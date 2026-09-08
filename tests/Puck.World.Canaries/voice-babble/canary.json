@@ -1,0 +1,70 @@
+{
+  "id": "voice-babble",
+  "title": "Triggering an identity's voice babble fires multiple distinct seeded syllable voices over time, never one sustained tone",
+  "bootShape": "windowed",
+  "requirements": ["gpu"],
+  "seconds": 15,
+  "timeoutSeconds": 30,
+  "binding": "A one-seat fixture authoring an identity (WorldIdentityDefinition.Voice: patchId=stinger, cadenceTicks=200) and the referenced synth patch, with no speakers/emissions/tunes declared -- so the mixer produces signal only if something explicitly triggers a voice. The positive leg calls the voice.babble debug trigger (WorldAudioDirector.TriggerBabble) for 4 syllables, then waits long enough for VoiceBabbler's cadence-jittered schedule to have fired and resolved every syllable. The discriminating leg runs the IDENTICAL fixture and wait with the trigger step omitted, so nothing ever babbles.",
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/voice-babble/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "console", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "voice.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "voice.babble", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "voice.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "audio.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "response", "name": "voice state before triggering", "stream": "stdout", "verb": "voice.state", "occurrence": 1, "count": 2, "extract": [
+        { "name": "beforeFired", "field": "fired" },
+        { "name": "beforeScheduled", "field": "scheduled" }
+      ] },
+      { "type": "relation", "name": "nothing has fired before the trigger", "left": { "value": "beforeFired" }, "operator": "equal", "right": { "literal": "0" } },
+      { "type": "relation", "name": "nothing is scheduled before the trigger", "left": { "value": "beforeScheduled" }, "operator": "equal", "right": { "literal": "0" } },
+      { "type": "response", "name": "voice state once the utterance has resolved", "stream": "stdout", "verb": "voice.state", "occurrence": 2, "count": 2, "extract": [
+        { "name": "afterFired", "field": "fired" },
+        { "name": "afterScheduled", "field": "scheduled" }
+      ] },
+      { "type": "relation", "name": "all four syllables fired as four DISTINCT triggers, never collapsing to one", "left": { "value": "afterFired" }, "operator": "equal", "right": { "literal": "4" } },
+      { "type": "relation", "name": "every scheduled syllable resolved", "left": { "value": "afterScheduled" }, "operator": "equal", "right": { "literal": "0" } },
+      { "type": "response", "name": "audio state after the utterance", "stream": "stdout", "verb": "audio.state", "occurrence": 1, "count": 1, "extract": [
+        { "name": "afterPeak", "field": "peak" }
+      ] },
+      { "type": "relation", "name": "the mix produced signal", "left": { "value": "afterPeak" }, "operator": "notEqual", "right": { "literal": "0" } },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false },
+      { "type": "line", "name": "no mutation rejected", "stream": "stderr", "match": "contains", "text": "world.mutation rejected", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/voice-babble/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "console", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "voice.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "voice.state", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "audio.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "wire.errors", "occurrence": 1, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "response", "name": "voice state without a trigger", "stream": "stdout", "verb": "voice.state", "occurrence": 2, "count": 2, "extract": [
+        { "name": "stillFired", "field": "fired" },
+        { "name": "stillScheduled", "field": "scheduled" }
+      ] },
+      { "type": "relation", "name": "without a trigger nothing ever fires", "left": { "value": "stillFired" }, "operator": "equal", "right": { "literal": "0" } },
+      { "type": "relation", "name": "without a trigger nothing is ever scheduled", "left": { "value": "stillScheduled" }, "operator": "equal", "right": { "literal": "0" } },
+      { "type": "response", "name": "audio state without a trigger", "stream": "stdout", "verb": "audio.state", "occurrence": 1, "count": 1, "extract": [
+        { "name": "stillPeak", "field": "peak" }
+      ] },
+      { "type": "relation", "name": "without a trigger the mix never produces signal", "left": { "value": "stillPeak" }, "operator": "equal", "right": { "literal": "0" } },
+      { "type": "line", "name": "no unhandled exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  }
+}

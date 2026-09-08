@@ -7,7 +7,9 @@ draws can take the control plane away). Every capability is a verb; `help` is
 generated from the registered commands. Infrastructure lives in
 `src/Puck.Commands/` (`CommandRegistry.cs`, `CommandDefinition.cs`,
 `CommandRouting.cs`, `TextCommandSource.cs`, `WireArgs.cs`); the modules
-live in `src/Puck.World/*CommandModule.cs`.
+live in `src/Puck.World/*CommandModule.cs` and, for the server-only doors
+moved out of `Puck.World`, `src/Puck.World.Console/*CommandModule.cs` (see
+the project table in the main `SKILL.md`).
 
 ## Contents
 
@@ -26,8 +28,7 @@ A module implements `Puck.Commands.ICommandModule` — one
 `GetCommands() → IEnumerable<CommandDefinition>`. Convention: state as
 constructor parameters (never `IServiceProvider`), verb logic inline; when a
 module hits the analyzer complexity ceiling, carve by SUBJECT into more
-modules (the six `EditorSculpt*CommandModule`s), never into
-shell+static-logic. Registration is `services.AddSingleton<ICommandModule,
+modules, never into shell+static-logic. Registration is `services.AddSingleton<ICommandModule,
 X>()` in `Program.cs`; `CommandRegistry` aggregates all modules and
 observers at construction and throws on any duplicate name/alias (including
 its built-ins `help`, `wire.ack`, `wire.errors`).
@@ -97,7 +98,67 @@ Three echo models — do not conflate them:
 3. **Mutation verbs** return `CommandResult.None` with NO synchronous echo;
    the accept/reject narration arrives at the tick boundary through
    `WorldServer.EchoTap` (stderr + toast + mirror), and a rejection
-   increments `wire.errors` via `NoteDeferredRejection`.
+   increments `wire.errors` via `NoteDeferredRejection`. A verb that submits
+   through the registering `Submit(link, mutation, echoes, verb)` overload
+   (`WorldDeferredVerbEchoes`; the `world.row.set`/`world.row.remove`/`world.assign`/
+   `world.state.transform`/`world.state.act` family) also gets a per-verb
+   `[<verb>: …]` line the tick-boundary drain settles — stderr on rejection
+   (beside the verb-agnostic `[world.mutation rejected: …]`), stdout on
+   acceptance — so a canary can account either outcome against the
+   submitting verb rather than only a refusal. A verb that submits through
+   the plain `Submit(link, mutation)` overload (`world.generate`,
+   `world.state.cell.set`, `world.state.cell.remove`) registers nothing, so
+   its only observable answer is the universal `[world.mutation: … applied]`/
+   `[world.mutation rejected: … — …]` narration, always stderr regardless of
+   outcome — `puck canary`'s runner accounts these by correlating that
+   narration to the verb's own `Describe()` prefix (`WorldServer.Describe.cs`
+   — unique per `WorldMutation` case, e.g. `Generate '`), never by a
+   `[<verb>: …]` line the console layer never prints. Adding the echoes
+   registration to a currently-unregistered verb is the more direct fix; the
+   narration-correlation reading is the fallback for when that command
+   module is out of reach. The two readings are not layered — registering a
+   verb that stays listed as narrated in the runner (`CanaryCommand`'s
+   `NarratedMutationVerbs`) still reads the narrated way, so a verb moved to
+   registration must also move out of that table. The narrated reading counts
+   a mutation KIND, not a caller: anything else in the world that composes the
+   same `WorldMutation` case — a rule frame's own install, an addon guest —
+   narrates under the same `Describe()` prefix and is counted with the
+   script's calls. That direction is a count mismatch (a red the runner
+   reports as `accounted <verb>: N response(s) for M authored occurrence(s)`),
+   never a silent green, so a script for a world whose rules write the same
+   kind must either author the extra occurrences or use a registered verb.
+
+`world.gravity` is the gravity decision's Immediate read-back: it echoes the
+authored solver, uniform acceleration, shared constant/softening, explicit-mass
+sources, point/planet presets with their deterministically derived masses, and
+bounded local areas in their compiled priority/authored-order fold (bound,
+directional/radial effect, Combine/Replace, and static/attached ride), plus the
+last solver and area structural work counters. `world.budget` repeats the static
+source count, declared areas per target, last exact/approximate evaluations, and
+last area checks/matches so gravity authoring does not create a silent per-tick
+price. `world.navigation` and `world.budget` are authoritative-core verbs: both
+remain registered headless, with budget naming the absent renderer while still
+reporting simulation costs. `world.flock` reads each kit's local-perception
+profile, movement-domain binding, optional cohesion/alignment expressions, and
+last-step candidate/neighbor/sight, movement-check/refusal, and affinity
+evaluation/failure counters; `world.budget` repeats the scratch capacities and
+charged affinity work, included in the shared rule-work ceiling. Navigation also reports shared destination slots, actual/budgeted
+expansions, extracted paths, and capacity refusals. A bounded sample is not globally nearest
+neighbors, and a headless work count is not an FPS measurement. None of these
+verbs mutates the field.
+
+Body command targets use the world's authored local-seat prefix, not the host's
+four-seat ceiling. A zero-seat world can address peer body 0 through the same
+designation and control verbs as any other active peer.
+`body.designate` returns the target read-back under its own verb prefix;
+`body.targets` keeps its query prefix, so command accounting cannot conflate them.
+
+`world.transfer <source-instance> body:<index> <destination>` addresses any
+zero-based body index, including creature and network-peer slots. Bare numbers
+are one-based local seats (1..4), and `party` selects the active local-seat cohort.
+Parsing enforces the global body ceiling; the transfer drain checks the named
+source's actual capacity, occupancy, and the stamped caller's Drive grant. Use
+explicit body targets when verifying onward transfers of remote travelers.
 
 `wire.ack [on|quiet]`: quiet drops SUCCESSFUL echoes of verbs registered
 `ackOnly: true` (flood-friendly); errors and answer-bearing verbs always
@@ -107,24 +168,48 @@ reports `[wire.errors: N rejected]`.
 
 ## The stdin drain barrier and `world.wait`
 
-The barrier lives in `TextCommandSource.Collect` (`Puck.Commands`): while a
-Simulation submission is pending (`CommandRegistry.
-HasPendingSimulationSubmission`), a following line that does NOT route to
-Simulation is held — so a scripted write-then-read pair (`world.row.set kits …`
-then `world.status`) needs no polling. Further Simulation lines keep
-draining FIFO into the same pending snapshot. Blank lines and `#` comments
+Silo row retirement disposes its `TextCommandSession`, refusing work still
+queued behind commands or waits. The stdin router uses `SiloConsoleRouting.TryEnqueue`
+so a concurrent retirement is a row refusal, not an exception that kills the
+reader thread. Already injected simulation work keeps its completion semantics.
+Clock regression invalidates every old wait deadline, even one that expired
+before the next command-pump drain observed it.
+
+The barrier lives in `TextCommandSource.Collect` (`Puck.Commands`) and is
+PER-SESSION, not registry-wide: while a session's own Simulation submission is
+pending (`TextCommandSession.HasPendingSimulationSubmission`, over the
+`TextSubmissionBarrier` that rides that submission's snapshot entry), a
+following line from THAT session that does NOT route to Simulation is held — so
+a scripted write-then-read pair (`world.row.set kits …` then `world.status`)
+needs no polling, and another seat's ready text keeps draining meanwhile.
+Further Simulation lines keep draining FIFO into the same pending snapshot.
+Blank lines and `#` comments
 are skipped, so piped scripts can be self-documenting. **The barrier holds
-only `Immediate` lines** — it fences reads behind writes; it does not delay
-Simulation traffic.
+`Immediate` lines and queued host operations** — it fences reads behind writes; it does not delay
+Simulation traffic. It releases whether or not the submission's handler
+dispatched or threw, so a throwing verb can no longer strand a session's stdin.
 
 `world.wait <ticks>` (`WorldWaitCommandModule` + `WorldConsoleWaitGate`) is
-the explicit fence: Immediate, 1..144000 ticks (ten minutes at the 240 Hz
-fixed step), clocked by COMPLETED SIMULATION TICKS
-(`WorldServerStepShell` via `WorldConsoleWaitGate.PublishTick`), never wall time. Echo:
+the explicit wait: Immediate, 1..144000 ticks, clocked by completed host-work
+ticks through `WorldConsoleWaitGate.PublishTick`, independent of replay
+rewinds and wall time. It holds only `CommandContext.TextSession`; each
+session has its own deadline even when sessions share the same row clock.
+Do not wire this gate to the source-wide `ITextCommandHoldGate`.
+Direct registry submissions without a text session are refused. Echo:
 `[world.wait: N ticks from T — releasing at tick R]`. Being Immediate, the
 barrier holds `world.wait` itself until a preceding mutation lands, so its
 countdown starts from a tick that already contains it. Use it for
 read-after-write across ticks (e.g. asserting motion after input).
+
+**The release is AT LEAST, never exactly-at.** The host loop drains stdin
+once per iteration and `FixedStepPump.Advance` may run a catch-up burst of
+fixed steps in one call (bounded by `maxFrameTicks`, 1/4 s = 60 steps at
+240 Hz), so a read following a released wait can land tens of ticks past R
+on a loaded machine — and the sim is deliberately never console-paced. An
+exact-text assertion after a wait must therefore observe STATIONARY state
+(a settled pose, a rest value), never a still-moving quantity; a body in
+free fall or mid-decay reads differently per slipped tick and flakes under
+load.
 
 ## The tape
 
@@ -144,8 +229,12 @@ operator panel.
 
 `world.binding-bar [on|off|auto] [player]` is the binding bar's parallel live
 control and read-back. `on`/`off` force a side, `auto` returns to the authored
-enabled/rest policy, and every form reports the resolved per-seat policy,
-current hidden state and reason, and layout values.
+enabled/rest policy, and every form reports the resolved per-seat policy — its
+`text on|off` switch, authored `slots`/`banks` counts, the resolved (world-or-
+player) `hideUnbound`/`stacked` preferences, current hidden state and reason,
+and layout values (`scale` reflects a player's own override when set) —
+included. Visibility is the only side the verb overrides; every other field is
+authored only (`bindingBar.*`, see [documents.md](documents.md)).
 
 ## Screenshots
 
@@ -162,8 +251,8 @@ verification.
 the whole truth, and a script reading only one of them reads a half-answer:
 
 - stdout, at arming: `[world.screenshot: pending <path> — lands on the next
-  composed frame]`. No file exists yet. **Fence a frame (`world.wait`) before
-  reading it.**
+  composed frame]`. No file is promised yet. Let rendering progress with
+  `world.wait`, then confirm the completion before reading it.
 - stderr, when the frame lands: `[capture] unified overlay -> <path>` (the
   overlay decorator served it) or `[debug] captured frame N -> <path>` (the
   engine node beneath it did). THIS is the line that says a file exists.
@@ -173,12 +262,17 @@ the whole truth, and a script reading only one of them reads a half-answer:
 
 Arming a second capture while one is still pending is REFUSED by name
 (`SdfWorldRender.PendingCapturePath`) and counts in `wire.errors`: the render
-chain holds exactly ONE pending path, so arming over it would silently drop a
-file the caller was already promised. Any Simulation-routed line between two
-shots fences a composed frame for free (the drain barrier), which is why
-back-to-back shots separated by an ordinary write never trip it (see
-[hud.md](hud.md)'s "Verifying" section for the live recipe this once
-exercised as a committed battery).
+chain admits one pending request at a time. A mutation barrier orders command
+application, but does not itself prove the capture has completed; use the
+capture outcome before reusing a path or claiming its bytes exist.
+
+Host integrations arm captures through `TextCommandSession.InvokeAsync` when
+they must follow the session's queued edits and waits. Await the returned
+`FrameCaptureRequest.Completion` off the pump. Success means the writer closed
+the PNG; failure carries an exception, including disposal before service.
+`PendingCapturePath == null` is never proof of a successful capture, and a
+tick wait alone does not prove a particular request finished. Cancelling an
+await does not cancel the accepted capture or release its output path for reuse.
 
 ## The document has ONE door — do not add a per-section verb
 
@@ -204,8 +298,8 @@ composing writes. That is a defect class, not a shortcut.
 ## Grammar conventions for new verbs
 
 - `family.verb` dotted names (`world.*`, `player.*`, `screen.*`,
-  `editor.*`, `profile.*`, `storage.*`, `capture.*`, `replay.*`,
-  `audio.*`, `market.*`); names case-insensitive on the full parse, ordinal
+  `profile.*`, `storage.*`, `capture.*`, `replay.*`,
+  `audio.*`); names case-insensitive on the full parse, ordinal
   on the fast path.
 - Row-valued mutation verbs take ONE inline-JSON argument in the exact wire
   shape of the document section row, reconstructed from the raw text
@@ -223,7 +317,7 @@ composing writes. That is a defect class, not a shortcut.
   `WorldSeatBindings.RecomposeSeat` REJECTS the whole seat document and keeps the
   prior mapping — so every later `player.bind`, profile load or context regroup is
   silently discarded. Boot narration is NOT proof a binding change is safe: force a
-  recompose (`player.bind 1 keyboard.p editor.status`) and assert stderr carries no
+  recompose (`player.bind 1 keyboard.p player.wheel.ring value:1`) and assert stderr carries no
   `recompose rejected` line.
 - `player.bind` can carry a constant for a command destination with `value:<v>`
   (validated against the destination's declared kind; mutually exclusive with
@@ -233,8 +327,35 @@ composing writes. That is a defect class, not a shortcut.
 - Choose routing by determinism class, not convenience: anything that
   touches sim state is `Simulation`; a read-back is `Immediate`. Routing
   describes when the command handler runs. For example,
-  `world.addon.reload` is Simulation-routed but calls the addon runtime
-  synchronously once its handler runs, while `world.addon.mount` enqueues a
-  `PendingOp.AddonLifecycle` for the tick boundary. Both buy the drain
-  barrier, so a following read waits for settled state.
+  `world.row.set addons`/`world.row.remove addons` — the door that mounts,
+  unmounts, reloads, enables, and disables an addon — is Simulation-routed
+  and buffers a `PendingOp.Mutate` for the tick boundary, exactly like any
+  other `world.row.set`/`.remove`. The drain barrier makes a following
+  `world.addons` read wait for settled state.
 - New decision surface ⇒ read-back verb in the same change.
+
+`world.decisions` is an Immediate, no-argument, headless-safe read-back of
+world-rule choice policies and their active bindings. It reports the selected
+option, selected body incarnation, last raw score, remaining engine-tick timers,
+reconsiderations, and local random draws. It echoes neighbor policies and last-pass
+image points, grid builds, inspected/scored candidates, sight tests, and limited
+queries. `world.rules` routes decision rules to this richer echo;
+`world.budget` includes candidate inspections/gates, expanded score programs, and
+the greatest effect branch, plus shared pose-image and grid copy/group visits.
+It separately echoes the per-tick pose, distinct range-scale rebuild, and sorted
+grid-point ceilings without cadence discounts. These structural units do not
+claim a CPU-time or sorting-comparison bound.
+
+Discrete state commands: `world.state.transform <transform-json>` and
+`world.state.act <phase-row> <sequence> <transform-json>` are Simulation-routed,
+stamp the caller, and register deferred refusal echoes. `world.topologies`
+and `world.state.observe` are Immediate read-backs. The latter uses a stamped
+query and returns observation JSON; `world.state` remains an authority-console
+read-back. `world.observe <principal>` is the third: an Immediate,
+authority-side composition of `WorldStateDisclosure.Compose` for an EXPLICITLY
+named principal (`WorldPrincipal.TryParse`'s token grammar, the same
+`world.grant`/`world.why` take), so a single console session can inspect what
+seat1 sees and what seat2 sees without submitting as either — the read-back
+side of a hidden-hand table (see the garden's `games/poker.world.json` poker table).
+Operators and limits live in the Schema README's discrete-state section rather
+than a second command vocabulary here.

@@ -58,6 +58,7 @@ internal static class BessScope {
             eiPending: out _,
             halted: out var halted,
             ime: out var ime,
+            lockedUp: out _,
             scratch: scratch
         );
 

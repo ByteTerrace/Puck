@@ -45,7 +45,7 @@ namespace Puck.SdfVm;
 /// resolution). <c>0</c> provisions no pool (a 4-byte filler keeps the always-present shader binding valid). A pool-less
 /// engine still accepts a program declaring a <see cref="SdfShapeType.SampledRegion"/> — baking and rendering are split:
 /// the shader detects the filler (by its element count) and renders the region via the conservative uncarved-hull
-/// fallback (the Subtraction never bites), so a filming view (<c>SdfCameraView</c>/<c>NestedWorldView</c>) shows a
+/// fallback (the Subtraction never bites), so a filming view (<c>SdfCameraView</c>/<c>WorldSessionView</c>) shows a
 /// SampledRegion world uncarved rather than a box-shaped hole. Only <see cref="SdfWorldEngine.RequestBrickBake"/> stays a
 /// loud rejection on a pool-less engine (nothing to bake into). The pool is a persistent device-local buffer the sliced
 /// background bake (<see cref="SdfWorldEngine.RequestBrickBake"/>) writes and the beam + views kernels sample.</param>

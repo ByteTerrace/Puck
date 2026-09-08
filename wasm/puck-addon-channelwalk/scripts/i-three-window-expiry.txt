@@ -16,11 +16,11 @@ world.grant seat1 drive body:0 channels:forward ceiling:1.0
 # ticks_since_drive is in-window (<240) here: expect forward folded=1(65536), trusted=[addon:channelwalk] (NOT
 # untrusted — the addon's term is TRUSTED post-recut; see the note above).
 world.wait 60
-player.channels 1
+body.channels 1
 # ticks_since_drive is now well past 240 (window closed exactly once, never repeating): expect forward folded=0.
 world.wait 300
-player.channels 1
+body.channels 1
 # Long past close — proves the stop is PERMANENT, not a decay that might drift back up.
 world.wait 2000
-player.channels 1
+body.channels 1
 world.addons

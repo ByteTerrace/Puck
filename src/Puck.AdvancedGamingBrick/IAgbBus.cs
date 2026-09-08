@@ -8,6 +8,9 @@ namespace Puck.AdvancedGamingBrick;
 /// against a flat-memory test bus (for ARM/Thumb conformance vectors) as readily as against the decoded machine.
 /// </summary>
 public interface IAgbBus {
+    /// <summary>Whether the bus suppresses game-pak prefetch for diagnostics. Included in machine identity;
+    /// bus decorators must forward the underlying value.</summary>
+    bool PrefetchDisabled => false;
     /// <summary>Gets a value indicating whether the interrupt controller is asserting the IRQ line — the
     /// signal the CPU samples each instruction boundary. Test buses with no interrupt source return false.</summary>
     bool IrqPending { get; }
@@ -74,9 +77,10 @@ public interface IAgbBus {
     /// enabled interrupt is requested.</summary>
     /// <param name="stop">Whether to enter STOP (deeper sleep) rather than HALT.</param>
     void Halt(bool stop) { }
-    /// <summary>Advances the machine while the CPU is halted until an enabled interrupt is requested (IE &amp; IF),
-    /// then clears the halt state. Called by the CPU in place of executing an instruction while halted.</summary>
-    void RunUntilInterrupt() { }
+    /// <summary>Checks for an enabled wake interrupt. If present, charges wake latency and clears the halt state;
+    /// otherwise advances one idle cycle and any pending DMA, keeping the CPU halted. Returns control so a host
+    /// can deliver later input or stop execution even when no interrupt is forthcoming.</summary>
+    void StepHalted() { }
     /// <summary>Begins a DMA-stall region: while a DMA burst holds the CPU off the bus, the timers keep counting
     /// but the IRQ-recognition pipeline freezes (the DMA CPU-stall behavior). Re-entrant — pairs with
     /// <see cref="EndDmaStall"/>. Test buses do nothing.</summary>

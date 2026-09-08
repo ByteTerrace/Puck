@@ -33,7 +33,7 @@ public sealed class TransferAbortDynamicStateLawTests {
         // (Laws' own doctrine): a body already at rest would prove nothing about whether velocity/action-track state
         // actually rides through the capture/restore seam versus simply defaulting to the same zero either way.
         body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One)); // "forward" role channel (Fixtures' one declared channel at ordinal 0)
-        fixture.Step(); // grounded model, empty response table: planar velocity snaps to the commanded target THIS step; gravity (no collider in this fixture) integrates a non-zero vertical velocity from tick 1 on (see PortalSweepOriginLawTests' own remarks).
+        fixture.Step(); // grounded program, instant whole-vector shaping: planar velocity snaps to the commanded target THIS step; gravity (no collider in this fixture) integrates a non-zero vertical velocity from tick 1 on (see PortalSweepOriginLawTests' own remarks).
         // A timed channel press in flight — WorldBody.PressChannel reaches ANY ordinal directly, no kit binding
         // required, so this exercises the action-track capture without needing to author a bound action instruction.
         var pressOutcome = body.PressChannel(ordinal: 1, value: FixedQ4816.One, holdSeconds: 5f, authoredMaximum: FixedQ4816.FromInteger(value: 60));
@@ -76,7 +76,7 @@ public sealed class TransferAbortDynamicStateLawTests {
         Assert.Equal(expected: capturedState.PlanarVelocity, actual: restoredState.PlanarVelocity);
         Assert.Equal(expected: capturedState.VerticalVelocity, actual: restoredState.VerticalVelocity);
         Assert.Equal(expected: capturedState.Orientation, actual: restoredState.Orientation);
-        Assert.Equal(expected: capturedState.VehiclePitch, actual: restoredState.VehiclePitch);
+        Assert.Equal(expected: capturedState.DrivePitch, actual: restoredState.DrivePitch);
         Assert.Equal(expected: capturedState.OverlayVelocity, actual: restoredState.OverlayVelocity);
         Assert.Equal(expected: capturedState.OverlayRemainingTicks, actual: restoredState.OverlayRemainingTicks);
         Assert.Equal(expected: capturedState.ChannelTimerTicks[1], actual: restoredState.ChannelTimerTicks[1]);

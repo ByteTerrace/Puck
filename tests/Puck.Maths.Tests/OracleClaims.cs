@@ -248,8 +248,8 @@ internal static class OracleClaims {
         (int Face, int Coface, int Sign)[] incidences = [(0, 1, +1), (1, 2, +1)];
 
         try {
-            _ = FieldHomology<QuadraticSurd, RationalMaterial>.Create(
-                calculus: ExteriorCalculus<QuadraticSurd, RationalMaterial>.Create(
+            _ = FieldHomology<RealQuadratic, RationalMaterial>.Create(
+                calculus: ExteriorCalculus<RealQuadratic, RationalMaterial>.Create(
                     dimensions: dimensions,
                     incidences: incidences,
                     material: default
@@ -257,10 +257,10 @@ internal static class OracleClaims {
             );
 
             return "field homology admitted incidence data with boundary_1 boundary_2 nonzero";
-        } catch (ChainComplexException<QuadraticSurd> exception) {
+        } catch (ChainComplexException<RealQuadratic> exception) {
             var witness = exception.Obstruction;
 
-            if ((1 != witness.Degree) || (0 != witness.RowCell) || (2 != witness.ColumnCell) || (QuadraticSurd.One != witness.CompositeCoefficient)) {
+            if ((1 != witness.Degree) || (0 != witness.RowCell) || (2 != witness.ColumnCell) || (RealQuadratic.One != witness.CompositeCoefficient)) {
                 return $"field refusal witnessed degree={witness.Degree}, row={witness.RowCell}, column={witness.ColumnCell}, coefficient={witness.CompositeCoefficient}";
             }
         }
@@ -296,8 +296,8 @@ internal static class OracleClaims {
             (3, 6, +1), (4, 6, +1), (5, 6, -1),
         ];
 
-        var field = FieldHomology<QuadraticSurd, RationalMaterial>.Create(
-            calculus: ExteriorCalculus<QuadraticSurd, RationalMaterial>.Create(
+        var field = FieldHomology<RealQuadratic, RationalMaterial>.Create(
+            calculus: ExteriorCalculus<RealQuadratic, RationalMaterial>.Create(
                 dimensions: validDimensions,
                 incidences: validIncidences,
                 material: default
@@ -328,15 +328,15 @@ internal static class OracleClaims {
         return null;
     }
     internal static string? PresentedGroupRequiresAssociativity() {
-        var octonions = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(
-            presentation: Presentations.CayleyDickson<QuadraticSurd, RationalMaterial>(
+        var octonions = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(
+            presentation: Presentations.CayleyDickson<RealQuadratic, RationalMaterial>(
                 floors: 3,
                 basisRelabelling: [],
                 material: default
             )
         );
 
-        if (PresentedGroup<QuadraticSurd, RationalMaterial>.TryCertify(
+        if (PresentedGroup<RealQuadratic, RationalMaterial>.TryCertify(
             algebra: octonions,
             group: out _,
             obstruction: out var obstruction
@@ -607,13 +607,13 @@ internal static class OracleClaims {
     // The material advertises the exact rational FIELD. The surd carrier also represents a + b·√d, and those values are
     // not one field between them: √2 and √3 were each admitted and their sum then had nowhere to live.
     internal static string? RationalMaterialAdmitsOnlyRationals() {
-        IMaterialOps<QuadraticSurd, RationalMaterial> material = default(RationalMaterial);
-        var algebra = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(
-            presentation: Presentations.FreeMonoid<QuadraticSurd, RationalMaterial>(letterCount: 2, material: default, windowDegree: 2)
+        IMaterialOps<RealQuadratic, RationalMaterial> material = default(RationalMaterial);
+        var algebra = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(
+            presentation: Presentations.FreeMonoid<RealQuadratic, RationalMaterial>(letterCount: 2, material: default, windowDegree: 2)
         );
-        var root2 = QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1);
-        var root3 = QuadraticSurd.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 1);
-        var goldenRatio = QuadraticSurd.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: 1);
+        var root2 = RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 0, surdNumerator: 1);
+        var root3 = RealQuadratic.Create(denominator: 1, radicand: 3, rationalNumerator: 0, surdNumerator: 1);
+        var goldenRatio = RealQuadratic.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: 1);
 
         foreach (var irrational in new[] { root2, root3, goldenRatio }) {
             var direct = Refusal<ArgumentOutOfRangeException>(action: () => material.Canonicalize(value: irrational));
@@ -634,12 +634,12 @@ internal static class OracleClaims {
 
         // The rationals stay a field: a product and a sum of admitted coefficients land back in the carrier, and the
         // reciprocal of a nonzero one exists.
-        var third = QuadraticSurd.Rational(denominator: 3, numerator: 1);
-        var half = QuadraticSurd.Rational(denominator: 2, numerator: -1);
+        var third = RealQuadratic.Rational(denominator: 3, numerator: 1);
+        var half = RealQuadratic.Rational(denominator: 2, numerator: -1);
         var left = algebra.FromSupport(coefficients: [third], keys: [1L]);
         var right = algebra.FromSupport(coefficients: [half], keys: [1L]);
         var sum = algebra.Add(left: left, right: right);
-        var expected = QuadraticSurd.Rational(denominator: 6, numerator: -1);
+        var expected = RealQuadratic.Rational(denominator: 6, numerator: -1);
 
         if ((1 != sum.SupportCount) || (expected != sum.Coefficients[0])) {
             return $"one third plus minus one half admitted as {((0 == sum.SupportCount) ? "nothing" : sum.Coefficients[0].ToString())} rather than {expected}";
@@ -647,7 +647,7 @@ internal static class OracleClaims {
 
         var rational = default(RationalMaterial);
 
-        if (!rational.TryInvert(value: third, out var reciprocal) || (QuadraticSurd.Rational(value: 3) != reciprocal)) {
+        if (!rational.TryInvert(value: third, out var reciprocal) || (RealQuadratic.Rational(value: 3) != reciprocal)) {
             return $"the reciprocal of one third came back as {reciprocal}";
         }
 

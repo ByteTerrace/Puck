@@ -41,7 +41,7 @@ namespace Puck.Analyzers;
 /// context-registered, e.g. <c>GrantSubjectJsonConverter</c> on <c>GrantSubject</c>): a type converted whole never has
 /// its own properties visited by System.Text.Json's serializer, so nothing under it is reachable through property
 /// serialization at all. This is what excuses <c>GrantSubjectKind</c>/<c>PrincipalKind</c> (nested inside a
-/// wrapper-converted record) and the <c>Puck.Forge.Authoring</c> document family (bridged through its own
+/// wrapper-converted record) and the <c>Puck.World.Authoring</c> document family (bridged through its own
 /// <c>DocumentJsonOptions.Shared</c> serializer via a converter) without any allowlist: the exclusion is the
 /// converter attribute or <c>Converters</c> entry already sitting in source, at the site a reader finds it, for the
 /// reason already written there. A member marked <c>System.Text.Json.Serialization.JsonIgnoreAttribute</c> with
@@ -58,7 +58,7 @@ namespace Puck.Analyzers;
 /// <c>System.Text.Json.JsonElement</c>/<c>System.Text.Json.JsonDocument</c>) are treated as leaves and
 /// never recursed into — a hand-maintained list, not a derived one, because none of them can carry a user enum. Only
 /// <c>System.Text.Json.Serialization.JsonSerializerContext</c>-derived contexts are walked at all: a document family
-/// riding a hand-built <c>System.Text.Json.JsonSerializerOptions</c> instead (<c>Puck.Forge.Authoring</c>'s
+/// riding a hand-built <c>System.Text.Json.JsonSerializerOptions</c> instead (<c>Puck.World.Authoring</c>'s
 /// own) is a different serializer entirely and is never inspected — not because it is excluded, but because this
 /// analyzer only ever looks at <c>JsonSerializerContext</c> subclasses in the first place. Public fields (as opposed
 /// to properties — including the compiler-synthesized properties behind a positional record parameter) are not

@@ -12,24 +12,15 @@ public static partial class WorldDefinitionValidator {
             b: WorldAudioDefaults.CurveLinear,
             comparisonType: StringComparison.Ordinal
         ));
-    // The one audio gain rule: finite, non-negative, and within the shared ceiling
-    // (Puck.Forge.Authoring.CreationSoundDocument.MaxLevel — one vocabulary for every audio gain-shaped field).
-    private static void RequireGain(float value, string name, List<string> errors) {
-        if (
-            !float.IsFinite(f: value) ||
-            (value < 0f) ||
-            (value > Puck.Forge.Authoring.CreationSoundDocument.MaxLevel)
-        ) {
-            errors.Add(item: $"{name} {value} must be within [0, {Puck.Forge.Authoring.CreationSoundDocument.MaxLevel}].");
-        }
-    }
     // The audio host-section defaults: the master gain rides the shared ceiling, the coalescing radius/fade are
     // physical, the curve token is v1's one recognized value, the listener policy resolves (focus | seat:<n> |
-    // a declared camera name), and every cue-table row resolves (a CLOSED event token, a live patch id, the gain
-    // ceiling in thousandths, a placement token whose emitter form names a declared speaker).
-    private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, HashSet<string> patchIds, HashSet<string> speakerNames, int localSeats, List<string> errors) {
-        RequireGain(
+    // a declared camera name), and every cue-table row resolves (a published engine event or rule-emitted token, a
+    // live patch id, the gain ceiling in thousandths, and a placement whose emitter form names a declared speaker).
+    private static void ValidateAudioDefaults(WorldAudioDefaults audio, HashSet<string> cameras, HashSet<string> patchIds, HashSet<string> speakerNames, IReadOnlyList<WorldRule>? rules, int localSeats, List<string> errors) {
+        RequireRange(
             value: audio.MasterGain,
+            min: 0f,
+            max: Puck.World.Authoring.CreationSoundDocument.MaxLevel,
             name: "audio.masterGain",
             errors: errors
         );
@@ -83,13 +74,27 @@ public static partial class WorldDefinitionValidator {
             cues: audio.Cues,
             patchIds: patchIds,
             speakerNames: speakerNames,
+            ruleCueTokens: RuleCueTokens(rules: rules),
             errors: errors
         );
     }
-    // THE CUE TABLE: absent is empty; each row's event token must sit in the CLOSED published vocabulary,
-    // its patch must resolve, its gain rides the shared ceiling in thousandths, and an emitter placement must name
-    // a declared speaker (at-site and listener are the only other recognized placements).
-    private static void ValidateCues(IReadOnlyList<WorldAudioCue>? cues, HashSet<string> patchIds, HashSet<string> speakerNames, List<string> errors) {
+    private static HashSet<string> RuleCueTokens(IReadOnlyList<WorldRule>? rules) {
+        var tokens = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var rule in (rules ?? [])) {
+            foreach (var effect in (rule?.Effects ?? [])) {
+                if ((effect is WorldEffect.EmitCue cue) && WorldGameplayCue.IsValidName(candidate: cue.Name)) {
+                    tokens.Add(item: cue.Name);
+                }
+            }
+        }
+
+        return tokens;
+    }
+    // The cue table admits either a published engine event or a cue emitted by this document's rules. Its patch
+    // resolves, its gain rides the shared ceiling in thousandths, and an emitter placement names a declared speaker
+    // (at-site and listener are the only other recognized placements).
+    private static void ValidateCues(IReadOnlyList<WorldAudioCue>? cues, HashSet<string> patchIds, HashSet<string> speakerNames, HashSet<string> ruleCueTokens, List<string> errors) {
         if (cues is null) {
             return;
         }
@@ -104,25 +109,30 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!WorldAudioCue.IsEventToken(token: cue.Event)) {
-                errors.Add(item: $"{path}.event '{cue.Event}' is not a published cue event token ({string.Join(
+            var isPublished = WorldAudioCue.IsEventToken(token: cue.Event);
+            if (!isPublished && !ruleCueTokens.Contains(item: cue.Event)) {
+                errors.Add(item: $"{path}.event '{cue.Event}' is neither emitted by a world rule nor a published cue event token ({string.Join(
                     separator: " | ",
                     values: WorldAudioCue.EventTokens
                 )}).");
+            } else if (isPublished && WorldAudioCue.IsProducerBypassedToken(token: cue.Event)) {
+                errors.Add(item: $"{path}.event '{cue.Event}' is fired directly by its producer and can never be targeted by an authored audio.cues row.");
             }
 
-            if (
-                string.IsNullOrWhiteSpace(value: cue.PatchId) ||
-                !patchIds.Contains(item: cue.PatchId)
-            ) {
-                errors.Add(item: $"{path}.patchId '{cue.PatchId}' names no patch row.");
-            }
+            RequireDeclared(
+                value: cue.PatchId,
+                declaredSet: patchIds,
+                path: path,
+                field: "patchId",
+                rowNoun: "patch",
+                errors: errors
+            );
 
             if (
                 (cue.GainThousandths is { } gain) &&
-                ((gain < 0) || (gain > ((int)(Puck.Forge.Authoring.CreationSoundDocument.MaxLevel * 1000f))))
+                ((gain < 0) || (gain > ((int)(Puck.World.Authoring.CreationSoundDocument.MaxLevel * 1000f))))
             ) {
-                errors.Add(item: $"{path}.gainThousandths {gain} must be within [0, {((int)(Puck.Forge.Authoring.CreationSoundDocument.MaxLevel * 1000f))}].");
+                errors.Add(item: $"{path}.gainThousandths {gain} must be within [0, {((int)(Puck.World.Authoring.CreationSoundDocument.MaxLevel * 1000f))}].");
             }
 
             switch (cue.Placement) {
@@ -154,15 +164,19 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        if (
-            string.IsNullOrWhiteSpace(value: emission.PatchId) ||
-            !patchIds.Contains(item: emission.PatchId)
-        ) {
-            errors.Add(item: $"{path}.patchId '{emission.PatchId}' names no patch row.");
-        }
+        RequireDeclared(
+            value: emission.PatchId,
+            declaredSet: patchIds,
+            path: path,
+            field: "patchId",
+            rowNoun: "patch",
+            errors: errors
+        );
 
-        RequireGain(
+        RequireRange(
             value: emission.Level,
+            min: 0f,
+            max: Puck.World.Authoring.CreationSoundDocument.MaxLevel,
             name: $"{path}.level",
             errors: errors
         );
@@ -186,8 +200,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.channel '{feed.Channel}' must be '{WorldSpeakerFeed.ChannelMix}', '{WorldSpeakerFeed.ChannelLeft}', or '{WorldSpeakerFeed.ChannelRight}'.");
         }
 
-        RequireGain(
+        RequireRange(
             value: feed.Gain,
+            min: 0f,
+            max: Puck.World.Authoring.CreationSoundDocument.MaxLevel,
             name: $"{path}.gain",
             errors: errors
         );
@@ -235,11 +251,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: speaker.Name)) {
-                errors.Add(item: $"{path}.name is required.");
-            } else if (!names.Add(item: speaker.Name)) {
-                errors.Add(item: $"{path}.name '{speaker.Name}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: speaker.Name,
+                seen: names,
+                path: path,
+                field: "name",
+                errors: errors
+            );
 
             switch (speaker) {
                 case WorldSpeaker.Fixed fixedSpeaker:

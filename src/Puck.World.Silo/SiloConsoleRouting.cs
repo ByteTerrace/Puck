@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.World.Server;
 
 namespace Puck.World.Silo;
@@ -26,7 +27,22 @@ public sealed class SiloConsoleRouting {
 
         public void Dispose() => WorldNarrationScope.Current = m_previous;
     }
-    private sealed record RowRoute(int Slot, TextCommandSession Session);
+    private sealed record RowRoute(int Slot, TextCommandSession Session) {
+        internal readonly Lock Gate = new();
+        internal readonly HashSet<RowControlSession> Controls = [];
+        internal readonly CancellationTokenSource Lifetime = new();
+        internal bool Retired;
+    }
+    private sealed class RowControlSession(RowRoute route, ConsoleControlSession session, Action? closed) : IControlSession {
+        private int m_closed;
+        public Task<ControlResponse> ExecuteAsync(ControlRequest request, CancellationToken cancellationToken) => session.ExecuteAsync(request, cancellationToken);
+        public void Dispose() {
+            if (Interlocked.Exchange(ref m_closed, 1) != 0) { return; }
+            lock (route.Gate) { route.Controls.Remove(this); }
+            session.Dispose();
+            closed?.Invoke();
+        }
+    }
 
     private readonly ConcurrentDictionary<int, string> m_bySlot = new();
     private readonly ConcurrentDictionary<string, RowRoute> m_byWorldId = new(comparer: StringComparer.Ordinal);
@@ -56,21 +72,22 @@ public sealed class SiloConsoleRouting {
     /// <summary>Gets the world id <c>silo.use</c> last selected for untagged lines, or <see langword="null"/> when
     /// none has been selected.</summary>
     public string? DefaultWorldId => Volatile.Read(location: ref m_defaultWorldId);
+    /// <summary>Reads the registered command vocabulary under the host's disclosure policy.</summary>
+    /// <param name="include">Metadata filter evaluated on the command pump.</param>
+    /// <returns>Names and descriptions of selected commands.</returns>
+    public string DescribeCommands(Func<CommandMetadata, bool> include) => m_source().DescribeCommands(include);
 
     /// <summary>Registers a freshly admitted row's own tagged console session, tagging every result it produces
     /// with <c>[&lt;worldId&gt;] </c> ahead of the shared output writer's own <c>Console.Out</c>/<c>Console.Error</c>
     /// routing.</summary>
     /// <param name="worldId">The row's registry name.</param>
-    /// <param name="hold">The row's own <c>world.wait</c> hold predicate.</param>
     /// <returns>The row's own text session — the caller enqueues nothing through it directly; it exists so the
     /// registry submits lines under this row's stamped identity and slot.</returns>
-    public TextCommandSession Register(string worldId, Func<bool> hold) {
+    public TextCommandSession Register(string worldId) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: worldId);
-        ArgumentNullException.ThrowIfNull(argument: hold);
 
         var slot = Interlocked.Increment(location: ref m_nextSlot);
         var session = m_source().CreateSession(
-            hold: hold,
             onResult: (_, result) => m_tagging.WriteTagged(
                 result: result,
                 tag: worldId
@@ -103,8 +120,8 @@ public sealed class SiloConsoleRouting {
         key: slot,
         value: out worldId!
     );
-    /// <summary>Resolves a currently registered row's own session by world id — <see cref="SiloStdinRouter"/>'s
-    /// tagged-input lookup.</summary>
+    /// <summary>Resolves a currently registered row's own session by world id. Background text readers use
+    /// <see cref="TryEnqueue"/> to handle retirement between lookup and enqueue.</summary>
     /// <param name="worldId">The row's registry name.</param>
     /// <param name="session">The row's own session, on success.</param>
     /// <returns><see langword="true"/> when the world id is currently registered (its row is admitted).</returns>
@@ -122,14 +139,72 @@ public sealed class SiloConsoleRouting {
 
         return false;
     }
+    /// <summary>Queues a line on an admitted row. Retirement racing the reader is a refusal, not a reader-thread
+    /// exception; already injected simulation work retains its existing completion semantics.</summary>
+    /// <param name="worldId">The addressed row's registry name.</param>
+    /// <param name="line">The command line.</param>
+    /// <returns>Whether the line was queued before the session closed. This is not a dispatch receipt.</returns>
+    /// <exception cref="ArgumentNullException">The world id or line is null.</exception>
+    public bool TryEnqueue(string worldId, string line) {
+        ArgumentNullException.ThrowIfNull(line);
+        if (!TryGetSession(worldId, out var session)) {
+            return false;
+        }
+        try {
+            session.Enqueue(line);
+            return true;
+        } catch (ObjectDisposedException) {
+            return false;
+        }
+    }
+    /// <summary>Creates independent Console ingress for a currently admitted row. Retirement closes every attached session.</summary>
+    /// <param name="worldId">The exact configured row, never the mutable stdin default.</param>
+    /// <param name="principal">The admitted acting identity; omitted only for trusted local Console ingress.</param>
+    /// <param name="authorize">A live command authorization check on the command pump.</param>
+    /// <param name="closed">Releases the host's admission when this session closes.</param>
+    /// <returns>An independently ordered session owned by the caller.</returns>
+    /// <exception cref="InvalidOperationException">The row is unavailable or already retired.</exception>
+    public IControlSession CreateControlSession(string worldId, CommandPrincipal? principal = null, Func<CommandMetadata, bool>? authorize = null, Action? closed = null) {
+        if (!m_byWorldId.TryGetValue(worldId, out var route)) { throw new InvalidOperationException("The configured World row is not admitted."); }
+        lock (route.Gate) {
+            if (route.Retired) { throw new InvalidOperationException("The configured World row has retired."); }
+            var session = new RowControlSession(route, new ConsoleControlSession(m_source(),
+                _ => throw new NotSupportedException("The headless silo has no framebuffer."), route.Slot, () => new RowNarrationScope(worldId), principal, authorize), closed);
+            route.Controls.Add(session);
+            return session;
+        }
+    }
+    /// <summary>Runs a trusted host lifecycle operation on the ordinary command pump.</summary>
+    /// <typeparam name="T">The result type.</typeparam>
+    /// <param name="worldId">The row whose retirement cancels the operation.</param>
+    /// <param name="operation">The operation; never supplied by command text.</param>
+    /// <param name="cancellationToken">Cancels queued work before it can execute.</param>
+    /// <returns>The operation's result.</returns>
+    public async ValueTask<T> InvokeAsync<T>(string worldId, Func<T> operation, CancellationToken cancellationToken) {
+        if (!m_byWorldId.TryGetValue(worldId, out var route)) { throw new InvalidOperationException("World unavailable."); }
+        CancellationTokenSource lifetime;
+        lock (route.Gate) {
+            if (route.Retired) { throw new InvalidOperationException("World retired."); }
+            lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, route.Lifetime.Token);
+        }
+        using var stopped = lifetime;
+        using var session = m_source().CreateSession(CommandPrincipal.Console);
+        return await session.InvokeAsync(operation, lifetime.Token).ConfigureAwait(false);
+    }
     /// <summary>Retires a row's console session — called from the same tick-thread mailbox action that removes the
-    /// row itself, so a session's lifetime never outlives its row.</summary>
+    /// row itself. Closes ingress and refuses work still queued, including operations held behind a wait.</summary>
     /// <param name="worldId">The row's registry name.</param>
     public void Unregister(string worldId) {
         if (m_byWorldId.TryRemove(
             key: worldId,
             value: out var route
         )) {
+            RowControlSession[] controls;
+            lock (route.Gate) { route.Retired = true; controls = [.. route.Controls]; route.Controls.Clear(); }
+            route.Lifetime.Cancel();
+            route.Lifetime.Dispose();
+            foreach (var control in controls) { control.Dispose(); }
+            route.Session.Dispose();
             m_bySlot.TryRemove(
                 key: route.Slot,
                 value: out _

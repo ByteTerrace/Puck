@@ -1,0 +1,7 @@
+# let the tick-1 rule fire, read every symmetry read-back and the lattice's own answer, confirm the wire stayed clean
+world.status
+world.wait 5
+world.state
+world.symmetry 5 17
+world.symmetry 87
+wire.errors

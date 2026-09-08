@@ -1,0 +1,2430 @@
+{
+  "exports": {
+    "actions": [
+      "solitaireSpider"
+    ],
+    "bindings": [
+      "solitaireSpider"
+    ],
+    "reads": [
+      "solitaireSpider",
+      "solitaireSpiderCards",
+      "solitaireSpiderFace",
+      "solitaireSpiderRank",
+      "solitaireSpiderSuit"
+    ]
+  },
+  "state": {
+  "world": [
+    {
+      "name": "solitaireSpiderCards",
+      "kind": "Int",
+      "capacity": 104,
+      "cells": [
+        {
+          "key": "0",
+          "value": 0
+        },
+        {
+          "key": "1",
+          "value": 1
+        },
+        {
+          "key": "2",
+          "value": 2
+        },
+        {
+          "key": "3",
+          "value": 3
+        },
+        {
+          "key": "4",
+          "value": 4
+        },
+        {
+          "key": "5",
+          "value": 5
+        },
+        {
+          "key": "6",
+          "value": 6
+        },
+        {
+          "key": "7",
+          "value": 7
+        },
+        {
+          "key": "8",
+          "value": 8
+        },
+        {
+          "key": "9",
+          "value": 9
+        },
+        {
+          "key": "10",
+          "value": 10
+        },
+        {
+          "key": "11",
+          "value": 11
+        },
+        {
+          "key": "12",
+          "value": 12
+        },
+        {
+          "key": "13",
+          "value": 13
+        },
+        {
+          "key": "14",
+          "value": 14
+        },
+        {
+          "key": "15",
+          "value": 15
+        },
+        {
+          "key": "16",
+          "value": 16
+        },
+        {
+          "key": "17",
+          "value": 17
+        },
+        {
+          "key": "18",
+          "value": 18
+        },
+        {
+          "key": "19",
+          "value": 19
+        },
+        {
+          "key": "20",
+          "value": 20
+        },
+        {
+          "key": "21",
+          "value": 21
+        },
+        {
+          "key": "22",
+          "value": 22
+        },
+        {
+          "key": "23",
+          "value": 23
+        },
+        {
+          "key": "24",
+          "value": 24
+        },
+        {
+          "key": "25",
+          "value": 25
+        },
+        {
+          "key": "26",
+          "value": 26
+        },
+        {
+          "key": "27",
+          "value": 27
+        },
+        {
+          "key": "28",
+          "value": 28
+        },
+        {
+          "key": "29",
+          "value": 29
+        },
+        {
+          "key": "30",
+          "value": 30
+        },
+        {
+          "key": "31",
+          "value": 31
+        },
+        {
+          "key": "32",
+          "value": 32
+        },
+        {
+          "key": "33",
+          "value": 33
+        },
+        {
+          "key": "34",
+          "value": 34
+        },
+        {
+          "key": "35",
+          "value": 35
+        },
+        {
+          "key": "36",
+          "value": 36
+        },
+        {
+          "key": "37",
+          "value": 37
+        },
+        {
+          "key": "38",
+          "value": 38
+        },
+        {
+          "key": "39",
+          "value": 39
+        },
+        {
+          "key": "40",
+          "value": 40
+        },
+        {
+          "key": "41",
+          "value": 41
+        },
+        {
+          "key": "42",
+          "value": 42
+        },
+        {
+          "key": "43",
+          "value": 43
+        },
+        {
+          "key": "44",
+          "value": 44
+        },
+        {
+          "key": "45",
+          "value": 45
+        },
+        {
+          "key": "46",
+          "value": 46
+        },
+        {
+          "key": "47",
+          "value": 47
+        },
+        {
+          "key": "48",
+          "value": 48
+        },
+        {
+          "key": "49",
+          "value": 49
+        },
+        {
+          "key": "50",
+          "value": 50
+        },
+        {
+          "key": "51",
+          "value": 51
+        },
+        {
+          "key": "52",
+          "value": 52
+        },
+        {
+          "key": "53",
+          "value": 53
+        },
+        {
+          "key": "54",
+          "value": 54
+        },
+        {
+          "key": "55",
+          "value": 55
+        },
+        {
+          "key": "56",
+          "value": 56
+        },
+        {
+          "key": "57",
+          "value": 57
+        },
+        {
+          "key": "58",
+          "value": 58
+        },
+        {
+          "key": "59",
+          "value": 59
+        },
+        {
+          "key": "60",
+          "value": 60
+        },
+        {
+          "key": "61",
+          "value": 61
+        },
+        {
+          "key": "62",
+          "value": 62
+        },
+        {
+          "key": "63",
+          "value": 63
+        },
+        {
+          "key": "64",
+          "value": 64
+        },
+        {
+          "key": "65",
+          "value": 65
+        },
+        {
+          "key": "66",
+          "value": 66
+        },
+        {
+          "key": "67",
+          "value": 67
+        },
+        {
+          "key": "68",
+          "value": 68
+        },
+        {
+          "key": "69",
+          "value": 69
+        },
+        {
+          "key": "70",
+          "value": 70
+        },
+        {
+          "key": "71",
+          "value": 71
+        },
+        {
+          "key": "72",
+          "value": 72
+        },
+        {
+          "key": "73",
+          "value": 73
+        },
+        {
+          "key": "74",
+          "value": 74
+        },
+        {
+          "key": "75",
+          "value": 75
+        },
+        {
+          "key": "76",
+          "value": 76
+        },
+        {
+          "key": "77",
+          "value": 77
+        },
+        {
+          "key": "78",
+          "value": 78
+        },
+        {
+          "key": "79",
+          "value": 79
+        },
+        {
+          "key": "80",
+          "value": 80
+        },
+        {
+          "key": "81",
+          "value": 81
+        },
+        {
+          "key": "82",
+          "value": 82
+        },
+        {
+          "key": "83",
+          "value": 83
+        },
+        {
+          "key": "84",
+          "value": 84
+        },
+        {
+          "key": "85",
+          "value": 85
+        },
+        {
+          "key": "86",
+          "value": 86
+        },
+        {
+          "key": "87",
+          "value": 87
+        },
+        {
+          "key": "88",
+          "value": 88
+        },
+        {
+          "key": "89",
+          "value": 89
+        },
+        {
+          "key": "90",
+          "value": 90
+        },
+        {
+          "key": "91",
+          "value": 91
+        },
+        {
+          "key": "92",
+          "value": 92
+        },
+        {
+          "key": "93",
+          "value": 93
+        },
+        {
+          "key": "94",
+          "value": 94
+        },
+        {
+          "key": "95",
+          "value": 95
+        },
+        {
+          "key": "96",
+          "value": 96
+        },
+        {
+          "key": "97",
+          "value": 97
+        },
+        {
+          "key": "98",
+          "value": 98
+        },
+        {
+          "key": "99",
+          "value": 99
+        },
+        {
+          "key": "100",
+          "value": 100
+        },
+        {
+          "key": "101",
+          "value": 101
+        },
+        {
+          "key": "102",
+          "value": 102
+        },
+        {
+          "key": "103",
+          "value": 103
+        }
+      ]
+    },
+    {
+      "name": "solitaireSpiderRank",
+      "kind": "Int",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards"
+      },
+      "capacity": 104,
+      "cells": [
+        {
+          "key": "0",
+          "value": 1
+        },
+        {
+          "key": "1",
+          "value": 2
+        },
+        {
+          "key": "2",
+          "value": 3
+        },
+        {
+          "key": "3",
+          "value": 4
+        },
+        {
+          "key": "4",
+          "value": 5
+        },
+        {
+          "key": "5",
+          "value": 6
+        },
+        {
+          "key": "6",
+          "value": 7
+        },
+        {
+          "key": "7",
+          "value": 8
+        },
+        {
+          "key": "8",
+          "value": 9
+        },
+        {
+          "key": "9",
+          "value": 10
+        },
+        {
+          "key": "10",
+          "value": 11
+        },
+        {
+          "key": "11",
+          "value": 12
+        },
+        {
+          "key": "12",
+          "value": 13
+        },
+        {
+          "key": "13",
+          "value": 1
+        },
+        {
+          "key": "14",
+          "value": 2
+        },
+        {
+          "key": "15",
+          "value": 3
+        },
+        {
+          "key": "16",
+          "value": 4
+        },
+        {
+          "key": "17",
+          "value": 5
+        },
+        {
+          "key": "18",
+          "value": 6
+        },
+        {
+          "key": "19",
+          "value": 7
+        },
+        {
+          "key": "20",
+          "value": 8
+        },
+        {
+          "key": "21",
+          "value": 9
+        },
+        {
+          "key": "22",
+          "value": 10
+        },
+        {
+          "key": "23",
+          "value": 11
+        },
+        {
+          "key": "24",
+          "value": 12
+        },
+        {
+          "key": "25",
+          "value": 13
+        },
+        {
+          "key": "26",
+          "value": 1
+        },
+        {
+          "key": "27",
+          "value": 2
+        },
+        {
+          "key": "28",
+          "value": 3
+        },
+        {
+          "key": "29",
+          "value": 4
+        },
+        {
+          "key": "30",
+          "value": 5
+        },
+        {
+          "key": "31",
+          "value": 6
+        },
+        {
+          "key": "32",
+          "value": 7
+        },
+        {
+          "key": "33",
+          "value": 8
+        },
+        {
+          "key": "34",
+          "value": 9
+        },
+        {
+          "key": "35",
+          "value": 10
+        },
+        {
+          "key": "36",
+          "value": 11
+        },
+        {
+          "key": "37",
+          "value": 12
+        },
+        {
+          "key": "38",
+          "value": 13
+        },
+        {
+          "key": "39",
+          "value": 1
+        },
+        {
+          "key": "40",
+          "value": 2
+        },
+        {
+          "key": "41",
+          "value": 3
+        },
+        {
+          "key": "42",
+          "value": 4
+        },
+        {
+          "key": "43",
+          "value": 5
+        },
+        {
+          "key": "44",
+          "value": 6
+        },
+        {
+          "key": "45",
+          "value": 7
+        },
+        {
+          "key": "46",
+          "value": 8
+        },
+        {
+          "key": "47",
+          "value": 9
+        },
+        {
+          "key": "48",
+          "value": 10
+        },
+        {
+          "key": "49",
+          "value": 11
+        },
+        {
+          "key": "50",
+          "value": 12
+        },
+        {
+          "key": "51",
+          "value": 13
+        },
+        {
+          "key": "52",
+          "value": 1
+        },
+        {
+          "key": "53",
+          "value": 2
+        },
+        {
+          "key": "54",
+          "value": 3
+        },
+        {
+          "key": "55",
+          "value": 4
+        },
+        {
+          "key": "56",
+          "value": 5
+        },
+        {
+          "key": "57",
+          "value": 6
+        },
+        {
+          "key": "58",
+          "value": 7
+        },
+        {
+          "key": "59",
+          "value": 8
+        },
+        {
+          "key": "60",
+          "value": 9
+        },
+        {
+          "key": "61",
+          "value": 10
+        },
+        {
+          "key": "62",
+          "value": 11
+        },
+        {
+          "key": "63",
+          "value": 12
+        },
+        {
+          "key": "64",
+          "value": 13
+        },
+        {
+          "key": "65",
+          "value": 1
+        },
+        {
+          "key": "66",
+          "value": 2
+        },
+        {
+          "key": "67",
+          "value": 3
+        },
+        {
+          "key": "68",
+          "value": 4
+        },
+        {
+          "key": "69",
+          "value": 5
+        },
+        {
+          "key": "70",
+          "value": 6
+        },
+        {
+          "key": "71",
+          "value": 7
+        },
+        {
+          "key": "72",
+          "value": 8
+        },
+        {
+          "key": "73",
+          "value": 9
+        },
+        {
+          "key": "74",
+          "value": 10
+        },
+        {
+          "key": "75",
+          "value": 11
+        },
+        {
+          "key": "76",
+          "value": 12
+        },
+        {
+          "key": "77",
+          "value": 13
+        },
+        {
+          "key": "78",
+          "value": 1
+        },
+        {
+          "key": "79",
+          "value": 2
+        },
+        {
+          "key": "80",
+          "value": 3
+        },
+        {
+          "key": "81",
+          "value": 4
+        },
+        {
+          "key": "82",
+          "value": 5
+        },
+        {
+          "key": "83",
+          "value": 6
+        },
+        {
+          "key": "84",
+          "value": 7
+        },
+        {
+          "key": "85",
+          "value": 8
+        },
+        {
+          "key": "86",
+          "value": 9
+        },
+        {
+          "key": "87",
+          "value": 10
+        },
+        {
+          "key": "88",
+          "value": 11
+        },
+        {
+          "key": "89",
+          "value": 12
+        },
+        {
+          "key": "90",
+          "value": 13
+        },
+        {
+          "key": "91",
+          "value": 1
+        },
+        {
+          "key": "92",
+          "value": 2
+        },
+        {
+          "key": "93",
+          "value": 3
+        },
+        {
+          "key": "94",
+          "value": 4
+        },
+        {
+          "key": "95",
+          "value": 5
+        },
+        {
+          "key": "96",
+          "value": 6
+        },
+        {
+          "key": "97",
+          "value": 7
+        },
+        {
+          "key": "98",
+          "value": 8
+        },
+        {
+          "key": "99",
+          "value": 9
+        },
+        {
+          "key": "100",
+          "value": 10
+        },
+        {
+          "key": "101",
+          "value": 11
+        },
+        {
+          "key": "102",
+          "value": 12
+        },
+        {
+          "key": "103",
+          "value": 13
+        }
+      ]
+    },
+    {
+      "name": "solitaireSpiderSuit",
+      "kind": "Int",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards"
+      },
+      "capacity": 104,
+      "cells": [
+        {
+          "key": "0",
+          "value": 0
+        },
+        {
+          "key": "1",
+          "value": 0
+        },
+        {
+          "key": "2",
+          "value": 0
+        },
+        {
+          "key": "3",
+          "value": 0
+        },
+        {
+          "key": "4",
+          "value": 0
+        },
+        {
+          "key": "5",
+          "value": 0
+        },
+        {
+          "key": "6",
+          "value": 0
+        },
+        {
+          "key": "7",
+          "value": 0
+        },
+        {
+          "key": "8",
+          "value": 0
+        },
+        {
+          "key": "9",
+          "value": 0
+        },
+        {
+          "key": "10",
+          "value": 0
+        },
+        {
+          "key": "11",
+          "value": 0
+        },
+        {
+          "key": "12",
+          "value": 0
+        },
+        {
+          "key": "13",
+          "value": 1
+        },
+        {
+          "key": "14",
+          "value": 1
+        },
+        {
+          "key": "15",
+          "value": 1
+        },
+        {
+          "key": "16",
+          "value": 1
+        },
+        {
+          "key": "17",
+          "value": 1
+        },
+        {
+          "key": "18",
+          "value": 1
+        },
+        {
+          "key": "19",
+          "value": 1
+        },
+        {
+          "key": "20",
+          "value": 1
+        },
+        {
+          "key": "21",
+          "value": 1
+        },
+        {
+          "key": "22",
+          "value": 1
+        },
+        {
+          "key": "23",
+          "value": 1
+        },
+        {
+          "key": "24",
+          "value": 1
+        },
+        {
+          "key": "25",
+          "value": 1
+        },
+        {
+          "key": "26",
+          "value": 2
+        },
+        {
+          "key": "27",
+          "value": 2
+        },
+        {
+          "key": "28",
+          "value": 2
+        },
+        {
+          "key": "29",
+          "value": 2
+        },
+        {
+          "key": "30",
+          "value": 2
+        },
+        {
+          "key": "31",
+          "value": 2
+        },
+        {
+          "key": "32",
+          "value": 2
+        },
+        {
+          "key": "33",
+          "value": 2
+        },
+        {
+          "key": "34",
+          "value": 2
+        },
+        {
+          "key": "35",
+          "value": 2
+        },
+        {
+          "key": "36",
+          "value": 2
+        },
+        {
+          "key": "37",
+          "value": 2
+        },
+        {
+          "key": "38",
+          "value": 2
+        },
+        {
+          "key": "39",
+          "value": 3
+        },
+        {
+          "key": "40",
+          "value": 3
+        },
+        {
+          "key": "41",
+          "value": 3
+        },
+        {
+          "key": "42",
+          "value": 3
+        },
+        {
+          "key": "43",
+          "value": 3
+        },
+        {
+          "key": "44",
+          "value": 3
+        },
+        {
+          "key": "45",
+          "value": 3
+        },
+        {
+          "key": "46",
+          "value": 3
+        },
+        {
+          "key": "47",
+          "value": 3
+        },
+        {
+          "key": "48",
+          "value": 3
+        },
+        {
+          "key": "49",
+          "value": 3
+        },
+        {
+          "key": "50",
+          "value": 3
+        },
+        {
+          "key": "51",
+          "value": 3
+        },
+        {
+          "key": "52",
+          "value": 0
+        },
+        {
+          "key": "53",
+          "value": 0
+        },
+        {
+          "key": "54",
+          "value": 0
+        },
+        {
+          "key": "55",
+          "value": 0
+        },
+        {
+          "key": "56",
+          "value": 0
+        },
+        {
+          "key": "57",
+          "value": 0
+        },
+        {
+          "key": "58",
+          "value": 0
+        },
+        {
+          "key": "59",
+          "value": 0
+        },
+        {
+          "key": "60",
+          "value": 0
+        },
+        {
+          "key": "61",
+          "value": 0
+        },
+        {
+          "key": "62",
+          "value": 0
+        },
+        {
+          "key": "63",
+          "value": 0
+        },
+        {
+          "key": "64",
+          "value": 0
+        },
+        {
+          "key": "65",
+          "value": 1
+        },
+        {
+          "key": "66",
+          "value": 1
+        },
+        {
+          "key": "67",
+          "value": 1
+        },
+        {
+          "key": "68",
+          "value": 1
+        },
+        {
+          "key": "69",
+          "value": 1
+        },
+        {
+          "key": "70",
+          "value": 1
+        },
+        {
+          "key": "71",
+          "value": 1
+        },
+        {
+          "key": "72",
+          "value": 1
+        },
+        {
+          "key": "73",
+          "value": 1
+        },
+        {
+          "key": "74",
+          "value": 1
+        },
+        {
+          "key": "75",
+          "value": 1
+        },
+        {
+          "key": "76",
+          "value": 1
+        },
+        {
+          "key": "77",
+          "value": 1
+        },
+        {
+          "key": "78",
+          "value": 2
+        },
+        {
+          "key": "79",
+          "value": 2
+        },
+        {
+          "key": "80",
+          "value": 2
+        },
+        {
+          "key": "81",
+          "value": 2
+        },
+        {
+          "key": "82",
+          "value": 2
+        },
+        {
+          "key": "83",
+          "value": 2
+        },
+        {
+          "key": "84",
+          "value": 2
+        },
+        {
+          "key": "85",
+          "value": 2
+        },
+        {
+          "key": "86",
+          "value": 2
+        },
+        {
+          "key": "87",
+          "value": 2
+        },
+        {
+          "key": "88",
+          "value": 2
+        },
+        {
+          "key": "89",
+          "value": 2
+        },
+        {
+          "key": "90",
+          "value": 2
+        },
+        {
+          "key": "91",
+          "value": 3
+        },
+        {
+          "key": "92",
+          "value": 3
+        },
+        {
+          "key": "93",
+          "value": 3
+        },
+        {
+          "key": "94",
+          "value": 3
+        },
+        {
+          "key": "95",
+          "value": 3
+        },
+        {
+          "key": "96",
+          "value": 3
+        },
+        {
+          "key": "97",
+          "value": 3
+        },
+        {
+          "key": "98",
+          "value": 3
+        },
+        {
+          "key": "99",
+          "value": 3
+        },
+        {
+          "key": "100",
+          "value": 3
+        },
+        {
+          "key": "101",
+          "value": 3
+        },
+        {
+          "key": "102",
+          "value": 3
+        },
+        {
+          "key": "103",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "solitaireSpiderFace",
+      "kind": "Int",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards"
+      },
+      "capacity": 104,
+      "cells": [
+        {
+          "key": "0",
+          "value": 0
+        },
+        {
+          "key": "1",
+          "value": 0
+        },
+        {
+          "key": "2",
+          "value": 0
+        },
+        {
+          "key": "3",
+          "value": 0
+        },
+        {
+          "key": "4",
+          "value": 0
+        },
+        {
+          "key": "5",
+          "value": 0
+        },
+        {
+          "key": "6",
+          "value": 0
+        },
+        {
+          "key": "7",
+          "value": 0
+        },
+        {
+          "key": "8",
+          "value": 0
+        },
+        {
+          "key": "9",
+          "value": 0
+        },
+        {
+          "key": "10",
+          "value": 0
+        },
+        {
+          "key": "11",
+          "value": 0
+        },
+        {
+          "key": "12",
+          "value": 0
+        },
+        {
+          "key": "13",
+          "value": 0
+        },
+        {
+          "key": "14",
+          "value": 0
+        },
+        {
+          "key": "15",
+          "value": 0
+        },
+        {
+          "key": "16",
+          "value": 0
+        },
+        {
+          "key": "17",
+          "value": 0
+        },
+        {
+          "key": "18",
+          "value": 0
+        },
+        {
+          "key": "19",
+          "value": 0
+        },
+        {
+          "key": "20",
+          "value": 0
+        },
+        {
+          "key": "21",
+          "value": 0
+        },
+        {
+          "key": "22",
+          "value": 0
+        },
+        {
+          "key": "23",
+          "value": 0
+        },
+        {
+          "key": "24",
+          "value": 0
+        },
+        {
+          "key": "25",
+          "value": 0
+        },
+        {
+          "key": "26",
+          "value": 0
+        },
+        {
+          "key": "27",
+          "value": 0
+        },
+        {
+          "key": "28",
+          "value": 0
+        },
+        {
+          "key": "29",
+          "value": 0
+        },
+        {
+          "key": "30",
+          "value": 0
+        },
+        {
+          "key": "31",
+          "value": 0
+        },
+        {
+          "key": "32",
+          "value": 0
+        },
+        {
+          "key": "33",
+          "value": 0
+        },
+        {
+          "key": "34",
+          "value": 0
+        },
+        {
+          "key": "35",
+          "value": 0
+        },
+        {
+          "key": "36",
+          "value": 0
+        },
+        {
+          "key": "37",
+          "value": 0
+        },
+        {
+          "key": "38",
+          "value": 0
+        },
+        {
+          "key": "39",
+          "value": 0
+        },
+        {
+          "key": "40",
+          "value": 0
+        },
+        {
+          "key": "41",
+          "value": 0
+        },
+        {
+          "key": "42",
+          "value": 0
+        },
+        {
+          "key": "43",
+          "value": 0
+        },
+        {
+          "key": "44",
+          "value": 0
+        },
+        {
+          "key": "45",
+          "value": 0
+        },
+        {
+          "key": "46",
+          "value": 0
+        },
+        {
+          "key": "47",
+          "value": 0
+        },
+        {
+          "key": "48",
+          "value": 0
+        },
+        {
+          "key": "49",
+          "value": 0
+        },
+        {
+          "key": "50",
+          "value": 0
+        },
+        {
+          "key": "51",
+          "value": 0
+        },
+        {
+          "key": "52",
+          "value": 0
+        },
+        {
+          "key": "53",
+          "value": 0
+        },
+        {
+          "key": "54",
+          "value": 0
+        },
+        {
+          "key": "55",
+          "value": 0
+        },
+        {
+          "key": "56",
+          "value": 0
+        },
+        {
+          "key": "57",
+          "value": 0
+        },
+        {
+          "key": "58",
+          "value": 0
+        },
+        {
+          "key": "59",
+          "value": 0
+        },
+        {
+          "key": "60",
+          "value": 0
+        },
+        {
+          "key": "61",
+          "value": 0
+        },
+        {
+          "key": "62",
+          "value": 0
+        },
+        {
+          "key": "63",
+          "value": 0
+        },
+        {
+          "key": "64",
+          "value": 0
+        },
+        {
+          "key": "65",
+          "value": 0
+        },
+        {
+          "key": "66",
+          "value": 0
+        },
+        {
+          "key": "67",
+          "value": 0
+        },
+        {
+          "key": "68",
+          "value": 0
+        },
+        {
+          "key": "69",
+          "value": 0
+        },
+        {
+          "key": "70",
+          "value": 0
+        },
+        {
+          "key": "71",
+          "value": 0
+        },
+        {
+          "key": "72",
+          "value": 0
+        },
+        {
+          "key": "73",
+          "value": 0
+        },
+        {
+          "key": "74",
+          "value": 0
+        },
+        {
+          "key": "75",
+          "value": 0
+        },
+        {
+          "key": "76",
+          "value": 0
+        },
+        {
+          "key": "77",
+          "value": 0
+        },
+        {
+          "key": "78",
+          "value": 0
+        },
+        {
+          "key": "79",
+          "value": 0
+        },
+        {
+          "key": "80",
+          "value": 0
+        },
+        {
+          "key": "81",
+          "value": 0
+        },
+        {
+          "key": "82",
+          "value": 0
+        },
+        {
+          "key": "83",
+          "value": 0
+        },
+        {
+          "key": "84",
+          "value": 0
+        },
+        {
+          "key": "85",
+          "value": 0
+        },
+        {
+          "key": "86",
+          "value": 0
+        },
+        {
+          "key": "87",
+          "value": 0
+        },
+        {
+          "key": "88",
+          "value": 0
+        },
+        {
+          "key": "89",
+          "value": 0
+        },
+        {
+          "key": "90",
+          "value": 0
+        },
+        {
+          "key": "91",
+          "value": 0
+        },
+        {
+          "key": "92",
+          "value": 0
+        },
+        {
+          "key": "93",
+          "value": 0
+        },
+        {
+          "key": "94",
+          "value": 0
+        },
+        {
+          "key": "95",
+          "value": 0
+        },
+        {
+          "key": "96",
+          "value": 0
+        },
+        {
+          "key": "97",
+          "value": 0
+        },
+        {
+          "key": "98",
+          "value": 0
+        },
+        {
+          "key": "99",
+          "value": 0
+        },
+        {
+          "key": "100",
+          "value": 0
+        },
+        {
+          "key": "101",
+          "value": 0
+        },
+        {
+          "key": "102",
+          "value": 0
+        },
+        {
+          "key": "103",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "solitaireSpiderPile0",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": [
+        {
+          "key": "0",
+          "value": true
+        },
+        {
+          "key": "1",
+          "value": true
+        },
+        {
+          "key": "2",
+          "value": true
+        },
+        {
+          "key": "3",
+          "value": true
+        },
+        {
+          "key": "4",
+          "value": true
+        },
+        {
+          "key": "5",
+          "value": true
+        },
+        {
+          "key": "6",
+          "value": true
+        },
+        {
+          "key": "7",
+          "value": true
+        },
+        {
+          "key": "8",
+          "value": true
+        },
+        {
+          "key": "9",
+          "value": true
+        },
+        {
+          "key": "10",
+          "value": true
+        },
+        {
+          "key": "11",
+          "value": true
+        },
+        {
+          "key": "12",
+          "value": true
+        },
+        {
+          "key": "13",
+          "value": true
+        },
+        {
+          "key": "14",
+          "value": true
+        },
+        {
+          "key": "15",
+          "value": true
+        },
+        {
+          "key": "16",
+          "value": true
+        },
+        {
+          "key": "17",
+          "value": true
+        },
+        {
+          "key": "18",
+          "value": true
+        },
+        {
+          "key": "19",
+          "value": true
+        },
+        {
+          "key": "20",
+          "value": true
+        },
+        {
+          "key": "21",
+          "value": true
+        },
+        {
+          "key": "22",
+          "value": true
+        },
+        {
+          "key": "23",
+          "value": true
+        },
+        {
+          "key": "24",
+          "value": true
+        },
+        {
+          "key": "25",
+          "value": true
+        },
+        {
+          "key": "26",
+          "value": true
+        },
+        {
+          "key": "27",
+          "value": true
+        },
+        {
+          "key": "28",
+          "value": true
+        },
+        {
+          "key": "29",
+          "value": true
+        },
+        {
+          "key": "30",
+          "value": true
+        },
+        {
+          "key": "31",
+          "value": true
+        },
+        {
+          "key": "32",
+          "value": true
+        },
+        {
+          "key": "33",
+          "value": true
+        },
+        {
+          "key": "34",
+          "value": true
+        },
+        {
+          "key": "35",
+          "value": true
+        },
+        {
+          "key": "36",
+          "value": true
+        },
+        {
+          "key": "37",
+          "value": true
+        },
+        {
+          "key": "38",
+          "value": true
+        },
+        {
+          "key": "39",
+          "value": true
+        },
+        {
+          "key": "40",
+          "value": true
+        },
+        {
+          "key": "41",
+          "value": true
+        },
+        {
+          "key": "42",
+          "value": true
+        },
+        {
+          "key": "43",
+          "value": true
+        },
+        {
+          "key": "44",
+          "value": true
+        },
+        {
+          "key": "45",
+          "value": true
+        },
+        {
+          "key": "46",
+          "value": true
+        },
+        {
+          "key": "47",
+          "value": true
+        },
+        {
+          "key": "48",
+          "value": true
+        },
+        {
+          "key": "49",
+          "value": true
+        },
+        {
+          "key": "50",
+          "value": true
+        },
+        {
+          "key": "51",
+          "value": true
+        },
+        {
+          "key": "52",
+          "value": true
+        },
+        {
+          "key": "53",
+          "value": true
+        },
+        {
+          "key": "54",
+          "value": true
+        },
+        {
+          "key": "55",
+          "value": true
+        },
+        {
+          "key": "56",
+          "value": true
+        },
+        {
+          "key": "57",
+          "value": true
+        },
+        {
+          "key": "58",
+          "value": true
+        },
+        {
+          "key": "59",
+          "value": true
+        },
+        {
+          "key": "60",
+          "value": true
+        },
+        {
+          "key": "61",
+          "value": true
+        },
+        {
+          "key": "62",
+          "value": true
+        },
+        {
+          "key": "63",
+          "value": true
+        },
+        {
+          "key": "64",
+          "value": true
+        },
+        {
+          "key": "65",
+          "value": true
+        },
+        {
+          "key": "66",
+          "value": true
+        },
+        {
+          "key": "67",
+          "value": true
+        },
+        {
+          "key": "68",
+          "value": true
+        },
+        {
+          "key": "69",
+          "value": true
+        },
+        {
+          "key": "70",
+          "value": true
+        },
+        {
+          "key": "71",
+          "value": true
+        },
+        {
+          "key": "72",
+          "value": true
+        },
+        {
+          "key": "73",
+          "value": true
+        },
+        {
+          "key": "74",
+          "value": true
+        },
+        {
+          "key": "75",
+          "value": true
+        },
+        {
+          "key": "76",
+          "value": true
+        },
+        {
+          "key": "77",
+          "value": true
+        },
+        {
+          "key": "78",
+          "value": true
+        },
+        {
+          "key": "79",
+          "value": true
+        },
+        {
+          "key": "80",
+          "value": true
+        },
+        {
+          "key": "81",
+          "value": true
+        },
+        {
+          "key": "82",
+          "value": true
+        },
+        {
+          "key": "83",
+          "value": true
+        },
+        {
+          "key": "84",
+          "value": true
+        },
+        {
+          "key": "85",
+          "value": true
+        },
+        {
+          "key": "86",
+          "value": true
+        },
+        {
+          "key": "87",
+          "value": true
+        },
+        {
+          "key": "88",
+          "value": true
+        },
+        {
+          "key": "89",
+          "value": true
+        },
+        {
+          "key": "90",
+          "value": true
+        },
+        {
+          "key": "91",
+          "value": true
+        },
+        {
+          "key": "92",
+          "value": true
+        },
+        {
+          "key": "93",
+          "value": true
+        },
+        {
+          "key": "94",
+          "value": true
+        },
+        {
+          "key": "95",
+          "value": true
+        },
+        {
+          "key": "96",
+          "value": true
+        },
+        {
+          "key": "97",
+          "value": true
+        },
+        {
+          "key": "98",
+          "value": true
+        },
+        {
+          "key": "99",
+          "value": true
+        },
+        {
+          "key": "100",
+          "value": true
+        },
+        {
+          "key": "101",
+          "value": true
+        },
+        {
+          "key": "102",
+          "value": true
+        },
+        {
+          "key": "103",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "solitaireSpiderPile2",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile3",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile4",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile5",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile6",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile7",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile8",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile9",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile10",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile11",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpiderPile12",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireSpiderCards",
+        "ordered": true
+      },
+      "capacity": 104,
+      "cells": []
+    },
+    {
+      "name": "solitaireSpider",
+      "kind": "Int",
+      "capacity": 27,
+      "cells": [
+        {
+          "key": "request",
+          "value": 0
+        },
+        {
+          "key": "applied",
+          "value": 0
+        },
+        {
+          "key": "action",
+          "value": 0
+        },
+        {
+          "key": "from",
+          "value": -1
+        },
+        {
+          "key": "to",
+          "value": -1
+        },
+        {
+          "key": "card",
+          "value": -1
+        },
+        {
+          "key": "option",
+          "value": 1
+        },
+        {
+          "key": "activeOption",
+          "value": 1
+        },
+        {
+          "key": "stage",
+          "value": 0
+        },
+        {
+          "key": "busy",
+          "value": 0
+        },
+        {
+          "key": "status",
+          "value": 0
+        },
+        {
+          "key": "result",
+          "value": 0
+        },
+        {
+          "key": "moves",
+          "value": 0
+        },
+        {
+          "key": "score",
+          "value": 0
+        },
+        {
+          "key": "passes",
+          "value": 0
+        },
+        {
+          "key": "sourceOk",
+          "value": 0
+        },
+        {
+          "key": "targetOk",
+          "value": 0
+        },
+        {
+          "key": "runLength",
+          "value": 0
+        },
+        {
+          "key": "emptyCells",
+          "value": 0
+        },
+        {
+          "key": "emptyColumns",
+          "value": 0
+        },
+        {
+          "key": "deals",
+          "value": 0
+        },
+        {
+          "key": "dealStep",
+          "value": 0
+        },
+        {
+          "key": "gatherStep",
+          "value": 0
+        },
+        {
+          "key": "scan",
+          "value": 0
+        },
+        {
+          "key": "changed",
+          "value": 0
+        },
+        {
+          "key": "attributeStep",
+          "value": 0
+        },
+        {
+          "key": "drawLeft",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "solitaireSpiderStream",
+      "kind": "Int",
+      "draw": {
+        "generator": {
+          "source": "StreamDraw"
+        },
+        "timing": "Event"
+      }
+    }
+  ]
+},
+  "patterns": [
+    {"name": "solitaireSpiderLength","kind": "Int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "star","item": {"$type": "any"}}},
+    {"name": "solitaireSpiderSingle","kind": "Int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "any"}},
+    {"name": "solitaireSpiderRun","kind": "Int","value": "solitaireSpiderFace[$token] * (1 + (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))","symbols": [{"name": "face","min": 1,"max": 2},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "symbol","name": "face"},{"$type": "star","item": {"$type": "symbol","name": "next"}}]}},
+    {"name": "solitaireSpiderLanding","kind": "Int","value": "(solitaireSpiderRank[$token] == solitaireSpiderRank[solitaireSpider[card]] + 1)","symbols": [{"name": "yes","min": 1,"max": 1}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "yes"}]}},
+    {"name": "solitaireSpiderComplete","kind": "Int","value": "solitaireSpiderFace[$token] * ((solitaireSpiderRank[$token] == 13) + 2 * (solitaireSpiderRank[$token] == solitaireSpiderRank[$previous] - 1) * (solitaireSpiderSuit[$token] == solitaireSpiderSuit[$previous]))","symbols": [{"name": "king","min": 1,"max": 1},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "king"},{"$type": "repeat","item": {"$type": "symbol","name": "next"},"min": 12,"max": 12}]}}
+  ],
+  "rules": [
+    {"name": "solitaireSpider-new-deal","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 1},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireSpider","key": "option","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "option","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "option","comparison": "Equal","value": 4}]}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "activeOption","expression": "solitaireSpider[option]"},{"$type": "setState","state": "solitaireSpider","key": "stage","value": 1},{"$type": "setState","state": "solitaireSpider","key": "status","value": 0},{"$type": "setState","state": "solitaireSpider","key": "result","value": 0},{"$type": "setState","state": "solitaireSpider","key": "busy","value": 1}]},
+    {"name": "solitaireSpider-gather","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 1},{"$type": "compareState","state": "$reduce:count:$zones[solitaireSpider[gatherStep]]","comparison": "Greater","value": 0}]},"effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireSpider[gatherStep]]","to": "solitaireSpiderPile0","selector": "Slice","key": "$zone:$zones[solitaireSpider[gatherStep]]:first"}}],"zones": ["solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11","solitaireSpiderPile12"]},
+    {"name": "solitaireSpider-attributes-start","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "gatherStep","comparison": "Equal","value": 10},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile0","comparison": "Equal","value": 104}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "stage","value": 5}]},
+    {"name": "solitaireSpider-reset-attributes","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 5}]},"effects": [{"$type": "setState","state": "solitaireSpiderFace","key": "$cell:solitaireSpider:attributeStep","value": 0},{"$type": "setState","state": "solitaireSpiderSuit","key": "$cell:solitaireSpider:attributeStep","expression": "(solitaireSpider[attributeStep] / 13) % solitaireSpider[activeOption]"}]},
+    {"name": "solitaireSpider-shuffle","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 5},{"$type": "compareState","state": "solitaireSpider","key": "attributeStep","comparison": "Equal","value": 103}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "shuffle","row": "solitaireSpiderPile0","draw": "solitaireSpiderStream"}},{"$type": "setState","state": "solitaireSpider","key": "stage","value": 3}]}]},
+    {"name": "solitaireSpider-deal","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireSpider","key": "dealStep","comparison": "LessOrEqual","value": 53}]},"effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "solitaireSpiderPile0","to": "$zones[2 + (solitaireSpider[dealStep] % 10)]","selector": "First"}}],"zones": ["solitaireSpiderPile0","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11","solitaireSpiderPile12"]},
+    {"name": "solitaireSpider-deal-finish","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireSpider","key": "dealStep","comparison": "Equal","value": 53}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireSpider","key": "stage","value": 0},{"$type": "setState","state": "solitaireSpider","key": "status","value": 1},{"$type": "setState","state": "solitaireSpider","key": "moves","value": 0},{"$type": "setState","state": "solitaireSpider","key": "score","value": 500},{"$type": "setState","state": "solitaireSpider","key": "passes","value": 0},{"$type": "setState","state": "solitaireSpider","key": "deals","expression": "solitaireSpider[deals] + 1"},{"$type": "setState","state": "solitaireSpider","key": "result","value": 1},{"$type": "setState","state": "solitaireSpider","key": "applied","expression": "solitaireSpider[request]"}]}]},
+    {"name": "solitaireSpider-prepare-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "sourceOk","value": 0},{"$type": "setState","state": "solitaireSpider","key": "targetOk","value": 0},{"$type": "setState","state": "solitaireSpider","key": "runLength","value": 0}]},
+    {"name": "solitaireSpider-source","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "$zones[solitaireSpider[from]]","key": "$cell:solitaireSpider:card","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "sourceOk","expression": "$match:solitaireSpiderRun:$zones[solitaireSpider[from]][solitaireSpider[card]]"},{"$type": "setState","state": "solitaireSpider","key": "runLength","expression": "$match:solitaireSpiderLength:$zones[solitaireSpider[from]]:prefix[solitaireSpider[card]]"}],"zones": ["","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11"]},
+    {"name": "solitaireSpider-target","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "sourceOk","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "targetOk","expression": "$reduce:count:$zones[solitaireSpider[to]] == 0 ? 1 : $match:solitaireSpiderLanding:$zones[solitaireSpider[to]]"}],"zones": ["","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11"]},
+    {"name": "solitaireSpider-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "sourceOk","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "targetOk","comparison": "Equal","value": 1},{"$type": "compareValue","comparison": "NotEqual","kind": "Int","left": "solitaireSpider[from]","right": "solitaireSpider[to]"}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireSpider[from]]","to": "$zones[solitaireSpider[to]]","selector": "Slice","key": "$cell:solitaireSpider:card"}},{"$type": "setState","state": "solitaireSpider","key": "moves","expression": "solitaireSpider[moves] + 1"},{"$type": "setState","state": "solitaireSpider","key": "busy","value": 1},{"$type": "setState","state": "solitaireSpider","key": "score","expression": "solitaireSpider[score] - 1"},{"$type": "setState","state": "solitaireSpider","key": "result","value": 1},{"$type": "setState","state": "solitaireSpider","key": "applied","expression": "solitaireSpider[request]"}]}],"zones": ["solitaireSpiderPile0","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11","solitaireSpiderPile12"]},
+    {"name": "solitaireSpider-draw-start","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "action","comparison": "Equal","value": 3},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile0","comparison": "GreaterOrEqual","value": 10},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile2","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile3","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile4","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile5","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile6","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile7","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile8","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile9","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile10","comparison": "Greater","value": 0},{"$type": "compareState","state": "$reduce:count:solitaireSpiderPile11","comparison": "Greater","value": 0}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireSpider","key": "stage","value": 4},{"$type": "setState","state": "solitaireSpider","key": "busy","value": 1}]}]},
+    {"name": "solitaireSpider-draw","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 4},{"$type": "compareState","state": "solitaireSpider","key": "dealStep","comparison": "LessOrEqual","value": 9}]},"effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "solitaireSpiderPile0","to": "$zones[2 + solitaireSpider[dealStep]]","selector": "First"}}],"zones": ["solitaireSpiderPile0","","solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11","solitaireSpiderPile12"]},
+    {"name": "solitaireSpider-draw-finish","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 4},{"$type": "compareState","state": "solitaireSpider","key": "dealStep","comparison": "Equal","value": 9}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireSpider","key": "stage","value": 0},{"$type": "setState","state": "solitaireSpider","key": "moves","expression": "solitaireSpider[moves] + 1"},{"$type": "setState","state": "solitaireSpider","key": "score","expression": "solitaireSpider[score] - 1"},{"$type": "setState","state": "solitaireSpider","key": "result","value": 1},{"$type": "setState","state": "solitaireSpider","key": "applied","expression": "solitaireSpider[request]"}]}]},
+    {"name": "solitaireSpider-deal-advance","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 4}]}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "dealStep","expression": "solitaireSpider[stage] == 0 ? 0 : solitaireSpider[dealStep] + 1"}]},
+    {"name": "solitaireSpider-reject","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "request","comparison": "NotEqual","comparandState": "solitaireSpider","comparandKey": "applied"},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireSpider","key": "result","value": -1},{"$type": "setState","state": "solitaireSpider","key": "applied","expression": "solitaireSpider[request]"}]}]},
+    {"name": "solitaireSpider-reveal","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "$reduce:count:$zones[$each]","comparison": "Greater","value": 0},{"$type": "compareState","state": "solitaireSpiderFace","key": "$zone:$zones[$each]:last","comparison": "Equal","value": 0}]},"effects": [{"$type": "setState","state": "solitaireSpiderFace","key": "$zone:$zones[$each]:last","value": 1},{"$type": "setState","state": "solitaireSpider","key": "busy","value": 1},{"$type": "setState","state": "solitaireSpider","key": "changed","value": 1}],"forEach": "$zones","zones": ["solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11"]},
+    {"name": "solitaireSpider-complete","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 1},{"$type": "compareState","state": "$match:solitaireSpiderComplete:$zones[solitaireSpider[scan]]","comparison": "Equal","value": 1}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireSpider[scan]]","to": "solitaireSpiderPile12","selector": "Last","count": 13}},{"$type": "setState","state": "solitaireSpider","key": "score","expression": "solitaireSpider[score] + 100"},{"$type": "setState","state": "solitaireSpider","key": "changed","value": 1}]}],"zones": ["solitaireSpiderPile2","solitaireSpiderPile3","solitaireSpiderPile4","solitaireSpiderPile5","solitaireSpiderPile6","solitaireSpiderPile7","solitaireSpiderPile8","solitaireSpiderPile9","solitaireSpiderPile10","solitaireSpiderPile11"]},
+    {"name": "solitaireSpider-scan-advance","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "scan","expression": "(solitaireSpider[scan] + 1) % 10"},{"$type": "setState","state": "solitaireSpider","key": "busy","expression": "solitaireSpider[scan] == 0 ? solitaireSpider[changed] : 1"},{"$type": "setState","state": "solitaireSpider","key": "changed","expression": "solitaireSpider[scan] == 0 ? 0 : solitaireSpider[changed]"}]},
+    {"name": "solitaireSpider-gather-advance","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 1}]}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "gatherStep","expression": "solitaireSpider[stage] == 0 ? 0 : min(10, solitaireSpider[gatherStep] + 1)"}]},
+    {"name": "solitaireSpider-attribute-advance","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireSpider","key": "stage","comparison": "Equal","value": 5}]}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "attributeStep","expression": "solitaireSpider[stage] == 0 ? 0 : solitaireSpider[attributeStep] + 1"}]},
+    {"name": "solitaireSpider-win","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireSpider","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireSpider","key": "busy","comparison": "Equal","value": 0}]},"effects": [{"$type": "setState","state": "solitaireSpider","key": "status","expression": "($reduce:count:solitaireSpiderPile12) == 104 ? 2 : 1"}]}
+  ]
+}

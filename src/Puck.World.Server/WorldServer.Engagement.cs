@@ -55,7 +55,7 @@ public sealed partial class WorldServer {
         reason = string.Empty;
         return true;
     }
-    // player.press and player.stop are read back SYNCHRONOUSLY by their console handlers immediately after a submit
+    // body.press and body.stop are read back SYNCHRONOUSLY by their console handlers immediately after a submit
     // (WorldPopulation.PressRefusal/StopRefusal, mirroring MotionRefusal) — so a refusal that reaches EITHER of
     // ApplyCommand's early returns above (the grant-table denial, the missing/inactive body) must leave a note
     // behind too, or the handler reads whatever an EARLIER, unrelated attempt on the SAME body left there and
@@ -78,6 +78,19 @@ public sealed partial class WorldServer {
 
                 break;
         }
+    }
+    // Whether the principal's application set names anything other than its own body — the "already engaged" test
+    // the context-button probe skips on. Reads the one storage; there is no separate latch to consult.
+    private bool HasComposedApplication(WorldPrincipal principal) {
+        var own = GrantSubject.Body(index: principal.Index);
+
+        foreach (var application in m_grants.Applications(principal: principal)) {
+            if (application.Target != own) {
+                return true;
+            }
+        }
+
+        return false;
     }
     private void QueueRouteTransition(WorldPrincipal principal, GrantSubject? previous, GrantSubject? current) {
         var sourceBody = principal.Kind switch {
@@ -121,7 +134,12 @@ public sealed partial class WorldServer {
 
             if (m_tickWrittenPrincipal[index] != principal) {
                 if (!m_contended[entityIndex]) {
-                    Console.Error.WriteLine(value: $"[world.grant: body:{entityIndex} driven by both {m_tickWrittenPrincipal[index].Describe()} and {principal.Describe()} this tick — {principal.Describe()}'s intent applies]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(
+                            channel: "world.grant",
+                            text: $"[world.grant: body:{entityIndex} driven by both {m_tickWrittenPrincipal[index].Describe()} and {principal.Describe()} this tick — {principal.Describe()}'s intent applies]"
+                        );
+                    }
                 }
 
                 m_tickCollided[index] = true;
@@ -141,15 +159,15 @@ public sealed partial class WorldServer {
     /// <summary>Returns the context-sensitive-button interception's eligibility pass (the RPG A-button, <c>CLAUDE.md</c>'s
     /// overworld intent) — for each active, un-routed local seat, the first (document order) screen that is
     /// engageable and backed by a live booted machine (the real gate is <see cref="CheckScreenEngagePolicy"/>'s
-    /// <see cref="WorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and
+    /// <see cref="IWorldMachineHost.HasMachine"/> check — the authoritative server-side boot signal; the host boots and
     /// steps the machine in-process, so this project sees the real boot directly rather than a document-declared
     /// proxy), names an <see cref="WorldScreenRoute.EngageChannel"/> this world's channel table resolves, carries no live occupant
     /// (<see cref="WorldEngagement.PlayersOn"/> empty), sits within <see cref="WorldScreenRoute.EngageRadius"/> of the
     /// seat's pre-move position (this tick's population has not advanced yet — <c>Step</c> calls this before
     /// <see cref="WorldPopulation.AdvanceSeats"/>), and would actually pass <see cref="WorldEngagement.CheckEngage"/>.
     /// <para>
-    /// <see cref="WorldEngagement.Engage"/>'s own remarks leave engageable/proximity/machine policy to the caller
-    /// (ordinarily the client, ahead of a manual <c>player.engage</c>'s submission) — this is that same policy,
+    /// <see cref="WorldEngagement.Compose"/>'s own remarks leave engageable/proximity/machine policy to the caller
+    /// (ordinarily the client, ahead of a manual <c>body.engage</c>'s submission) — this is that same policy,
     /// resolved here instead, from document and grant state alone. Pure sim state in, pure sim state out: a shadow
     /// replay re-derives the identical decision at the identical tick from the identical taped inputs, with nothing
     /// new to tape — the same "re-derived, not recorded" shape <see cref="WorldEngagement"/>'s own body-route
@@ -176,10 +194,9 @@ public sealed partial class WorldServer {
 
             var principal = WorldPrincipal.Seat(slot: slot);
 
-            // A seat already routed somewhere (captured OR mirrored) keeps that ONE route — Engage re-points rather
-            // than stacking, and re-pointing an active possession/mirror off an unrelated button press is not this
-            // feature's job.
-            if (m_grants.ControlRoute(principal: principal) is not null) {
+            // A seat that has composed anything beyond its own body keeps that set — composing off an unrelated
+            // button press over an active possession/mirror is not this feature's job.
+            if (HasComposedApplication(principal: principal)) {
                 continue;
             }
 

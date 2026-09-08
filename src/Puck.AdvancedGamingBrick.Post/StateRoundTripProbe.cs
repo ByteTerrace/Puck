@@ -62,7 +62,7 @@ internal static class StateRoundTripProbe {
         );
         var machine = host.Machine;
 
-        RunFrames(
+        PostMachine.RunFrames(
             frames: WarmupFrames,
             machine: machine
         );
@@ -95,7 +95,7 @@ internal static class StateRoundTripProbe {
         );
         var machine = host.Machine;
 
-        RunFrames(
+        PostMachine.RunFrames(
             frames: WarmupFrames,
             machine: machine
         );
@@ -139,14 +139,14 @@ internal static class StateRoundTripProbe {
         );
         var machine = host.Machine;
 
-        RunFrames(
+        PostMachine.RunFrames(
             frames: WarmupFrames,
             machine: machine
         );
 
         var original = machine.Snapshot();
 
-        RunFrames(
+        PostMachine.RunFrames(
             frames: RecordFrames,
             machine: machine
         );
@@ -166,11 +166,6 @@ internal static class StateRoundTripProbe {
             : $"reproduces-original={reproducesOriginal}, idempotent={idempotent}");
 
         return (ok, detail);
-    }
-    private static void RunFrames(AdvancedGamingBrickMachine machine, int frames) {
-        for (var i = 0; (i < frames); ++i) {
-            _ = machine.RunFrame();
-        }
     }
     // Per-frame fingerprints: the framebuffer hash and the CPU register+CPSR hash after each of `frames` whole frames.
     private static (ulong Frame, ulong Registers)[] RecordFramesInto(AdvancedGamingBrickMachine machine, int frames) {

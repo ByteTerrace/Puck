@@ -19,7 +19,7 @@ public enum WorldStorageNamespace {
 /// The cloud-backed <see cref="IWorldNeighbourResolver"/> — reads a named neighbour's document as an ordinary blob
 /// read, reusing <see cref="WorldOwnedWorldSync"/>'s own address shape (the same namespace prefix, quoted rather than
 /// duplicated) instead of inventing a second resolution mechanism. A <see cref="WorldReference.Document"/> value must
-/// be the canonical file name emitted for a <see cref="WorldSafeName"/>-shaped world id. The resolver parses that id
+/// be the canonical file name emitted for a <see cref="SafeName"/>-shaped world id. The resolver parses that id
 /// and calls <see cref="WorldOwnedWorldSync.AddressFor"/> or <see cref="WorldOwnedWorldSync.HostedAddressFor"/>
 /// (selected by <see cref="WorldStorageNamespace"/>), so a reader cannot drift from the writer's encoding or reach an
 /// object the writer could never have produced.
@@ -28,7 +28,7 @@ public enum WorldStorageNamespace {
 /// Read-only, by design: this resolver never adopts, never tracks a version token, and never writes — it exists only
 /// so a validator can read a neighbour's declared data (kits, simulation rate, placements) to prove an adjacency
 /// claim, not to sync a catalog. It parses the fetched bytes through <see cref="WorldJsonPayload.TryParse{T}(string,
-/// System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}, out T, out string)"/> and <see cref="WorldDefinitionMigrations.Apply"/>
+/// System.Text.Json.Serialization.Metadata.JsonTypeInfo{T}, out T, out string, bool)"/> and <see cref="WorldDefinitionMigrations.Apply"/>
 /// only — never <see cref="WorldDefinitionValidator.Validate"/> — because the neighbour's own validity (which may in
 /// turn need its own neighbour resolver for a border of its own) is that world's own boot concern, not a proof this
 /// resolver re-derives. A read that fails for any reason (not found, no permission, an unreachable endpoint, a
@@ -61,34 +61,8 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
 
     /// <inheritdoc/>
     public WorldNeighbourResolution Resolve(string document) {
-        if (string.IsNullOrWhiteSpace(value: document)) {
-            return WorldNeighbourResolution.Unavailable(reason: "the reference names no document");
-        }
-
-        if (!document.EndsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: WorldOwnedWorldFileName.Suffix
-        )) {
-            return WorldNeighbourResolution.Unavailable(reason: $"document '{document}' is not a canonical owned-world file name ending in '{WorldOwnedWorldFileName.Suffix}'");
-        }
-
-        var candidateId = document[..^WorldOwnedWorldFileName.Suffix.Length];
-
-        if (
-            !WorldSafeName.TryParse(
-            candidate: candidateId,
-            name: out var id,
-            reason: out var nameReason
-        ) ||
-            !string.Equals(
-            a: document,
-            b: WorldOwnedWorldFileName.For(id: id),
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            return WorldNeighbourResolution.Unavailable(reason: $"document '{document}' is not a canonical owned-world file name — {nameReason}");
-        }
-
+        if (m_namespace == WorldStorageNamespace.Hosted) { return ResolveHostedAsync(document, CancellationToken.None).AsTask().GetAwaiter().GetResult(); }
+        if (!TryWorldId(document: document, id: out var id, reason: out var reason)) { return WorldNeighbourResolution.Unavailable(reason: reason); }
         var address = ((m_namespace == WorldStorageNamespace.Hosted)
             ? WorldOwnedWorldSync.HostedAddressFor(
                 containerId: m_containerId,
@@ -160,25 +134,73 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             }
         }
 
-        if (!WorldJsonPayload.TryParse(
-            json: json,
-            info: WorldJsonContext.Default.WorldDefinition,
-            value: out var parsed,
-            error: out var parseError
-        )) {
-            return WorldNeighbourResolution.Unavailable(reason: $"'{address.Key}' does not parse as {WorldDefinition.SchemaVersion} — {parseError}");
+        return ParseAttestation(json, address.Key, document);
+    }
+
+    private static bool TryWorldId(string document, out SafeName id, out string reason) {
+        id = default;
+        if (string.IsNullOrWhiteSpace(value: document)) {
+            reason = "the reference names no document"; return false;
         }
 
-        // The neighbour's document is reduced to its seam facts here and never handed to the validator: a cloud copy
-        // is fetched to prove a border, not to read a world.
+        if (!document.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldOwnedWorldFileName.Suffix
+        )) {
+            reason = $"document '{document}' is not a canonical owned-world file name ending in '{WorldOwnedWorldFileName.Suffix}'"; return false;
+        }
+
+        var candidateId = document[..^WorldOwnedWorldFileName.Suffix.Length];
+
+        if (
+            !SafeName.TryParse(
+            candidate: candidateId,
+            name: out id,
+            reason: out var nameReason
+        ) ||
+            !string.Equals(
+            a: document,
+            b: WorldOwnedWorldFileName.For(id: id),
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            reason = $"document '{document}' is not a canonical owned-world file name — {nameReason}"; return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    // Hosted definitions are published fully composed; boot must never turn a basis into blocking storage reads.
+    internal async ValueTask<WorldNeighbourResolution> ResolveHostedAsync(string document, CancellationToken cancellationToken) {
+        if (!TryWorldId(document: document, id: out var id, reason: out var reason)) { return WorldNeighbourResolution.Unavailable(reason: reason); }
+        var address = WorldOwnedWorldSync.HostedAddressFor(containerId: m_containerId, leaf: "definition.json", world: id);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+
+        timeout.CancelAfter(delay: OperationTimeout);
+        try {
+            var content = await m_store.ReadAsync(m_target, address, timeout.Token).ConfigureAwait(continueOnCapturedContext: false);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (content is not { } found) { return WorldNeighbourResolution.Unavailable(reason: $"no cloud copy at '{address.Key}'"); }
+            return ParseAttestation(Encoding.UTF8.GetString(bytes: found.Content.Span), address.Key, document);
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; } catch (Exception error) { return WorldNeighbourResolution.Unavailable(reason: $"could not read '{address.Key}' — {error.Message.ReplaceLineEndings(replacementText: " ")}"); }
+    }
+
+    private static WorldNeighbourResolution ParseAttestation(string json, string sourceName, string document) {
+        // Bind creation expressions and migrate, but prove only the seam facts needed by this world.
+        if (!WorldDefinitionFileSource.TryParseDocument(json, sourceName, out var parsed, out var parseError)) {
+            return WorldNeighbourResolution.Unavailable(reason: $"'{sourceName}' does not parse as {WorldDefinition.SchemaVersion} — {parseError}");
+        }
+
         return ((WorldCounterpartAttestation.TryCompose(
-            definition: WorldDefinitionMigrations.Apply(definition: parsed),
+            definition: parsed!,
             document: document,
             attestation: out var attestation,
             reason: out var attestReason
         ) && (attestation is not null))
             ? WorldNeighbourResolution.Attested(attestation: attestation)
-            : WorldNeighbourResolution.Unavailable(reason: $"'{address.Key}' declares no attestable seam — {attestReason}")
+            : WorldNeighbourResolution.Unavailable(reason: $"'{sourceName}' declares no attestable seam — {attestReason}")
         );
     }
 }

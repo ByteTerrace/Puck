@@ -87,6 +87,16 @@ internal static partial class Oracles {
     /// stating the rule twice would let the two spellings drift apart while every law stayed green.</remarks>
     public static long RoundDyadic(BigInteger exact, int shift) =>
         WrapToRaw(value: RoundRationalTiesToEven(numerator: exact, denominator: (BigInteger.One << shift)));
+    /// <summary>The round-to-nearest, exact-ties-UP rational rounding <c>SecondOrderExactMath.RoundToGuardScale</c>
+    /// used before it was routed through <see cref="RoundRationalTiesToEven"/> (this module's own tie rule, and now
+    /// the subject's): <c>floor((2·numerator·2^fractionBitCount + denominator) / (2·denominator))</c>, for a
+    /// non-negative rational.</summary>
+    /// <param name="numerator">The exact non-negative numerator.</param>
+    /// <param name="denominator">The exact positive denominator.</param>
+    /// <param name="fractionBitCount">The result's fraction bit count.</param>
+    /// <returns>The rounded, unwrapped raw.</returns>
+    public static BigInteger RoundHalfUp(BigInteger numerator, BigInteger denominator, int fractionBitCount) =>
+        (((numerator << (fractionBitCount + 1)) + denominator) / (denominator * 2));
     /// <summary>The exact quotient rounded toward negative infinity, in arbitrary width.</summary>
     /// <param name="numerator">The dividend.</param>
     /// <param name="denominator">The divisor, which must be non-zero.</param>

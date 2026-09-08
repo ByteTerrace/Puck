@@ -144,12 +144,12 @@ public static partial class WorldDefinitionValidator {
 
         return names;
     }
-    // The admission section: which identities/issuers the TCP door admits (WorldAdmissionDoor, Puck.World.Server's
-    // WorldTcpHost), and what each is minted. Crypto-shape rules reuse Puck.Attestation's TrustListEntry.Validate()
+    // The admission section: which identities/issuers the QUIC door admits (WorldAdmissionDoor, Puck.World.Server's
+    // WorldPeerHost), and what each is minted. Crypto-shape rules reuse Puck.Attestation's TrustListEntry.Validate()
     // directly rather than re-deriving them. Grant TEMPLATE rows are checked against the same subject-bounds/
     // exclusive-over-all rules ValidateGrants applies; Budget/exclusivity legitimacy is WorldServer.Grant's decision
     // at admission time, not this pass's.
-    private static void ValidateAdmission(IReadOnlyList<WorldAdmissionEntry>? entries, int populationCapacity, List<string> errors) {
+    private static void ValidateAdmission(IReadOnlyList<WorldAdmissionEntry>? entries, int populationCapacity, List<string> errors, ICollection<string>? deferred) {
         if (entries is not { Count: > 0 } rows) {
             return;
         }
@@ -169,6 +169,9 @@ public static partial class WorldDefinitionValidator {
             if (!seen.Add(item: (row.Domain, row.Subject, row.Mode))) {
                 errors.Add(item: $"{path} duplicates an earlier row naming the same domain, subject, and mode.");
             }
+            if (row.Mode == WorldAdmissionTrustMode.OAuth && row.Domain is { } boundedIssuer && Encoding.UTF8.GetByteCount(boundedIssuer) > AttestationResourceLimits.TextStringUtf8Bytes) {
+                errors.Add($"{path}.domain exceeds the verified-identity limit of {AttestationResourceLimits.TextStringUtf8Bytes} UTF-8 bytes.");
+            }
 
             if (
                 (row.Subject is not null) &&
@@ -180,7 +183,7 @@ public static partial class WorldDefinitionValidator {
             // The attestation-profile crypto shape governs rows that verify attestation claims. A 'federatedAuthority'
             // row is keyless by rule (below) and its domain is an authority namespace or the any-authority
             // wildcard, never a key fingerprint — the profile's algorithm/domain constraints cannot apply to it.
-            if (row.Mode != WorldAdmissionTrustMode.FederatedAuthority) {
+            if (row.Mode is not (WorldAdmissionTrustMode.FederatedAuthority or WorldAdmissionTrustMode.OAuth)) {
                 if (!AttestationProfile.Base.AllowsAlgorithm(algorithm: row.Algorithm)) {
                     errors.Add(item: $"{path}.algorithm must be '{AttestationAlgorithms.EcdsaP256Sha256}' because the world admission door uses the mandatory attestation-v1-base profile.");
                 }
@@ -205,16 +208,16 @@ public static partial class WorldDefinitionValidator {
 
             byte[]? spki = null;
 
-            if (row.Mode == WorldAdmissionTrustMode.FederatedAuthority) {
+            if (row.Mode is WorldAdmissionTrustMode.FederatedAuthority or WorldAdmissionTrustMode.OAuth) {
                 if (string.IsNullOrWhiteSpace(value: row.Domain)) {
-                    errors.Add(item: $"{path}.domain is required for mode 'federatedAuthority' — it names the authenticated source-authority namespace, or '{WorldAdmissionEntry.AnyAuthority}' for any of them.");
+                    errors.Add(item: $"{path}.domain is required for keyless admission.");
                 }
 
                 if (
                     !string.IsNullOrEmpty(value: row.Algorithm) ||
                     !string.IsNullOrEmpty(value: row.PublicKey)
                 ) {
-                    errors.Add(item: $"{path} carries a key for mode 'federatedAuthority' — an arrival row authorizes a namespace the federation handshake already authenticated and can never verify a claim; leave algorithm and publicKey empty.");
+                    errors.Add(item: $"{path} is a keyless admission mode; leave algorithm and publicKey empty.");
                 }
             } else {
                 try {
@@ -248,7 +251,17 @@ public static partial class WorldDefinitionValidator {
                         MaximumAge: null
                     );
 
-                    entry.Validate();
+                    entry.ValidateShape();
+
+                    // ECDsa.Create() has no browser-wasm backing (no native crypto surface Mono's browser host
+                    // exposes it through); a browser Parse/ParseFragment defers the key-material check rather than
+                    // failing every admission row outright, and reports the deferral by name so a caller can tell
+                    // "this row's shape is sound but its key was never imported" from "this row is wrong".
+                    if (OperatingSystem.IsBrowser()) {
+                        deferred?.Add(item: $"{path}: public-key import/curve verification deferred — ECDsa is unavailable on this platform.");
+                    } else {
+                        entry.ValidateKeyMaterial();
+                    }
                 } catch (ArgumentException exception) {
                     errors.Add(item: $"{path}: {exception.Message}");
                 }
@@ -261,6 +274,13 @@ public static partial class WorldDefinitionValidator {
                 string.IsNullOrWhiteSpace(value: row.Subject)
             ) {
                 errors.Add(item: $"{path}.subject is required for mode 'signsDirectly'.");
+            }
+
+            if (row.Mode == WorldAdmissionTrustMode.OAuth &&
+                (!Uri.TryCreate(row.Domain, UriKind.Absolute, out var issuer) || issuer.Scheme != "https" ||
+                 !string.IsNullOrEmpty(issuer.UserInfo) || !string.IsNullOrEmpty(issuer.Query) || !string.IsNullOrEmpty(issuer.Fragment) ||
+                 string.IsNullOrWhiteSpace(row.Subject) || row.Subject == "*")) {
+                errors.Add($"{path}: OAuth admission requires an exact HTTPS issuer and a non-wildcard subject.");
             }
 
             if (
@@ -331,6 +351,26 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path}.subject body:{subject.Value} is outside 0..{(populationCapacity - 1)} for the authored population capacity.");
         }
+        // A row-scoped Mutate subject is deliberately NOT bound-checked against the live creations/placements rows:
+        // authoring a row that does not exist yet is the act a contribution slot grants. Its shape is still checked,
+        // by the same rule the live grant door applies (Server.WorldGrants.Conflicts) — WorldPrototype.Id is a
+        // DocumentIdentifier, so a `state.` token there names a reference whose resolved value is some other string;
+        // WorldPlacement.Id is a plain literal, which is why the reference rule is creation-only.
+        if (subject.Kind is GrantSubjectKind.Creation or GrantSubjectKind.Placement) {
+            var id = (subject.Id ?? string.Empty);
+
+            if (string.IsNullOrWhiteSpace(value: id)) {
+                errors.Add(item: $"{path}.subject {subject.Describe()} names a blank row id.");
+            } else if (
+                (subject.Kind == GrantSubjectKind.Creation) &&
+                id.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix
+            )
+            ) {
+                errors.Add(item: $"{path}.subject {subject.Describe()} names a state reference rather than a row id — a '{Puck.Assets.Documents.DocumentIdentifier.ReferencePrefix}' token resolves to some other string at load, so the row it addresses can never equal the granted subject; name the resolved id.");
+            }
+        }
     }
     private static void ValidateGrants(IReadOnlyList<WorldGrant> grants, HashSet<string> addonNames, HashSet<string> groupIds, int populationCapacity, int localSeats, List<string> errors) {
         var seen = new HashSet<(WorldPrincipal, WorldCapability, GrantSubject)>();
@@ -393,17 +433,13 @@ public static partial class WorldDefinitionValidator {
     private static void ValidateGroupSelector(WorldGroupSelector selector, HashSet<string> groupIds, string path, List<string> errors) {
         switch (selector) {
             case WorldGroupSelector.Named named:
-                if (
-                    string.IsNullOrWhiteSpace(value: named.Group) ||
-                    !groupIds.Contains(item: named.Group)
-                ) {
-                    errors.Add(item: ((groupIds.Count > 0)
-                        ? $"{path} names group '{named.Group}', which names no groups.groups row; the world declares: {string.Join(
-                            separator: ", ",
-                            values: groupIds
-                        )}."
-                        : $"{path} names group '{named.Group}', which names no groups.groups row; the world declares none."));
-                }
+                RequireDeclaredListing(
+                    declaredSet: groupIds,
+                    errors: errors,
+                    rowNoun: "groups.groups row",
+                    subject: $"{path} names group '{named.Group}', which",
+                    value: named.Group
+                );
                 break;
 
             case WorldGroupSelector.Tagged tagged:
@@ -472,11 +508,13 @@ public static partial class WorldDefinitionValidator {
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(value: role.Name)) {
-                    errors.Add(item: $"{rolePath}.name is required.");
-                } else if (!roleNames.Add(item: role.Name)) {
-                    errors.Add(item: $"{rolePath}.name '{role.Name}' is duplicated.");
-                }
+                RequireUniqueName(
+                    value: role.Name,
+                    seen: roleNames,
+                    path: rolePath,
+                    field: "name",
+                    errors: errors
+                );
 
                 if (role.Capabilities.Count == 0) {
                     errors.Add(item: $"{rolePath}.capabilities is empty — a role reaching no capability could not exist without lying about what it is for; omit the role instead.");
@@ -522,10 +560,10 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            // row.Id already crossed the WorldSafeName door at JSON parse — it CANNOT hold a value the
+            // row.Id already crossed the SafeName door at JSON parse — it CANNOT hold a value the
             // id-to-instance-name composition (WorldSessionResolver.MintInstanceName) would refuse (the identical
             // reasoning WorldIdentitySeed.Id's own validator comment states: the mapping is injective over
-            // WorldSafeName, so no separate "does it survive the mapping" check can ever fire here). The only thing
+            // SafeName, so no separate "does it survive the mapping" check can ever fire here). The only thing
             // left to check is ORDINAL UNIQUENESS within this document.
             if (!groupIds.Add(item: row.Id)) {
                 errors.Add(item: $"{path}.id '{row.Id}' is duplicated.");
@@ -544,11 +582,13 @@ public static partial class WorldDefinitionValidator {
                     var tag = tags[tagIndex];
                     var tagPath = $"{path}.tags[{tagIndex}]";
 
-                    if (string.IsNullOrWhiteSpace(value: tag)) {
-                        errors.Add(item: $"{tagPath} must be non-empty.");
-                    } else if (!seenTags.Add(item: tag)) {
-                        errors.Add(item: $"{tagPath} '{tag}' is duplicated.");
-                    }
+                    RequireUniqueName(
+                        errors: errors,
+                        field: "",
+                        path: tagPath,
+                        seen: seenTags,
+                        value: tag
+                    );
                 }
             }
 

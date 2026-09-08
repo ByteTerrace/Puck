@@ -29,6 +29,10 @@ of its own — that lives in each brick that references it.
 - *Machine-neutral time travel:* `MachineTimeTravel<TInput>` builds bounded
   rewind, persistent-fork runahead, and capped fast-forward over the small
   `ITimeTravelMachineCore<TInput>` adapter.
+- *Owned cable links:* `LinkedMachineGroup` takes ownership of two or more
+  workers' cores, steps them as one group through an `IMachineGroupCore`
+  medium, and publishes each member back through its own worker — with the
+  group's own bounded queue, backpressure, and coupled time travel.
 - *Shared contract proof:* `QueuedHostContractProbe` drives the neutral
   `IScreenMachine`/`IQueuedScreenMachine` surface through the same checks —
   backpressure, frame publication, audio, coherent memory access,
@@ -52,6 +56,49 @@ fork.Machine.RunCycles(cycles: 200);
 returns its underlying sibling to the pool instead of tearing its container
 down, and the next `Fork()` call rents it back and restores into it — a
 restore, not a container build.
+
+## Synchronous core hosting
+
+`IQueuedMachineCore` also works in a host's own synchronous update loop.
+Construct [AdvancedGamingBrickCore](../Puck.AdvancedGamingBrick/README.md#-quick-start)
+or [HumbleGamingBrickCore](../Puck.HumbleGamingBrick/README.md#-quick-start)
+with ROM bytes and explicit configuration. The name describes the adapter
+contract; constructing a core starts no worker or rendering infrastructure.
+
+- Keep stepping, input, output, snapshots and disposal on one owning thread.
+  Separate cores can run concurrently. Keep supplied ROM/configuration buffers
+  immutable for the lifetime of the core and its forks.
+- Apply `MachinePadState` before advancing. `RunCycles` takes master-clock
+  cycles (AGB CPU cycles, HGB LCD dots) and
+  completes the instruction in flight, so a call can overshoot its budget.
+  Carry fractional pacing remainders in a long-running host. HGB carries
+  instruction overshoot internally; AGB callers subtract the previous
+  call's overshoot from the next budget. AGB's rate is
+  16,777,216 cycles/second; HGB's hardware rate is 4,194,304 LCD dots/second,
+  including CGB double speed. HGB's `CyclesPerSecond` retains the queued
+  host's speed policy: pass `dmgSpeed: true` to keep that reported rate at
+  the dot rate when using it for your host's pacing. `NativeFrameIndex` is
+  based on the master clock and remains usable while the LCD is disabled.
+- `Framebuffer` is a live, row-major `0x00RRGGBB` span: 240 × 160 for AGB,
+  160 × 144 for HGB. Copy it before another thread uses it or the core advances.
+  Alpha is absent; set it when uploading to a format that requires it.
+- Call `ConfigureAudio` with the output rate, drain signed 16-bit interleaved
+  stereo samples regularly into an even-sized buffer, and pass only the
+  returned sample count to the audio device. The returned count includes
+  left and right separately. Rate 0 disables output. Audio buffers are
+  presentation state and are cleared on restore.
+- `CaptureState`/`RestoreState` reuse a caller-owned buffer for **same-core**
+  rewind. These raw bytes carry no identity guard; do not load them into a
+  different ROM, model, BIOS or configuration. Use the machine's typed
+  `Snapshot`/`Restore` API when identity validation is needed. Dispose each
+  `CreateLookahead()` rental before disposing its source core.
+- Omit `savePath` for in-memory operation and use the cartridge's export/import
+  API for a custom save service. File-backed hosts should call `FlushSave`
+  periodically; disposal performs a final flush. Optional file I/O failures
+  are reported to standard error.
+
+The `embedding` stage in each Post battery exercises this path without a
+worker, graphics backend or audio device.
 
 ## 🎮 Queued screen-machine hosting
 
@@ -138,6 +185,45 @@ feedback and pixels from the landing. Memory pokes or instruction-granular
 advances that the frame-oriented replay log cannot reproduce invalidate stale
 history rather than pretending it remains safe.
 
+## 🔗 Cable-linked groups
+
+A *link* is an object that owns its members' cores. `LinkedMachineGroup` forms
+one by quiescing each member's `QueuedMachineWorker` at a frame boundary
+(`LendCore`) and lending its core to the group's single execution thread, where
+an `IMachineGroupCore` — the medium plus its deterministic interleave — advances
+every member through one shared cycle budget.
+
+- *One publication path.* After each group step the members publish through
+  their own workers (`PublishLentStep`): the same framebuffer, audio ring,
+  feedback, and completed-step count a host already reads. Nothing above the
+  worker changes when a cable goes in.
+- *Per-seat input.* `MachineLinkPads` carries one `MachinePadState` per seat, in
+  cable order, and is the held-input image the group's rewind ring replays.
+- *One unit for the queue.* `Submit` accepts exact (tick budget, seat inputs)
+  segments up to a finite pending window and backpressures at capacity;
+  `IMachineLink.Step` is the synchronous submit-and-drain path. A lent member's
+  own `Step`/`Submit` refuses work, and its peek/poke/reconfigure/flush marshal
+  onto the link thread through `IMachineCoreLender`.
+- *Coupled time travel.* One `MachineTimeTravel<MachineLinkPads>` rides the group
+  core, whose state image holds every member's snapshot **and** the medium's own
+  pacing state, so a rewind lands the members and the interleave together and
+  the resumed future matches the un-rewound run. Fast-forward repeats the exact
+  segment for the whole group. Runahead is refused: a lookahead would have to
+  fork every member and the medium, and a peer's future is not a function of
+  held input.
+- *Severing.* `Dispose` stops the group thread, disconnects the medium at once —
+  an unfinished externally-clocked transfer stays pending, as an unplugged
+  cable's does — and returns each core to its own worker with the group's
+  tick-to-cycle accumulator phase, so the conversion carries no drift across the
+  seam. Disposing a member while it is lent severs the link first; a second
+  concurrent severing caller (typically another member disposing itself at the
+  same instant) waits for the first to finish rather than observing a false
+  "already severed" before the group thread has actually stopped.
+
+Cross-process transport is out of scope here. The seam it would carry is the
+group core's serializable state image plus each submitted segment; nothing in
+this project reaches beyond the process.
+
 ## 📋 Core types
 
 | Area | Types | Purpose |
@@ -147,6 +233,7 @@ history rather than pretending it remains safe.
 | Fork lifecycle | `ISnapshotableMachine`, `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine, TConfiguration>`, `MachineInstancePool<TMachine, TConfiguration>` | Pooled, ABA-safe forked-instance rentals |
 | Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore` | Ordered off-thread emulation and complete-frame publication |
 | Time travel | `MachineTimeTravel<TInput>`, `ITimeTravelMachineCore<TInput>`, `ITimeTravelLookahead<TInput>` | Bounded rewind, persistent runahead, and fast-forward |
+| Cable links | `LinkedMachineGroup`, `IMachineGroupCore`, `IMachineCoreLender`, `MachineLinkPads` | Group-owned cores, per-seat input, and coupled time travel |
 | Contract proof | `QueuedHostContractProbe`, `QueuedHostProbeResult` | Shared observable checks for concrete queued hosts |
 
 Each brick re-exposes the closed generics under its own bare name through a

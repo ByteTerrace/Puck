@@ -11,7 +11,8 @@
     </PropertyGroup>
     <PropertyGroup>
         <!-- Documents/DocumentCanonicalizer + DocumentJsonOptions use reflection-based JsonSerializer metadata and a
-             runtime enum converter, same as Puck.World.Forge's Authoring/ before this project relocated them. -->
+             runtime enum converter. Documents/ also owns the puck.audio.v1/puck.synth.v1 families so the ROM
+             forges consume them without a world assembly. -->
         <IsAotCompatible>false</IsAotCompatible>
     </PropertyGroup>
     <ItemGroup>

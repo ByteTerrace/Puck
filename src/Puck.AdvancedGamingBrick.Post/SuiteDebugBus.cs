@@ -30,7 +30,8 @@ internal sealed class SuiteDebugBus : IAgbBus {
     public bool IrqPending => m_inner.IrqPending;
 
     public void Halt(bool stop) => m_inner.Halt(stop: stop);
-    public void RunUntilInterrupt() => m_inner.RunUntilInterrupt();
+    public void StepHalted() => m_inner.StepHalted();
+    public bool PrefetchDisabled => m_inner.PrefetchDisabled;
     public byte Read8(uint address, BusAccessType access) {
         if (TryReadDebug(
             address: address,

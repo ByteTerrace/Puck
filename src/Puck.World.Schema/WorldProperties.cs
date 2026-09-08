@@ -13,7 +13,7 @@ namespace Puck.World;
 /// already the substrate's one per-carrier tag storage (see <c>WorldRules.cs</c>'s <c>$argmax:</c>/<c>$argmin:</c>
 /// remarks — "author a keyed row whose cell keys are body indices"), so a property does not invent a second storage
 /// kind: registering <c>hot</c> here requires a declared <c>state</c> row named <c>hot</c>, kind <c>int</c>, keyed
-/// (<see cref="WorldStateRow.IsKeyed"/>) — its cells are the carriers (0-based body indices, spelled as plain
+/// (<see cref="StateRow.IsKeyed"/>) — its cells are the carriers (0-based body indices, spelled as plain
 /// integers) that presently carry the tag, with a nonzero value meaning "on". Reading, writing, journaling, undoing,
 /// and echoing a carrier's tag are therefore the ordinary <c>state</c> substrate (<c>world.state.cell.set</c>/
 /// <c>.remove</c>, <c>world.state</c>) — nothing new to build there.</para>

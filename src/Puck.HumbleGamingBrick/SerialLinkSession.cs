@@ -29,8 +29,13 @@ namespace Puck.HumbleGamingBrick;
 /// hands back a <see cref="SerialLinkResumeToken"/> capturing both credits, and the resume constructor re-anchors each
 /// machine's target at <c>CycleCount − credit</c> so a snapshot/restore/reconnect cycle continues the exact pacing the
 /// suspend severed at. A naive reconnect (the plain constructor, which anchors targets at the current instant) instead
-/// discards the credit and runs those extra cycles, diverging the trace by construction — so a linked pair may only be
-/// snapshotted across a <see cref="Suspend"/>.
+/// discards the credit and runs those extra cycles, diverging the trace by construction.
+/// </para>
+/// <para>
+/// A live session that never severs snapshots the same credits through <see cref="PacingCredits"/> and re-anchors them
+/// through <see cref="ReanchorPacing"/> — the path a link's coupled rewind takes, where the cable stays wired and both
+/// machines are restored in place. That path has no transfer-idle requirement: an in-flight transfer is part of each
+/// machine's own snapshot, so a mid-transfer instant restores exactly.
 /// </para>
 /// </summary>
 public sealed class SerialLinkSession : IDisposable {
@@ -102,6 +107,42 @@ public sealed class SerialLinkSession : IDisposable {
         m_secondTarget = (m_second.Clock.CycleCount - resumeToken.SecondCredit);
     }
 
+    /// <summary>Gets the pair-stepper's live pacing state as each machine's instruction-overshoot credit — the same
+    /// quantity <see cref="Suspend"/> hands back, readable at any instant without severing the cable. A link that
+    /// snapshots its members must snapshot this beside them: it is the session's own state, not either machine's, so a
+    /// restore that reproduces both machines but re-anchors the targets at the landing instant discards the credit and
+    /// diverges the trace by construction.</summary>
+    public SerialLinkResumeToken PacingCredits =>
+        new(
+            FirstCredit: (m_first.Clock.CycleCount - m_firstTarget),
+            SecondCredit: (m_second.Clock.CycleCount - m_secondTarget)
+        );
+
+    /// <summary>Re-anchors both pacing targets at <c>CycleCount − credit</c> without touching the cable — the
+    /// restore-side counterpart of <see cref="PacingCredits"/>, for a link that has just restored both machines into
+    /// the live session rather than reconnecting fresh ones.</summary>
+    /// <param name="credits">The credits captured beside the machines' states.</param>
+    /// <exception cref="ObjectDisposedException">The session has been disposed.</exception>
+    /// <exception cref="ArgumentException">A credit exceeds its machine's own cycle count.</exception>
+    public void ReanchorPacing(SerialLinkResumeToken credits) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+        LinkSessionStepper.RequireCreditFits(
+            credit: credits.FirstCredit,
+            cycleCount: m_first.Clock.CycleCount,
+            side: "first"
+        );
+        LinkSessionStepper.RequireCreditFits(
+            credit: credits.SecondCredit,
+            cycleCount: m_second.Clock.CycleCount,
+            side: "second"
+        );
+
+        m_firstTarget = (m_first.Clock.CycleCount - credits.FirstCredit);
+        m_secondTarget = (m_second.Clock.CycleCount - credits.SecondCredit);
+    }
     /// <summary>Advances both machines forward by a shared budget of T-cycles (dots), interleaved deterministically —
     /// the seam a host drives in place of the two machines' own <see cref="Machine.Run"/> while they are linked.</summary>
     /// <param name="tCycles">The number of T-cycles to advance each machine this call.</param>

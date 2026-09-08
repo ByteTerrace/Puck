@@ -16,6 +16,10 @@ namespace Puck.World;
 /// and returns <see cref="CommandResult.None"/> — the server prints the loud <c>[world.mutation: … applied/rejected]</c> line.
 /// </summary>
 public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
+    // Narrower than WorldPrincipal.TokenGrammar: a group member/ownership party is never group:<id> or document:<id>
+    // (a group cannot itself be a member — see this class's own remarks) or world (never a real actor).
+    private const string MemberTokenGrammar = "seat1..seat4|console|addon:<name>|peer:<n>:<generation>";
+
     private delegate WorldMutation Build(string groupId, WorldPrincipal member, WorldPrincipal actor);
 
     // The read-back: kinds, then every live group row (id-filtered when requested), then ownership bindings. Omits a
@@ -31,37 +35,38 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             return "[world.groups: (no groups section)]";
         }
 
-        var builder = new System.Text.StringBuilder();
-
-        _ = builder.Append(value: "[world.groups:");
+        var echo = CommandEcho.Open(verb: "world.groups");
 
         if (filter is null) {
             foreach (var kind in groupsSection.Kinds) {
-                _ = builder.Append(value: " kind ").Append(value: kind.Name).Append(value: " roles=[");
+                var roles = new System.Text.StringBuilder();
 
                 for (var index = 0; (index < kind.Roles.Count); index++) {
                     if (index > 0) {
-                        _ = builder.Append(value: ',');
+                        _ = roles.Append(value: ',');
                     }
 
                     var role = kind.Roles[index];
 
-                    _ = builder.Append(value: role.Name).Append(value: '=').Append(value: string.Join(
+                    _ = roles.Append(value: role.Name).Append(value: '=').Append(value: string.Join(
                         separator: '+',
                         values: role.Capabilities
                     ));
                 }
 
-                _ = builder.Append(value: "] ownership=").Append(value: kind.OwnershipPolicy)
-                    .Append(value: " lifetime=").Append(value: kind.Lifetime)
-                    .Append(value: " eviction=").Append(value: kind.EvictionPolicy)
-                    .Append(value: " cap=").Append(value: kind.Capacity);
+                _ = echo.Head(head: "kind")
+                    .Field(key: "name", value: kind.Name)
+                    .Field(key: "roles", value: $"[{roles}]")
+                    .Field(key: "ownership", value: kind.OwnershipPolicy.ToString())
+                    .Field(key: "lifetime", value: kind.Lifetime.ToString())
+                    .Field(key: "eviction", value: kind.EvictionPolicy.ToString())
+                    .Field(key: "cap", value: kind.Capacity);
 
                 if (kind.SharedStateScope is { } scope) {
-                    _ = builder.Append(value: " sharedState=").Append(value: scope);
+                    _ = echo.Field(key: "sharedState", value: scope.ToString());
                 }
 
-                _ = builder.Append(value: " |");
+                _ = echo.Segment();
             }
         }
 
@@ -77,12 +82,14 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 continue;
             }
 
-            _ = builder.Append(value: " group ").Append(value: group.Id).Append(value: " kind=").Append(value: group.KindName).Append(value: " members=[");
-            _ = builder.Append(value: string.Join(
+            _ = echo.Head(head: "group")
+                .Field(key: "id", value: group.Id)
+                .Field(key: "kind", value: group.KindName)
+                .Field(key: "members", value: $"[{string.Join(
                 separator: ',',
                 values: DescribeMembers(members: group.Members)
-            ));
-            _ = builder.Append(value: "] |");
+            )}]")
+                .Segment();
         }
 
         if (filter is null) {
@@ -96,20 +103,20 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                     _ => (ownership.Owner.Principal?.Describe() ?? "?"),
                 };
 
-                _ = builder.Append(value: " ownership ").Append(value: ownership.Subject.Kind).Append(value: ':').Append(value: ownership.Subject.Id)
-                    .Append(value: " -> ").Append(value: owner)
-                    .Append(value: " |");
+                _ = echo.Head(head: "ownership")
+                    .Field(key: "subject", value: $"{ownership.Subject.Kind}:{ownership.Subject.Id}")
+                    .Field(key: "owner", value: owner)
+                    .Segment();
             }
         }
 
-        return (builder.Append(value: ']').ToString());
+        return echo.Close();
     }
     private static IEnumerable<string> DescribeMembers(IReadOnlyList<WorldPrincipal> members) {
         foreach (var member in members) {
             yield return member.Describe();
         }
     }
-    private static CommandResult Usage(string verb, string form) => CommandResult.Error(output: $"[{verb}: expected {form}]");
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -119,7 +126,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             description: "Forms a new, empty RUNTIME group of a declared kind: world.group.form <id> <kindName>. Rejected loudly if <id> is already taken or <kindName> names no declared kind. Never written back to the server's base document, so a whole-document rebuild (world.reset/.load/.reload) discards it — the runtime half of the party-vs-roster split. Buffers and applies at the tick boundary under Mutate/section:groups.",
             handler: (context, args) => {
                 if (args.Count != 2) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<id> <kindName>",
                         verb: "world.group.form"
                     );
@@ -189,7 +196,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             description: "Echoes the group+membership binding substrate (Immediate; the stdin barrier makes it read the settled table after any pending group mutation): world.groups [group-id]. With a group id, echoes only that group's row. Lists declared kinds (name, roles, ownershipPolicy, lifetime, evictionPolicy, capacity, sharedStateScope), every live group row (id, kind, members), and every ownership binding — including an escrowed row's offerer/recipient/deadline.",
             handler: (context, args) => {
                 if (args.Count > 1) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "[group-id]",
                         verb: "world.groups"
                     );
@@ -221,7 +228,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
             description: "Places a Principal-owned subject into ESCROW, naming the intended recipient and a tick deadline: world.ownership.offer <subject> <recipient> <deadlineTick>. <subject> is group:<id> (the only declared subject kind today); <recipient> is a principal token (seat1..seat4|console|addon:<name>|peer:<n>:<generation>). Rejected loudly unless the acting principal IS the subject's current owner, <recipient> differs from the acting principal, and <deadlineTick> lies strictly after the tick this applies at. While escrowed, the subject is owned by NEITHER party — see world.groups' ownership line. Buffers and applies at the tick boundary under Mutate/section:groups.",
             handler: (context, args) => {
                 if (args.Count != 3) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<subject> <recipient> <deadlineTick>",
                         verb: "world.ownership.offer"
                     );
@@ -238,7 +245,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                     token: args[1],
                     principal: out var recipient
                 )) {
-                    return CommandResult.Error(output: $"[world.ownership.offer: unknown principal '{args[1].ToString()}' — seat1..seat4|console|addon:<name>|peer:<n>:<generation>]");
+                    return CommandResult.Error(output: $"[world.ownership.offer: unknown principal '{args[1].ToString()}' — {MemberTokenGrammar}]");
                 }
 
                 if (!args.TryInt(
@@ -288,7 +295,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
         // identical <subject> shape and differ only in Reclaim.
         CommandResult Settle(CommandContext context, in WireArgs args, string verb, bool reclaim) {
             if (args.Count != 1) {
-                return Usage(
+                return CommandResult.Usage(
                     form: "<subject>",
                     verb: verb
                 );
@@ -314,7 +321,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
         // the identical <group-id> <principal> shape and differ only in which WorldMutation kind they build.
         CommandResult Handle(CommandContext context, in WireArgs args, string verb, Build build) {
             if (args.Count != 2) {
-                return Usage(
+                return CommandResult.Usage(
                     form: "<group-id> <principal>",
                     verb: verb
                 );
@@ -324,7 +331,7 @@ public sealed class WorldGroupCommandModule(IWorldConsoleAuthority authority, IS
                 token: args[1],
                 principal: out var member
             )) {
-                return CommandResult.Error(output: $"[{verb}: unknown principal '{args[1].ToString()}' — seat1..seat4|console|addon:<name>|peer:<n>:<generation>]");
+                return CommandResult.Error(output: $"[{verb}: unknown principal '{args[1].ToString()}' — {MemberTokenGrammar}]");
             }
 
             link.SubmitWorldMutation(mutation: build(

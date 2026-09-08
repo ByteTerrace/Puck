@@ -1,0 +1,4278 @@
+{
+  "exports": {
+    "actions": [
+      "board",
+      "gameStarted",
+      "move"
+    ],
+    "bindings": [
+      "illegalCount",
+      "inCheck",
+      "turn",
+      "verdict"
+    ],
+    "reads": [
+      "board",
+      "chessBoard",
+      "gameStarted",
+      "inCheck",
+      "move",
+      "plan",
+      "turn",
+      "verdict"
+    ]
+  },
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "walk",
+        "collider": {
+          "$type": "box",
+          "halfExtents": [
+            0.045,
+            0.12,
+            0.045
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 0.001
+          },
+          "turn": {
+            "rate": 0.001
+          }
+        },
+        "name": "piece",
+        "rigid": {
+          "angularDamping": 0.05,
+          "friction": 0.5,
+          "linearDamping": 0.05,
+          "mass": 0.12,
+          "restitution": 0.1,
+          "rollingFriction": 0.15
+        }
+      }
+    ]
+  },
+  "patterns": [
+    {
+      "kind": "Int",
+      "name": "chessRayEmpty",
+      "pattern": {
+        "$type": "star",
+        "item": {
+          "$type": "symbol",
+          "name": "empty"
+        }
+      },
+      "symbols": [
+        {
+          "max": 0,
+          "min": 0,
+          "name": "empty"
+        }
+      ]
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "board": {
+          "move": "move",
+          "occupancy": "board",
+          "plan": "plan",
+          "topology": "chessBoard",
+          "turn": "turn",
+          "verdict": "verdict"
+        },
+        "id": "tabletop",
+        "position": [
+          -8,
+          -0.5,
+          12
+        ],
+        "prototypeId": "tabletop",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece0",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_rook",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.8,
+          -0.7
+        ],
+        "prototypeId": "piece_white_rook",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece1",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_knight",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.8,
+          -0.7
+        ],
+        "prototypeId": "piece_white_knight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece2",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_bishop",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.8,
+          -0.7
+        ],
+        "prototypeId": "piece_white_bishop",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece3",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_queen",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.8,
+          -0.7
+        ],
+        "prototypeId": "piece_white_queen",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece4",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_king",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.8,
+          -0.7
+        ],
+        "prototypeId": "piece_white_king",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece5",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_bishop",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.8,
+          -0.7
+        ],
+        "prototypeId": "piece_white_bishop",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece6",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_knight",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.8,
+          -0.7
+        ],
+        "prototypeId": "piece_white_knight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece7",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_rook",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.8,
+          -0.7
+        ],
+        "prototypeId": "piece_white_rook",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece8",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.8,
+          -0.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece9",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.8,
+          -0.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece10",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.8,
+          -0.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece11",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.8,
+          -0.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece12",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.8,
+          -0.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece13",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.8,
+          -0.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece14",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.8,
+          -0.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece15",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_white_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.8,
+          -0.5
+        ],
+        "prototypeId": "piece_white_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece16",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.8,
+          0.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece17",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.8,
+          0.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece18",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.8,
+          0.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece19",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.8,
+          0.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece20",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.8,
+          0.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece21",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.8,
+          0.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece22",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.8,
+          0.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece23",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_pawn",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.8,
+          0.5
+        ],
+        "prototypeId": "piece_black_pawn",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece24",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_rook",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.8,
+          0.7
+        ],
+        "prototypeId": "piece_black_rook",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece25",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_knight",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.8,
+          0.7
+        ],
+        "prototypeId": "piece_black_knight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece26",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_bishop",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.8,
+          0.7
+        ],
+        "prototypeId": "piece_black_bishop",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece27",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_queen",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.8,
+          0.7
+        ],
+        "prototypeId": "piece_black_queen",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece28",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_king",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.8,
+          0.7
+        ],
+        "prototypeId": "piece_black_king",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece29",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_bishop",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.8,
+          0.7
+        ],
+        "prototypeId": "piece_black_bishop",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece30",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_knight",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.8,
+          0.7
+        ],
+        "prototypeId": "piece_black_knight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "piece31",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "piece",
+          "look": "piece_black_rook",
+          "source": "Idle"
+        },
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.8,
+          0.7
+        ],
+        "prototypeId": "piece_black_rook",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-0",
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.305,
+          -0.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-1",
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.305,
+          -0.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-2",
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.305,
+          -0.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-3",
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.305,
+          -0.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-4",
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.305,
+          -0.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-5",
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.305,
+          -0.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-6",
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.305,
+          -0.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-7",
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.305,
+          -0.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-8",
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.305,
+          -0.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-9",
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.305,
+          -0.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-10",
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.305,
+          -0.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-11",
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.305,
+          -0.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-12",
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.305,
+          -0.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-13",
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.305,
+          -0.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-14",
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.305,
+          -0.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-15",
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.305,
+          -0.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-16",
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.305,
+          -0.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-17",
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.305,
+          -0.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-18",
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.305,
+          -0.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-19",
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.305,
+          -0.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-20",
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.305,
+          -0.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-21",
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.305,
+          -0.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-22",
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.305,
+          -0.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-23",
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.305,
+          -0.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-24",
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.305,
+          -0.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-25",
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.305,
+          -0.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-26",
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.305,
+          -0.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-27",
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.305,
+          -0.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-28",
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.305,
+          -0.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-29",
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.305,
+          -0.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-30",
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.305,
+          -0.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-31",
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.305,
+          -0.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-32",
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.305,
+          0.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-33",
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.305,
+          0.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-34",
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.305,
+          0.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-35",
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.305,
+          0.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-36",
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.305,
+          0.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-37",
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.305,
+          0.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-38",
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.305,
+          0.1
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-39",
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.305,
+          0.1
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-40",
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.305,
+          0.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-41",
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.305,
+          0.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-42",
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.305,
+          0.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-43",
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.305,
+          0.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-44",
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.305,
+          0.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-45",
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.305,
+          0.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-46",
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.305,
+          0.3
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-47",
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.305,
+          0.3
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-48",
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.305,
+          0.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-49",
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.305,
+          0.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-50",
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.305,
+          0.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-51",
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.305,
+          0.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-52",
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.305,
+          0.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-53",
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.305,
+          0.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-54",
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.305,
+          0.5
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-55",
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.305,
+          0.5
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-56",
+        "parent": "tabletop",
+        "position": [
+          -0.7,
+          1.305,
+          0.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-57",
+        "parent": "tabletop",
+        "position": [
+          -0.5,
+          1.305,
+          0.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-58",
+        "parent": "tabletop",
+        "position": [
+          -0.3,
+          1.305,
+          0.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-59",
+        "parent": "tabletop",
+        "position": [
+          -0.1,
+          1.305,
+          0.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-60",
+        "parent": "tabletop",
+        "position": [
+          0.1,
+          1.305,
+          0.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-61",
+        "parent": "tabletop",
+        "position": [
+          0.3,
+          1.305,
+          0.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-62",
+        "parent": "tabletop",
+        "position": [
+          0.5,
+          1.305,
+          0.7
+        ],
+        "prototypeId": "boardSquareDark",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "boardSquare-63",
+        "parent": "tabletop",
+        "position": [
+          0.7,
+          1.305,
+          0.7
+        ],
+        "prototypeId": "boardSquareLight",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "tabletop",
+        "palette": [
+          {
+            "color": "#8A6A45"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "top",
+            "position": [
+              0,
+              1.25,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              1.0,
+              0.05,
+              1.0
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "leg",
+            "position": [
+              0,
+              0.6,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.08,
+              0.6,
+              0.08
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "tabletop"
+    },
+    {
+      "document": {
+        "name": "piece_white_pawn",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.035,
+              0.09,
+              0.035
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_white_pawn"
+    },
+    {
+      "document": {
+        "name": "piece_white_knight",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.04,
+              0.12,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_white_knight"
+    },
+    {
+      "document": {
+        "name": "piece_white_bishop",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.04,
+              0.15,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_white_bishop"
+    },
+    {
+      "document": {
+        "name": "piece_white_rook",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.11,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_white_rook"
+    },
+    {
+      "document": {
+        "name": "piece_white_queen",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.17,
+              0.045
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "crown",
+            "position": [
+              0,
+              0.203,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0.01,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "piece_white_queen"
+    },
+    {
+      "document": {
+        "name": "piece_white_king",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.white",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.19,
+              0.045
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "crown",
+            "position": [
+              0,
+              0.226,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.06,
+              0.06,
+              0.06
+            ],
+            "smooth": 0.01,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "piece_white_king"
+    },
+    {
+      "document": {
+        "name": "piece_black_pawn",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.035,
+              0.09,
+              0.035
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_black_pawn"
+    },
+    {
+      "document": {
+        "name": "piece_black_knight",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.04,
+              0.12,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_black_knight"
+    },
+    {
+      "document": {
+        "name": "piece_black_bishop",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.04,
+              0.15,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_black_bishop"
+    },
+    {
+      "document": {
+        "name": "piece_black_rook",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.05,
+              0.11,
+              0.05
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          }
+        ]
+      },
+      "id": "piece_black_rook"
+    },
+    {
+      "document": {
+        "name": "piece_black_queen",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.17,
+              0.045
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "crown",
+            "position": [
+              0,
+              0.203,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.055,
+              0.055,
+              0.055
+            ],
+            "smooth": 0.01,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "piece_black_queen"
+    },
+    {
+      "document": {
+        "name": "piece_black_king",
+        "palette": [
+          {
+            "color": "state.pieceSetColors.black",
+            "shininess": 35,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "body",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.045,
+              0.19,
+              0.045
+            ],
+            "smooth": 0,
+            "type": "Capsule"
+          },
+          {
+            "blend": "SmoothUnion",
+            "id": 1,
+            "material": 0,
+            "name": "crown",
+            "position": [
+              0,
+              0.226,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.06,
+              0.06,
+              0.06
+            ],
+            "smooth": 0.01,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "piece_black_king"
+    },
+    {
+      "document": {
+        "name": "boardSquareLight",
+        "palette": [
+          {
+            "color": "state.boardColors.light",
+            "shininess": 8,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "square",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.095,
+              0.004,
+              0.095
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "boardSquareLight"
+    },
+    {
+      "document": {
+        "name": "boardSquareDark",
+        "palette": [
+          {
+            "color": "state.boardColors.dark",
+            "shininess": 8,
+            "specular": 0.05
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "square",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              0.095,
+              0.004,
+              0.095
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "boardSquareDark"
+    }
+  ],
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "settleHold",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$physics:quiescent",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Less",
+            "state": "settleHold",
+            "value": 60
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tabletop-settle-hold-advance"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "settleHold",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "NotEqual",
+        "state": "$physics:quiescent",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "tabletop-settle-hold-reset"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$board:cellOf:board:placement:$each",
+          "key": "$each",
+          "state": "pieceCell"
+        }
+      ],
+      "forEach": "pieceCode",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$upright:placement:$each",
+            "value": 0.5
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-derive-cell-upright"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "pieceCell",
+          "value": -1
+        }
+      ],
+      "forEach": "pieceCode",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "not",
+            "predicate": {
+              "$type": "compareState",
+              "comparison": "GreaterOrEqual",
+              "state": "$upright:placement:$each",
+              "value": 0.5
+            }
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-derive-cell-tilted"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "boardCollisions",
+          "expression": "$reduce:count:pieceCell:between:0:63 + popCount($board:mask:board:0:0) - 64"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-collisions"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "boardCombine",
+            "left": "board",
+            "operation": "Copy",
+            "row": "lastLegal"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "gameStarted",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "boardCollisions",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-game-start-snapshot"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "turn == 0 ? $board:mask:lastLegal:1:6 : $board:mask:lastLegal:-6:-1",
+          "kind": "Int",
+          "name": "ownBefore"
+        },
+        {
+          "expression": "turn == 0 ? $board:mask:board:1:6 : $board:mask:board:-6:-1",
+          "kind": "Int",
+          "name": "ownAfter"
+        },
+        {
+          "expression": "$bind:ownBefore & ~($board:mask:board:1:6 | $board:mask:board:-6:-1)",
+          "kind": "Int",
+          "name": "sources"
+        },
+        {
+          "expression": "$bind:ownAfter & ~$bind:ownBefore",
+          "kind": "Int",
+          "name": "destinations"
+        },
+        {
+          "expression": "turn == 0 ? $board:mask:lastLegal:6:6 : $board:mask:lastLegal:-6:-6",
+          "kind": "Int",
+          "name": "kingBefore"
+        },
+        {
+          "expression": "turn == 0 ? $board:mask:board:6:6 : $board:mask:board:-6:-6",
+          "kind": "Int",
+          "name": "kingAfter"
+        },
+        {
+          "expression": "($bind:sources & $bind:kingBefore) != 0 ? $bind:destinations & $bind:kingAfter : $bind:destinations",
+          "kind": "Int",
+          "name": "target"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "$bind:sources == 0 ? -1 : trailingZeroCount(($bind:sources & $bind:kingBefore) != 0 ? $bind:sources & $bind:kingBefore : $bind:sources)",
+          "key": "from",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "expression": "$bind:target == 0 ? -1 : trailingZeroCount($bind:target)",
+          "key": "to",
+          "state": "move"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-candidate-cells"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "lastLegal[move[from]]",
+          "kind": "Int",
+          "name": "mover"
+        },
+        {
+          "expression": "(move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (abs($bind:mover) == 6) & (abs(move[to] - move[from]) == 2) ? 4 : (abs($bind:mover) == 1) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1",
+          "kind": "Int",
+          "name": "kind"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "$bind:mover",
+          "key": "mover",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "expression": "$bind:kind",
+          "key": "kind",
+          "state": "move"
+        },
+        {
+          "$type": "setState",
+          "expression": "$bind:kind == 3 ? lastLegal[(move[to] - 8 * (1 - 2 * turn))] : lastLegal[move[to]]",
+          "key": "captured",
+          "state": "move"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-candidate-move"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "(($board:mask:board:-3:-2 | $board:mask:board:1:2 | $board:mask:board:5:6) ^ ($board:mask:lastLegal:-3:-2 | $board:mask:lastLegal:1:2 | $board:mask:lastLegal:5:6)) | (($board:mask:board:-5:-3 | $board:mask:board:2:5) ^ ($board:mask:lastLegal:-5:-3 | $board:mask:lastLegal:2:5)) | (($board:mask:board:-4:3) ^ ($board:mask:lastLegal:-4:3)) | (($board:mask:board:0:7) ^ ($board:mask:lastLegal:0:7))",
+          "kind": "Int",
+          "name": "changed"
+        },
+        {
+          "expression": "move[from]",
+          "kind": "Int",
+          "name": "from"
+        },
+        {
+          "expression": "move[to]",
+          "kind": "Int",
+          "name": "to"
+        },
+        {
+          "expression": "1 - 2 * turn",
+          "kind": "Int",
+          "name": "sign"
+        },
+        {
+          "expression": "move[kind] == 4 ? ($bind:from & 56) + ($bind:to > $bind:from ? 7 : 0) : move[kind] == 3 ? $bind:to - 8 * $bind:sign : -1",
+          "kind": "Int",
+          "name": "clear"
+        },
+        {
+          "expression": "move[kind] == 4 ? (($bind:from + $bind:to) >> 1) : -1",
+          "kind": "Int",
+          "name": "rook"
+        },
+        {
+          "expression": "($bind:clear >= 0) & ($bind:clear < 64) & ($bind:clear != $bind:from) & ($bind:clear != $bind:to)",
+          "kind": "Int",
+          "name": "clearUnique"
+        },
+        {
+          "expression": "($bind:rook >= 0) & ($bind:rook < 64) & ($bind:rook != $bind:from) & ($bind:rook != $bind:to) & ($bind:rook != $bind:clear)",
+          "kind": "Int",
+          "name": "rookUnique"
+        },
+        {
+          "expression": "(($bind:from >= 0) * (1 << max($bind:from, 0))) | (($bind:to >= 0) * (1 << max($bind:to, 0))) | ($bind:clearUnique * (1 << clamp($bind:clear, 0, 63))) | ($bind:rookUnique * (1 << clamp($bind:rook, 0, 63)))",
+          "kind": "Int",
+          "name": "footprint"
+        },
+        {
+          "expression": "(abs(move[mover]) == 1) & ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]",
+          "kind": "Int",
+          "name": "landed"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "popCount($bind:changed & ~$bind:footprint) + ($bind:from >= 0) * (board[move[from]] != 0) + ($bind:to >= 0) * (board[move[to]] != $bind:landed) + $bind:clearUnique * (board[($bind:clear)] != 0) + $bind:rookUnique * (board[($bind:rook)] != 4 * $bind:sign)",
+          "state": "boardMismatch"
+        },
+        {
+          "$type": "setState",
+          "expression": "popCount($bind:changed)",
+          "state": "boardChanged"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-candidate-match"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "(($board:mask:lastLegal:-1:-1 & 0x5000) != 0) | (($board:mask:lastLegal:-2:-2 & 0x508800) != 0) | (($board:mask:lastLegal:-6:-6 & 0x7050) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[5] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[5] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[5]",
+          "key": "wk",
+          "state": "castleTransitAttacked"
+        },
+        {
+          "$type": "setState",
+          "expression": "(($board:mask:lastLegal:-1:-1 & 0x1400) != 0) | (($board:mask:lastLegal:-2:-2 & 0x142200) != 0) | (($board:mask:lastLegal:-6:-6 & 0x1C14) != 0) | `$board:attacks:lastLegal:-5:-4:N,S,E,W`[3] | `$board:attacks:lastLegal:-3:-3:NE,SE,SW,NW`[3] | `$board:attacks:lastLegal:-5:-5:NE,SE,SW,NW`[3]",
+          "key": "wq",
+          "state": "castleTransitAttacked"
+        },
+        {
+          "$type": "setState",
+          "expression": "(($board:mask:lastLegal:1:1 & byteSwap(0x5000)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x508800)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x7050)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[61] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[61] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[61]",
+          "key": "bk",
+          "state": "castleTransitAttacked"
+        },
+        {
+          "$type": "setState",
+          "expression": "(($board:mask:lastLegal:1:1 & byteSwap(0x1400)) != 0) | (($board:mask:lastLegal:2:2 & byteSwap(0x142200)) != 0) | (($board:mask:lastLegal:6:6 & byteSwap(0x1C14)) != 0) | `$board:attacks:lastLegal:4:5:N,S,E,W`[59] | `$board:attacks:lastLegal:3:3:NE,SE,SW,NW`[59] | `$board:attacks:lastLegal:5:5:NE,SE,SW,NW`[59]",
+          "key": "bq",
+          "state": "castleTransitAttacked"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "kind",
+            "state": "move",
+            "value": 4
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-castle-transit-attacked"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "1 - 2 * turn",
+          "kind": "Int",
+          "name": "sign"
+        },
+        {
+          "expression": "4 + 56 * turn",
+          "kind": "Int",
+          "name": "home"
+        },
+        {
+          "expression": "move[to] > move[from] ? 1 : -1",
+          "kind": "Int",
+          "name": "direction"
+        },
+        {
+          "expression": "$bind:home + ($bind:direction == 1 ? 3 : -4)",
+          "kind": "Int",
+          "name": "rook"
+        },
+        {
+          "expression": "($bind:direction == 1 ? 2 : 1) << (2 * turn)",
+          "kind": "Int",
+          "name": "right"
+        },
+        {
+          "expression": "$bind:direction == 1 ? $match:chessRayEmpty:lastLegal:E:cell[move[from]] : $match:chessRayEmpty:lastLegal:W:cell[move[from]]",
+          "kind": "Int",
+          "name": "path"
+        },
+        {
+          "expression": "turn == 0 ? ($bind:direction == 1 ? castleTransitAttacked[wk] : castleTransitAttacked[wq]) : ($bind:direction == 1 ? castleTransitAttacked[bk] : castleTransitAttacked[bq])",
+          "kind": "Int",
+          "name": "attacked"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "(move[kind] == 4) & (move[from] == $bind:home) & (move[to] == $bind:home + 2 * $bind:direction) & ((castleRights & $bind:right) == 0) & (lastLegal[($bind:rook)] == 4 * $bind:sign) & ($bind:path == $bind:rook) & (previousInCheck[turn[$value]] == 0) & ($bind:attacked == 0)",
+          "state": "castleLegal"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-castle-legal"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "abs(move[mover])",
+          "kind": "Int",
+          "name": "piece"
+        },
+        {
+          "expression": "abs(move[to] % 8 - move[from] % 8)",
+          "kind": "Int",
+          "name": "dx"
+        },
+        {
+          "expression": "(move[to] / 8 - move[from] / 8) * (1 - 2 * turn)",
+          "kind": "Int",
+          "name": "dy"
+        },
+        {
+          "expression": "max(max(max($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])",
+          "kind": "Int",
+          "name": "straight"
+        },
+        {
+          "expression": "max(max(max($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])",
+          "kind": "Int",
+          "name": "diagonal"
+        },
+        {
+          "expression": "move[from] + 8 * (1 - 2 * turn)",
+          "kind": "Int",
+          "name": "middle"
+        },
+        {
+          "expression": "($bind:dx == 0) & (lastLegal[move[to]] == 0) & max($bind:dy == 1, ($bind:dy == 2) & (move[from] / 8 == (turn == 0 ? 1 : 6)) & (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) & ($bind:dy == 1) & max(move[kind] == 2, (move[kind] == 3) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))",
+          "kind": "Int",
+          "name": "pawn"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "$bind:piece == 1 ? $bind:pawn : $bind:piece == 2 ? $bind:dx * abs($bind:dy) == 2 : $bind:piece == 3 ? $bind:diagonal : $bind:piece == 4 ? $bind:straight : $bind:piece == 5 ? max($bind:diagonal, $bind:straight) : $bind:piece == 6 ? max((max($bind:dx, abs($bind:dy)) == 1) & (move[kind] != 4), castleLegal) : 0",
+          "state": "shapeLegal"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-shape-final"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "lowestSetBit($board:mask:board:6:6)",
+          "kind": "Int",
+          "name": "kingMask"
+        },
+        {
+          "expression": "$bind:kingMask == 0 ? -1 : trailingZeroCount($bind:kingMask)",
+          "kind": "Int",
+          "name": "kingSquare"
+        },
+        {
+          "expression": "boardShift($bind:kingMask, chessBoard, E) | boardShift($bind:kingMask, chessBoard, W)",
+          "kind": "Int",
+          "name": "nearFiles"
+        },
+        {
+          "expression": "(boardShift($bind:nearFiles, chessBoard, E) | boardShift($bind:nearFiles, chessBoard, W)) & ~$bind:kingMask",
+          "kind": "Int",
+          "name": "farFiles"
+        },
+        {
+          "expression": "$bind:kingMask | $bind:nearFiles",
+          "kind": "Int",
+          "name": "kingBand"
+        },
+        {
+          "expression": "((boardShift($bind:nearFiles, chessBoard, S) & $board:mask:board:-1:-1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, S) | boardShift($bind:kingBand, chessBoard, N)) & $board:mask:board:-6:-6)) != 0",
+          "kind": "Int",
+          "name": "closeHit"
+        },
+        {
+          "expression": "((boardShift(boardShift($bind:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($bind:nearFiles, chessBoard, N), chessBoard, N) | boardShift($bind:farFiles, chessBoard, S) | boardShift($bind:farFiles, chessBoard, N)) & $board:mask:board:-2:-2) != 0",
+          "kind": "Int",
+          "name": "knightHit"
+        },
+        {
+          "expression": "($bind:kingMask != 0) & (`$board:attacks:board:-5:-4:N,S,E,W`[($bind:kingSquare)] | `$board:attacks:board:-3:-3:NE,SE,SW,NW`[($bind:kingSquare)] | `$board:attacks:board:-5:-5:NE,SE,SW,NW`[($bind:kingSquare)])",
+          "kind": "Int",
+          "name": "slideHit"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "$bind:closeHit | $bind:knightHit | $bind:slideHit",
+          "key": "0",
+          "state": "inCheck"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-check-white"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "lowestSetBit($board:mask:board:-6:-6)",
+          "kind": "Int",
+          "name": "kingMask"
+        },
+        {
+          "expression": "$bind:kingMask == 0 ? -1 : trailingZeroCount($bind:kingMask)",
+          "kind": "Int",
+          "name": "kingSquare"
+        },
+        {
+          "expression": "boardShift($bind:kingMask, chessBoard, E) | boardShift($bind:kingMask, chessBoard, W)",
+          "kind": "Int",
+          "name": "nearFiles"
+        },
+        {
+          "expression": "(boardShift($bind:nearFiles, chessBoard, E) | boardShift($bind:nearFiles, chessBoard, W)) & ~$bind:kingMask",
+          "kind": "Int",
+          "name": "farFiles"
+        },
+        {
+          "expression": "$bind:kingMask | $bind:nearFiles",
+          "kind": "Int",
+          "name": "kingBand"
+        },
+        {
+          "expression": "((boardShift($bind:nearFiles, chessBoard, N) & $board:mask:board:1:1) | (($bind:kingBand | boardShift($bind:kingBand, chessBoard, S) | boardShift($bind:kingBand, chessBoard, N)) & $board:mask:board:6:6)) != 0",
+          "kind": "Int",
+          "name": "closeHit"
+        },
+        {
+          "expression": "((boardShift(boardShift($bind:nearFiles, chessBoard, S), chessBoard, S) | boardShift(boardShift($bind:nearFiles, chessBoard, N), chessBoard, N) | boardShift($bind:farFiles, chessBoard, S) | boardShift($bind:farFiles, chessBoard, N)) & $board:mask:board:2:2) != 0",
+          "kind": "Int",
+          "name": "knightHit"
+        },
+        {
+          "expression": "($bind:kingMask != 0) & (`$board:attacks:board:4:5:N,S,E,W`[($bind:kingSquare)] | `$board:attacks:board:3:3:NE,SE,SW,NW`[($bind:kingSquare)] | `$board:attacks:board:5:5:NE,SE,SW,NW`[($bind:kingSquare)])",
+          "kind": "Int",
+          "name": "slideHit"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "$bind:closeHit | $bind:knightHit | $bind:slideHit",
+          "key": "1",
+          "state": "inCheck"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-check-black"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "inCheck[0]",
+          "key": "0",
+          "state": "previousInCheck"
+        },
+        {
+          "$type": "setState",
+          "expression": "inCheck[1]",
+          "key": "1",
+          "state": "previousInCheck"
+        },
+        {
+          "$type": "setState",
+          "state": "gameStarted",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "gameStarted",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "boardCollisions",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-game-start-check"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "1 - 2 * turn",
+          "kind": "Int",
+          "name": "sign"
+        },
+        {
+          "expression": "(abs(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0))",
+          "kind": "Int",
+          "name": "promotes"
+        },
+        {
+          "expression": "$bind:promotes ? (board[move[to]] * $bind:sign >= 2) & (board[move[to]] * $bind:sign <= 5) : board[move[to]] == move[mover]",
+          "kind": "Int",
+          "name": "replacement"
+        },
+        {
+          "expression": "(popCount($board:mask:board:6:6) == 1) & (popCount($board:mask:board:-6:-6) == 1)",
+          "kind": "Int",
+          "name": "kings"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "(move[kind] >= 1) & (move[kind] <= 4) & (boardMismatch == 0) & (boardCollisions == 0) & shapeLegal & $bind:replacement & (move[mover] * $bind:sign > 0) & (move[captured] * $bind:sign <= 0) & (inCheck[turn[$value]] == 0) & $bind:kings",
+          "state": "verdict"
+        },
+        {
+          "$type": "setState",
+          "expression": "boardChanged == 0 ? -1 : promotionPending[0]",
+          "key": "0",
+          "state": "promotionPending"
+        },
+        {
+          "$type": "setState",
+          "expression": "boardChanged == 0 ? -1 : promotionPending[1]",
+          "key": "1",
+          "state": "promotionPending"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "settleHold",
+        "value": 60
+      },
+      "mode": "Edge",
+      "name": "tabletop-verdict"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "move[to]",
+          "key": "$cell:turn:$value",
+          "state": "promotionPending"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 0
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "Equal",
+            "kind": "Int",
+            "left": "(abs(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (popCount($board:mask:board:6:6) == 1) & (popCount($board:mask:board:-6:-6) == 1)",
+            "right": "1"
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-promotion-pending"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "castleRights",
+              "expression": "castleRights | parallelBitExtract($bind:lostRooks, 0x81 | (0x81 << 56)) | (parallelBitDeposit(parallelBitExtract($bind:lostKings, (1 << 4) | (1 << 60)), 5) * 3)"
+            },
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "boardCombine",
+                "left": "board",
+                "operation": "Copy",
+                "row": "lastLegal"
+              }
+            },
+            {
+              "$type": "setState",
+              "expression": "inCheck[0]",
+              "key": "0",
+              "state": "previousInCheck"
+            },
+            {
+              "$type": "setState",
+              "expression": "inCheck[1]",
+              "key": "1",
+              "state": "previousInCheck"
+            },
+            {
+              "$type": "setState",
+              "expression": "(abs(move[mover]) == 1) & (abs(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1",
+              "state": "enPassantTarget"
+            },
+            {
+              "$type": "setState",
+              "expression": "1 - turn",
+              "state": "turn"
+            },
+            {
+              "$type": "setState",
+              "key": "0",
+              "state": "promotionPending",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "1",
+              "state": "promotionPending",
+              "value": -1
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "kind",
+            "state": "move",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-advance-turn",
+      "bindings": [
+        {
+          "expression": "(($board:mask:lastLegal:4:4 & ~$board:mask:board:4:4) & 0x81) | (($board:mask:lastLegal:-4:-4 & ~$board:mask:board:-4:-4) & (0x81 << 56))",
+          "kind": "Int",
+          "name": "lostRooks"
+        },
+        {
+          "expression": "(($board:mask:lastLegal:6:6 & ~$board:mask:board:6:6) & (1 << 4)) | (($board:mask:lastLegal:-6:-6 & ~$board:mask:board:-6:-6) & (1 << 60))",
+          "kind": "Int",
+          "name": "lostKings"
+        }
+      ]
+    },
+    {
+      "effects": [
+        {
+          "$type": "pushState",
+          "fromState": "$board:canonical:board",
+          "state": "boardHistory"
+        },
+        {
+          "$type": "setState",
+          "expression": "1 + ($history:boardHistory:0 == $history:boardHistory:2) + ($history:boardHistory:0 == $history:boardHistory:4) + ($history:boardHistory:0 == $history:boardHistory:6) + ($history:boardHistory:0 == $history:boardHistory:8) + ($history:boardHistory:0 == $history:boardHistory:10)",
+          "state": "repetitionCount"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "kind",
+            "state": "move",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-board-history"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "illegalCount",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "settleHold",
+            "value": 60
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "verdict",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "kind",
+            "state": "move",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "boardMismatch",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "promotionPending",
+            "value": -1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "1",
+            "state": "promotionPending",
+            "value": -1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "tabletop-apply-illegal"
+    }
+  ],
+  "state": {
+    "lattices": [
+      {
+        "$type": "grid",
+        "band": 0.3,
+        "cellSize": 0.2,
+        "depth": 8,
+        "directions": [
+          {
+            "name": "N",
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "NE",
+            "x": 1,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "E",
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "SE",
+            "x": 1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "S",
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "SW",
+            "x": -1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "W",
+            "x": -1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "NW",
+            "x": -1,
+            "y": -1,
+            "z": 0
+          }
+        ],
+        "name": "chessBoard",
+        "origin": [
+          -0.8,
+          1.25,
+          -0.8
+        ],
+        "width": 8,
+        "wrap": "None"
+      }
+    ],
+    "world": [
+      {
+        "capacity": 64,
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "chessBoard"
+        },
+        "kind": "Int",
+        "max": 6,
+        "min": -6,
+        "name": "board",
+        "inverse": {
+          "tokens": "pieceCell",
+          "codes": "pieceCode"
+        }
+      },
+      {
+        "capacity": 64,
+        "cells": [
+          {
+            "key": "0",
+            "value": 4
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 5
+          },
+          {
+            "key": "4",
+            "value": 6
+          },
+          {
+            "key": "5",
+            "value": 3
+          },
+          {
+            "key": "6",
+            "value": 2
+          },
+          {
+            "key": "7",
+            "value": 4
+          },
+          {
+            "key": "8",
+            "value": 1
+          },
+          {
+            "key": "9",
+            "value": 1
+          },
+          {
+            "key": "10",
+            "value": 1
+          },
+          {
+            "key": "11",
+            "value": 1
+          },
+          {
+            "key": "12",
+            "value": 1
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 0
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": -1
+          },
+          {
+            "key": "49",
+            "value": -1
+          },
+          {
+            "key": "50",
+            "value": -1
+          },
+          {
+            "key": "51",
+            "value": -1
+          },
+          {
+            "key": "52",
+            "value": -1
+          },
+          {
+            "key": "53",
+            "value": -1
+          },
+          {
+            "key": "54",
+            "value": -1
+          },
+          {
+            "key": "55",
+            "value": -1
+          },
+          {
+            "key": "56",
+            "value": -4
+          },
+          {
+            "key": "57",
+            "value": -2
+          },
+          {
+            "key": "58",
+            "value": -3
+          },
+          {
+            "key": "59",
+            "value": -5
+          },
+          {
+            "key": "60",
+            "value": -6
+          },
+          {
+            "key": "61",
+            "value": -3
+          },
+          {
+            "key": "62",
+            "value": -2
+          },
+          {
+            "key": "63",
+            "value": -4
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "chessBoard"
+        },
+        "kind": "Int",
+        "max": 6,
+        "min": -6,
+        "name": "lastLegal"
+      },
+      {
+        "capacity": 64,
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "chessBoard"
+        },
+        "kind": "Int",
+        "name": "plan"
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "turn",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "verdict",
+        "value": 1
+      },
+      {
+        "kind": "Int",
+        "max": 50400,
+        "min": 0,
+        "name": "illegalCount",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 60,
+        "min": 0,
+        "name": "settleHold",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "gameStarted",
+        "value": 0
+      },
+      {
+        "cells": [
+          {
+            "key": "white",
+            "value": "#F2E9D8"
+          },
+          {
+            "key": "black",
+            "value": "#2B2420"
+          }
+        ],
+        "kind": "Text",
+        "name": "pieceSetColors"
+      },
+      {
+        "capacity": 5,
+        "cells": [
+          {
+            "key": "captured",
+            "value": 0
+          },
+          {
+            "key": "from",
+            "value": -1
+          },
+          {
+            "key": "kind",
+            "value": 0
+          },
+          {
+            "key": "mover",
+            "value": 0
+          },
+          {
+            "key": "to",
+            "value": -1
+          }
+        ],
+        "kind": "Int",
+        "max": 63,
+        "min": -6,
+        "name": "move"
+      },
+      {
+        "capacity": 32,
+        "cells": [
+          {
+            "key": "piece0",
+            "value": 4
+          },
+          {
+            "key": "piece1",
+            "value": 2
+          },
+          {
+            "key": "piece2",
+            "value": 3
+          },
+          {
+            "key": "piece3",
+            "value": 5
+          },
+          {
+            "key": "piece4",
+            "value": 6
+          },
+          {
+            "key": "piece5",
+            "value": 3
+          },
+          {
+            "key": "piece6",
+            "value": 2
+          },
+          {
+            "key": "piece7",
+            "value": 4
+          },
+          {
+            "key": "piece8",
+            "value": 1
+          },
+          {
+            "key": "piece9",
+            "value": 1
+          },
+          {
+            "key": "piece10",
+            "value": 1
+          },
+          {
+            "key": "piece11",
+            "value": 1
+          },
+          {
+            "key": "piece12",
+            "value": 1
+          },
+          {
+            "key": "piece13",
+            "value": 1
+          },
+          {
+            "key": "piece14",
+            "value": 1
+          },
+          {
+            "key": "piece15",
+            "value": 1
+          },
+          {
+            "key": "piece16",
+            "value": -1
+          },
+          {
+            "key": "piece17",
+            "value": -1
+          },
+          {
+            "key": "piece18",
+            "value": -1
+          },
+          {
+            "key": "piece19",
+            "value": -1
+          },
+          {
+            "key": "piece20",
+            "value": -1
+          },
+          {
+            "key": "piece21",
+            "value": -1
+          },
+          {
+            "key": "piece22",
+            "value": -1
+          },
+          {
+            "key": "piece23",
+            "value": -1
+          },
+          {
+            "key": "piece24",
+            "value": -4
+          },
+          {
+            "key": "piece25",
+            "value": -2
+          },
+          {
+            "key": "piece26",
+            "value": -3
+          },
+          {
+            "key": "piece27",
+            "value": -5
+          },
+          {
+            "key": "piece28",
+            "value": -6
+          },
+          {
+            "key": "piece29",
+            "value": -3
+          },
+          {
+            "key": "piece30",
+            "value": -2
+          },
+          {
+            "key": "piece31",
+            "value": -4
+          }
+        ],
+        "kind": "Int",
+        "max": 6,
+        "min": -6,
+        "name": "pieceCode"
+      },
+      {
+        "capacity": 32,
+        "cells": [
+          {
+            "key": "piece0",
+            "value": -1
+          },
+          {
+            "key": "piece1",
+            "value": -1
+          },
+          {
+            "key": "piece2",
+            "value": -1
+          },
+          {
+            "key": "piece3",
+            "value": -1
+          },
+          {
+            "key": "piece4",
+            "value": -1
+          },
+          {
+            "key": "piece5",
+            "value": -1
+          },
+          {
+            "key": "piece6",
+            "value": -1
+          },
+          {
+            "key": "piece7",
+            "value": -1
+          },
+          {
+            "key": "piece8",
+            "value": -1
+          },
+          {
+            "key": "piece9",
+            "value": -1
+          },
+          {
+            "key": "piece10",
+            "value": -1
+          },
+          {
+            "key": "piece11",
+            "value": -1
+          },
+          {
+            "key": "piece12",
+            "value": -1
+          },
+          {
+            "key": "piece13",
+            "value": -1
+          },
+          {
+            "key": "piece14",
+            "value": -1
+          },
+          {
+            "key": "piece15",
+            "value": -1
+          },
+          {
+            "key": "piece16",
+            "value": -1
+          },
+          {
+            "key": "piece17",
+            "value": -1
+          },
+          {
+            "key": "piece18",
+            "value": -1
+          },
+          {
+            "key": "piece19",
+            "value": -1
+          },
+          {
+            "key": "piece20",
+            "value": -1
+          },
+          {
+            "key": "piece21",
+            "value": -1
+          },
+          {
+            "key": "piece22",
+            "value": -1
+          },
+          {
+            "key": "piece23",
+            "value": -1
+          },
+          {
+            "key": "piece24",
+            "value": -1
+          },
+          {
+            "key": "piece25",
+            "value": -1
+          },
+          {
+            "key": "piece26",
+            "value": -1
+          },
+          {
+            "key": "piece27",
+            "value": -1
+          },
+          {
+            "key": "piece28",
+            "value": -1
+          },
+          {
+            "key": "piece29",
+            "value": -1
+          },
+          {
+            "key": "piece30",
+            "value": -1
+          },
+          {
+            "key": "piece31",
+            "value": -1
+          }
+        ],
+        "kind": "Int",
+        "max": 63,
+        "min": -1,
+        "name": "pieceCell"
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          },
+          {
+            "key": "1",
+            "value": -1
+          }
+        ],
+        "kind": "Int",
+        "max": 63,
+        "min": -1,
+        "name": "promotionPending"
+      },
+      {
+        "cells": [
+          {
+            "key": "$value",
+            "value": -1
+          }
+        ],
+        "kind": "Int",
+        "max": 63,
+        "min": -1,
+        "name": "enPassantTarget"
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "inCheck"
+      },
+      {
+        "domain": {
+          "$type": "ring",
+          "capacity": 12,
+          "empty": -1
+        },
+        "kind": "Int",
+        "name": "boardHistory"
+      },
+      {
+        "cells": [
+          {
+            "key": "$value",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 12,
+        "min": 0,
+        "name": "repetitionCount"
+      },
+      {
+        "cells": [
+          {
+            "key": "$value",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "shapeLegal"
+      },
+      {
+        "cells": [
+          {
+            "key": "$value",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "castleLegal"
+      },
+      {
+        "cells": [
+          {
+            "key": "light",
+            "value": "#F0D9B5"
+          },
+          {
+            "key": "dark",
+            "value": "#8B5A2B"
+          }
+        ],
+        "kind": "Text",
+        "name": "boardColors"
+      },
+      {
+        "kind": "Int",
+        "max": 15,
+        "min": 0,
+        "name": "castleRights",
+        "value": 0
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "previousInCheck"
+      },
+      {
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "wk",
+            "value": 0
+          },
+          {
+            "key": "wq",
+            "value": 0
+          },
+          {
+            "key": "bk",
+            "value": 0
+          },
+          {
+            "key": "bq",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "castleTransitAttacked"
+      },
+      {
+        "kind": "Int",
+        "max": 64,
+        "min": 0,
+        "name": "boardMismatch",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 64,
+        "min": 0,
+        "name": "boardChanged",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 64,
+        "min": 0,
+        "name": "boardCollisions",
+        "value": 0
+      }
+    ]
+  }
+}

@@ -28,10 +28,6 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
     private readonly WorldInstanceHost m_instances = instances;
     private readonly WorldReplayTape m_replayTape = replayTape;
 
-    // The reserved trailing token — the SAME spelling and refusal-on-redundant-boot convention
-    // PlayerCommandModule.TryStripInstanceToken already establishes for every instance-targeted drive verb.
-    private const string InstanceTokenPrefix = "instance:";
-
     private static string Describe(string name, WorldInstanceHost.WorldInstanceRateStatus status) {
         var state = (status.Stopped
             ? "stopped"
@@ -66,10 +62,7 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
         return 1;
     }
     private static bool IsInstanceToken(in WireArgs args, int index) =>
-        ((((uint)index) < ((uint)args.Count)) && args[index].StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: InstanceTokenPrefix
-        ));
+        ((((uint)index) < ((uint)args.Count)) && WorldArgs.IsInstanceToken(token: args[index]));
     // Tapes a pause/resume that targets the BOOT instance specifically — the tape's own scope (see
     // WorldReplayTape.NoteRateLever's remarks). A named instance's own lever never reaches the tape.
     private void NoteBootLever(string name, bool paused) {
@@ -153,40 +146,19 @@ internal sealed class WorldRateCommandModule(WorldInstanceHost instances, WorldR
             return false;
         }
 
-        if (!args[tokenIndex].StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: InstanceTokenPrefix
-        )) {
+        if (!WorldArgs.IsInstanceToken(token: args[tokenIndex])) {
             instanceName = string.Empty;
             error = CommandResult.Error(output: $"[{verb}: expected 'instance:<name>']");
 
             return false;
         }
 
-        var name = args[tokenIndex][InstanceTokenPrefix.Length..].ToString();
-
-        if (string.IsNullOrWhiteSpace(value: name)) {
-            instanceName = string.Empty;
-            error = CommandResult.Error(output: $"[{verb}: instance: must name a running instance — see world.instance.status]");
-
-            return false;
-        }
-
-        if (string.Equals(
-            a: name,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            instanceName = string.Empty;
-            error = CommandResult.Error(output: $"[{verb}: '{WorldInstanceHost.BootInstanceName}' is the world this process booted with — omit instance: to address it]");
-
-            return false;
-        }
-
-        instanceName = name;
-        error = null;
-
-        return true;
+        return WorldArgs.TryParseInstanceName(
+            token: args[tokenIndex],
+            verb: verb,
+            name: out instanceName,
+            error: out error
+        );
     }
 
     /// <inheritdoc/>

@@ -22,12 +22,12 @@ namespace Puck.Maths;
 /// </para>
 /// <para>
 /// A default-initialized value is the valid zero measure. All results are <see cref="BigInteger"/> so the object keeps
-/// the unbounded exactness of <see cref="QuadraticSurd"/>; consumers may use checked conversions at their own storage
+/// the unbounded exactness of <see cref="RealQuadratic"/>; consumers may use checked conversions at their own storage
 /// boundary.
 /// </para>
 /// </remarks>
 public readonly record struct DiscreteMeasure {
-    private DiscreteMeasure(QuadraticSurd rate, QuadraticSurd offset) {
+    private DiscreteMeasure(RealQuadratic rate, RealQuadratic offset) {
         Offset = offset;
         Rate = rate;
     }
@@ -41,7 +41,7 @@ public readonly record struct DiscreteMeasure {
     /// <summary>
     /// Gets the normalized affine offset in <c>[0, 1)</c>, which selects the allocation's origin without changing its rate.
     /// </summary>
-    public QuadraticSurd Offset { get; }
+    public RealQuadratic Offset { get; }
     /// <summary>
     /// Gets the least positive period of the unit-interval allocation when <see cref="IsPeriodic"/> is true; otherwise
     /// <see langword="null"/>.
@@ -51,7 +51,7 @@ public readonly record struct DiscreteMeasure {
         : null
     );
     /// <summary>Gets the non-negative exact amount per unit interval.</summary>
-    public QuadraticSurd Rate { get; }
+    public RealQuadratic Rate { get; }
     /// <summary>Gets the measure that assigns zero to every interval.</summary>
     public static DiscreteMeasure Zero => default;
 
@@ -124,7 +124,7 @@ public readonly record struct DiscreteMeasure {
     /// The irrational parts of <paramref name="rate"/> and <paramref name="offset"/> belong to different quadratic
     /// fields.
     /// </exception>
-    public static DiscreteMeasure Create(QuadraticSurd rate, QuadraticSurd offset) {
+    public static DiscreteMeasure Create(RealQuadratic rate, RealQuadratic offset) {
         if (rate.Sign < 0) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(rate),
@@ -133,10 +133,10 @@ public readonly record struct DiscreteMeasure {
         }
 
         // This also validates that two irrational operands inhabit the same quadratic field. A rational operand is
-        // compatible with either field, exactly as QuadraticSurd arithmetic specifies.
+        // compatible with either field, exactly as RealQuadratic arithmetic specifies.
         _ = (rate + offset);
 
-        var normalizedOffset = (offset - QuadraticSurd.Rational(value: offset.Floor()));
+        var normalizedOffset = (offset - RealQuadratic.Rational(value: offset.Floor()));
 
         return new DiscreteMeasure(
             offset: normalizedOffset,
@@ -146,7 +146,7 @@ public readonly record struct DiscreteMeasure {
     /// <summary>Returns the signed cumulative amount at boundary <paramref name="index"/>: <c>floor(r*index + o)</c>.</summary>
     /// <remarks><c>Cumulative(0)</c> is always zero because <see cref="Offset"/> is normalized into <c>[0, 1)</c>.</remarks>
     public BigInteger Cumulative(BigInteger index) =>
-        ((Rate * QuadraticSurd.Rational(value: index)) + Offset).Floor();
+        ((Rate * RealQuadratic.Rational(value: index)) + Offset).Floor();
     /// <summary>
     /// Returns the unique unit-interval index whose mapped output interval contains <paramref name="outputIndex"/>.
     /// Empty input intervals are naturally skipped.
@@ -165,7 +165,7 @@ public readonly record struct DiscreteMeasure {
     public BigInteger LowerBound(BigInteger amount) {
         ThrowIfZeroRate();
 
-        return ((QuadraticSurd.Rational(value: amount) - Offset) / Rate).Ceiling();
+        return ((RealQuadratic.Rational(value: amount) - Offset) / Rate).Ceiling();
     }
     /// <summary>
     /// Maps <c>[start, start + length)</c> to its contiguous output interval. The returned start is the cumulative
@@ -200,11 +200,11 @@ public readonly record struct DiscreteMeasure {
     /// <summary>Creates a zero-offset measure with exact rational rate <paramref name="numerator"/>/<paramref name="denominator"/>.</summary>
     public static DiscreteMeasure Rational(BigInteger numerator, BigInteger denominator) =>
         Create(
-            rate: QuadraticSurd.Rational(
+            rate: RealQuadratic.Rational(
                 denominator: denominator,
                 numerator: numerator
             ),
-            offset: QuadraticSurd.Zero
+            offset: RealQuadratic.Zero
         );
     /// <summary>
     /// Creates an exact rational-rate measure with an independently specified exact rational allocation offset.
@@ -215,11 +215,11 @@ public readonly record struct DiscreteMeasure {
         BigInteger offsetNumerator,
         BigInteger offsetDenominator) =>
         Create(
-            rate: QuadraticSurd.Rational(
+            rate: RealQuadratic.Rational(
                 denominator: denominator,
                 numerator: numerator
             ),
-            offset: QuadraticSurd.Rational(
+            offset: RealQuadratic.Rational(
                 denominator: offsetDenominator,
                 numerator: offsetNumerator
             )
@@ -231,7 +231,7 @@ public readonly record struct DiscreteMeasure {
     public DiscreteMeasure Translate(BigInteger distance) =>
         Create(
             rate: Rate,
-            offset: (Offset + (Rate * QuadraticSurd.Rational(value: distance)))
+            offset: (Offset + (Rate * RealQuadratic.Rational(value: distance)))
         );
     /// <summary>
     /// Attempts to compile this exact measure into its allocation-free signed-64-bit execution form.

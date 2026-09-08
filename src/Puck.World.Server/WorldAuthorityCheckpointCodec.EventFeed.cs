@@ -82,6 +82,17 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
             }
         );
+        WriteArray(
+            writer: writer,
+            items: section.Links,
+            writeItem: static (w, row) => {
+                w.WriteString(value: row.Adjacency);
+                w.WriteUInt64(value: row.DeliveredTick);
+                w.WriteInt64(value: row.StaleTicks);
+                w.WriteBoolean(value: row.PendingRefresh);
+                w.WriteBoolean(value: row.Dropped);
+            }
+        );
 
         return writer.ToArray();
     }
@@ -99,11 +110,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var seatOccupied = ReadBoolArray(
             field: "event feed seat occupied",
+            maximum: WorldBodiesLimits.LocalSeatCount,
             reader: ref reader
         );
         var overlapping = ReadArray(
             reader: ref reader,
             field: "event feed overlapping",
+            maximum: WorldEventFeed.MaximumTrackedPairsForCapacity(WorldBodiesLimits.CapacityCeiling),
             readItem: static (ref WireReader r) => {
                 var a = r.ReadInt32();
                 var b = r.ReadInt32();
@@ -121,10 +134,34 @@ public static partial class WorldAuthorityCheckpointCodec {
                 );
                 var occupancy = ReadBoolArray(
                     field: "event feed region occupancy cells",
+                    maximum: WorldBodiesLimits.CapacityCeiling,
                     reader: ref r
                 );
 
                 return (region, occupancy);
+            }
+        );
+
+        var links = ReadArray(
+            reader: ref reader,
+            field: "event feed links",
+            readItem: static (ref WireReader r) => {
+                var adjacency = r.ReadString(
+                    field: "event feed link adjacency name",
+                    maxBytes: MaxStringBytes
+                );
+                var deliveredTick = r.ReadUInt64();
+                var staleTicks = r.ReadInt64();
+                var pendingRefresh = r.ReadBoolean();
+                var dropped = r.ReadBoolean();
+
+                return new WorldEventFeed.WorldEventLinkState(
+                    Adjacency: adjacency,
+                    DeliveredTick: deliveredTick,
+                    Dropped: dropped,
+                    PendingRefresh: pendingRefresh,
+                    StaleTicks: staleTicks
+                );
             }
         );
 
@@ -137,6 +174,7 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         section = new WorldEventFeed.WorldEventFeedCheckpoint(
             Edges: edges,
+            Links: links,
             Overlapping: overlapping,
             PendingRoutes: pendingRoutes,
             RegionOccupancy: regionOccupancy,

@@ -1,6 +1,7 @@
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.Physics;
+using Puck.SignedDistance;
 
 namespace Puck.World.Server;
 
@@ -37,36 +38,41 @@ internal sealed class WorldColliderSet : IContactField {
     private readonly List<FixedStaticCollider> m_attachedColliders = [];
     // Every ATTACHED solid row (Attach + Solid both set — refused only under the FIELD provider, see the validator):
     // its geometry cannot join m_colliders above because its origin/yaw are not the row's static authored transform,
-    // they are a live body's pose. RefreshAttached recomputes m_attachedColliders from these once per tick.
-    private readonly IReadOnlyList<(WorldPlacement Placement, WorldCreation Creation)> m_attachedRows;
+    // they are a live body's pose. RefreshAttached recomputes m_attachedColliders from these once per tick. Attached
+    // colliders never carry a grip decision — hold/tether queries search m_colliders alone (see
+    // TryHoldableSurfaceAlongDirection/TryNearestSurfaceAlongDirection), so a moving carrier is never itself
+    // holdable or tetherable today.
+    private readonly IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> m_attachedRows;
     private readonly FixedStaticCollider[] m_colliders;
-    private readonly FixedQ4816 m_groundedThreshold;
-    private readonly int m_iterations;
-    private readonly FixedQ4816 m_skin;
+    // The holdable subset of m_colliders, filtered at build time rather than the full array gated after the fact:
+    // filtering first is the difference between "the nearest holdable surface along the probe" and "the nearest
+    // surface along the probe, if it is holdable", and the latter lets an ordinary floor shadow every holdable wall
+    // beside it. Parallel to m_holdableGrantedByOverride.
+    private readonly FixedStaticCollider[] m_holdableColliders;
+    // Whether a per-placement WorldPlacementGrip override (rather than the world's own DefaultGrip) is what made
+    // the collider at the same index in m_holdableColliders holdable — the read-back's "which policy layer granted
+    // it" fact.
+    private readonly bool[] m_holdableGrantedByOverride;
+    private readonly FixedStaticContactSolver m_solver;
+    // A running fold of the last-refreshed m_attachedColliders, so RefreshAttached can tell whether the carrier
+    // actually moved without keeping a second snapshot array. AttachedRevision only advances when the fold changes —
+    // never on every call — so a world with no moving attached row (the common case) never wakes a sleeping body.
+    private ulong m_attachedHash;
 
-    private WorldColliderSet(FixedStaticCollider[] colliders, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldCreation Creation)> attachedRows) {
+    private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<(WorldPlacement Placement, WorldPrototype Creation)> attachedRows) {
         m_colliders = colliders;
+        m_holdableColliders = holdableColliders;
+        m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
-        m_skin = tuning.ContactSkin;
-        m_groundedThreshold = tuning.GroundedThreshold;
-        m_iterations = Math.Max(
-            val1: 1,
-            val2: tuning.MaxIterations
+        m_solver = new FixedStaticContactSolver(
+            ContactSkin: tuning.ContactSkin,
+            GroundedThreshold: tuning.GroundedThreshold,
+            MaxIterations: tuning.MaxIterations
         );
     }
 
     /// <summary>Gets the number of solid boxes in the set.</summary>
     public int BoxCount { get; private init; }
-    /// <inheritdoc/>
-    public WorldContactCensus Census => new(
-        SphereCount: SphereCount,
-        BoxCount: BoxCount,
-        PlaneCount: PlaneCount,
-        PlacementSphereCount: PlacementSphereCount,
-        PlacementBoxCount: PlacementBoxCount,
-        PlacementPlaneCount: PlacementPlaneCount,
-        UnsupportedPlacementCount: 0L
-    );
     /// <summary>Gets the number of placement-derived boxes in the set.</summary>
     public int PlacementBoxCount { get; private init; }
     /// <summary>Gets the number of placement-derived half-spaces in the set.</summary>
@@ -79,11 +85,16 @@ internal sealed class WorldColliderSet : IContactField {
     public int SolidCount => ((SphereCount + BoxCount) + PlaneCount);
     /// <summary>Gets the number of solid spheres in the set.</summary>
     public int SphereCount { get; private init; }
+    /// <summary>Gets a counter that advances whenever <see cref="RefreshAttached"/> finds an attached solid row at a
+    /// different resolved pose than the snapshot it replaces — never on a call that leaves every collider unchanged.
+    /// A sleeping body compares this against the value it last observed to decide whether a moving carrier woke it.</summary>
+    public ulong AttachedRevision { get; private set; }
 
     /// <summary>Measures the analytic collider vocabulary without materializing the collider array.</summary>
     /// <param name="definition">The live world definition.</param>
     /// <returns>The screen and placement contribution.</returns>
     internal static WorldContactCensus Measure(WorldDefinition definition) {
+        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var spheres = 0L;
         var boxes = 0L;
         var planes = 0L;
@@ -103,7 +114,7 @@ internal sealed class WorldColliderSet : IContactField {
                 (placement.Solid is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -111,27 +122,43 @@ internal sealed class WorldColliderSet : IContactField {
 
             var copies = CreationStampLattice.MaterializedCopyCount(
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
+                sampledCount: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed)?.Count,
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement)
             );
 
             foreach (var shape in (creation.Document.Shapes ?? [])) {
-                if (shape.Type == AvatarPrimitive.Plane) {
+                // A shape carrying domain ops compiles one collider PER EXPANDED COPY, exactly as Build emits them —
+                // counting the authored shape once would under-report the census the placement budget is read against.
+                var shapeCopies = (ShapeDomainOps.TryExpand(
+                    domain: shape.Domain,
+                    frames: out var frames,
+                    refusal: out _
+                )
+                    ? CreationStampLattice.MultiplySaturated(
+                        ceiling: long.MaxValue,
+                        left: copies,
+                        right: frames.Length
+                    )
+                    : copies
+                );
+
+                if (shape.Type == SdfSolidPrimitive.Plane) {
                     placementPlanes = AddSaturated(
                         left: placementPlanes,
-                        right: copies
+                        right: shapeCopies
                     );
                 } else if (
-                    (shape.Type == AvatarPrimitive.Sphere) &&
+                    (shape.Type == SdfSolidPrimitive.Sphere) &&
                     CreationStampEmitter.IsIsotropicallyScaled(shape: shape)
                 ) {
                     placementSpheres = AddSaturated(
                         left: placementSpheres,
-                        right: copies
+                        right: shapeCopies
                     );
                 } else {
                     placementBoxes = AddSaturated(
                         left: placementBoxes,
-                        right: copies
+                        right: shapeCopies
                     );
                 }
             }
@@ -165,37 +192,13 @@ internal sealed class WorldColliderSet : IContactField {
         ? long.MaxValue
         : (left + right)
     );
-    private void ApplyPush(
-        ref FixedVector3 position,
-        ref FixedVector3 velocity,
-        in FixedContactPush push,
-        ref bool grounded,
-        ref FixedVector3 lastNormal
-    ) {
-        position += (push.Normal * push.Penetration);
-        var walkable = (push.Normal.Y >= m_groundedThreshold);
-
-        grounded |= walkable;
-
-        // world.contacts' obstruction witness tracks only a NON-walkable push (a wall, not the ground/a ramp) —
-        // a standing body re-resolves its ground contact every solver iteration, so an unconditional "last push"
-        // would have the ground overwrite a genuine wall push from an earlier iteration in the SAME tick.
-        if (!walkable) {
-            lastNormal = push.Normal;
-        }
-
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: push.Normal
-        );
-
-        if (into < FixedQ4816.Zero) {
-            velocity -= (push.Normal * into);
-        }
-    }
     // The axis-aligned bounding box of a screen slab's oriented frame: the geometry center sits one HalfDepth behind the
     // front-face Origin along the face normal, and each world-axis half-extent is the |projection| of the three oriented
     // axes. Exact for the axis-aligned screens the built-in world ships; conservative (bounding) for a rotated slab.
+    // The authored Right/Up are used as the box axes directly, which is sound only because they are orthogonal: the
+    // validator refuses a skewed frame (WorldDefinitionValidator's screen basis rule), so this triple and the
+    // orthonormal rotation the client stamps the slab with are the same frame. Relaxing that rule would make this
+    // collider and the rendered slab different solids.
     private static (FixedVector3 Center, FixedVector3 HalfExtents) ScreenBox(WorldScreen screen) {
         var normal = FixedVector3.Cross(
             left: FixedVector3.FromVector3(value: screen.Right),
@@ -221,10 +224,14 @@ internal sealed class WorldColliderSet : IContactField {
     /// <returns>The analytic field.</returns>
     public static WorldColliderSet Build(WorldDefinition definition) {
         var collision = definition.Collision;
+        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
 
         var tuning = FixedWorldCollision.Compile(collision: collision);
         var colliders = new List<FixedStaticCollider>();
-        var attachedRows = new List<(WorldPlacement Placement, WorldCreation Creation)>();
+        var holdableColliders = new List<FixedStaticCollider>();
+        var holdableGrantedByOverride = new List<bool>();
+        var worldDefaultGrip = definition.Collision.DefaultHold;
+        var attachedRows = new List<(WorldPlacement Placement, WorldPrototype Creation)>();
         var spheres = 0;
         var boxes = 0;
         var planes = 0;
@@ -240,24 +247,32 @@ internal sealed class WorldColliderSet : IContactField {
             var rowMargin = FixedQ4816.FromDouble(value: solid.Margin);
 
             var (center, halfExtents) = ScreenBox(screen: screen);
-
-            colliders.Add(item: FixedStaticCollider.AxisAlignedBox(
+            var screenCollider = FixedStaticCollider.AxisAlignedBox(
                 center: center,
                 halfExtents: (halfExtents + new FixedVector3(
                     X: rowMargin,
                     Y: rowMargin,
                     Z: rowMargin
                 ))
-            ));
+            );
+
+            colliders.Add(item: screenCollider);
+            // A screen carries no grip facet — its collider always follows the world default, never an override.
+            if (worldDefaultGrip) {
+                holdableColliders.Add(item: screenCollider);
+                holdableGrantedByOverride.Add(item: false);
+            }
             boxes++;
         }
 
         foreach (var placement in definition.Placements) {
+            // A dealt template collides with nothing itself; its solid facet is what its dealt children carry.
             if (
                 (placement.Solid is not { } solid) ||
+                (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -273,7 +288,8 @@ internal sealed class WorldColliderSet : IContactField {
             }
 
             var margin = FixedQ4816.FromDouble(value: solid.Margin);
-            // The authored yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
+            var resolvedFrame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+            // The resolved yaw enters the contract through the SAME degrees-to-fixed-radians idiom every other
             // fixed-point placement path already uses (WorldPopulation, WorldPlacementAttachment), and
             // FixedQuaternion.FromAxisAngle is integer arithmetic — so no platform libm sine reaches a collider.
             // This runs once per boot, but once per boot ON EVERY MACHINE: the compiled colliders are re-derived
@@ -281,13 +297,18 @@ internal sealed class WorldColliderSet : IContactField {
             // transcendental here is a cross-machine divergence rather than a one-time authoring rounding.
             var rotation = FixedQuaternion.FromAxisAngle(
                 axis: UnitY,
-                angle: FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)))
+                angle: FixedQ4816.FromDouble(value: (resolvedFrame.YawDegrees * (Math.PI / 180.0)))
             );
+            // Every collider a distribution/mirror expands this ONE row into shares its ONE grip decision — see
+            // WorldPlacementGrip's own remarks.
+            var placementHoldable = (placement.Grip?.Holdable ?? worldDefaultGrip);
+            var placementHoldableIsOverride = (placement.Grip is not null);
 
             CreationStampLattice.ForEachFixedInstance(
-                origin: FixedVector3.FromVector3(value: placement.Position),
+                origin: FixedVector3.FromVector3(value: resolvedFrame.Position),
                 rotation: rotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
+                sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => CreationStampEmitter.VisitFixedPrimitiveCopies(
                     document: creation.EngineDocument,
@@ -298,38 +319,47 @@ internal sealed class WorldColliderSet : IContactField {
                         ReflectionNormal: instance.ReflectionNormal
                     ),
                     visitor: copy => {
-                        if (copy.Shape.Type == AvatarPrimitive.Plane) {
+                        FixedStaticCollider placementCollider;
+
+                        if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                             var normal = copy.PlaneNormal;
 
-                            colliders.Add(item: FixedStaticCollider.HalfSpace(
+                            placementCollider = FixedStaticCollider.HalfSpace(
                                 point: (copy.Center + (normal * margin)),
                                 normal: normal
-                            ));
+                            );
                             planes++;
                             placementPlanes++;
                         } else if (
-                            (copy.Shape.Type == AvatarPrimitive.Sphere) &&
+                            (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
                             (copy.UniformScale > FixedQ4816.Zero)
                         ) {
-                            var sphereBounds = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
+                            var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
-                            colliders.Add(item: FixedStaticCollider.Sphere(
+                            placementCollider = FixedStaticCollider.Sphere(
                                 center: copy.Center,
                                 radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
-                            ));
+                            );
                             spheres++;
                             placementSpheres++;
                         } else {
-                            colliders.Add(item: FixedStaticCollider.AxisAlignedBox(
+                            placementCollider = FixedStaticCollider.AxisAlignedBox(
                                 center: copy.Center,
                                 halfExtents: (copy.HalfExtents + new FixedVector3(
                                     X: margin,
                                     Y: margin,
                                     Z: margin
                                 ))
-                            ));
+                            );
                             boxes++;
                             placementBoxes++;
+                        }
+
+                        colliders.Add(item: placementCollider);
+
+                        if (placementHoldable) {
+                            holdableColliders.Add(item: placementCollider);
+                            holdableGrantedByOverride.Add(item: placementHoldableIsOverride);
                         }
                     }
                 )
@@ -337,6 +367,8 @@ internal sealed class WorldColliderSet : IContactField {
         }
 
         return new WorldColliderSet(
+            holdableColliders: holdableColliders.ToArray(),
+            holdableGrantedByOverride: holdableGrantedByOverride.ToArray(),
             colliders: colliders.ToArray(),
             tuning: tuning,
             attachedRows: attachedRows
@@ -367,6 +399,8 @@ internal sealed class WorldColliderSet : IContactField {
         if (m_attachedRows.Count == 0) {
             return;
         }
+
+        var hash = Fnv1aHash.Create();
 
         foreach (var (placement, creation) in m_attachedRows) {
             // An inactive target body resolves nothing — the row's established "contributes nothing" verdict
@@ -401,97 +435,72 @@ internal sealed class WorldColliderSet : IContactField {
                     ReflectionNormal: null
                 ),
                 visitor: copy => {
-                    if (copy.Shape.Type == AvatarPrimitive.Plane) {
+                    FixedStaticCollider attached;
+
+                    if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
                         var normal = copy.PlaneNormal;
 
-                        m_attachedColliders.Add(item: FixedStaticCollider.HalfSpace(
+                        attached = FixedStaticCollider.HalfSpace(
                             point: (copy.Center + (normal * margin)),
                             normal: normal
-                        ));
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        FoldCollider(collider: in attached, hash: ref hash);
                     } else if (
-                        (copy.Shape.Type == AvatarPrimitive.Sphere) &&
+                        (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
                         (copy.UniformScale > FixedQ4816.Zero)
                     ) {
-                        var sphereBounds = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
+                        var sphereBounds = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
-                        m_attachedColliders.Add(item: FixedStaticCollider.Sphere(
+                        attached = FixedStaticCollider.Sphere(
                             center: copy.Center,
                             radius: ((FixedQ4816.FromDouble(value: sphereBounds.HalfExtents.X) * copy.UniformScale) + margin)
-                        ));
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        FoldCollider(collider: in attached, hash: ref hash);
                     } else {
-                        m_attachedColliders.Add(item: FixedStaticCollider.AxisAlignedBox(
+                        attached = FixedStaticCollider.AxisAlignedBox(
                             center: copy.Center,
                             halfExtents: (copy.HalfExtents + new FixedVector3(
                                 X: margin,
                                 Y: margin,
                                 Z: margin
                             ))
-                        ));
+                        );
+                        m_attachedColliders.Add(item: attached);
+                        FoldCollider(collider: in attached, hash: ref hash);
                     }
                 }
             );
         }
+
+        if (hash.Value != m_attachedHash) {
+            m_attachedHash = hash.Value;
+            AttachedRevision++;
+        }
+    }
+    private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
+        hash.Add(value: ((byte)collider.Kind));
+        hash.Add(value: collider.Center.X.Value);
+        hash.Add(value: collider.Center.Y.Value);
+        hash.Add(value: collider.Center.Z.Value);
+        hash.Add(value: collider.Extent.X.Value);
+        hash.Add(value: collider.Extent.Y.Value);
+        hash.Add(value: collider.Extent.Z.Value);
     }
     /// <inheritdoc/>
-    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var grounded = false;
-        var lastNormal = FixedVector3.Zero;
-
-        for (var iteration = 0; (iteration < m_iterations); iteration++) {
-            var pushed = false;
-
-            foreach (var volume in volumes) {
-                foreach (var collider in m_colliders) {
-                    if (collider.TryGetPush(
-                        orientation: in orientation,
-                        position: position,
-                        push: out var push,
-                        skin: m_skin,
-                        volume: in volume
-                    )) {
-                        ApplyPush(
-                            grounded: ref grounded,
-                            lastNormal: ref lastNormal,
-                            position: ref position,
-                            push: in push,
-                            velocity: ref velocity
-                        );
-                        pushed = true;
-                    }
-                }
-
-                // ATTACHED solid rows — recomputed once per tick by RefreshAttached, never here (Resolve runs once
-                // PER BODY; refreshing per body would repeat the same recompute for every other body in the world).
-                foreach (var collider in m_attachedColliders) {
-                    if (collider.TryGetPush(
-                        orientation: in orientation,
-                        position: position,
-                        push: out var push,
-                        skin: m_skin,
-                        volume: in volume
-                    )) {
-                        ApplyPush(
-                            grounded: ref grounded,
-                            lastNormal: ref lastNormal,
-                            position: ref position,
-                            push: in push,
-                            velocity: ref velocity
-                        );
-                        pushed = true;
-                    }
-                }
-            }
-
-            if (!pushed) {
-                break;
-            }
-        }
-
-        return new ContactResolution(
-            Grounded: grounded,
-            ObstructionNormal: lastNormal
+    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
+        // ATTACHED solid rows ride the second span: RefreshAttached recomputes them once per tick, never here (Resolve
+        // runs once PER BODY, so refreshing here would repeat that recompute for every other body in the world).
+        m_solver.Resolve(
+            colliders: m_colliders,
+            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
+            orientation: in orientation,
+            position: ref position,
+            up: in up,
+            velocity: ref velocity,
+            volumes: volumes
         );
-    }
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
         _ = position;
@@ -499,4 +508,37 @@ internal sealed class WorldColliderSet : IContactField {
 
         return true;
     }
+    /// <inheritdoc/>
+    // Searches m_holdableColliders alone (never m_attachedColliders — see the field's own remarks), with a zero
+    // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+        if (!FixedSurfaceQuery.TryNearestDirected(
+            assistHalfAngle: FixedQ4816.Zero,
+            candidate: out candidate,
+            colliders: m_holdableColliders,
+            direction: in direction,
+            dynamicColliders: [],
+            maxDistance: maxDistance,
+            origin: in origin
+        )) {
+            candidate = default;
+            grantedByOverride = false;
+
+            return false;
+        }
+
+        grantedByOverride = m_holdableGrantedByOverride[candidate.ColliderIndex];
+
+        return true;
+    }
+    /// <inheritdoc/>
+    public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) => FixedSurfaceQuery.TryNearestDirected(
+        assistHalfAngle: assistHalfAngle,
+        candidate: out candidate,
+        colliders: m_colliders,
+        direction: in direction,
+        dynamicColliders: [],
+        maxDistance: maxDistance,
+        origin: in origin
+    );
 }

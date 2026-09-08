@@ -8,7 +8,7 @@ public sealed class QrCodecLawTests {
     // Packs the module grid, one bit per module (row-major, MSB first), prefixed with the header fields a scanner
     // also reads from the symbol itself — two matrices with the same fingerprint carry the identical grid.
     private static string Fingerprint(QrMatrix matrix) {
-        var bits = new byte[((matrix.Size * matrix.Size) + 7) / 8];
+        var bits = new byte[(((matrix.Size * matrix.Size) + 7) / 8)];
         var bitIndex = 0;
 
         for (var row = 0; (row < matrix.Size); row++) {

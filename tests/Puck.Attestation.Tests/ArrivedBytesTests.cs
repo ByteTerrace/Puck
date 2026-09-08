@@ -89,34 +89,28 @@ public sealed class ArrivedBytesTests {
     [Fact]
     public void SingleByteMutationSweep_NoMutationIsAcceptedOrCrashes() {
         var (codec, _, trust, _, wire) = BuildFixture();
-        var accepted = new List<string>();
-        var crashed = new List<string>();
-
-        for (var offset = 0; (offset < wire.Length); offset += 1) {
-            for (var value = 0; (value < 256); value += 1) {
-                if (value == wire[offset]) {
-                    continue;
-                }
-
-                var mutated = ((byte[])wire.Clone());
-
-                mutated[offset] = ((byte)value);
-
+        AssertAccepted(VerifyWire(codec, trust, wire));
+        var failures = new string?[wire.Length];
+        // Each offset owns its input buffer. The codec and trust list are read-only; every verification creates
+        // its own crypto state. Keep the complete 255-substitution sweep while bounding CPU concurrency.
+        Parallel.For(0, wire.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Min(8, Environment.ProcessorCount) }, offset => {
+            var mutated = (byte[])wire.Clone();
+            for (var value = 0; value < 256; value++) {
+                if (value == wire[offset]) { continue; }
+                mutated[offset] = (byte)value;
                 try {
-                    var result = VerifyWire(bytes: mutated, codec: codec, trust: trust);
-
-                    if (result.Verified) {
-                        accepted.Add(item: $"offset {offset} = 0x{value:X2}");
+                    if (VerifyWire(codec, trust, mutated).Verified) {
+                        failures[offset] = $"offset {offset} = 0x{value:X2} was accepted";
+                        return;
                     }
                 } catch (FormatException) {
                     // Expected: refused at decode.
                 } catch (Exception exception) {
-                    crashed.Add(item: $"offset {offset} = 0x{value:X2} threw {exception.GetType().Name}");
+                    failures[offset] = $"offset {offset} = 0x{value:X2} threw {exception.GetType().Name}";
+                    return;
                 }
             }
-        }
-
-        Assert.Empty(collection: accepted);
-        Assert.Empty(collection: crashed);
+        });
+        Assert.All(failures, failure => Assert.Null(failure));
     }
 }

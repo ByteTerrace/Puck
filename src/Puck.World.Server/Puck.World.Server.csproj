@@ -4,18 +4,18 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
         <ProjectReference Include="..\Puck.Audio\Puck.Audio.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
-        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
         <ProjectReference Include="..\Puck.Networking\Puck.Networking.csproj" />
         <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
-        <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
         <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
         <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
         <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
     </ItemGroup>
 </Project>

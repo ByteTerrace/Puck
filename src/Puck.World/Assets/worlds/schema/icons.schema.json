@@ -1,0 +1,131 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "rows": {
+      "description": "The icon rows.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One authored icon: a stable name (the string binding entries and badge rows reference, e.g. action.jump, edit.next) plus its content \u2014 exactly one of Glyph (a baked atlas glyph) or Label (a short text badge, at most MaxLabelChars characters \u2014 the LB/RB path made authorable).",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The stable icon name.",
+            "type": "string"
+          },
+          "glyph": {
+            "description": "The glyph content, or null when this row carries Label instead.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "font": {
+                "description": "The font id (WorldIconFontCatalog).",
+                "type": "string"
+              },
+              "glyph": {
+                "description": "The glyph spelling: one literal character, or U\u002BXXXX.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "font",
+              "glyph"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldIconGlyphRef"
+          },
+          "label": {
+            "description": "The short text content, or null when this row carries Glyph instead.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "title": "WorldIconRow"
+      },
+      "default": null
+    },
+    "badges": {
+      "description": "The badge-mapping rows.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One physical-control badge mapping: which authored icon an INPUT SOURCE ID shows on the binding bar, with optional per-family overrides \u2014 the engine holds no button\u2192glyph switch, and a control the bar can name is a control a badge row can key. A slot, a modifier indicator, and a chord hint all resolve their badge through this one table, by the same id.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "source": {
+            "description": "The physical control\u0027s input source id (gamepad.buttonSouth, gamepad.leftTrigger, mouse.button1, \u2026).",
+            "type": "string"
+          },
+          "icon": {
+            "description": "The default icon name.",
+            "type": "string"
+          },
+          "overrides": {
+            "description": "Family-specific overrides \u2014 ABSENT resolves to none.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One family-specific badge override: the same physical button renders a different icon on the named controller family (Puck.Input.Devices.GamepadType member name).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "family": {
+                  "description": "The controller family name.",
+                  "type": "string"
+                },
+                "icon": {
+                  "description": "The icon name this family shows instead of the row\u0027s default.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "family",
+                "icon"
+              ],
+              "additionalProperties": false,
+              "title": "WorldIconBadgeOverride"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "source",
+          "icon"
+        ],
+        "additionalProperties": false,
+        "title": "WorldIconBadgeRow"
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldIconographySection"
+}

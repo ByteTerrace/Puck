@@ -1,43 +1,85 @@
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 
 namespace Puck.World;
 
 /// <summary>One locomotion kit — a world-definition row naming a way of moving: the body motion program it runs under,
-/// the motion model its
+/// the motion tuning its
 /// bodies compile, its producer arguments, and its action-lane bindings. Every game-flavored movement noun is a
 /// row of this data, never an engine enum; the census echo prints these names. <see cref="Name"/> is the kit's
 /// kebab-case name (the census echo token); <see cref="BodyMotionProgram"/> names the body motion program the
-/// kit's bodies execute; <see cref="Motion"/> is the locomotion model the kit's bodies compile (a seat's profile
-/// speeds still override its speed fields) — see <see cref="WorldMotionModel"/>.</summary>
+/// kit's bodies execute; <see cref="Motion"/> is the locomotion tuning the kit's bodies compile (a seat's profile
+/// speeds still override its speed fields) — see <see cref="WorldMotion"/>.</summary>
 /// <remarks><see cref="Collider"/> is the kit's body volume solved against the world contact field, or
 /// <see langword="null"/> for a kit with no volume (never solved against the field), omitted from the wire when
 /// null. <see cref="BodyContact"/> is whether bodies wearing this kit overlap one another or participate in
-/// physical depenetration — world geometry still uses <see cref="Collider"/> in either mode.</remarks>
+/// physical depenetration — world geometry still uses <see cref="Collider"/> in either mode. <see cref="Mass"/> is the
+/// body's gravitational mass in the same units a <c>gravity.attractors</c> row uses; zero (the default) makes a body a
+/// target that is pulled but pulls nothing. <see cref="Rigid"/> is a distinct facet: presence hands the kit's bodies
+/// to the rigid solver instead of a locomotion motion program, requires <see cref="Collider"/> (sphere/capsule/box)
+/// and <see cref="BodyContact"/> <see cref="WorldBodyContactMode.Solid"/>, and derives its own inertial mass from that
+/// collider's shape — it never reads <see cref="Mass"/>. <see cref="Tether"/> is a further distinct facet: presence
+/// admits the kit's bodies to <c>body.attach</c>/<c>body.detach</c>/<c>body.reel</c>, an aimed distance-cap rope
+/// anchored through <see cref="Puck.Physics.IContactField.TryNearestSurfaceAlongDirection"/> and
+/// <see cref="Puck.Physics.FixedTetherConstraint"/>.</remarks>
 public sealed record WorldKit(
     string Name,
     string BodyMotionProgram,
-    WorldMotionModel Motion,
+    WorldMotion Motion,
     [property: JsonPropertyName("producers"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, BodyProgramParameters>? ProducersRaw = null,
     [property: JsonPropertyName("actions"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, ActionSpec>? ActionsRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
-    WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap
+    WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap,
+    float Mass = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRigid? Rigid = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCarry? Carry = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTether? Tether = null,
+    [property: JsonPropertyName("pad"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldPadElement>? PadRaw = null,
+    [property: JsonPropertyName("autonomy"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAutonomyCadence? AutonomyRaw = null
 ) {
-    /// <summary>Gets the producer parameter maps keyed by authored producer-program name — ABSENT resolves to
-    /// none.</summary>
-    [JsonIgnore]
-    public IReadOnlyDictionary<string, BodyProgramParameters> Producers => (ProducersRaw ?? EmptyProducers);
     /// <summary>Gets the kit's composition bindings, keyed by declared channel name (validated against the world's
     /// channel table — a kit naming an undeclared channel is a dead name; a declared composition channel with no
     /// entry here stays legal and inert per body). Compositions key off channel name, never a lane ordinal. ABSENT
     /// resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyDictionary<string, ActionSpec> Actions => (ActionsRaw ?? EmptyActions);
+    /// <summary>Gets the kit's machine-pad bindings, keyed by the same declared channel names <see cref="Actions"/>
+    /// keys off — what a channel MEANS when this kit is worn by a control application whose target is a screen's
+    /// booted machine, rather than by a body. One vocabulary, two destinations: a kit binding <c>jump</c> to a body
+    /// action and to <see cref="WorldPadElement.South"/> answers both. A kit carrying no pad map cannot be named by
+    /// a <see cref="WorldScreenRoute.Kit"/>; ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, WorldPadElement> Pad => (PadRaw ?? EmptyPad);
+    /// <summary>Gets the producer parameter maps keyed by authored producer-program name — ABSENT resolves to
+    /// none.</summary>
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, BodyProgramParameters> Producers => (ProducersRaw ?? EmptyProducers);
+    /// <summary>Gets the cadence policy for locally simulated, non-human bodies wearing this kit. ABSENT preserves
+    /// full-rate motion and producer steering.</summary>
+    [JsonIgnore]
+    public WorldAutonomyCadence Autonomy => (AutonomyRaw ?? WorldAutonomyCadence.FullRate);
 
     private static readonly IReadOnlyDictionary<string, BodyProgramParameters> EmptyProducers = new Dictionary<string, BodyProgramParameters>(comparer: StringComparer.Ordinal);
     private static readonly IReadOnlyDictionary<string, ActionSpec> EmptyActions = new Dictionary<string, ActionSpec>(comparer: StringComparer.Ordinal);
+    private static readonly IReadOnlyDictionary<string, WorldPadElement> EmptyPad = new Dictionary<string, WorldPadElement>(comparer: StringComparer.Ordinal);
+}
+/// <summary>Independent deterministic update cadences for non-human bodies. Human-occupied peers and local seats
+/// always run at the authority's full rate. A zero value means every authority tick; a positive interval batches
+/// elapsed engine time and phases bodies across that interval, preserving rates while trading response granularity
+/// for crowd scale. Submitted input and command-side channel presses immediately promote a body to full-rate steps,
+/// and a timed press keeps it there through release. Motion batching is only valid for overlap bodies; solid-body
+/// kits must advance every authority tick so dynamic contact remains exact.</summary>
+/// <param name="MotionSeconds">How often the body's physics/motion program advances.</param>
+/// <param name="SteeringSeconds">How often its selected producer refreshes steering. The most recent image is reused
+/// between refreshes.</param>
+public sealed record WorldAutonomyCadence(float MotionSeconds = 0f, float SteeringSeconds = 0f) {
+    /// <summary>The greatest supported autonomous update interval.</summary>
+    public const float MaximumSeconds = 1f;
+    /// <summary>Full authority-rate motion and steering.</summary>
+    public static WorldAutonomyCadence FullRate { get; } = new();
 }
 /// <summary>Declares how a kit responds to other dynamic bodies. Interactions and targeting remain available in
 /// both modes; only <see cref="Solid"/> authorizes physical depenetration.</summary>
@@ -55,21 +97,28 @@ public enum WorldBodyContactMode : byte {
 /// <param name="Actions">The kit's compiled composition bindings, indexed by channel ordinal
 /// (<see cref="ChannelLimits.MaxChannels"/> slots; unbound ordinals are <see langword="null"/>) — the channel-name map
 /// resolved once against the world's <see cref="WorldChannelTable"/>.</param>
-/// <param name="ActionThresholds">The binary crossing threshold for each ordinal in <paramref name="Actions"/>
-/// (meaningful only where a binding exists).</param>
+/// <param name="ActionThresholds">The world's declared binary crossing threshold for every ordinal (not just where
+/// a binding exists) — the one array every held read, action edge, engage-channel probe, and previous-bit image
+/// compares against.</param>
 /// <param name="ActionShapes">The world's declared channel shape for every ordinal (not just where a binding
 /// exists) — the held-image composition (<c>Puck.World.Server.WorldBody.NextIntent</c>) needs a composition
 /// ordinal's shape whether or not this kit binds an action to it.</param>
 /// <param name="Collider">The kit's compiled body volumes, or <see langword="null"/> for a volumeless kit.</param>
 /// <param name="BodyContact">The authored dynamic-body contact mode.</param>
-/// <param name="SprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> (or the
-/// vehicle arm's <see cref="WorldMotionModel.Vehicle.BoostChannel"/> — the same held-multiplier seam) resolved to,
-/// or <c>-1</c> for a kit with no sprint capability (including a kit whose declared model carries none).</param>
-/// <param name="DriftChannelOrdinal">The ordinal <see cref="WorldMotionModel.Vehicle.DriftChannel"/> resolved to,
-/// or <c>-1</c> for a kit that cannot drift (every non-vehicle kit).</param>
+/// <param name="Mass">The compiled gravitational mass.</param>
 /// <param name="RoleOrdinals">The authored ordinals resolved for engine motion roles.</param>
 /// <param name="RoleMask">The compiled per-ordinal role predicate.</param>
 /// <param name="ActionState">The kit's compiled named action-state register file.</param>
+/// <param name="Holds">The kit's compiled ordered hold list (<see cref="WorldMotion.Holds"/>), empty
+/// for a kit authoring none.</param>
+/// <param name="Tuning">The kit's compiled locomotion tuning — speed, turn, and the shaping table — resolved
+/// against the world's channel table and <c>dynamics</c> rows here, once, rather than per body.</param>
+/// <param name="AutonomousMotionTicks">The non-human motion cadence in engine ticks; zero means every authority tick.</param>
+/// <param name="AutonomousSteeringTicks">The non-human producer cadence in engine ticks; zero means every authority tick.</param>
+/// <param name="Rigid">The kit's compiled rigid-dynamics facet, or <see langword="null"/> for a locomotion kit.</param>
+/// <param name="Carry">The kit's compiled carry facet, or <see langword="null"/> for a kit that cannot pick up a
+/// rigid body.</param>
+/// <param name="Tether">The kit's compiled tether facet, or <see langword="null"/> for a kit that carries no rope.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -78,11 +127,17 @@ public readonly record struct FixedWorldKit(
     ChannelShape[] ActionShapes,
     FixedWorldCollider? Collider,
     WorldBodyContactMode BodyContact,
-    int SprintChannelOrdinal,
-    int DriftChannelOrdinal,
+    FixedQ4816 Mass,
     RoleChannelOrdinals RoleOrdinals,
     bool[] RoleMask,
-    CompiledActionStateSlot[] ActionState
+    CompiledActionStateSlot[] ActionState,
+    FixedBodyHold[] Holds,
+    FixedMotionTuning Tuning,
+    ulong AutonomousMotionTicks,
+    ulong AutonomousSteeringTicks,
+    FixedWorldRigid? Rigid = null,
+    FixedWorldCarry? Carry = null,
+    FixedWorldTether? Tether = null
 ) {
     private static (CompiledActionStateSlot[] Slots, Dictionary<string, int> ByName) CompileActionState(IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
         var slots = new List<CompiledActionStateSlot>();
@@ -161,11 +216,22 @@ public readonly record struct FixedWorldKit(
     /// <param name="kit">The authored kit row.</param>
     /// <param name="channels">The world's compiled channel table.</param>
     /// <param name="targets">The world's compiled target-register table.</param>
+    /// <param name="curves">The world's compiled curves-row table — a producer's curve-follow target resolves
+    /// against it the same way <paramref name="targets"/> resolves a designated register.</param>
+    /// <param name="navigation">The world's compiled navigation-domain table.</param>
     /// <param name="programs">The world's compiled body motion programs keyed by stable name.</param>
+    /// <param name="programRows">The world's authored body motion program rows keyed by the same names — the target
+    /// source a producer senses is authored vocabulary, so it is read here rather than carried on the compiled
+    /// instruction form.</param>
     /// <param name="creations">The creation rows a <see cref="WorldCollider.FromCreation"/> may reference.</param>
     /// <param name="bodyState">The world's body-owned ephemeral state declarations.</param>
     /// <param name="identityState">The world's identity-owned durable state declarations.</param>
-    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyList<WorldCreation> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState) {
+    /// <param name="dynamics">The world's declared <c>dynamics</c> rows, resolved against <paramref name="kit"/>'s
+    /// motion row's own declared dynamics row name (validation has already refused a dangling name).</param>
+    /// <param name="simulationRateHz">The world's own simulation rate — the step width a resolved dynamics row's
+    /// propagator compiles against (validation has already refused a resolved name at rate 0), and a curve-follow
+    /// producer's per-tick arc step divisor.</param>
+    public static FixedWorldKit Compile(WorldKit kit, WorldChannelTable channels, WorldTargetRegisterTable targets, WorldCurveTable curves, WorldNavigationDomainTable navigation, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, IReadOnlyDictionary<string, BodyMotionProgram> programRows, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<ActionStateSlot> bodyState, IReadOnlyList<ActionStateSlot> identityState, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz) {
         var actions = new CompiledActionSpec?[ChannelLimits.MaxChannels];
         var thresholds = new FixedQ4816[ChannelLimits.MaxChannels];
         // Every ordinal, not just bound ones — a composition channel's shape is a WORLD property, not a per-kit one,
@@ -179,9 +245,13 @@ public readonly record struct FixedWorldKit(
             identityState: identityState
         );
 
+        // Every ordinal carries the world's own declared threshold, bound or not: the held reads (a speed modifier,
+        // a shaping gate), the engage-channel probe, and the previous-bit image all compare against this array, and
+        // an unbound ordinal left at zero would read as held, and as crossed, whenever the channel rests at zero.
         for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
             shapes[ordinal] = channels.Shape(ordinal: ordinal);
             roleMask[ordinal] = channels.IsRole(ordinal: ordinal);
+            thresholds[ordinal] = channels.Threshold(ordinal: ordinal);
         }
 
         foreach (var (name, spec) in kit.Actions) {
@@ -192,35 +262,14 @@ public readonly record struct FixedWorldKit(
                 continue;
             }
 
-            actions[ordinal] = CompiledActionSpec.Compile(
+            actions[ordinal] = BodyActionSpecFactory.Compile(
                 spec: spec,
                 stateSlots: stateSlots,
                 program: program,
                 actionName: $"{kit.Name}.{name}"
             );
-            thresholds[ordinal] = channels.Threshold(ordinal: ordinal);
         }
 
-        // An arm without a held-multiplier channel resolves -1 here the same way a kit with the field unset does —
-        // "no sprint" by construction, not a special case (DeclaredSprintChannel is the one arm-dispatch read,
-        // covering Grounded's and Swim's sprint and the vehicle arm's boost, the same held-multiplier seam). The
-        // vehicle arm's drift channel is its own held read, resolved the same way below.
-        var sprintOrdinal = (((kit.Motion.DeclaredSprintChannel is { Length: > 0 } sprintChannel)
-            && channels.TryGetOrdinal(
-            name: sprintChannel,
-            ordinal: out var sprintResolved
-        ))
-            ? sprintResolved
-            : -1
-        );
-        var driftOrdinal = ((((kit.Motion as WorldMotionModel.Vehicle)?.DriftChannel is { Length: > 0 } driftChannel)
-            && channels.TryGetOrdinal(
-            name: driftChannel,
-            ordinal: out var driftResolved
-        ))
-            ? driftResolved
-            : -1
-        );
         var roleOrdinals = channels.RoleOrdinals;
         var producers = new Dictionary<string, CompiledBodyProducer>(
             capacity: kit.Producers.Count,
@@ -232,9 +281,13 @@ public readonly record struct FixedWorldKit(
                 key: name,
                 value: CompiledBodyProducer.Compile(
                     program: programs[name],
+                    source: programRows[name].Target,
                     parameters: parameters,
                     channels: channels,
-                    targets: targets
+                    targets: targets,
+                    curves: curves,
+                    navigation: navigation,
+                    simulationRateHz: simulationRateHz
                 )
             );
         }
@@ -245,17 +298,33 @@ public readonly record struct FixedWorldKit(
             ordinals: roleOrdinals
         );
 
-        // The sprint/boost and drift ordinals are HELD reads, not Actions bindings — each needs its threshold in
-        // ActionThresholds regardless of whether kit.Actions also binds a press/release effect there (the loop above
-        // only writes a threshold where an ActionSpec exists), so WorldBody's held-channel test compares against the
-        // channel's OWN declared threshold rather than the array's zero default.
-        if (sprintOrdinal >= 0) {
-            thresholds[sprintOrdinal] = channels.Threshold(ordinal: sprintOrdinal);
-        }
+        var collider = FixedWorldCollider.Compile(
+            collider: kit.Collider,
+            creations: creations
+        );
+        var rigid = ((kit.Rigid is { } rigidRow)
+            ? FixedWorldRigid.Compile(
+                rigid: rigidRow,
+                collider: collider!.Value
+            )
+            : (FixedWorldRigid?)null
+        );
+        var carry = ((kit.Carry is { } carryRow)
+            ? FixedWorldCarry.Compile(carry: carryRow)
+            : (FixedWorldCarry?)null
+        );
+        var tether = FixedWorldTether.Compile(
+            channels: channels,
+            stateOrdinals: stateSlots,
+            tether: kit.Tether
+        );
 
-        if (driftOrdinal >= 0) {
-            thresholds[driftOrdinal] = channels.Threshold(ordinal: driftOrdinal);
-        }
+        var tuning = WorldMotionTuningFactory.Compile(
+            channels: channels,
+            dynamics: dynamics,
+            simulationRateHz: simulationRateHz,
+            tuning: kit.Motion
+        );
 
         return new FixedWorldKit(
             BodyMotionProgram: program,
@@ -263,16 +332,26 @@ public readonly record struct FixedWorldKit(
             Actions: actions,
             ActionThresholds: thresholds,
             ActionShapes: shapes,
-            Collider: FixedWorldCollider.Compile(
-                collider: kit.Collider,
-                creations: creations
-            ),
+            Collider: collider,
             BodyContact: kit.BodyContact,
-            SprintChannelOrdinal: sprintOrdinal,
-            DriftChannelOrdinal: driftOrdinal,
+            Mass: FixedQ4816.FromDouble(value: kit.Mass),
             RoleOrdinals: roleOrdinals,
             RoleMask: roleMask,
-            ActionState: actionState
+            ActionState: actionState,
+            Holds: WorldHoldFactory.Compile(
+                channels: channels,
+                holds: kit.Motion.Holds
+            ),
+            Tuning: tuning,
+            AutonomousMotionTicks: ((kit.Autonomy.MotionSeconds > 0f)
+                ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.MotionSeconds))
+                : 0UL),
+            AutonomousSteeringTicks: ((kit.Autonomy.SteeringSeconds > 0f)
+                ? FixedTickConversion.DurationEngineTicks(seconds: FixedQ4816.FromDouble(value: kit.Autonomy.SteeringSeconds))
+                : 0UL),
+            Rigid: rigid,
+            Carry: carry,
+            Tether: tether
         );
     }
 }

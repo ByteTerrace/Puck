@@ -241,6 +241,11 @@ internal static class Coverage {
         (new CoverRef(Name: "value__", Type: typeof(ResidualTwist)), EnumStorageReason),
         (new CoverRef(Name: "value__", Type: typeof(RuleKind)), EnumStorageReason),
         (new CoverRef(Name: "value__", Type: typeof(DiscreteMeasureCompilationFailure)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(SecondOrderDynamicsBranch)), EnumStorageReason),
+        (new CoverRef(Name: "value__", Type: typeof(CurvatureSplineRefusal)), EnumStorageReason),
+        (new CoverRef(Name: "CarrierOverflow", Type: typeof(CurvatureSplineRefusal)), CurvatureSplineUnreachableOverflowReason),
+        (new CoverRef(Name: "ArcLengthErrorUnbounded", Type: typeof(CurvatureSplineRefusal)), CurvatureSplineUnreachableArcErrorReason),
+        (new CoverRef(Name: "CoefficientFractionBitCount", Type: typeof(CurvatureSpline)), CurvatureSplineCoefficientScaleReason),
         (new CoverRef(Name: "LocallyFinite", Type: typeof(ClosureCertificate)), UnreachedCertificateReason),
 
         // ---- the continued-fraction lenses ----
@@ -257,11 +262,58 @@ internal static class Coverage {
         // from the same (p,q,d,r), so a wiring defect in either accessor (the wrong field assigned, a stale copy, an
         // omitted read) reddens the case even though the underlying eigenvalue arithmetic is pinned elsewhere.
 
+        // ---- the scalar-field seam ----
+        // A contract declaration with no implementation in this assembly: nothing here computes a distance or a
+        // gradient, so there is no operand domain, subject shape or oracle to state a law against — a law would have to
+        // supply an implementation, and it would then be testing that implementation rather than this declaration. The
+        // behavior belongs to each provider and is gated where the provider lives: SdfFieldEvaluator answers in
+        // tests/Puck.SignedDistance.Tests. FieldEvaluatorCapabilities is the one-flag carrier the contract hands back.
+        // NOTHING is owed here; a law would become owed only if Puck.Maths ever ships a field implementation of its own.
+        (new CoverRef(Name: "Capabilities", Type: typeof(IWorldQuery)), FieldSeamReason),
+        (new CoverRef(Name: "LineOfSight", Type: typeof(IWorldQuery)), FieldSeamReason),
+        (new CoverRef(Name: "Overlap", Type: typeof(IWorldQuery)), FieldSeamReason),
+        (new CoverRef(Name: "Raycast", Type: typeof(IWorldQuery)), FieldSeamReason),
+        (new CoverRef(Name: "SphereCast", Type: typeof(IWorldQuery)), FieldSeamReason),
+        (new CoverRef(Name: "TryGroundHeight", Type: typeof(IWorldQuery)), FieldSeamReason),
+        (new CoverRef(Name: ".ctor", Type: typeof(QueryCapabilities)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "HasBlocked", Type: typeof(QueryCapabilities)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "HasHeightfield", Type: typeof(QueryCapabilities)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "HasOccupancy", Type: typeof(QueryCapabilities)), FieldSeamCarrierReason),
+        (new CoverRef(Name: ".ctor", Type: typeof(RayHit)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "Confidence", Type: typeof(RayHit)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "Distance", Type: typeof(RayHit)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "Material", Type: typeof(RayHit)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "Normal", Type: typeof(RayHit)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "Point", Type: typeof(RayHit)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "Bounded", Type: typeof(WorldQueryConfidence)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "Exact", Type: typeof(WorldQueryConfidence)), FieldSeamCarrierReason),
+        (new CoverRef(Name: "value__", Type: typeof(WorldQueryConfidence)), EnumStorageReason),
+        (new CoverRef(Name: "Capabilities", Type: typeof(IFieldEvaluator)), FieldSeamReason),
+        (new CoverRef(Name: "TryDistance", Type: typeof(IFieldEvaluator)), FieldSeamReason),
+        (new CoverRef(Name: "TryFieldGradient", Type: typeof(IFieldEvaluator)), FieldSeamReason),
+        (new CoverRef(Name: ".ctor", Type: typeof(FieldEvaluatorCapabilities)), FieldSeamReason),
+        (new CoverRef(Name: "WarpFree", Type: typeof(FieldEvaluatorCapabilities)), FieldSeamReason),
+
+        // ---- the generic-draw dispatch contract ----
+        // IDrawGenerator carries no body of its own: it exists so a generic caller (Puck.State.GeneratorEngine,
+        // AliasTable<TElement>.Sample/SampleIndex) can run one sampling body over either Pcg32XshRr or
+        // Pcg32Extended without a virtual call or a second copy. Each implementer's own concrete method is a
+        // separate reflected member under its own declaring type and already carries its own coverage
+        // (Pcg32XshRr.NextUInt32/NextUInt32(uint,uint)/Advance and Pcg32Extended's own via the sampling.* laws);
+        // the interface declaration itself computes nothing to state a law against.
+        (new CoverRef(Name: "NextUInt32", Type: typeof(IDrawGenerator)), DrawGeneratorShapeReason),
+        (new CoverRef(Name: "Advance", Type: typeof(IDrawGenerator)), DrawGeneratorShapeReason),
     ];
 
     // The shared category reasons. Each is written once and cited by every member of its category, which is what makes
     // the category reviewable as a category rather than as a pile of one-off prose.
+    private const string FieldSeamCarrierReason = "A field- or query-seam carrier: it holds a value some provider computed and this assembly computes nothing to put in it, so THIS member has no operand domain, subject shape or oracle here. The producing arithmetic is gated where the provider lives. Owed only if Puck.Maths ever ships a field or query implementation of its own.";
+    private const string CurvatureSplineCoefficientScaleReason = "A documentation constant naming the scale every CurvatureSplineSegment raw is carried at; every law in the curvature-spline family reads and compares those raws, so a wrong value here would desynchronize every comparison in the family rather than fail one case that names it — the constant has no operand domain, subject shape or oracle of its own.";
+    private const string CurvatureSplineUnreachableArcErrorReason = "Named refusal with no reachable trigger through legal authored knots: composite-Simpson error scales with the FOURTH power of the panel width, so each doubling divides the Richardson error estimate by roughly sixteen; CheckInteriorCusp already certifies every admitted segment's speed stays at or above MinSpeedFloor everywhere on [0, 1] (an exact, interval-isolated bound), which keeps the integrand's own higher derivatives from the kind of near-singular blowup that would demand many doublings, so the panel count converges within a handful of doublings for every admitted segment this suite or a hand-constructed adversarial one has reached — nowhere near the 65,536-panel budget. The refusal stays as the defensive catch-all a bounded search demands, not because a law can drive it.";
+    private const string CurvatureSplineUnreachableOverflowReason = "Named refusal with no reachable trigger through legal authored knots: every §1.6 derived bound (MaxCoordinate, MaxTangentChordRatio, MinTangentLength) exists specifically to keep the Q32 raw carrier from overflowing, and a knot pair inside KnotOutOfRange's own coordinate bound compiles or refuses by an earlier, more specific name first (curvature-spline.refusal-ladder's own leg records a 30000-draw sweep at the coordinate cap finding zero occurrences). The refusal stays in the ladder as the defensive catch-all TryRoundRational's own Try-shape demands, not because a law can drive it.";
+    private const string DrawGeneratorShapeReason = "A generic-dispatch shape contract with no body of its own: THIS declaration computes nothing, so it carries no operand domain, subject shape or oracle. Each implementer's own concrete member is a separate reflected member under its own declaring type, gated by that type's sampling.* laws.";
     private const string EnumStorageReason = "The compiler-generated enum storage field, not authored API.";
+    private const string FieldSeamReason = "A contract declaration with no implementation in this assembly: no member here computes a distance or a gradient, so THIS member carries no operand domain, subject shape or oracle — stating a law would mean supplying an implementation and then testing that implementation instead. Each provider's behavior is gated where the provider lives (SdfFieldEvaluator at tests/Puck.SignedDistance.Tests). Owed only if Puck.Maths ever ships a field implementation of its own.";
     private const string SymmetryLatticeReason = "Node arithmetic on a fixed reflection lattice, not fixed-point algebra: THIS member carries no operand domain, subject shape or oracle in this suite (AreOrthogonal, Cycle, RayCycleFactors, RayCycleOrder and Reflect do, and are covered by the two reflection cases rather than waived). NARROW, and deliberately not smoothed over: the no-oracle argument is the whole of it, and no gate anywhere stands over these members — nothing in or out of this suite checks the E8/Ising mass spectrum or the reflection-world group-order closure, so they are gated by nothing. OWED: an in-suite E8/Ising mass-spectrum law and a group-order closure law, either of which would promote most of this list out of the register.";
     private const string UnreachedCertificateReason = "Enumeration case with no producer: the guarded sum names the certificate it ATTEMPTED, and every attempt in the library is Nilpotent, Idempotent or FieldResolvent. A divisibility window is locally finite but reports the nilpotence it observed, so LocallyFinite is still issued nowhere, and None is the absence of any issued certificate rather than a certificate itself.";
 

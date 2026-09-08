@@ -101,11 +101,11 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
         );
 
         var master = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: masterRom
         );
         var slave = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: slaveRom
         );
         var masterTally = new TrafficTally();
@@ -153,11 +153,11 @@ internal sealed class LinkChurnStage : IPostStage<PostContext> {
                         var masterState = master.Machine.Snapshot();
                         var slaveState = slave.Machine.Snapshot();
                         var freshMaster = PostMachine.Build(
-                            model: ConsoleModel.Dmg,
+                            model: ConsoleModel.DmgC,
                             rom: masterRom
                         );
                         var freshSlave = PostMachine.Build(
-                            model: ConsoleModel.Cgb,
+                            model: ConsoleModel.CgbE,
                             rom: slaveRom
                         );
 

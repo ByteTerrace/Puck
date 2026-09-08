@@ -11,18 +11,6 @@ namespace Puck.World.Server;
 /// <param name="Ok">Whether the operation landed.</param>
 /// <param name="Detail">What happened — the receipt, or why it was refused.</param>
 public readonly record struct WorldSyncOutcome(string Id, bool Ok, string Detail);
-/// <summary>What the most recent push actually did — the honest three-valued answer <c>storage.status</c> echoes,
-/// distinguishing "no write has been attempted or every one landed" from the two ways a write fails, because a status
-/// line that only tracked the precondition bit read <c>ok</c> after a run in which every push was refused.</summary>
-public enum WorldSyncWriteOutcome {
-    /// <summary>No push has been attempted this session, or every world in the last one landed.</summary>
-    Ok,
-    /// <summary>At least one world hit an if-match precondition — the cloud copy moved since last sync.</summary>
-    PreconditionFailed,
-    /// <summary>At least one world failed for another reason — a transport error, a timeout, an unsynced cloud copy,
-    /// or a key its id cannot address.</summary>
-    Failed,
-}
 /// <summary>
 /// The owned-world cloud sync engine: pushes and pulls whole world documents against the per-user container, one blob
 /// per world under <c>puck/worlds/</c>, carrying the storage version token so a stale writer is refused rather than
@@ -33,10 +21,13 @@ public enum WorldSyncWriteOutcome {
 /// boots. A fresh session therefore reports dirty until its first fully successful whole-catalog push or pull, which
 /// errs on the side that prompts a sync rather than the side that fakes one. Per-world detail lines are the truth;
 /// the cursor is the catalog-level approximation.
-/// <para>One blob name per world id means the id must name the blob unambiguously, and
-/// <see cref="WorldOwnedWorldFileName"/> is lossy (every reserved character collapses to <c>'_'</c>), so an id
-/// that does not survive it — or that escapes onto a name another catalog id already claims — is refused by name at
-/// both push and pull rather than quietly sharing a stranger's key. A whole-catalog <see cref="Pull"/> also discovers
+/// <para>One blob name per world id means the id must name the blob unambiguously. <see cref="WorldOwnedWorldFileName"/>
+/// escapes nothing, so the whole of that rule is <see cref="SafeName"/>: an id that does not parse as one is
+/// refused by name at both push and pull (<c>KeyRefusal</c>) rather than quietly sharing a stranger's key, and two
+/// parsed ids can never collide on one cloud key, whose namespace is case-SENSITIVE. The LOCAL catalog's directory is
+/// not, which is the one asymmetry this engine carries: two cloud keys differing only in case adopt onto one local
+/// file, so <see cref="WorldOwnedWorlds.ReplaceFromSync"/> refuses that adoption by name.
+/// A whole-catalog <see cref="Pull"/> also discovers
 /// cloud-only worlds by listing the <c>puck/worlds/</c> namespace and inverting that same mapping; a listed name the
 /// mapping could never have emitted belongs to no reachable id and is refused by name too, so an operator learns the
 /// object exists instead of watching it vanish.</para>
@@ -44,8 +35,9 @@ public enum WorldSyncWriteOutcome {
 /// own identity <c>id</c> is not that id: adopting it would key the document under one name and the version token
 /// under another, overwriting whichever local world the document happens to name and leaving the adopted copy
 /// unpushable. Adoption keys the document under its own identity <c>id</c> and runs only <see cref="WorldOwnedWorlds.ReplaceFromSync"/>'s
-/// save-side rule — it replaces the same-id entry or adds a new one, refusing merely a document with no identity
-/// section, and does not apply <see cref="WorldOwnedWorlds.Create"/>'s display-name-collision check.</para>
+/// save-side rules — it replaces the same-id entry or adds a new one, refusing a document with no identity section
+/// and one whose id collides with a local id in case only, and does not apply <see cref="WorldOwnedWorlds.Create"/>'s
+/// display-name-collision check.</para>
 /// <para>Operations block the console pump — and with it the frame loop it drains on — for up to 15 seconds PER
 /// BLOB touched, never once per call: a <see cref="Push"/> or <see cref="Pull"/> of an N-link chain touches N blobs,
 /// each under its own 15-second budget, and <see cref="WorldStorageNeighbourResolver.Resolve"/> reads a root (15s)
@@ -94,7 +86,7 @@ public sealed class WorldOwnedWorldSync {
 
     private string m_lastClaimDetail = "no counterpart claim posted this session";
 
-    private WorldSyncWriteOutcome m_lastWrite;
+    private WorldAuthorityStoreOutcomeKind m_lastWrite;
 
     private readonly Dictionary<string, string> m_basisTokens = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, string> m_tokens = new(comparer: StringComparer.Ordinal);
@@ -131,9 +123,9 @@ public sealed class WorldOwnedWorldSync {
     /// <summary>Gets the catalog revision at the last fully successful whole-catalog push or pull THIS SESSION; 0 before
     /// one happens, so a fresh boot reads as unsynced (the safe side).</summary>
     public long LastSyncedRevision => m_lastSyncedRevision;
-    /// <summary>Gets what the most recent push actually did — <see cref="WorldSyncWriteOutcome.Ok"/> before any push and
+    /// <summary>Gets what the most recent push actually did — <see cref="WorldAuthorityStoreOutcomeKind.Ok"/> before any push and
     /// after one where every world landed, else the way it failed.</summary>
-    public WorldSyncWriteOutcome LastWrite => m_lastWrite;
+    public WorldAuthorityStoreOutcomeKind LastWrite => m_lastWrite;
     /// <summary>Gets how many owned worlds carry a tracked cloud token.</summary>
     public int TrackedCount => m_tokens.Count;
 
@@ -175,7 +167,7 @@ public sealed class WorldOwnedWorldSync {
             return;
         } catch (InvalidOperationException exception) {
             // NOT a transport failure — the store declined to send the request at all (an edge-shaped target with no
-            // DirectEndpoint authored; see AzureBlobObjectBlobStoreBackend.GetListServiceClient). Calling that a
+            // a discovery endpoint authored in the selected storage extension). Calling that a
             // transport error would send an operator to the network for a configuration answer, so it gets its own
             // word. Uncapped on purpose: this message is authored, and its TAIL is the remedy.
             refusals.Add(item: new WorldSyncOutcome(
@@ -219,7 +211,7 @@ public sealed class WorldOwnedWorldSync {
 
             var candidateId = fileName[..^WorldOwnedWorldFileName.Suffix.Length];
 
-            if (!WorldSafeName.TryParse(
+            if (!SafeName.TryParse(
                 candidate: candidateId,
                 name: out _,
                 reason: out var reason
@@ -251,14 +243,16 @@ public sealed class WorldOwnedWorldSync {
 
         return $"{flat[..cut]}…";
     }
-    /// <summary>Parses a candidate id into a <see cref="WorldSafeName"/>, refusing by name (naming the offending
+    /// <summary>Parses a candidate id into a <see cref="SafeName"/>, refusing by name (naming the offending
     /// character) exactly like every other door in this family — the id arrives here untyped (a console-verb
     /// argument, a sidecar-tracked key, or a candidate <see cref="DiscoverCloudIds"/> extracted from a cloud blob
     /// name), so this is the one place left that still validates rather than trusts. Once parsed, two distinct safe
-    /// ids can never collide on one cloud key — <see cref="WorldOwnedWorldFileName"/>'s mapping is injective over
-    /// <see cref="WorldSafeName"/> — so there is no separate "shares a key with a stranger" check left to run.</summary>
-    private static string? KeyRefusal(string id, out WorldSafeName safe) {
-        if (!WorldSafeName.TryParse(
+    /// ids can never collide on one cloud key — <see cref="WorldOwnedWorldFileName"/> escapes nothing and the object
+    /// namespace is case-sensitive — so there is no separate "shares a key with a stranger" check left to run here.
+    /// The local catalog's own case-insensitive uniqueness rule is held where the document lands, in
+    /// <see cref="WorldOwnedWorlds.ReplaceFromSync"/>.</summary>
+    private static string? KeyRefusal(string id, out SafeName safe) {
+        if (!SafeName.TryParse(
             candidate: id,
             name: out safe,
             reason: out var reason
@@ -304,7 +298,12 @@ public sealed class WorldOwnedWorldSync {
                 }
             }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or JsonException)) {
-            Console.Error.WriteLine(value: $"[storage] sync state unreadable, starting untracked ({exception.Message})");
+            if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
+                m_worlds.NarrationHub?.Narrate(
+                    channel: "storage",
+                    text: $"[storage] sync state unreadable, starting untracked ({exception.Message})"
+                );
+            }
             m_basisTokens.Clear();
             m_tokens.Clear();
             m_lastSyncedRevision = 0;
@@ -514,8 +513,8 @@ public sealed class WorldOwnedWorldSync {
     // path that ever refreshes it. Both a CreateOnly loss (untracked) and an if-match loss (tracked-but-stale) are
     // therefore read back and compared byte-for-byte — identical content adopts the current token; only genuine
     // divergence refuses.
-    private WorldSyncOutcome PushBasisLink(string name, byte[] bytes, out WorldSyncWriteOutcome write) {
-        write = WorldSyncWriteOutcome.Failed;
+    private WorldSyncOutcome PushBasisLink(string name, byte[] bytes, out WorldAuthorityStoreOutcomeKind write) {
+        write = WorldAuthorityStoreOutcomeKind.Failed;
 
         var label = $"{name} (basis)";
         var address = BasisAddressFor(
@@ -543,7 +542,7 @@ public sealed class WorldOwnedWorldSync {
             ).AsTask().GetAwaiter().GetResult();
 
             if (result.Succeeded) {
-                write = WorldSyncWriteOutcome.Ok;
+                write = WorldAuthorityStoreOutcomeKind.Ok;
                 m_basisTokens[key: name] = (result.VersionToken ?? string.Empty);
                 return new WorldSyncOutcome(
                     Id: label,
@@ -566,8 +565,8 @@ public sealed class WorldOwnedWorldSync {
             }
 
             write = (result.PreconditionFailed
-                ? WorldSyncWriteOutcome.PreconditionFailed
-                : WorldSyncWriteOutcome.Failed
+                ? WorldAuthorityStoreOutcomeKind.PreconditionFailed
+                : WorldAuthorityStoreOutcomeKind.Failed
             );
             return new WorldSyncOutcome(
                 Id: label,
@@ -621,8 +620,8 @@ public sealed class WorldOwnedWorldSync {
     }
     // The tip push (chain[0]) and each basis link (chain[1..]) share one worst-of ordering; PushOne folds them
     // together so a caller sees ONE write outcome per identity regardless of how many blobs its chain touched.
-    private WorldSyncOutcome PushOne(WorldIdentity identity, HashSet<string> basisPushedThisCall, List<WorldSyncOutcome> basisOutcomes, out WorldSyncWriteOutcome write) {
-        write = WorldSyncWriteOutcome.Failed;
+    private WorldSyncOutcome PushOne(WorldIdentity identity, HashSet<string> basisPushedThisCall, List<WorldSyncOutcome> basisOutcomes, out WorldAuthorityStoreOutcomeKind write) {
+        write = WorldAuthorityStoreOutcomeKind.Failed;
 
         if (
             (identity.Document is not { } document) ||
@@ -686,7 +685,7 @@ public sealed class WorldOwnedWorldSync {
             ).AsTask().GetAwaiter().GetResult();
 
             if (result.Succeeded) {
-                write = WorldSyncWriteOutcome.Ok;
+                write = WorldAuthorityStoreOutcomeKind.Ok;
                 m_tokens[key: identity.Id] = (result.VersionToken ?? string.Empty);
 
                 var claimDetail = PublishCounterpartClaim(
@@ -702,8 +701,8 @@ public sealed class WorldOwnedWorldSync {
                 );
             } else {
                 write = (result.PreconditionFailed
-                    ? WorldSyncWriteOutcome.PreconditionFailed
-                    : WorldSyncWriteOutcome.Failed
+                    ? WorldAuthorityStoreOutcomeKind.PreconditionFailed
+                    : WorldAuthorityStoreOutcomeKind.Failed
                 );
                 tipOutcome = new WorldSyncOutcome(
                     Id: identity.Id,
@@ -748,8 +747,8 @@ public sealed class WorldOwnedWorldSync {
 
         return tipOutcome;
     }
-    private WorldSyncOutcome ReconcileBasisCreateOnlyLoss(ObjectBlobAddress address, byte[] bytes, string label, string name, out WorldSyncWriteOutcome write) {
-        write = WorldSyncWriteOutcome.Failed;
+    private WorldSyncOutcome ReconcileBasisCreateOnlyLoss(ObjectBlobAddress address, byte[] bytes, string label, string name, out WorldAuthorityStoreOutcomeKind write) {
+        write = WorldAuthorityStoreOutcomeKind.Failed;
 
         ObjectBlobContent? existing;
 
@@ -773,7 +772,7 @@ public sealed class WorldOwnedWorldSync {
             (existing is { } found) &&
             found.Content.Span.SequenceEqual(other: bytes)
         ) {
-            write = WorldSyncWriteOutcome.Ok;
+            write = WorldAuthorityStoreOutcomeKind.Ok;
             m_basisTokens[key: name] = (found.VersionToken ?? string.Empty);
             return new WorldSyncOutcome(
                 Id: label,
@@ -828,7 +827,12 @@ public sealed class WorldOwnedWorldSync {
                 sourceFileName: swapPath
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[storage] sync state not persisted ({exception.Message})");
+            if (m_worlds.NarrationHub is { HasNarrationSink: true }) {
+                m_worlds.NarrationHub?.Narrate(
+                    channel: "storage",
+                    text: $"[storage] sync state not persisted ({exception.Message})"
+                );
+            }
         }
     }
     private List<WorldIdentity> SelectIdentities(string? id) {
@@ -909,7 +913,7 @@ public sealed class WorldOwnedWorldSync {
     /// <param name="containerId">The per-user container id.</param>
     /// <param name="id">The owned world id.</param>
     /// <returns>The blob address.</returns>
-    public static ObjectBlobAddress AddressFor(Guid containerId, WorldSafeName id) => new(
+    public static ObjectBlobAddress AddressFor(Guid containerId, SafeName id) => new(
         ObjectId: containerId,
         Key: $"{WorldsNamespace}/{WorldOwnedWorldFileName.For(id: id)}"
     );
@@ -933,7 +937,7 @@ public sealed class WorldOwnedWorldSync {
     /// <param name="leaf">The leaf path under the world's own hosted namespace segment (e.g. <c>"definition.json"</c>,
     /// <c>"checkpoints/latest"</c>).</param>
     /// <returns>The blob address.</returns>
-    public static ObjectBlobAddress HostedAddressFor(Guid containerId, WorldSafeName world, string leaf) {
+    public static ObjectBlobAddress HostedAddressFor(Guid containerId, SafeName world, string leaf) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: leaf);
 
         var root = ((leaf is "definition.json" or "projection.json")
@@ -1014,7 +1018,7 @@ public sealed class WorldOwnedWorldSync {
         var basisPushedThisCall = new HashSet<string>(comparer: StringComparer.Ordinal);
         // The worst thing that happened to any world (or basis link) in this push, in that order: a plain failure
         // outranks a precondition, because a run carrying both is not one storage.pull will settle.
-        var write = WorldSyncWriteOutcome.Ok;
+        var write = WorldAuthorityStoreOutcomeKind.Ok;
 
         foreach (var identity in identities) {
             outcomes.Add(item: PushOne(

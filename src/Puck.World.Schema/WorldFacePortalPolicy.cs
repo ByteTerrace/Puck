@@ -51,9 +51,11 @@ public static class WorldFacePortalPolicy {
         return ((SpeedCeiling(definition: definition) * step) + FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Collision.ContactSkin)));
     }
     /// <summary>The fastest travel a document declares, in world units per second — the maximum over the world's
-    /// profileless motion default and every kit's own arm ceiling (an authored envelope's upper bound where one is
-    /// declared, the arm's own base speed otherwise, scaled by its held sprint/boost multiplier) together with the
-    /// arm's terminal vertical speeds.</summary>
+    /// profileless motion default and, per kit, its speed row's ceiling (the authored <c>speed.envelope</c> upper
+    /// bound where one is declared, its own <c>speed.value</c> otherwise, scaled by its held multiplier), its
+    /// holds' fastest authored vertical speed (a terminal fall speed or a medium's rise/sink terminal — zero for a
+    /// kit whose holds are all Pull or None, which folds into this maximum as a no-op rather than lowering it), and
+    /// a drive-decomposition shaping row's <c>along.backwardSpeed</c> where one is authored.</summary>
     /// <param name="definition">The document to read.</param>
     /// <returns>The declared speed ceiling.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
@@ -62,69 +64,33 @@ public static class WorldFacePortalPolicy {
 
         var ceiling = FixedQ4816.Abs(value: FixedQ4816.FromDouble(value: definition.Motion.MoveSpeed));
 
-        // A sibling of WorldBody's own motion-arm switch (the sim) and WorldDefinitionValidator's (authoring
-        // checks) — each dispatches on the SAME closed WorldMotionModel hierarchy for a DIFFERENT question (drive
-        // the body vs. validate the document vs., here, bound how fast a body can travel), so collapsing them into
-        // one predicate would blur three distinct policies rather than deduplicate one. A new WorldMotionModel arm
-        // owes all three switches an entry; the compiler will not name the other two for you.
         foreach (var kit in definition.Kits) {
             if (kit is null) {
                 continue;
             }
 
-            switch (kit.Motion) {
-                case WorldMotionModel.Grounded grounded:
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Scaled(
-                            baseSpeed: (grounded.MoveSpeedEnvelope?.Max ?? grounded.MoveSpeed),
-                            multiplier: grounded.SprintMultiplier
-                        )
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: grounded.MaxFallSpeed)
-                    );
+            var motion = kit.Motion;
 
-                    break;
-                case WorldMotionModel.Vehicle vehicle:
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Scaled(
-                            baseSpeed: (vehicle.TopSpeedEnvelope?.Max ?? vehicle.TopSpeed),
-                            multiplier: vehicle.BoostMultiplier
-                        )
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: vehicle.ReverseTopSpeed)
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: vehicle.MaxFallSpeed)
-                    );
+            ceiling = FixedQ4816.Max(
+                x: ceiling,
+                y: Scaled(
+                    baseSpeed: (motion.Speed.Envelope?.Max ?? motion.Speed.Value),
+                    multiplier: (motion.Speed.Held?.Multiplier ?? 1f)
+                )
+            );
+            ceiling = FixedQ4816.Max(
+                x: ceiling,
+                y: Magnitude(value: WorldHoldFactory.MaxEnvelopeSpeed(holds: motion.Holds))
+            );
 
-                    break;
-                case WorldMotionModel.Swim swim:
+            // An anisotropic shaping row's along facet travels backwards at its own rate, which no forward bound covers.
+            foreach (var row in (motion.Shaping ?? [])) {
+                if ((row?.Across is not null) && (row.Along?.BackwardSpeed is { } reverse)) {
                     ceiling = FixedQ4816.Max(
                         x: ceiling,
-                        y: Scaled(
-                            baseSpeed: (swim.ThrustSpeedEnvelope?.Max ?? swim.ThrustSpeed),
-                            multiplier: swim.SprintMultiplier
-                        )
+                        y: Magnitude(value: reverse)
                     );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: swim.MaxRiseSpeed)
-                    );
-                    ceiling = FixedQ4816.Max(
-                        x: ceiling,
-                        y: Magnitude(value: swim.MaxSinkSpeed)
-                    );
-
-                    break;
-                default:
-                    break;
+                }
             }
         }
 
@@ -134,23 +100,19 @@ public static class WorldFacePortalPolicy {
     /// <param name="row">The derived face row.</param>
     /// <param name="crossingFloor">The document's <see cref="CrossingFloor"/>.</param>
     /// <param name="aperture">The region on success; otherwise <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the face's shape kind maps onto a region arm.</returns>
+    /// <returns><see langword="true"/> when the face's shape kind opens a region.</returns>
     public static bool TryAperture(in WorldFaceRow row, FixedQ4816 crossingFloor, out WorldFaceAperture? aperture) {
-        switch (row.Aperture) {
-            case WorldFaceApertureKind.Box:
-                aperture = new WorldFaceAperture.Box(
-                    Frame: row.Frame,
-                    Depth: FixedQ4816.Max(
-                        x: row.Frame.HalfDepth,
-                        y: crossingFloor
-                    )
-                );
+        if (row.Aperture is not { } recipe) {
+            aperture = null;
 
-                return true;
-            default:
-                aperture = null;
-
-                return false;
+            return false;
         }
+
+        aperture = recipe.Open(
+            arg1: row.Frame,
+            arg2: crossingFloor
+        );
+
+        return true;
     }
 }

@@ -21,9 +21,9 @@ namespace Puck.World;
 /// happened since you last asked", so two consumers of the same seat's motion would each see part of it. That is
 /// deliberate and is why a drained accumulator is not a general read-back — position and buttons, which every
 /// consumer may read freely, are the non-destructive half.</para>
-/// <para>The mouse carries no <see cref="Puck.Commands.InputDeviceId"/> of its own, so it rides whichever seat the
-/// keyboard currently owns; <see cref="WorldPointerSlot.Resolve"/> resolves that slot at every use rather than
-/// caching it.</para>
+/// <para>Each physical mouse carries its own <see cref="Puck.Commands.InputDeviceId"/> and rides whichever seat the
+/// roster currently maps IT to; <see cref="WorldPointerSink"/> resolves that slot per event rather than caching it,
+/// so a live <c>player.assign</c> that moves a mouse carries its pointer with it.</para>
 /// </remarks>
 internal sealed class WorldPointer {
     // 0=left, 1=right, 2=middle — the same index WindowInputEvent.PointerButton carries in ButtonIndex, held here as
@@ -175,13 +175,10 @@ internal sealed class WorldPointer {
         );
     }
     /// <summary>Drops every held button for every seat (each seat's own <see cref="SystemReleaseCount"/> advances by
-    /// one). The mouse carries no device identity of its own and always rides whichever seat currently owns the
-    /// keyboard (see the class remarks), so only that one seat's button state is ever live; every other seat's bits
-    /// are already leftover from whenever it last owned the keyboard. Clearing all of them can therefore never
-    /// disturb a real in-progress drag, which is what makes this safe to use for a trigger where pinpointing the one
-    /// stale seat is not worth it: OS focus loss, and the keyboard itself changing seats (the latter would otherwise
-    /// strand the old seat's held bit forever — the mouse event stream has already moved to the new seat, so no
-    /// ordinary button-up can ever reach it again).</summary>
+    /// one) — used where pinpointing the one seat whose device just moved or lost focus is not worth it: OS focus
+    /// loss, and any device's seat reassignment (which would otherwise strand a held button forever on the seat it
+    /// left — the event stream has already moved to the new seat, so no ordinary button-up can ever reach it
+    /// again). Clearing a seat that never held anything is a no-op for it.</summary>
     public void ReleaseAllButtons() {
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             ReleaseButtons(slot: slot);

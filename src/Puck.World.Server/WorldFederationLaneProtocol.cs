@@ -18,6 +18,17 @@ internal sealed class WorldFederationLaneProtocol(WorldRemoteAuthority owner) : 
         stream: stream
     );
     /// <inheritdoc/>
+    /// <remarks>Every kind other than <see cref="WorldFederationRequest.Submission"/> answers <see langword="true"/>.
+    /// Of the kinds a lane actually carries, <see cref="WorldFederationRequest.Reserve"/>,
+    /// <see cref="WorldFederationRequest.Commit"/>, <see cref="WorldFederationRequest.Abort"/>,
+    /// <see cref="WorldFederationRequest.AcknowledgeTransfer"/>, and <see cref="WorldFederationRequest.Status"/> are
+    /// keyed by transfer id and <see cref="WorldFederationRequest.Route"/> is read-only, all idempotent at the host, so
+    /// a second copy of one is harmless; the remaining kinds (observe, intent, and the intent stream's own frames) ride
+    /// their own sessions and never reach a lane. A Submission is decoded and applied straight through with no dedup,
+    /// so a re-send would apply it twice; the lane answers <see cref="WireRefusal.ConnectionClosed"/> instead and the
+    /// caller treats the submission as in doubt.</remarks>
+    public bool MayResend(WorldFederationRequest kind) => (kind is not WorldFederationRequest.Submission);
+    /// <inheritdoc/>
     public async Task<LaneResponse<WorldFederationResponse>> ReadResponseAsync(Stream stream, CancellationToken ct) {
         var read = await WorldFederationCodec.ReadResponseAsync(
             ct: ct,
@@ -37,8 +48,9 @@ internal sealed class WorldFederationLaneProtocol(WorldRemoteAuthority owner) : 
         );
     }
     /// <inheritdoc/>
-    public Task WriteHelloAsync(Stream stream, CancellationToken ct) => WorldFederationCodec.WriteHelloAsync(
+    public Task WriteHelloAsync(Stream stream, CancellationToken ct) => HandshakeWireFormat.WriteHelloAsync(
         ct: ct,
+        key: WorldFederationCodec.WireKey,
         stream: stream
     );
     /// <inheritdoc/>

@@ -29,12 +29,13 @@ public enum WorldNeighbourResolutionKind {
 /// storage type: a caller in <c>Puck.World.Schema</c> knows only that a neighbour was reached (with its parsed
 /// document) or was not (with a named reason), never HOW the attempt was made.</summary>
 public readonly record struct WorldNeighbourResolution {
-    private WorldNeighbourResolution(WorldNeighbourResolutionKind kind, WorldDefinition? definition, WorldCounterpartAttestation? attestation, string subject, string reason) {
+    private WorldNeighbourResolution(WorldNeighbourResolutionKind kind, WorldDefinition? definition, WorldCounterpartAttestation? attestation, string subject, string reason, bool shared) {
         Kind = kind;
         Definition = definition;
         Attestation = attestation;
         Subject = subject;
         Reason = reason;
+        Shared = shared;
     }
 
     /// <summary>Gets the neighbour's seam attestation when <see cref="Kind"/> is <see cref="WorldNeighbourResolutionKind.Attested"/>
@@ -48,6 +49,10 @@ public readonly record struct WorldNeighbourResolution {
     /// <summary>Gets the named reason the neighbour could not be reached when <see cref="Kind"/> is
     /// <see cref="WorldNeighbourResolutionKind.Unavailable"/>; otherwise empty.</summary>
     public string Reason { get; }
+    /// <summary>Gets whether <see cref="Definition"/> came from a document image this process had already composed,
+    /// rather than one this call merged itself — always <see langword="false"/> outside
+    /// <see cref="WorldNeighbourResolutionKind.Resolved"/>. The fact <c>world.adjacencies</c> names per neighbour.</summary>
+    public bool Shared { get; }
     /// <summary>Gets the authenticated subject a signed claim's chain-of-trust bound to <see cref="Attestation"/> when
     /// <see cref="Kind"/> is <see cref="WorldNeighbourResolutionKind.VerifiedAttested"/>; otherwise empty.</summary>
     public string Subject { get; }
@@ -66,13 +71,16 @@ public readonly record struct WorldNeighbourResolution {
             definition: null,
             kind: WorldNeighbourResolutionKind.Attested,
             reason: string.Empty,
+            shared: false,
             subject: string.Empty
         );
     }
     /// <summary>Builds a resolved outcome.</summary>
     /// <param name="definition">The neighbour's parsed document.</param>
+    /// <param name="shared">Whether <paramref name="definition"/> came from a document image this process had
+    /// already composed rather than one this call merged itself.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static WorldNeighbourResolution Resolved(WorldDefinition definition) {
+    public static WorldNeighbourResolution Resolved(WorldDefinition definition, bool shared = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         return new WorldNeighbourResolution(
@@ -80,6 +88,7 @@ public readonly record struct WorldNeighbourResolution {
             definition: definition,
             kind: WorldNeighbourResolutionKind.Resolved,
             reason: string.Empty,
+            shared: shared,
             subject: string.Empty
         );
     }
@@ -94,6 +103,7 @@ public readonly record struct WorldNeighbourResolution {
             definition: null,
             kind: WorldNeighbourResolutionKind.Unavailable,
             reason: reason,
+            shared: false,
             subject: string.Empty
         );
     }
@@ -114,6 +124,7 @@ public readonly record struct WorldNeighbourResolution {
             definition: null,
             kind: WorldNeighbourResolutionKind.VerifiedAttested,
             reason: string.Empty,
+            shared: false,
             subject: subject
         );
     }

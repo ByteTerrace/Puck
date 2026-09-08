@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.SdfVm;
 using Puck.SignedDistance;
 using Puck.World.Server;
 
@@ -12,56 +13,39 @@ internal static class WorldSessionRenderEnvelope {
     // headroom. The hidden headroom slabs are capacity probes only; live emission adds them if and when an authored
     // mutation consumes those rows. Indices are chosen from the same free range as WorldSceneEmitter's boot probe.
     private static void EmitScreenReservation(SdfProgramBuilder builder, WorldDefinition candidate) {
-        var facets = WorldCreationFacets.Derive(
+        var facets = WorldPrototypeFacets.Derive(
             definition: candidate,
-            derivedFaceBase: WorldCreationFacets.DerivedFaceBase,
+            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
             derivedFaceScreens: candidate.Authoring.DerivedFaceScreens
         );
+
+        WorldStaticSceneEmit.Emit(
+            builder: builder,
+            derivedFaces: facets.Faces,
+            screens: candidate.Screens
+        );
+
         var used = new HashSet<int>();
 
         foreach (var screen in candidate.Screens) {
             _ = used.Add(item: screen.Index);
-            WorldScreenStamper.Emit(
-                builder: builder,
-                screen: screen
-            );
         }
 
         foreach (var face in facets.Faces) {
             _ = used.Add(item: face.Index);
-            WorldScreenStamper.Emit(
-                builder: builder,
-                screen: face
-            );
         }
 
-        var reserved = 0;
-
-        for (var index = 0; ((index < SdfProgramBuilder.MaxScreenSurfaces) && (reserved < candidate.Authoring.AuthoringHeadroomScreens)); index++) {
-            if (!used.Add(item: index)) {
-                continue;
-            }
-
+        foreach (var screen in WorldScreenHeadroom.Reserve(
+            authoredCount: candidate.Screens.Count,
+            derivedFaceBase: WorldPrototypeFacets.DerivedFaceBase,
+            derivedFaceScreens: candidate.Authoring.DerivedFaceScreens,
+            headroomCount: candidate.Authoring.AuthoringHeadroomScreens,
+            usedIndices: used
+        )) {
             WorldScreenStamper.Emit(
                 builder: builder,
-                screen: new WorldScreen(
-                    Index: index,
-                    Origin: new Vector3(
-                        x: 0f,
-                        y: -1000f,
-                        z: 0f
-                    ),
-                    Right: Vector3.UnitX,
-                    Up: Vector3.UnitY,
-                    HalfWidth: 0.01f,
-                    HalfHeight: 0.01f,
-                    HalfDepth: 0.01f,
-                    Round: 0f,
-                    Source: new WorldScreenSource.None(),
-                    Route: WorldScreenRoute.Passive
-                )
+                screen: screen
             );
-            reserved++;
         }
     }
 
@@ -73,7 +57,8 @@ internal static class WorldSessionRenderEnvelope {
 
         var reserved = WorldPlacementStamper.StaticStampInstances(
             creations: candidate.Creations,
-            placements: candidate.Placements
+            placements: candidate.Placements,
+            worldSeed: (candidate.Generation?.WorldSeed ?? 0UL)
         );
 
         WorldPlacementStamper.EmitProbe(
@@ -88,18 +73,18 @@ internal static class WorldSessionRenderEnvelope {
             );
         }
 
-        var bodyMaterials = new int[WorldAvatarCatalog.Capacity];
-        var accentMaterials = new int[WorldAvatarCatalog.Capacity];
+        var bodyMaterials = new int[WorldBodiesLimits.CapacityCeiling];
+        var accentMaterials = new int[WorldBodiesLimits.CapacityCeiling];
         var noseFactor = candidate.PlayerDefaults.NoseFactor;
 
-        for (var index = 0; (index < WorldAvatarCatalog.Capacity); index++) {
+        for (var index = 0; (index < WorldBodiesLimits.CapacityCeiling); index++) {
             var color = bodyColor(index);
 
             bodyMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: color));
             accentMaterials[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: (color * noseFactor)));
         }
 
-        WorldAvatarCatalog.Emit(
+        WorldRigCatalog.Emit(
             builder: builder,
             isActive: static _ => true,
             bodyMaterials: bodyMaterials,
@@ -117,26 +102,22 @@ internal static class WorldSessionRenderEnvelope {
         ArgumentNullException.ThrowIfNull(argument: candidate);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
-        var builder = new SdfProgramBuilder();
-
-        EmitProbe(
-            bodyColor: bodyColor,
-            builder: builder,
-            candidate: candidate,
-            includeScreens: includeScreens,
-            slotBase: 0
-        );
-
-        if (includeAdjacencies) {
-            WorldPlacementStamper.EmitProbe(
+        return SdfProgramMeasure.Measure(emit: builder => {
+            EmitProbe(
+                bodyColor: bodyColor,
                 builder: builder,
-                reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: candidate) * WorldAdjacencyGeometry.MaximumPlacementsPerBand)
+                candidate: candidate,
+                includeScreens: includeScreens,
+                slotBase: 0
             );
-        }
 
-        var measured = builder.Build();
-
-        return (Words: measured.Words.Length, Instances: measured.Instances.Count);
+            if (includeAdjacencies) {
+                WorldPlacementStamper.EmitProbe(
+                    builder: builder,
+                    reservedCount: (WorldAdjacencyBands.ProjectionCapacity(definition: candidate) * WorldAdjacencyGeometry.MaximumPlacementsPerBand)
+                );
+            }
+        });
     }
 }
 

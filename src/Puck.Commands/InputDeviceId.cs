@@ -11,6 +11,22 @@ public enum InputDeviceIdentityPersistence : byte {
     /// <summary>The identity is derived from physical-device content and is stable across reconnects.</summary>
     Reconnect,
 }
+/// <summary>What kind of physical device an <see cref="InputDeviceId"/> names — the roster's per-kind token vocabulary
+/// (<c>keyboard&lt;N&gt;</c>, <c>mouse&lt;N&gt;</c>, <c>gamepad&lt;N&gt;</c>, <c>camera&lt;N&gt;</c>) keys off this
+/// rather than off identity content.</summary>
+public enum InputDeviceKind : byte {
+    /// <summary>A physical keyboard.</summary>
+    Keyboard,
+
+    /// <summary>A gamepad or other locomotion controller.</summary>
+    Gamepad,
+
+    /// <summary>A physical camera, seated like a gamepad but never counted as player presence or activity.</summary>
+    Camera,
+
+    /// <summary>A physical mouse.</summary>
+    Mouse,
+}
 /// <summary>The identity of an input device. Prefer the content-addressed factories so a device's identity is
 /// stable across reconnects; <see cref="New"/> and <see cref="FromConnectionKey"/> remain for ad-hoc or
 /// transport-local identities that must not be persisted.</summary>

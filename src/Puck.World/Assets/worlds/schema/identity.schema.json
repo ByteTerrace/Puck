@@ -6,6 +6,7 @@
   "properties": {
     "id": {
       "description": "The stable owned-world id.",
+      "title": "SafeName",
       "type": "string"
     },
     "name": {
@@ -18,10 +19,12 @@
     },
     "moveSpeedState": {
       "description": "The fixed state row supplying locomotion speed.",
+      "title": "CellName",
       "type": "string"
     },
     "turnSpeedState": {
       "description": "The fixed state row supplying turn speed.",
+      "title": "CellName",
       "type": "string"
     },
     "controllers": {
@@ -39,10 +42,12 @@
         "properties": {
           "machineState": {
             "description": "The row containing the machine id.",
+            "title": "CellName",
             "type": "string"
           },
           "deviceState": {
             "description": "The row containing the device id.",
+            "title": "CellName",
             "type": "string"
           }
         },
@@ -50,9 +55,63 @@
           "machineState",
           "deviceState"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldControllerStateSlots"
       },
       "default": null
+    },
+    "voice": {
+      "description": "The identity\u0027s authored voice-babble selectors, or null for none (see WorldVoiceProfile).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "patchId": {
+          "description": "The referenced Name (must resolve when declared).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "cadenceTicks": {
+          "description": "The base inter-syllable tick spacing (must be positive when declared).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldVoiceProfile"
+    },
+    "facts": {
+      "description": "The facts row this identity carries and its capacity, or null for Default.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "state": {
+          "description": "The keyed Int row on the identity\u0027s document holding the facts.",
+          "title": "CellName",
+          "type": "string"
+        },
+        "capacity": {
+          "description": "How many distinct facts the row holds; a write past it refuses by name.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "state",
+        "capacity"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldIdentityFacts"
     }
   },
   "required": [
@@ -63,5 +122,6 @@
     "turnSpeedState"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldIdentityDefinition"
 }

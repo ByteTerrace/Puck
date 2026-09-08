@@ -19,9 +19,15 @@ namespace Puck.SdfVm;
 /// <param name="CullArgs">The cull-args reduction kernel.</param>
 /// <param name="Views">The Stage 1 per-view SDF kernel (the full-ISA reference variant).</param>
 /// <param name="ViewsCore">The Stage 1 core-ops variant (exotic op/shape cases compiled out).</param>
+/// <param name="ViewsFolds">The Stage 1 fold-ops variant (folds/scopes kept, the heavy warp/noise family compiled out).</param>
 /// <param name="Composite">The Stage 2 source-agnostic compositor kernel.</param>
 /// <param name="BrickBake">The standalone carve-union brick baker (<c>sdf-brick-bake.comp</c>) — dispatched only when
-/// the engine provisions a brick pool (carve-bake plan §3).</param>
+/// the engine provisions a brick pool.</param>
+/// <param name="BrickUpload">The host-baked brick uploader (<c>sdf-brick-upload.comp</c>) — a staging-to-pool copy, dispatched
+/// only when the engine provisions a brick pool.</param>
+/// <param name="FrameUpload">The per-frame table uploader (<c>sdf-frame-upload.comp</c>) — copies this frame's host-written
+/// viewport rows, dynamic transforms, and frame instance grid into their device-local twins at the top of every frame,
+/// so no march kernel reads a host-visible buffer per sample.</param>
 public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Sky,
     ReadOnlyMemory<byte> Beam,
@@ -29,8 +35,11 @@ public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> CullArgs,
     ReadOnlyMemory<byte> Views,
     ReadOnlyMemory<byte> ViewsCore,
+    ReadOnlyMemory<byte> ViewsFolds,
     ReadOnlyMemory<byte> Composite,
-    ReadOnlyMemory<byte> BrickBake
+    ReadOnlyMemory<byte> BrickBake,
+    ReadOnlyMemory<byte> BrickUpload,
+    ReadOnlyMemory<byte> FrameUpload
 ) {
     /// <summary>The standard deploy location (<c>Assets/Shaders/Sdf</c> next to the application, where the
     /// <c>Puck.SdfVm</c> reference copies its committed bytecode) — <see cref="Load(string)"/>'s default directory,
@@ -54,12 +63,15 @@ public readonly record struct SdfWorldKernels(
         return new SdfWorldKernels(
             Beam: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-beam.comp{bytecodeExtension}")),
             BrickBake: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-brick-bake.comp{bytecodeExtension}")),
+            BrickUpload: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-brick-upload.comp{bytecodeExtension}")),
             Composite: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-composite.comp{bytecodeExtension}")),
             CullArgs: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-cull-args.comp{bytecodeExtension}")),
+            FrameUpload: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-frame-upload.comp{bytecodeExtension}")),
             InstanceCull: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-instance-cull.comp{bytecodeExtension}")),
             Sky: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-sky.comp{bytecodeExtension}")),
             Views: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views.comp{bytecodeExtension}")),
-            ViewsCore: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views-core.comp{bytecodeExtension}"))
+            ViewsCore: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views-core.comp{bytecodeExtension}")),
+            ViewsFolds: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views-folds.comp{bytecodeExtension}"))
         );
     }
 }

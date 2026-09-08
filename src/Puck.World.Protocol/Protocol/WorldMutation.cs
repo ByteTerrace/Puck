@@ -1,7 +1,7 @@
 namespace Puck.World.Protocol;
 
 /// <summary>
-/// The kind-tagged vocabulary of live world edits carried over <see cref="IServerLink.SubmitWorldMutation"/> — the
+/// The kind-tagged vocabulary of live world edits carried over <see cref="ServerLinkSubmissions.SubmitWorldMutation"/> — the
 /// closed set of in-flight mutations that <em>is</em> the editor substrate. One coarse record per
 /// <see cref="WorldDefinition"/> section, addressed by stable id, whole-row upsert (never a field poke): a genre world
 /// arrives as different data through these same messages, never a new message shape. Mutations buffer
@@ -75,7 +75,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// toggle itself — upsert and remove differ by a single bit, not by payload, so one kind covers both shapes
     /// naturally (unlike <see cref="UpsertInteraction"/>/<see cref="RemoveInteraction"/>, whose two payloads do not
     /// fit one shape). Upsert (<see cref="Remove"/> = <see langword="false"/>) is rejected loudly at whole-document
-    /// validation if <see cref="Name"/> is not a legitimate <see cref="WorldCellName"/> spelling, or names no
+    /// validation if <see cref="Name"/> is not a legitimate <see cref="CellName"/> spelling, or names no
     /// declared keyed <c>int</c> <c>state</c> row of the same name (a property's per-carrier tags are stored there —
     /// see <see cref="WorldPropertyRegistrySection"/>'s remarks). Remove (<see cref="Remove"/> =
     /// <see langword="true"/>) is rejected loudly if no property declares that name, or if a live
@@ -91,7 +91,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Population">The census defaults.</param>
     [MutationKind(ordinal: 11, section: WorldSection.Population)]
-    public sealed record SetPopulationDefaults(WorldPrincipal Principal, WorldPopulationDefaults Population) : WorldMutation(Principal);
+    public sealed record SetPopulationDefaults(WorldPrincipal Principal, WorldBodiesDefaults Population) : WorldMutation(Principal);
     /// <summary>Replaces the render-lever defaults and quality-preset table (document-only; live render levers stay
     /// <c>WorldRenderSettings</c>).</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -120,14 +120,14 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Id">The overlay id to remove.</param>
     [MutationKind(ordinal: 16, section: WorldSection.Bindings)]
     public sealed record RemoveBindingOverlay(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
-    /// <summary>Upserts a creation asset row addressed by <see cref="WorldCreation.Id"/>. The compose boundary
+    /// <summary>Upserts a creation asset row addressed by <see cref="WorldPrototype.Id"/>. The compose boundary
     /// canonicalizes the row's document (doc + hash always come from the same <see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}"/>)
     /// and rejects loudly when the carried hash does not match the canonical one — a hash the pipeline did not itself
     /// compute is never accepted.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Creation">The whole creation row.</param>
     [MutationKind(ordinal: 17, section: WorldSection.Creations)]
-    public sealed record UpsertCreation(WorldPrincipal Principal, WorldCreation Creation) : WorldMutation(Principal);
+    public sealed record UpsertCreation(WorldPrincipal Principal, WorldPrototype Creation) : WorldMutation(Principal);
     /// <summary>Removes the creation row with id <paramref name="Id"/>. Rejected loudly when no row declares that id
     /// or when live placements still reference it (the conservative no-cascade ruling — remove the placements first).</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -157,31 +157,31 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Name">The speaker name to remove.</param>
     [MutationKind(ordinal: 22, section: WorldSection.Speakers)]
     public sealed record RemoveSpeaker(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
-    /// <summary>Upserts a tune asset row addressed by <see cref="WorldTune.Id"/>. The compose boundary
-    /// re-canonicalizes the embedded <c>puck.audio.v1</c> document and rejects a hash the pipeline did not itself
-    /// compute, the same rule as <see cref="UpsertCreation"/>.</summary>
+    /// <summary>Upserts a tune asset row addressed by <see cref="WorldTune.Name"/>. The compose boundary loads the
+    /// referenced <c>puck.audio.v1</c> document, canonicalizes it, and rejects a hash the pipeline did not itself
+    /// compute — the referenced twin of <see cref="UpsertCreation"/>'s embedded-document rule.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Tune">The whole tune row.</param>
     [MutationKind(ordinal: 23, section: WorldSection.Tunes)]
     public sealed record UpsertTune(WorldPrincipal Principal, WorldTune Tune) : WorldMutation(Principal);
-    /// <summary>Removes the tune row with id <paramref name="Id"/>. Rejected loudly while speakers still reference it
+    /// <summary>Removes the tune row named <paramref name="Name"/>. Rejected loudly while speakers still reference it
     /// (the conservative no-cascade ruling — retarget or remove the speakers first).</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Id">The tune id to remove.</param>
+    /// <param name="Name">The tune name to remove.</param>
     [MutationKind(ordinal: 24, section: WorldSection.Tunes)]
-    public sealed record RemoveTune(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
-    /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Id"/> — the <c>puck.synth.v1</c>
-    /// twin of <see cref="UpsertTune"/>, same canonicalize + hash-pin boundary.</summary>
+    public sealed record RemoveTune(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    /// <summary>Upserts a synth-patch asset row addressed by <see cref="WorldPatch.Name"/> — the <c>puck.synth.v1</c>
+    /// twin of <see cref="UpsertTune"/>, same load + canonicalize + hash-pin boundary.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Patch">The whole patch row.</param>
     [MutationKind(ordinal: 25, section: WorldSection.Patches)]
     public sealed record UpsertPatch(WorldPrincipal Principal, WorldPatch Patch) : WorldMutation(Principal);
-    /// <summary>Removes the patch row with id <paramref name="Id"/>. Rejected loudly while speakers or emission
+    /// <summary>Removes the patch row named <paramref name="Name"/>. Rejected loudly while speakers or emission
     /// facets still reference it (no cascade — the dependents are named).</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Id">The patch id to remove.</param>
+    /// <param name="Name">The patch name to remove.</param>
     [MutationKind(ordinal: 26, section: WorldSection.Patches)]
-    public sealed record RemovePatch(WorldPrincipal Principal, string Id) : WorldMutation(Principal);
+    public sealed record RemovePatch(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Replaces the audio host-section defaults (the whole <see cref="WorldAudioDefaults"/> row). Applies
     /// live: the emitter-derivation coalescing, the listener policy, and the cue table read the delivered row.
     /// <c>MasterGain</c> follows the lever-precedence rule: it flows live only until the <c>world.volume</c> session
@@ -192,14 +192,14 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     [MutationKind(ordinal: 27, section: WorldSection.Audio)]
     public sealed record SetAudioDefaults(WorldPrincipal Principal, WorldAudioDefaults Audio) : WorldMutation(Principal);
     /// <summary>Replaces the whole editor/authoring policy row. A single whole-row mutation carries both
-    /// consumption classes the row holds (see <see cref="WorldAuthoringDefaults"/>'s remarks): the boot-consumed
+    /// consumption classes the row holds (see <see cref="WorldPlacementPolicyDefaults"/>'s remarks): the boot-consumed
     /// headroom/repeat-cap fields apply at the next boot (the frozen render-envelope probe cannot retroactively grow),
     /// while the live-consumed candidate/layout/preview fields apply at the very next tick — the server's accept echo
     /// narrates the split honestly rather than picking one class for the whole row.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Authoring">The whole authoring policy row.</param>
     [MutationKind(ordinal: 28, section: WorldSection.Authoring)]
-    public sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldAuthoringDefaults Authoring) : WorldMutation(Principal);
+    public sealed record SetAuthoringDefaults(WorldPrincipal Principal, WorldPlacementPolicyDefaults Authoring) : WorldMutation(Principal);
     /// <summary>Replaces the whole contact-solver tuning (the <see cref="WorldCollision"/> section). Applies live: the
     /// population rebuilds the collider set and hands it to every body on the next tick.</summary>
     /// <param name="Principal">The acting identity.</param>
@@ -265,19 +265,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Assignment">The look assignment policy.</param>
     [MutationKind(ordinal: 36, section: WorldSection.Looks)]
     public sealed record SetLookAssignment(WorldPrincipal Principal, WorldRowAssignment Assignment) : WorldMutation(Principal);
-    /// <summary>Upserts a cable-link row (whole-row, keyed by name) into the <see cref="WorldSection.Links"/> section —
-    /// the durable twin of the <c>screen.link</c> verb. Applies live: the binder reconciles the declared links to the
-    /// new definition, establishing (or reporting dormant) the group. Rejected by full-document revalidation when a
-    /// named screen is undeclared, a screen is in two links, or fewer than two screens are named.</summary>
-    /// <param name="Principal">The acting identity.</param>
-    /// <param name="Link">The whole cable-link row.</param>
-    [MutationKind(ordinal: 37, section: WorldSection.Links)]
-    public sealed record UpsertScreenLink(WorldPrincipal Principal, WorldScreenLink Link) : WorldMutation(Principal);
-    /// <summary>Removes a cable-link row by name. Rejected loudly when no row declares that name.</summary>
-    /// <param name="Principal">The acting identity.</param>
-    /// <param name="Name">The link name to remove.</param>
-    [MutationKind(ordinal: 38, section: WorldSection.Links)]
-    public sealed record RemoveScreenLink(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    // Ordinals 37/38 (UpsertScreenLink/RemoveScreenLink) are retired: machine cable linking is authored on the
+    // Machine source itself (WorldMachineCable), so cable edits ride UpsertScreen. Never reassign them.
     /// <summary>Upserts a document-authored grant row (see <see cref="WorldDefinition.Grants"/>) — replaces the row
     /// matching the same (<see cref="WorldGrant.Principal"/>, <see cref="WorldGrant.Capability"/>,
     /// <see cref="WorldGrant.Subject"/>) triple, or appends a new one; a bare re-set of an existing triple changes
@@ -335,7 +324,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <param name="Defaults">The whole HUD defaults row.</param>
     [MutationKind(ordinal: 45, section: WorldSection.Hud)]
     public sealed record SetHudDefaults(WorldPrincipal Principal, WorldHudDefaults Defaults) : WorldMutation(Principal);
-    /// <summary>Upserts a <c>state</c> row addressed by <see cref="WorldStateRow.Name"/> — replaces the matching row
+    /// <summary>Upserts a <c>state</c> row addressed by <see cref="StateRow.Name"/> — replaces the matching row
     /// or appends a new one. Applies live. Checked twice: the standard <see cref="WorldCapability.Mutate"/> hold over
     /// <see cref="WorldSection.State"/> every mutation kind requires, plus a second, row-scoped
     /// <see cref="WorldCapability.Edit"/> hold over the concrete <c>state:&lt;name&gt;</c> subject the row names (or
@@ -356,8 +345,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// failure, definition unchanged) if <see cref="Row"/> names no state row; rejected by the whole-document
     /// revalidation if the resulting value falls outside the row's declared envelope, a non-negative row's value
     /// would go negative, the write would grow the row past its effective capacity, or (a <c>Text</c>-kind row) the
-    /// written text exceeds <see cref="WorldStateCapacity.MaxTextValueLength"/>. Reaches any row — a slot-shaped
-    /// row's implicit cell (keyed <see cref="WorldStateRow.SlotKey"/>) as much as an author-keyed cell, since a slot
+    /// written text exceeds <see cref="StateCapacity.MaxTextValueLength"/>. Reaches any row — a slot-shaped
+    /// row's implicit cell (keyed <see cref="StateRow.SlotKey"/>) as much as an author-keyed cell, since a slot
     /// is a table with one key (see <see cref="WorldStateRow"/>'s remarks); the console's <c>world.state.cell.set</c>
     /// (numeric/bool and text alike, dispatching on the row's declared kind) / <c>world.state.cell.remove</c> verbs are its whole
     /// spelling, in the same verb family the whole-row pair uses — <see cref="Value"/> carries the former,
@@ -388,10 +377,17 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// integer is exactly the decision that needs the row, and the row may not exist yet at submit time. Carrying the
     /// token uninterpreted and parsing it at compose, against the candidate row's <c>Kind</c> (the same document a
     /// same-batch <see cref="UpsertStateRow"/> ahead of this one has already installed into), is what makes a
-    /// same-batch declare-then-write deterministic: see <see cref="WorldStateCellWriter"/>'s token parser, which the
+    /// same-batch declare-then-write deterministic: see <see cref="StateCellWriter"/>'s token parser, which the
     /// compose arm runs when this is set.</param>
+    /// <param name="CycleTokens">The human-authored tokens of an atomic cycle, or <see langword="null"/> for an ordinary
+    /// set/add. When present (two or more), <see cref="Kind"/> must be <see cref="WorldDocumentWriteKind.Set"/>. The
+    /// compose arm reads the destination's current value, finds the token it equals, and writes the NEXT token
+    /// (wrapping); a value matching none writes the first. Numeric rows compare parsed values, text rows compare text.
+    /// The comparison and write happen against the destination authority's one live candidate, never a stale client
+    /// projection — which is what lets a bound press (<c>player.state.cell.toggle</c>) flip a cell in whatever world
+    /// the seat is actually in.</param>
     [MutationKind(ordinal: 49, section: WorldSection.State)]
-    public sealed record UpsertStateCell(WorldPrincipal Principal, string Row, string Key, long Value, WorldDocumentWriteKind Kind, string? Text = null, string? RawToken = null) : WorldMutation(Principal);
+    public sealed record UpsertStateCell(WorldPrincipal Principal, string Row, string Key, long Value, WorldDocumentWriteKind Kind, string? Text = null, string? RawToken = null, IReadOnlyList<string>? CycleTokens = null) : WorldMutation(Principal);
     /// <summary>Removes one cell from an already-declared <see cref="WorldStateRow"/>. Rejected if <see cref="Row"/>
     /// names no state row, or if no cell inside it carries <see cref="Key"/>. Checked twice — see
     /// <see cref="UpsertStateCell"/>'s remarks.</summary>
@@ -406,7 +402,7 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     [MutationKind(ordinal: 48, section: WorldSection.InputHold)]
     public sealed record SetInputHold(WorldPrincipal Principal, WorldInputHoldSettings Settings) : WorldMutation(Principal);
     /// <summary>
-    /// Runs one emission of a generator row (a <see cref="WorldStateRow"/> declaring a <see cref="WorldGenerator"/>)
+    /// Runs one emission of a generator row (a <see cref="WorldStateRow"/> declaring a <see cref="StateGenerator"/>)
     /// and writes the space-joined result into a text cell — the sampling primitive the whole Markov family reduces
     /// to, and the one mechanism the <c>world.generate</c> console verb, a kit's <c>ActionEffect.Generate</c>, and a
     /// world rule's own generate effect all submit.
@@ -414,8 +410,8 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <remarks>
     /// <para><b>A pure function of the candidate document and the instance identity.</b> Composing this mutation
     /// resolves the site's source (named or inlined), seeks the PRNG to the position the site's own
-    /// <see cref="WorldStateRow.DrawCursor"/> records — an O(1) jump, never a replay — draws, and writes both the
-    /// drawn value and the advanced cursor/decks into the same candidate. Nothing lives outside the document, so
+    /// <see cref="StateRow.DrawCursor"/> records — an O(1) jump, never a replay — draws, and writes both the
+    /// drawn value and the advanced cursor/drawn masks into the same candidate. Nothing lives outside the document, so
     /// <c>world.undo</c> rewinds a draw position bit-identically by the ordinary whole-document restore — there is no
     /// separate runtime to reconcile, and no tape record of a draw to keep in step.</para>
     /// <para><b>Authority: one hold, plus the mask.</b> The standard <see cref="WorldCapability.Mutate"/> hold over
@@ -428,18 +424,20 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// source it references, is an <see cref="UpsertStateRow"/> against that row and is gated there, which is where
     /// the interesting authority actually sits.</para>
     /// <para>Rejected loudly (compose failure, definition unchanged) if <see cref="Row"/> names no state row, names
-    /// one declaring no draw, or names one whose <see cref="WorldDraw.Timing"/> is
-    /// <see cref="WorldDrawTiming.Boot"/> (drawn once at first fill, never again); if the site's facet resolves to no
+    /// one declaring no draw, or names one whose <see cref="Draw.Timing"/> is
+    /// <see cref="DrawTiming.Boot"/> (drawn once at first fill, never again); if the site's facet resolves to no
     /// source; if the source's emission kind the site cannot hold; if a Markov walk reaches
-    /// <see cref="WorldGenerator.Bound"/> tokens without terminating; or if a
-    /// <see cref="WorldGeneratorMode.WithoutReplacement"/> context is exhausted. Rejected by the whole-document
-    /// revalidation if a joined emission exceeds <see cref="WorldStateCapacity.MaxTextValueLength"/>.</para>
+    /// <see cref="StateGenerator.Bound"/> tokens without terminating; or if a
+    /// <see cref="GeneratorMode.WithoutReplacement"/> context is exhausted. Rejected by the whole-document
+    /// revalidation if a joined emission exceeds <see cref="StateCapacity.MaxTextValueLength"/>.</para>
     /// </remarks>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Row">The draw site's row name.</param>
+    /// <param name="Keys">On a keyed site, the cells to redraw with every other cell held (a dice hold); null redraws
+    /// every cell. Refused on a slot site.</param>
     [MutationKind(ordinal: 51, section: WorldSection.State)]
-    public sealed record Generate(WorldPrincipal Principal, string Row) : WorldMutation(Principal);
-    /// <summary>Upserts a world rule addressed by <see cref="WorldRule.Name"/> — the authoring door for the
+    public sealed record Generate(WorldPrincipal Principal, string Row, IReadOnlyList<string>? Keys = null) : WorldMutation(Principal);
+    /// <summary>Upserts a world rule addressed by <see cref="Rule.Name"/> — the authoring door for the
     /// <c>rules</c> section, never the firing one: a rule evaluating and its effects applying both ride
     /// <see cref="WorldPrincipal.World"/> and never submit this kind. Rejected loudly if the rule fails to compile
     /// against the candidate document (an undeclared state row or cell, an inadmissible predicate/effect kind for
@@ -450,11 +448,11 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     public sealed record UpsertWorldRule(WorldPrincipal Principal, WorldRule Rule) : WorldMutation(Principal);
     /// <summary>Removes the world rule named <paramref name="Name"/>. Rejected if no rule declares that name.</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Name">The rule name to remove — a <see cref="WorldCellName"/>, the same validated-identifier type
-    /// <see cref="WorldRule.Name"/> itself rides, so a name this mutation could never match is refused at the verb
+    /// <param name="Name">The rule name to remove — a <see cref="CellName"/>, the same validated-identifier type
+    /// <see cref="Rule.Name"/> itself rides, so a name this mutation could never match is refused at the verb
     /// (or the JSON converter) instead of travelling as a miss.</param>
     [MutationKind(ordinal: 53, section: WorldSection.Rules)]
-    public sealed record RemoveWorldRule(WorldPrincipal Principal, WorldCellName Name) : WorldMutation(Principal);
+    public sealed record RemoveWorldRule(WorldPrincipal Principal, CellName Name) : WorldMutation(Principal);
     /// <summary>Upserts an interaction row addressed by <see cref="WorldInteraction.Name"/> — replaces the matching
     /// row or appends a new one. The authoring door for the <c>interactions</c> section, never the firing one: an
     /// interaction evaluating and its effects applying both ride <see cref="WorldPrincipal.World"/> and never submit
@@ -468,11 +466,11 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// <summary>Removes the interaction named <paramref name="Name"/>. Rejected if no interaction declares that
     /// name.</summary>
     /// <param name="Principal">The acting identity.</param>
-    /// <param name="Name">The interaction name to remove — a <see cref="WorldCellName"/>, the same
+    /// <param name="Name">The interaction name to remove — a <see cref="CellName"/>, the same
     /// validated-identifier type <see cref="WorldInteraction.Name"/> itself rides, so a name this mutation could
     /// never match is refused at the verb (or the JSON converter) instead of travelling as a miss.</param>
     [MutationKind(ordinal: 55, section: WorldSection.Interactions)]
-    public sealed record RemoveInteraction(WorldPrincipal Principal, WorldCellName Name) : WorldMutation(Principal);
+    public sealed record RemoveInteraction(WorldPrincipal Principal, CellName Name) : WorldMutation(Principal);
     /// <summary>Upserts a group kind addressed by <see cref="WorldGroupKind.Name"/> — replaces the matching row or
     /// appends a new one. Rejected loudly if the resulting kind set contains two kinds identical in every
     /// behavior-bearing field except <see cref="WorldGroupKind.Capacity"/> (a capacity-only difference is a value, not
@@ -567,107 +565,125 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
     /// a reclaim to the named offerer once the deadline has passed.</param>
     [MutationKind(ordinal: 63, section: WorldSection.Groups)]
     public sealed record SettleOwnership(WorldPrincipal Principal, OwnershipSubject Subject, bool Reclaim) : WorldMutation(Principal);
-    /// <summary>Lists <see cref="Quantity"/> of <see cref="ItemRow"/> for sale — escrows it out of <see cref="Seller"/>'s
-    /// own cell (keyed by <see cref="Seller"/>'s <see cref="WorldPrincipal.Index"/>, and for a
-    /// <see cref="PrincipalKind.Peer"/>, its <see cref="WorldPrincipal.Generation"/> too — a recycled population slot
-    /// must never inherit a departed peer's balance) atomically with minting the listing row, in the same candidate
-    /// document. <see cref="Principal"/> is the checked authority (whoever is submitting —
-    /// <c>context.ActingPrincipal()</c>, never constructed) and <see cref="Seller"/> is the trade party the listing
-    /// escrows from and pays out to — the same split <see cref="JoinGroup"/>'s <c>Principal</c>/<c>Member</c> pair
-    /// uses, but narrower than <c>Mutate/section:market</c> alone: only <see cref="Principal"/> naming itself as
-    /// <see cref="Seller"/>, or <see cref="WorldPrincipal.Console"/>/<see cref="WorldPrincipal.World"/> naming any
-    /// seat or peer, is admitted — a seat's own boot-seeded <c>Mutate/section:market</c> hold is authority over its
-    /// own inventory, never another seat's. A real connected client acting for itself passes the identical value for
-    /// both. Rejected loudly when the world authors no <see cref="WorldSection.Market"/> section;
-    /// <see cref="Principal"/> is neither <see cref="Seller"/> nor Console/World; <see cref="Seller"/> is not a
-    /// <see cref="PrincipalKind.Seat"/>/<see cref="PrincipalKind.Peer"/>; <see cref="Format"/> is not one the
-    /// market's <see cref="WorldMarketSection.EffectiveFormats"/> admits; <see cref="DurationSeconds"/> falls
-    /// outside the market's declared duration bounds; <see cref="ItemRow"/>/<see cref="CurrencyRow"/> name no
-    /// declared, capacity-bounded, Int-kind state row; <see cref="Quantity"/> is not positive; <see cref="Seller"/>'s
-    /// <see cref="ItemRow"/> cell holds fewer than <see cref="Quantity"/>; a format's own price field is missing or
-    /// non-positive; or the world's <c>simulation.rateHz</c> is zero (no tick mapping for the authored duration).</summary>
-    /// <param name="Principal">The acting identity — checked against <c>Mutate/section:market</c> and against
-    /// <see cref="Seller"/> (must equal it, or be Console/World).</param>
-    /// <param name="Seller">The trade party — must be a seat or peer.</param>
-    /// <param name="ItemRow">The keyed state row carrying the traded item.</param>
-    /// <param name="Quantity">How much to escrow and sell.</param>
-    /// <param name="CurrencyRow">The keyed state row carrying the price currency.</param>
-    /// <param name="Format">Which trade shape this listing runs.</param>
-    /// <param name="StartPrice">The minimum opening bid (English).</param>
-    /// <param name="BuyoutPrice">The instant-win price, or <see langword="null"/> for an English listing carrying none.</param>
-    /// <param name="DurationSeconds">The authored listing lifetime, in seconds — compiled once, at creation, into the
-    /// listing's <see cref="WorldMarketListing.DeadlineTick"/>.</param>
-    [MutationKind(ordinal: 65, section: WorldSection.Market)]
-    public sealed record CreateMarketListing(WorldPrincipal Principal, WorldPrincipal Seller, WorldCellName ItemRow, long Quantity, WorldCellName CurrencyRow, WorldMarketFormat Format, long StartPrice, long? BuyoutPrice, float DurationSeconds) : WorldMutation(Principal);
-    /// <summary>Places an ascending bid against an <see cref="WorldMarketFormat.English"/> listing — escrows
-    /// <see cref="Amount"/> out of <see cref="Bidder"/>'s own currency cell, refunding the previous bidder's escrowed
-    /// <see cref="WorldMarketListing.CurrentBid"/> (if any) in the same candidate document. <see cref="Principal"/>/
-    /// <see cref="Bidder"/> follow the same checked-authority/trade-party split <see cref="CreateMarketListing"/>'s
-    /// remarks describe. Rejected loudly when the listing does not exist, is not
-    /// <see cref="WorldMarketListingStatus.Active"/>, has reached its deadline, is not
-    /// <see cref="WorldMarketFormat.English"/>, <see cref="Bidder"/> is the listing's own seller or not a seat/peer,
-    /// <see cref="Principal"/> is neither <see cref="Bidder"/> nor Console/World, <see cref="Amount"/> does not
-    /// strictly exceed the current bid (or the listing's <see cref="WorldMarketListing.StartPrice"/> while unbid),
-    /// or <see cref="Bidder"/>'s currency cell holds fewer than <see cref="Amount"/>.</summary>
-    /// <param name="Principal">The acting identity — checked against <c>Mutate/section:market</c> and against
-    /// <see cref="Bidder"/> (must equal it, or be Console/World).</param>
-    /// <param name="Bidder">The trade party — must be a seat or peer, and not the listing's seller.</param>
-    /// <param name="ListingId">The listing to bid against.</param>
-    /// <param name="Amount">The bid amount.</param>
-    [MutationKind(ordinal: 66, section: WorldSection.Market)]
-    public sealed record PlaceMarketBid(WorldPrincipal Principal, WorldPrincipal Bidder, long ListingId, long Amount) : WorldMutation(Principal);
-    /// <summary>Settles a listing immediately at its declared <see cref="WorldMarketListing.BuyoutPrice"/> — pays the
-    /// seller (net of the market's fee), refunds any standing English bidder, credits <see cref="Buyer"/>'s item
-    /// cell, and marks the listing <see cref="WorldMarketListingStatus.Settled"/>, all in the same candidate
-    /// document. <see cref="Principal"/>/<see cref="Buyer"/> follow the same checked-authority/trade-party split
-    /// <see cref="CreateMarketListing"/>'s remarks describe. Rejected loudly when the listing does not exist, is not
-    /// <see cref="WorldMarketListingStatus.Active"/>, has reached its deadline, carries no
-    /// <see cref="WorldMarketListing.BuyoutPrice"/>, <see cref="Buyer"/> is the listing's own seller or not a
-    /// seat/peer, <see cref="Principal"/> is neither <see cref="Buyer"/> nor Console/World, or <see cref="Buyer"/>
-    /// cannot afford the price (net of any refund due back to themself as the standing bidder).</summary>
-    /// <param name="Principal">The acting identity — checked against <c>Mutate/section:market</c> and against
-    /// <see cref="Buyer"/> (must equal it, or be Console/World).</param>
-    /// <param name="Buyer">The trade party — must be a seat or peer, and not the listing's seller.</param>
-    /// <param name="ListingId">The listing to buy out.</param>
-    [MutationKind(ordinal: 67, section: WorldSection.Market)]
-    public sealed record BuyoutMarketListing(WorldPrincipal Principal, WorldPrincipal Buyer, long ListingId) : WorldMutation(Principal);
-    /// <summary>Withdraws a listing before it settles — returns the escrowed item to the seller and refunds any
-    /// standing English bidder, marking the listing <see cref="WorldMarketListingStatus.Cancelled"/>.
-    /// <see cref="Principal"/>/<see cref="Canceler"/> follow the same checked-authority/trade-party split
-    /// <see cref="CreateMarketListing"/>'s remarks describe. Rejected loudly when the listing does not exist, is not
-    /// <see cref="WorldMarketListingStatus.Active"/>, <see cref="Principal"/> is neither <see cref="Canceler"/> nor
-    /// Console/World, or <see cref="Canceler"/> is not the listing's own seller.</summary>
-    /// <param name="Principal">The acting identity — checked against <c>Mutate/section:market</c> and against
-    /// <see cref="Canceler"/> (must equal it, or be Console/World).</param>
-    /// <param name="Canceler">The trade party — must equal the listing's seller.</param>
-    /// <param name="ListingId">The listing to cancel.</param>
-    [MutationKind(ordinal: 68, section: WorldSection.Market)]
-    public sealed record CancelMarketListing(WorldPrincipal Principal, WorldPrincipal Canceler, long ListingId) : WorldMutation(Principal);
-    /// <summary>Resolves a listing that has reached its deadline — the engine's own automatic sweep
-    /// (<c>Server.WorldServer</c>'s per-tick market pass, the same shape as its <c>ReclaimExpiredEscrows</c>), firing
-    /// under <see cref="WorldPrincipal.World"/> once a listing's <see cref="WorldMarketListing.DeadlineTick"/> passes
-    /// with no operator action needed. A standing English bid settles (pays the seller net of fee, credits the
-    /// winner's item cell); no bid at all expires (returns the escrowed item to the seller). Rejected loudly when the
-    /// listing does not exist, is not <see cref="WorldMarketListingStatus.Active"/>, the applying tick has not yet
-    /// reached the deadline, or <see cref="Principal"/> is not <see cref="WorldPrincipal.World"/>.</summary>
-    /// <param name="Principal">Always <see cref="WorldPrincipal.World"/> — the engine's own timeout sweep.</param>
-    /// <param name="ListingId">The listing to resolve.</param>
-    [MutationKind(ordinal: 69, section: WorldSection.Market)]
-    public sealed record SettleMarketListing(WorldPrincipal Principal, long ListingId) : WorldMutation(Principal);
-    /// <summary>Archives the market's own terminal rows (<see cref="WorldMarketListingStatus.Settled"/>/
-    /// <see cref="WorldMarketListingStatus.Cancelled"/>/<see cref="WorldMarketListingStatus.Expired"/>) once each has
-    /// stood at least <see cref="WorldMarketSection.RetentionSeconds"/> past the tick it resolved at
-    /// (<see cref="WorldMarketListing.ResolvedTick"/>) — bounded archival for <see cref="WorldMarketCapacity.MaxListings"/>,
-    /// the same "recovery is a lifetime rule" shape <see cref="SettleMarketListing"/> and
-    /// <see cref="SettleOwnership"/>'s reclaim establish, firing under <see cref="WorldPrincipal.World"/>
-    /// (<c>Server.WorldServer</c>'s per-tick market pass — <c>PruneExpiredMarketListings</c>, run only when at least
-    /// one row is currently eligible) with no operator action needed. Removes every eligible row in one candidate; an
-    /// active row is never eligible however old its deadline, and a pruned <see cref="WorldMarketListing.Id"/> is
-    /// never reused — only <see cref="WorldMarketSection.Listings"/> shrinks, <see cref="WorldMarketSection.NextListingId"/>
-    /// never rewinds. Rejected loudly when <see cref="Principal"/> is not <see cref="WorldPrincipal.World"/>, the
-    /// world authors no <see cref="WorldSection.Market"/> section, the world's <c>simulation.rateHz</c> is zero (no
-    /// tick mapping for the authored retention), or no row is currently eligible.</summary>
-    /// <param name="Principal">Always <see cref="WorldPrincipal.World"/> — the engine's own retention sweep.</param>
-    [MutationKind(ordinal: 70, section: WorldSection.Market)]
-    public sealed record PruneMarketListings(WorldPrincipal Principal) : WorldMutation(Principal);
+    // Ordinals 65-70 (CreateMarketListing/PlaceMarketBid/BuyoutMarketListing/CancelMarketListing/
+    // SettleMarketListing/PruneMarketListings) are retired: the local auction house dissolved into an escrowed
+    // conditional transfer over ordinary keyed rows, authored as rules (AddState/SetState/ScheduleState/PushState)
+    // rather than a bespoke mutation kind. Never reassign them.
+    /// <summary>Upserts a dynamics row (whole-row, keyed by name) into the <see cref="WorldSection.Dynamics"/>
+    /// section. Applies live — a kit's planar follower, a camera boom, and a look/state follower all read the
+    /// resolved row fresh on their next compile/step, keeping any live follower state.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Row">The whole dynamics row.</param>
+    [MutationKind(ordinal: 71, section: WorldSection.Dynamics)]
+    public sealed record UpsertDynamics(WorldPrincipal Principal, DynamicsRow Row) : WorldMutation(Principal);
+    /// <summary>Removes a dynamics row by name. Rejected loudly by full-document revalidation while any consumer
+    /// (a look, a kit, a camera program, a state cell) still names it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The dynamics row name to remove.</param>
+    [MutationKind(ordinal: 72, section: WorldSection.Dynamics)]
+    public sealed record RemoveDynamics(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    /// <summary>Upserts a curves row (whole-row, keyed by name) into the <see cref="WorldSection.Curves"/> section.
+    /// Applies live — a camera path op and a sim curve-follow target both read the resolved row's compiled spline
+    /// fresh on their next compile/step.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Row">The whole curves row.</param>
+    [MutationKind(ordinal: 73, section: WorldSection.Curves)]
+    public sealed record UpsertCurve(WorldPrincipal Principal, WorldCurveRow Row) : WorldMutation(Principal);
+    /// <summary>Removes a curves row by name. Rejected loudly by full-document revalidation while any consumer (a
+    /// camera program, a body-motion program) still names it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The curves row name to remove.</param>
+    [MutationKind(ordinal: 74, section: WorldSection.Curves)]
+    public sealed record RemoveCurve(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
+    /// <summary>Applies one bounded state transform atomically, checking edit reach over every touched row.</summary>
+    /// <param name="Principal">The stamped acting identity.</param>
+    /// <param name="Transform">The typed operation.</param>
+    /// <param name="Guard">Optional admission against a phase generation and the stamped actor.</param>
+    [MutationKind(ordinal: 75, section: WorldSection.State)]
+    public sealed record TransformState(WorldPrincipal Principal, StateTransform Transform, PhaseGuard? Guard = null) : WorldMutation(Principal);
+    /// <summary>Sets the population's spawn distribution alone, composed against the population row as it stands when
+    /// the mutation applies — never a whole-row replacement built from a snapshot the console read earlier, which
+    /// another queued edit to a sibling field would silently revert.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Distribution">The spawn distribution.</param>
+    [MutationKind(ordinal: 76, section: WorldSection.Population)]
+    public sealed record SetPopulationDistribution(WorldPrincipal Principal, WorldDistribution Distribution) : WorldMutation(Principal);
+    /// <summary>Sets the population's census figures alone — the per-seat activation policy and the network player
+    /// count — composed against the population row as it stands when the mutation applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="SeatActivation">The per-local-seat activation policy.</param>
+    /// <param name="NetworkPlayers">The network player count.</param>
+    [MutationKind(ordinal: 77, section: WorldSection.Population)]
+    public sealed record SetPopulationCensus(WorldPrincipal Principal, IReadOnlyList<SeatActivationPolicy> SeatActivation, int NetworkPlayers) : WorldMutation(Principal);
+    /// <summary>Sets the views section's seat rig alone, composed against the views row as it stands when the
+    /// mutation applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="SeatRig">The seat camera program.</param>
+    [MutationKind(ordinal: 78, section: WorldSection.Views)]
+    public sealed record SetViewSeatRig(WorldPrincipal Principal, WorldCameraProgram SeatRig) : WorldMutation(Principal);
+    /// <summary>Sets the views section's seat control alone, composed against the views row as it stands when the
+    /// mutation applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="SeatControl">The seat view control.</param>
+    [MutationKind(ordinal: 79, section: WorldSection.Views)]
+    public sealed record SetViewSeatControl(WorldPrincipal Principal, WorldSeatViewControl SeatControl) : WorldMutation(Principal);
+    /// <summary>Sets the player defaults' seat look alone, composed against the player-defaults row as it stands when
+    /// the mutation applies.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="SeatLook">The seat camera feel.</param>
+    [MutationKind(ordinal: 80, section: WorldSection.PlayerDefaults)]
+    public sealed record SetPlayerSeatLook(WorldPrincipal Principal, WorldSeatCameraFeel SeatLook) : WorldMutation(Principal);
+    /// <summary>Several mutations installed as one: composed in order against one candidate, validated once, journaled
+    /// once, and replayed as one — the carrier a rule's <c>transaction</c> effect commits through. Admission checks
+    /// every member on its own terms; a member that would be refused alone refuses the batch.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Mutations">The members, in application order.</param>
+    /// <param name="ExpectedDefinition">Optional canonical document fingerprint. Composition refuses the entire
+    /// batch if its base changed after preview; permission and capacity checks still run normally.</param>
+    /// <param name="ExpectedCells">Optional numeric reads checked at commit time, including advancing cell values.</param>
+    /// <param name="ExpectedStateRows">Optional world-state dependency selection for ExpectedDefinition; null hashes every row.</param>
+    /// <param name="ExpectedSpatialReads">Optional bounded spatial read dependencies. Each region is re-queried at
+    /// commit, so occupation, clearance, extents, parent frames, and newly entering obstacles are guarded together.</param>
+    /// <param name="ExpectedInputs">Optional explicitly named placement and state input dependencies.</param>
+    [MutationKind(ordinal: 81, section: WorldSection.State)]
+    public sealed record Batch(WorldPrincipal Principal, [property: System.Text.Json.Serialization.JsonConverter(typeof(WorldMutationListJsonConverter))] IReadOnlyList<WorldMutation> Mutations,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? ExpectedDefinition = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldStateExpectation>? ExpectedCells = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? ExpectedStateRows = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSpatialReadDependency>? ExpectedSpatialReads = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldDefinitionReadDependency? ExpectedInputs = null) : WorldMutation(Principal) {
+        /// <summary>Validates this batch's immediate members and guards. Nested batches pass the same check when
+        /// admitted or decoded recursively; every member must carry the enclosing actor.</summary>
+        /// <param name="reason">The structural refusal, or empty on success.</param>
+        /// <returns>Whether this level has a well-formed shape.</returns>
+        public bool TryValidateShape(out string reason) {
+            reason = "a batch requires members carrying its own principal and well-formed guards";
+            if (Mutations is not { Count: > 0 }) { return false; }
+            for (var index = 0; index < Mutations.Count; index++) {
+                if (Mutations[index] is not { } member || member.Principal != Principal) { return false; }
+            }
+            if (ExpectedDefinition is { } hash && (hash.Length != 64 || hash.Any(c => !char.IsAsciiHexDigit(c)))) { return false; }
+            if (ExpectedInputs is { } inputs && !inputs.TryValidate()) { return false; }
+            if (ExpectedStateRows is { } rows) {
+                if (ExpectedDefinition is null) { return false; }
+                for (var index = 0; index < rows.Count; index++) {
+                    if (string.IsNullOrWhiteSpace(rows[index])) { return false; }
+                }
+            }
+            if (ExpectedCells is { } cells) {
+                for (var index = 0; index < cells.Count; index++) {
+                    if (cells[index] is not { } cell || string.IsNullOrWhiteSpace(cell.Row) || cell.Key is { Length: 0 } ||
+                        !Enum.IsDefined(cell.Comparison) || (cell.Kind is { } kind && !Enum.IsDefined(kind))) { return false; }
+                }
+            }
+            if (ExpectedSpatialReads is { } spatial) {
+                if (spatial.Count == 0) { return false; }
+                for (var index = 0; index < spatial.Count; index++) {
+                    if (spatial[index] is not { } read || !read.TryValidate(out _)) { return false; }
+                }
+            }
+            reason = string.Empty;
+            return true;
+        }
+    }
 }

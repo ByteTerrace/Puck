@@ -1,34 +1,39 @@
+using Puck.Commands;
 namespace Puck.Overlays;
 
 /// <summary>
-/// The binding-bar writer: renders each seat's active-page slot cluster from an <see cref="IBindingBarSource"/>
-/// snapshot as icon elements — the twelve slot chips (the mirrored-diamond layout), the modifier pips, and the
-/// active page's name —
-/// CONFINED to that seat's own normalized viewport rect, so 4-player split screen gets four correctly scaled bars
-/// with the render node staying dumb. Pure record emission; no GPU types.
+/// The binding-bar writer: renders each seat's authored banks from an <see cref="IBindingBarSource"/> snapshot as
+/// icon elements — every bank's slot cluster (the mirrored-diamond layout plus the menu-trio and exotics rows, each
+/// bank displaced by its own authored offset), the modifier indicators, and the active page's name — CONFINED to that
+/// seat's own normalized viewport rect, so 4-player split screen gets four correctly scaled bars with the render
+/// node staying dumb. Pure record emission; no GPU types.
 /// </summary>
 public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
     // A viewport eased/shrunk to nothing has nowhere to draw a bar.
     private const float MinRegionExtent = 0.05f;
 
+    /// <summary>One full march of the latched-toggle border, seconds.</summary>
+    public const float TogglePeriodSeconds = 1.6f;
     /// <summary>The chord-hint lines one seat's bar draws. A page with more command-chord rows than this shows the
     /// first <see cref="MaxHintLines"/> and the rest are refused at the bar's own channel boundary, attributed.</summary>
     public const int MaxHintLines = 8;
-    /// <summary>The character clamp on every text run the bar writes (the page label and the hint lines alike) —
-    /// the editor HUD's line clamp, shared so the two text surfaces read at one width.</summary>
+    /// <summary>The character clamp on every text run the bar writes (the page label and the hint lines alike).</summary>
     public const int MaxLineChars = 46;
-    /// <summary>The modifier pips one seat's bar draws.</summary>
-    public const int MaxModifierPips = 8;
 
     private readonly IBindingBarSource m_source;
+    private readonly OverlayThemeStore m_theme;
 
     /// <summary>Initializes a new instance of the <see cref="BindingBarWriter"/> class.</summary>
     /// <param name="source">The binding-bar snapshot source.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
-    public BindingBarWriter(IBindingBarSource source) {
+    /// <param name="theme">The live resolved theme.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="theme"/> is
+    /// <see langword="null"/>.</exception>
+    public BindingBarWriter(IBindingBarSource source, OverlayThemeStore theme) {
         ArgumentNullException.ThrowIfNull(argument: source);
+        ArgumentNullException.ThrowIfNull(argument: theme);
 
         m_source = source;
+        m_theme = theme;
     }
 
     void IOverlaySeatEmitter<OverlayBindingSeat>.EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) =>
@@ -37,7 +42,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             seat: in seat
         );
 
-    // One seat's cluster: the layout runs in the seat REGION's own space (its aspect, its bottom-center anchor,
+    // One seat's cluster: the layout runs in the seat REGION's own space (its aspect, its edge anchors,
     // every length a fraction of the region height), then maps to pixels — so a bar shrinks with its pane through
     // the split-screen ladder and a fullscreen seat draws the classic full-size cluster.
     private void EmitSeat(OverlayFrameBuilder builder, in OverlayBindingSeat seat) {
@@ -52,58 +57,104 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
         }
 
         var layout = seat.Layout;
+        var chrome = m_theme.Current.Chrome;
+        // The latched-toggle border's phase: one march per TogglePeriodSeconds on the presentation clock — never
+        // simulation time; every latched plate in the frame shares it so they march together.
+        var togglePhase = ((float)((System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: 0L).TotalSeconds % TogglePeriodSeconds) / TogglePeriodSeconds));
         var regionWidthPx = (region.Width * builder.Width);
         var regionHeightPx = (region.Height * builder.Height);
         var regionOriginX = (region.X * builder.Width);
         var regionOriginY = (region.Y * builder.Height);
         var regionAspect = (regionWidthPx / regionHeightPx);
         var slots = seat.Slots.Span;
+        var frames = seat.Frames.Span;
+        // The authored size is a ceiling: a narrow pane shrinks every plate together until each frame fits.
+        var scaledButtonSize = CompiledBindingBarLayout.FitButtonSize(
+            aspect: regionAspect,
+            buttonSize: (layout.ButtonSize * layout.Scale),
+            frames: frames
+        );
+        var barAnchor = BindingBarLayout.BarAnchor(
+            aspect: regionAspect,
+            edge: layout.AnchorEdge,
+            inset: (layout.AnchorInset * scaledButtonSize)
+        );
+        var plateHalf = ((scaledButtonSize * 0.5f) * regionHeightPx);
+        var glyphHalf = (((scaledButtonSize * layout.GlyphSizeRatio) * 0.5f) * regionHeightPx);
+        // One glyph offset; each plate's badge takes its own signed multiple of it (see OverlayBindingSlot.BadgeX/Y).
+        var badgeNudge = ((scaledButtonSize * layout.GlyphOffsetRatio) * regionHeightPx);
 
-        for (var index = 0; ((index < slots.Length) && (index < BindingBarLayout.SlotButtons.Length)); index++) {
+        builder.BeginClip(
+            h: regionHeightPx,
+            w: regionWidthPx,
+            x: regionOriginX,
+            y: regionOriginY
+        );
+
+        for (var index = 0; (index < slots.Length); index++) {
             var slot = slots[index];
 
-            if (!slot.Visible) {
+            if (!slot.Visible || (((uint)slot.Frame) >= ((uint)frames.Length))) {
                 continue;
             }
 
-            var placement = BindingBarLayout.Place(
-                aspect: regionAspect,
-                index: index,
-                options: in layout
+            var frame = frames[slot.Frame];
+
+            // Each plate hangs from its frame: a side column and the bottom strip of one bar share a seat and a
+            // region but not an edge.
+            var center = BindingBarLayout.PlateCenter(
+                anchor: BindingBarLayout.BarAnchor(
+                    aspect: regionAspect,
+                    edge: frame.Edge,
+                    inset: (frame.Inset * scaledButtonSize)
+                ),
+                buttonSize: scaledButtonSize,
+                edge: frame.Edge,
+                pitchX: slot.PitchX,
+                pitchY: slot.PitchY
             );
+            var centerX = (regionOriginX + (center.X * regionHeightPx));
+            var centerY = (regionOriginY + (center.Y * regionHeightPx));
 
             builder.WriteIcon(
                 accent: slot.Accent,
-                alpha: slot.Alpha,
+                // A latch shown on a bank that is not live keeps the held LOOK but takes the bank's REST coverage: the
+                // held tier fills solid where a rest plate fills at the chip rest opacity, so scaling a wing's latch
+                // by that same opacity makes it fade with its neighbours instead of standing at full strength.
+                alpha: (slot.Latched
+                ? (slot.Alpha * m_theme.Current.Elevation.ChipRestOpacity)
+                : (slot.Bound
+                    ? slot.Alpha
+                    : (slot.Alpha * chrome.DimQuietAlpha))),
+                badgeGlyph0: slot.BadgeGlyph0,
+                badgeGlyph1: slot.BadgeGlyph1,
                 bound: slot.Bound,
-                centerX: (regionOriginX + (placement.Center.X * regionHeightPx)),
-                centerY: (regionOriginY + (placement.Center.Y * regionHeightPx)),
-                glyph: slot.Glyph,
-                glyphHalf: (placement.GlyphHalfSize * regionHeightPx),
-                glyphOffsetX: ((placement.GlyphCenter.X - placement.Center.X) * regionHeightPx),
-                glyphOffsetY: ((placement.GlyphCenter.Y - placement.Center.Y) * regionHeightPx),
-                icon: slot.Icon,
-                plateHalf: (placement.HalfSize * regionHeightPx),
-                pressed: slot.Pressed
+                centerX: centerX,
+                centerY: centerY,
+                glyphHalf: glyphHalf,
+                glyphOffsetX: (badgeNudge * slot.BadgeX),
+                glyphOffsetY: (-badgeNudge * slot.BadgeY),
+                iconGlyph0: slot.IconGlyph0,
+                iconGlyph1: slot.IconGlyph1,
+                plateHalf: plateHalf,
+                pressed: slot.Pressed,
+                toggled: slot.Toggled,
+                togglePhase: togglePhase
             );
         }
 
-        // The modifier pips sit between the clusters on the bar's anchor line, lit while held.
+        // The modifier indicators sit between the clusters on the bar's anchor line, lit while held.
         var modifiers = seat.Modifiers.Span;
-        var anchor = BindingBarLayout.BarAnchor(
-            anchorOffsetY: layout.AnchorOffsetY,
-            aspect: regionAspect
-        );
+        var anchor = barAnchor;
         var anchorX = (regionOriginX + (anchor.X * regionHeightPx));
         var anchorY = (regionOriginY + (anchor.Y * regionHeightPx));
-        var scaledButtonSize = (layout.ButtonSize * layout.Scale);
-        var pipHalf = ((scaledButtonSize * 0.35f) * regionHeightPx);
-        var pipSpacing = ((scaledButtonSize * 1.1f) * regionHeightPx);
-        // The page NAME rides directly under the pips — the visible half of the page model: squeeze a trigger chord
+        var modifierHalf = ((scaledButtonSize * layout.ModifierHalfRatio) * regionHeightPx);
+        var modifierSpacing = ((scaledButtonSize * layout.ModifierSpacingRatio) * regionHeightPx);
+        // The page NAME rides directly under the modifiers — the visible half of the page model: squeeze a trigger chord
         // and the bar both re-renders AND says which page it turned to, so a sparse page still reads.
         var labelCell = Math.Max(
-            val1: 12,
-            val2: ((int)(pipHalf * 1.9f))
+            val1: ((int)layout.LabelCellMinPx),
+            val2: ((int)(modifierHalf * layout.LabelCellRatio))
         );
 
         if (!string.IsNullOrEmpty(value: seat.Label)) {
@@ -113,7 +164,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             );
 
             builder.WriteText(
-                alpha: 0.9f,
+                alpha: chrome.BarLabelAlpha,
                 cellHeight: labelCell,
                 maxChars: MaxLineChars,
                 role: OverlayColorRole.TextPrimary,
@@ -122,63 +173,55 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                     cellHeight: labelCell,
                     chars: labelChars
                 ) * 0.5f)),
-                y: (anchorY + (pipHalf * 1.4f))
+                y: (anchorY + (modifierHalf * layout.LabelGapRatio))
             );
         }
 
-        if (modifiers.Length == 0) {
-            return;
-        }
+        // The producer bounds the count: the feed's per-seat modifier array and this channel's lease reservation are
+        // both sized from the document contract's modifier ceiling (WorldBindingBarCapacity.MaxModifiers, crossed as
+        // OverlayCapacity.BindingBarMaxModifiers), which the document validator also refuses a composed profile past —
+        // so every published modifier has a reserved record and the bar carries no private cap of its own.
+        var modifierCount = modifiers.Length;
 
-        var pipCount = Math.Min(
-            val1: modifiers.Length,
-            val2: MaxModifierPips
-        );
-
-        // The pip cap is the SAME kind of self-declared truncation as the hint-line cap below it: attribute it the
-        // same way (NoteRefused) rather than letting it clip silently at a smaller grain than the row cap does.
-        if (pipCount < modifiers.Length) {
-            builder.NoteRefused(
-                elements: (modifiers.Length - pipCount),
-                textWords: 0
-            );
-        }
-
-        for (var index = 0; (index < pipCount); index++) {
+        for (var index = 0; (index < modifierCount); index++) {
             var modifier = modifiers[index];
 
             builder.WriteIcon(
                 accent: false,
                 alpha: (modifier.Held
                 ? 1f
-                : 0.35f),
+                : chrome.DimQuietAlpha),
+                badgeGlyph0: modifier.BadgeGlyph0,
+                badgeGlyph1: modifier.BadgeGlyph1,
                 bound: true,
-                centerX: (anchorX + ((index - ((pipCount - 1) * 0.5f)) * pipSpacing)),
+                centerX: (anchorX + ((index - ((modifierCount - 1) * 0.5f)) * modifierSpacing)),
                 centerY: anchorY,
-                glyph: modifier.Glyph,
-                glyphHalf: (pipHalf * 0.8f),
+                glyphHalf: (modifierHalf * layout.ModifierGlyphRatio),
                 glyphOffsetX: 0f,
                 glyphOffsetY: 0f,
-                icon: OverlayIconId.None,
-                plateHalf: pipHalf,
+                iconGlyph0: 0,
+                iconGlyph1: 0,
+                plateHalf: modifierHalf,
                 pressed: modifier.Held
             );
         }
 
-        // The chord hints stack above the pips: one small centered line per command-chord row of the active group
+        // The chord hints stack above the modifiers: one small centered line per command-chord row of the active group
         // (ASCII only — the glyph pack is ASCII-95), quiet alpha so the bar's chips stay dominant.
         var hints = seat.Hints.Span;
 
         if (hints.Length == 0) {
+            builder.EndClip();
+
             return;
         }
 
         var hintCell = Math.Max(
-            val1: 10,
-            val2: ((int)(pipHalf * 1.6f))
+            val1: ((int)layout.HintCellMinPx),
+            val2: ((int)(modifierHalf * layout.HintCellRatio))
         );
-        var hintLineStep = (hintCell * 1.3f);
-        var hintBaseY = (anchorY - (pipHalf * 2.2f));
+        var hintLineStep = (hintCell * layout.HintLineStepRatio);
+        var hintBaseY = (anchorY - (modifierHalf * layout.HintBaseGapRatio));
         // Bounded and pinned: a page with many command-chord rows would otherwise lose its overflow silently at the
         // shared record pool's boundary, by draw-order accident. The first MaxHintLines rows draw; the rest are
         // refused at the bar's reservation and attributed to the bar — boundedness is what makes the reservation
@@ -217,7 +260,7 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
             );
 
             builder.WriteText(
-                alpha: 0.6f,
+                alpha: chrome.BarHintAlpha,
                 cellHeight: hintCell,
                 maxChars: MaxLineChars,
                 role: OverlayColorRole.TextDim,
@@ -229,6 +272,8 @@ public sealed class BindingBarWriter : IOverlaySeatEmitter<OverlayBindingSeat> {
                 y: ((hintBaseY - (((hintCount - 1) - index) * hintLineStep)) - hintCell)
             );
         }
+
+        builder.EndClip();
     }
 
     /// <summary>Emits this frame's per-seat bars, when a snapshot has been published.</summary>

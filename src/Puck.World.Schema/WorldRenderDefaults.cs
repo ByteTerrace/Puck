@@ -4,13 +4,50 @@ using System.Text.Json;
 
 namespace Puck.World;
 
+/// <summary>One ranked anchor candidate of a <see cref="WorldCamera"/>: the anchor the camera rides while
+/// <paramref name="When"/> holds. Candidates are walked in authored order every frame and the first holding one wins;
+/// a <see langword="null"/> predicate always holds, so the last row is the default.</summary>
+/// <param name="Anchor">What the camera rides while this candidate wins.</param>
+/// <param name="When">The condition, evaluated for the seat the view is resolved for.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldCameraAnchorCandidate(WorldAnchor Anchor, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? When = null);
 /// <summary>One placeable camera composed from a reference frame, local motion, framing policy, lens, and render target.</summary>
 /// <param name="Name">The camera's stable name — the handle a View screen / layout slot samples by.</param>
-/// <param name="Anchor">What the camera rides, or <see langword="null"/> for the world reference frame.</param>
+/// <param name="Anchor">What the camera rides, or <see langword="null"/> for the world reference frame (or for
+/// <paramref name="Anchors"/> to decide).</param>
 /// <param name="Rig">The independent local motion, aim, and lens axes.</param>
 /// <param name="RenderWidth">The offscreen render width in pixels.</param>
 /// <param name="RenderHeight">The offscreen render height in pixels.</param>
-public sealed record WorldCamera(string Name, WorldAnchor? Anchor, WorldCameraRig Rig, uint RenderWidth, uint RenderHeight);
+/// <param name="Anchors">Ranked anchor candidates, first holding wins each frame — a portrait camera that rides the
+/// speaking character while they speak and the seat's own avatar otherwise. Refused beside <paramref name="Anchor"/>;
+/// a single unconditional anchor is <paramref name="Anchor"/>.</param>
+public sealed record WorldCamera(
+    string Name,
+    WorldAnchor? Anchor,
+    WorldCameraProgram Rig,
+    uint RenderWidth,
+    uint RenderHeight,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraAnchorCandidate>? Anchors = null
+) {
+    /// <summary>Gets a value indicating whether any candidate or the anchor is seat-relative, so the view must be
+    /// resolved per seat.</summary>
+    [JsonIgnore]
+    public bool IsSeatRelative {
+        get {
+            if (Anchor is WorldAnchor.Seat) {
+                return true;
+            }
+
+            foreach (var candidate in (Anchors ?? [])) {
+                if (candidate?.Anchor is WorldAnchor.Seat) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+}
 public static class WorldApplicationDefaults {
     /// <summary>The built-in world ships with no bundled AGB cartridge — an asset-free default, never an owner-local
     /// absolute path or a copyrighted dump. Durable per-deployment cartridge/BIOS paths belong in the world data file
@@ -55,11 +92,19 @@ public readonly record struct WorldQualityPreset(
 /// existed.</param>
 /// <param name="Cycle">Lighting and sky keyed over a state row's value (a day/night cycle when that row advances).
 /// Optional; absent leaves <paramref name="Lighting"/>/<paramref name="Sky"/> static.</param>
+/// <param name="FarDistance">The far distance in world units: the depth at which every camera march ends — the far
+/// plane the renderer's fine march exits at, the reach of the beam's cone proofs, and the depth the fog and depth
+/// ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon
+/// curve at this depth unless the sky fog has absorbed it (<c>render.sky.fogDensity</c>). Optional; absent
+/// resolves to the engine's pinned 40 — exactly the value every world marched to before this field existed. Must
+/// lie within [<see cref="MinFarDistance"/>, <see cref="MaxFarDistance"/>]. Re-read on every definition revision
+/// (a <c>world.row.set render</c> lands on the next frame); <c>world.budget</c> echoes it with its derived
+/// costs.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
-    float ShadowCrowdRadius = 15f,
+    float ShadowCrowdRadius = 0f,
     bool AmbientOcclusion = false,
-    WorldRenderScaleTier RenderScale = WorldRenderScaleTier.Half,
+    WorldRenderScaleTier RenderScale = WorldRenderScaleTier.Native,
     float UpscaleSharpness = 0f,
     [property: JsonPropertyName("low"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? LowRaw = null,
     [property: JsonPropertyName("medium"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? MediumRaw = null,
@@ -67,45 +112,36 @@ public sealed record WorldRenderDefaults(
     IReadOnlyList<WorldRenderExtensionEntry>? Extensions = null,
     WorldRenderLighting? Lighting = null,
     WorldRenderSky? Sky = null,
-    WorldRenderCycle? Cycle = null
+    WorldRenderCycle? Cycle = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FarDistance = null
 ) {
-    // Exact-128 is the built-in scene, so boot in the measured fleet posture that retains ample headroom above the
-    // 60-FPS floor. High/native remains a live quality preset rather than silently changing the population.
-    /// <summary>Gets the built-in default render levers — the boot values and preset table.</summary>
-    public static WorldRenderDefaults Default { get; } = new WorldRenderDefaults();
+    /// <summary>The smallest <see cref="FarDistance"/> the validator admits: one world unit. The beam's cone march
+    /// starts at 0.02 units and the fine march accepts a hit within a 0.001-unit floor, so a far plane under one unit
+    /// leaves no marchable depth a camera could frame a body in.</summary>
+    public const float MinFarDistance = 1f;
+    /// <summary>The largest <see cref="FarDistance"/> the validator admits: 8192 world units. The march advances a
+    /// float depth against a 0.001-unit surface epsilon; 8192 is the largest power of two at which a float's spacing
+    /// (2^13 · 2^-23 = 0.00098) still resolves that epsilon, so every sample along the whole ray can still land within
+    /// it. Past this the accept floor is unrepresentable and the cone proofs would rest on rounding.</summary>
+    public const float MaxFarDistance = 8192f;
 
-    /// <summary>Gets the low quality preset (the authored one, or the built-in).</summary>
-    [JsonIgnore]
-    public WorldQualityPreset Low => (LowRaw ?? new WorldQualityPreset(
-        AmbientOcclusion: false,
-        RenderScale: WorldRenderScaleTier.Half,
-        Shadows: ShadowTier.Off
-    ));
-    /// <summary>Gets the medium quality preset (the authored one, or the built-in).</summary>
-    [JsonIgnore]
-    public WorldQualityPreset Medium => (MediumRaw ?? new WorldQualityPreset(
-        AmbientOcclusion: true,
-        RenderScale: WorldRenderScaleTier.ThreeQuarter,
-        Shadows: ShadowTier.Medium
-    ));
-    /// <summary>Gets the high quality preset (the authored one, or the built-in).</summary>
-    [JsonIgnore]
-    public WorldQualityPreset High => (HighRaw ?? new WorldQualityPreset(
-        AmbientOcclusion: true,
-        RenderScale: WorldRenderScaleTier.Native,
-        Shadows: ShadowTier.High
-    ));
+    /// <summary>Gets the inert absence — shadows off, no crowd radius, no ambient occlusion, native scale, no
+    /// authored presets, the engine's pinned far distance. The engine holds no render posture of its own: the
+    /// standard boot levers and preset table are AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world
+    /// inherits them by naming that document as its basis.</summary>
+    public static WorldRenderDefaults Absent { get; } = new WorldRenderDefaults();
 
-    /// <summary>Returns the preset for a quality tier keyword (case-insensitive <c>low</c>/<c>medium</c>/<c>high</c>), or
-    /// <see langword="null"/> when the token names none.</summary>
+    /// <summary>Returns the authored preset for a quality tier keyword (case-insensitive
+    /// <c>low</c>/<c>medium</c>/<c>high</c>), or <see langword="null"/> when the token names none or the world
+    /// authors no such preset — the <c>world.quality</c> verb refuses by name either way.</summary>
     /// <param name="name">The quality tier keyword.</param>
-    /// <returns>The matching preset, or <see langword="null"/>.</returns>
+    /// <returns>The matching authored preset, or <see langword="null"/>.</returns>
     public WorldQualityPreset? Preset(string name) {
         return (name.ToUpperInvariant() switch {
-            "LOW" => Low,
-            "MEDIUM" => Medium,
-            "HIGH" => High,
-            _ => ((WorldQualityPreset?)null),
+            "LOW" => LowRaw,
+            "MEDIUM" => MediumRaw,
+            "HIGH" => HighRaw,
+            _ => null,
         });
     }
 }
@@ -132,22 +168,26 @@ public sealed record WorldRenderLighting(WorldRenderSun? Sun = null, WorldRender
 /// <param name="Direction">The direction from a lit surface toward the light, any nonzero length (normalized
 /// host-side before upload).</param>
 /// <param name="Weight">The sun's diffuse weight.</param>
-/// <param name="Color">The sun's linear <c>#RRGGBB</c> color.</param>
-public sealed record WorldRenderSun(DocumentVector3? Direction = null, float? Weight = null, string? Color = null);
+/// <param name="Color">The sun's linear color — a <c>#RRGGBB</c>/<c>#RRGGBBAA</c> literal, or a
+/// <c>state.&lt;row&gt;[.&lt;key&gt;]</c> binding naming a Text cell that holds one (alpha is ignored; the render
+/// path is opaque).</param>
+public sealed record WorldRenderSun(DocumentVector3? Direction = null, float? Weight = null, BindableColor? Color = null);
 /// <summary>The ambient (hemisphere) term. Every field is optional individually — absent resolves to
 /// <c>SdfFrame</c>'s pinned default for that field.</summary>
 /// <param name="Base">The ambient floor.</param>
 /// <param name="Hemisphere">The hemisphere gradient, scaling surface normal Y.</param>
-/// <param name="Color">The ambient linear <c>#RRGGBB</c> color.</param>
-public sealed record WorldRenderAmbient(float? Base = null, float? Hemisphere = null, string? Color = null);
+/// <param name="Color">The ambient linear color — <see cref="BindableColor"/>'s grammar, on the same terms as
+/// <see cref="WorldRenderSun.Color"/>.</param>
+public sealed record WorldRenderAmbient(float? Base = null, float? Hemisphere = null, BindableColor? Color = null);
 /// <summary>The procedural sky — a three-stop gradient, sun disc, star field, and distance fog, authored as world
 /// data. Absent is a hard gate: every existing world renders the pinned two-stop gradient and 0.015 fog density
 /// bit-exactly, as before this section existed, until it authors one.</summary>
-/// <param name="Zenith">The straight-up sky color, as <c>#RRGGBB</c>. Optional; absent takes the pinned zenith.</param>
-/// <param name="Horizon">The horizon-band color (the gradient's middle stop), as <c>#RRGGBB</c>. Optional; absent
-/// takes the midpoint between the pinned ground and zenith.</param>
-/// <param name="Ground">The straight-down (nadir) color, as <c>#RRGGBB</c>. Optional; absent takes the pinned
-/// ground.</param>
+/// <param name="Zenith"><see cref="BindableColor"/>'s grammar: the straight-up sky color. Optional; absent takes
+/// the pinned zenith.</param>
+/// <param name="Horizon"><see cref="BindableColor"/>'s grammar: the horizon-band color (the gradient's middle
+/// stop). Optional; absent takes the midpoint between the pinned ground and zenith.</param>
+/// <param name="Ground"><see cref="BindableColor"/>'s grammar: the straight-down (nadir) color. Optional; absent
+/// takes the pinned ground.</param>
 /// <param name="FogDensity">The exponential distance-fog density fading toward the sky color. Optional; absent
 /// takes the pinned 0.015 — the exact value the fog term used before this field existed.</param>
 /// <param name="Sun">The visible sun disc, drawn about the lighting sun's direction. Optional; absent draws no
@@ -155,9 +195,9 @@ public sealed record WorldRenderAmbient(float? Base = null, float? Hemisphere = 
 /// <param name="Stars">The procedural star field. Optional; absent draws no stars.</param>
 /// <param name="Clouds">The procedural cloud layer. Optional; absent draws no clouds.</param>
 public sealed record WorldRenderSky(
-    string? Zenith = null,
-    string? Horizon = null,
-    string? Ground = null,
+    BindableColor? Zenith = null,
+    BindableColor? Horizon = null,
+    BindableColor? Ground = null,
     float? FogDensity = null,
     WorldRenderSkySun? Sun = null,
     WorldRenderSkyStars? Stars = null,
@@ -207,8 +247,7 @@ public sealed record WorldRenderSkyTwinkle(float Share, float Depth, float Rate)
 /// <param name="Scale">The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1
 /// spans about 45° overhead). Larger is broader clouds.</param>
 /// <param name="Seed">The hash seed folded into the lattice — a different seed reshapes the layer.</param>
-/// <param name="Color">The cloud colour, as <c>#RRGGBB</c> or a <c>state.&lt;row&gt;.&lt;key&gt;</c> binding.
-/// Optional; absent is white.</param>
+/// <param name="Color"><see cref="BindableColor"/>'s grammar: the cloud colour. Optional; absent is white.</param>
 /// <param name="Drift">The layer's wind, in layer units per second along world X and Z, integrated on the tick clock.
 /// Optional; absent holds still.</param>
 /// <param name="Spin">The layer's rotation about the zenith in radians per second — the planetary-scale turning a
@@ -219,4 +258,4 @@ public sealed record WorldRenderSkyTwinkle(float Share, float Depth, float Rate)
 /// <param name="Shear">The wind of the SHAPING field relative to the cloud field, in layer units per second: the
 /// two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture.
 /// Optional; absent holds their shapes.</param>
-public sealed record WorldRenderSkyClouds(float Coverage, float Softness, float Scale, uint Seed, string? Color = null, DocumentVector2? Drift = null, float? Spin = null, float? Curl = null, DocumentVector2? Shear = null);
+public sealed record WorldRenderSkyClouds(float Coverage, float Softness, float Scale, uint Seed, BindableColor? Color = null, DocumentVector2? Drift = null, float? Spin = null, float? Curl = null, DocumentVector2? Shear = null);

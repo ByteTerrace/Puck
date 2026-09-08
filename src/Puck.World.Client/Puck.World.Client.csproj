@@ -15,10 +15,14 @@
         <ProjectReference Include="..\Puck.Overlays\Puck.Overlays.csproj" />
         <ProjectReference Include="..\Puck.Scripting\Puck.Scripting.csproj" />
         <ProjectReference Include="..\Puck.SdfVm\Puck.SdfVm.csproj" />
+        <ProjectReference Include="..\Puck.Shaders\Puck.Shaders.csproj" />
         <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
-        <ProjectReference Include="..\Puck.World.Forge\Puck.World.Forge.csproj" />
+        <ProjectReference Include="..\Puck.World.Authoring\Puck.World.Authoring.csproj" />
         <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
     </ItemGroup>
 </Project>

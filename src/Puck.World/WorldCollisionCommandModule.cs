@@ -19,10 +19,21 @@ namespace Puck.World;
 /// </summary>
 internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLink link, Client.WorldSeatAuthorityRouter seatRouter) : ICommandModule {
     // The live analytic-vocabulary census, compiled by the same server path that materializes placement colliders.
+    //
+    // Names whether the world actually SOLVES against this vocabulary. A world that authors a field-selecting contact
+    // requirement stands on the SDF field instead, blend and all, and the analytic figures below then describe a
+    // vocabulary nothing is resolved against — a reading taken to answer "what am I standing on" that quietly
+    // describes the wrong surface. The census is still worth printing there (it is what the analytic path WOULD see,
+    // and the gap between the two is exactly what a blend contributes), but it is labelled for what it is.
     private CommandResult Census() {
         var census = server.Population.ContactCensus;
+        var field = WorldContactSelection.RequiresField(collision: server.Definition.Collision);
+        var provider = (field
+            ? $"field contact (requirements: {string.Join(separator: ", ", values: server.Definition.Collision.Requirements)}); analytic census NOT SOLVED AGAINST"
+            : "analytic contact; census"
+        );
 
-        return new CommandResult(Output: $"[world.contacts: analytic census {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
+        return new CommandResult(Output: $"[world.contacts: {provider} {census.SolidCount} colliders ({census.SphereCount} spheres, {census.BoxCount} boxes, {census.PlaneCount} planes); placements={census.PlacementColliderCount} ({census.PlacementSphereCount} spheres, {census.PlacementBoxCount} boxes, {census.PlacementPlaneCount} planes), unsupported={census.UnsupportedPlacementCount}; dynamic potentialPairs={server.Population.DynamicContactPotentialPairs} narrowPairs={server.Population.DynamicContactNarrowPairs} resolvedPairs={server.Population.DynamicContactResolvedPairs}]");
     }
     private static string DescribeCollider(WorldCollider collider) {
         return collider switch {
@@ -38,7 +49,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
             provider: CultureInfo.InvariantCulture,
             handler: $"box half=({box.HalfExtents.X:0.##},{box.HalfExtents.Y:0.##},{box.HalfExtents.Z:0.##}) rotation=({box.Rotation.X:0.##},{box.Rotation.Y:0.##},{box.Rotation.Z:0.##},{box.Rotation.W:0.##})"
         ),
-            WorldCollider.FromCreation fromCreation => $"fromCreation creation={fromCreation.CreationId}",
+            WorldCollider.FromCreation fromCreation => $"fromCreation creation={fromCreation.PrototypeId}",
             _ => throw new ArgumentOutOfRangeException(
             paramName: nameof(collider),
             actualValue: collider,
@@ -50,30 +61,19 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
     private CommandResult Probe(WireArgs args) {
         if (
             (args.Count != 3) ||
-            !float.TryParse(
-            s: args[0],
-            style: NumberStyles.Float,
-            provider: CultureInfo.InvariantCulture,
-            result: out var x
-        ) ||
-            !float.TryParse(
-            s: args[1],
-            style: NumberStyles.Float,
-            provider: CultureInfo.InvariantCulture,
-            result: out var y
-        ) ||
-            !float.TryParse(
-            s: args[2],
-            style: NumberStyles.Float,
-            provider: CultureInfo.InvariantCulture,
-            result: out var z
+            !args.TryFloats(
+            count: 3,
+            start: 0,
+            values: out var xyz
         )
         ) {
-            return Usage(
+            return CommandResult.Usage(
                 form: "<x> <y> <z>",
                 verb: "world.collision.probe"
             );
         }
+
+        var (x, y, z) = (xyz[0], xyz[1], xyz[2]);
 
         if (server.SolidField is not { } field) {
             return CommandResult.Error(output: "[world.collision.probe: no field — author a field-selecting contact requirement]");
@@ -115,6 +115,31 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         ),
         };
     }
+    // The rigid solver census (world.rigid): every active rigid-kit body's mass, velocity, and resting latch.
+    private CommandResult Rigid() {
+        var rows = new List<string>();
+
+        for (var index = 0; (index < server.Population.Capacity); index++) {
+            if (
+                (server.Population.EntryBody(index: index) is not { IsRigid: true } body) ||
+                !server.Population.IsActive(index: index)
+            ) {
+                continue;
+            }
+
+            rows.Add(item: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"body:{index} mass={((double)body.RigidMass):0.###} v=({((double)body.RigidVelocity.X):0.###},{((double)body.RigidVelocity.Y):0.###},{((double)body.RigidVelocity.Z):0.###}) w=({((double)body.RigidAngularVelocity.X):0.###},{((double)body.RigidAngularVelocity.Y):0.###},{((double)body.RigidAngularVelocity.Z):0.###}) resting={(body.Resting ? 1 : 0)}"
+            ));
+        }
+
+        var quiescent = (server.Population.RigidBodiesQuiescent() ? 1 : 0);
+
+        return new CommandResult(Output: ((rows.Count == 0)
+            ? $"[world.rigid: no active rigid body; quiescent={quiescent}]"
+            : $"[world.rigid: quiescent={quiescent} | {string.Join(separator: " | ", values: rows)}]"
+        ));
+    }
     // The contact-solver status readout (world.collision.status): the tuning, the field size/revision, and the per-kit
     // collider table so the whole grounded-contact configuration is one Immediate read.
     private CommandResult Status() {
@@ -148,14 +173,18 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         );
         var census = server.Population.ContactCensus;
         var placementFieldShapes = (server.SolidField?.PlacementShapeCount ?? 0L);
+        var grid = ((server.SolidField?.Grid is { } baked)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{((double)baked.CellSize):0.###}x({baked.CornerCountX}x{baked.CornerCountY}x{baked.CornerCountZ}) baked={baked.BakedCornerCount} band={((double)server.SolidField.ContactBand):0.###} bakeHash={server.SolidField.Census.SolidBakeHash:x16}"
+            )
+            : "none"
+        );
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.collision.status: selectedProvider={provider} forcedBy={forcedBy} instructions={instructions} placementFieldShapes={placementFieldShapes} placementColliders={census.PlacementColliderCount} placementColliderLimit={WorldPlacementPolicy.MaxSolidPlacementColliders} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° colliders=[{kitTable}]]"
+            handler: $"[world.collision.status: selectedProvider={provider} forcedBy={forcedBy} instructions={instructions} placementFieldShapes={placementFieldShapes} placementColliders={census.PlacementColliderCount} placementColliderLimit={WorldPlacementPolicy.MaxSolidPlacementColliders} revision={server.SolidRevision} skin={collision.ContactSkin:0.###} slope={collision.MaxSlopeDegrees:0.#}° grid={grid} colliders=[{kitTable}]]"
         ));
-    }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
     }
 
     /// <inheritdoc/>
@@ -163,7 +192,7 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.contacts",
-            description: "Reports the solidity state (Immediate read): world.contacts prints the analytic collider census and placement contribution; world.contacts <body-index> prints that 1-based body's grounded flag, planar speed, grounded witness (resolved=1 when grounded, else 0), the swim medium facts (submerged/atSurface — always false for a non-swim kit), and an obstruction witness (obstruction=none, or the LATCHED last non-walkable contact's unit surface normal at 3-decimal precision — a vertical wall reads a non-zero obstruction even though resolved=0, and even while the same body simultaneously reads resolved=1 from standing on the floor elsewhere; a walkable push, ground or ramp, never sets it). LATCHED, not a raw per-tick read: it survives a solver tick that happens not to re-register a push while the body stays actively driven and hasn't meaningfully moved, and clears the instant either input goes idle or the body actually gets clear — so a pinned body reads a stable obstruction rather than flickering.",
+            description: "Reports the solidity state (Immediate read): world.contacts prints the analytic collider census and placement contribution; world.contacts <body-index> prints that 1-based body's grounded flag, planar speed, grounded witness (resolved=1 when grounded, else 0), the medium facts (inMedium/atMediumBand — always false for a kit authoring no medium hold), and an obstruction witness (obstruction=none, or the LATCHED last non-walkable contact's unit surface normal at 3-decimal precision — a vertical wall reads a non-zero obstruction even though resolved=0, and even while the same body simultaneously reads resolved=1 from standing on the floor elsewhere; a walkable push, ground or ramp, never sets it). LATCHED, not a raw per-tick read: it survives a solver tick that happens not to re-register a push while the body stays actively driven and hasn't meaningfully moved, and clears the instant either input goes idle or the body actually gets clear — so a pinned body reads a stable obstruction rather than flickering.",
             handler: (_, args) => {
                 if (args.Count == 0) {
                     return Census();
@@ -184,19 +213,24 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
                     return CommandResult.Error(output: $"[world.contacts: bad body index '{args[0].ToString()}' — 1..{server.Population.Capacity}]");
                 }
 
-                var result = default(CommandResult);
-                var submissions = link;
-                var authorityIndex = index;
-
-                if (index <= WorldPopulationLimits.LocalSeatCount) {
-                    var route = seatRouter.Route(slot: (index - 1));
-
-                    submissions = route.Endpoint.Submissions;
-                    authorityIndex = (route.EntityIndex + 1);
+                if (
+                    (index <= WorldBodiesLimits.LocalSeatCount) &&
+                    seatRouter.TryRouteQuery(
+                    factory: static authorityIndex => new WorldQuery.Contacts(Index: authorityIndex),
+                    result: out var routed,
+                    slot: (index - 1),
+                    tagInstance: false
+                )
+                ) {
+                    return routed;
                 }
 
-                submissions.Query(
-                    query: new WorldQuery.Contacts(Index: authorityIndex),
+                // No local route for this slot (a world declaring fewer local seats than the ceiling) or a
+                // simulated entry beyond the local range: query the injected link with the raw 1-based index.
+                var result = default(CommandResult);
+
+                link.Query(
+                    query: new WorldQuery.Contacts(Index: index),
                     completion: answer => {
                         result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
                     }
@@ -207,16 +241,25 @@ internal sealed class WorldCollisionCommandModule(WorldServer server, IServerLin
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.collision.probe",
-            description: "Reads the live field the simulation solves against (Immediate): world.collision.probe <x> <y> <z> prints signed distance, material, unit gradient, and an up= column (gradient when GradientDerivedUp is authored, +Y otherwise — the body up axis, not the printed gradient, which is always the contact-push normal). Requires a field-selecting contact requirement.",
+            description: "Reads the live field the simulation solves against (Immediate): world.collision.probe <x> <y> <z> prints signed distance, material, unit gradient, and the field's ambient up mode (gradient when GradientDerivedUp is authored, +Y otherwise). Body-frame policy separately decides whether that candidate, solved gravity, or a measured support normal may orient a body. Requires a field-selecting contact requirement.",
             handler: (_, args) => Probe(args: args)
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.rigid",
+            description: "Reports the rigid solver's live census (Immediate): every active rigid-kit body's mass, linear/angular velocity, and resting latch, plus quiescent=1|0 — the same value $physics:quiescent reads. 'no active rigid body' with quiescent=1 when the world authors none.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.rigid") is { } refusal)
+            ? refusal
+            : Rigid()),
+            routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.collision.status",
             description: "Reports the selected contact provider, the requirements that forced it, solid instruction count, field revision, contact skin, and the per-kit collider table.",
-            handler: (_, args) => ((args.Count == 0)
-            ? Status()
-            : CommandResult.Error(output: $"[world.collision.status: unrecognized '{args[0]}' — expected no arguments]"))
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.collision.status") is { } refusal)
+            ? refusal
+            : Status())
         );
     }
 

@@ -2,7 +2,10 @@ using System.Numerics;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.SdfVm;
+using Puck.SdfVm.Views;
+using Puck.SignedDistance.Queries;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Client;
 
@@ -17,11 +20,11 @@ namespace Puck.World.Client;
 /// <remarks>Single-threaded on the launcher's window-pump thread: snapshots arrive synchronously inside the server
 /// step, submissions run immediately before it, and the render-pose refresh runs during frame produce.</remarks>
 public sealed class WorldClient : IClientSink, ISdfAnchorSource {
-    /// <summary>The entity-view capacity — single-sourced from <see cref="WorldPopulationLimits.CapacityCeiling"/>
+    /// <summary>The entity-view capacity — single-sourced from <see cref="WorldBodiesLimits.CapacityCeiling"/>
     /// so the validator's admitted population.capacity and this client's fixed
     /// per-entity arrays can never again drift apart: an over-capacity document refuses at load instead of booting
     /// into a latent out-of-bounds throw here.</summary>
-    public const int EntityCapacity = WorldPopulationLimits.CapacityCeiling;
+    public const int EntityCapacity = WorldBodiesLimits.CapacityCeiling;
     /// <summary>How many counters <see cref="WriteRevision"/> reports — the component count
     /// <c>WorldSceneEmitter</c> folds into its own when it lays out its revision vector.</summary>
     public const int RevisionComponentCount = 3;
@@ -38,6 +41,19 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The server's live world definition — the boot definition at construction, replaced by DeliverDefinition after an
     // applied mutation batch or a swap. The frame source re-reads scene/screens from this behind the revision check.
     private WorldDefinition m_definition;
+    private WorldClientFieldLattice? m_fields;
+    // The static-scene query field, rebuilt by WorldFramePresenter whenever the composed program changes and parked
+    // here so every presentation consumer reads ONE evaluator: the chase camera's clearance sweep and the stamp
+    // pool's limb probes ask the same geometry the same way. Null before the first composed program, and for a world
+    // whose program carries render-only warps no fixed-point query can interpret.
+    private SdfFieldEvaluator? m_staticField;
+
+    /// <summary>Gets the mirror of the authority's field lattice, or <see langword="null"/> for a world without a
+    /// <c>fields</c> section.</summary>
+    public WorldClientFieldLattice? Fields => m_fields;
+    /// <summary>Gets the static-scene query field, or <see langword="null"/> when none is resolved.</summary>
+    public SdfFieldEvaluator? StaticField => m_staticField;
+
     private int m_definitionRevision;
     // The accepted-lever applier (see WorldSessionLeverSink). Optional so a client composed without the presentation
     // services — a headless or test host — simply drops accepted levers rather than failing to construct.
@@ -64,6 +80,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     // The LOOK row index per entity — the frame source reads it to resolve each body's appearance (catalog rig vs.
     // creation stamp), scale, and gait amplitude. PRESENTATION-ONLY.
     private readonly byte[] m_look = new byte[EntityCapacity];
+    private readonly BodyFacts[] m_facts = new BodyFacts[EntityCapacity];
     // The occupant-owned procedural rig. This is deliberately distinct from the authority-local entity index: a
     // seamless transfer may move the occupant to another slot without changing its implicit shape.
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
@@ -72,6 +89,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     private readonly bool[] m_active = new bool[EntityCapacity];
     private readonly bool[] m_seen = new bool[EntityCapacity];
     private readonly RenderErrorEaser[] m_easers = new RenderErrorEaser[EntityCapacity];
+    // Bumped on activation, a Teleport continuity, and an over-threshold Correction snap — every discontinuity a
+    // presentation-side follower (a root/part second-order lag) must reseed across rather than chase.
+    private readonly int[] m_poseEpoch = new int[EntityCapacity];
     // The per-frame resolved render poses (alpha-interpolated + eased) — what the frame source and anchors read.
     private readonly Vector3[] m_renderPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_renderOrientation = new Quaternion[EntityCapacity];
@@ -149,11 +169,11 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
         return false;
     }
-    /// <summary>The move composition — the determinism seam <c>WorldMotionModel</c>'s <c>MoveFrame</c> remarks
+    /// <summary>The move composition — the determinism seam <c>WorldMotion</c>'s <c>MoveFrame</c> remarks
     /// promise: every movement contribution is rotated into WORLD axes here, before it reaches the wire, so the sim
     /// only ever reads a world-frame vector and never a camera pose. Two producers fold: the seat's held channel
     /// rows (already summed by <see cref="SeatController.HeldIntent"/>), rotated by the frame the world declared on
-    /// its MoveForward/MoveStrafe pair (<see cref="WorldChannelTable.MoveFrame"/> — <see cref="ChannelFrame.Camera"/>
+    /// its MoveAdvance/MoveStrafe pair (<see cref="WorldChannelTable.MoveFrame"/> — <see cref="ChannelFrame.Camera"/>
     /// by the camera yaw, <see cref="ChannelFrame.Heading"/> by the body's authoritative HEADING off the wire
     /// (<see cref="WorldAuthorityEndpoint.TryEntityHeading"/> — never the drawn attitude, which the sim's facing snap
     /// angles toward the travel), <see cref="ChannelFrame.World"/> not at all), and the stick's <c>player.move</c> or
@@ -174,7 +194,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <param name="endpoint">The authority that owns the body and supplies its current orientation.</param>
     /// <param name="definition">The definition of the instance receiving the intent.</param>
     /// <param name="intent">The seat's held-row intent (no stick sample in it).</param>
-    /// <returns><paramref name="intent"/> with <c>MoveForward</c>/<c>MoveStrafe</c> (and, for a camera-framed
+    /// <returns><paramref name="intent"/> with <c>MoveAdvance</c>/<c>MoveStrafe</c> (and, for a camera-framed
     /// movement-facing contribution, <c>FaceX</c>/<c>FaceZ</c>) composed into world axes; unchanged when nothing moves or the body
     /// pose the frame needs is unavailable.</returns>
     private PlayerIntent ComposeMoveFrame(int slot, int bodyIndex, WorldAuthorityEndpoint endpoint, WorldDefinition definition, PlayerIntent intent) {
@@ -192,7 +212,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         var roles = channels.RoleOrdinals;
         var rowForward = ((float)((double)roles.Read(
             intent: in intent,
-            role: ChannelRole.MoveForward
+            role: ChannelRole.MoveAdvance
         )));
         var rowStrafe = ((float)((double)roles.Read(
             intent: in intent,
@@ -215,12 +235,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
         if (
             (ResolveSeatKit(definition: definition) is not { } kit) ||
-            (kit.Motion.DeclaredMoveFrame != MotionMoveFrame.World)
+            (kit.Motion.MoveFrame != MotionMoveFrame.World)
         ) {
             return WriteMove(
-                roles: roles,
-                intent: intent,
                 forward: (rowForward + stickForward),
+                intent: intent,
+                roles: roles,
                 strafe: (rowStrafe + stickStrafe)
             );
         }
@@ -230,7 +250,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         var bodyHeading = 0f;
 
         if (
-            (definition.Views.SeatControl.YawReference == WorldSeatYawReference.Body) &&
+            ((definition.Views.SeatControl.YawReference == WorldSeatYawReference.Body) || roles.HasMoveDirection) &&
             !endpoint.TryEntityPose(
                 index: bodyIndex,
                 orientation: out bodyOrientation,
@@ -242,8 +262,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         if (
             ((frame == ChannelFrame.Heading) || (seat.FreeLooking && stickMoves)) &&
             !endpoint.TryEntityHeading(
-                index: bodyIndex,
-                heading: out bodyHeading
+                heading: out bodyHeading,
+                index: bodyIndex
             )
         ) {
             return intent;
@@ -298,11 +318,34 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         );
 
         intent = WriteMove(
-            roles: roles,
-            intent: intent,
             forward: (rowWorldForward + stickWorldForward),
+            intent: intent,
+            roles: roles,
             strafe: (rowWorldStrafe + stickWorldStrafe)
         );
+
+        // The full world direction, when the world declares the triple. The planar pair above stays written — the
+        // gates that ask merely WHETHER movement was commanded read it, and it remains the answer for a body whose
+        // up is world up — but on any other surface it cannot carry the direction, so the sim prefers this.
+        //
+        // Composed from what the player is LOOKING at, not from a world axis: the camera's forward laid onto the
+        // body's own tangent plane, and the stick resolved against that. This is the only frame that stays meaningful
+        // when the body's up is arbitrary, and it is one the player can predict, because both terms are on screen.
+        // Where the body stands on world up and the camera yaws about it, it reproduces the planar pair exactly.
+        if (roles.HasMoveDirection) {
+            intent = WriteMoveDirection(
+                bodyOrientation: bodyOrientation,
+                intent: intent,
+                roles: roles,
+                view: seat.View,
+                rowForward: rowForward,
+                rowStrafe: rowStrafe,
+                rowYaw: rowYaw,
+                stickForward: stickForward,
+                stickStrafe: stickStrafe,
+                stickYaw: stickYaw
+            );
+        }
 
         // A camera-framed contribution turns the heading to the way it moves — the stick's direction when it moves,
         // else the rows' when THEY are camera-framed. Heading-framed rows never turn the heading: the Turn role owns
@@ -319,7 +362,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
             (roles.FaceX >= 0) &&
             (roles.FaceZ >= 0)
         ) {
-            // The sim reads planar movement as (MoveStrafe, -MoveForward) in world X/Z and a facing as the direction
+            // The sim reads planar movement as (MoveStrafe, -MoveAdvance) in world X/Z and a facing as the direction
             // (FaceX, FaceZ) — the same vector, so the body faces its own travel exactly.
             var length = MathF.Sqrt(x: ((faceForward * faceForward) + (faceStrafe * faceStrafe)));
 
@@ -353,7 +396,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
             strafe /= length;
         }
     }
-    // The inverse of WorldBody's world-frame read (planarTarget = (MoveStrafe, -MoveForward) in world X/Z): rotate a
+    // The inverse of WorldBody's world-frame read (planarTarget = (MoveStrafe, -MoveAdvance) in world X/Z): rotate a
     // frame-relative (forward, strafe) pair by the frame's yaw into that same world-frame pair.
     private static (float Forward, float Strafe) Rotate(float forward, float strafe, float yaw) {
         if (yaw == 0f) {
@@ -365,12 +408,113 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
         return (((forward * cos) + (strafe * sin)), ((strafe * cos) - (forward * sin)));
     }
+    // The world direction a (forward, strafe) pair commands, laid onto the plane the body stands on.
+    //
+    // The reference is the CAMERA's own heading in world axes — the same yaw the planar pair is rotated by — never
+    // the body's facing. The two are independent whenever the body does not turn to its travel, and resolving the
+    // stick against the body would add its heading a second time: a seat looking one way while running another would
+    // be sent a direction wrong by exactly the angle between them.
+    //
+    // The whole camera frame is then carried onto the surface by the shortest arc from world up to the body's up,
+    // rather than either camera axis being projected onto it. Projecting ANCHORS the basis to one axis, and every
+    // such basis dies on a whole RING — wherever the anchor lines up with the surface normal, its projection
+    // vanishes and its direction is decided by rounding, which reverses the commanded direction between ticks on a
+    // wobble of a hundredth. Rotating the frame instead leaves one singular POINT, the body's up exactly opposite
+    // world up, where the shortest arc is ambiguous; a ring is reachable by walking, a point is not.
+    private static Vector3 ComposeMoveDirection(float forward, float strafe, float yaw, Quaternion alignment) {
+        UnitDisc(
+            forward: ref forward,
+            strafe: ref strafe
+        );
+
+        if ((forward == 0f) && (strafe == 0f)) {
+            return Vector3.Zero;
+        }
+
+        var sin = MathF.Sin(x: yaw);
+        var cos = MathF.Cos(x: yaw);
+        // The camera's world heading and the right that goes with it: the pair path's Rotate written as two axes.
+        var camForward = new Vector3(x: -sin, y: 0f, z: -cos);
+        var camRight = new Vector3(x: cos, y: 0f, z: -sin);
+
+        if (alignment == Quaternion.Identity) {
+            // A body standing on world up gets the pair rotation back exactly — no transform, no rounding.
+            return ((camForward * forward) + (camRight * strafe));
+        }
+
+        return ((Vector3.Transform(
+            rotation: alignment,
+            value: camForward
+        ) * forward) + (Vector3.Transform(
+            rotation: alignment,
+            value: camRight
+        ) * strafe));
+    }
+    private static PlayerIntent WriteMoveDirection(
+        RoleChannelOrdinals roles,
+        PlayerIntent intent,
+        WorldSeatViewState view,
+        Quaternion bodyOrientation,
+        float rowForward,
+        float rowStrafe,
+        float rowYaw,
+        float stickForward,
+        float stickStrafe,
+        float stickYaw
+    ) {
+        var up = Vector3.Transform(
+            rotation: bodyOrientation,
+            value: Vector3.UnitY
+        );
+
+        if (up.LengthSquared() <= 0f) {
+            return intent;
+        }
+
+        var alignment = view.CarriedUpAlignment(up: up);
+
+        // The two contributions fold exactly as the planar pair's do: each clamped to the unit disc against its OWN
+        // frame yaw, summed, and the sum clamped once.
+        var direction = (ComposeMoveDirection(
+            alignment: alignment,
+            forward: rowForward,
+            strafe: rowStrafe,
+            yaw: rowYaw
+        ) + ComposeMoveDirection(
+            alignment: alignment,
+            forward: stickForward,
+            strafe: stickStrafe,
+            yaw: stickYaw
+        ));
+        var length = direction.Length();
+
+        if (length > 1f) {
+            direction /= length;
+        }
+
+        intent = roles.Write(
+            intent: intent,
+            role: ChannelRole.MoveX,
+            value: FixedQ4816.FromDouble(value: direction.X)
+        );
+        intent = roles.Write(
+            intent: intent,
+            role: ChannelRole.MoveY,
+            value: FixedQ4816.FromDouble(value: direction.Y)
+        );
+
+        return roles.Write(
+            intent: intent,
+            role: ChannelRole.MoveZ,
+            value: FixedQ4816.FromDouble(value: direction.Z)
+        );
+    }
     private static PlayerIntent WriteMove(RoleChannelOrdinals roles, PlayerIntent intent, float forward, float strafe) {
         var negativeOne = -FixedQ4816.One;
 
         intent = roles.Write(
             intent: intent,
-            role: ChannelRole.MoveForward,
+            role: ChannelRole.MoveAdvance,
             value: FixedQ4816.Clamp(
                 value: FixedQ4816.FromDouble(value: forward),
                 minimum: negativeOne,
@@ -487,10 +631,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                 ? preference.Gyro.Project(angularVelocity: seat.MotionAngularVelocity)
                 : Vector2.Zero
             );
-            var lookRate = new Vector2(
-                x: ((float)((double)look.Value.X) * preference.StickLookRate),
-                y: ((float)((double)look.Value.Y) * preference.StickLookRate)
-            ) + motionLook;
+            var lookRate = (new Vector2(
+                x: (((float)((double)look.Value.X)) * preference.StickLookRate),
+                y: (((float)((double)look.Value.Y)) * preference.StickLookRate)
+            ) + motionLook);
             var looking = (
                 look.IsActive ||
                 seat.MotionControlsActive ||
@@ -515,7 +659,6 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                     heading: out var recenterHeading
                 )) {
                     seat.View.RecenterLook(
-                        rate: definition.Views.SeatControl.SwapRate,
                         targetYaw: recenterHeading,
                         views: definition.Views
                     );
@@ -539,8 +682,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
             seat.View.Follow(
                 targetYaw: heading,
                 rate: follow.Rate,
-                deltaSeconds: deltaSeconds,
-                views: definition.Views
+                deltaSeconds: deltaSeconds
             );
         }
     }
@@ -590,6 +732,12 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         // Store the live definition and bump the delivery revision (one component of WriteRevision), so the frame source rebuilds
         // its program and re-reads scene/screens on its next capture. Poses still flow only through snapshots.
         m_definition = definition;
+        m_fields = ((definition.Fields is { } fields)
+            ? (((m_fields is { } existing) && (existing.Document.Lattice == fields.Lattice) && (existing.FieldCount == fields.Fields.Count))
+                ? existing
+                : new WorldClientFieldLattice(document: fields))
+            : null
+        );
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
@@ -597,6 +745,19 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
         );
         m_definitionRevision++;
     }
+    /// <inheritdoc/>
+    public void DeliverState(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        // A value-only mutation cannot have changed channels, target registers, or scene shape: store the fresh
+        // definition for state-value reads (cell contents, HUD bindings) without bumping the frame source's
+        // rebuild-watch revision or recompiling anything DeliverDefinition would.
+        m_definition = definition;
+    }
+    /// <summary>Publishes the static-scene query field every presentation consumer shares.</summary>
+    /// <param name="field">The evaluator built over the composed program's static layers, or <see langword="null"/>
+    /// when the program admits no fixed-point query.</param>
+    public void PublishStaticField(SdfFieldEvaluator? field) => m_staticField = field;
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
         // Already past the server's Mutate check on the lever's folded-into section (see WorldServer.ApplySessionLever),
@@ -606,6 +767,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         Array.Clear(array: m_seen);
+        m_fields?.Apply(
+            deltas: snapshot.FieldCells.Span,
+            full: snapshot.FieldsFull
+        );
 
         foreach (ref readonly var entry in snapshot.Entries.Span) {
             var index = entry.Index;
@@ -614,6 +779,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
             m_color[index] = entry.BodyColor;
             m_kit[index] = entry.Kit;
             m_look[index] = entry.Look;
+            m_facts[index] = entry.Facts;
             m_catalogRig[index] = entry.CatalogRig;
             m_generation[index] = entry.Generation;
             m_placementId[index] = entry.PlacementId;
@@ -623,6 +789,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                 m_previousPosition[index] = entry.Position;
                 m_previousOrientation[index] = entry.Orientation;
                 m_easers[index].Reset();
+                m_poseEpoch[index]++;
             } else {
                 switch (entry.Continuity.Kind) {
                     case EntityContinuityKind.Teleport:
@@ -630,6 +797,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                         m_previousPosition[index] = entry.Position;
                         m_previousOrientation[index] = entry.Orientation;
                         m_easers[index].Reset();
+                        m_poseEpoch[index]++;
 
                         break;
                     case EntityContinuityKind.Correction: {
@@ -640,6 +808,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
 
                             if (positionError.Length() > m_definition.Motion.MaxSmoothError) {
                                 m_easers[index].Reset();
+                                m_poseEpoch[index]++;
                             } else {
                                 m_easers[index].Begin(
                                     positionError: positionError,
@@ -714,20 +883,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// stamped part and the body it hangs off can never disagree about which row they are wearing.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The entity's look row.</returns>
-    public WorldLook Look(int index) {
-        var rows = Definition.Looks;
-
-        if (rows.Count == 0) {
-            return WorldLook.Implicit;
-        }
-
-        var lookIndex = LookIndex(index: index);
-
-        return ((lookIndex < rows.Count)
-            ? rows[lookIndex]
-            : WorldLook.Implicit
-        );
-    }
+    public WorldLook Look(int index) => WorldDefinitionRows.ResolveLook(
+        rows: Definition.Looks,
+        index: LookIndex(index: index)
+    );
     /// <summary>The entity's resolved look row index from the latest snapshot — the frame source's appearance selector
     /// (presentation-only).</summary>
     /// <param name="index">The 0-based entity index.</param>
@@ -739,9 +898,18 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// renders an inhabitant's creation geometry (a body-rooted stamp) instead of a catalog avatar.</summary>
     /// <param name="index">The 0-based entity index.</param>
     public string? PlacementId(int index) => m_placementId[index];
+    /// <summary>The entity's pose-discontinuity counter — bumped on activation, a <see cref="EntityContinuityKind.Teleport"/>,
+    /// and an over-threshold <see cref="EntityContinuityKind.Correction"/> snap. A presentation-side second-order
+    /// follower reseeds whenever this changes, so it never chases across a jump.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public int PoseEpoch(int index) => m_poseEpoch[index];
     /// <summary>The entity's per-frame render position (interpolated and correction-eased).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 Position(int index) => m_renderPosition[index];
+    /// <summary>The entity's authoritative fact mask from the latest snapshot — the presentation's gate for
+    /// fact-keyed animation. An inactive index reports whatever its last snapshot carried.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public BodyFacts Facts(int index) => m_facts[index];
     /// <summary>Submits each joined, active seat's device intent (and live-held lane image) for this tick — the
     /// client's per-tick outbound half, run immediately before the server step. A pending seat submits nothing (its
     /// inputs drive the profile picker, not locomotion), and a seat submits only under
@@ -952,7 +1120,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     /// <summary>Resolves this frame's render pose for every active entity: position <c>Lerp(previous, current,
     /// alpha)</c>, orientation shortest-path nlerp, then the eased correction offset folded in. Called once per
     /// captured frame before anything reads <see cref="Position"/>/<see cref="Orientation"/>. On a frame that banked
-    /// zero sub-steps previous == current, so both hold stably (no snap-back). Presentation only: <c>player.where</c>
+    /// zero sub-steps previous == current, so both hold stably (no snap-back). Presentation only: <c>body.where</c>
     /// reports the server sim pose, never this.</summary>
     /// <param name="alpha">How far this frame sits between the last and next fixed sim step, in <c>[0, 1)</c>.</param>
     public void UpdateRenderPoses(float alpha) {
@@ -998,7 +1166,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
     }
 
     // The correction error-smoothing state, one per entity, with a Begin/Decay/Apply/Reset lifecycle. Presentation
-    // only — the sim never reads it, and it is never part of the pose flowing out to player.where. A
+    // only — the sim never reads it, and it is never part of the pose flowing out to body.where. A
     // default-constructed easer has a zero (non-identity) m_orientation, but Apply is guarded on m_remaining > 0 and
     // Begin always sets the orientation before arming it (and construction calls Reset), so the zero is never observed.
     private struct RenderErrorEaser {
@@ -1020,7 +1188,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource {
                 // Smoothstep ease: weight is 1 at receipt (craft sits at its old pose) and eases to 0 as the window drains
                 // (craft arrives at authority), with a soft start and a soft settle. fraction = remaining/window runs 1→0.
                 var fraction = (m_remaining / m_window);
-                var weight = ((fraction * fraction) * (3f - (2f * fraction)));
+                var weight = Easing.Smoothstep(t: fraction);
 
                 position += (m_position * weight);
                 // At weight 1 the render attitude is E · interpolated = the old attitude; at weight 0 it is the

@@ -1,0 +1,2508 @@
+{
+  "exports": {
+    "actions": [
+      "betAction1",
+      "betAction2",
+      "table"
+    ],
+    "bindings": [
+      "bets",
+      "phase",
+      "stack"
+    ],
+    "reads": [
+      "bets",
+      "community",
+      "hand1",
+      "hand2",
+      "phase",
+      "stack",
+      "table"
+    ]
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "next",
+          "fromState": "phase",
+          "key": "street",
+          "state": "phase"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparandKey": "next",
+        "comparandState": "phase",
+        "comparison": "NotEqual",
+        "key": "street",
+        "state": "phase"
+      },
+      "mode": "Level",
+      "name": "poker-transition"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "3 - table[button]",
+          "kind": "Int",
+          "name": "button"
+        },
+        {
+          "expression": "table[button]",
+          "kind": "Int",
+          "name": "blind"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 2,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "hand1"
+              }
+            },
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 2,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "hand2"
+              }
+            },
+            {
+              "$type": "setState",
+              "key": "dealRequest",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "expression": "$bind:button",
+              "key": "button",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "expression": "$bind:button",
+              "key": "bettor",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "expression": "house[smallBlind]",
+              "key": "$expr:$bind:button",
+              "state": "streetBet"
+            },
+            {
+              "$type": "setState",
+              "expression": "house[bigBlind]",
+              "key": "$expr:$bind:blind",
+              "state": "streetBet"
+            },
+            {
+              "$type": "addState",
+              "expression": "0 - house[smallBlind]",
+              "key": "$expr:$bind:button",
+              "state": "stack"
+            },
+            {
+              "$type": "addState",
+              "expression": "0 - house[bigBlind]",
+              "key": "$expr:$bind:blind",
+              "state": "stack"
+            },
+            {
+              "$type": "setState",
+              "expression": "house[smallBlind] + house[bigBlind]",
+              "key": "pot",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "key": "acted",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "raises",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "winner",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "boardMask",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "hole",
+              "state": "private1",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "hole",
+              "state": "private2",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "strength",
+              "state": "private1",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "strength",
+              "state": "private2",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "evalPending",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "next",
+              "state": "phase",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "audience1",
+          "text": "seat1"
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "audience2",
+          "text": "seat2"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "dealRequest",
+            "state": "table",
+            "value": 1
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "GreaterOrEqual",
+            "kind": "Int",
+            "left": "min(stack[1], stack[2])",
+            "right": "house[bigBlind]"
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-deal"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "private1[hole] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))",
+          "key": "hole",
+          "state": "private1"
+        }
+      ],
+      "forEach": "hand1",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "evalPending",
+        "state": "table",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "poker-see-hand1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "private2[hole] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))",
+          "key": "hole",
+          "state": "private2"
+        }
+      ],
+      "forEach": "hand2",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "evalPending",
+        "state": "table",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "poker-see-hand2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "table[boardMask] | (1 << (16 * (suit[$each] - 1) + rank[$each] - 1))",
+          "key": "boardMask",
+          "state": "table"
+        }
+      ],
+      "forEach": "community",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "evalPending",
+        "state": "table",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "poker-see-board"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "private1[hole] | table[boardMask]",
+          "kind": "Int",
+          "name": "s"
+        },
+        {
+          "expression": "bitField($bind:s, 0, 16)",
+          "kind": "Int",
+          "name": "l0"
+        },
+        {
+          "expression": "bitField($bind:s, 16, 16)",
+          "kind": "Int",
+          "name": "l1"
+        },
+        {
+          "expression": "bitField($bind:s, 32, 16)",
+          "kind": "Int",
+          "name": "l2"
+        },
+        {
+          "expression": "bitField($bind:s, 48, 16)",
+          "kind": "Int",
+          "name": "l3"
+        },
+        {
+          "expression": "$bind:l0 | $bind:l1 | $bind:l2 | $bind:l3",
+          "kind": "Int",
+          "name": "ranks"
+        },
+        {
+          "expression": "($bind:l0 & $bind:l1) | ($bind:l0 & $bind:l2) | ($bind:l0 & $bind:l3) | ($bind:l1 & $bind:l2) | ($bind:l1 & $bind:l3) | ($bind:l2 & $bind:l3)",
+          "kind": "Int",
+          "name": "pairs"
+        },
+        {
+          "expression": "($bind:l0 & $bind:l1 & $bind:l2) | ($bind:l0 & $bind:l1 & $bind:l3) | ($bind:l0 & $bind:l2 & $bind:l3) | ($bind:l1 & $bind:l2 & $bind:l3)",
+          "kind": "Int",
+          "name": "trips"
+        },
+        {
+          "expression": "($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 1) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 2) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 3) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 4)",
+          "kind": "Int",
+          "name": "sf"
+        },
+        {
+          "expression": "($bind:ranks | (($bind:ranks >> 13) & 1)) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 1) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 2) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 3) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 4)",
+          "kind": "Int",
+          "name": "st"
+        },
+        {
+          "expression": "popCount($bind:l0) >= 5 ? $bind:l0 : popCount($bind:l1) >= 5 ? $bind:l1 : popCount($bind:l2) >= 5 ? $bind:l2 : popCount($bind:l3) >= 5 ? $bind:l3 : 0",
+          "kind": "Int",
+          "name": "fl"
+        },
+        {
+          "expression": "popCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
+          "kind": "Int",
+          "name": "top2p"
+        },
+        {
+          "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (popCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : popCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
+          "kind": "Int",
+          "name": "cat"
+        },
+        {
+          "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << max(popCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
+          "kind": "Int",
+          "name": "high"
+        },
+        {
+          "expression": "$bind:cat == 4 ? 63 - leadingZeroCount($bind:st) : $bind:cat == 3 ? $bind:trips : $bind:cat == 2 ? $bind:top2p : $bind:cat == 1 ? $bind:pairs : clearLowestSetBit(clearLowestSetBit($bind:ranks))",
+          "kind": "Int",
+          "name": "low"
+        },
+        {
+          "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << max(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
+          "kind": "Int",
+          "name": "secondary"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "($bind:cat << 28) | (($bind:cat >= 5 ? $bind:high : $bind:low) << 14) | $bind:secondary",
+          "key": "strength",
+          "state": "private1"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "evalPending",
+        "state": "table",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "poker-evaluate-1"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "private2[hole] | table[boardMask]",
+          "kind": "Int",
+          "name": "s"
+        },
+        {
+          "expression": "bitField($bind:s, 0, 16)",
+          "kind": "Int",
+          "name": "l0"
+        },
+        {
+          "expression": "bitField($bind:s, 16, 16)",
+          "kind": "Int",
+          "name": "l1"
+        },
+        {
+          "expression": "bitField($bind:s, 32, 16)",
+          "kind": "Int",
+          "name": "l2"
+        },
+        {
+          "expression": "bitField($bind:s, 48, 16)",
+          "kind": "Int",
+          "name": "l3"
+        },
+        {
+          "expression": "$bind:l0 | $bind:l1 | $bind:l2 | $bind:l3",
+          "kind": "Int",
+          "name": "ranks"
+        },
+        {
+          "expression": "($bind:l0 & $bind:l1) | ($bind:l0 & $bind:l2) | ($bind:l0 & $bind:l3) | ($bind:l1 & $bind:l2) | ($bind:l1 & $bind:l3) | ($bind:l2 & $bind:l3)",
+          "kind": "Int",
+          "name": "pairs"
+        },
+        {
+          "expression": "($bind:l0 & $bind:l1 & $bind:l2) | ($bind:l0 & $bind:l1 & $bind:l3) | ($bind:l0 & $bind:l2 & $bind:l3) | ($bind:l1 & $bind:l2 & $bind:l3)",
+          "kind": "Int",
+          "name": "trips"
+        },
+        {
+          "expression": "($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 1) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 2) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 3) & (($bind:s | (($bind:s >> 13) & repeatBits(1, 16))) >> 4)",
+          "kind": "Int",
+          "name": "sf"
+        },
+        {
+          "expression": "($bind:ranks | (($bind:ranks >> 13) & 1)) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 1) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 2) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 3) & (($bind:ranks | (($bind:ranks >> 13) & 1)) >> 4)",
+          "kind": "Int",
+          "name": "st"
+        },
+        {
+          "expression": "popCount($bind:l0) >= 5 ? $bind:l0 : popCount($bind:l1) >= 5 ? $bind:l1 : popCount($bind:l2) >= 5 ? $bind:l2 : popCount($bind:l3) >= 5 ? $bind:l3 : 0",
+          "kind": "Int",
+          "name": "fl"
+        },
+        {
+          "expression": "popCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
+          "kind": "Int",
+          "name": "top2p"
+        },
+        {
+          "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (popCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : popCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
+          "kind": "Int",
+          "name": "cat"
+        },
+        {
+          "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << max(popCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
+          "kind": "Int",
+          "name": "high"
+        },
+        {
+          "expression": "$bind:cat == 4 ? 63 - leadingZeroCount($bind:st) : $bind:cat == 3 ? $bind:trips : $bind:cat == 2 ? $bind:top2p : $bind:cat == 1 ? $bind:pairs : clearLowestSetBit(clearLowestSetBit($bind:ranks))",
+          "kind": "Int",
+          "name": "low"
+        },
+        {
+          "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << max(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
+          "kind": "Int",
+          "name": "secondary"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "($bind:cat << 28) | (($bind:cat >= 5 ? $bind:high : $bind:low) << 14) | $bind:secondary",
+          "key": "strength",
+          "state": "private2"
+        },
+        {
+          "$type": "setState",
+          "key": "evalPending",
+          "state": "table",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "evalPending",
+        "state": "table",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "poker-evaluate-2"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]",
+          "kind": "Int",
+          "name": "toCall"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "pushState",
+          "expression": "phase[street] * 100 + table[bettor] * 10 + 0",
+          "state": "bets"
+        },
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "addState",
+              "expression": "0 - $bind:toCall",
+              "key": "$expr:table[bettor]",
+              "state": "stack"
+            },
+            {
+              "$type": "addState",
+              "expression": "$bind:toCall",
+              "key": "pot",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "expression": "streetBet[(3 - table[bettor])]",
+              "key": "$expr:table[bettor]",
+              "state": "streetBet"
+            },
+            {
+              "$type": "addState",
+              "key": "acted",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction1",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction2",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "expression": "3 - table[bettor]",
+              "key": "bettor",
+              "state": "table"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "Equal",
+            "kind": "Int",
+            "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
+            "right": "0"
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "GreaterOrEqual",
+            "kind": "Int",
+            "left": "stack[(table[bettor])]",
+            "right": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])]"
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-check-call"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)",
+          "kind": "Int",
+          "name": "pay"
+        },
+        {
+          "expression": "house[bigBlind] * (phase[street] >= 3 ? 2 : 1)",
+          "kind": "Int",
+          "name": "bet"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "pushState",
+          "expression": "phase[street] * 100 + table[bettor] * 10 + 1",
+          "state": "bets"
+        },
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "addState",
+              "expression": "0 - $bind:pay",
+              "key": "$expr:table[bettor]",
+              "state": "stack"
+            },
+            {
+              "$type": "addState",
+              "expression": "$bind:pay",
+              "key": "pot",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "expression": "streetBet[(3 - table[bettor])] + $bind:bet",
+              "key": "$expr:table[bettor]",
+              "state": "streetBet"
+            },
+            {
+              "$type": "setState",
+              "key": "acted",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "addState",
+              "key": "raises",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction1",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction2",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "expression": "3 - table[bettor]",
+              "key": "bettor",
+              "state": "table"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "Equal",
+            "kind": "Int",
+            "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
+            "right": "1"
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "maxRaises",
+            "comparandState": "house",
+            "comparison": "Less",
+            "key": "raises",
+            "state": "table"
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "GreaterOrEqual",
+            "kind": "Int",
+            "left": "stack[(table[bettor])]",
+            "right": "streetBet[(3 - table[bettor])] - streetBet[(table[bettor])] + house[bigBlind] * (phase[street] >= 3 ? 2 : 1)"
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-raise"
+    },
+    {
+      "effects": [
+        {
+          "$type": "pushState",
+          "expression": "phase[street] * 100 + table[bettor] * 10 + 2",
+          "state": "bets"
+        },
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "expression": "3 - table[bettor]",
+              "key": "winner",
+              "state": "table"
+            },
+            {
+              "$type": "addState",
+              "expression": "table[pot]",
+              "key": "$expr:3 - table[bettor]",
+              "state": "stack"
+            },
+            {
+              "$type": "setState",
+              "key": "pot",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "addState",
+              "key": "hands",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction1",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "act",
+              "state": "betAction2",
+              "value": -1
+            },
+            {
+              "$type": "setState",
+              "key": "next",
+              "state": "phase",
+              "value": 6
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareValue",
+            "comparison": "Equal",
+            "kind": "Int",
+            "left": "(table[bettor] == 1 ? betAction1[act] : betAction2[act])",
+            "right": "2"
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-fold"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "expression": "phase[street] + 1",
+              "key": "next",
+              "state": "phase"
+            },
+            {
+              "$type": "setState",
+              "key": "acted",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "raises",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "1",
+              "state": "streetBet",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "2",
+              "state": "streetBet",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "expression": "3 - table[button]",
+              "key": "bettor",
+              "state": "table"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "acted",
+            "state": "table",
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "comparandKey": "2",
+            "comparandState": "streetBet",
+            "comparison": "Equal",
+            "key": "1",
+            "state": "streetBet"
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-street-complete"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 3,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "community"
+              }
+            },
+            {
+              "$type": "setState",
+              "key": "evalPending",
+              "state": "table",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:community",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-flop"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 1,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "community"
+              }
+            },
+            {
+              "$type": "setState",
+              "key": "evalPending",
+              "state": "table",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 3
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:community",
+            "value": 3
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-turn"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "count": 1,
+                "draw": "cardStream",
+                "from": "deck",
+                "selector": "Random",
+                "to": "community"
+              }
+            },
+            {
+              "$type": "setState",
+              "key": "evalPending",
+              "state": "table",
+              "value": 1
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 4
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:community",
+            "value": 4
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-river"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "private1[strength] > private2[strength] ? 1 : private2[strength] > private1[strength] ? 2 : 0",
+          "kind": "Int",
+          "name": "winner"
+        },
+        {
+          "expression": "table[pot] >> 1",
+          "kind": "Int",
+          "name": "half"
+        },
+        {
+          "expression": "table[pot] & 1",
+          "kind": "Int",
+          "name": "odd"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "audience1",
+          "text": "seat2"
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "audience2",
+          "text": "seat1"
+        },
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "expression": "$bind:winner",
+              "key": "winner",
+              "state": "table"
+            },
+            {
+              "$type": "addState",
+              "expression": "$bind:winner == 1 ? table[pot] : $bind:winner == 2 ? 0 : $bind:half + $bind:odd * (table[button] == 1)",
+              "key": "1",
+              "state": "stack"
+            },
+            {
+              "$type": "addState",
+              "expression": "$bind:winner == 2 ? table[pot] : $bind:winner == 1 ? 0 : $bind:half + $bind:odd * (table[button] == 2)",
+              "key": "2",
+              "state": "stack"
+            },
+            {
+              "$type": "setState",
+              "key": "pot",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "addState",
+              "key": "hands",
+              "state": "table",
+              "value": 1
+            },
+            {
+              "$type": "setState",
+              "key": "next",
+              "state": "phase",
+              "value": 6
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "evalPending",
+            "state": "table",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-showdown"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 1,
+            "from": "community",
+            "selector": "First",
+            "to": "deck"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "$reduce:count:community",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-collect-board"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 1,
+            "from": "hand1",
+            "selector": "First",
+            "to": "deck"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "$reduce:count:hand1",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-collect-hand1"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "count": 1,
+            "from": "hand2",
+            "selector": "First",
+            "to": "deck"
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "$reduce:count:hand2",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "poker-collect-hand2"
+    },
+    {
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "key": "acted",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "raises",
+              "state": "table",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "1",
+              "state": "streetBet",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "key": "2",
+              "state": "streetBet",
+              "value": 0
+            },
+            {
+              "$type": "setState",
+              "expression": "house[autoDeal]",
+              "key": "dealRequest",
+              "state": "table"
+            },
+            {
+              "$type": "setState",
+              "key": "next",
+              "state": "phase",
+              "value": 0
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "street",
+            "state": "phase",
+            "value": 6
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:community",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:hand1",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$reduce:count:hand2",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "poker-hand-over"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "leak",
+          "state": "table",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareValue",
+        "comparison": "NotEqual",
+        "kind": "Int",
+        "left": "$reduce:count:deck + $reduce:count:hand1 + $reduce:count:hand2 + $reduce:count:community",
+        "right": "$reduce:count:cards"
+      },
+      "mode": "Edge",
+      "name": "poker-card-conservation"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "act",
+          "state": "betAction1",
+          "value": -1
+        },
+        {
+          "$type": "setState",
+          "key": "act",
+          "state": "betAction2",
+          "value": -1
+        },
+        {
+          "$type": "addState",
+          "key": "refused",
+          "state": "table",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareValue",
+        "comparison": "NotEqual",
+        "kind": "Int",
+        "left": "max(betAction1[act], betAction2[act])",
+        "right": "-1"
+      },
+      "mode": "Level",
+      "name": "poker-discard"
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "2C",
+            "value": 0
+          },
+          {
+            "key": "2D",
+            "value": 0
+          },
+          {
+            "key": "2H",
+            "value": 0
+          },
+          {
+            "key": "2S",
+            "value": 0
+          },
+          {
+            "key": "3C",
+            "value": 0
+          },
+          {
+            "key": "3D",
+            "value": 0
+          },
+          {
+            "key": "3H",
+            "value": 0
+          },
+          {
+            "key": "3S",
+            "value": 0
+          },
+          {
+            "key": "4C",
+            "value": 0
+          },
+          {
+            "key": "4D",
+            "value": 0
+          },
+          {
+            "key": "4H",
+            "value": 0
+          },
+          {
+            "key": "4S",
+            "value": 0
+          },
+          {
+            "key": "5C",
+            "value": 0
+          },
+          {
+            "key": "5D",
+            "value": 0
+          },
+          {
+            "key": "5H",
+            "value": 0
+          },
+          {
+            "key": "5S",
+            "value": 0
+          },
+          {
+            "key": "6C",
+            "value": 0
+          },
+          {
+            "key": "6D",
+            "value": 0
+          },
+          {
+            "key": "6H",
+            "value": 0
+          },
+          {
+            "key": "6S",
+            "value": 0
+          },
+          {
+            "key": "7C",
+            "value": 0
+          },
+          {
+            "key": "7D",
+            "value": 0
+          },
+          {
+            "key": "7H",
+            "value": 0
+          },
+          {
+            "key": "7S",
+            "value": 0
+          },
+          {
+            "key": "8C",
+            "value": 0
+          },
+          {
+            "key": "8D",
+            "value": 0
+          },
+          {
+            "key": "8H",
+            "value": 0
+          },
+          {
+            "key": "8S",
+            "value": 0
+          },
+          {
+            "key": "9C",
+            "value": 0
+          },
+          {
+            "key": "9D",
+            "value": 0
+          },
+          {
+            "key": "9H",
+            "value": 0
+          },
+          {
+            "key": "9S",
+            "value": 0
+          },
+          {
+            "key": "TC",
+            "value": 0
+          },
+          {
+            "key": "TD",
+            "value": 0
+          },
+          {
+            "key": "TH",
+            "value": 0
+          },
+          {
+            "key": "TS",
+            "value": 0
+          },
+          {
+            "key": "JC",
+            "value": 0
+          },
+          {
+            "key": "JD",
+            "value": 0
+          },
+          {
+            "key": "JH",
+            "value": 0
+          },
+          {
+            "key": "JS",
+            "value": 0
+          },
+          {
+            "key": "QC",
+            "value": 0
+          },
+          {
+            "key": "QD",
+            "value": 0
+          },
+          {
+            "key": "QH",
+            "value": 0
+          },
+          {
+            "key": "QS",
+            "value": 0
+          },
+          {
+            "key": "KC",
+            "value": 0
+          },
+          {
+            "key": "KD",
+            "value": 0
+          },
+          {
+            "key": "KH",
+            "value": 0
+          },
+          {
+            "key": "KS",
+            "value": 0
+          },
+          {
+            "key": "AC",
+            "value": 0
+          },
+          {
+            "key": "AD",
+            "value": 0
+          },
+          {
+            "key": "AH",
+            "value": 0
+          },
+          {
+            "key": "AS",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "cards"
+      },
+      {
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "2C",
+            "value": 2
+          },
+          {
+            "key": "2D",
+            "value": 2
+          },
+          {
+            "key": "2H",
+            "value": 2
+          },
+          {
+            "key": "2S",
+            "value": 2
+          },
+          {
+            "key": "3C",
+            "value": 3
+          },
+          {
+            "key": "3D",
+            "value": 3
+          },
+          {
+            "key": "3H",
+            "value": 3
+          },
+          {
+            "key": "3S",
+            "value": 3
+          },
+          {
+            "key": "4C",
+            "value": 4
+          },
+          {
+            "key": "4D",
+            "value": 4
+          },
+          {
+            "key": "4H",
+            "value": 4
+          },
+          {
+            "key": "4S",
+            "value": 4
+          },
+          {
+            "key": "5C",
+            "value": 5
+          },
+          {
+            "key": "5D",
+            "value": 5
+          },
+          {
+            "key": "5H",
+            "value": 5
+          },
+          {
+            "key": "5S",
+            "value": 5
+          },
+          {
+            "key": "6C",
+            "value": 6
+          },
+          {
+            "key": "6D",
+            "value": 6
+          },
+          {
+            "key": "6H",
+            "value": 6
+          },
+          {
+            "key": "6S",
+            "value": 6
+          },
+          {
+            "key": "7C",
+            "value": 7
+          },
+          {
+            "key": "7D",
+            "value": 7
+          },
+          {
+            "key": "7H",
+            "value": 7
+          },
+          {
+            "key": "7S",
+            "value": 7
+          },
+          {
+            "key": "8C",
+            "value": 8
+          },
+          {
+            "key": "8D",
+            "value": 8
+          },
+          {
+            "key": "8H",
+            "value": 8
+          },
+          {
+            "key": "8S",
+            "value": 8
+          },
+          {
+            "key": "9C",
+            "value": 9
+          },
+          {
+            "key": "9D",
+            "value": 9
+          },
+          {
+            "key": "9H",
+            "value": 9
+          },
+          {
+            "key": "9S",
+            "value": 9
+          },
+          {
+            "key": "TC",
+            "value": 10
+          },
+          {
+            "key": "TD",
+            "value": 10
+          },
+          {
+            "key": "TH",
+            "value": 10
+          },
+          {
+            "key": "TS",
+            "value": 10
+          },
+          {
+            "key": "JC",
+            "value": 11
+          },
+          {
+            "key": "JD",
+            "value": 11
+          },
+          {
+            "key": "JH",
+            "value": 11
+          },
+          {
+            "key": "JS",
+            "value": 11
+          },
+          {
+            "key": "QC",
+            "value": 12
+          },
+          {
+            "key": "QD",
+            "value": 12
+          },
+          {
+            "key": "QH",
+            "value": 12
+          },
+          {
+            "key": "QS",
+            "value": 12
+          },
+          {
+            "key": "KC",
+            "value": 13
+          },
+          {
+            "key": "KD",
+            "value": 13
+          },
+          {
+            "key": "KH",
+            "value": 13
+          },
+          {
+            "key": "KS",
+            "value": 13
+          },
+          {
+            "key": "AC",
+            "value": 14
+          },
+          {
+            "key": "AD",
+            "value": 14
+          },
+          {
+            "key": "AH",
+            "value": 14
+          },
+          {
+            "key": "AS",
+            "value": 14
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards"
+        },
+        "kind": "Int",
+        "name": "rank",
+        "visibility": {
+          "hidden": "Placeholder"
+        }
+      },
+      {
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "2C",
+            "value": 1
+          },
+          {
+            "key": "2D",
+            "value": 2
+          },
+          {
+            "key": "2H",
+            "value": 3
+          },
+          {
+            "key": "2S",
+            "value": 4
+          },
+          {
+            "key": "3C",
+            "value": 1
+          },
+          {
+            "key": "3D",
+            "value": 2
+          },
+          {
+            "key": "3H",
+            "value": 3
+          },
+          {
+            "key": "3S",
+            "value": 4
+          },
+          {
+            "key": "4C",
+            "value": 1
+          },
+          {
+            "key": "4D",
+            "value": 2
+          },
+          {
+            "key": "4H",
+            "value": 3
+          },
+          {
+            "key": "4S",
+            "value": 4
+          },
+          {
+            "key": "5C",
+            "value": 1
+          },
+          {
+            "key": "5D",
+            "value": 2
+          },
+          {
+            "key": "5H",
+            "value": 3
+          },
+          {
+            "key": "5S",
+            "value": 4
+          },
+          {
+            "key": "6C",
+            "value": 1
+          },
+          {
+            "key": "6D",
+            "value": 2
+          },
+          {
+            "key": "6H",
+            "value": 3
+          },
+          {
+            "key": "6S",
+            "value": 4
+          },
+          {
+            "key": "7C",
+            "value": 1
+          },
+          {
+            "key": "7D",
+            "value": 2
+          },
+          {
+            "key": "7H",
+            "value": 3
+          },
+          {
+            "key": "7S",
+            "value": 4
+          },
+          {
+            "key": "8C",
+            "value": 1
+          },
+          {
+            "key": "8D",
+            "value": 2
+          },
+          {
+            "key": "8H",
+            "value": 3
+          },
+          {
+            "key": "8S",
+            "value": 4
+          },
+          {
+            "key": "9C",
+            "value": 1
+          },
+          {
+            "key": "9D",
+            "value": 2
+          },
+          {
+            "key": "9H",
+            "value": 3
+          },
+          {
+            "key": "9S",
+            "value": 4
+          },
+          {
+            "key": "TC",
+            "value": 1
+          },
+          {
+            "key": "TD",
+            "value": 2
+          },
+          {
+            "key": "TH",
+            "value": 3
+          },
+          {
+            "key": "TS",
+            "value": 4
+          },
+          {
+            "key": "JC",
+            "value": 1
+          },
+          {
+            "key": "JD",
+            "value": 2
+          },
+          {
+            "key": "JH",
+            "value": 3
+          },
+          {
+            "key": "JS",
+            "value": 4
+          },
+          {
+            "key": "QC",
+            "value": 1
+          },
+          {
+            "key": "QD",
+            "value": 2
+          },
+          {
+            "key": "QH",
+            "value": 3
+          },
+          {
+            "key": "QS",
+            "value": 4
+          },
+          {
+            "key": "KC",
+            "value": 1
+          },
+          {
+            "key": "KD",
+            "value": 2
+          },
+          {
+            "key": "KH",
+            "value": 3
+          },
+          {
+            "key": "KS",
+            "value": 4
+          },
+          {
+            "key": "AC",
+            "value": 1
+          },
+          {
+            "key": "AD",
+            "value": 2
+          },
+          {
+            "key": "AH",
+            "value": 3
+          },
+          {
+            "key": "AS",
+            "value": 4
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "cards"
+        },
+        "kind": "Int",
+        "name": "suit",
+        "visibility": {
+          "hidden": "Placeholder"
+        }
+      },
+      {
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "2C",
+            "value": true
+          },
+          {
+            "key": "2D",
+            "value": true
+          },
+          {
+            "key": "2H",
+            "value": true
+          },
+          {
+            "key": "2S",
+            "value": true
+          },
+          {
+            "key": "3C",
+            "value": true
+          },
+          {
+            "key": "3D",
+            "value": true
+          },
+          {
+            "key": "3H",
+            "value": true
+          },
+          {
+            "key": "3S",
+            "value": true
+          },
+          {
+            "key": "4C",
+            "value": true
+          },
+          {
+            "key": "4D",
+            "value": true
+          },
+          {
+            "key": "4H",
+            "value": true
+          },
+          {
+            "key": "4S",
+            "value": true
+          },
+          {
+            "key": "5C",
+            "value": true
+          },
+          {
+            "key": "5D",
+            "value": true
+          },
+          {
+            "key": "5H",
+            "value": true
+          },
+          {
+            "key": "5S",
+            "value": true
+          },
+          {
+            "key": "6C",
+            "value": true
+          },
+          {
+            "key": "6D",
+            "value": true
+          },
+          {
+            "key": "6H",
+            "value": true
+          },
+          {
+            "key": "6S",
+            "value": true
+          },
+          {
+            "key": "7C",
+            "value": true
+          },
+          {
+            "key": "7D",
+            "value": true
+          },
+          {
+            "key": "7H",
+            "value": true
+          },
+          {
+            "key": "7S",
+            "value": true
+          },
+          {
+            "key": "8C",
+            "value": true
+          },
+          {
+            "key": "8D",
+            "value": true
+          },
+          {
+            "key": "8H",
+            "value": true
+          },
+          {
+            "key": "8S",
+            "value": true
+          },
+          {
+            "key": "9C",
+            "value": true
+          },
+          {
+            "key": "9D",
+            "value": true
+          },
+          {
+            "key": "9H",
+            "value": true
+          },
+          {
+            "key": "9S",
+            "value": true
+          },
+          {
+            "key": "TC",
+            "value": true
+          },
+          {
+            "key": "TD",
+            "value": true
+          },
+          {
+            "key": "TH",
+            "value": true
+          },
+          {
+            "key": "TS",
+            "value": true
+          },
+          {
+            "key": "JC",
+            "value": true
+          },
+          {
+            "key": "JD",
+            "value": true
+          },
+          {
+            "key": "JH",
+            "value": true
+          },
+          {
+            "key": "JS",
+            "value": true
+          },
+          {
+            "key": "QC",
+            "value": true
+          },
+          {
+            "key": "QD",
+            "value": true
+          },
+          {
+            "key": "QH",
+            "value": true
+          },
+          {
+            "key": "QS",
+            "value": true
+          },
+          {
+            "key": "KC",
+            "value": true
+          },
+          {
+            "key": "KD",
+            "value": true
+          },
+          {
+            "key": "KH",
+            "value": true
+          },
+          {
+            "key": "KS",
+            "value": true
+          },
+          {
+            "key": "AC",
+            "value": true
+          },
+          {
+            "key": "AD",
+            "value": true
+          },
+          {
+            "key": "AH",
+            "value": true
+          },
+          {
+            "key": "AS",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "Bool",
+        "name": "deck",
+        "visibility": {
+          "readers": []
+        }
+      },
+      {
+        "capacity": 2,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "Bool",
+        "name": "hand1",
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "readersFrom": "audience1"
+        }
+      },
+      {
+        "capacity": 2,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "Bool",
+        "name": "hand2",
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "readersFrom": "audience2"
+        }
+      },
+      {
+        "capacity": 5,
+        "domain": {
+          "$type": "keysOf",
+          "ordered": true,
+          "row": "cards"
+        },
+        "kind": "Bool",
+        "name": "community",
+        "visibility": {}
+      },
+      {
+        "draw": {
+          "generator": {
+            "source": "StreamDraw"
+          },
+          "timing": "Event"
+        },
+        "kind": "Int",
+        "name": "cardStream"
+      },
+      {
+        "capacity": 2,
+        "cells": [],
+        "kind": "Text",
+        "name": "audience1"
+      },
+      {
+        "capacity": 2,
+        "cells": [],
+        "kind": "Text",
+        "name": "audience2"
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "street",
+            "value": 0
+          },
+          {
+            "key": "next",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "phase",
+        "visibility": {}
+      },
+      {
+        "capacity": 16,
+        "cells": [
+          {
+            "key": "button",
+            "value": 2
+          },
+          {
+            "key": "bettor",
+            "value": 0
+          },
+          {
+            "key": "pot",
+            "value": 0
+          },
+          {
+            "key": "acted",
+            "value": 0
+          },
+          {
+            "key": "raises",
+            "value": 0
+          },
+          {
+            "key": "winner",
+            "value": 0
+          },
+          {
+            "key": "hands",
+            "value": 0
+          },
+          {
+            "key": "dealRequest",
+            "value": 0
+          },
+          {
+            "key": "evalPending",
+            "value": 0
+          },
+          {
+            "key": "boardMask",
+            "value": 0
+          },
+          {
+            "key": "refused",
+            "value": 0
+          },
+          {
+            "key": "leak",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "table",
+        "visibility": {}
+      },
+      {
+        "capacity": 4,
+        "cells": [
+          {
+            "key": "smallBlind",
+            "value": 10
+          },
+          {
+            "key": "bigBlind",
+            "value": 20
+          },
+          {
+            "key": "maxRaises",
+            "value": 4
+          },
+          {
+            "key": "autoDeal",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "house",
+        "visibility": {}
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1000
+          },
+          {
+            "key": "2",
+            "value": 1000
+          }
+        ],
+        "kind": "Int",
+        "name": "stack",
+        "nonNegative": true,
+        "visibility": {}
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "streetBet",
+        "nonNegative": true,
+        "visibility": {}
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "act",
+            "value": -1
+          }
+        ],
+        "kind": "Int",
+        "max": 2,
+        "min": -1,
+        "name": "betAction1",
+        "visibility": {}
+      },
+      {
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "act",
+            "value": -1
+          }
+        ],
+        "kind": "Int",
+        "max": 2,
+        "min": -1,
+        "name": "betAction2",
+        "visibility": {}
+      },
+      {
+        "domain": {
+          "$type": "ring",
+          "capacity": 16,
+          "empty": -1
+        },
+        "kind": "Int",
+        "name": "bets",
+        "visibility": {}
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "hole",
+            "value": 0
+          },
+          {
+            "key": "strength",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "private1",
+        "visibility": {
+          "readers": [
+            "seat1"
+          ],
+          "readersFrom": "audience1"
+        }
+      },
+      {
+        "capacity": 2,
+        "cells": [
+          {
+            "key": "hole",
+            "value": 0
+          },
+          {
+            "key": "strength",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "private2",
+        "visibility": {
+          "readers": [
+            "seat2"
+          ],
+          "readersFrom": "audience2"
+        }
+      }
+    ]
+  }
+}

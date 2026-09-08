@@ -2,7 +2,7 @@ using System.Numerics;
 
 using Xunit;
 
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -29,7 +29,7 @@ public sealed class WorldFaceCatalogLawTests {
     // A rotation about the face's own RIGHT axis — pitch, the axis a world-up-pinned frame cannot represent.
     private static Quaternion Pitched { get; } = Quaternion.CreateFromAxisAngle(axis: Vector3.UnitX, angle: (MathF.PI / 6f));
 
-    private static WorldCreation BuildDoorCreation(AvatarPrimitive faceShape = AvatarPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false) {
+    private static WorldPrototype BuildDoorCreation(SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box, bool faceNamesShape = true, bool animated = false, bool pitched = false) {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
@@ -54,12 +54,12 @@ public sealed class WorldFaceCatalogLawTests {
         // frame here (the inverse CreationFrame applies at the engine door) keeps every assertion below unchanged.
         var canonical = CreationCanonicalizer.Canonicalize(document: CreationFrame.ToAuthor(document: document), source: "door");
 
-        return new WorldCreation(Id: "door", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(Id: "door", Document: canonical.Document, HashRaw: canonical.Hash);
     }
     private static WorldDefinition BuildDoorDocument(
         float yawDegrees = 0f,
         float scale = 1f,
-        AvatarPrimitive faceShape = AvatarPrimitive.Box,
+        SdfSolidPrimitive faceShape = SdfSolidPrimitive.Box,
         bool faceNamesShape = true,
         bool animated = false,
         bool carriesPortal = true,
@@ -71,7 +71,7 @@ public sealed class WorldFaceCatalogLawTests {
         var portal = new WorldPlacementPortal(Destination: DestinationName, Travel: null, Arrival: WorldPortalArrival.Spawn, Counterpart: null);
         var placement = new WorldPlacement(
             Id: DoorPlacementId,
-            CreationId: creation.Id,
+            PrototypeId: creation.Id,
             Position: new Vector3(x: 4f, y: 1.5f, z: -7f),
             YawDegrees: yawDegrees,
             Scale: scale,
@@ -81,9 +81,9 @@ public sealed class WorldFaceCatalogLawTests {
 
         return Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
-            PlacementsRaw = [placement],
-            References = [new WorldReference(Name: WorldSafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
-            Destinations = [new WorldDestination(Name: WorldSafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
+            PlacementRowsRaw = [placement],
+            References = [new WorldReference(Name: SafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
+            Destinations = [new WorldDestination(Name: SafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
         };
     }
     private static WorldFaceRow DoorRow(WorldDefinition definition) {
@@ -273,11 +273,11 @@ public sealed class WorldFaceCatalogLawTests {
             deniedOutcome: static () => Validates(definition: BuildDoorDocument(faceNamesShape: false)),
             controlOutcome: static () => Validates(definition: BuildDoorDocument()));
     }
-    [InlineData(AvatarPrimitive.Sphere)]
-    [InlineData(AvatarPrimitive.Cylinder)]
-    [InlineData(AvatarPrimitive.Plane)]
+    [InlineData(SdfSolidPrimitive.Sphere)]
+    [InlineData(SdfSolidPrimitive.Cylinder)]
+    [InlineData(SdfSolidPrimitive.Plane)]
     [Theory]
-    public void APortalOnAShapeKindWithNoApertureMapping_RefusesByName(AvatarPrimitive faceShape) {
+    public void APortalOnAShapeKindWithNoApertureMapping_RefusesByName(SdfSolidPrimitive faceShape) {
         var unmapped = BuildDoorDocument(faceShape: faceShape);
 
         Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: unmapped, neighbours: null, reason: out var reason));
@@ -288,15 +288,15 @@ public sealed class WorldFaceCatalogLawTests {
     public void APortalOnAShapeKindWithNoApertureMapping_RefusesByName_ControlValidates() {
         Laws.RefusalWithControl(
             lawId: "face-frame.portal-on-unmapped-shape",
-            deniedOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Sphere)),
-            controlOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Box)));
+            deniedOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere)),
+            controlOutcome: static () => Validates(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Box)));
     }
     [Fact]
     public void AFaceWithNoApertureStillDrawsWithoutAPortal() {
         // Geometry is never taken away by a refusal: the shape kinds that cannot be walked through still derive a
         // frame and still show a feed.
-        Assert.True(condition: Validates(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Sphere, carriesPortal: false)));
-        Assert.Equal(expected: WorldFaceApertureKind.None, actual: DoorRow(definition: BuildDoorDocument(faceShape: AvatarPrimitive.Sphere, carriesPortal: false)).Aperture);
+        Assert.True(condition: Validates(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere, carriesPortal: false)));
+        Assert.Null(@object: DoorRow(definition: BuildDoorDocument(faceShape: SdfSolidPrimitive.Sphere, carriesPortal: false)).Aperture);
     }
 
     // ---- The slot budget ----
@@ -308,7 +308,7 @@ public sealed class WorldFaceCatalogLawTests {
         for (var index = 0; (index < liveFaces); index++) {
             placements[index] = new WorldPlacement(
                 Id: $"{DoorPlacementId}-{index}",
-                CreationId: creation.Id,
+                PrototypeId: creation.Id,
                 Position: new Vector3(x: (index * 8f), y: 1.5f, z: -7f),
                 YawDegrees: 0f,
                 Scale: 1f,
@@ -318,8 +318,8 @@ public sealed class WorldFaceCatalogLawTests {
 
         return Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
-            PlacementsRaw = placements,
-            AuthoringRaw = (WorldAuthoringDefaults.Default with { DerivedFaceScreens = reservedSlots }),
+            PlacementRowsRaw = placements,
+            AuthoringRaw = (Fixtures.StandardAuthoring with { DerivedFaceScreens = reservedSlots }),
         };
     }
 
@@ -344,10 +344,10 @@ public sealed class WorldFaceCatalogLawTests {
 
         placements[0] = (placements[0] with { FaceSources = [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())] });
 
-        var catalog = WorldFaceCatalog.For(definition: (dark with { PlacementsRaw = placements }));
+        var catalog = WorldFaceCatalog.For(definition: (dark with { PlacementRowsRaw = placements }));
 
         Assert.Equal(expected: 2, actual: catalog.ClaimingFaceCount);
-        Assert.True(condition: Validates(definition: (dark with { PlacementsRaw = placements })));
+        Assert.True(condition: Validates(definition: (dark with { PlacementRowsRaw = placements })));
         Assert.Equal(expected: -1, actual: catalog.Rows[0].ScreenIndex);
         Assert.False(condition: catalog.Rows[0].SlotStarved);
     }
@@ -361,7 +361,7 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.True(condition: starved.SlotStarved);
         Assert.Equal(expected: -1, actual: starved.ScreenIndex);
         Assert.NotEqual(expected: default, actual: starved.Frame);
-        Assert.Equal(expected: WorldFaceApertureKind.Box, actual: starved.Aperture);
+        Assert.Equal(expected: SdfSolidPrimitive.Box, actual: starved.Aperture?.Primitive);
         Assert.Contains(collection: catalog.Notices, filter: notice => (notice.Contains(value: starved.PlacementId, comparisonType: StringComparison.Ordinal) && notice.Contains(comparisonType: StringComparison.Ordinal, value: "DARKENED")));
         Assert.Equal(expected: WorldPlacementPolicy.DerivedFaceBase, actual: catalog.Rows[0].ScreenIndex);
         Assert.Equal(expected: (WorldPlacementPolicy.DerivedFaceBase + 1), actual: catalog.Rows[1].ScreenIndex);

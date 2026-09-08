@@ -1,0 +1,119 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "state-cycle-trait-canary",
+  "simulation": {
+    "rateHz": 240
+  },
+  "state": {
+    "world": [
+      {
+        "name": "spin",
+        "kind": "Int",
+        "value": 0,
+        "cycle": {
+          "output": "Step",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "spinPhased",
+        "kind": "Int",
+        "value": 7,
+        "cycle": {
+          "output": "Step",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "spinTurns",
+        "kind": "Fixed",
+        "value": "0",
+        "cycle": {
+          "output": "Turns",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "spinCos",
+        "kind": "Fixed",
+        "value": "0",
+        "cycle": {
+          "power": 13,
+          "output": "Cos",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "orbit",
+        "kind": "Int",
+        "value": 5,
+        "cycle": {
+          "power": 7,
+          "output": "Node",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "orbitX",
+        "kind": "Fixed",
+        "value": "5",
+        "cycle": {
+          "power": 7,
+          "output": "ProjectionX",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "dial",
+        "kind": "Int",
+        "value": 0,
+        "cycle": {
+          "word": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "output": "Step",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "dialNode",
+        "kind": "Int",
+        "value": 5,
+        "cycle": {
+          "word": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "output": "Node",
+          "ticksPerStep": 20
+        }
+      },
+      {
+        "name": "dialRing",
+        "kind": "Int",
+        "value": 5,
+        "cycle": {
+          "word": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "output": "Ring",
+          "ticksPerStep": 20
+        }
+      }
+    ]
+  }
+}

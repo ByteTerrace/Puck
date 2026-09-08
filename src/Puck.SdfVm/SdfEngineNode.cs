@@ -43,7 +43,7 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// sampling frame tracks the geometry the dynamic transform already moved (see <see cref="SdfWorldEngine.SetScreenSurface"/>).
 /// </para>
 /// </summary>
-public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequestTarget {
+public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequestTarget {
     private const ulong TimingReportInterval = 60;
 
     private readonly int m_brickPoolVoxelCapacity;
@@ -55,10 +55,31 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     private readonly ISdfFrameSource m_frameSource;
     private readonly uint m_height;
     private readonly int m_instanceCapacity;
-    private readonly SdfWorldKernels m_kernels;
+    private SdfWorldKernels m_kernels;
+
+    /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of
+    /// the <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
+    public int LiveProgramWords { get; private set; }
+    /// <summary>Gets the last uploaded program's instance count, or 0 before the first upload.</summary>
+    public int LiveProgramInstances { get; private set; }
+    /// <summary>Gets the last uploaded program's Lipschitz step scale (1 = no clamp), or 0 before the first
+    /// upload.</summary>
+    public float LiveProgramStepScale { get; private set; }
+    /// <summary>Gets the last uploaded program's step-scale binder (see <see cref="SdfProgram.StepScaleBinder"/>), or
+    /// <see langword="null"/> before the first upload and whenever nothing unscoped binds the step scale.</summary>
+    public SdfStepScaleBinder? LiveProgramStepScaleBinder { get; private set; }
+    /// <summary>Gets the frozen program-word envelope this node was constructed with.</summary>
+    public int ProgramWordCapacity => m_programWordCapacity;
+
     private readonly int m_programWordCapacity;
     private readonly bool? m_rayQueryEnabled;
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
+
+    private SdfScreenSourceFrame[] m_pendingScreenSourceFrames = [];
+    private SdfScreenSourceFrame[][] m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: 0);
+    private readonly int[] m_retainedScreenSourceFrameCounts = new int[SdfWorldEngine.FrameRingSize];
+    private Dictionary<int, Func<SdfScreenSourceFrame>> m_screenSourceFrames = EmptyScreenSourceFrames;
+
     private readonly Dictionary<int, Func<nint>> m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
     private readonly SdfViewGpuServices m_services;
@@ -75,7 +96,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     // its block rather than an arbitrary modulo-boundary sample, exposing intermittent CPU hitches without per-frame IO.
     private ulong m_cpuTimingFrame;
     private CpuFrameTiming m_cpuTimingWorst;
-    private string? m_debugCapturePath;
+    private FrameCaptureRequest? m_debugCapture;
     private int m_debugMode;
     private IGpuDeviceContext? m_deviceContext;
     private bool m_disposed;
@@ -96,10 +117,27 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     ) {
         public long TotalTicks => (((((CaptureFrameTicks + SetupTicks) + ScreenPublishTicks) + ViewRenderTicks) + BindingsTicks) + SubmitFrameTicks);
     }
+    /// <summary>Brackets one CPU phase with <see cref="Stopwatch"/> only while <paramref name="enabled"/> is set;
+    /// disabled, <see cref="Stop"/> reads 0 without touching the clock.</summary>
+    private readonly ref struct CpuPhaseTimer(bool enabled, long startTicks) {
+        private readonly bool m_enabled = enabled;
+        private readonly long m_startTicks = startTicks;
+
+        public static CpuPhaseTimer Start(bool enabled) {
+            return new CpuPhaseTimer(
+                enabled: enabled,
+                startTicks: (enabled ? Stopwatch.GetTimestamp() : 0L)
+            );
+        }
+        public long Stop() {
+            return (m_enabled ? (Stopwatch.GetTimestamp() - m_startTicks) : 0L);
+        }
+    }
 
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
     // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies caller maps to match.
     private static readonly Dictionary<int, IRenderNode> EmptyChildren = new();
+    private static readonly Dictionary<int, Func<SdfScreenSourceFrame>> EmptyScreenSourceFrames = new();
     private static readonly Dictionary<int, Func<nint>> EmptyScreenSources = new();
     private static readonly Dictionary<int, Func<Vector3>> EmptyScreenLights = new();
     private static readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> EmptyScreenSurfaceTransforms = new();
@@ -108,6 +146,9 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         SurfaceId: SurfaceId.New()
     );
     private Surface[] m_childSurfaces = [];
+
+    private int m_pendingScreenSourceFrameCount;
+
     private ISteppableRenderNode[] m_steppableChildren = [];
 
     private static int CaptureDelayFrames() {
@@ -118,6 +159,15 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             ? frame
             : 0
         );
+    }
+    private static SdfScreenSourceFrame[][] BuildScreenSourceFrameRing(int capacity) {
+        var ring = new SdfScreenSourceFrame[SdfWorldEngine.FrameRingSize][];
+
+        for (var slot = 0; (slot < ring.Length); slot++) {
+            ring[slot] = new SdfScreenSourceFrame[capacity];
+        }
+
+        return ring;
     }
     private void EnsureEngine(IGpuDeviceContext gpuDevice, SdfFrame frame) {
         if (m_engine is not null) {
@@ -413,6 +463,46 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             width: width
         );
     }
+    // A provider can acquire an externally-written image (the camera shared-target tier). Keep that acquisition with
+    // the SDF frame-ring slot whose command buffer samples it, and retire the old contents only after that slot's fence
+    // signals. The fixed arrays avoid allocating a closure/list every produced frame.
+    private void RetireAndAdoptScreenSourceFrames(int frameSlot) {
+        var retained = m_retainedScreenSourceFrames[frameSlot];
+        var retainedCount = m_retainedScreenSourceFrameCounts[frameSlot];
+
+        for (var index = 0; (index < retainedCount); index++) {
+            retained[index].Retire();
+            retained[index] = default;
+        }
+
+        m_pendingScreenSourceFrames.AsSpan(length: m_pendingScreenSourceFrameCount, start: 0).CopyTo(destination: retained);
+        m_retainedScreenSourceFrameCounts[frameSlot] = m_pendingScreenSourceFrameCount;
+        Array.Clear(array: m_pendingScreenSourceFrames, index: 0, length: m_pendingScreenSourceFrameCount);
+        m_pendingScreenSourceFrameCount = 0;
+    }
+    private void RetirePendingScreenSourceFrames() {
+        for (var index = 0; (index < m_pendingScreenSourceFrameCount); index++) {
+            m_pendingScreenSourceFrames[index].Retire();
+            m_pendingScreenSourceFrames[index] = default;
+        }
+
+        m_pendingScreenSourceFrameCount = 0;
+    }
+    private void RetireAllScreenSourceFrames() {
+        RetirePendingScreenSourceFrames();
+
+        for (var slot = 0; (slot < m_retainedScreenSourceFrames.Length); slot++) {
+            var retained = m_retainedScreenSourceFrames[slot];
+            var count = m_retainedScreenSourceFrameCounts[slot];
+
+            for (var index = 0; (index < count); index++) {
+                retained[index].Retire();
+                retained[index] = default;
+            }
+
+            m_retainedScreenSourceFrameCounts[slot] = 0;
+        }
+    }
 
     /// <inheritdoc/>
     public void Dispose() {
@@ -421,9 +511,11 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         }
 
         m_disposed = true;
+        _ = m_debugCapture?.TryFail(new ObjectDisposedException(nameof(SdfEngineNode)));
+        m_debugCapture = null;
 
-        // Drain before tearing down GPU resources: the per-frame submits are fire-and-forget (nothing fences them),
-        // so a frame could still be in flight at teardown. The engine's Dispose is wait-free by contract.
+        // Drain before tearing down GPU resources: the per-frame submits are fire-and-forget, so a frame may still be
+        // in flight. This also proves every retained external screen-source acquisition is safe to release below.
         m_deviceContext.TryWaitIdle();
 
         foreach (var child in m_children.Values) {
@@ -432,6 +524,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         m_engine?.Dispose();
         m_engine = null;
+        RetireAllScreenSourceFrames();
     }
     /// <inheritdoc/>
     public void OnDeviceLost() {
@@ -447,6 +540,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         m_frameSource.NotifyDeviceLost();
         m_engine?.Dispose();
         m_engine = null;
+        RetireAllScreenSourceFrames();
         m_glyphAtlasInitialized = false;
         m_uploadedGlyphAtlas = null;
         m_deviceContext = null;
@@ -486,24 +580,15 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         }
 
         var cpuTimingEnabled = GpuTimingControl.Shared.Armed;
-        var captureFrameStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        var captureFrameTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         var frame = m_frameSource.CaptureFrame(
             width: m_width,
             height: m_height,
             deltaSeconds: ((float)context.FrameDeltaSeconds),
             interpolationAlpha: ((float)context.InterpolationAlpha)
         );
-        var captureFrameTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - captureFrameStart)
-            : 0L
-        );
-        var cpuPhaseStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        var captureFrameTicks = captureFrameTimer.Stop();
+        var cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
         // Produce each child viewport's surface first (so its image-view is known before the source array is bound),
         // then build/refresh the engine, then hand it the child views for this frame's source-array (re)bind.
@@ -515,6 +600,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             frame: frame,
             gpuDevice: gpuDevice
         );
+        ApplyPendingShaderReload();
         ReconcileGlyphAtlas();
         m_engine!.DebugMode = m_debugMode;
 
@@ -522,10 +608,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             m_engine.DebugLabel = m_debugLabel;
         }
 
-        var setupTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - cpuPhaseStart)
-            : 0L
-        );
+        var setupTicks = cpuPhaseTimer.Stop();
 
         foreach (var (slot, _) in m_children) {
             if (
@@ -544,44 +627,44 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         // Screen-source PREPARE: hand the frame source the live device + compute services so a CPU-pixel source can
         // upload THIS frame's image to a stable handle before the providers below are polled (they return that
         // handle). Mirrors AdvanceBricks — an engine seam, default no-op. m_gpu is set by EnsureEngine just above.
-        cpuPhaseStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         m_frameSource.PrepareScreenSources(
             deviceContext: gpuDevice,
             gpu: m_gpu!
         );
-        var screenPublishTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - cpuPhaseStart)
-            : 0L
-        );
+        var screenPublishTicks = cpuPhaseTimer.Stop();
 
         // View RENDER: hand the frame source this frame's full context so a source hosting an offscreen ViewStack (a
         // diegetic camera / jumbotron) renders its views against the live device now — their handles fresh before the
         // screen-source poll below reads them. Mirrors PrepareScreenSources — an engine seam, default no-op.
-        cpuPhaseStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
         m_frameSource.RenderViews(context: in context);
-        var viewRenderTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - cpuPhaseStart)
-            : 0L
-        );
+        var viewRenderTicks = cpuPhaseTimer.Stop();
 
-        cpuPhaseStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
         // Screen sources: polled AFTER children have produced (a provider may read a just-produced child surface).
         // A provider returning 0 leaves the slot unbound this frame — the engine's material-shaded fallback applies.
+        RetirePendingScreenSourceFrames();
+
         foreach (var (screenIndex, provider) in m_screenSources) {
             m_engine!.SetScreenSource(
                 screenIndex: screenIndex,
                 imageViewHandle: provider()
             );
+        }
+
+        foreach (var (screenIndex, provider) in m_screenSourceFrames) {
+            var source = provider();
+
+            m_engine!.SetScreenSource(
+                screenIndex: screenIndex,
+                imageViewHandle: source.ImageViewHandle
+            );
+
+            if (source.RequiresRetirement) {
+                m_pendingScreenSourceFrames[m_pendingScreenSourceFrameCount++] = source;
+            }
         }
 
         // Screen LIGHTS: the colored glow each screen emits into the room (parallel to the source poll above).
@@ -629,19 +712,24 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
 
         if (frame.ProgramChanged) {
             m_engine!.UploadProgram(program: frame.Program);
+            LiveProgramWords = frame.Program.Words.Length;
+            LiveProgramInstances = frame.Program.Instances.Count;
+            LiveProgramStepScale = frame.Program.StepScale;
+            LiveProgramStepScaleBinder = frame.Program.StepScaleBinder;
         }
 
-        var bindingsTicks = (cpuTimingEnabled
-            ? (Stopwatch.GetTimestamp() - cpuPhaseStart)
-            : 0L
-        );
+        var bindingsTicks = cpuPhaseTimer.Stop();
 
-        var submitFrameStart = (cpuTimingEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0L
-        );
+        var submitFrameTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
-        m_engine!.SubmitFrame(frame: frame);
+        if (0 == m_screenSourceFrames.Count) {
+            m_engine!.SubmitFrame(frame: frame);
+        } else {
+            m_engine!.SubmitFrameWithExternalResources(
+                frame: frame,
+                onFrameSlotAvailable: RetireAndAdoptScreenSourceFrames
+            );
+        }
 
         if (cpuTimingEnabled) {
             ++m_cpuTimingFrame;
@@ -651,7 +739,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
                 ScreenPublishTicks: screenPublishTicks,
                 ViewRenderTicks: viewRenderTicks,
                 BindingsTicks: bindingsTicks,
-                SubmitFrameTicks: (Stopwatch.GetTimestamp() - submitFrameStart)
+                SubmitFrameTicks: submitFrameTimer.Stop()
             ));
         }
 
@@ -682,22 +770,23 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         }
 
         // The runtime sibling of --capture: a debug verb arms a one-shot capture of whatever frame is produced next.
-        if (m_debugCapturePath is { } debugCapturePath) {
-            m_debugCapturePath = null;
+        if (m_debugCapture is { } request) {
+            m_debugCapture = null;
+            var result = request.Write(path => {
+                if (m_captureUnavailable || !TryWriteCapturePng(
+                    path: path,
+                    rgba: m_engine.ReadPixels().ToArray(),
+                    width: ((int)m_width),
+                    height: ((int)m_height)
+                )) {
+                    m_captureUnavailable = true;
+                    throw new NotSupportedException("PNG capture is unavailable.");
+                }
 
-            if (m_captureUnavailable) {
-                // The latch spares a doomed assembly load per frame, but a request dropped for it still has to be
-                // said out loud: the requester was told a path and no file is coming.
-                Console.Error.WriteLine(value: $"[debug] capture skipped, Puck.Assets is unavailable — no file written to {debugCapturePath}");
-            } else if (TryWriteCapturePng(
-                path: debugCapturePath,
-                rgba: m_engine.ReadPixels().ToArray(),
-                width: ((int)m_width),
-                height: ((int)m_height)
-            )) {
-                Console.Error.WriteLine(value: $"[debug] captured frame {m_produceFrameIndex} -> {debugCapturePath}");
-            } else {
-                m_captureUnavailable = true;
+                Console.Error.WriteLine(value: $"[debug] captured frame {m_produceFrameIndex} -> {path}");
+            });
+            if (result.Error is { } error) {
+                Console.Error.WriteLine(value: $"[debug] capture failed -> {request.Path} ({error.Message})");
             }
         }
 
@@ -729,11 +818,15 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
             )
         );
     }
-    /// <summary>Arms a one-shot debug capture: the next produced frame is read back and written to
-    /// <paramref name="path"/> — the runtime sibling of the <c>--capture</c> startup flag (the debug-page verb).</summary>
-    /// <param name="path">The PNG path to write (the caller creates the directory).</param>
-    public void RequestCapture(string path) {
-        m_debugCapturePath = path;
+    /// <inheritdoc/>
+    public void RequestCapture(FrameCaptureRequest request) {
+        ArgumentNullException.ThrowIfNull(request);
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (PendingCapturePath is not null || request.Completion.IsCompleted) {
+            throw new InvalidOperationException("A capture is already pending or the request is terminal.");
+        }
+
+        m_debugCapture = request;
     }
     /// <summary>Reads the cadence gate's per-span diagnostics through the live engine (a passthrough of
     /// <see cref="SdfWorldEngine.CadenceDiagnostics"/>, mirroring the <see cref="TryReadPassTimings"/> forwarder) — the
@@ -892,6 +985,21 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
         _ = GpuTimingControl.Shared.TrySeed(armed: (m_timingEnabled ?? false));
     }
 
+    // Builder-only additive seam: keeps the longstanding public constructor's Func<nint> screenSources parameter
+    // source-compatible while a render spec can opt particular indices into fence-retired frame acquisitions.
+    internal void SetScreenSourceFrames(IReadOnlyDictionary<int, Func<SdfScreenSourceFrame>>? screenSourceFrames) {
+        if (m_engine is not null) {
+            throw new InvalidOperationException(message: "screen-source frame providers must be configured before the first produced frame");
+        }
+
+        m_screenSourceFrames = ((screenSourceFrames is null)
+            ? EmptyScreenSourceFrames
+            : new Dictionary<int, Func<SdfScreenSourceFrame>>(collection: screenSourceFrames)
+        );
+        m_pendingScreenSourceFrames = new SdfScreenSourceFrame[m_screenSourceFrames.Count];
+        m_retainedScreenSourceFrames = BuildScreenSourceFrameRing(capacity: m_screenSourceFrames.Count);
+    }
+
     /// <inheritdoc/>
     int IPassTimingSource.PassCount => PassTimingCount;
     /// <inheritdoc/>
@@ -925,7 +1033,7 @@ public sealed class SdfEngineNode : IRenderNode, IPassTimingSource, ICaptureRequ
     /// <see cref="SdfWorldEngine.PassTimingLabels"/> so a consumer holding only this node names no engine type.</summary>
     public static ReadOnlySpan<string> PassTimingLabels => SdfWorldEngine.PassTimingLabels;
     /// <inheritdoc/>
-    public string? PendingCapturePath => m_debugCapturePath;
+    public string? PendingCapturePath => m_debugCapture?.Path;
     /// <summary>Gets a value indicating whether the resolved <c>PUCK_RAY_QUERY</c> toggle is enabled: the constructor
     /// argument when given, else the environment/default. See the constructor's <c>rayQueryEnabled</c> parameter doc
     /// for why nothing consumes this yet.</summary>

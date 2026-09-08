@@ -42,8 +42,8 @@ public sealed class OpenTypeOutlineTests {
         var first = Generate(bytes: collection, faceIndex: 0);
         var second = Generate(bytes: collection, faceIndex: 1);
 
-        Assert.True(first.TryGetGlyph(unicode: 'A', glyph: out var firstGlyph));
-        Assert.True(second.TryGetGlyph(unicode: 'A', glyph: out var secondGlyph));
+        Assert.True(condition: first.TryGetGlyph(glyph: out var firstGlyph, unicode: 'A'));
+        Assert.True(condition: second.TryGetGlyph(glyph: out var secondGlyph, unicode: 'A'));
         Assert.Equal(1f, firstGlyph.Advance, precision: 5);
         Assert.Equal(0.75f, secondGlyph.Advance, precision: 5);
     }
@@ -51,26 +51,26 @@ public sealed class OpenTypeOutlineTests {
     public void CollectionFaceIndexRefusesOutOfRangeAndStandaloneSelections() {
         var collection = SyntheticOpenTypeCollection.Build(SyntheticTrueTypeFont.Build());
 
-        var collectionError = Assert.Throws<ArgumentException>(() => Generate(bytes: collection, faceIndex: 1));
-        var standaloneError = Assert.Throws<ArgumentException>(() => Generate(bytes: SyntheticTrueTypeFont.Build(), faceIndex: 1));
+        var collectionError = Assert.Throws<ArgumentException>(testCode: () => Generate(bytes: collection, faceIndex: 1));
+        var standaloneError = Assert.Throws<ArgumentException>(testCode: () => Generate(bytes: SyntheticTrueTypeFont.Build(), faceIndex: 1));
 
         Assert.Contains(expectedSubstring: "face index 1 is out of range", actualString: collectionError.Message, comparisonType: StringComparison.Ordinal);
         Assert.Contains(expectedSubstring: "not a collection", actualString: standaloneError.Message, comparisonType: StringComparison.Ordinal);
     }
 
     private static void AssertCubicGlyph(FontAtlas atlas) {
-        Assert.True(atlas.TryGetGlyph(unicode: 'A', glyph: out var glyph));
-        Assert.NotNull(glyph.AtlasBounds);
-        Assert.NotNull(atlas.ImageData);
-        Assert.True(atlas.TryGetGlyphById(glyphId: 1, glyph: out var glyphById));
-        Assert.Same(expected: glyph, actual: glyphById);
+        Assert.True(condition: atlas.TryGetGlyph(glyph: out var glyph, unicode: 'A'));
+        Assert.NotNull(value: glyph.AtlasBounds);
+        Assert.NotNull(@object: atlas.ImageData);
+        Assert.True(condition: atlas.TryGetGlyphById(glyph: out var glyphById, glyphId: 1));
+        Assert.Same(actual: glyphById, expected: glyph);
 
         var bounds = glyph.AtlasBounds.Value;
         var centerX = ((int)((bounds.Left + bounds.Right) * 0.5f));
         var centerY = ((int)((bounds.Top + bounds.Bottom) * 0.5f));
         var centerAlpha = atlas.ImageData.RgbaPixels[((((centerY * atlas.Width) + centerX) * 4) + 3)];
 
-        Assert.True((centerAlpha > 127));
+        Assert.True(condition: (centerAlpha > 127));
     }
 }
 
@@ -342,14 +342,14 @@ internal static class SyntheticOpenTypeCollection {
     }
 
     private static void RebaseTableOffsets(Span<byte> face, int faceOffset) {
-        var tableCount = BinaryPrimitives.ReadUInt16BigEndian(source: face.Slice(start: 4, length: 2));
+        var tableCount = BinaryPrimitives.ReadUInt16BigEndian(source: face.Slice(length: 2, start: 4));
 
         for (var index = 0; (index < tableCount); index++) {
             var offsetPosition = checked((20 + (index * 16)));
-            var oldOffset = BinaryPrimitives.ReadUInt32BigEndian(source: face.Slice(start: offsetPosition, length: 4));
+            var oldOffset = BinaryPrimitives.ReadUInt32BigEndian(source: face.Slice(length: 4, start: offsetPosition));
 
             BinaryPrimitives.WriteUInt32BigEndian(
-                destination: face.Slice(start: offsetPosition, length: 4),
+                destination: face.Slice(length: 4, start: offsetPosition),
                 value: checked((oldOffset + ((uint)faceOffset)))
             );
         }

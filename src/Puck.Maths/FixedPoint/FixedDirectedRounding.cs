@@ -19,7 +19,7 @@ namespace Puck.Maths;
 /// toward positive infinity and "up" meaning away from zero — a bound whose direction depends on a sign the caller did
 /// not think about is the defect this family exists to remove. The quantities it serves (a separation, a radius, a
 /// speed bound, a norm) are non-negative by construction.</para>
-/// <para><b>The round-to-nearest siblings, deliberately left alone.</b> <see cref="FixedQ4816.Sqrt"/> is the floor
+/// <para><b>The round-to-nearest siblings, deliberately left alone.</b> <see cref="FixedQ4816.Sqrt"/> is the nearest
 /// square root and <see cref="FixedVectorMath.TryMagnitude(long, long, long, out FixedQ4816)"/> the round-to-nearest
 /// norm; neither changes behaviour to serve this family. <see cref="TryCeilingSquareRoot"/> at
 /// <see cref="FixedQ4816.FractionBitCount"/> is the directed sibling of the first, and

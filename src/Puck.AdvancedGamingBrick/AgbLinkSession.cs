@@ -6,7 +6,7 @@ namespace Puck.AdvancedGamingBrick;
 /// argument order (the first machine is the parent, player 0); the set must then be advanced THROUGH the session:
 /// <see cref="Run"/> moves every machine forward by one shared budget of master-clock cycles (the same unit
 /// <see cref="AdvancedGamingBrickMachine.RunCycles"/> consumes), always stepping the machine that is furthest behind
-/// its own cumulative target, one instruction at a time, ties to the lowest index. That interleave is a pure function
+/// its own cumulative target, one CPU step at a time (an instruction or halted idle cycle), ties to the lowest index. That interleave is a pure function
 /// of the machines' states and the budget sequence — a fixed, state-free rule, the same one the DMG/CGB
 /// <c>SerialLinkSession</c> proved — so a linked run is deterministic and replay-identical, and the per-machine
 /// targets are cumulative (anchored at connect), so instruction overshoot carries between calls instead of accreting

@@ -437,20 +437,20 @@ faulting the instance.
 A resolved name lands on one of two ordinal spans: a fixed `ChannelRole` slot (`0..5` — the motion
 model reads these directly) when the world document's row claims a role, or the next free
 composition ordinal (`6` up, in declaration order) when it does not — a kit's own `Actions` binding
-decides what a composition channel does. The shipped default world (`Assets/worlds/play.world.json`)
+decides what a composition channel does. The shipped default world (`Assets/worlds/nexus.world.json`)
 declares:
 
 | Channel | Shape | Intent effect, host-side (play world) |
 |---|---|---|
-| `forward` | `Bipolar` | `PlayerIntent.MoveForward = A` (role `MoveForward`) |
+| `forward` | `Bipolar` | `PlayerIntent.MoveAdvance = A` (role `MoveAdvance`) |
 | `strafe` | `Bipolar` | `PlayerIntent.MoveStrafe = A` (role `MoveStrafe`) |
 | `turn` | `Bipolar` | `PlayerIntent.Turn = A` (role `Turn`) — no host-side sign flip; the channel's documented convention IS the wire convention |
-| `up` | `Bipolar` | `PlayerIntent.MoveUp = A` (role `MoveUp`, free model only) |
-| `pitch` | `Bipolar` | `PlayerIntent.Pitch = A` (role `Pitch`, free model only) |
-| `roll` | `Bipolar` | `PlayerIntent.Roll = A` (role `Roll`, free model only) |
+| `up` | `Bipolar` | `PlayerIntent.MoveUp = A` (role `MoveUp`, free program only) |
+| `pitch` | `Bipolar` | `PlayerIntent.Pitch = A` (role `Pitch`, free program only) |
+| `roll` | `Bipolar` | `PlayerIntent.Roll = A` (role `Roll`, free program only) |
 | `jump` | `Binary` | composition ordinal `6`; play's grounded kit binds it to the vertical impulse, pressed iff `A == One` THIS tick |
 | `dash` | `Binary` | composition ordinal `7`; per-kit binding (declared, unbound by play's own kit), pressed iff `A == One` THIS tick |
-| `run` | `Binary` | composition ordinal `8`; the `promenader` kit's `sprintChannel` — scales commanded planar speed by `sprintMultiplier` (`1.3`) while held (a HELD, not edge-triggered, read) |
+| `run` | `Binary` | composition ordinal `8`; the `promenader` kit's `speed.held.channel` — scales commanded planar speed by its `multiplier` (`1.3`) while held (a HELD, not edge-triggered, read) |
 
 A different world document declares a different table — same resolver class, a different
 `WorldChannelTable` constructor argument.
@@ -639,22 +639,18 @@ Every fault is loud and attributed. Detail lines are formatted for the console a
 addon's **name**, so an operator reading a run log sees which addon failed, why, and what to do:
 
 ```text
-addon ghost: OutOfFuel at tick 3140 — disabled; 'addon enable ghost' to retry
+addon ghost: OutOfFuel — disabled; re-instantiate ghost to retry
 ```
 
 `AddonHost.Describe()` narrates each addon with a `ContentPetname`
 (`Willow-Lantern-Nine  sha256-64/…  fuel 1000000  ENABLED`).
 
-**Hot reload** (`AddonHost.Reload(name)`) re-reads the declared module path, recompiles (a changed
-content hash misses the module cache; an unchanged one reuses it), and swaps in a fresh store — the
-in-session edit loop the `addon reload <name>` console verb drives. The status line names the change
-by petname (`Moss-Pouch-Two became Cinder-Locket-Five`) because the petname **is** the content hash;
-an unchanged module reports `unchanged (fresh store)`. A declared `moduleHash` pin **refuses** a
-content change on `Reload`, leaving the running instance untouched (remove the pin to hot-reload),
-and a broken edit swaps in a sticky faulted instance naming the reason. The reloaded addon runs
-regardless of its prior enabled/disabled state. The same pin is enforced on the initial mount too:
-there is no running instance to leave untouched at boot, so a mismatch there loads the addon
-straight into a sticky `HashMismatch` fault instead of refusing in place.
+**Hot reload** is a consumer-level act: re-`Prepare` the same descriptor (a changed content hash
+misses the module cache; an unchanged one reuses it) and publish the fresh instance through `Adopt`
+— Puck.World drives this as an addon-row revision change through
+`WorldAddonRuntime.TryPrepare`/`Commit` (see [Puck.World.Addons](../Puck.World.Addons/README.md)).
+A declared `moduleHash` pin is enforced at every load: a content mismatch loads the instance
+straight into a sticky `HashMismatch` fault naming the reason, at boot and re-prepare alike.
 
 ---
 
@@ -683,9 +679,8 @@ straight into a sticky `HashMismatch` fault instead of refusing in place.
   byte length back rather than assuming `count * stride`. Every reserved-must-be-zero and shape guard
   is checked in order, and any failure is a deterministic refusal naming the cell index (or entry
   index, for the name table) — a stale guest can smuggle no meaning into a reserved field.
-- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[44.0.0]`. The battery
-  stage that used to assert the loaded assembly's major version left the build with `Puck.Post`;
-  the pin is now held by review, not by a gate.
+- **Never float the Wasmtime version.** Fuel timing is codegen-locked to `[44.0.0]`. Nothing in the
+  build asserts the loaded assembly's major version, so the pin is held by review, not by a gate.
 - **Single-threaded, one store per addon.** Do not share a `Store` across threads or reuse one
   across addons; hot-swap a script by `Enable()` (dispose + re-instantiate), not by mutation.
 

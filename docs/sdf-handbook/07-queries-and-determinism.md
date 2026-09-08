@@ -20,7 +20,9 @@ differ by a few bits between backends, and on whatever the render happens
 to have resident that frame. None of that is acceptable for code that has to
 produce the *same* answer on every machine, every time.
 
-`IWorldQuery` is the seam that keeps those worlds apart. It is fully
+`IWorldQuery` is the seam that keeps those worlds apart. It is declared in
+`Puck.Maths`, so a provider and a consumer can sit in sibling libraries that
+never reference each other, and it is fully
 fixed-point (`FixedQ4816`/`FixedVector3`/`FixedPosition`) end to end, and every
 method is synchronous — both implementations that exist today are cheap
 enough per call that no async plumbing is warranted.
@@ -56,14 +58,16 @@ remember to do it. `Capabilities` — a small struct of booleans
 (`HasHeightfield`/`HasBlocked`/`HasOccupancy`) — is meant to be checked once
 at startup, not per call: a provider that lacks a layer degrades gracefully
 (a raycast without an occupancy grid falls back to the flat heightfield)
-rather than throwing per query.
+rather than throwing per query. A layer counts as present only when it
+carries content — an allocated but entirely empty layer reports absent, so
+"present" really does mean "this one can answer."
 
 Every answer is tagged with a `WorldQueryConfidence`:
 
 ```csharp
 public enum WorldQueryConfidence {
-    Bounded = 0,  // a baked, resolution-quantized artifact — sign-correct, conservatively dilated
-    Exact = 1,    // a live evaluator against the actual program
+    Bounded = 0,  // a conservative baked answer, or a live march that could not complete a safe proof
+    Exact = 1,    // a live evaluator whose query converged against the actual program
 }
 ```
 
@@ -84,6 +88,43 @@ float-to-fixed conversion happens at the edges of authoring, never inside
 the per-tick query path. This provider is cheap, coarse by construction (a
 cell's answer is only as precise as the cell), and never sub-cell-exact —
 hence `Bounded`.
+
+Coarse is not the same as sloppy, and the difference is worth being precise
+about. `Bounded` means *quantized and conservatively dilated*, not
+*approximate*: a cast enumerates every cell its swept volume can reach and
+intersects the segment with that cell's box analytically, so "clear" means
+no cell in the artifact can be reached — never that no probe happened to
+land on one. Where the answer is deliberately loose it is loose in the safe
+direction: a swept sphere is tested against each cell box dilated by the
+radius on each axis, which contains the true rounded-rectangle sweep, so
+contact can be reported slightly early at a box corner but never late.
+`Overlap` uses the exact clamp-to-solid test and is the tighter of the two.
+The two layers also resolve Y differently, because they carry different
+information: a blocked cell is authored as a footprint with no height and
+so blocks at every Y, while the heightfield blocks where the query volume's
+lowest point reaches its authored ground. Both layers answer every verb,
+which is why an artifact carrying only one layer still answers all five.
+
+Two contracts sit at this provider's edges rather than inside its math. The
+grid's origin is a world coordinate, so every position argument is rebased
+against the world origin before it reaches a cell index — the same rebase
+the evaluator applies, and for the same reason: a position's raw local
+offset repeats once per hierarchy cell, so reading it would answer for
+whichever copy of the grid the caller happened to be standing in. And a
+radius is body-scale by contract: both radius-taking verbs walk every cell
+the radius reaches, so a radius wider than `MaxRadiusCells` of the
+artifact's own cells is refused by name rather than paid for quietly.
+Nothing here indexes occupancy hierarchically, and the refusal is how a
+consumer that genuinely needs one says so.
+
+The bake itself has a separate allocation ceiling. The default is
+`WorldQueryBaker.DefaultMaxCellCount` (4,194,304 cells), enough for a 512 by 512
+world-unit square at the default quarter-unit resolution and about 32.5 MiB of
+retained height/blocked storage. A larger bake must pass an explicit
+`maxCellCount`; either way, the dimensions are checked before either per-cell
+array is allocated. The artifact also rejects any origin, dimension, and cell
+size combination whose far edge would leave signed Q48.16, so later cell-edge
+arithmetic stays representable.
 
 **`SdfFieldEvaluator`** is a second, independent interpreter of the *same*
 instruction stream the GPU's `mapCore` walks — not a codegen of the shader,
@@ -116,6 +157,26 @@ its wrong answers would look exactly like right ones.
 `WorldQueryProviders.ForWorld` is the resolver a sim asks for the right
 provider; a sim binds only `IWorldQuery` itself; nothing downstream needs to
 know or care which provider answered.
+
+A third reading sits between the two. `SdfDistanceGrid` keeps the live
+evaluator's exact values at the corners of world-space cells, and because the
+field cannot change faster than its Lipschitz bound, the nearest corner's value
+less a slack is a lower bound anywhere in the cell. `SdfBandedFieldEvaluator`
+answers the exact evaluator wherever that bound falls inside a band a body can
+touch, and the bound everywhere else — so a sample in open air costs one corner
+read instead of a walk over every solid, while a contact, a hit, or an overlap
+is decided on the exact field.
+
+One subtlety matters for sphere queries against a live program. `StepScale`
+turns the field into a lower bound on Euclidean separation, so the safe sphere
+advance is `field * StepScale - radius`, not `(field - radius) * StepScale`.
+`Overlap` compares that same lower bound with the radius. When the lower bound
+becomes too small to support another fixed-point step before the raw field has
+converged, a cast returns a `Bounded` obstruction. It does not continue through
+an unproven gap and later claim the sweep was clear. For the same reason,
+`Overlap` reports occupied when a populated program cannot rebase an extreme
+hierarchical position into Q48.16; failure to represent a sample is not proof
+that a placement is clear.
 
 ## What "determinism" actually means here
 
@@ -162,7 +223,9 @@ every time, by construction.
 ## Gravity in one line
 
 `IWorldQuery` answers geometric questions about a world. A narrower,
-separate interface answers a question one level more abstract:
+separate interface — declared in `Puck.Maths`, so a field's producer and its
+consumers can sit in sibling libraries that never reference each other —
+answers a question one level more abstract:
 
 ```csharp
 public interface IFieldEvaluator {
@@ -227,8 +290,8 @@ all if a different consumer read it differently.
 - [CLAUDE.md](../../CLAUDE.md) — the determinism contract (core rule 4). Note
   that it no longer pairs with a verification contract for the engine: the
   battery that gated one is quarantined with `Puck.Post`.
-- Source: `src/Puck.SignedDistance/Queries/IWorldQuery.cs`,
-  `src/Puck.SignedDistance/Queries/IFieldEvaluator.cs`,
+- Source: `src/Puck.Maths/FixedPoint/IWorldQuery.cs`,
+  `src/Puck.Maths/FixedPoint/IFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/SdfFieldEvaluator.cs`,
   `src/Puck.SignedDistance/Queries/BakedWorldQuery.cs`,
   `src/Puck.SignedDistance/Queries/WorldQueryProviders.cs`.

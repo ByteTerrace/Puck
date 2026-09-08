@@ -122,7 +122,7 @@ public sealed partial class SdfProgramBuilder {
 
         if ((MathF.Abs(x: jitter) * 0.5f) >= (0.5f * minSpacing)) {
             throw new ArgumentException(
-                message: "CellJitter jitter/2 must be < min(spacing)/2, or jittered content crosses the cell boundary and holes the march. The caller must ALSO keep jitter/2 + prototype radius <= min(spacing)/2 (the prototype is emitted later, so this builder cannot check it) — and even then the single-cell round() fold overestimates near cell walls (containment does not guarantee the nearest copy; boundary seams and grazing-angle hole risk persist), so keep jitter conservative.",
+                message: "CellJitter jitter/2 must be < min(spacing)/2, or jittered content crosses the cell boundary and holes the march. The full in-cell rule (jitter/2 + prototype reach <= min(spacing)/2) is refused later, at Build, where the prototype is visible — and even then the single-cell round() fold overestimates near cell walls (containment does not guarantee the nearest copy; boundary seams and grazing-angle hole risk persist), so keep jitter conservative.",
                 paramName: nameof(jitter)
             );
         }

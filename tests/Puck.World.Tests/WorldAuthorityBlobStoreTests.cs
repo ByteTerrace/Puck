@@ -1,6 +1,7 @@
 using Xunit;
 
 using Puck.Storage;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World.Tests;
@@ -13,7 +14,7 @@ public sealed class WorldAuthorityBlobStoreTests {
 
     private static WorldAuthorityIdentity Identity(Guid? owner = null) => new(
         Owner: (owner ?? Guid.NewGuid()),
-        World: WorldSafeName.Parse(candidate: "amber")
+        World: SafeName.Parse(candidate: "amber")
     );
 
     [Fact]

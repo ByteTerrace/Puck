@@ -12,7 +12,7 @@ namespace Puck.World;
 /// <param name="Description">The author description, when authored.</param>
 public sealed record WorldProjectedMetadata(string? Title = null, string? Description = null);
 /// <summary>
-/// One kit as a visitor's client sees it — the embodiment facts (which motion model a body wears, what shape it
+/// One kit as a visitor's client sees it — the embodiment facts (which motion tuning a body wears, what shape it
 /// occupies, whether it depenetrates). The projection document's own row type, not a <see cref="WorldKit"/> with
 /// holes: it carries no member for the kit's <c>producers</c>/<c>actions</c>, which are the world's game logic and
 /// are read only by the authority that runs them.
@@ -20,14 +20,14 @@ public sealed record WorldProjectedMetadata(string? Title = null, string? Descri
 /// <param name="Name">The kit's name — the identity a placement/assignment row addresses.</param>
 /// <param name="BodyMotionProgram">The program name the destination advances this kit on. A name only; the
 /// <c>bodyMotionPrograms</c> section itself never crosses below the replica tier.</param>
-/// <param name="Motion">The kit's motion model — the arm and its tuning, which is what decides how a client
-/// interpolates and frames a body wearing it.</param>
+/// <param name="Motion">The kit's motion tuning, which is what decides how a client interpolates and frames a body
+/// wearing it.</param>
 /// <param name="Collider">The kit's collider, when it authors one.</param>
 /// <param name="BodyContact">Whether two bodies wearing this kit physically depenetrate.</param>
 public sealed record WorldProjectedKit(
     string Name,
     string BodyMotionProgram,
-    WorldMotionModel Motion,
+    WorldMotion Motion,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollider? Collider = null,
     WorldBodyContactMode BodyContact = WorldBodyContactMode.Overlap
 );
@@ -45,10 +45,10 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <summary>
 /// <c>puck.world.projection.v1</c> — what an authority hands a peer holding the
 /// <see cref="WorldDisclosureTier.Presentation"/> tier. A separate versioned document rather than a
-/// <see cref="WorldDefinition"/> with sections nulled out, because <see cref="WorldDefinition"/> requires 33 sections
-/// and a partial one either refuses at <c>RequireSections</c> or misreports what it carries. This type's member list
+/// <see cref="WorldDefinition"/> with sections nulled out: a partial definition either refuses at
+/// <see cref="WorldDefinitionValidator"/> or misreports what it carries. This type's member list
 /// is the disclosure decision: a section that must not leave an authority below the replica tier has no member here.
-/// <para>Absent by construction: <c>rules</c>, <c>grants</c>, <c>state</c>, <c>market</c>, <c>admission</c>,
+/// <para>Absent by construction: <c>rules</c>, <c>grants</c>, <c>state</c>, <c>admission</c>,
 /// <c>generation</c>, <c>generators</c>, <c>groups</c>, <c>properties</c>, <c>addons</c>, <c>storage</c>,
 /// <c>host</c>, <c>authoring</c>, <c>identity</c>, <c>inputHold</c>, <c>targetRegisters</c>,
 /// <c>bodyMotionPrograms</c>, <c>portals</c>, and every kit's <c>producers</c>/<c>actions</c> (see
@@ -81,12 +81,15 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Patches">The synth patch assets.</param>
 /// <param name="Audio">The audio defaults.</param>
 /// <param name="Collision">The contact tuning — a client reads body radius/height from it to frame and interpolate.</param>
-/// <param name="Views">The view defaults (slots, layouts, seat framing).</param>
+/// <param name="Views">The authored window composition (slots, layouts, seat framing), or <see langword="null"/>
+/// when the document authors none — a seatless world composes no seat view.</param>
 /// <param name="Looks">The look rows.</param>
 /// <param name="LookAssignment">The body-to-look assignment.</param>
-/// <param name="Links">The screen links.</param>
+/// <param name="Dynamics">The named second-order "personality" rows every look/camera/kit follower reference
+/// resolves against.</param>
 /// <param name="Hud">The HUD section.</param>
-/// <param name="Water">The standing-water medium, when the world authors one.</param>
+/// <param name="Fields">The field lattice declaration — a presentation peer renders field geometry from the snapshot's
+/// cell deltas and needs the lattice footprint, height scales, and colours to do it.</param>
 /// <param name="Simulation">The authored simulation rate, when the world authors one.</param>
 /// <param name="Interactions">The interaction table — carried for its distance reach alone (see the type remarks).</param>
 /// <param name="References">The named neighbouring documents.</param>
@@ -94,6 +97,7 @@ public sealed record WorldProjectionProvenance(string Authority, string? Documen
 /// <param name="Adjacencies">The reciprocal boundary rows.</param>
 /// <param name="Metadata">The title/description half of <c>metadata</c>, when the world authors one — see the type
 /// remarks.</param>
+/// <param name="Observations">Explicitly disclosed literal state observations, without executable or draw bookkeeping traits.</param>
 public sealed record WorldProjectionDocument(
     WorldProjectionProvenance Provenance,
     WorldMotionDefaults Motion,
@@ -101,32 +105,33 @@ public sealed record WorldProjectionDocument(
     WorldRenderDefaults Render,
     IReadOnlyList<WorldScreen> Screens,
     IReadOnlyList<WorldCamera> Cameras,
-    WorldPopulationDefaults Population,
+    WorldBodiesDefaults Population,
     WorldPlayerDefaults PlayerDefaults,
     IReadOnlyList<WorldChannel> Channels,
     IReadOnlyList<WorldProjectedKit> Kits,
     string DefaultSeatKit,
     WorldRowAssignment Assignment,
     IReadOnlyList<WorldBindingOverlay> BindingOverlays,
-    IReadOnlyList<WorldCreation> Creations,
+    [property: System.Text.Json.Serialization.JsonPropertyName("prototypes")] IReadOnlyList<WorldPrototype> Creations,
     IReadOnlyList<WorldPlacement> Placements,
     IReadOnlyList<WorldSpeaker> Speakers,
     IReadOnlyList<WorldTune> Tunes,
     IReadOnlyList<WorldPatch> Patches,
     WorldAudioDefaults Audio,
     WorldCollision Collision,
-    WorldViewDefaults Views,
+    WorldViewDefaults? Views,
     IReadOnlyList<WorldLook> Looks,
     WorldRowAssignment LookAssignment,
-    IReadOnlyList<WorldScreenLink> Links,
+    IReadOnlyList<DynamicsRow> Dynamics,
     WorldHudSection Hud,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldWaterSection? Water = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFieldsSection? Fields = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSimulationDefaults? Simulation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldInteractionsSection? Interactions = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldReference>? References = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDestination>? Destinations = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldAdjacency>? Adjacencies = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldProjectedMetadata? Metadata = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldProjectedMetadata? Metadata = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldObservedRow>? Observations = null
 ) {
     /// <summary>The document schema version. A reader refuses any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.projection.v1";
@@ -147,10 +152,13 @@ public sealed record WorldProjectionDocument(
 /// read the definition directly — colocated trust is home trust.
 /// </summary>
 /// <remarks>
-/// <para><see cref="ToDefinition"/> rebuilds a <see cref="WorldDefinition"/> from a projection so a receiving
+/// <para><see cref="TryToDefinition"/> rebuilds a <see cref="WorldDefinition"/> from a projection so a receiving
 /// consumer keeps its existing type. The wire carries the projection; the receiver constructs a locally-valid
 /// document whose undisclosed sections carry their neutral built-in defaults. A hydrated document is never saved,
 /// journaled, or treated as a source of authority.</para>
+/// <para>A projection is flat: <see cref="Compose"/> answers every <c>state.&lt;row&gt;[.&lt;key&gt;]</c> document
+/// value from the composing authority's own state and sends the literal, because the projection discloses no state
+/// section for a receiver to answer one against.</para>
 /// <para>At <see cref="WorldDisclosureTier.Replica"/> <see cref="Compose"/> answers <see langword="null"/> and the
 /// caller serializes the definition verbatim. For a flat document that download is hash-identical to the authored
 /// file; for a document loaded from a <c>basis</c> delta it is the flattened composition — self-contained by
@@ -167,7 +175,8 @@ public static class WorldProjection {
     /// <see cref="WorldDisclosureTier.Replica"/> (the caller sends the definition verbatim) and at
     /// <see cref="WorldDisclosureTier.Frames"/> (the caller sends no document at all).</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision) {
+    /// <param name="recipient">The authenticated recipient, or null for public observation.</param>
+    public static WorldProjectionDocument? Compose(WorldDefinition definition, WorldDisclosureTier tier, string authority, int revision, WorldPrincipal? recipient = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (tier != WorldDisclosureTier.Presentation) {
@@ -188,7 +197,7 @@ public static class WorldProjection {
             );
         }
 
-        return new WorldProjectionDocument(
+        var projection = new WorldProjectionDocument(
             Provenance: new WorldProjectionProvenance(
                 Authority: authority,
                 DocumentId: definition.DocumentId,
@@ -214,12 +223,11 @@ public static class WorldProjection {
             Patches: definition.Patches,
             Audio: definition.Audio,
             Collision: definition.Collision,
-            Views: definition.Views,
+            Views: definition.ViewsRaw,
             Looks: definition.Looks,
             LookAssignment: definition.LookAssignment,
-            Links: definition.Links,
+            Dynamics: definition.Dynamics,
             Hud: definition.Hud,
-            Water: definition.Water,
             Simulation: definition.Simulation,
             Interactions: definition.Interactions,
             References: definition.References,
@@ -232,7 +240,45 @@ public static class WorldProjection {
                 )
             : null)
         );
+
+        WorldStateDisclosure.ValidateBindings(definition, projection, recipient);
+        projection = projection with { Observations = WorldStateDisclosure.Compose(definition, recipient) };
+        return Flatten(
+            definition: definition,
+            projection: projection
+        );
     }
+
+    // A projection discloses no `state` section, so a retained `state.<row>[.<key>]` reference would reach the peer
+    // as a pointer into a table it was never handed — read as one, it faults; resolved as one, it refuses. The egress
+    // is therefore flat: every reference is answered from this authority's own state and dropped.
+    //
+    // The rows above are the LIVE document's own objects, and their value holders carry the authored reference
+    // canonical write-back preserves, so the flattening runs on a rehydrated private copy.
+    private static WorldProjectionDocument Flatten(WorldProjectionDocument projection, WorldDefinition definition) {
+        if (!WorldStateDocumentValues.HasReference(graph: projection)) {
+            return projection;
+        }
+
+        if (!TryDeserialize(
+            utf8Json: Serialize(projection: projection),
+            projection: out var copy,
+            reason: out var reason
+        ) || (copy is null)) {
+            throw new InvalidOperationException(message: $"the composed projection did not round-trip: {reason}");
+        }
+
+        if (!WorldStateDocumentValues.TryFlatten(
+            graph: copy,
+            reason: out var flattenReason,
+            source: definition
+        )) {
+            throw new InvalidOperationException(message: $"the composed projection could not be flattened: {flattenReason}");
+        }
+
+        return copy;
+    }
+
     /// <summary>Serializes a projection to its canonical UTF-8 bytes.</summary>
     /// <param name="projection">The projection.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>
@@ -248,11 +294,21 @@ public static class WorldProjection {
     /// <summary>Rebuilds a locally-valid <see cref="WorldDefinition"/> from a projection — see the class remarks. Every
     /// undisclosed section arrives as its neutral built-in default, never as a fabricated stand-in for what the
     /// composing authority actually authored.</summary>
+    /// <remarks>
+    /// The hydration runs the same document-value resolution pass a file load runs, so a delivered definition is
+    /// indistinguishable from a loaded one. <see cref="Compose"/> flattens what it sends, so a peer that still names a
+    /// state cell is naming one this projection carries no section for: that refuses here rather than faulting later
+    /// at the first read of the value.
+    /// </remarks>
     /// <param name="projection">The projection.</param>
-    /// <returns>The hydrated definition.</returns>
+    /// <param name="definition">The hydrated definition on success.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when the projection hydrated and every document value resolved.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="projection"/> is <see langword="null"/>.</exception>
-    public static WorldDefinition ToDefinition(WorldProjectionDocument projection) {
+    public static bool TryToDefinition(WorldProjectionDocument projection, out WorldDefinition? definition, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: projection);
+
+        definition = null;
 
         var kits = new WorldKit[projection.Kits.Count];
 
@@ -270,7 +326,7 @@ public static class WorldProjection {
             );
         }
 
-        return new WorldDefinition(
+        var hydrated = new WorldDefinition(
             MotionRaw: projection.Motion,
             SpawnPointsRaw: projection.SpawnPoints,
             RenderRaw: projection.Render,
@@ -281,28 +337,31 @@ public static class WorldProjection {
             ChannelsRaw: projection.Channels,
             TargetRegistersRaw: [],
             BodyMotionProgramsRaw: [],
-            KitsRaw: kits,
+            KitsRaw: new WorldKitsSection(
+                Assignment: projection.Assignment,
+                Rows: kits
+            ),
             DefaultSeatKitRaw: projection.DefaultSeatKit,
-            AssignmentRaw: projection.Assignment,
             AddonsRaw: [],
             BindingOverlaysRaw: projection.BindingOverlays,
             StorageRaw: new WorldStorageDefaults(),
             CreationsRaw: projection.Creations,
-            PlacementsRaw: projection.Placements,
-            AuthoringRaw: WorldAuthoringDefaults.Default,
+            PlacementsRaw: new WorldPlacementsSection(Rows: projection.Placements),
             SpeakersRaw: projection.Speakers,
             TunesRaw: projection.Tunes,
             PatchesRaw: projection.Patches,
             AudioRaw: projection.Audio,
             CollisionRaw: projection.Collision,
-            HostRaw: WorldHostDefaults.Default,
+            HostRaw: null,
             ViewsRaw: projection.Views,
-            LooksRaw: projection.Looks,
-            LookAssignmentRaw: projection.LookAssignment,
-            LinksRaw: projection.Links,
+            LooksRaw: new WorldLooksSection(
+                Assignment: projection.LookAssignment,
+                Rows: projection.Looks
+            ),
+            DynamicsRaw: projection.Dynamics,
             GrantsRaw: [],
             HudRaw: projection.Hud,
-            StateRaw: new WorldStateSection(World: []),
+            StateRaw: WorldFieldsSection.ToStateSection(composite: projection.Fields),
             InputHoldRaw: new WorldInputHoldAuthoring(
                 CeilingSeconds: 0f,
                 DefaultSeconds: 0f,
@@ -310,7 +369,6 @@ public static class WorldProjection {
                 LowerAfterSeconds: 0f,
                 Participants: []
             ),
-            Water: projection.Water,
             Simulation: projection.Simulation,
             Interactions: projection.Interactions,
             References: projection.References,
@@ -325,6 +383,17 @@ public static class WorldProjection {
         ) {
             DocumentId = projection.Provenance.DocumentId,
         };
+
+        if (!WorldStateDocumentValues.TryResolve(
+            definition: hydrated,
+            reason: out reason
+        )) {
+            return false;
+        }
+
+        definition = hydrated;
+
+        return true;
     }
     /// <summary>Parses a projection from untrusted bytes, refusing by name — the same Try-shaped, never-throwing
     /// discipline every other wire leaf follows.</summary>

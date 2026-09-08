@@ -9,11 +9,25 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
+        <PackageReference Include="JsonSchema.Net" Version="[7.*, )" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
         <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- The shipped world, read as-authored by BindingDocumentWireShapeTests: the binding sections it
+             carries are the real thing a consumer round-trips, not a fixture written to pass. Linked rather than
+             copied so the file has exactly one home. -->
+        <Content
+            CopyToOutputDirectory="PreserveNewest"
+            Include="..\..\src\Puck.World\Assets\worlds\puck.world.json"
+            Link="Assets\puck.world.json"
+        />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
     </ItemGroup>
 </Project>

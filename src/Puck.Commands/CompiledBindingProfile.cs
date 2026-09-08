@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Collections.Immutable;
 
 namespace Puck.Commands;
@@ -16,15 +17,22 @@ namespace Puck.Commands;
 /// recompose, no recompilation.
 /// </remarks>
 public sealed class CompiledBindingProfile {
+    // Every lookup here is built once, at compile time, and then read for the whole life of the profile — a group
+    // switch, a modifier resolution per raw input signal, a wheel probe per page flip. That is FrozenDictionary's
+    // exact shape: pay the construction cost once to make every subsequent read faster than Dictionary's. The
+    // comparers are the compiler's own and are load-bearing document semantics, so each is carried across
+    // explicitly rather than left to the default (ToFrozenDictionary's no-comparer overload would silently
+    // substitute one).
     private readonly int[][] m_commandRowsByGroup;
-    private readonly Dictionary<string, int> m_groupIndexByName;
+    private readonly FrozenDictionary<string, int> m_groupIndexByName;
     private readonly ImmutableArray<string> m_groups;
-    private readonly Dictionary<string, int> m_modifierIndexBySource;
+    private readonly FrozenDictionary<string, int> m_modifierIndexBySource;
     private readonly ImmutableArray<BindingModifierDefinition> m_modifiers;
     private readonly int[][] m_pageRowsByGroup;
+    private readonly FrozenDictionary<string, int> m_pageRowByPageId;
     private readonly int[] m_restingRowByGroup;
     private readonly CompiledChordRow[] m_rows;
-    private readonly Dictionary<int, BindingWheelView> m_wheelViewByRow;
+    private readonly FrozenDictionary<int, BindingWheelView> m_wheelViewByRow;
 
     // One compiled chord row: exactly one of (Table, View) — the page meaning — or Command is present. A PAGE
     // meaning row may additionally carry row-scoped Activators — entries whose trigger is an ordered sequence
@@ -36,7 +44,7 @@ public sealed class CompiledBindingProfile {
         int GroupIndex,
         int[] Chord,
         int[] Held,
-        IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>>? Table,
+        FrozenDictionary<string, IReadOnlyList<CommandBinding>>? Table,
         BindingPageView? View,
         CompiledCommandEdge? Command,
         IReadOnlyList<CompiledActivatorEntry>? Activators = null
@@ -55,7 +63,8 @@ public sealed class CompiledBindingProfile {
         CommandValue ReleaseValue,
         bool Reassertable,
         BindingEntryMode Mode,
-        string Source
+        string Source,
+        string? Text = null
     );
     // A compiled row activator: the shared command edge plus the sequence/mode/timeout a RowActivatorTracker
     // resolves, plus a GLOBAL index (0..ActivatorCount-1, unique across the whole compiled profile) a slot's
@@ -170,9 +179,11 @@ public sealed class CompiledBindingProfile {
     internal CompiledChordRow RowAt(int rowIndex) {
         return m_rows[rowIndex];
     }
-    /// <summary>Gets a page row's binding table.</summary>
+    /// <summary>Gets a page row's binding table, keyed by base source (<c>OrdinalIgnoreCase</c>). Returned as the
+    /// concrete <see cref="FrozenDictionary{TKey, TValue}"/> so the per-signal lookup binds directly instead of
+    /// dispatching through <see cref="IReadOnlyDictionary{TKey, TValue}"/>.</summary>
     /// <param name="rowIndex">A page-meaning row index.</param>
-    internal IReadOnlyDictionary<string, IReadOnlyList<CommandBinding>> TableOf(int rowIndex) {
+    internal FrozenDictionary<string, IReadOnlyList<CommandBinding>> TableOf(int rowIndex) {
         return m_rows[rowIndex].Table!;
     }
     /// <summary>Attempts to resolve a source to the modifier it drives.</summary>
@@ -225,6 +236,26 @@ public sealed class CompiledBindingProfile {
             value: out groupIndex
         );
     }
+    /// <summary>Attempts to resolve a page's precomputed view by its profile-unique id, across every group — the
+    /// lookup a consumer that names a page directly (rather than resolving the active page from a held chord) uses,
+    /// e.g. a binding-bar bank rendering a page other than the seat's currently active one.</summary>
+    /// <param name="pageId">The page id (ordinal comparison).</param>
+    /// <param name="view">The page's view, when found.</param>
+    /// <returns><see langword="true"/> when the profile declares a page with this id.</returns>
+    public bool TryGetPageView(string pageId, out BindingPageView view) {
+        if (m_pageRowByPageId.TryGetValue(
+            key: pageId,
+            value: out var rowIndex
+        )) {
+            view = m_rows[rowIndex].View!;
+
+            return true;
+        }
+
+        view = null!;
+
+        return false;
+    }
 
     internal CompiledBindingProfile(
         IReadOnlyList<BindingModifierDefinition> modifiers,
@@ -240,14 +271,27 @@ public sealed class CompiledBindingProfile {
     ) {
         m_commandRowsByGroup = commandRowsByGroup;
         m_pageRowsByGroup = pageRowsByGroup;
-        m_groupIndexByName = groupIndexByName;
+        m_groupIndexByName = groupIndexByName.ToFrozenDictionary(comparer: groupIndexByName.Comparer);
         m_groups = ImmutableArray.CreateRange(items: groups);
-        m_modifierIndexBySource = modifierIndexBySource;
+        m_modifierIndexBySource = modifierIndexBySource.ToFrozenDictionary(comparer: modifierIndexBySource.Comparer);
         m_modifiers = ImmutableArray.CreateRange(items: modifiers);
         m_restingRowByGroup = restingRowByGroup;
         m_rows = rows;
-        m_wheelViewByRow = wheelViewByRow;
+        m_wheelViewByRow = wheelViewByRow.ToFrozenDictionary();
         ActivatorCount = activatorCount;
+
+        // A page id is profile-unique by authoring contract (BindingPageDefinition.Id), so one flat table covers
+        // every group; a row with no page meaning (a bare command/channel row) contributes nothing. Ordinal, because
+        // TryGetPageView's caller names a page id it read out of the same document the compiler read.
+        var pageRowByPageId = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        for (var rowIndex = 0; (rowIndex < rows.Length); rowIndex++) {
+            if (rows[rowIndex].View is { PageId: { Length: > 0 } pageId }) {
+                pageRowByPageId[pageId] = rowIndex;
+            }
+        }
+
+        m_pageRowByPageId = pageRowByPageId.ToFrozenDictionary(comparer: pageRowByPageId.Comparer);
     }
 
     /// <summary>Gets the total number of row activators declared across every page in this profile — the size a

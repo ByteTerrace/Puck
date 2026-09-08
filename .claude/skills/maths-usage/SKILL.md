@@ -55,9 +55,9 @@ coverage ratchet and both leg gates, so every change owes it and most changes
 owe nothing more. Run `deep.runsettings` before committing; `exhaustive.runsettings`
 and `bench.runsettings` on demand only.
 
-**Do not reflexively run `Puck.Post` or the `exhaustive` tier.** They take
-minutes and cannot run a subset. Run one only when the member you touched names
-it as its gate of record. A public API change also requires a law or precise waiver
+**Do not reflexively run the `exhaustive` tier.** It takes minutes and cannot
+run a subset. Run it only when the member you touched names it as its gate of
+record. A public API change also requires a law or precise waiver
 under `maths-laws`. Report the exact commands, and distinguish failures caused
 by the change from pre-existing ones.
 

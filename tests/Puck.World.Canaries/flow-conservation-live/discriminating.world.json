@@ -1,0 +1,36 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "flow-conservation-live-canary-discriminating",
+  "simulation": { "rateHz": 240 },
+  "state": {
+    "world": [
+      {
+        "name": "water",
+        "kind": "Fixed",
+        "domain": { "$type": "cellsOf", "topology": "channel" },
+        "field": {
+          "initial": 0,
+          "min": 0,
+          "max": 1000,
+          "heightScale": 0
+        }
+      },
+      { "name": "spill", "kind": "Fixed", "value": "0", "min": "0", "max": "1000000" }
+    ],
+    "lattices": [
+      {
+        "$type": "field",
+        "name": "channel",
+        "origin": [0, 0, 0],
+        "cellSize": 1,
+        "width": 3,
+        "depth": 1,
+        "layers": 1,
+        "stepEveryTicks": 1,
+        "reactions": [
+          { "$type": "flow", "field": "water", "rate": 1, "spillRow": "spill" }
+        ]
+      }
+    ]
+  }
+}

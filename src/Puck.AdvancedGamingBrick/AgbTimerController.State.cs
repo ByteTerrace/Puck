@@ -82,6 +82,7 @@ public sealed partial class AgbTimerController : ISnapshotable {
         reader.ReadBlock<int>(destination: m_latchReload);
         m_timerLatched = reader.ReadBoolean();
         m_scheduled = reader.ReadBoolean();
+        RefreshPendingLatch();
 
         // Re-derive the overflow events from the anchors (the scheduler cleared its queue in its own LoadState, run
         // first). Only a scheduled prescaler timer owns a live overflow event; everything else stays descheduled.

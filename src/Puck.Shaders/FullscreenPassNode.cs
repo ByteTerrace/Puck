@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
+using Puck.Assets;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -15,9 +17,8 @@ namespace Puck.Shaders;
 /// every run, machine, and backend), the pass's resolution, or its own frame counter. The pass owns its render
 /// target, fence, pipeline, and descriptor set, and disposes the inner node with itself.
 /// </summary>
-public sealed class FullscreenPassNode : IRenderNode {
+public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     private readonly IGpuCommandRecorder m_commandRecorder;
-    private readonly ShaderConfigValues m_config;
     private readonly Func<uint, uint, IGpuRenderTarget> m_createRenderTarget;
     private readonly NodeDescriptor m_descriptor;
     private readonly IGpuDescriptorAllocator m_descriptorAllocator;
@@ -32,10 +33,13 @@ public sealed class FullscreenPassNode : IRenderNode {
     private readonly IGpuQueueSubmitter m_queueSubmitter;
     private readonly uint m_sampledImageBinding;
     private readonly IGpuShaderModuleFactory m_shaderModuleFactory;
+    private readonly IGpuSurfaceTransferFactory m_surfaceTransferFactory;
     private readonly IGpuVertexBufferFactory m_vertexBufferFactory;
     private readonly ReadOnlyMemory<byte> m_vertexBytecode;
     private readonly uint m_width;
 
+    private bool m_captureUnavailable;
+    private ShaderConfigValues m_config;
     private nint m_descriptorPool;
     private nint m_descriptorSet;
     private bool m_disposed;
@@ -43,7 +47,11 @@ public sealed class FullscreenPassNode : IRenderNode {
     private IGpuSubmissionFence? m_frameFence;
     private IGpuShaderModule? m_fragmentShader;
     private nint m_lastImageViewHandle;
+    private Dictionary<string, ShaderConfigValue>? m_liveConfig;
+    private Dictionary<string, byte[]>? m_liveConfigBytes;
+    private FrameCaptureRequest? m_pendingCapture;
     private IGpuPipeline? m_pipeline;
+    private IGpuSurfaceReadback? m_readback;
     private IGpuRenderTarget? m_renderTarget;
     private bool m_resourcesReady;
     private nint m_sampler;
@@ -92,6 +100,7 @@ public sealed class FullscreenPassNode : IRenderNode {
         m_queueSubmitter = services.QueueSubmitter;
         m_sampledImageBinding = manifest.Bindings[0].VulkanBinding;
         m_shaderModuleFactory = services.ShaderModuleFactory;
+        m_surfaceTransferFactory = services.SurfaceTransferFactory;
         m_vertexBufferFactory = services.VertexBufferFactory;
         m_vertexBytecode = File.ReadAllBytes(path: manifest.BytecodePath(stem: manifest.Stages.Vertex!, bytecodeExtension: bytecodeExtension));
         m_width = width;
@@ -99,8 +108,13 @@ public sealed class FullscreenPassNode : IRenderNode {
         FillStaticPushConstants();
     }
 
+    /// <summary>Gets the pass's live config values — the manifest's bound config, as overwritten by any
+    /// <see cref="TrySetConfig"/> call since.</summary>
+    public ShaderConfigValues Config => m_config;
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
+    /// <inheritdoc/>
+    public string? PendingCapturePath => (m_pendingCapture?.Path ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
 
     /// <inheritdoc/>
     public void Dispose() {
@@ -109,8 +123,13 @@ public sealed class FullscreenPassNode : IRenderNode {
         }
 
         m_disposed = true;
-        ReleaseGpuResources();
-        m_inner.Dispose();
+        _ = m_pendingCapture?.TryFail(new ObjectDisposedException(GetType().Name));
+        m_pendingCapture = null;
+        try {
+            ReleaseGpuResources();
+        } finally {
+            m_inner.Dispose();
+        }
     }
     /// <inheritdoc/>
     public void OnDeviceLost() {
@@ -128,6 +147,8 @@ public sealed class FullscreenPassNode : IRenderNode {
         var inner = m_inner.ProduceFrame(context: context);
 
         if (inner.IsEmpty || (0 == inner.ImageViewHandle)) {
+            ForwardPendingCapture();
+
             return inner;
         }
 
@@ -153,6 +174,7 @@ public sealed class FullscreenPassNode : IRenderNode {
         Span<nint> commandBuffers = [RecordPass()];
 
         m_queueSubmitter.Submit(commandBufferHandles: commandBuffers, deviceContext: m_deviceContext, fence: m_frameFence!);
+        CaptureIfPending();
 
         return Surface.SameDeviceImage(
             imageHandle: m_renderTarget!.ImageHandle,
@@ -162,7 +184,122 @@ public sealed class FullscreenPassNode : IRenderNode {
             format: SurfaceFormat.R8G8B8A8Unorm
         );
     }
+    /// <inheritdoc/>
+    public void RequestCapture(FrameCaptureRequest request) {
+        ArgumentNullException.ThrowIfNull(request);
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (PendingCapturePath is not null || request.Completion.IsCompleted) {
+            throw new InvalidOperationException("A capture is already pending or the request is terminal.");
+        }
 
+        m_pendingCapture = request;
+    }
+    /// <summary>Overwrites one scalar-float config field's live value, and — when a push-constant slot sources it —
+    /// the slot's bytes for the next frame. The write a presentation binding drives per frame; the manifest's
+    /// originally bound config is unaffected. Allocates only on a field's first write; later writes to the same
+    /// field update the live bytes in place.</summary>
+    /// <param name="field">The config field's name.</param>
+    /// <param name="value">The new value; must be finite and inside the field's declared range.</param>
+    /// <returns><see langword="true"/> when <paramref name="field"/> names a <c>float</c>-typed config field of this
+    /// pass's manifest and <paramref name="value"/> satisfies its schema; <see langword="false"/> for an unknown
+    /// field, any other type (a vector, <c>uint</c>, or <c>int</c> field), or a value the field's own
+    /// <c>min</c>/<c>max</c> would refuse at bind time.</returns>
+    public bool TrySetConfig(string field, float value) {
+        if ((m_manifest.Config is not { } schema) || !schema.TryGetValue(key: field, value: out var declared) || (declared.Type != ShaderValueType.Float)) {
+            return false;
+        }
+        if (!float.IsFinite(f: value) || !ShaderConfigBinding.InRange(field: declared, value: value)) {
+            return false;
+        }
+
+        if (m_liveConfig is not { } live) {
+            live = new Dictionary<string, ShaderConfigValue>(comparer: StringComparer.Ordinal);
+
+            foreach (var name in m_config.Names) {
+                live[name] = m_config[name];
+            }
+
+            m_liveConfig = live;
+            m_liveConfigBytes = new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal);
+            m_config = new ShaderConfigValues(values: live);
+        }
+
+        if (!m_liveConfigBytes!.TryGetValue(key: field, value: out var bytes)) {
+            bytes = new byte[ShaderValueTypes.ComponentBytes];
+            m_liveConfigBytes[field] = bytes;
+            live[field] = new ShaderConfigValue(Bytes: bytes, Type: ShaderValueType.Float);
+        }
+
+        BinaryPrimitives.WriteSingleLittleEndian(destination: bytes, value: value);
+
+        if (m_pushConstantLayout is { } layout) {
+            foreach (var slot in layout.Slots) {
+                if ((slot.Kind == ShaderPushConstantSourceKind.Config) && string.Equals(a: slot.ConfigField, b: field, comparisonType: StringComparison.Ordinal)) {
+                    bytes.CopyTo(destination: m_pushConstantData.AsSpan(start: ((int)slot.Offset)));
+                }
+            }
+        }
+
+        return true;
+    }
+
+    // Reads back this pass's own render target (the composed result — what the player sees when nothing draws over
+    // it) and writes it as a PNG.
+    private void CaptureIfPending() {
+        if (m_pendingCapture is not { } request) {
+            return;
+        }
+
+        m_pendingCapture = null;
+        var result = request.Write(WriteCapture);
+        if (result.Error is { } error) {
+            Console.Error.WriteLine(value: $"[capture] failed -> {request.Path} ({error.Message})");
+        }
+    }
+    private void WriteCapture(string path) {
+        if (m_captureUnavailable) {
+            Console.Error.WriteLine(value: $"[capture] skipped, Puck.Assets is unavailable — no file written to {path}");
+
+            throw new NotSupportedException("PNG capture is unavailable.");
+        }
+
+        m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
+
+        var pixels = m_readback.Read(
+            bytesPerPixel: 4,
+            deviceContext: m_deviceContext,
+            format: GpuPixelFormat.R8G8B8A8Unorm,
+            height: m_height,
+            sourceImageHandle: m_renderTarget!.ImageHandle,
+            sourceLayout: GpuImageLayout.ShaderReadOnly,
+            width: m_width
+        );
+
+        if (TryWriteCapturePng(
+            height: ((int)m_height),
+            path: path,
+            rgba: pixels,
+            width: ((int)m_width)
+        )) {
+            Console.Error.WriteLine(value: $"[capture] {m_manifest.Name} -> {path}");
+        } else {
+            m_captureUnavailable = true;
+            throw new NotSupportedException("PNG capture is unavailable.");
+        }
+    }
+    // Passing the inner frame through untouched: hand a pending capture down so the readback lands on whatever
+    // actually produced the shown frame. Keeping it armed when the inner cannot serve it is what stops a request
+    // from vanishing silently — the request remains armed until a node serves it or disposal fails it.
+    private void ForwardPendingCapture() {
+        if (m_pendingCapture is not { } request) {
+            return;
+        }
+
+        if (m_inner is ICaptureRequestTarget target) {
+            target.RequestCapture(request: request);
+            m_pendingCapture = null;
+        }
+    }
     private void EnsureResources() {
         if (m_resourcesReady) {
             return;
@@ -276,6 +413,30 @@ public sealed class FullscreenPassNode : IRenderNode {
 
         return 1;
     }
+    // Attempts one capture write, surviving (and loudly reporting) an environment that refuses to load Puck.Assets.
+    // Returns false so the caller can latch m_captureUnavailable and stop retrying a doomed load.
+    private static bool TryWriteCapturePng(string path, ReadOnlyMemory<byte> rgba, int width, int height) =>
+        CapturePngWriteGuard.TryWrite(
+            state: (Path: path, Rgba: rgba, Width: width, Height: height),
+            writeCore: static state => WriteCapturePngCore(
+                height: state.Height,
+                path: state.Path,
+                rgba: state.Rgba,
+                width: state.Width
+            )
+        );
+    // The ONLY member touching the Puck.Assets-typed PngEncoder call, kept non-inlined so the CLR resolves and loads
+    // Puck.Assets.dll on the first actual capture rather than on every produced frame. CapturePngWriteGuard's
+    // try/catch wraps the call one frame up, where a failure to load the assembly is observable.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void WriteCapturePngCore(string path, ReadOnlyMemory<byte> rgba, int width, int height) {
+        PngEncoder.Write(
+            height: height,
+            path: path,
+            rgba: rgba.Span,
+            width: width
+        );
+    }
     private nint RecordPass() {
         var deviceHandle = m_deviceContext.DeviceHandle;
         var commandBufferHandle = m_renderTarget!.CommandBufferHandle;
@@ -319,6 +480,8 @@ public sealed class FullscreenPassNode : IRenderNode {
         }
 
         m_frameFence?.Wait();
+        m_readback?.Dispose();
+        m_readback = null;
         m_vertexBuffer?.Dispose();
         m_vertexBuffer = null;
         m_pipeline?.Dispose();

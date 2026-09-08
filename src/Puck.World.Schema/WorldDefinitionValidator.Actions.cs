@@ -1,12 +1,14 @@
+using Puck.Physics.Motion;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
     private static string PredicateKind(ActionPredicate predicate) => predicate switch {
         ActionPredicate.CompareState => "compareState",
-        ActionPredicate.TimerElapsed => "timerElapsed",
+        WorldPredicate.TimerElapsed => "timerElapsed",
         _ => "?",
     };
-    private static void ValidateActionSpec(ActionSpec? spec, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, ISet<string> judgeRowNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
+    private static void ValidateActionSpec(ActionSpec? spec, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
         if (spec is null) {
             return;
         }
@@ -15,7 +17,6 @@ public static partial class WorldDefinitionValidator {
             trigger: spec.OnPress,
             stateSlots: stateSlots,
             targetRegisterNames: targetRegisterNames,
-            judgeRowNames: judgeRowNames,
             stateRows: stateRows,
             latchLegitimate: true,
             path: $"{path}.onPress",
@@ -25,7 +26,6 @@ public static partial class WorldDefinitionValidator {
             trigger: spec.OnRelease,
             stateSlots: stateSlots,
             targetRegisterNames: targetRegisterNames,
-            judgeRowNames: judgeRowNames,
             stateRows: stateRows,
             latchLegitimate: false,
             path: $"{path}.onRelease",
@@ -62,7 +62,6 @@ public static partial class WorldDefinitionValidator {
                         effect: rule.Effects[effect],
                         stateSlots: stateSlots,
                         targetRegisterNames: targetRegisterNames,
-                        judgeRowNames: judgeRowNames,
                         stateRows: stateRows,
                         path: $"{path}.onFact[{index}].effects[{effect}]",
                         errors: errors
@@ -167,8 +166,8 @@ public static partial class WorldDefinitionValidator {
         var stateSlots = new Dictionary<string, ActionStateSlot>(comparer: StringComparer.Ordinal);
         var count = (definition.BodyState.Count + definition.IdentityState.Count);
 
-        if (count > WorldStateCapacity.MaxBodySlots) {
-            errors.Add(item: $"state body and identity lanes declare {count} slots; the combined maximum is {WorldStateCapacity.MaxBodySlots}.");
+        if (count > StateCapacity.MaxBodySlots) {
+            errors.Add(item: $"state body and identity lanes declare {count} slots; the combined maximum is {StateCapacity.MaxBodySlots}.");
         }
 
         void Add(IReadOnlyList<ActionStateSlot> rows, ActionStateLifetime lifetime, string lane) {
@@ -177,13 +176,16 @@ public static partial class WorldDefinitionValidator {
                 var path = $"state.{lane}[{index}]";
 
                 ValidateActionStateSlot(
-                    state: state,
+                    errors: errors,
                     lifetime: lifetime,
                     path: path,
-                    errors: errors
+                    state: state
                 );
 
-                if (state is null || string.IsNullOrWhiteSpace(value: state.Name)) {
+                if (
+                    (state is null) ||
+                    string.IsNullOrWhiteSpace(value: state.Name)
+                ) {
                     continue;
                 }
                 if (!stateSlots.TryAdd(
@@ -207,7 +209,7 @@ public static partial class WorldDefinitionValidator {
         );
         return stateSlots;
     }
-    private static void ValidateEffect(ActionEffect effect, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, ISet<string> judgeRowNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
+    private static void ValidateEffect(ActionEffect effect, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
         if (
             (effect is not null) &&
             !Enum.IsDefined(value: TargetOf(value: effect))
@@ -219,21 +221,21 @@ public static partial class WorldDefinitionValidator {
             case null:
                 errors.Add(item: $"{path} is required.");
                 break;
-            case ActionEffect.SetVerticalVelocity set:
+            case WorldEffect.SetVerticalVelocity set:
                 RequireFinite(
                     value: set.Velocity,
                     name: $"{path}.velocity",
                     errors: errors
                 );
                 break;
-            case ActionEffect.ScaleVerticalVelocity scale:
+            case WorldEffect.ScaleVerticalVelocity scale:
                 RequireFinite(
                     value: scale.Factor,
                     name: $"{path}.factor",
                     errors: errors
                 );
                 break;
-            case ActionEffect.PlanarImpulse impulse:
+            case WorldEffect.PlanarImpulse impulse:
                 RequireFinite(
                     value: impulse.Speed,
                     name: $"{path}.speed",
@@ -262,6 +264,9 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
+            case ActionEffect.PushState:
+                errors.Add(item: $"{path} is refused at body scope — 'pushState' writes a world history row; a world rule carries it.");
+                break;
             case ActionEffect.SetState set:
                 RefuseKey(
                     key: set.Key,
@@ -276,6 +281,15 @@ public static partial class WorldDefinitionValidator {
                     valueSeconds: set.ValueSeconds,
                     verb: "setState"
                 );
+                RefuseExpression(
+                    expression: set.Expression,
+                    verb: "setState"
+                );
+
+                if (set.Text is not null) {
+                    errors.Add(item: $"{path}.text is refused at body scope — 'setState' writes a numeric per-body action-state slot; a text write addresses a world state row, in the rules section.");
+                }
+
                 ValidateCounterState(
                     name: set.State,
                     value: set.Value
@@ -295,15 +309,19 @@ public static partial class WorldDefinitionValidator {
                     valueSeconds: add.ValueSeconds,
                     verb: "addState"
                 );
+                RefuseExpression(
+                    expression: add.Expression,
+                    verb: "addState"
+                );
                 ValidateCounterState(
                     name: add.State,
                     value: add.Value
                 );
                 break;
-            case ActionEffect.CountdownState:
-                errors.Add(item: $"{path} authors a WORLD state-row countdown, which has no body-scope meaning — admissible only inside a world rule's own effects.");
+            case ActionEffect.TransformState or ActionEffect.CountdownState or ActionEffect.RemoveStateCell or ActionEffect.ScheduleState or ActionEffect.Transaction or WorldEffect.EmitCue or WorldEffect.SetBodyVerticalVelocity or WorldEffect.ScaleBodyVerticalVelocity or WorldEffect.ApplyBodyImpulse or WorldEffect.ApplyRigidImpulse or WorldEffect.DesignateBody or WorldEffect.PaintField:
+                errors.Add(item: $"{path} is a world-rule effect, which has no body-action meaning — admissible only inside a world rule's own effects.");
                 break;
-            case ActionEffect.StartTimer timer:
+            case WorldEffect.StartTimer timer:
                 if (!stateSlots.TryGetValue(
                     key: timer.State,
                     value: out var timerSlot
@@ -318,12 +336,15 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
                 break;
-            case ActionEffect.Designate designate:
-                if (string.IsNullOrWhiteSpace(value: designate.Register)) {
-                    errors.Add(item: $"{path}.register must be non-empty.");
-                } else if (!targetRegisterNames.Contains(item: designate.Register)) {
-                    errors.Add(item: $"{path}.register '{designate.Register}' names no target register.");
-                }
+            case WorldEffect.Designate designate:
+                RequireDeclared(
+                    value: designate.Register,
+                    declaredSet: targetRegisterNames,
+                    path: path,
+                    field: "register",
+                    rowNoun: "target register",
+                    errors: errors
+                );
                 if (designate.Target != ActionTarget.AffectingSubject) {
                     errors.Add(item: $"{path}.target must be AffectingSubject.");
                 }
@@ -339,22 +360,18 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
                 break;
-            case ActionEffect.Judge judge:
-                if (string.IsNullOrWhiteSpace(value: judge.JudgeRef)) {
-                    errors.Add(item: $"{path}.judgeRef must be non-empty.");
-                } else if (!judgeRowNames.Contains(item: judge.JudgeRef)) {
-                    errors.Add(item: $"{path}.judgeRef '{judge.JudgeRef}' names no declared judge row.");
-                }
-                break;
             // upsertHudPanel/removeHudPanel/upsertPlacement/removePlacement author WORLD document rows, and save
             // performs WORLD-scope engine I/O — a per-body action has none of either, so all five are refused BY NAME
             // here (this is the check that actually surfaces: it runs before CompiledBodyMotionProgram.Compile's own
             // mirroring refusal in WorldDefinition.cs, which a passing ValidateEffect never lets a candidate reach).
-            case ActionEffect.UpsertHudPanel or ActionEffect.RemoveHudPanel or ActionEffect.UpsertPlacement or ActionEffect.RemovePlacement:
+            case WorldEffect.UpsertHudPanel or WorldEffect.RemoveHudPanel or WorldEffect.UpsertPlacement or WorldEffect.RemovePlacement:
                 errors.Add(item: $"{path} authors a WORLD document row, which has no body-scope meaning — admissible only inside a world rule's own effects.");
                 break;
-            case ActionEffect.Save:
+            case WorldEffect.Save:
                 errors.Add(item: $"{path} has no body-scope meaning — a per-body action has no world file of its own to save, and is admissible only inside a world rule's own effects.");
+                break;
+            case WorldEffect.Pose:
+                errors.Add(item: $"{path} has no body-scope meaning — 'pose' teleports a body the world names, and is admissible only inside a world rule's own effects.");
                 break;
             default:
                 errors.Add(item: $"{path} is an unknown effect kind.");
@@ -388,7 +405,13 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        void ValidateCounterState(string name, float? value) {
+        void RefuseExpression(ValueExpression? expression, string verb) {
+            if (expression is not null) {
+                errors.Add(item: $"{path}.expression is refused at body scope — '{verb}' writes one per-body action-state slot from a literal; expressions address world state rows and are legitimate only in a world rule.");
+            }
+        }
+
+        void ValidateCounterState(string name, decimal? value) {
             if (!stateSlots.TryGetValue(
                 key: name,
                 value: out var slot
@@ -401,22 +424,20 @@ public static partial class WorldDefinitionValidator {
             if (value is not { } constant) {
                 errors.Add(item: $"{path}.value is required at body scope — a live copy source ('fromState') is legitimate only in a world rule.");
             } else {
-                RequireFinite(
-                    errors: errors,
-                    name: $"{path}.value",
-                    value: constant
-                );
+                if (!NumericLiteral.TryToFixed(value: constant, result: out _)) {
+                    errors.Add(item: $"{path}.value is outside the Q48.16 action-state range.");
+                }
             }
         }
 
         static ActionTarget TargetOf(ActionEffect value) => value switch {
-            ActionEffect.SetVerticalVelocity item => item.Target,
-            ActionEffect.ScaleVerticalVelocity item => item.Target,
-            ActionEffect.PlanarImpulse item => item.Target,
+            WorldEffect.SetVerticalVelocity item => item.Target,
+            WorldEffect.ScaleVerticalVelocity item => item.Target,
+            WorldEffect.PlanarImpulse item => item.Target,
             ActionEffect.SetState item => item.Target,
             ActionEffect.AddState item => item.Target,
-            ActionEffect.StartTimer item => item.Target,
-            ActionEffect.Designate item => item.Target,
+            WorldEffect.StartTimer item => item.Target,
+            WorldEffect.Designate item => item.Target,
             _ => ActionTarget.Self,
         };
     }
@@ -434,38 +455,50 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (destination.Draw is not { } draw) {
-            errors.Add(item: $"{path}.row '{row}' declares no draw — 'generate' redraws a draw site.");
+            // A lattice row painted by a draw fill is redrawn a whole pass at a time and carries no timing.
+            if (WorldLatticeFill.FindDraw(trait: destination.Field) is null) {
+                errors.Add(item: $"{path}.row '{row}' declares no draw — 'generate' redraws a draw site or a field row painted by a draw fill.");
+            }
 
             return;
         }
 
-        if (draw.Timing == WorldDrawTiming.Boot) {
+        if (draw.Timing == DrawTiming.Boot) {
             errors.Add(item: $"{path}.row '{row}' declares timing=boot — it draws once at first fill and is never redrawn.");
         }
 
     }
-    // A motion-response gate: the body-fact predicate vocabulary ONLY. Now/Recently/All are accepted; the lane-scoped
-    // CompareState/TimerElapsed are rejected by name ("action-state predicates apply only to action triggers"); an
-    // unknown kind is loud. Mirrors ValidatePredicate's structure but narrows the admissible set.
-    private static void ValidateMotionGate(ActionPredicate? predicate, string path, List<string> errors) {
+    // A shaping-row gate: the body-fact predicate vocabulary, plus 'held' (a shaping row's own channel test).
+    // Now/Recently/All/Any/Not/Held are accepted; the lane-scoped CompareState/TimerElapsed are rejected by name
+    // ("action-state predicates apply only to action triggers"); an unknown kind is loud. Mirrors ValidatePredicate's
+    // structure but narrows the admissible set.
+    private static void ValidateMotionGate(ActionPredicate? predicate, ISet<string> channelNames, string path, List<string> errors) {
         switch (predicate) {
             case null:
                 break;
-            case ActionPredicate.Now now when !Enum.IsDefined(value: now.Fact):
+            case WorldPredicate.Now now when !Enum.IsDefined(value: now.Fact):
                 errors.Add(item: $"{path}.fact '{now.Fact}' is not a defined ActionFact.");
                 break;
-            case ActionPredicate.Now:
+            case WorldPredicate.Now:
                 break;
-            case ActionPredicate.Recently recently:
+            case WorldPredicate.Recently recently:
                 if (!Enum.IsDefined(value: recently.Fact)) {
                     errors.Add(item: $"{path}.fact '{recently.Fact}' is not a defined ActionFact.");
                 }
 
+                RequirePositive(
+                    value: recently.WindowSeconds,
+                    name: $"{path}.windowSeconds",
+                    errors: errors
+                );
+
+                break;
+            case WorldPredicate.Held held:
                 if (
-                    !float.IsFinite(f: recently.WindowSeconds) ||
-                    (recently.WindowSeconds <= 0f)
+                    string.IsNullOrWhiteSpace(value: held.Channel) ||
+                    !channelNames.Contains(item: held.Channel)
                 ) {
-                    errors.Add(item: $"{path}.windowSeconds must be finite and greater than 0.");
+                    errors.Add(item: $"{path}.channel '{held.Channel}' names no declared composition channel.");
                 }
 
                 break;
@@ -479,15 +512,46 @@ public static partial class WorldDefinitionValidator {
                 for (var index = 0; (index < inner.Count); index++) {
                     ValidateMotionGate(
                         predicate: inner[index],
+                        channelNames: channelNames,
                         path: $"{path}.all[{index}]",
                         errors: errors
                     );
                 }
 
                 break;
+            case ActionPredicate.Any any:
+                if (any.Predicates is not { Count: > 0 } alternatives) {
+                    errors.Add(item: $"{path}.any must contain at least one predicate.");
+
+                    break;
+                }
+
+                for (var index = 0; (index < alternatives.Count); index++) {
+                    ValidateMotionGate(
+                        predicate: alternatives[index],
+                        channelNames: channelNames,
+                        path: $"{path}.any[{index}]",
+                        errors: errors
+                    );
+                }
+
+                break;
+            case ActionPredicate.Not not:
+                if (not.Predicate is null) {
+                    errors.Add(item: $"{path}.not must contain one predicate.");
+                } else {
+                    ValidateMotionGate(
+                        predicate: not.Predicate,
+                        channelNames: channelNames,
+                        path: $"{path}.not",
+                        errors: errors
+                    );
+                }
+
+                break;
             case ActionPredicate.CompareState:
-            case ActionPredicate.TimerElapsed:
-                errors.Add(item: $"{path} is an action-state predicate ('{PredicateKind(predicate: predicate)}') — action-state predicates apply only to action triggers, not a motion response gate.");
+            case WorldPredicate.TimerElapsed:
+                errors.Add(item: $"{path} is an action-state predicate ('{PredicateKind(predicate: predicate)}') — action-state predicates apply only to action triggers, not a shaping-row gate.");
                 break;
             default:
                 errors.Add(item: $"{path} is an unknown predicate kind.");
@@ -498,22 +562,21 @@ public static partial class WorldDefinitionValidator {
         switch (predicate) {
             case null:
                 break;
-            case ActionPredicate.Now now when !Enum.IsDefined(value: now.Fact):
+            case WorldPredicate.Now now when !Enum.IsDefined(value: now.Fact):
                 errors.Add(item: $"{path}.fact '{now.Fact}' is not a defined ActionFact.");
                 break;
-            case ActionPredicate.Now:
+            case WorldPredicate.Now:
                 break;
-            case ActionPredicate.Recently recently:
+            case WorldPredicate.Recently recently:
                 if (!Enum.IsDefined(value: recently.Fact)) {
                     errors.Add(item: $"{path}.fact '{recently.Fact}' is not a defined ActionFact.");
                 }
 
-                if (
-                    !float.IsFinite(f: recently.WindowSeconds) ||
-                    (recently.WindowSeconds <= 0f)
-                ) {
-                    errors.Add(item: $"{path}.windowSeconds must be finite and greater than 0.");
-                }
+                RequirePositive(
+                    value: recently.WindowSeconds,
+                    name: $"{path}.windowSeconds",
+                    errors: errors
+                );
 
                 break;
             case ActionPredicate.CompareState compare:
@@ -544,14 +607,12 @@ public static partial class WorldDefinitionValidator {
                 if (compare.Value is not { } compareValue) {
                     errors.Add(item: $"{path}.value is required at body scope — a per-body predicate names an authored constant (a comparand row reference is legitimate only in a world rule).");
                 } else {
-                    RequireFinite(
-                        errors: errors,
-                        name: $"{path}.value",
-                        value: compareValue
-                    );
+                    if (!NumericLiteral.TryToFixed(value: compareValue, result: out _)) {
+                        errors.Add(item: $"{path}.value is outside the Q48.16 action-state range.");
+                    }
                 }
                 break;
-            case ActionPredicate.TimerElapsed elapsed:
+            case WorldPredicate.TimerElapsed elapsed:
                 if (!stateSlots.TryGetValue(
                     key: elapsed.State,
                     value: out var timerSlot
@@ -578,12 +639,44 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
+            case ActionPredicate.Any any:
+                if (any.Predicates is not { Count: > 0 } alternatives) {
+                    errors.Add(item: $"{path}.any must contain at least one predicate.");
+                    break;
+                }
+
+                for (var index = 0; (index < alternatives.Count); index++) {
+                    ValidatePredicate(
+                        predicate: alternatives[index],
+                        stateSlots: stateSlots,
+                        path: $"{path}.any[{index}]",
+                        errors: errors
+                    );
+                }
+
+                break;
+            case ActionPredicate.Not not:
+                if (not.Predicate is null) {
+                    errors.Add(item: $"{path}.not must contain one predicate.");
+                    break;
+                }
+
+                ValidatePredicate(
+                    predicate: not.Predicate,
+                    stateSlots: stateSlots,
+                    path: $"{path}.not",
+                    errors: errors
+                );
+                break;
+            case WorldPredicate.Held:
+                errors.Add(item: $"{path} is 'held' — legitimate only inside a kit's shaping-row gate, not an action trigger.");
+                break;
             default:
                 errors.Add(item: $"{path} is an unknown predicate kind.");
                 break;
         }
     }
-    private static void ValidateTrigger(ActionTrigger? trigger, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, ISet<string> judgeRowNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool latchLegitimate, string path, List<string> errors) {
+    private static void ValidateTrigger(ActionTrigger? trigger, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool latchLegitimate, string path, List<string> errors) {
         if (trigger is null) {
             return;
         }
@@ -622,7 +715,6 @@ public static partial class WorldDefinitionValidator {
                 effect: effects[index],
                 stateSlots: stateSlots,
                 targetRegisterNames: targetRegisterNames,
-                judgeRowNames: judgeRowNames,
                 stateRows: stateRows,
                 path: $"{path}.effects[{index}]",
                 errors: errors

@@ -1,20 +1,26 @@
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
+using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    /// <summary>Gets the latest peer-advance cadence work. Counts only bodies whose kit authors a nonzero cadence.</summary>
+    public WorldAutonomyStatistics AutonomyStatistics { get; private set; }
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
-        entry.ProducerState.WeaveFrequency = (producer.Scalar(name: "weaveFrequencyBase") + (producer.Scalar(name: "weaveFrequencyRange") * weaveUnit));
+        entry.ProducerState.WeaveFrequency = (producer.Scalar(BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
 
         if (resetPhase) {
             entry.ProducerState.AcquiredTarget = -1;
+            entry.ProducerState.CurveArcRaw = 0L;
+            entry.NavigationState.Clear();
             entry.ProducerState.Phase = phase;
             entry.ProducerState.ActivityPhase = (phase + (TwoPi * activityUnit));
-            entry.ProducerState.ActivityRate = (producer.Scalar(name: "activityRateBase") + (producer.Scalar(name: "activityRateRange") * activityUnit));
+            entry.ProducerState.ActivityRate = (producer.Scalar(BodyProducerParameter.ActivityRateBase) + (producer.Scalar(BodyProducerParameter.ActivityRateRange) * activityUnit));
         }
     }
-    private bool HasLineOfSight(in FixedVector3 from, in FixedQuaternion fromOrientation, in FixedVector3 to, in FixedQuaternion toOrientation) {
+    internal bool HasLineOfSight(in FixedVector3 from, in FixedQuaternion fromOrientation, in FixedVector3 to, in FixedQuaternion toOrientation) {
         var start = (from + fromOrientation.Rotate(vector: LocalSightOffset));
         var end = (to + toOrientation.Rotate(vector: LocalSightOffset));
 
@@ -23,13 +29,10 @@ public sealed partial class WorldPopulation {
             to: end
         ) ?? false);
     }
-    // The distribution for one inhabited body is anchored at the placement root.
-    private static FixedVector3 InhabitantSpawn(WorldPlacement placement, WorldDistribution distribution, int ordinal, int count) {
-        var position = new FixedVector3(
-            X: FixedQ4816.FromDouble(value: placement.Position.X),
-            Y: FixedQ4816.FromDouble(value: placement.Position.Y),
-            Z: FixedQ4816.FromDouble(value: placement.Position.Z)
-        );
+    // The distribution for one inhabited body is anchored at the placement's own COMPOSED (world) frame — see
+    // WorldDefinitionRows.ResolvedFrame — never its authored (possibly parent-relative) Position directly.
+    private static FixedVector3 InhabitantSpawn(CompiledPlacementFrame frame, WorldDistribution distribution, int ordinal, int count) {
+        var position = FixedVector3.FromVector3(value: frame.Position);
         var disc = ((WorldDistributionRegion.Disc)distribution.Region);
         var radius = FixedQ4816.FromDouble(value: disc.Radius);
 
@@ -55,7 +58,7 @@ public sealed partial class WorldPopulation {
     }
     private FixedQ4816 PreferredAltitudeFor(in FixedWorldKit kit, CompiledBodyProducer producer, FixedQ4816 altitudeUnit) {
         return (kit.BodyMotionProgram.Contains(operation: BodyMotionOp.IntegrateLocalAttitude)
-            ? (producer.Scalar(name: "altitudeBase") + (producer.Scalar(name: "altitudeRange") * altitudeUnit))
+            ? (producer.Scalar(BodyProducerParameter.AltitudeBase) + (producer.Scalar(BodyProducerParameter.AltitudeRange) * altitudeUnit))
             : FixedQ4816.Zero
         );
     }
@@ -74,24 +77,32 @@ public sealed partial class WorldPopulation {
     private BodyProducerSensors ReadProducerSensors(int selfIndex, Entry entry, int currentTarget, in FixedVector3 self, in FixedVector3 forward, CompiledBodyProducer producer) {
         var candidate = BodySensorTarget.None;
         var targetSource = producer.Target;
+        var frozen = producer.Flock is not null;
 
         if (targetSource?.Source is BodyTargetSource.Designated) {
             var designated = entry.Designations[targetSource.Value.RegisterIndex];
 
-            if (
-                (designated >= 0) &&
-                (designated < Capacity) &&
-                m_entries[designated].Active &&
-                (m_entries[designated].Body is { } designatedBody)
+            if (designated.IsPoint) {
+                candidate = BodySensorTarget.Point(
+                    position: designated.Point,
+                    distanceSquared: (designated.Point - self).LengthSquared
+                );
+            } else if (
+                designated.HasBody &&
+                (designated.Index < Capacity) &&
+                m_entries[designated.Index].Active &&
+                (m_entries[designated.Index].Body is { } designatedBody)
             ) {
-                var position = designatedBody.FixedPosition;
+                var position = frozen ? m_flockPositions[designated.Index] : designatedBody.FixedPosition;
 
                 candidate = new BodySensorTarget(
-                    Index: designated,
+                    Index: designated.Index,
                     Position: position,
                     DistanceSquared: (position - self).LengthSquared
                 );
             }
+        } else if (frozen && targetSource?.Source is BodyTargetSource.Sensed) {
+            candidate = ReadFlockTarget(entry, self);
         } else if (targetSource?.Source is BodyTargetSource.Sensed sensed) {
             var fixedSource = targetSource.Value;
 
@@ -105,7 +116,7 @@ public sealed partial class WorldPopulation {
                     continue;
                 }
 
-                var position = body.FixedPosition;
+                var position = frozen ? m_flockPositions[index] : body.FixedPosition;
 
                 if (
                     !BodyTargetConeSense.Contains(
@@ -118,9 +129,9 @@ public sealed partial class WorldPopulation {
                 ) ||
                     (sensed.RequiresLineOfSight && !HasLineOfSight(
                     from: self,
-                    fromOrientation: m_entries[selfIndex].Body!.FixedOrientation,
+                    fromOrientation: frozen ? m_flockOrientations[selfIndex] : m_entries[selfIndex].Body!.FixedOrientation,
                     to: position,
-                    toOrientation: body.FixedOrientation
+                    toOrientation: frozen ? m_flockOrientations[index] : body.FixedOrientation
                 ))
                 ) {
                     continue;
@@ -134,13 +145,41 @@ public sealed partial class WorldPopulation {
                     );
                 }
             }
+        } else if (targetSource?.Source is BodyTargetSource.CurveFollow) {
+            var fixedSource = targetSource.Value;
+
+            if (((uint)fixedSource.CurveIndex) < ((uint)m_curveRows.Count)) {
+                var compiled = m_curveRows[fixedSource.CurveIndex].Compiled;
+
+                entry.ProducerState.CurveArcRaw = AdvanceCurveArc(
+                    arcRaw: entry.ProducerState.CurveArcRaw,
+                    stepRaw: fixedSource.ArcStepRaw,
+                    totalLengthRaw: compiled.TotalLengthRaw,
+                    closed: compiled.Closed
+                );
+
+                var position = compiled.EvaluateRaw(arcRaw: entry.ProducerState.CurveArcRaw).Position;
+
+                candidate = BodySensorTarget.Point(
+                    position: position,
+                    distanceSquared: (position - self).LengthSquared
+                );
+            }
+        } else if (targetSource?.Source is BodyTargetSource.Navigated) {
+            candidate = ReadNavigatedTarget(
+                entry: entry,
+                self: self,
+                target: targetSource.Value,
+                frozen: frozen
+            );
         }
 
-        var current = (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
+        var current = frozen ? (candidate.Index == currentTarget ? candidate : BodySensorTarget.None) :
+            (((currentTarget >= 0) && (currentTarget < Capacity) && m_entries[currentTarget].Active && (m_entries[currentTarget].Body is { } held))
             ? new BodySensorTarget(
                 Index: currentTarget,
-                Position: held.FixedPosition,
-                DistanceSquared: (held.FixedPosition - self).LengthSquared
+                Position: frozen ? m_flockPositions[currentTarget] : held.FixedPosition,
+                DistanceSquared: ((frozen ? m_flockPositions[currentTarget] : held.FixedPosition) - self).LengthSquared
             )
             : BodySensorTarget.None
         );
@@ -150,15 +189,155 @@ public sealed partial class WorldPopulation {
             CurrentTarget: current
         );
     }
-    // The altitude a wander entity holds: a free kit's authored base plus its per-index range sample; a grounded kit
+    private BodySensorTarget ReadNavigatedTarget(Entry entry, in FixedVector3 self, in FixedBodyTargetSource target, bool frozen) {
+        var state = entry.NavigationState;
+        state.ExpandedLast = 0;
+        var designation = entry.Designations[target.RegisterIndex];
+        FixedVector3 goal;
+        var targetIndex = WorldTargetDesignation.PointIndex;
+
+        if (designation.IsPoint) {
+            goal = designation.Point;
+        } else if (
+            designation.HasBody &&
+            designation.Index < Capacity &&
+            m_entries[designation.Index].Active &&
+            m_entries[designation.Index].Body is { } designatedBody
+        ) {
+            goal = frozen ? m_flockPositions[designation.Index] : designatedBody.FixedPosition;
+            targetIndex = designation.Index;
+        } else {
+            state.Clear(status: NavigationStatus.NoTarget);
+            return BodySensorTarget.None;
+        }
+
+        if ((uint)target.NavigationDomainIndex >= (uint)m_navigation.Count) {
+            state.Clear(status: NavigationStatus.OutsideDomain);
+            return BodySensorTarget.None;
+        }
+
+        var domain = m_navigation[target.NavigationDomainIndex];
+        if (!domain.TryCell(position: in self, node: out var start) || !domain.TryCell(position: in goal, node: out var goalCell)) {
+            state.Clear(status: NavigationStatus.OutsideDomain);
+            return BodySensorTarget.None;
+        }
+
+        var onCachedRoute = state.PathLength != 0 && state.DomainIndex == target.NavigationDomainIndex && state.GoalCell == goalCell;
+        if (onCachedRoute) {
+            var previous = Math.Max(0, state.Waypoint - 1);
+            onCachedRoute = state.Path[previous] == start || (state.Waypoint < state.PathLength && state.Path[state.Waypoint] == start);
+            if (onCachedRoute && state.Waypoint < state.PathLength) {
+                onCachedRoute = domain.IsTraversableEdge(current: state.Path[previous], next: state.Path[state.Waypoint]);
+            }
+        }
+Replan:
+        if (!onCachedRoute) {
+            state.DomainIndex = target.NavigationDomainIndex;
+            state.GoalCell = goalCell;
+            state.Waypoint = 1;
+            state.Status = domain.Sharing is not null
+                ? domain.RequestShared(start, goalCell, state.WritablePath(), out state.PathLength)
+                : domain.FindPath(start, goalCell, state.WritablePath(), out state.PathLength, out state.ExpandedLast);
+            if (state.PathLength == 0) {
+                state.Waypoint = 0;
+                return BodySensorTarget.None;
+            }
+        }
+
+        var arrivalSquared = (domain.Tuning.ArrivalDistance * domain.Tuning.ArrivalDistance);
+        while (state.Waypoint < state.PathLength) {
+            if (state.Waypoint > 0 && !domain.IsTraversableEdge(current: state.Path[state.Waypoint - 1], next: state.Path[state.Waypoint])) {
+                onCachedRoute = false;
+                goto Replan;
+            }
+            var waypoint = domain.Position(node: state.Path[state.Waypoint]);
+            if ((waypoint - self).LengthSquared > arrivalSquared) {
+                state.Status = NavigationStatus.Active;
+                return new BodySensorTarget(
+                    Index: targetIndex,
+                    Position: waypoint,
+                    DistanceSquared: (waypoint - self).LengthSquared
+                );
+            }
+            state.Waypoint++;
+        }
+
+        var distanceSquared = (goal - self).LengthSquared;
+        state.Status = (distanceSquared <= arrivalSquared ? NavigationStatus.Arrived : NavigationStatus.Active);
+        return new BodySensorTarget(Index: targetIndex, Position: goal, DistanceSquared: distanceSquared);
+    }
+    // Advances a curve-follow arc position by one compiled step, then wraps (closed) or clamps (open) it back inside
+    // [0, totalLengthRaw] — the persisted state never grows past the curve's own length, so it stays bounded across
+    // an arbitrarily long run and CompiledCurvatureSpline.EvaluateRaw's own wrap/clamp is redundant with, never a
+    // substitute for, this one (EvaluateRaw wraps its ARGUMENT; this wraps the STORED accumulator). Both arcRaw and
+    // stepRaw arrive already bounded well under long's range (CurvatureSpline's own MaxCoordinate/
+    // MaxTangentChordRatio caps bound totalLengthRaw far below 2^62), so the addition itself cannot overflow.
+    private static long AdvanceCurveArc(long arcRaw, long stepRaw, long totalLengthRaw, bool closed) {
+        var next = unchecked((arcRaw + stepRaw));
+
+        if (!closed) {
+            return Math.Clamp(
+                max: totalLengthRaw,
+                min: 0L,
+                value: next
+            );
+        }
+
+        if (totalLengthRaw <= 0L) {
+            return 0L;
+        }
+
+        next %= totalLengthRaw;
+
+        if (next < 0L) {
+            next += totalLengthRaw;
+        }
+
+        return next;
+    }
+
+    /// <summary>Counts active bodies whose currently selected producer follows a <c>curves</c> row — the
+    /// <c>world.budget</c> cost sheet's own per-tick price for the feature (one
+    /// <see cref="Puck.Maths.CompiledCurvatureSpline.Evaluate"/> per follower, per tick).</summary>
+    public int CountCurveFollowers() {
+        var count = 0;
+
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (
+                !entry.Active ||
+                (entry.Body is not { } body) ||
+                (body.Source.ProducerName is not { } name)
+            ) {
+                continue;
+            }
+
+            var kitIndex = ((entry.Kind == PopulationKind.LocalSeat) ? m_seatKit : entry.KitIndex);
+
+            if (
+                m_kits[kitIndex].Producers.TryGetValue(
+                key: name,
+                value: out var producer
+            ) &&
+                (producer.Target?.Source is BodyTargetSource.CurveFollow)
+            ) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    // The altitude a roaming producer holds: a free kit's authored base plus its per-index range sample; a grounded kit
     // starts at the authored spawn point or the world origin and lets contact geometry settle it.
     private static CompiledBodyProducer? SeedProducer(in FixedWorldKit kit) =>
-        kit.Producers.Values.FirstOrDefault(predicate: producer => producer.Program.Contains(operation: BodyMotionOp.ProduceWanderIntent));
-    // Seed a seat's wander-producer dynamics from its slot alone (no RNG) — the parameters player.control producer:<name>
-    // steers by, parallel to the independently authored peer variation. A seat has no wander spawn/color seeding — the
-    // definition spawns it and its profile colors it.
-    private void SeedSeatWander(int slot, bool resetPhase = true) {
-        // A kit that declares no wander producer (a bare seat kit) has no wander dynamics to seed.
+        kit.Producers.Values.FirstOrDefault(predicate: producer => producer.RoamActive);
+    // Seed a seat's steering-producer oscillator and altitude from its slot alone (no RNG) — the parameters
+    // body.control producer:<name> steers by, parallel to the independently authored peer variation. A seat has no
+    // producer spawn/color seeding — the definition spawns it and its profile colors it.
+    private void SeedSeatSteeringProducer(int slot, bool resetPhase = true) {
+        // A kit that declares no active roam shape (a bare or approach-only seat kit) has no oscillator/altitude to seed.
         if (SeedProducer(kit: m_kits[m_seatKit]) is not { } producer) {
             return;
         }
@@ -193,14 +372,13 @@ public sealed partial class WorldPopulation {
         );
     }
     // Seed a simulated entry's static per-index data from the authored distribution and independent sequences. Baked
-    // for every entry at construction so the color is valid across all 128 from frame 1. A
-    // live Rebuild re-derives the kit/wander-dependent statics with resetPhase: false, which keeps the running wander
+    // for every entry at construction so its color and spawn are valid regardless of producer kind. A
+    // live Rebuild re-derives the kit/producer-dependent statics with resetPhase: false, which keeps the running roam
     // phase/activity so the retune does not jerk the crowd.
     private void SeedSimulated(int index, bool resetPhase = true) {
         var offset = (index - LocalSeatCount);
-        if (SeedProducer(kit: m_kits[m_entries[index].KitIndex]) is not { } producer) {
-            return;
-        }
+
+        var producer = SeedProducer(kit: m_kits[m_entries[index].KitIndex]);
 
         var phase = WorldSequenceSampling.FixedAngle(
             sequence: m_peerVariation.Phase,
@@ -221,7 +399,7 @@ public sealed partial class WorldPopulation {
         );
         var entry = m_entries[index];
 
-        entry.ProducerState.PreferredAltitude = PreferredAltitudeFor(
+        entry.ProducerState.PreferredAltitude = producer is null ? FixedQ4816.Zero : PreferredAltitudeFor(
             kit: m_kits[entry.KitIndex],
             producer: producer,
             altitudeUnit: altitudeUnit
@@ -266,14 +444,16 @@ public sealed partial class WorldPopulation {
             s: m_playerDefaults.Saturation,
             v: m_playerDefaults.Value
         );
-        ApplyVariation(
-            activityUnit: activityUnit,
-            entry: entry,
-            phase: phase,
-            producer: producer,
-            resetPhase: resetPhase,
-            weaveUnit: weaveUnit
-        );
+        if (producer is not null) {
+            ApplyVariation(
+                activityUnit: activityUnit,
+                entry: entry,
+                phase: phase,
+                producer: producer,
+                resetPhase: resetPhase,
+                weaveUnit: weaveUnit
+            );
+        }
     }
     private static FixedVector3 SpawnAtPoint(FixedVector3 basePoint, FixedQ4816 halfExtent, WorldSequence fill, int ordinal) {
         var (jitterX, jitterZ) = WorldSequenceSampling.FixedPair(
@@ -291,6 +471,7 @@ public sealed partial class WorldPopulation {
     }
     // Run the named producer before motion. Live and Idle name no producer.
     private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks) {
+        body.SetFlockMovementDomain(null);
         var kitIndex = ((entry.Kind == PopulationKind.LocalSeat)
             ? m_seatKit
             : entry.KitIndex
@@ -303,9 +484,52 @@ public sealed partial class WorldPopulation {
             value: out var producer
         )
         ) {
+            // Leaving the producer lane is itself a producer transition. Do not let a prior route (or curve
+            // station) remain observable through rule facts while the body is idle, live-driven, or names a
+            // producer that the current kit does not carry.
+            if (entry.ProducerState.ActiveProducerName is not null) {
+                entry.ProducerState.ActiveProducerName = null;
+                entry.ProducerState.ActiveProducerCurveIndex = -1;
+                entry.ProducerState.ActiveProducerNavigationDomainIndex = -1;
+                entry.ProducerState.CurveArcRaw = 0L;
+                entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
+                entry.ProducerState.FlockSeeded = false;
+            }
+            body.StageProducerIntent(intent: default);
             return;
         }
 
+        // Selecting a producer starts it: a plain producer switch, or a same-name kit retune onto a different
+        // curve row, resets the travelled arc rather than resuming a foreign curve's station — see
+        // BodyProducerState.ActiveProducerName's remarks.
+        var curveIndex = -1;
+        var navigationDomainIndex = -1;
+
+        if (producer.Target?.Source is BodyTargetSource.CurveFollow) {
+            curveIndex = producer.Target.Value.CurveIndex;
+        } else if (producer.Target?.Source is BodyTargetSource.Navigated) {
+            navigationDomainIndex = producer.Target.Value.NavigationDomainIndex;
+        }
+
+        if (
+            !string.Equals(a: entry.ProducerState.ActiveProducerName, b: name, comparisonType: StringComparison.Ordinal) ||
+            (entry.ProducerState.ActiveProducerCurveIndex != curveIndex) ||
+            (entry.ProducerState.ActiveProducerNavigationDomainIndex != navigationDomainIndex)
+        ) {
+            entry.ProducerState.ActiveProducerCurveIndex = curveIndex;
+            entry.ProducerState.ActiveProducerName = name;
+            entry.ProducerState.CurveArcRaw = 0L;
+            entry.ProducerState.ActiveProducerNavigationDomainIndex = navigationDomainIndex;
+            entry.NavigationState.Clear();
+            entry.ProducerState.FlockSeeded = false;
+        }
+
+        if (producer.Flock is not null) {
+            if (producer.Flock.MovementDomainIndex >= 0) {
+                body.SetFlockMovementDomain(m_navigation[producer.Flock.MovementDomainIndex]);
+            }
+            RefreshFlockPerception(index, entry, producer, stepTicks);
+        }
         var sensors = ReadProducerSensors(
             selfIndex: index,
             entry: entry,
@@ -314,6 +538,11 @@ public sealed partial class WorldPopulation {
             forward: body.FixedOrientation.Rotate(vector: LocalForward),
             producer: producer
         );
+        if (producer.Flock is not null) {
+            sensors = sensors with { FlockDesired = BlendFlockPreference(index, entry, producer.Flock, sensors.Candidate) };
+        } else {
+            entry.ProducerState.FlockSeeded = false;
+        }
 
         body.ExecuteProducer(
             producer: producer,
@@ -323,7 +552,31 @@ public sealed partial class WorldPopulation {
         );
     }
 
-    /// <summary>Advances every active seat body by one exact simulation tick: a wander-sourced seat gets this tick's
+    /// <summary>Samples every active body's medium free surface at its coupled lattice cell (the same coupling
+    /// <see cref="Puck.Physics.Fields.FieldLattice.TryBodyCellOf"/> resolves) and pushes it to the body — <see langword="null"/>
+    /// for a body outside the lattice or over a zero-value medium cell. Called once per tick, before
+    /// <see cref="AdvanceSimulated"/>/<see cref="AdvanceSeats"/>, so a medium hold's phase-4 law reads this
+    /// tick's surface rather than a stale one. A no-op world without a <c>fields</c> section costs one null
+    /// check.</summary>
+    public void SampleMediumSurfaces() {
+        if (m_fields is not { } fields) {
+            return;
+        }
+
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (
+                !entry.Active ||
+                (entry.Body is not { } body)
+            ) {
+                continue;
+            }
+
+            body.SetMediumSurface(surface: fields.MediumSurface(position: body.FixedPosition));
+        }
+    }
+    /// <summary>Advances every active seat body by one exact simulation tick: a producer-sourced seat gets this tick's
     /// producer image staged first (the same deterministic path as a peer), then the body integrates its submitted
     /// intent per the merge rule. Runs after <see cref="AdvanceSimulated"/> in the server step, so the
     /// population advances before seats.</summary>
@@ -335,7 +588,7 @@ public sealed partial class WorldPopulation {
     /// at all — the zero-cost path every world without an <c>engageChannel</c>-bearing screen takes.</param>
     /// <param name="engageEdges">Receives, per slot, whether that slot's probe ordinal fired a rising edge this tick
     /// (the caller — <see cref="Puck.World.Server.WorldServer.Step"/> — routes each into
-    /// <see cref="Puck.World.Server.WorldEngagement.Engage"/>). Every entry is written for an active slot; an inactive
+    /// <see cref="Puck.World.Server.WorldEngagement.Compose"/>). Every entry is written for an active slot; an inactive
     /// slot is left at the caller's own default (callers pass a freshly zeroed span).</param>
     public void AdvanceSeats(ulong tick, ulong stepTicks, ulong stepStartEngineTick, ReadOnlySpan<int> engageProbeOrdinals, Span<bool> engageEdges) {
         for (var slot = 0; (slot < LocalSeatCount); slot++) {
@@ -370,15 +623,84 @@ public sealed partial class WorldPopulation {
                     engageProbeOrdinal: probe,
                     entityIndex: slot,
                     generatorInvocations: m_generatorInvocations,
-                    judgeInvocations: m_judgeInvocations,
+                    rigidPolicy: m_rigidContactPolicy,
                     stepTicks: stepTicks,
                     tick: tick
                 );
+                RecordFlockMotion(body);
             }
         }
     }
+
+    // The tick's one gravity solve. Gathered in ENTITY ORDER so the solver's input order is the population's own
+    // stable order: an approximate solver's answer depends on the order its tree is built in, so activation history
+    // must not reach it.
+    private void SolveGravity() {
+        if (m_gravityField is not { IsActive: true } gravity) {
+            return;
+        }
+
+        gravity.RefreshAttachedAreas(population: this);
+        m_gravityTargets.Clear();
+
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (
+                !entry.Active ||
+                (entry.Body is not { } body)
+            ) {
+                continue;
+            }
+
+            m_gravityTargets.Add(item: new WorldGravityTarget(
+                EntityIndex: index,
+                Mass: ((((uint)entry.KitIndex) < ((uint)m_kits.Length))
+                ? m_kits[entry.KitIndex].Mass
+                : FixedQ4816.Zero),
+                Position: body.FixedPosition
+            ));
+        }
+
+        gravity.Solve(targets: m_gravityTargets);
+    }
+
+    private static void BindCadence(ulong period, int ordinal, int count, ref ulong boundPeriod, ref ulong elapsed, ref ulong remaining) {
+        if (boundPeriod == period) {
+            return;
+        }
+
+        boundPeriod = period;
+        elapsed = 0UL;
+        remaining = ((period == 0UL)
+            ? 0UL
+            : Math.Max(
+                val1: 1UL,
+                val2: (((checked((ulong)(ordinal + 1)) * period) + checked((ulong)count - 1UL)) / checked((ulong)count))
+            )
+        );
+    }
+    private static bool CadenceDue(ulong period, ulong stepTicks, ref ulong elapsed, ref ulong remaining, out ulong elapsedTicks) {
+        if (period == 0UL) {
+            elapsedTicks = stepTicks;
+            return true;
+        }
+
+        elapsed = checked(elapsed + stepTicks);
+        remaining = ((remaining > stepTicks) ? (remaining - stepTicks) : 0UL);
+        if (remaining > 0UL) {
+            elapsedTicks = 0UL;
+            return false;
+        }
+
+        elapsedTicks = elapsed;
+        elapsed = 0UL;
+        remaining = period;
+        return true;
+    }
+
     /// <summary>Advances every active simulated stand-in by one sub-step: a named producer runs before motion, then
-    /// every peer body integrates. A live <c>player.fly</c> tape or
+    /// every peer body integrates. A live <c>body.fly</c> tape or
     /// a submitted intent overrides the producer per the merge rule; an <see cref="IntentSource.Idle"/> peer holds
     /// still between tape segments yet its tapes still play. The local seats are advanced separately by
     /// <see cref="AdvanceSeats"/>.</summary>
@@ -391,7 +713,16 @@ public sealed partial class WorldPopulation {
     public void AdvanceSimulated(ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
 
+        AutonomyStatistics = default;
+
         (m_contactField as WorldColliderSet)?.RefreshAttached(population: this);
+        SolveGravity();
+        FreezeFlockImage();
+        m_navigation.BeginStep();
+
+        // Read once for the whole tick: every sleeping body below compares against the same value, so a solid/lattice
+        // change mid-loop (nothing here writes either) can never wake half a tick's peers and not the other half.
+        var contactFieldVersion = ContactFieldVersion;
 
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             var entry = m_entries[index];
@@ -406,16 +737,80 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: stepStartEngineTick)) {
+            // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no
+            // cadence bookkeeping, no Advance. See WorldBody.Sleep.cs.
+            if (player.TryDeferSleepingAdvance(contactFieldVersion: contactFieldVersion)) {
                 continue;
             }
 
-            StageProducer(
-                body: player,
-                entry: entry,
-                index: index,
-                stepTicks: stepTicks
+            var kit = m_kits[entry.KitIndex];
+            var locallyAutonomous = (
+                !entry.IsRemoteHuman &&
+                !player.Source.IsLive &&
+                !player.HasMotionTape &&
+                !player.RequiresFullRateAutonomy
             );
+            var motionPeriod = (locallyAutonomous ? kit.AutonomousMotionTicks : 0UL);
+            var steeringPeriod = ((!entry.IsRemoteHuman && player.Source.IsProducer) ? kit.AutonomousSteeringTicks : 0UL);
+            ref var autonomy = ref entry.AutonomyState;
+            var ordinal = (index - LocalSeatCount);
+            BindCadence(motionPeriod, ordinal, PeerCapacity, ref autonomy.MotionPeriodTicks, ref autonomy.MotionElapsedTicks, ref autonomy.MotionRemainingTicks);
+            BindCadence(steeringPeriod, ordinal, PeerCapacity, ref autonomy.SteeringPeriodTicks, ref autonomy.SteeringElapsedTicks, ref autonomy.SteeringRemainingTicks);
+
+            var steeringDue = CadenceDue(
+                period: steeringPeriod,
+                stepTicks: stepTicks,
+                elapsed: ref autonomy.SteeringElapsedTicks,
+                remaining: ref autonomy.SteeringRemainingTicks,
+                elapsedTicks: out var steeringTicks
+            );
+            if (steeringDue) {
+                StageProducer(
+                    body: player,
+                    entry: entry,
+                    index: index,
+                    stepTicks: steeringTicks
+                );
+                if (player.Source.IsProducer && ((steeringPeriod != 0UL) || (motionPeriod != 0UL))) {
+                    autonomy.SteeringIntent = player.StagedProducerIntent;
+                    autonomy.SteeringSeeded = true;
+                } else {
+                    autonomy.SteeringIntent = default;
+                    autonomy.SteeringSeeded = false;
+                }
+                if (steeringPeriod != 0UL) {
+                    AutonomyStatistics = AutonomyStatistics with { SteeringUpdates = AutonomyStatistics.SteeringUpdates + 1 };
+                }
+            }
+
+            if (!CadenceDue(
+                period: motionPeriod,
+                stepTicks: stepTicks,
+                elapsed: ref autonomy.MotionElapsedTicks,
+                remaining: ref autonomy.MotionRemainingTicks,
+                elapsedTicks: out var motionTicks
+            )) {
+                player.DeferOrdinaryAdvance();
+                if (motionPeriod != 0UL) {
+                    AutonomyStatistics = AutonomyStatistics with { MotionDeferred = AutonomyStatistics.MotionDeferred + 1 };
+                }
+                continue;
+            }
+
+            if (motionPeriod != 0UL) {
+                AutonomyStatistics = AutonomyStatistics with { MotionUpdates = AutonomyStatistics.MotionUpdates + 1 };
+            }
+
+            var accumulatedStart = checked(stepStartEngineTick + stepTicks - motionTicks);
+            if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: accumulatedStart)) {
+                autonomy.MotionElapsedTicks = 0UL;
+                autonomy.MotionRemainingTicks = motionPeriod;
+                continue;
+            }
+
+            if (!steeringDue && autonomy.SteeringSeeded) {
+                player.StageProducerIntent(intent: in autonomy.SteeringIntent);
+            }
             var targets = ReadEffectTargets(
                 selfIndex: index,
                 entry: entry,
@@ -424,14 +819,17 @@ public sealed partial class WorldPopulation {
 
             player.Advance(
                 tick: tick,
-                stepTicks: stepTicks,
+                stepTicks: motionTicks,
                 entityIndex: index,
                 effectTargets: targets,
                 effectOutputs: m_effectOutputs,
                 designationOutputs: m_designationOutputs,
                 generatorInvocations: m_generatorInvocations,
-                judgeInvocations: m_judgeInvocations
+                rigidPolicy: m_rigidContactPolicy,
+                sleepAfterTicks: m_sleepAfterTicks,
+                contactFieldVersion: contactFieldVersion
             );
+            RecordFlockMotion(player);
         }
     }
     /// <summary>Overrides an already-active seat's own pose and velocity — the mapped-arrival half of a portal
@@ -590,5 +988,97 @@ public sealed partial class WorldPopulation {
             Channels: channels,
             Registers: registers
         );
+    }
+    // Sentinel meaning "no cell-driven inhabit count has ever been read for this placement ordinal" — distinct from
+    // every representable raw cell value, including 0 (an authored count cell legitimately starts empty).
+    private const long NoInhabitCountObserved = long.MinValue;
+    // Per-placement-ordinal cache of the last raw cell value ReconcileInhabitCounts resolved for a cell-driven
+    // inhabit facet — a placement with no such facet, or a literal count, is never written here. Resized (and its
+    // fresh slots re-seeded to NoInhabitCountObserved) only when the placement count itself changes, which already
+    // allocates elsewhere in the same structural install; a quiet tick that touches no relevant cell reads this
+    // array and writes nothing.
+    private long[] m_inhabitCountCache = [];
+
+    // Forces the next ReconcileInhabitCounts call to re-resolve every cell-driven placement from scratch — a
+    // structural install's own defensive reset (ReconcileInhabitants), since a placement's ordinal can carry a
+    // different row reference after a reorder or replacement without its overall count changing.
+    private void InvalidateInhabitCountCache() => Array.Fill(array: m_inhabitCountCache, value: NoInhabitCountObserved);
+
+    /// <summary>Reconciles every cell-driven inhabit facet's live count against its bound cell's current value —
+    /// the value half of the count-cell primitive (<see cref="ReconcileInhabitants"/> is the structural half, and
+    /// never grows a cell-referencing placement: such a placement starts at zero live bodies through every install,
+    /// and is admitted here, which the server calls right after every structural reconcile, boot included, and on
+    /// every state write). Skips a
+    /// placement whose bound cell has not moved since the last call — the frame's own per-row version lives only
+    /// inside the rule evaluator's short-lived state frame, unreachable from here, so this compares the resolved
+    /// raw value directly, which answers the identical question ("did anything change") at the cost of one cached
+    /// long per tracked placement. A document with no cell-driven inhabit facet, or one whose cell simply has not
+    /// changed this tick, walks a bounded array scan and allocates nothing.</summary>
+    /// <param name="definition">The live definition.</param>
+    /// <param name="tick">The tick this reconcile answers as of.</param>
+    /// <param name="admitted">Optional sink for the peer generations admitted by the reconciliation.</param>
+    /// <param name="disconnected">Optional sink for the peer generations disconnected by the reconciliation.</param>
+    public void ReconcileInhabitCounts(WorldDefinition definition, ulong tick, List<WorldPeerEventEntry>? admitted = null, List<WorldPeerEventEntry>? disconnected = null) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var placements = definition.Placements;
+
+        if (m_inhabitCountCache.Length != placements.Count) {
+            var cache = new long[placements.Count];
+
+            Array.Fill(array: cache, value: NoInhabitCountObserved);
+            m_inhabitCountCache = cache;
+        }
+
+        var changed = false;
+
+        for (var ordinal = 0; (ordinal < placements.Count); ordinal++) {
+            var placement = placements[ordinal];
+
+            if (
+                (placement.Inhabit is not { } inhabit) ||
+                (inhabit.Count?.Row is not { } row) ||
+                (ResolveInhabitKit(
+                definition: definition,
+                placement: placement
+            ) is not { } kitName) ||
+                (ResolveKitOrNull(name: kitName) is not { } kitIndex)
+            ) {
+                continue;
+            }
+
+            var raw = (inhabit.Count.Resolve(definition: definition, tick: tick) ?? 0L);
+
+            if (raw == m_inhabitCountCache[ordinal]) {
+                continue;
+            }
+
+            m_inhabitCountCache[ordinal] = raw;
+            changed = true;
+
+            var sampleCount = ((inhabit.Distribution?.Region as WorldDistributionRegion.Disc)?.SampleCount);
+            var bound = Math.Min(val1: PeerCapacity, val2: (sampleCount ?? PeerCapacity));
+            var desired = (int)Math.Clamp(value: raw, min: 0L, max: (long)bound);
+
+            if ((desired != raw) && (NarrationHub is { HasNarrationSink: true })) {
+                NarrationHub?.Narrate(channel: "world.placement", text: $"[world.placement: inhabited '{placement.Id}' count {desired} of {row} (clamped by {bound})]");
+            }
+
+            ReconcileOneInhabitedCount(
+                admitted: admitted,
+                definition: definition,
+                desired: desired,
+                disconnected: disconnected,
+                inhabit: inhabit,
+                kitIndex: kitIndex,
+                placement: placement
+            );
+        }
+
+        if (changed) {
+            _ = SetSimulatedCount(count: m_simulatedCount);
+            RebuildPlacementOrdinalTable(definition: definition);
+            m_revision++;
+        }
     }
 }

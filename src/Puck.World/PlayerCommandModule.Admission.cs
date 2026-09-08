@@ -1,48 +1,11 @@
 using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
+using Puck.World.Server;
 
 namespace Puck.World;
 
 internal sealed partial class PlayerCommandModule {
-    private CommandResult AssignHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 2) {
-            return CommandResult.Error(output: "[player.assign: expected a device token and a slot — player.assign <kbd|padN> <slot 1..4>]");
-        }
-
-        var deviceToken = args[0].ToString();
-
-        if (!m_roster.TryResolveDeviceToken(
-            device: out var device,
-            token: deviceToken
-        )) {
-            return CommandResult.Error(output: $"[player.assign: no device '{deviceToken}' — see world.devices]");
-        }
-
-        if (!WorldArgs.TryParseIndex(
-            args: in args,
-            at: 1,
-            fallback: null,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var slot
-        )) {
-            return CommandResult.Error(output: $"[player.assign: <slot> must be an integer 1..{PlayerRoster.MaxSlots}]");
-        }
-
-        // An operator command naming BOTH the device and the destination explicitly — context.ActingPrincipal() (the
-        // text door's Console) is the real actor, threaded all the way into AssignDevice's Drive check, never a
-        // fabricated target identity.
-        return DescribeAssign(
-            verb: "player.assign",
-            outcome: m_roster.AssignDevice(
-                device: device,
-                targetSlot: PlayerRoster.SlotFromDisplay(number: slot),
-                actingPrincipal: context.ActingPrincipal()
-            ),
-            slot: PlayerRoster.SlotFromDisplay(number: slot)
-        );
-    }
     private CommandResult ClaimHandler(CommandContext context) {
         // The target slot rides the binding's Axis1D value as a 1-based player number (the clean scalar constant a
         // CommandBinding carries — CommandValue.Axis(float)); a typed invocation with no value is a no-op. This
@@ -166,20 +129,12 @@ internal sealed partial class PlayerCommandModule {
     // Format a device-reassignment outcome, echoing the roster on a change. Each Ignored-shaped outcome gets its OWN
     // accurate reason (see AssignOutcome's own remarks) rather than one hardcoded "roster is full" text that used to
     // print even when the real cause was an exclusively-claimed device or target slot.
-    private CommandResult DescribeAssign(string verb, AssignOutcome outcome, int slot) {
-        return (outcome switch {
-            AssignOutcome.CreatedPending => new CommandResult(Output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} joined pending] {m_roster.Describe()}"),
-            AssignOutcome.JoinedTeam => new CommandResult(Output: $"[{verb}: device moved to player {PlayerRoster.DisplayNumber(slot: slot)}] {m_roster.Describe()}"),
-            AssignOutcome.NoOp => new CommandResult(Output: $"[{verb}: device already on player {PlayerRoster.DisplayNumber(slot: slot)}]"),
-            AssignOutcome.DeviceClaimed => CommandResult.Error(output: $"[{verb}: this device is exclusively claimed and cannot be reassigned]"),
-            AssignOutcome.TargetClaimed => CommandResult.Error(output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} is exclusively claimed — a device cannot move onto it]"),
-            // Denied is distinct from Ignored ("roster is full"/out of range) — the QUIBBLE's own shape, closed here
-            // too so a plain authority refusal never misreports as "no room". world.why over drive/body:<slot>
-            // explains the refusal with the actor already named in the loud stderr line AssignDevice printed.
-            AssignOutcome.Denied => CommandResult.Error(output: $"[{verb}: player {PlayerRoster.DisplayNumber(slot: slot)} — actor denied, see wire.errors/world.why]"),
-            _ => CommandResult.Error(output: $"[{verb}: the roster is full ({PlayerRoster.MaxSlots} players)]"),
-        });
-    }
+    private CommandResult DescribeAssign(string verb, AssignOutcome outcome, int slot) => PlayerAssignmentCommand.Describe(
+        outcome: outcome,
+        roster: m_roster,
+        slot: slot,
+        verb: verb
+    );
     private CommandResult DescribeConfirm(ConfirmOutcome outcome, int slot, InputDeviceId? device, WorldPrincipal actingPrincipal) {
 
         return (outcome switch {
@@ -189,7 +144,7 @@ internal sealed partial class PlayerCommandModule {
             ConfirmOutcome.Seated => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} seated]"),
             ConfirmOutcome.AlreadyActive => new CommandResult(Output: $"[player.confirm: player {PlayerRoster.DisplayNumber(slot: slot)} is already active]"),
             ConfirmOutcome.Denied => CommandResult.Error(output: $"[player.confirm: {actingPrincipal.Describe()} cannot confirm player {PlayerRoster.DisplayNumber(slot: slot)} — see world.why]"),
-            _ => CommandResult.Error(output: $"[player.confirm: the roster is full ({PlayerRoster.MaxSlots} players)]"),
+            _ => CommandResult.Error(output: $"[player.confirm: the roster is full ({m_roster.LocalSeats} declared local seat(s), population.localSeats)]"),
         });
     }
     // The device-driven roster gestures — confirm/cycle/claim — routed by the pressing device's id. Confirm (South /
@@ -234,7 +189,7 @@ internal sealed partial class PlayerCommandModule {
         // rather than the boot form's either-order profile-then-slot convenience, which seat.enter never had.
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount is (< 1 or > 2)) {
-                return CommandResult.Error(output: $"[player.join: instance-targeted form expects <slot> [identity], before instance:<name> — slot is 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[player.join: instance-targeted form expects <slot> [identity], before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             if (
@@ -243,9 +198,9 @@ internal sealed partial class PlayerCommandModule {
                 value: out var instanceSlot
             ) ||
                 (instanceSlot < 1) ||
-                (instanceSlot > WorldPopulationLimits.LocalSeatCount)
+                (instanceSlot > WorldBodiesLimits.LocalSeatCount)
             ) {
-                return CommandResult.Error(output: $"[player.join: instance-targeted <slot> must be an integer 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[player.join: instance-targeted <slot> must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             var instanceIdentity = ((instanceTarget.EffectiveCount == 2)
@@ -254,7 +209,7 @@ internal sealed partial class PlayerCommandModule {
             );
             var joinReply = instance.Server.ApplySession(request: new SessionRequest.Join(
                 Principal: context.ActingPrincipal(),
-                Slot: (instanceSlot - 1),
+                Slot: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 IdentityName: instanceIdentity,
                 WireProtocolKey: WorldProtocol.WireProtocolKey
             ));
@@ -363,7 +318,7 @@ internal sealed partial class PlayerCommandModule {
 
         if (instanceTarget.Instance is { } instance) {
             if (instanceTarget.EffectiveCount != 1) {
-                return CommandResult.Error(output: $"[player.leave: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[player.leave: instance-targeted form expects <slot>, before instance:<name> — slot is 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             if (
@@ -372,29 +327,29 @@ internal sealed partial class PlayerCommandModule {
                 value: out var instanceSlot
             ) ||
                 (instanceSlot < 1) ||
-                (instanceSlot > WorldPopulationLimits.LocalSeatCount)
+                (instanceSlot > WorldBodiesLimits.LocalSeatCount)
             ) {
-                return CommandResult.Error(output: $"[player.leave: instance-targeted <slot> must be an integer 1..{WorldPopulationLimits.LocalSeatCount}]");
+                return CommandResult.Error(output: $"[player.leave: instance-targeted <slot> must be an integer 1..{WorldBodiesLimits.LocalSeatCount}]");
             }
 
             if (m_instances.TryFindFollowedRosterSlot(
                 instanceName: instance.Name,
-                instanceSlot: (instanceSlot - 1),
+                instanceSlot: WorldPopulation.EntityFromDisplay(number: instanceSlot),
                 rosterSlot: out var rosterSlot
             )) {
                 if (!m_roster.Leave(
                     slot: rosterSlot,
                     actingPrincipal: context.ActingPrincipal()
                 )) {
-                    return CommandResult.Error(output: $"[player.leave: '{instance.Name}' seat {instanceSlot} is followed by player {(rosterSlot + 1)}, which cannot leave or the actor was denied]");
+                    return CommandResult.Error(output: $"[player.leave: '{instance.Name}' seat {instanceSlot} is followed by player {PlayerRoster.DisplayNumber(slot: rosterSlot)}, which cannot leave or the actor was denied]");
                 }
 
-                return new CommandResult(Output: $"[player.leave: player {(rosterSlot + 1)} left '{instance.Name}' seat {instanceSlot}] {m_roster.Describe()}");
+                return new CommandResult(Output: $"[player.leave: player {PlayerRoster.DisplayNumber(slot: rosterSlot)} left '{instance.Name}' seat {instanceSlot}] {m_roster.Describe()}");
             }
 
             var leaveReply = instance.Server.ApplySession(request: new SessionRequest.Leave(
                 Principal: context.ActingPrincipal(),
-                Slot: (instanceSlot - 1)
+                Slot: WorldPopulation.EntityFromDisplay(number: instanceSlot)
             ));
 
             if (!leaveReply.Accepted) {
@@ -474,7 +429,7 @@ internal sealed partial class PlayerCommandModule {
             ? "joined active"
             : "joined pending")}] {m_roster.Describe()}"),
             JoinResult.Occupied => CommandResult.Error(output: $"[player.join: player {PlayerRoster.DisplayNumber(slot: slot)} is already joined]"),
-            JoinResult.Full => CommandResult.Error(output: $"[player.join: the roster is full ({PlayerRoster.MaxSlots} players)]"),
+            JoinResult.Full => CommandResult.Error(output: $"[player.join: the roster is full ({m_roster.LocalSeats} declared local seat(s), population.localSeats)]"),
             _ => CommandResult.Error(output: $"[player.join: {actingPrincipal.Describe()} cannot join slot {PlayerRoster.DisplayNumber(slot: slot)} — see world.why]"),
         });
     }

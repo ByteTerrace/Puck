@@ -1,5 +1,5 @@
 using System.Globalization;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using System.Numerics;
 using Puck.Commands;
 using Puck.Maths;
@@ -15,16 +15,19 @@ namespace Puck.World;
 /// <param name="Id">The stable identity id.</param>
 /// <param name="Name">The display name.</param>
 /// <param name="ColorHex">The authored body color.</param>
-/// <param name="MoveSpeed">The claimed locomotion rate; the destination clamps it against its own kit envelope.</param>
-/// <param name="TurnSpeed">The claimed turn rate, clamped the same way.</param>
-public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816 MoveSpeed, FixedQ4816 TurnSpeed);
+/// <param name="MoveSpeed">The claimed locomotion rate, or <see langword="null"/> when the identity claims none —
+/// the seat then moves at the kit's own authored rate. A claimed rate is clamped against the destination's kit
+/// envelope.</param>
+/// <param name="TurnSpeed">The claimed turn rate, or <see langword="null"/>, clamped the same way.</param>
+public readonly record struct WorldIdentityProjection(string Id, string Name, string ColorHex, FixedQ4816? MoveSpeed, FixedQ4816? TurnSpeed);
 /// <summary>A live identity backed by one owned <see cref="WorldDefinition"/>.</summary>
 public sealed class WorldIdentity {
     private readonly string m_neutralColor;
     private readonly float m_noseFactor;
 
-    private FixedQ4816 m_moveSpeed;
-    private FixedQ4816 m_turnSpeed;
+    private int m_factsRevision;
+    private FixedQ4816? m_moveSpeed;
+    private FixedQ4816? m_turnSpeed;
 
     /// <summary>Builds an identity from an owned world.</summary>
     /// <param name="document">The owned world.</param>
@@ -46,13 +49,11 @@ public sealed class WorldIdentity {
         );
         m_moveSpeed = ReadFixed(
             document.State,
-            identity.MoveSpeedState,
-            document.Motion.MoveSpeed
+            identity.MoveSpeedState
         );
         m_turnSpeed = ReadFixed(
             document.State,
-            identity.TurnSpeedState,
-            document.Motion.TurnSpeed
+            identity.TurnSpeedState
         );
         Bindings = document.BindingOverlays.FirstOrDefault()?.Document;
         Hud = document.Hud.Panels.FirstOrDefault();
@@ -63,7 +64,7 @@ public sealed class WorldIdentity {
         m_neutralColor = defaults.NeutralColor;
     }
 
-    private WorldIdentity(string name, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, WorldPlayerDefaults defaults, string? id = null, string? colorHex = null) {
+    private WorldIdentity(string name, FixedQ4816? moveSpeed, FixedQ4816? turnSpeed, WorldPlayerDefaults defaults, string? id = null, string? colorHex = null) {
         Id = (id ?? name);
         Name = name;
         ColorHex = (string.IsNullOrWhiteSpace(value: colorHex)
@@ -88,26 +89,43 @@ public sealed class WorldIdentity {
     public string ColorHex { get; private set; }
     /// <summary>Gets the owned world, or <see langword="null"/> for a replay-pinned identity.</summary>
     public WorldDefinition? Document { get; private set; }
-    /// <summary>Gets the deterministic locomotion speed.</summary>
-    public FixedQ4816 FixedMoveSpeed => m_moveSpeed;
-    /// <summary>Gets the deterministic turn speed.</summary>
-    public FixedQ4816 FixedTurnSpeed => m_turnSpeed;
+    /// <summary>Gets the facts row this identity carries, or <see langword="null"/> when no fact was ever written or
+    /// there is no owned document to carry one.</summary>
+    public WorldStateRow? Facts => ((Document is { } document)
+        ? WorldDefinitionRows.FindStateRow(rows: document.State, name: FactsDefinition.State)
+        : null
+    );
+    /// <summary>Gets the facts row name and capacity this identity's document declares, or the default for one
+    /// declaring none.</summary>
+    public WorldIdentityFacts FactsDefinition => (Document?.Identity?.FactsOrDefault ?? WorldIdentityFacts.Default);
+    /// <summary>Gets a counter that moves on every change to <see cref="Facts"/> — the one reference a server holds
+    /// to know whether a body's lane still mirrors this identity's row.</summary>
+    public int FactsRevision => m_factsRevision;
+    /// <summary>Gets the claimed deterministic locomotion speed, or <see langword="null"/> when this identity
+    /// claims none — the seat then moves at the kit's own authored rate.</summary>
+    public FixedQ4816? FixedMoveSpeed => m_moveSpeed;
+    /// <summary>Gets the claimed deterministic turn speed, or <see langword="null"/> when this identity claims
+    /// none.</summary>
+    public FixedQ4816? FixedTurnSpeed => m_turnSpeed;
     /// <summary>Gets the identity-owned private HUD panel.</summary>
     public WorldHudPanel? Hud { get; set; }
     /// <summary>Gets the stable identity/world id.</summary>
     public string Id { get; }
-    /// <summary>Gets the locomotion speed.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">The assigned value is not finite and positive.</exception>
-    public float MoveSpeed {
-        get => ((float)((double)m_moveSpeed)); set {
-            m_moveSpeed = RequirePositiveRate(
-                value: value,
-                name: nameof(MoveSpeed)
-            ); WriteFixed(
-                slot: Document?.Identity?.MoveSpeedState,
-                value: m_moveSpeed
-            );
-        }
+    /// <summary>Sets the claimed locomotion speed — the deliberate override door <c>identity.motion</c> walks;
+    /// mints the identity document's rate row on first write.</summary>
+    /// <param name="value">The rate to claim.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite and positive.</exception>
+    public void SetMoveSpeed(float value) {
+        var rate = RequirePositiveRate(
+            value: value,
+            name: nameof(value)
+        );
+
+        m_moveSpeed = rate;
+        WriteFixed(
+            slot: Document?.Identity?.MoveSpeedState,
+            value: rate
+        );
     }
     /// <summary>Gets the display name.</summary>
     public string Name { get; private set; }
@@ -123,28 +141,31 @@ public sealed class WorldIdentity {
     /// That is also the answer BEFORE a profile has been delivered for a seat, which is the same
     /// answer whether the profile is about to arrive in-process or across a link: nothing here assumes an identity
     /// document can only be built locally.</remarks>
-    public WorldSeatLook? SeatLook { get; set; }
-    /// <summary>Gets the turn speed.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">The assigned value is not finite and positive.</exception>
-    public float TurnSpeed {
-        get => ((float)((double)m_turnSpeed)); set {
-            m_turnSpeed = RequirePositiveRate(
-                value: value,
-                name: nameof(TurnSpeed)
-            ); WriteFixed(
-                slot: Document?.Identity?.TurnSpeedState,
-                value: m_turnSpeed
-            );
-        }
+    public WorldSeatCameraFeel? SeatLook { get; set; }
+    /// <summary>Sets the claimed turn speed — the same deliberate override door as <see cref="SetMoveSpeed"/>.</summary>
+    /// <param name="value">The rate to claim.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite and positive.</exception>
+    public void SetTurnSpeed(float value) {
+        var rate = RequirePositiveRate(
+            value: value,
+            name: nameof(value)
+        );
+
+        m_turnSpeed = rate;
+        WriteFixed(
+            slot: Document?.Identity?.TurnSpeedState,
+            value: rate
+        );
     }
 
-    private static FixedQ4816 ReadFixed(IReadOnlyList<WorldStateRow> rows, string name, float fallback) =>
+    // An absent rate row is an identity that claims no rate — the kit's authored rate applies at the seat.
+    private static FixedQ4816? ReadFixed(IReadOnlyList<WorldStateRow> rows, string name) =>
         ((WorldDefinitionRows.FindStateRow(
             name: name,
             rows: rows
         ) is { Kind: CellKind.Fixed, IsSlot: true } row)
             ? FixedQ4816.FromRawBits(value: row.Cells![0].Value)
-            : FixedQ4816.FromDouble(value: fallback)
+            : null
         );
     // The type-level wall for a live locomotion rate: the verb door (identity.motion) refuses this range with a
     // named console error before any assignment, so reaching this throw means a NEW caller wrote the property
@@ -165,10 +186,10 @@ public sealed class WorldIdentity {
     }
     // Mints the next monotonic sequence key for rowName's derived "<row>-seq" Int slot counter — reads its current
     // value (0 if the counter row does not exist yet), increments it, persists the increment, and returns the
-    // incremented value's decimal string as a WorldCellName. Deterministic: no wall clock, no RNG — the identical
+    // incremented value's decimal string as a CellName. Deterministic: no wall clock, no RNG — the identical
     // command sequence always mints the identical keys, on every run and every replay.
-    private bool TryNextSequenceKey(WorldCellName rowName, out WorldCellName key, out string reason) {
-        var seqRowName = WorldCellName.Parse(candidate: $"{rowName}-seq");
+    private bool TryNextSequenceKey(CellName rowName, out CellName key, out string reason) {
+        var seqRowName = CellName.Parse(candidate: $"{rowName}-seq");
         var next = 1L;
 
         if (TryReadState(
@@ -189,24 +210,24 @@ public sealed class WorldIdentity {
             Name: seqRowName,
             Kind: CellKind.Int,
             NonNegative: true,
-            Cells: [new WorldStateCell(
+            Cells: [new StateCell(
                     Key: WorldStateRow.SlotKey,
                     Value: next
                 )]
         ));
 
-        return WorldCellName.TryParse(
+        return CellName.TryParse(
             candidate: next.ToString(provider: CultureInfo.InvariantCulture),
             name: out key,
             reason: out reason
         );
     }
-    private void WriteFixed(WorldCellName? slot, FixedQ4816 value) {
+    private void WriteFixed(CellName? slot, FixedQ4816 value) {
         if (slot is { } name) {
             WriteState(row: new WorldStateRow(
                 Name: name,
                 Kind: CellKind.Fixed,
-                Cells: [new WorldStateCell(
+                Cells: [new StateCell(
                         Key: WorldStateRow.SlotKey,
                         Value: value.Value
                     )]
@@ -247,11 +268,11 @@ public sealed class WorldIdentity {
         );
     /// <summary>Mints a detached replay identity with bit-exact rates.</summary>
     /// <param name="name">The display name.</param>
-    /// <param name="moveSpeed">The deterministic locomotion speed.</param>
-    /// <param name="turnSpeed">The deterministic turn speed.</param>
+    /// <param name="moveSpeed">The deterministic locomotion speed, or <see langword="null"/> as recorded.</param>
+    /// <param name="turnSpeed">The deterministic turn speed, or <see langword="null"/> as recorded.</param>
     /// <param name="defaults">The player defaults.</param>
     /// <returns>The detached identity.</returns>
-    public static WorldIdentity Pinned(string name, FixedQ4816 moveSpeed, FixedQ4816 turnSpeed, WorldPlayerDefaults defaults) =>
+    public static WorldIdentity Pinned(string name, FixedQ4816? moveSpeed, FixedQ4816? turnSpeed, WorldPlayerDefaults defaults) =>
         new(
             name: name,
             moveSpeed: moveSpeed,
@@ -270,7 +291,84 @@ public sealed class WorldIdentity {
         );
     /// <summary>Replaces the backing owned world after a composed edit.</summary>
     /// <param name="document">The replacement owned world.</param>
-    public void ReplaceDocument(WorldDefinition document) => Document = document;
+    public void ReplaceDocument(WorldDefinition document) {
+        Document = document;
+        m_factsRevision++;
+    }
+    /// <summary>Writes one fact on this identity's own facts row — minting the row on the first write — and reports
+    /// whether the row changed. A write of the value the row already holds changes nothing and touches no
+    /// document.</summary>
+    /// <param name="key">The fact key.</param>
+    /// <param name="value">The fact's integer value.</param>
+    /// <param name="changed">Whether the row changed.</param>
+    /// <param name="reason">Why the write was refused, or empty on success.</param>
+    /// <returns><see langword="true"/> when the write applied or was already in place.</returns>
+    public bool TrySetFact(CellName key, long value, out bool changed, out string reason) {
+        changed = false;
+
+        if (Document is null) {
+            reason = "this identity carries no owned document to persist a fact into";
+
+            return false;
+        }
+
+        var definition = FactsDefinition;
+        var row = Facts;
+
+        if (row is { } declared) {
+            if (declared is not { Kind: CellKind.Int, IsKeyed: true }) {
+                reason = $"state row '{definition.State}' is not a keyed int row";
+
+                return false;
+            }
+
+            var cells = (declared.Cells ?? []);
+
+            for (var index = 0; (index < cells.Count); index++) {
+                if (cells[index].Key != key) {
+                    continue;
+                }
+                if (cells[index].Value == value) {
+                    reason = string.Empty;
+
+                    return true;
+                }
+
+                var replaced = new StateCell[cells.Count];
+
+                for (var copy = 0; (copy < cells.Count); copy++) {
+                    replaced[copy] = cells[copy];
+                }
+
+                replaced[index] = new StateCell(Key: key, Value: value);
+                WriteState(row: declared with { Cells = replaced });
+                changed = true;
+                reason = string.Empty;
+
+                return true;
+            }
+
+            if (cells.Count >= definition.Capacity) {
+                reason = $"facts row '{definition.State}' holds {cells.Count} of {definition.Capacity} facts; '{key}' does not fit";
+
+                return false;
+            }
+
+            WriteState(row: declared with { Cells = [.. cells, new StateCell(Key: key, Value: value)] });
+        } else {
+            WriteState(row: new WorldStateRow(
+                Name: definition.State,
+                Kind: CellKind.Int,
+                Capacity: definition.Capacity,
+                Cells: [new StateCell(Key: key, Value: value)]
+            ));
+        }
+
+        changed = true;
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Changes display identity in the owned world.</summary>
     /// <param name="name">The new display name.</param>
     /// <param name="colorHex">The new authored color, as <c>#RRGGBB</c>.</param>
@@ -296,7 +394,7 @@ public sealed class WorldIdentity {
     /// <param name="evictedKey">The evicted key, or <see langword="null"/> when nothing was evicted.</param>
     /// <param name="reason">Why the append was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the append applied.</returns>
-    public bool TryAppendEvictingText(WorldCellName rowName, string text, out WorldCellName? evictedKey, out string reason) {
+    public bool TryAppendEvictingText(CellName rowName, string text, out CellName? evictedKey, out string reason) {
         evictedKey = null;
 
         if (!TryReadState(
@@ -322,7 +420,7 @@ public sealed class WorldIdentity {
             return false;
         }
 
-        if (!WorldStateCellWriter.TryComposeTextCell(
+        if (!StateCellWriter.TryComposeTextCell(
             cells: out var cells,
             evictedKey: out evictedKey,
             key: key,
@@ -368,5 +466,6 @@ public sealed class WorldIdentity {
         )).Append(element: row).ToArray();
 
         Document = Document.WithWorldState(rows: state);
+        m_factsRevision++;
     }
 }

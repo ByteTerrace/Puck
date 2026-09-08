@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Description>Native AGB cartridge compilation from editable puck.cartridge.v1 data, with Thumb/ARM emitters, direct-boot image building and emulator verification tools.</Description>
+        <IsAotCompatible>false</IsAotCompatible>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.AdvancedGamingBrick.Forge</PackageId>
+        <PackageTags>agb;arm7tdmi;authoring;determinism;gba;homebrew;rom;thumb</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.AdvancedGamingBrick.Forge</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.GamingBricks.Forge\Puck.GamingBricks.Forge.csproj" />
+        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
+    </ItemGroup>
+</Project>

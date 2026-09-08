@@ -26,6 +26,7 @@ internal sealed class TestHidDevice : IHidDevice {
     private int m_activeReads;
     private bool m_disposed;
     private TaskCompletionSource? m_readTimeoutHold;
+
     private TaskCompletionSource m_reportArrived = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
     public string DevicePath { get; init; } = "test:hid";
@@ -107,7 +108,7 @@ internal sealed class TestHidDevice : IHidDevice {
 
                 if (expiry is null) {
                     await arrival.WaitAsync(cancellationToken: cancellationToken);
-                } else if (expiry == await Task.WhenAny(arrival, expiry)) {
+                } else if (expiry == await Task.WhenAny(task1: arrival, task2: expiry)) {
                     // Propagates cancellation the way a timed delay does.
                     await expiry;
 

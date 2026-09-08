@@ -4,7 +4,10 @@
     </PropertyGroup>
     <PropertyGroup>
         <IsPackable>false</IsPackable>
-        <!-- Constructs live CommandRegistry/InputRouter/binding instances directly (public members only) — no reflection. -->
+        <!-- Most facts construct live CommandRegistry/InputRouter/binding instances directly (public members only),
+             but ApiSurfaceTests/PackagingTests read the built assembly's own metadata through System.Reflection to
+             hold the published surface to its shape. Reflecting over an assembly is exactly what the trim analyzer
+             cannot see through, so this project opts out rather than annotating an inspection that never ships. -->
         <IsAotCompatible>false</IsAotCompatible>
         <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
         <NoWarn>$(NoWarn);CS1591</NoWarn>

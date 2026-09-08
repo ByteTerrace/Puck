@@ -54,19 +54,58 @@ kernel ships in two compiled variants
 exotic op/shape cases to shrink register pressure and raise warp occupancy
 when a program uses none of them.
 
+Exact secondary lighting has its own instance masks. Each 8×8 workgroup's
+shadow gather covers the full 16384-instance ceiling; reserved slots cannot
+silently select camera-tile shadows. Exact ambient occlusion includes every
+live instance, with parked slots removed once per group. Camera visibility
+does not prove that an object is irrelevant to an AO probe outside that ray.
+The two shared masks cost 4 KiB per workgroup. Explicit fast AO and camera-tile
+shadows remain approximation options; exact AO costs more in dense scenes.
+
 `SdfWorldEngine`'s construction options (`SdfWorldEngineOptions`) freeze the
 program word capacity, instance capacity, and dynamic-transform capacity for
 the lifetime of the engine; `UploadProgram` is the single owner of every
 per-program derived buffer and mask width, called once at construction and
 again whenever a host swaps the live program. `SdfEngineNode` is the
 `Puck.Hosting.IRenderNode` adapter a generic render tree composes — it owns
-device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine.
+device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine. It
+also records the last uploaded program's word/instance count and Lipschitz
+step scale (`LiveProgramWords`/`LiveProgramInstances`/`LiveProgramStepScale`,
+against the frozen `ProgramWordCapacity`) — the live half of `Puck.World`'s
+`world.budget` cost sheet.
 `SdfWorldRenderSpec.Decorate` is where a host wraps that node: post-render
 passes are `Puck.Shaders.FullscreenPassNode`s built from `puck.shader.v1`
 manifests shipped in this project's `Assets/Shaders/Sdf/` tree
 (`sdf-film-grain.frag.hlsl` + `sdf-film-grain.puck.shader.json` is the one
 today), selected by a world document's `render.extensions[].id`; this project
 carries no per-pass C#.
+
+## Reload compiled shaders
+
+After compiling HLSL, a running `Puck.World` accepts:
+
+```text
+world.shaders.reload src/Puck.SdfVm/Assets/Shaders/Sdf
+world.shaders.status
+```
+
+Omit the directory to read the deployed assets. The request is pending until
+the next produced frame handles it; status reports `applied`, `unchanged`, or
+`failed`, with a generation and changed pipeline count. Compile before issuing
+the command. Source edits alone do not change a running GPU pipeline.
+
+`SdfEngineNode.RequestShaderReload` queues the work; `SdfWorldEngine.ReloadKernels`
+owns the render-thread transaction. It builds changed pipelines using the
+existing binding descriptions, drains outstanding frames, and checks the beam
+and all three views variants' ISA on the GPU before retiring the old pipelines.
+A failed load or validation keeps the previous kernels. Buffers, images, scene
+programs, animation, and baked bricks remain allocated; shadow history and the
+frame reuse decision are invalidated. Unchanged bytecode skips pipeline creation
+and the GPU drain. Device-loss recovery uses the last successfully loaded set.
+
+This is the primary SDF engine's compute-kernel reload. Child engines and
+overlay/postprocess decorators own separate pipelines. Changing host bindings,
+buffer layouts, or the C# ISA requires a host rebuild, not a shader reload.
 
 ## 🧩 Composition, anchors, and views
 
@@ -82,9 +121,38 @@ registry a camera rig resolves against (`Views.SdfCameraView.Resolve` is its
 only consumer). `Puck.SdfVm.Views` holds the camera-rig shapes
 (`OrbitRig`/`FollowRig`/`FixedRig`/`FirstPersonRig`/`DollyRig`) and
 `ViewStack`, the budgeted round-robin registry for offscreen view content
-(`SdfCameraView`/`GuestSurfaceView`/`NestedWorldView`) with the
+(`SdfCameraView`/`WorldSessionView`) with the
 self-reference rule that keeps a screen wired to its own view from
-compounding frame over frame.
+compounding frame over frame. `SdfCameraProgram.cs`'s `dynamics` op names a
+pole-matched second-order response `SdfCameraBoomFollower` applies as the
+seat-rig boom's ease; `Views/SecondOrderFollower.cs` is the presentation-only
+float twin of `Puck.Maths.SecondOrderDynamics` this and every stamped-part
+follower (`Puck.World.Client`) share — document-blind, allocation-free, never
+feeding back into simulation state. `SdfCameraProgram.cs`'s `path` op samples
+a named `curves` row by arc-length fraction and re-seeds the subject/eye
+there, facing the sampled tangent; `Views/SdfCurvePath.cs` is the same kind of
+presentation twin, but of `Puck.Maths.CurvatureSpline` — it converts an
+already-solved `CompiledCurvatureSpline`'s Q32 raws once at construction, so
+it carries no solver of its own and cannot diverge from the fixed-point
+primitive's tangent-length branch pick. Every intermediate (converted control
+points, arc table, wrap/clamp/lookup) is carried in `double`, not `float` — a
+legal curve can accumulate arc well past `2^24` units, where a `float` ULP
+already exceeds a legal short segment; `float` appears only at the two public
+seams, the total length and `Sample`'s returned position/yaw.
+
+`SdfCameraView.ExportFactory` puts that view's offscreen engine into export
+mode (`SdfWorldEngineOptions.CreateOutputImage` returning an
+`IGpuExportableStorageImage`): the same rendered image both keeps serving
+`Resolve`'s same-device view handle (a jumbotron still samples it unchanged)
+and exposes `ExportSharedHandle` for a same-adapter, cross-API consumer to
+open. Setting the factory after the engine already exists retires it and keeps
+its last resolved image alive until the replacement engine completes a frame;
+`ExportGeneration` changes identity every rebuild (a late export request, a
+dimension change, device loss).
+An owner that exposes the single exported image to an asynchronous foreign
+reader wires `TryBeginExportWrite`/`EndExportWrite`: `Resolve` then holds the
+last completed image while the reader owns its lease and publishes the next
+image only after export-mode submission drains the producer queue.
 
 ## 🐛 Debug and bench tooling
 
@@ -116,3 +184,24 @@ not run — say so plainly rather than implying coverage that does not exist.
 The [`sdf-world` skill](../../.claude/skills/sdf-world/SKILL.md) carries the
 settled C#↔HLSL sync-pair contracts and engine semantics this project must
 never re-derive or accidentally fork.
+
+## Capture completion
+
+`SdfWorldRender.RequestCapture(path)` returns a `FrameCaptureRequest`.
+The request follows the outermost capture-capable decorator down to whichever
+node serves the frame. Its `Completion` resolves with a `FrameCaptureResult`
+only after the PNG writer returns, or with a failure if readback, writing,
+capture availability, or disposal prevents success. A busy target refuses
+instead of replacing the earlier request. `PendingCapturePath` is a busy
+diagnostic, never evidence that a file was written.
+
+A readback `DeviceLostException` completes the request with that failure and
+is then rethrown so the host can rebuild the graphics device. Ordinary PNG or
+filesystem failures remain result data and do not interrupt rendering.
+
+Arm requests on the host pump. A worker can use
+`TextCommandSession.InvokeAsync` to arm after that session's queued commands
+and waits, then await capture completion off the pump. Cancellation of that
+await leaves the capture accepted; keep its unique path reserved until it
+finishes. GPU readback and PNG writing remain synchronous render work, and
+completion does not promise an exact simulation tick or durable disk storage.

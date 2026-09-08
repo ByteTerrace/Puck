@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
@@ -36,6 +38,10 @@ public sealed partial class AgbBus : IAgbBus {
     private readonly IAgbSerialController m_serial;
     private readonly IAgbPpu m_ppu;
     private readonly IAgbApu m_apu;
+    private readonly AgbDmaController? m_dmaCore;
+    private readonly AgbApu? m_apuCore;
+    private readonly AgbClockState m_clockState = new();
+    private readonly Action<string>? m_busTrace;
 
     private uint m_openBus;
     private uint m_prevFetchHalf;
@@ -85,8 +91,9 @@ public sealed partial class AgbBus : IAgbBus {
     /// <param name="serial">The serial communication controller.</param>
     /// <param name="ppu">The picture-processing unit (owns palette/VRAM/OAM and the display registers).</param>
     /// <param name="apu">The audio-processing unit.</param>
-    /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public AgbBus(AgbScheduler scheduler, IBios bios, AgbCartridge cartridge, IAgbInterruptController interrupts, IAgbTimerController timers, IAgbDmaController dma, IAgbSerialController serial, IAgbPpu ppu, IAgbApu apu) {
+    /// <param name="options">Per-machine diagnostic overrides, or null for normal hardware behavior.</param>
+    /// <exception cref="ArgumentNullException">A required subsystem is <see langword="null"/>.</exception>
+    public AgbBus(AgbScheduler scheduler, IBios bios, AgbCartridge cartridge, IAgbInterruptController interrupts, IAgbTimerController timers, IAgbDmaController dma, IAgbSerialController serial, IAgbPpu ppu, IAgbApu apu, AgbMachineOptions? options = null) {
         ArgumentNullException.ThrowIfNull(scheduler);
         ArgumentNullException.ThrowIfNull(bios);
         ArgumentNullException.ThrowIfNull(cartridge);
@@ -98,6 +105,8 @@ public sealed partial class AgbBus : IAgbBus {
         ArgumentNullException.ThrowIfNull(apu);
 
         m_scheduler = scheduler;
+        PrefetchDisabled = options?.DisablePrefetch ?? false;
+        m_busTrace = options?.BusTrace;
         m_bios = bios.Image.ToArray();
         m_cartridge = cartridge;
         m_interrupts = interrupts;
@@ -106,6 +115,16 @@ public sealed partial class AgbBus : IAgbBus {
         m_serial = serial;
         m_ppu = ppu;
         m_apu = apu;
+        m_dmaCore = dma as AgbDmaController;
+        m_apuCore = apu as AgbApu;
+
+        // Only built-in controllers publish every readiness transition. Decorators retain the interface path.
+        // An observer already owned by another bus must not be replaced.
+        if ((timers is AgbTimerController { ClockState: null } timerCore)
+            && (interrupts is AgbInterruptController { ClockState: null } interruptCore)) {
+            timerCore.ObserveClockState(state: m_clockState);
+            interruptCore.ObserveClockState(state: m_clockState);
+        }
 
         cartridge.SetCycleProvider(provider: () => m_scheduler.Now);
 
@@ -118,6 +137,8 @@ public sealed partial class AgbBus : IAgbBus {
 
     /// <summary>Gets the current master-clock time (committed clock plus the CPU's running offset).</summary>
     public long Cycles => m_scheduler.Now;
+    /// <inheritdoc/>
+    public bool PrefetchDisabled { get; }
 
     /// <summary>Reads an I/O register halfword without advancing the clock — for the I/O-read differential dump.</summary>
     public ushort DebugReadIo(uint offset) => ReadIoHalf(offset: offset);
@@ -198,7 +219,18 @@ public sealed partial class AgbBus : IAgbBus {
     // advance. Direct-Sound keeps a timer enabled all session, so this collapse is what keeps real gameplay fast.
     // The timer block is flipped between event-scheduled and per-cycle at each span boundary; EnsureScheduled queues
     // the overflow events (and must run BEFORE the next-event clamp so an overflow due this span is not overstepped).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void StepClocks(int n) {
+        // Readiness is withdrawn by register writes, latch/IRQ transitions and restore. Equality belongs to
+        // the slow path: an event at the charge's final cycle must fire before the access returns.
+        if ((n > 0) && m_clockState.CanAdvance && (n < (m_scheduler.NextWhen - m_scheduler.Now))) {
+            m_scheduler.Now += n;
+            return;
+        }
+
+        StepClocksSlow(n: n);
+    }
+    private void StepClocksSlow(int n) {
         if (n <= 0) {
             m_scheduler.Now += n; // defensive; charge sites never pass a negative count
 
@@ -281,11 +313,22 @@ public sealed partial class AgbBus : IAgbBus {
     // trigger runs its whole burst HERE, just before the CPU touches the bus, with the CPU stalled — so the burst's
     // cycles and its completion IRQ are charged to the consuming instruction. m_dmaActive guards re-entry from the
     // DMA's own accesses and marks those accesses as DMA (for EEPROM routing).
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RunPendingDma() {
         if (m_dmaActive) {
             return;
         }
 
+        // Built-in peripherals expose their request flags without consuming them. Decorators and substitute
+        // implementations retain the full interface path, including their access-time callbacks.
+        if ((m_dmaCore is not null) && (m_apuCore is not null)
+            && !m_dmaCore.HasPendingTransfer && !m_apuCore.HasPendingFifoRefill) {
+            return;
+        }
+
+        RunPendingDmaSlow();
+    }
+    private void RunPendingDmaSlow() {
         m_dmaActive = true;
 
         var before = m_scheduler.Now;
@@ -422,7 +465,7 @@ public sealed partial class AgbBus : IAgbBus {
         var region = (address >> 24);
 
         if (
-            !DisablePrefetch &&
+            !PrefetchDisabled &&
             m_prefetchEnabled &&
             (region >= 0x08u) &&
             (region <= 0x0Du)
@@ -487,7 +530,7 @@ public sealed partial class AgbBus : IAgbBus {
             width: 2
         );
 
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             PrefetchStep(clocks: cost);
         }
 
@@ -513,7 +556,7 @@ public sealed partial class AgbBus : IAgbBus {
         var region = (address >> 24);
 
         if (
-            !DisablePrefetch &&
+            !PrefetchDisabled &&
             m_prefetchEnabled &&
             (region >= 0x08u) &&
             (region <= 0x0Du)
@@ -572,7 +615,7 @@ public sealed partial class AgbBus : IAgbBus {
             width: 4
         );
 
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             PrefetchStep(clocks: cost);
         }
 
@@ -671,11 +714,11 @@ public sealed partial class AgbBus : IAgbBus {
     public void Idle(int cycles) {
         RunPendingDma();
 
-        if (BusTraceEnabled) {
-            Console.Error.WriteLine(value: $"  c={m_scheduler.Now} I x{cycles}");
+        if (m_busTrace is { } trace) {
+            trace($"  c={m_scheduler.Now} I x{cycles}");
         }
 
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             PrefetchStep(clocks: cycles);
         }
 
@@ -703,45 +746,15 @@ public sealed partial class AgbBus : IAgbBus {
     private bool StopWakeRequested() => ((m_interrupts.ReadRegister(offset: 0x200u) & m_interrupts.ReadRegister(offset: 0x202u) & StopWakeMask) != 0);
 
     /// <inheritdoc/>
-    public void RunUntilInterrupt() {
-        // Hardware steps the halted CPU one cycle at a time, waking on enable[0] & flag[0]. We do the
-        // same per-cycle stepping whenever something can change the IRQ state on the next cycle (a pending timer
-        // latch or IRQ delay, or an un-propagated pipeline shift), but jump straight to the next scheduled event
-        // over genuinely idle spans — the VBlank-wait case, and now also a plain running timer whose overflow is
-        // the scheduled wake event. StepClocks collapses the span and fires that overflow on its exact cycle.
-        while (true) {
-            if (m_stopped
-                ? StopWakeRequested()
-                : m_interrupts.HasPendingInterrupt) {
-                break;
-            }
-
-            if (
-                m_timers.HasPendingLatch ||
-                !m_interrupts.PipelineQuiescent
-            ) {
-                StepClocks(n: 1);
-            } else {
-                // Nothing per-cycle can change the IRQ state; jump to the next scheduled event (the wake source for a
-                // V-blank-style wait). Cap to a frame so a pathological no-event halt still re-checks periodically.
-                var next = (m_scheduler.NextWhen - m_scheduler.Now);
-
-                StepClocks(n: ((next <= 0L)
-                    ? 1
-                    : (int)Math.Min(
-                    val1: next,
-                    val2: 280_896L
-                )));
-            }
-
+    public void StepHalted() {
+        if (!(m_stopped ? StopWakeRequested() : m_interrupts.HasPendingInterrupt)) {
+            // A sleeping CPU still yields to its caller. In particular, keypad input must be deliverable on the
+            // next queued host segment, and a link peer must get its turn to produce a serial wake interrupt.
+            StepClocks(n: 1);
             ProcessEvents();
-
-            // Hardware runs pending DMA during halt too. A timed DMA queued by a PPU event
-            // while the CPU is halted (e.g. a VBlank copy during a VBlank-wait) must still run, since there are no
-            // CPU bus accesses to drive RunPendingDma here.
             RunPendingDma();
+            return;
         }
-
         // Hardware wakes a halted CPU with two extra cycles before resuming — charged after the wake condition is
         // met and before the first post-halt instruction. Without this every IntrWait leaves the clock two cycles
         // ahead of the reference, which accumulates and breaks timing-paced boot loops (some commercial games).
@@ -1096,7 +1109,7 @@ public sealed partial class AgbBus : IAgbBus {
 
         // The buffer stops running ahead; the interrupted prefetch run is abandoned so the refill after this fetch
         // restarts non-sequentially. Contents are left in place (a full flush over-charges the post-DMA fetch).
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             m_prefetchStopped = true;
             m_prefetchAhead = false;
         }
@@ -1538,7 +1551,7 @@ public sealed partial class AgbBus : IAgbBus {
             // per-access palette-contention cost, exactly the DMA-into-palette case some commercial games' boot hits.
             for (var half = 0; (half < cost); ++half) {
                 do {
-                    if (!DisablePrefetch) {
+                    if (!PrefetchDisabled) {
                         PrefetchStep(clocks: 1);
                     }
 
@@ -1550,7 +1563,7 @@ public sealed partial class AgbBus : IAgbBus {
             return;
         }
 
-        if (!DisablePrefetch) {
+        if (!PrefetchDisabled) {
             if (
                 m_prefetchEnabled &&
                 (region >= 0x08u) &&
@@ -1563,14 +1576,12 @@ public sealed partial class AgbBus : IAgbBus {
         StepClocks(n: cost);
     }
 
-    private static readonly bool DisablePrefetch = (Environment.GetEnvironmentVariable(variable: "PUCK_NO_PREFETCH") == "1");
     // Per-access bus trace, mirroring the reference oracle's bus-trace format, so the two access streams diff
     // directly to localise cycle divergences. Logs the running clock (committed + uncommitted) BEFORE the access.
-    private static readonly bool BusTraceEnabled = (Environment.GetEnvironmentVariable(variable: "PUCK_BUSTRACE") == "1");
 
     private void BusTrace(char op, uint address, int width, BusAccessType access) {
-        if (BusTraceEnabled) {
-            Console.Error.WriteLine(value: $"  c={m_scheduler.Now} {op} a={address:X8} w={width} {((access == BusAccessType.Sequential)
+        if (m_busTrace is { } trace) {
+            trace($"  c={m_scheduler.Now} {op} a={address:X8} w={width} {((access == BusAccessType.Sequential)
                 ? "S"
                 : "N")}");
         }
@@ -1615,7 +1626,7 @@ public sealed partial class AgbBus : IAgbBus {
             if ((m_prefetchLoad & 0x1FFFEu) != 0) {
                 var offset = m_prefetchLoad & 0x01FFFFFFu;
 
-                m_prefetchSlots[(m_prefetchLoad >> 1) & 7] = ((ushort)(m_cartridge.ReadRom(offset: offset) | (m_cartridge.ReadRom(offset: (offset + 1u)) << 8)));
+                m_prefetchSlots[(m_prefetchLoad >> 1) & 7] = m_cartridge.ReadRomHalfword(offset: offset);
                 m_prefetchLoad += 2;
             }
 

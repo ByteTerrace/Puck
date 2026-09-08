@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace Puck.AdvancedGamingBrick.Post;
 
 /// <summary>
@@ -20,23 +18,17 @@ internal sealed class ThroughputStage : IPostStage<PostContext> {
         PostTier.A;
 
     /// <inheritdoc/>
-    public PostStageOutcome Run(PostContext context) {
-        using var machine = PostMachine.Build(
-            bios: context.BiosImage,
-            rom: SyntheticRom.Create()
+    public PostStageOutcome Run(PostContext context) =>
+        MachineStageProbes.MeasureThroughput(
+            benchFrames: BenchFrames,
+            build: () => PostMachine.Build(
+                bios: context.BiosImage,
+                rom: SyntheticRom.Create()
+            ),
+            cycleUnit: "Mcycle/s",
+            cyclesPerFrame: PostMachine.CyclesPerFrame,
+            hardwareFps: PostMachine.HardwareFps,
+            runFrames: static (machine, frames) => machine.RunFrames(frames: frames),
+            warmFrames: WarmFrames
         );
-
-        machine.RunFrames(frames: WarmFrames);
-
-        var stopwatch = Stopwatch.StartNew();
-
-        machine.RunFrames(frames: BenchFrames);
-        stopwatch.Stop();
-
-        var fps = (BenchFrames / stopwatch.Elapsed.TotalSeconds);
-        var realtimeMultiple = (fps / PostMachine.HardwareFps);
-        var megaCyclesPerSecond = ((fps * PostMachine.CyclesPerFrame) / 1e6);
-
-        return PostStageOutcome.Pass(detail: $"{fps:F0} fps ({realtimeMultiple:F1}x realtime, {megaCyclesPerSecond:F1} Mcycle/s) over {BenchFrames} frames");
-    }
 }

@@ -45,12 +45,16 @@ public readonly record struct BindingSessionEvent(
     int PressesRemaining,
     string? ConflictingCommand = null
 ) {
-    /// <summary>The nothing-happened event.</summary>
-    public static BindingSessionEvent None => new(
+    /// <summary>Creates the nothing-happened event for the step that was being prompted when the signal arrived —
+    /// the index still identifies the prompt a host is narrating, so a <see cref="BindingSessionEventKind.None"/>
+    /// never reads as if the session had rewound to its first step.</summary>
+    /// <param name="stepIndex">The index of the step the session is on (the step count once complete).</param>
+    /// <returns>The event.</returns>
+    public static BindingSessionEvent None(int stepIndex) => new(
         ConflictingCommand: null,
         Kind: BindingSessionEventKind.None,
         PressesRemaining: 0,
         Source: null,
-        StepIndex: 0
+        StepIndex: stepIndex
     );
 }

@@ -97,7 +97,7 @@ public sealed record WorldGroupKind(
 /// does not carry it forward — the party-vs-roster split falls out of the ordinary document-swap machinery, not a
 /// bespoke flag on this type).</summary>
 /// <param name="Id">The group's stable id, unique within <see cref="WorldGroupsSection.Groups"/> — the token
-/// <see cref="WorldPrincipal.Group"/> carries as a grant principal. <see cref="WorldSafeName"/>-typed (the
+/// <see cref="WorldPrincipal.Group"/> carries as a grant principal. <see cref="SafeName"/>-typed (the
 /// <see cref="WorldOwnedWorldFileName.For"/> precedent: a scoped session's process-local instance name is composed
 /// from this id, literal separators and all, in <c>WorldSessionResolver.MintInstanceName</c> — typing it here is
 /// what makes that composition injective by construction rather than by an escaping step downstream that could
@@ -116,7 +116,7 @@ public sealed record WorldGroupKind(
 /// authored empty list (refused — omit the member instead).</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGroup(
-    WorldSafeName Id,
+    SafeName Id,
     string KindName,
     IReadOnlyList<WorldPrincipal> Members,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Tags = null
@@ -156,7 +156,7 @@ public enum OwnershipOwnerKind : byte {
 /// <param name="Recipient">The principal named to accept the subject — the sole accept beneficiary. Never equal to
 /// <paramref name="Offerer"/> (refused by name — an offer to oneself is not a trade).</param>
 /// <param name="DeadlineTick">The server tick at or after which <c>WorldMutation.SettleOwnership</c>'s reclaim
-/// admits — the same tick unit <see cref="WorldStateAdvance.EpochTick"/> already rides. Before this tick, only an
+/// admits — the same tick unit <see cref="StateAdvance.EpochTick"/> already rides. Before this tick, only an
 /// accept by <see cref="Recipient"/> can resolve the escrow.</param>
 public readonly record struct OwnershipEscrow(
     WorldPrincipal Offerer,

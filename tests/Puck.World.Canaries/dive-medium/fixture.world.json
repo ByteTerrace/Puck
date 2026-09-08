@@ -1,0 +1,98 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "dive-medium-canary",
+  "imports": [
+    {
+      "document": "../../../src/Puck.World/Assets/worlds/modules/dive.world.json",
+      "as": "dive"
+    }
+  ],
+  "bodies": {
+    "localSeats": 1,
+    "capacity": 16
+  },
+  "simulation": {
+    "rateHz": 240
+  },
+  "spawnPoints": [
+    {
+      "id": "origin",
+      "position": [
+        0,
+        6,
+        0
+      ]
+    }
+  ],
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveAdvance"
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe"
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn"
+    },
+    {
+      "name": "up",
+      "shape": "Bipolar",
+      "role": "MoveUp"
+    }
+  ],
+  "collision": {
+    "requirements": [],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0
+  },
+  "views": {
+    "layouts": [],
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626001,
+          "yaw": 0,
+          "pitch": 0.4145069,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311
+        }
+      ]
+    }
+  },
+  "defaultSeatKit": "diver"
+}

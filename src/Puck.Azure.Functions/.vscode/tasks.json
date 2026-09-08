@@ -1,0 +1,70 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "args": [
+                "clean",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "command": "dotnet",
+            "label": "clean (functions)",
+            "problemMatcher": "$msCompile",
+            "type": "process"
+        },
+        {
+            "args": [
+                "build",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "command": "dotnet",
+            "dependsOn": "clean (functions)",
+            "group": {
+                "isDefault": true,
+                "kind": "build"
+            },
+            "label": "build (functions)",
+            "problemMatcher": "$msCompile",
+            "type": "process"
+        },
+        {
+            "args": [
+                "clean",
+                "--configuration",
+                "Release",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "command": "dotnet",
+            "label": "clean release (functions)",
+            "problemMatcher": "$msCompile",
+            "type": "process"
+        },
+        {
+            "args": [
+                "publish",
+                "--configuration",
+                "Release",
+                "/property:GenerateFullPaths=true",
+                "/consoleloggerparameters:NoSummary"
+            ],
+            "command": "dotnet",
+            "dependsOn": "clean release (functions)",
+            "label": "publish (functions)",
+            "problemMatcher": "$msCompile",
+            "type": "process"
+        },
+        {
+            "command": "host start",
+            "dependsOn": "build (functions)",
+            "isBackground": true,
+            "options": {
+                "cwd": "${workspaceFolder}/bin/Debug/net10.0"
+            },
+            "problemMatcher": "$func-dotnet-watch",
+            "type": "func"
+        }
+    ]
+}
+

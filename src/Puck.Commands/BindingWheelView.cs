@@ -12,6 +12,10 @@ namespace Puck.Commands;
 /// <param name="Rings">The ring views, innermost first.</param>
 /// <param name="Style">The validated presentation policy.</param>
 /// <param name="Excursion">Compiler-precomputed neutral-relative thresholds, or null for explicit ring selection.</param>
+/// <param name="LabelRow">The state row a sector's display text resolves from (see
+/// <see cref="BindingWheelDefinition.LabelRow"/>), carried through so the presenting world can resolve it.</param>
+/// <param name="IconRow">The state row a sector's icon resolves from (see
+/// <see cref="BindingWheelDefinition.IconRow"/>), carried through so the presenting world can resolve it.</param>
 /// <param name="SelectorDeadZoneSquared">The compiled squared Axis2D admission threshold: the excursion dead zone
 /// for excursion-selected rings, otherwise the style's Axis2D dead zone.</param>
 /// <param name="SelectorSwitchThresholdSquared">The compiled squared magnitude an opposite-side excursion must
@@ -19,6 +23,8 @@ namespace Puck.Commands;
 public sealed record BindingWheelView(
     string Id,
     string Group,
+    string? LabelRow,
+    string? IconRow,
     IReadOnlyList<string> HoldPageIds,
     IReadOnlyList<BindingWheelRingView> Rings,
     BindingWheelStyleDefinition Style,
@@ -51,12 +57,12 @@ public sealed record BindingWheelRingView(
 );
 /// <summary>One wheel sector as the UI presents it and a commit dispatches it.</summary>
 /// <param name="Activation">The compiled binding activation the sector commits through the input router.</param>
-/// <param name="Label">The sector's display label, if any; opaque to the engine.</param>
-/// <param name="Icon">The sector's display icon id, if any; opaque to the engine.</param>
+/// <param name="Id">The sector row's authored identity, if any — the key its display text resolves by (see
+/// <see cref="BindingWheelDefinition.LabelRow"/>). Two sectors activating one command with different constants are
+/// distinguishable here and nowhere else.</param>
 public sealed record BindingWheelSectorView(
     BindingActivation Activation,
-    string? Label,
-    string? Icon
+    string? Id
 ) {
     /// <summary>Gets the command name, exposed for presentation/read-back only.</summary>
     public string Command => Activation.Command;

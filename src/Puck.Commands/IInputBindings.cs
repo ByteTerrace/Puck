@@ -23,12 +23,39 @@ public interface IInputBindings {
     /// </summary>
     /// <param name="slot">The logical player slot.</param>
     /// <param name="signal">The captured signal being resolved.</param>
+    /// <param name="pressesWithheld">Whether the <see cref="InputRouter"/> will DISCARD every press this resolve
+    /// produces — the state a signal captured while its device's terminal focus is released arrives in (see
+    /// <see cref="InputRouter.CaptureFocusExempt(in InputSignal)"/>). Such a signal is forwarded only so the
+    /// resolver's own held state can be RELEASED: the page must still flip back and a broken row must still emit
+    /// its completion. A stateful resolver must therefore arm nothing and start nothing while this is
+    /// <see langword="true"/> — a row armed here would owe a completion for a command that never started, and
+    /// could not fire again until it delivered one.</param>
     /// <returns>The command bindings for <paramref name="slot"/> and the signal's source, or <see langword="null"/>.</returns>
-    IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
+    IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal, bool pressesWithheld) {
+        // A stateless resolver is a pure table: it arms nothing, so it has nothing to withhold.
         return Resolve(
             slot: slot,
             source: signal.Source
         );
+    }
+    /// <summary>
+    /// Returns whether this resolver currently carries state for <paramref name="source"/> that the source's own
+    /// release would clear — a press latch, a held modifier, a chord-consumed press, or an open activator gate.
+    /// </summary>
+    /// <param name="slot">The logical player slot.</param>
+    /// <param name="source">The provider-neutral input source id.</param>
+    /// <returns><see langword="true"/> when a release of the source has something here to release. The default is
+    /// <see langword="false"/>: a stateless resolver is a pure table and carries nothing.</returns>
+    /// <remarks>The <see cref="InputRouter"/>'s one question when deciding whether to forward an INACTIVE continuous
+    /// sample captured under focus exemption. A continuous producer streams inactive samples forever (a stick sitting
+    /// at centre reports every frame), and those are the device reporting rather than a release — forwarding them
+    /// would consult the authored page on every frame a seat console stays open. Only a source this resolver is
+    /// holding down is releasing when it next reports inactive, and only this resolver can say so: the router's own
+    /// memory of having seen a control deflected goes stale whenever it withdraws holds without resetting the
+    /// resolver (a device reseat), while the resolver's answer is about the very state the release would clear.
+    /// Called on the router's snapshot thread, immediately before the resolve; it must not create or mutate state.</remarks>
+    bool HoldsSource(int slot, string source) {
+        return false;
     }
     /// <summary>Releases one slot's held chord/modifier and press-latch state. Runtime modality transitions use this
     /// seam before held digital controls reassert through the new command surface. Default no-op for stateless

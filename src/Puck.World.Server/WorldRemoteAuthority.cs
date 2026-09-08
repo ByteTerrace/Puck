@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
@@ -16,6 +15,9 @@ public readonly record struct WorldRemoteRouteCredential(int BodyIndex, string S
 /// <param name="authority">The remote authority holding the traveler.</param>
 /// <param name="credential">The immutable route credential committed for it.</param>
 public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority, WorldRemoteRouteCredential credential) : IWorldForwardedAuthority {
+    /// <inheritdoc/>
+    public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
+        authority.RelayProjectionAsync(new(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops), output, ct);
     /// <inheritdoc/>
     public bool TryDescribeRoute(out WorldAuthorityRouteDescription route, out string reason) {
         var held = credential;
@@ -48,10 +50,8 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
         );
     }
     /// <inheritdoc/>
-    public void DescribeForCheckpoint(out string destinationAuthority, out WorldMobilityIdentity mobility) {
-        destinationAuthority = authority.Authority;
-        mobility = credential.Mobility;
-    }
+    public WorldForwardingDestination DescribeForCheckpoint() => new(authority.PeerAuthority,
+        credential.SourceAuthority, credential.Mobility, authority.Endpoint, authority.Definition);
 }
 
 /// <summary>The concerns that get their own ordered connection to one peer authority.</summary>
@@ -71,10 +71,21 @@ public enum WorldTransferStep : byte {
     /// <summary>The transport failed, so whether the destination applied this step is unknown. A commit that ends
     /// here is in doubt, never a refusal.</summary>
     Unreachable,
+
+    /// <summary>The asynchronous recovery request is still in flight. Its exact transaction remains held.</summary>
+    Pending,
 }
 /// <summary>One federation response, or the named reason there is none. The lane never faults a caller's task: a
 /// dead peer is a refusal with a name, so a simulation-thread caller always receives an answer it can act on.</summary>
-public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind, byte[] Body, WireFailure Failure) {
+/// <param name="Kind">The response kind. <see cref="WorldFederationResponse.Refusal"/> when <see cref="Ok"/> is
+/// <see langword="false"/>.</param>
+/// <param name="Body">The response body — a slice over the frame's own buffer, allocated per frame and never reused,
+/// so it is safe to keep. Empty when <see cref="Ok"/> is <see langword="false"/>.</param>
+/// <param name="Failure">The named transport refusal when nothing decoded; a lane answer of
+/// <see cref="WireRefusal.RequestTimedOut"/> or an in-doubt <see cref="WireRefusal.ConnectionClosed"/> is a named
+/// answer about ONE request (it may or may not have been applied), never evidence that the peer is down.</param>
+public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind, ReadOnlyMemory<byte> Body, WireFailure Failure) {
+    /// <summary>Gets a value indicating whether the peer answered at all (no transport refusal).</summary>
     public bool Ok => !Failure.IsRefusal;
 
     /// <summary>Narrates this answer as a refusal sentence.</summary>
@@ -82,13 +93,17 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
         (Failure.IsRefusal
             ? Failure.ToString()
             : ((Kind == WorldFederationResponse.Refusal)
-                ? Encoding.UTF8.GetString(bytes: Body)
+                ? Encoding.UTF8.GetString(bytes: Body.Span)
                 : $"unexpected federation response {Kind}"
         ));
+    /// <summary>Creates a refused answer.</summary>
+    /// <param name="refusal">The refusal name.</param>
+    /// <param name="detail">The refusal narration.</param>
+    /// <returns>The refused answer.</returns>
     public static WorldFederationAnswer Refused(WireRefusal refusal, string detail) =>
         new(
             Kind: WorldFederationResponse.Refusal,
-            Body: [],
+            Body: ReadOnlyMemory<byte>.Empty,
             Failure: new WireFailure(
                 Detail: detail,
                 Refusal: refusal
@@ -105,15 +120,27 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
 /// is what keeps a dead neighbour from stalling the tick. A caller that could be told "not yet" would have to hold
 /// state across ticks the adjacency scan is concurrently re-deriving, so no path here returns one.</para>
 /// </remarks>
-public sealed class WorldRemoteAuthority : IDisposable {
-    /// <summary>The ceiling on how long a routed submission or route lookup waits for its answer. This bounds
-    /// transport lifecycle, never simulation state.</summary>
+public sealed partial class WorldRemoteAuthority : IDisposable {
+    /// <summary>The detail every federation request answers with when this run holds no signing identity.</summary>
+    private const string UnconfiguredDetail = "this run holds no federation signing identity";
+
+    /// <summary>The ceiling on how long a caller waits for its answer, queue time included — the outer of the two
+    /// clocks. The lane's own <see cref="LaneRequestTimeout"/> bounds one attempt on the socket; this bounds how long
+    /// the caller's task waits behind whatever else is queued on the same ordered lane, so it is deliberately longer
+    /// than one attempt. A caller that runs out of it answers <see cref="WireRefusal.LaneUnavailable"/> and the
+    /// request stays queued for the lane to finish. This bounds transport lifecycle, never simulation state.</summary>
     private static readonly TimeSpan RoutedRequestDeadline = TimeSpan.FromSeconds(value: 10);
     /// <summary>How long a lane waits before retrying a connect that failed, before it calls the peer down.</summary>
     private static readonly TimeSpan ConnectRetryDelay = TimeSpan.FromMilliseconds(value: 50);
     /// <summary>How long a lane that failed to reach its peer answers immediately with
     /// <see cref="WireRefusal.LaneUnavailable"/> before trying to connect again.</summary>
     private static readonly TimeSpan LaneBackoff = TimeSpan.FromSeconds(value: 1);
+    /// <summary>The lane's per-attempt deadline — the inner of the two clocks. One attempt is connect, hello, and
+    /// authenticate (when the lane has no connection) plus the request write and the response read; a peer that goes
+    /// silent inside it is answered <see cref="WireRefusal.RequestTimedOut"/> once the request was written (no re-send,
+    /// no backoff) or counted as a connect failure before it. Shorter than <see cref="RoutedRequestDeadline"/> so a
+    /// caller's wait can cover its own attempt plus one queued ahead of it.</summary>
+    private static readonly TimeSpan LaneRequestTimeout = TimeSpan.FromSeconds(value: 5);
     // Written from the simulation thread as reservations commit and read from socket workers resolving a forwarded
     // submission, so the table itself must be concurrent even though every write comes from the commit path.
     private readonly ConcurrentDictionary<int, WorldRemoteRouteCredential> m_credentials = new();
@@ -124,6 +151,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
     private readonly ConcurrentDictionary<(string SourceAuthority, WorldFederationLane Lane), PersistentRequestLane<WorldFederationRequest, WorldFederationResponse>> m_requestLanes = new();
     private readonly ConcurrentDictionary<TransferStepKey, Task<WorldFederationAnswer>> m_transferSteps = new();
     private string m_authority = string.Empty;
+    private string m_peerAuthority = string.Empty;
     // Frames is the "nothing observed yet" value, so the first delivered document always narrates its tier once.
     private WorldDisclosureTier m_observedTier = WorldDisclosureTier.Frames;
 
@@ -132,27 +160,44 @@ public sealed class WorldRemoteAuthority : IDisposable {
     private readonly string m_observerAuthority;
     private readonly Action<WorldAuthorityRouteDescription>? m_routeChanged;
     private readonly IAuthenticator m_security;
+    private readonly WorldPeerNetwork m_network;
+    private readonly bool m_ownsNetwork;
     private readonly WorldRemoteAuthority? m_submissionAuthority;
     private readonly WorldRemoteRouteCredential? m_submissionCredential;
 
+    // Set once, by the first proof m_security refuses to give: an authenticator configured to verify but not to
+    // prove reports IsConfigured for the host's sake, so the client side learns it cannot sign from the exchange
+    // itself. Final for the run, exactly as an unconfigured authenticator is.
+    private int m_cannotProve;
     private WorldDefinition m_definition;
-    private IPEndPoint m_endpoint;
     private long m_lastObservedTickBits;
     private WorldAuthorityRouteDescription? m_observedRoute;
-    private int m_routeRevision;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default) {
-        if (!IPEndPoint.TryParse(
-            result: out var parsed,
-            s: endpoint
+    // The physical entry stays fixed even when a traveler's logical destination changes.
+    private readonly PublishedRoute m_route;
+
+    private int m_unconfiguredNoted;
+
+    // The local instance's own hub, so this lane's narration reaches whatever sink is attached to it — null for a
+    // caller with no local server (leaves this lane's narration undelivered, never a fallback to Console.Error).
+    private readonly WorldOutputHub? m_narrationHub;
+
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, string? expectedAuthority = null, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null) {
+        m_narrationHub = (narrationHub ?? submissionAuthority?.m_narrationHub);
+        if (!PeerEndpoint.TryParse(
+            endpoint: out var parsed,
+            value: endpoint
         )) {
-            throw new FormatException(message: $"host.authority '{endpoint}' is not a parseable IP endpoint");
+            throw new FormatException(message: $"host.authority '{endpoint}' is not a valid peer host and port");
         }
 
-        m_endpoint = parsed;
+        m_route = new PublishedRoute(endpoint: parsed);
         m_definition = placeholder;
         m_security = (security ?? throw new ArgumentNullException(paramName: nameof(security)));
+        m_network = (network ?? (submissionAuthority?.m_network ?? new WorldPeerNetwork()));
+        m_ownsNetwork = ((network is null) && (submissionAuthority is null));
         m_observerAuthority = observerAuthority;
+        m_peerAuthority = (expectedAuthority ?? string.Empty);
         m_submissionAuthority = submissionAuthority;
         m_submissionCredential = submissionCredential;
         if ((submissionAuthority is null) != (submissionCredential is null)) {
@@ -162,13 +207,8 @@ public sealed class WorldRemoteAuthority : IDisposable {
         m_routeChanged = routeChanged;
         m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: applicationStopping);
         if (initialRoute is { } route) {
-            if (!IPEndPoint.TryParse(
-                route.Endpoint,
-                out var initialEndpoint
-            )) {
-                throw new FormatException(message: $"route endpoint '{route.Endpoint}' is not a parseable IP endpoint");
-            }
-            m_endpoint = initialEndpoint;
+            // A logical destination can be a colocated world with no public listener. Keep the authenticated
+            // entry endpoint; its source-scoped forwarding chain relays this traveler's projection.
             m_definition = route.Definition;
             m_authority = route.Entity.Authority;
             m_lastObservedTickBits = unchecked((long)route.Tick);
@@ -176,18 +216,66 @@ public sealed class WorldRemoteAuthority : IDisposable {
         m_link = new WorldFederatedServerLink(authority: this);
     }
 
-    public string Authority => Volatile.Read(location: ref m_authority);
+    /// <summary>Gets the hub this authority's narration is delivered through, or <see langword="null"/> when none
+    /// was attached — the seam its own <see cref="WorldFederatedServerLink"/> narrates a held credential through
+    /// too, rather than carrying a second hub reference.</summary>
+    internal WorldOutputHub? NarrationHub => m_narrationHub;
+
+    public string Authority => ((Volatile.Read(location: ref m_authority) is { Length: > 0 } observed) ? observed : PeerAuthority);
+    /// <summary>Gets the pinned first-hop transaction namespace, or an empty string before the first handshake.
+    /// Reconnection checks this namespace before sending a request. It is distinct from a traveler's onward route.</summary>
+    public string PeerAuthority => Volatile.Read(location: ref m_peerAuthority);
+    /// <summary>Gets a value indicating whether every established lane is outside its unreachable-peer backoff
+    /// window. WALL-CLOCK transport lifecycle state (<see cref="PersistentRequestLane{TRequestKind,TResponseKind}.IsAvailable"/>),
+    /// legitimate for a read-back to print and never for simulation to read — link liveness the sim acts on is
+    /// tick-derived (<c>WorldEventFeed</c>'s link family). <see langword="true"/> when no lane has been opened yet:
+    /// nothing has failed.</summary>
+    public bool LanesAvailable {
+        get {
+            foreach (var lane in m_requestLanes) {
+                if (!lane.Value.IsAvailable) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
     public WorldDefinition Definition => Volatile.Read(location: ref m_definition);
-    public string Endpoint => Volatile.Read(location: ref m_endpoint).ToString();
+    /// <summary>Gets the fixed authenticated entry endpoint as cached text, without per-read formatting.</summary>
+    public string Endpoint => m_route.Description;
     public IServerLink Link => m_link;
     public ulong NextInputTick => (unchecked((ulong)Interlocked.Read(location: ref m_lastObservedTickBits)) + 1UL);
 
+    /// <summary>Issues one routed request on the source namespace's lane and waits, bounded, for its answer.</summary>
+    /// <remarks>This wait, and its twin in the transfer-step resolver, is reached from the tick thread: the transfer
+    /// steps from <c>WorldInstanceHost.DrainPendingTransfers</c> (the host's per-tick fixed point) and the forwarded
+    /// submissions and route lookups from the server's own drain, plus the routed observer's <see cref="IServerLink"/>
+    /// (<see cref="WorldFederatedServerLink"/>), which the console and client drive on the thread that pumps the tick.
+    /// A bounded synchronous wait is acceptable there because the contract demands an ANSWER inside the tick — a
+    /// caller told "not yet" would hold state across ticks the adjacency scan is concurrently re-deriving and mint a
+    /// second crossing for the same seat — and the wait is bounded twice over: the lane's own
+    /// <see cref="LaneRequestTimeout"/> per attempt, then <see cref="RoutedRequestDeadline"/> here. A lane already
+    /// known unreachable, or a run holding no signing identity, answers without waiting at all, so the stall is
+    /// confined to the one tick that carries a request to a peer that stops answering mid-exchange — the cost the
+    /// authored unavailable policy exists to absorb.</remarks>
+    /// <param name="sourceAuthority">The authenticated source namespace whose lane carries the request.</param>
+    /// <param name="kind">The request kind.</param>
+    /// <param name="body">The encoded request leaf.</param>
+    /// <returns>The peer's answer, or a named refusal when the lane could not deliver one in time.</returns>
     public WorldFederationAnswer AwaitAnswer(string sourceAuthority, WorldFederationRequest kind, byte[] body) {
         if (m_submissionAuthority is { } upstream) {
             return upstream.AwaitAnswer(
                 body: body,
                 kind: kind,
                 sourceAuthority: sourceAuthority
+            );
+        }
+
+        if (LacksSigningIdentity()) {
+            return WorldFederationAnswer.Refused(
+                detail: UnconfiguredDetail,
+                refusal: WireRefusal.LaneUnavailable
             );
         }
 
@@ -266,7 +354,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
         if (
             (answer.Kind != WorldFederationResponse.Route) ||
             !WorldFederationCodec.TryDecodeRoute(
-            body: answer.Body,
+            body: answer.Body.Span,
             route: out route,
             failure: out _
         )
@@ -430,16 +518,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             }
         }
     }
-    // Reads m_endpoint exactly once, so the endpoint a lane dials and the description it records for that same
-    // connect always name the same route republish generation.
-    private LaneRoute CurrentRoute() {
-        var endpoint = Volatile.Read(location: ref m_endpoint);
-
-        return new LaneRoute(
-            Endpoint: endpoint,
-            Description: endpoint.ToString()
-        );
-    }
+    private LaneRoute CurrentRoute() => m_route.Lane;
     private static string DescribeHandshake(WireFrameRead read, string stage) =>
         (read.Ok
             ? new WorldFederationAnswer(
@@ -447,7 +526,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
                 Body: read.Body,
                 Failure: default
             ).Describe()
-            : $"{WireRefusal.HandshakeRefused}: federation {stage} — {read.Failure}"
+            : $"federation {stage} — {read.Failure}"
         );
     private static async Task<WorldFederationAnswer> EnqueueAnswerAsync(PersistentRequestLane<WorldFederationRequest, WorldFederationResponse> lane, WorldFederationRequest kind, byte[] body) {
         var response = await lane.Enqueue(
@@ -455,10 +534,18 @@ public sealed class WorldRemoteAuthority : IDisposable {
             kind: kind
         ).ConfigureAwait(continueOnCapturedContext: false);
 
-        return new WorldFederationAnswer(
-            Kind: response.Kind,
-            Body: response.Body,
-            Failure: response.Failure
+        // A refused LaneResponse carries a default Kind (no WorldFederationResponse member); the answer's own contract
+        // is that Kind is Refusal on every failure path, so the refusal is re-minted here rather than copied.
+        return (response.Ok
+            ? new WorldFederationAnswer(
+                Kind: response.Kind,
+                Body: response.Body,
+                Failure: response.Failure
+            )
+            : WorldFederationAnswer.Refused(
+                detail: response.Failure.Detail,
+                refusal: response.Failure.Refusal
+            )
         );
     }
     private void ForgetTransferSteps(string sourceAuthority, ulong transferId) {
@@ -481,14 +568,47 @@ public sealed class WorldRemoteAuthority : IDisposable {
             pump.InvalidateAcknowledgement(mobility: credential.Mobility);
         }
     }
+    // The gate before every socket: a run started without a federation signing identity can never authenticate a
+    // lane, so its requests are refused here — one stderr line per authority, then silently — rather than paid for
+    // with a connect, a Hello, and a proof that throws. m_security is readonly and its configuration is fixed for
+    // the run, so a true answer is final. IsConfigured alone is not the whole gate: an authenticator configured to
+    // verify but not to prove passes it, and only the first proof it refuses (recorded in m_cannotProve by
+    // AuthenticateAsync) reveals that — from then on this gate closes for it exactly as for an unconfigured one.
+    private bool LacksSigningIdentity() {
+        if (
+            m_security.IsConfigured &&
+            (Volatile.Read(location: ref m_cannotProve) == 0)
+        ) {
+            return false;
+        }
+
+        if (Interlocked.Exchange(
+            location1: ref m_unconfiguredNoted,
+            value: 1
+        ) == 0) {
+            if (m_narrationHub is { HasNarrationSink: true }) {
+                m_narrationHub?.Narrate(
+                    channel: "world.authority unavailable",
+                    text: $"[world.authority unavailable: federation to '{Endpoint}' is refused ({UnconfiguredDetail})]"
+                );
+            }
+        }
+
+        return true;
+    }
     private PersistentRequestLane<WorldFederationRequest, WorldFederationResponse> LaneFor(string sourceAuthority, WorldFederationRequest kind) =>
         m_requestLanes.GetOrAdd(
             key: (sourceAuthority, LaneOf(kind: kind)),
             valueFactory: key => new PersistentRequestLane<WorldFederationRequest, WorldFederationResponse>(
+                connect: m_network.ConnectAsync,
                 connectRetryDelay: ConnectRetryDelay,
                 lifetime: m_lifetime.Token,
-                onUnavailable: exception => Console.Error.WriteLine(value: $"[world.authority unavailable: federation lane to '{Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"),
+                onUnavailable: exception => m_narrationHub?.Narrate(
+                    channel: "world.authority unavailable",
+                    text: $"[world.authority unavailable: federation lane to '{Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                ),
                 protocol: new WorldFederationLaneProtocol(owner: this),
+                requestTimeout: LaneRequestTimeout,
                 route: CurrentRoute,
                 sourceAuthority: key.SourceAuthority,
                 unavailableBackoff: LaneBackoff
@@ -500,30 +620,25 @@ public sealed class WorldRemoteAuthority : IDisposable {
             : WorldFederationLane.Transaction
         );
     private async Task<bool> ObserveSessionAsync(IClientSink sink, CancellationToken ct) {
-        using var client = new TcpClient();
+        var upstream = (m_submissionAuthority ?? this);
+        var observedEndpoint = upstream.m_route.Endpoint;
 
-        client.NoDelay = true;
-        var observedEndpoint = Volatile.Read(location: ref m_endpoint);
-        var observedRouteRevision = Volatile.Read(location: ref m_routeRevision);
+        await using var stream = await m_network.ConnectAsync(ct: ct, endpoint: observedEndpoint).ConfigureAwait(continueOnCapturedContext: false);
 
-        await client.ConnectAsync(
-            cancellationToken: ct,
-            remoteEP: observedEndpoint
-        ).ConfigureAwait(continueOnCapturedContext: false);
-        using var stream = client.GetStream();
-
-        await WorldFederationCodec.WriteHelloAsync(
+        await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
+            key: WorldFederationCodec.WireKey,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
-        await AuthenticateAsync(
+        await upstream.AuthenticateAsync(
             ct: ct,
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
         await WorldFederationCodec.WriteRequestAsync(
-            body: default,
+            body: ((m_submissionCredential is { } credential)
+                ? WorldFederationCodec.EncodeTravelerObservation(request: new(credential.SourceAuthority, credential.Mobility)) : default),
             ct: ct,
-            kind: WorldFederationRequest.Observe,
+            kind: (m_submissionCredential.HasValue ? WorldFederationRequest.ObserveTraveler : WorldFederationRequest.Observe),
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -538,24 +653,57 @@ public sealed class WorldRemoteAuthority : IDisposable {
             }
 
             switch ((WorldFederationResponse)frame.Kind) {
+                case WorldFederationResponse.ProjectionInvalidated:
+                    return m_submissionCredential.HasValue;
+                case WorldFederationResponse.Refusal:
+                    // The frame's body is a span over pooled memory that will not outlive this scope, so — unlike
+                    // every other site here — the sink check comes first and the decode happens only behind it,
+                    // rather than being captured into Narrate's own deferred formatter.
+                    if (m_narrationHub is { } hub) {
+                        var refusalReason = Encoding.UTF8.GetString(bytes: frame.Body.Span);
+
+                        if (hub.HasNarrationSink) {
+                            hub.Narrate(
+                                channel: "world.projection",
+                                text: $"[world.projection: remote observer '{Endpoint}' refused ({refusalReason})]"
+                            );
+                        }
+                    }
+                    return false;
+                case WorldFederationResponse.Route:
+                    if (!m_submissionCredential.HasValue || !WorldFederationCodec.TryDecodeRoute(frame.Body.Span, out var route, out _)) {
+                        return false;
+                    }
+                    PublishObservedRoute(route: route);
+                    break;
                 case WorldFederationResponse.Definition: {
                         if (
                             !WorldFederationCodec.TryDecodeDocument(
-                            body: frame.Body,
+                            body: frame.Body.Span,
                             definition: out var definition,
                             tier: out var definitionTier,
                             failure: out var definitionFailure
                         ) ||
                             (definition is null)
                         ) {
-                            Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' refused a definition record ({definitionFailure})]");
+                            if (m_narrationHub is { HasNarrationSink: true }) {
+                                m_narrationHub?.Narrate(
+                                    channel: "world.projection",
+                                    text: $"[world.projection: remote observer '{Endpoint}' refused a definition record ({definitionFailure})]"
+                                );
+                            }
 
                             return false;
                         }
 
                         if (definitionTier != m_observedTier) {
                             m_observedTier = definitionTier;
-                            Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' receives documents at tier {definitionTier}]");
+                            if (m_narrationHub is { HasNarrationSink: true }) {
+                                m_narrationHub?.Narrate(
+                                    channel: "world.projection",
+                                    text: $"[world.projection: remote observer '{Endpoint}' receives documents at tier {definitionTier}]"
+                                );
+                            }
                         }
 
                         Volatile.Write(
@@ -567,27 +715,20 @@ public sealed class WorldRemoteAuthority : IDisposable {
                     }
                 case WorldFederationResponse.Snapshot: {
                         if (!WorldFederationCodec.TryDecodeSnapshot(
-                            body: frame.Body,
+                            body: frame.Body.Span,
                             snapshot: out var snapshot,
                             failure: out var snapshotFailure
                         )) {
-                            Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' refused a snapshot record ({snapshotFailure})]");
+                            if (m_narrationHub is { HasNarrationSink: true }) {
+                                m_narrationHub?.Narrate(
+                                    channel: "world.projection",
+                                    text: $"[world.projection: remote observer '{Endpoint}' refused a snapshot record ({snapshotFailure})]"
+                                );
+                            }
 
                             return false;
                         }
 
-                        var containsObservedEntity = SnapshotContainsObservedEntity(snapshot: in snapshot);
-
-                        if (
-                            (Volatile.Read(location: ref m_routeRevision) != observedRouteRevision) ||
-                            (!containsObservedEntity && RefreshObservedRoute())
-                        ) {
-                            // The route callback seeded the new authority's committed image. Publishing this
-                            // old authority's missing-body snapshot first would create an avoidable inactive
-                            // frame between two committed writers—the camera hitch the route seed exists to
-                            // eliminate. Reconnect directly to the new head instead.
-                            return true;
-                        }
                         _ = Interlocked.Exchange(
                             location1: ref m_lastObservedTickBits,
                             value: unchecked((long)snapshot.Tick)
@@ -609,6 +750,14 @@ public sealed class WorldRemoteAuthority : IDisposable {
     // disconnected and the authored unavailable policy remains the crossing-side safety net.
     private async Task ObserveUntilCancelledAsync(IClientSink sink, CancellationToken ct) {
         while (!ct.IsCancellationRequested) {
+            // The same gate every lane applies: an observer session authenticates too, and a run holding no signing
+            // identity would otherwise reconnect and be refused four times a second for the rest of the run. Tested
+            // per session, not once, because an authenticator that verifies but cannot prove is only discovered by
+            // the first session's own proof.
+            if (LacksSigningIdentity()) {
+                return;
+            }
+
             try {
                 if (await ObserveSessionAsync(
                     ct: ct,
@@ -619,7 +768,12 @@ public sealed class WorldRemoteAuthority : IDisposable {
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                 return;
             } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException)) {
-                Console.Error.WriteLine(value: $"[world.projection: remote observer '{Endpoint}' unavailable ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]");
+                if (m_narrationHub is { HasNarrationSink: true }) {
+                    m_narrationHub?.Narrate(
+                        channel: "world.projection",
+                        text: $"[world.projection: remote observer '{Endpoint}' unavailable ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]"
+                    );
+                }
             }
 
             try {
@@ -643,6 +797,10 @@ public sealed class WorldRemoteAuthority : IDisposable {
             return;
         }
 
+        if (LacksSigningIdentity()) {
+            return;
+        }
+
         var lane = LaneFor(
             kind: kind,
             sourceAuthority: sourceAuthority
@@ -656,42 +814,11 @@ public sealed class WorldRemoteAuthority : IDisposable {
             );
         }
     }
-    private bool RefreshObservedRoute() {
-        if (
-            (m_submissionAuthority is null) ||
-            (m_submissionCredential is not { } credential) ||
-            !TryDescribeRoute(
-            credential: in credential,
-            reason: out _,
-            route: out var route
-        ) ||
-            !IPEndPoint.TryParse(
-            route.Endpoint,
-            out var routedEndpoint
-        )
-        ) {
-            return false;
-        }
+    private void PublishObservedRoute(WorldAuthorityRouteDescription route) {
+        var changed = ((m_observedRoute is not { } observed) || (observed.Entity != route.Entity));
 
-        if (
-            (m_observedRoute is { } observed) &&
-            string.Equals(
-            a: observed.Endpoint,
-            b: route.Endpoint,
-            comparisonType: StringComparison.Ordinal
-        ) &&
-            (observed.Entity == route.Entity)
-        ) {
-            m_observedRoute = route;
-            return false;
-        }
-
-        Volatile.Write(
-            location: ref m_endpoint,
-            value: routedEndpoint
-        );
         m_observedRoute = route;
-        InvalidateAcknowledgement(credential: in credential);
+        if (changed && (m_submissionCredential is { } credential)) { InvalidateAcknowledgement(credential: in credential); }
         Volatile.Write(
             location: ref m_definition,
             value: route.Definition
@@ -704,115 +831,27 @@ public sealed class WorldRemoteAuthority : IDisposable {
             location1: ref m_lastObservedTickBits,
             value: unchecked((long)route.Tick)
         );
-        _ = Interlocked.Increment(location: ref m_routeRevision);
         m_routeChanged?.Invoke(obj: route);
-        return true;
     }
-    private bool SnapshotContainsObservedEntity(in WorldSnapshot snapshot) {
-        var observedEntity = m_observedRoute?.Entity;
-        var bodyIndex = (observedEntity?.Index ?? (m_submissionCredential?.BodyIndex ?? -1));
-
-        foreach (ref readonly var entry in snapshot.Entries.Span) {
-            // A population slot may be reused in the same snapshot that the traveler leaves. Index+active alone
-            // would then mistake the replacement occupant for the traveler and suppress the route refresh forever,
-            // leaving control/camera attached to the wrong body. A durable entity address is authority/index/
-            // generation; use all three whenever the committed route supplied them.
-            if (
-                (entry.Index == bodyIndex) &&
-                entry.Active &&
-                ((observedEntity is null) || ((entry.Generation == observedEntity.Value.Generation) &&
-                    string.Equals(
-                a: snapshot.Authority,
-                b: observedEntity.Value.Authority,
-                comparisonType: StringComparison.Ordinal
-            )))
-            ) {
-                return true;
-            }
-        }
-        return false;
-    }
-    private static bool TryReadCompletion(byte[] body, out WorldSubmissionResult? result, out string reason) {
+    // A Completion body is one whole downstream frame, decoded in place over the answer's own buffer.
+    private static bool TryReadCompletion(ReadOnlyMemory<byte> body, out WorldSubmissionResult? result, out string reason) {
         result = null;
 
-        using var input = new MemoryStream(
-            body,
-            writable: false
-        );
-        var completion = WorldTcpWireFormat.TryReadDownstreamAsync(
-            ct: default,
-            stream: input
-        ).GetAwaiter().GetResult();
-
-        if (completion is null) {
+        if (!WorldPeerWireFormat.TryDecodeDownstream(
+            body: out var completionBody,
+            frame: body,
+            kind: out var completionKind
+        )) {
             reason = "forwarded authority returned an empty completion";
             return false;
         }
 
-        var frame = completion.Value;
-
-        switch (frame.Kind) {
-            case WorldTcpWireFormat.DownstreamKind.Ack:
-                result = WorldSubmissionResult.Ack.Instance;
-                reason = string.Empty;
-                return true;
-            case WorldTcpWireFormat.DownstreamKind.Session: {
-                    if (frame.Body.Length < ((sizeof(byte) + sizeof(int)) + sizeof(ushort))) {
-                        reason = "forwarded authority returned a truncated session completion";
-                        return false;
-                    }
-                    var offset = (sizeof(byte) + sizeof(int));
-                    var sessionReason = WorldTcpWireFormat.ReadLengthPrefixedString(
-                        body: frame.Body,
-                        offset: ref offset,
-                        ok: out var sessionOk
-                    );
-
-                    if (!sessionOk) {
-                        reason = "forwarded authority returned a truncated session completion";
-                        return false;
-                    }
-
-                    result = new WorldSubmissionResult.Session(Reply: new SessionReply(
-                        Accepted: (frame.Body[0] != 0),
-                        AssignedIndex: BinaryPrimitives.ReadInt32LittleEndian(source: frame.Body.AsSpan(start: sizeof(byte))),
-                        RosterEcho: string.Empty,
-                        Reason: sessionReason
-                    ));
-                    reason = string.Empty;
-                    return true;
-                }
-            case WorldTcpWireFormat.DownstreamKind.Query: {
-                    if (frame.Body.Length < (sizeof(byte) + sizeof(ushort))) {
-                        reason = "forwarded authority returned a truncated query completion";
-                        return false;
-                    }
-                    var offset = sizeof(byte);
-                    var queryText = WorldTcpWireFormat.ReadLengthPrefixedString(
-                        body: frame.Body,
-                        offset: ref offset,
-                        ok: out var queryOk
-                    );
-
-                    if (!queryOk) {
-                        reason = "forwarded authority returned a truncated query completion";
-                        return false;
-                    }
-
-                    result = new WorldSubmissionResult.Query(Answer: new QueryAnswer(
-                        Text: queryText,
-                        Refused: (frame.Body[0] != 0)
-                    ));
-                    reason = string.Empty;
-                    return true;
-                }
-            case WorldTcpWireFormat.DownstreamKind.Refusal:
-                reason = WorldTcpWireFormat.DecodeText(body: frame.Body);
-                return false;
-            default:
-                reason = $"forwarded authority returned unsupported completion {frame.Kind}";
-                return false;
-        }
+        return WorldPeerWireFormat.TryReadResult(
+            body: completionBody.Span,
+            kind: completionKind,
+            reason: out reason,
+            result: out result
+        );
     }
     private bool TryResolveTransferStep(string sourceAuthority, ulong transferId, WorldFederationRequest kind, Func<byte[]> body, out WorldFederationAnswer answer) {
         answer = default;
@@ -825,6 +864,15 @@ public sealed class WorldRemoteAuthority : IDisposable {
                 sourceAuthority: sourceAuthority,
                 transferId: transferId
             );
+        }
+
+        if (LacksSigningIdentity()) {
+            answer = WorldFederationAnswer.Refused(
+                detail: UnconfiguredDetail,
+                refusal: WireRefusal.LaneUnavailable
+            );
+
+            return true;
         }
 
         var lane = LaneFor(
@@ -912,7 +960,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
     }
     public IDisposable AttachSink(IClientSink sink) {
         ArgumentNullException.ThrowIfNull(sink);
-        var lease = CancellationTokenSource.CreateLinkedTokenSource(token: m_lifetime.Token);
+        var lease = new ObservationLease(parent: m_lifetime.Token);
 
         _ = Task.Run(function: () => ObserveUntilCancelledAsync(
             sink: sink,
@@ -925,8 +973,21 @@ public sealed class WorldRemoteAuthority : IDisposable {
     /// namespace alongside the proof — see <see cref="IAuthenticator"/>'s own remarks.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="ct">Cancellation.</param>
-    /// <exception cref="IOException">The peer's challenge or verdict frame is malformed or refused.</exception>
+    /// <exception cref="IOException">The peer's challenge or verdict frame is malformed or refused, or this run holds
+    /// no federation signing identity — every lane, observer, and intent pump gates that case before it opens a
+    /// socket, so this is belt and braces for a caller that reaches the exchange some other way. The one case the
+    /// gate cannot see up front is an authenticator configured to verify but not to prove: its first refused proof
+    /// is thrown as this same exception and recorded, so every later gate closes on it without another
+    /// socket.</exception>
     public async Task AuthenticateAsync(Stream stream, CancellationToken ct) {
+        if (m_security is IRemoteIdentityVerifier verifier &&
+            (stream is not Puck.Networking.Peers.PeerStream peer || !verifier.AcceptsRemoteIdentity(peer.Link.RemoteId.KeyHash))) {
+            throw new IOException("The remote transport identity does not match this connection's credential policy.");
+        }
+        if (LacksSigningIdentity()) {
+            throw new IOException(message: $"federation authentication — {UnconfiguredDetail}");
+        }
+
         var challenge = await WorldFederationCodec.ReadResponseAsync(
             ct: ct,
             stream: stream
@@ -943,7 +1004,22 @@ public sealed class WorldRemoteAuthority : IDisposable {
             ));
         }
 
-        var proof = m_security.Prove(challenge: challenge.Body);
+        byte[] proof;
+
+        try {
+            proof = m_security.Prove(challenge: challenge.Body.Span);
+        } catch (InvalidOperationException) {
+            // The authenticator holds nothing to sign with (WorldAttestedAuthenticator built with trust entries and
+            // no oracle). That is as final as an unconfigured run, so it is recorded for LacksSigningIdentity and
+            // thrown in the wire vocabulary: the lane takes its ordinary two-strike path to LaneUnavailable and
+            // backoff, and no later lane, observer, or intent stream pays a connect, a Hello, and a challenge for it.
+            Volatile.Write(
+                location: ref m_cannotProve,
+                value: 1
+            );
+
+            throw new IOException(message: $"federation authentication — {UnconfiguredDetail}");
+        }
 
         await WorldFederationCodec.WriteRequestAsync(
             stream: stream,
@@ -958,12 +1034,24 @@ public sealed class WorldRemoteAuthority : IDisposable {
 
         if (
             !verdict.Ok ||
-            (verdict.Kind != ((byte)WorldFederationResponse.Ack))
+            (verdict.Kind != ((byte)WorldFederationResponse.Authenticated))
         ) {
             throw new IOException(message: DescribeHandshake(
                 read: verdict,
                 stage: "authentication"
             ));
+        }
+        if (!WorldFederationCodec.TryDecodeAuthorityIdentity(verdict.Body.Span, out var peerAuthority, out var identityFailure)) {
+            throw new IOException(message: $"federation authentication — invalid destination identity ({identityFailure})");
+        }
+        // Routed observations use their transaction authority's authenticated entry connection too, so private
+        // onward world names never become socket endpoints or weaken the original peer namespace pin.
+        if (m_submissionAuthority is null) {
+            var expected = Interlocked.CompareExchange(comparand: string.Empty, location1: ref m_peerAuthority, value: peerAuthority);
+
+            if ((expected.Length != 0) && !string.Equals(a: expected, b: peerAuthority, comparisonType: StringComparison.Ordinal)) {
+                throw new IOException(message: $"federation destination authority mismatch: expected '{expected}', received '{peerAuthority}'");
+            }
         }
     }
     /// <summary>Resolves this transfer's commit step.</summary>
@@ -983,26 +1071,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             answer: out var answer
         );
 
-        if (!answer.Ok) {
-            reason = answer.Describe();
-
-            return WorldTransferStep.Unreachable;
-        }
-
-        if (
-            (answer.Kind != WorldFederationResponse.Commit) ||
-            !WorldFederationCodec.TryDecodeCommitReply(
-            body: answer.Body,
-            accepted: out accepted,
-            reason: out reason,
-            failure: out _
-        )
-        ) {
-            accepted = false;
-            reason = answer.Describe();
-        }
-
-        return WorldTransferStep.Answered;
+        return DecodeCommitAnswer(accepted: out accepted, answer: answer, reason: out reason);
     }
     public void Dispose() {
         m_lifetime.Cancel();
@@ -1015,6 +1084,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
         }
         m_requestLanes.Clear();
         m_transferSteps.Clear();
+        if (m_ownsNetwork) { m_network.Dispose(); }
     }
     /// <summary>Resolves this transfer's reservation step.</summary>
     /// <param name="request">The reservation request.</param>
@@ -1034,7 +1104,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
 
         if (
             !WorldFederationCodec.TryDecodeReservationReply(
-            body: answer.Body,
+            body: answer.Body.Span,
             reply: out var decoded,
             failure: out var failure
         ) ||
@@ -1074,17 +1144,28 @@ public sealed class WorldRemoteAuthority : IDisposable {
         if (
             (answer.Kind != WorldFederationResponse.Status) ||
             (answer.Body.Length != 1) ||
-            !Enum.IsDefined(value: ((WorldTransferStatus)answer.Body[0]))
+            !Enum.IsDefined(value: ((WorldTransferStatus)answer.Body.Span[0]))
         ) {
             return false;
         }
 
-        status = ((WorldTransferStatus)answer.Body[0]);
+        status = ((WorldTransferStatus)answer.Body.Span[0]);
 
         return true;
     }
 
     private readonly record struct TransferStepKey(string SourceAuthority, ulong TransferId, WorldFederationRequest Kind);
+    // One route republish generation: the endpoint to dial and its description, formatted once here so no attempt,
+    // narration, or comparison formats it again, and held as one reference so a swap is atomic.
+    private sealed class PublishedRoute(EndPoint endpoint) {
+        public string Description { get; } = PeerEndpoint.Format(endpoint);
+        public EndPoint Endpoint { get; } = endpoint;
+
+        public LaneRoute Lane => new(
+            Description: Description,
+            Endpoint: Endpoint
+        );
+    }
     // One authenticated, persistent control lane per source namespace. SubmitIntent only updates this pump's
     // bounded latest-value table and returns to the local simulation immediately; the background lane pays connect
     // and authentication once, then preserves request/ack ordering without making rendering or the boot clock wait
@@ -1112,7 +1193,7 @@ public sealed class WorldRemoteAuthority : IDisposable {
             m_worker = Task.Run(function: () => RunAsync(ct: m_lifetime.Token));
         }
 
-        private async Task HandoffAsync(NetworkStream stream, CancellationToken ct) {
+        private async Task HandoffAsync(Stream stream, CancellationToken ct) {
             // This is an intentional route handoff, not a dropped client. Tell the older authority not to
             // synthesize a neutral release: the new lane will seed the same current held state.
             await WorldFederationCodec.WriteRequestAsync(
@@ -1139,6 +1220,14 @@ public sealed class WorldRemoteAuthority : IDisposable {
         }
         private async Task RunAsync(CancellationToken ct) {
             while (!ct.IsCancellationRequested) {
+                // The same gate every lane applies: a run holding no signing identity can never open this stream, so
+                // the worker ends here instead of reconnecting ten times a second for the rest of the run. Tested per
+                // connection, not once, because an authenticator that verifies but cannot prove is only discovered
+                // by the first connection's own proof.
+                if (m_owner.LacksSigningIdentity()) {
+                    return;
+                }
+
                 string? attemptedEndpoint = null;
                 var established = false;
 
@@ -1181,7 +1270,12 @@ public sealed class WorldRemoteAuthority : IDisposable {
                         value: 1
                     ) == 0)
                     ) {
-                        Console.Error.WriteLine(value: $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]");
+                        if (m_owner.m_narrationHub is { HasNarrationSink: true }) {
+                            m_owner.m_narrationHub?.Narrate(
+                                channel: "world.authority unavailable",
+                                text: $"[world.authority unavailable: intent stream to '{m_owner.Endpoint}' is reconnecting ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                            );
+                        }
                     }
 
                     try {
@@ -1199,18 +1293,17 @@ public sealed class WorldRemoteAuthority : IDisposable {
             }
         }
         private async Task RunConnectionAsync(Action established, CancellationToken ct) {
-            using var client = new TcpClient();
+            // One route snapshot: the endpoint dialed and the description every later comparison names are the
+            // same generation, and the comparisons below are against the owner's cached description, never a
+            // fresh formatting.
+            var route = m_owner.CurrentRoute();
 
-            client.NoDelay = true;
-            await client.ConnectAsync(
-                cancellationToken: ct,
-                remoteEP: m_owner.m_endpoint
-            ).ConfigureAwait(continueOnCapturedContext: false);
-            var connectedEndpoint = m_owner.Endpoint;
-            using var stream = client.GetStream();
+            var connectedEndpoint = route.Description;
+            await using var stream = await m_owner.m_network.ConnectAsync(route.Endpoint, ct).ConfigureAwait(continueOnCapturedContext: false);
 
-            await WorldFederationCodec.WriteHelloAsync(
+            await HandshakeWireFormat.WriteHelloAsync(
                 ct: ct,
+                key: WorldFederationCodec.WireKey,
                 stream: stream
             ).ConfigureAwait(continueOnCapturedContext: false);
             await m_owner.AuthenticateAsync(

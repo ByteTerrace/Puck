@@ -40,14 +40,14 @@ public sealed class PlanarImpulseUnitDirectionLawTests {
             OnPress: new ActionTrigger(
                 Gate: null,
                 LatchSeconds: 0f,
-                Effects: [new ActionEffect.PlanarImpulse(BodyDirection: bodyDirection, Speed: 10f, DurationSeconds: 0.2f)]
+                Effects: [new WorldEffect.PlanarImpulse(BodyDirection: bodyDirection, Speed: 10f, DurationSeconds: 0.2f)]
             ),
             OnRelease: null
         );
 
         return document with {
             ChannelsRaw = [.. document.Channels, dashChannel],
-            KitsRaw = [document.Kits[0] with { ActionsRaw = new Dictionary<string, ActionSpec> { ["dash"] = dashAction } }],
+            KitRowsRaw = [document.Kits[0] with { ActionsRaw = new Dictionary<string, ActionSpec> { ["dash"] = dashAction } }],
         };
     }
 }

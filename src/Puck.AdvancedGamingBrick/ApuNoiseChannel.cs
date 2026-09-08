@@ -9,25 +9,20 @@ public sealed partial class ApuNoiseChannel {
     private static readonly int[] Divisors = { 8, 16, 32, 48, 64, 80, 96, 112 };
 
     private int m_frequencyTimer;
-    private int m_lengthCounter;
-    private int m_envelopeVolume;
-    private int m_envelopeInitial;
-    private int m_envelopePeriod;
-    private int m_envelopeTimer;
+    private ApuLengthCounter m_length;
+    private ApuEnvelopeUnit m_envelope;
     private int m_divisorCode;
     private int m_shiftClock;
-    private bool m_envelopeIncrease;
     private bool m_widthMode;
     private bool m_dacEnabled;
     private bool m_enabled;
-    private bool m_lengthEnabled;
     private ushort m_lfsr = 0x7FFF;
 
     /// <summary>Gets a value indicating whether the channel is currently producing sound.</summary>
     public bool Active => (m_enabled && m_dacEnabled);
     /// <summary>Gets the current output amplitude, 0–15.</summary>
     public int Output => ((Active && ((m_lfsr & 1) == 0))
-        ? m_envelopeVolume
+        ? m_envelope.Volume
         : 0);
 
     /// <summary>Advances the LFSR when the frequency timer expires.</summary>
@@ -48,27 +43,23 @@ public sealed partial class ApuNoiseChannel {
         }
     }
     /// <summary>Reads back the envelope register (NR42): initial volume, direction, and period.</summary>
-    public byte ReadEnvelope() => ((byte)((m_envelopeInitial << 4) | (m_envelopeIncrease
-        ? 0x8
-        : 0) | m_envelopePeriod));
+    public byte ReadEnvelope() =>
+        m_envelope.Read();
     /// <summary>Reads back the polynomial register (NR43): divisor, width mode, and shift clock.</summary>
     public byte ReadPolynomial() => ((byte)(m_divisorCode | (m_widthMode
         ? 0x8
         : 0) | (m_shiftClock << 4)));
     /// <summary>Reads back NR44's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => ((byte)(m_lengthEnabled
+    public byte ReadControl() => ((byte)(m_length.Enabled
         ? 0x40
         : 0));
     /// <summary>Reloads the length counter (NR41).</summary>
     public void WriteLength(byte value) {
-        m_lengthCounter = (64 - (value & 0x3F));
+        m_length.Counter = (64 - (value & 0x3F));
     }
     /// <summary>Sets the envelope (NR42); clearing the upper five bits disables the DAC.</summary>
     public void WriteEnvelope(byte value) {
-        m_envelopeInitial = (value >> 4) & 0xF;
-        m_envelopeIncrease = ((value & 0x8) != 0);
-        m_envelopePeriod = value & 0x7;
-        m_dacEnabled = ((value & 0xF8) != 0);
+        m_dacEnabled = m_envelope.Write(value: value);
 
         if (!m_dacEnabled) {
             m_enabled = false;
@@ -82,50 +73,26 @@ public sealed partial class ApuNoiseChannel {
     }
     /// <summary>Sets control (NR44); bit 7 triggers the channel, bit 6 enables the length counter.</summary>
     public void WriteControl(byte value) {
-        m_lengthEnabled = ((value & 0x40) != 0);
+        m_length.Enabled = ((value & 0x40) != 0);
 
         if ((value & 0x80) != 0) {
             m_enabled = m_dacEnabled;
             m_lfsr = 0x7FFF;
-            m_envelopeVolume = m_envelopeInitial;
-            m_envelopeTimer = m_envelopePeriod;
+            m_envelope.Trigger();
             m_frequencyTimer = ((Divisors[m_divisorCode] << m_shiftClock) * 4);
 
-            if (m_lengthCounter == 0) {
-                m_lengthCounter = 64;
+            if (m_length.Counter == 0) {
+                m_length.Counter = 64;
             }
         }
     }
     /// <summary>Clocks the length counter (256&#160;Hz).</summary>
     public void ClockLength() {
-        if (
-            m_lengthEnabled &&
-            (m_lengthCounter > 0) &&
-            (--m_lengthCounter == 0)
-        ) {
+        if (m_length.Clock()) {
             m_enabled = false;
         }
     }
     /// <summary>Clocks the volume envelope (64&#160;Hz).</summary>
-    public void ClockEnvelope() {
-        if (m_envelopePeriod == 0) {
-            return;
-        }
-
-        if (--m_envelopeTimer <= 0) {
-            m_envelopeTimer = m_envelopePeriod;
-
-            if (
-                m_envelopeIncrease &&
-                (m_envelopeVolume < 15)
-            ) {
-                ++m_envelopeVolume;
-            } else if (
-                !m_envelopeIncrease &&
-                (m_envelopeVolume > 0)
-            ) {
-                --m_envelopeVolume;
-            }
-        }
-    }
+    public void ClockEnvelope() =>
+        m_envelope.Clock();
 }

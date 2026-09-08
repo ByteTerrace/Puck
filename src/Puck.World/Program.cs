@@ -33,7 +33,7 @@ var presentModeOption = new Option<string?>(name: "--present-mode") {
 };
 var worldOption = new Option<string?>(name: "--world") {
     DefaultValueFactory = static _ => null,
-    Description = "The world definition file (puck.world.def.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/play.world.json beside the executable loads; failure to load that document also fails the boot.",
+    Description = "The world definition file (puck.world.def.v1) to load. A missing or invalid file FAILS the boot with a named reason and exit 1. Absent, the shipped Assets/worlds/puck.world.json beside the executable loads; failure to load that document also fails the boot.",
 };
 var recordingOption = new Option<string?>(name: "--recording") {
     DefaultValueFactory = static _ => null,
@@ -55,6 +55,10 @@ var stateDirOption = new Option<string?>(name: "--state-dir") {
     DefaultValueFactory = static _ => null,
     Description = "Override the on-disk state root (profile catalog, replays). Absent uses %LOCALAPPDATA%\\Puck\\World. A developer/deployment override: parallel verification runs and multiple hosts on one machine each need their own root.",
 };
+var captureDirOption = new Option<string?>(name: "--capture-dir") {
+    DefaultValueFactory = static _ => null,
+    Description = "Override the world document's captures.directory. A developer/deployment override, the --state-dir pattern: a cross-backend parity run needs the two legs' captures kept apart.",
+};
 // A DEVELOPER REFLECTION of the document's host.presentation field, not a separate product (the unification
 // contract): absent lets the document decide; a bare --headless (or --headless true) forces host.presentation=none
 // for this run only (no window, no GPU device, no swapchain, no audio device); --headless false forces windowed.
@@ -63,12 +67,12 @@ var headlessOption = new Option<bool?>(name: "--headless") {
     DefaultValueFactory = static _ => null,
     Description = "Override the world's boot shape: a bare flag (or 'true') boots headless (no window/GPU/swapchain/audio device — the authoritative server, console, and tape only); 'false' forces windowed. Absent uses the world document's host.presentation.",
 };
-// A DEVELOPER REFLECTION of the document's host.listen field (the TCP socket door), not a separate product: absent
-// lets the document decide (null = loopback-only, never opens a socket); an explicit value binds a TCP listener for
+// A DEVELOPER REFLECTION of the document's host.listen field (the QUIC socket door), not a separate product: absent
+// lets the document decide (null = loopback-only, never opens a socket); an explicit value binds a QUIC listener for
 // this run only.
 var listenOption = new Option<string?>(name: "--listen") {
     DefaultValueFactory = static _ => null,
-    Description = "Override the TCP listen endpoint (an \"ip:port\" pair, e.g. 127.0.0.1:7777). Absent uses the world document's host.listen (null = loopback-only, never opens a socket).",
+    Description = "Override the QUIC listen endpoint (an \"ip:port\" pair, e.g. 127.0.0.1:7777). Absent uses the world document's host.listen (null = loopback-only, never opens a socket).",
 };
 // NOT a host.* reflection — connecting is inherently this one run's initial transport target. It selects the
 // remote authority beneath the normal boot composition; rendering, commands, input, and routing remain unchanged.
@@ -80,6 +84,9 @@ var federationKeyFileOption = new Option<string?>(name: "--federation-key-file")
     DefaultValueFactory = static _ => null,
     Description = "A deployment-secret file holding this authority's own PKCS8 ECDSA P-256 private key (raw DER bytes) — the SignsDirectly signing identity peers pin against this world's host.authority (or its \"boot\" instance identity when host.authority is absent). Absent disables federation while leaving ordinary admitted-peer listening available.",
 };
+var authenticationConfigFileOption = new Option<string?>(name: "--authentication-config-file") {
+    Description = "Deployment-owned connection authentication extension (type and settings). Requires --connect; credentials are acquired by the installed provider and never read from the world document.",
+};
 // AddSelfUpdate is always registered (channel/cacheRoot/checkInterval/keepVersions come from the world document's
 // update section — see WorldUpdateDefaults — and the trust anchor is the build-pinned constant below). This
 // narrows to the two facets a document must never author — the release-source directory and the trust anchor —
@@ -89,10 +96,16 @@ var updateConfigFileOption = new Option<string?>(name: "--update-config-file") {
     DefaultValueFactory = static _ => null,
     Description = "A test/ops-only override for the release-source directory and the trust anchor (ReleaseSourceDirectory/TrustAnchor*) — see Puck.Launcher.Release.SelfUpdateConfigFile. Absent, self-update runs against an empty release source and the refusing build-time placeholder trust anchor.",
 };
+// Deployment authority, like the federation key and update trust configuration; never world-authored input.
+var extensionsConfigFileOption = new Option<string?>(name: "--extensions-config-file") {
+    Description = "Host-approved service extension composition (puck.world.extensions.v1). Absent disables external services. The file selects installed provider types, bindings, grants, and state connections; it never loads executable code.",
+};
 var launchCommand = new RootCommand(description: "Puck World") {
     backendOption,
     connectOption,
     federationKeyFileOption,
+    authenticationConfigFileOption,
+    captureDirOption,
     exitAfterSecondsOption,
     headlessOption,
     stateDirOption,
@@ -103,6 +116,7 @@ var launchCommand = new RootCommand(description: "Puck World") {
     storageDiscoveryUriOption,
     storageUriOption,
     updateConfigFileOption,
+    extensionsConfigFileOption,
     userIdOption,
     widthOption,
     worldOption,
@@ -118,8 +132,21 @@ if (parseResult.Errors.Count > 0) {
     return 1;
 }
 var connectTarget = parseResult.GetValue(option: connectOption);
+Puck.World.Server.WorldExtensionConfiguration? extensionsConfiguration = null;
+if (parseResult.GetValue(extensionsConfigFileOption) is { } extensionsPath) {
+    try {
+        if (connectTarget is not null) { throw new InvalidOperationException("Service extensions require a local authority, not a remote client boot."); }
+        extensionsConfiguration = Puck.World.Server.WorldExtensionConfiguration.Parse(Puck.Storage.ConfinedFile.ReadAllBytes(extensionsPath, 1048576));
+    } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException) {
+        Console.Error.WriteLine($"[world.extensions: configuration refused: {exception.Message}]");
+        return 1;
+    }
+}
 if (parseResult.GetValue(option: stateDirOption) is { } stateDirOverride) {
     Puck.World.Server.WorldStateRoot.Override(path: stateDirOverride);
+}
+if (parseResult.GetValue(option: captureDirOption) is { } captureDirOverride) {
+    WorldCaptureRoot.Override(path: captureDirOverride);
 }
 // Parse the nullable host CLI overrides at the boundary, keeping World's loud typo hard-exits for --backend / --present-
 // mode. A null override means "the document decides" (WorldHostSettings.Resolve coalesces to the authored defaults).
@@ -156,7 +183,7 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
     false => WorldHostPresentation.Windowed,
     null => null,
 });
-// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/play.world.json beside
+// The world definition (see WorldDefinition) — a --world file or the shipped Assets/worlds/puck.world.json beside
 // the executable, loaded / schema-checked / validated (see WorldDefinitionLoader). LOADED BEFORE the
 // window/launcher/presentation registrations because those now read their values from the resolved host section. Read
 // by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is
@@ -172,12 +199,28 @@ if (!WorldDefinitionLoader.TryResolve(
     return 1;
 }
 // The federation identity door — deny-by-default, mirroring --listen's own absent-means-closed posture: an
-// unconfigured authenticator refuses the federation dialect outright at WorldTcpHost's IsConfigured gate, leaving
+// unconfigured authenticator refuses the federation dialect outright at WorldPeerHost's IsConfigured gate, leaving
 // ordinary admitted-peer listening (the interactive attestation door) untouched. A configured one signs
 // SignsDirectly claims under this run's own pinned key, naming this document's host.authority as the subject a
 // peer's own admission entries pin against; verification reads the CURRENT document's admission rows fresh on
 // every attempt, so a live world.reload/edit is honored the same way the interactive door already is.
-Puck.Networking.IAuthenticator authenticator = new Puck.World.Server.WorldAttestedAuthenticator();
+Puck.Networking.IAuthenticator authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator();
+string? connectionSubject = null;
+if (parseResult.GetValue(authenticationConfigFileOption) is { } authenticationPath) {
+    try {
+        if (connectTarget is null || parseResult.GetValue(federationKeyFileOption) is not null) {
+            throw new ArgumentException("Connection authentication requires --connect and cannot be combined with --federation-key-file.");
+        }
+        var connection = WorldConnectionAuthentication.Load(authenticationPath);
+        authenticator = connection.Authenticator;
+        connectionSubject = connection.Subject;
+        // A user's local authority is an instance namespace, not a published listening endpoint.
+        worldSource = worldSource with { Definition = worldSource.Definition with { HostRaw = worldSource.Definition.Host with { Authority = null, Listen = null } } };
+    } catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException or Azure.Identity.AuthenticationFailedException) {
+        Console.Error.WriteLine($"[world.authentication: configuration refused: {error.Message}]");
+        return 1;
+    }
+}
 if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
     // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authority absent
     // means "colocated with the resolver", per its own doc comment) — reusing it here means authoring a signing key
@@ -189,29 +232,30 @@ if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFi
 
     try {
         var pkcs8 = File.ReadAllBytes(path: Path.GetFullPath(path: federationKeyFile));
-        var key = System.Security.Cryptography.ECDsa.Create();
-
-        key.ImportPkcs8PrivateKey(
-            bytesRead: out _,
-            source: pkcs8
+        // The one key-import path in the tree: refuses trailing bytes and any curve other than the one the signing
+        // algorithm names, so a wrong key file fails here by name rather than at the first signed claim.
+        var key = Puck.Attestation.AttestationKeys.ImportPkcs8PrivateKey(
+            algorithm: Puck.Attestation.AttestationAlgorithms.EcdsaP256Sha256,
+            pkcs8: pkcs8
         );
 
-        authenticator = new Puck.World.Server.WorldAttestedAuthenticator(
-            oracle: new Puck.World.Server.LocalKeySigningOracle(
+        authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator(
+            oracle: new Puck.World.Protocol.LocalKeySigningOracle(
                 key: key,
                 subject: federationSubject,
-                validity: Puck.World.Server.WorldAttestedAuthenticator.MaximumClaimAge
+                validity: Puck.World.Protocol.WorldAttestedAuthenticator.MaximumClaimAge
             ),
             trustEntries: () => worldSource.Definition.Admission
         );
-    } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)) {
+    } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or ArgumentException)) {
         Console.Error.WriteLine(value: $"--federation-key-file could not be read: {exception.Message}");
 
         return 1;
     }
 }
-// Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Default,
-// which reproduces World's current boot) overlaid by the nullable CLI flags. Backend authority differs by source — a CLI
+// Resolve the effective host settings: the world doc's host defaults (absence coalesced to WorldHostDefaults.Absent —
+// no presentation; the standard windowed boot is authored in standard.world.json) overlaid by the nullable CLI flags.
+// Backend authority differs by source — a CLI
 // assertion the OS cannot satisfy hard-exits (World's current behavior), a document preference degrades to Vulkan loudly.
 var directXAvailable = OperatingSystem.IsWindowsVersionAtLeast(
     major: 10,
@@ -248,6 +292,9 @@ var services = builder.Services;
 services.AddSingleton(implementationInstance: worldSource);
 services.AddSingleton(implementationInstance: worldSource.Definition);
 services.AddSingleton<Puck.Networking.IAuthenticator>(implementationInstance: authenticator);
+services.AddSingleton(_ => new Puck.World.Server.WorldPeerNetwork(
+    identityFile: parseResult.GetValue(option: federationKeyFileOption) ??
+        Path.Combine(Puck.World.Server.WorldStateRoot.Resolve(), "Network", "peer.pk8")));
 // The resolved host settings — read by the composition modules below and the world.host verb.
 services.AddSingleton(implementationInstance: hostSettings);
 // Registered before the launcher terminal block (AddLauncherTerminal/AddLauncherHeadlessTerminal, reached through
@@ -283,7 +330,7 @@ services.AddSingleton(implementationFactory: static provider => WorldStorageSync
     worlds: provider.GetRequiredService<Puck.World.Server.WorldOwnedWorlds>()
 ));
 // The player's controls as DATA: the world's binding overlays (the engine ships none — a world names
-// Assets/worlds/default.world.json as its basis for the standard movement/roster/editor/sculpt rows, or authors its
+// Assets/worlds/standard.world.json as its basis for the standard movement rows, or authors its
 // own, or has none), composed per seat with the seat's profile bindings and its live session rebinds. One
 // WorldSeatBindings resolves every seat's input, feeding the ONE input consumer there is: the per-seat sim-fold (the
 // IInputBindings handed to AddFixedStepSimulation), whose router stamps each lane's acting principal. Constructed here
@@ -297,6 +344,10 @@ services.AddSingleton(implementationInstance: seatBindings);
 // root, overlays, audio device, screens/machines, gamepads, and editor register only when presentation is
 // composed. See WorldBootComposition for the full split and WorldPostBuildWiring for the shared every-shape wiring.
 services.AddWorldAuthoritativeCore();
+if (connectionSubject is not null) {
+    services.AddSingleton(sp => ActivatorUtilities.CreateInstance<Puck.World.Server.WorldServer>(sp, connectionSubject));
+}
+services.AddSingleton(new WorldServiceExtensionOptions(extensionsConfiguration));
 if (hostSettings.Headless) {
     // No window, GPU device, swapchain, allocator, backend presenter, or audio device — the headless twin of the
     // block below (command pump + tick host). Nothing under AddWorldPresentation is ever called on this path.
@@ -307,6 +358,16 @@ if (hostSettings.Headless) {
     if (OperatingSystem.IsWindows()) {
         services.AddWindowsPrecisionWaiter();
     }
+    services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
+} else if (hostSettings.Offscreen) {
+    // A real GPU device and the composed-frame render pipeline, with NO window and NO swap chain — see
+    // WorldBootComposition.AddWorldOffscreenPresentation. The server steps exactly like the headless shape
+    // (HeadlessWorldSimulation); OffscreenTickHostedService additionally produces one composed frame per iteration.
+    services.AddLauncherOffscreenTerminal();
+    if (OperatingSystem.IsWindows()) {
+        services.AddWindowsPrecisionWaiter();
+    }
+    services.AddWorldOffscreenPresentation(hostsOnDirectX: hostsOnDirectX);
     services.AddFixedStepSimulation<HeadlessWorldSimulation>(bindings: seatBindings);
 } else {
     // The recording graph (puck.recording.v1) — native capture for streaming/upload workflows, defined as data.
@@ -326,7 +387,7 @@ if (hostSettings.Headless) {
     services.AddSingleton(implementationInstance: recordingSource);
 
     // The trimmed GPU host (windowing, allocator, one complete launch-selected backend), the render root, overlays,
-    // the audio device, screens/machines verbs, gamepads, and the editor. Only the selected backend enters this
+    // the audio device, screens/machines verbs, and gamepads. Only the selected backend enters this
     // service provider so its neutral compute services and presenter name the same physical device and shader
     // format.
     services.AddWorldPresentation(hostsOnDirectX: hostsOnDirectX);

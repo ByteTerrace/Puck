@@ -30,7 +30,7 @@ namespace Puck.World;
 /// <param name="RayQuery">Whether the SDF renderer may use the ray-query hardware path.</param>
 /// <param name="Timing">Whether GPU per-pass timing boots armed.</param>
 /// <param name="Genlock">The external-clock election policy (shape-only validation; the registry interprets the id), or <see langword="null"/> for automatic election.</param>
-/// <param name="Listen">The effective TCP listen endpoint (<c>host:port</c>), or <see langword="null"/> to stay
+/// <param name="Listen">The effective QUIC listen endpoint (<c>host:port</c>), or <see langword="null"/> to stay
 /// loopback-only.</param>
 internal sealed record WorldHostSettings(
     WorldHostPresentation Presentation,
@@ -52,8 +52,12 @@ internal sealed record WorldHostSettings(
     string? Listen
 ) {
     /// <summary>Whether this boot composes the authoritative core alone — no window, no GPU device, no swapchain, no
-    /// audio device. The single predicate <c>Program.cs</c> branches boot-shape registration on.</summary>
+    /// audio device. One of the three predicates <c>Program.cs</c> branches boot-shape registration on.</summary>
     public bool Headless => (Presentation == WorldHostPresentation.None);
+    /// <summary>Whether this boot composes the authoritative core plus a GPU device and the composed-frame render
+    /// pipeline with no window and no swapchain. One of the three predicates <c>Program.cs</c> branches boot-shape
+    /// registration on.</summary>
+    public bool Offscreen => (Presentation == WorldHostPresentation.Offscreen);
     /// <summary>The launcher present target: the boot Hz, or <see langword="null"/> for automatic display pacing (the
     /// <c>0</c>-means-automatic convention <see cref="Puck.Launcher.PresentPacingControl"/> uses).</summary>
     public double? TargetRenderRate => ((TargetHertz > 0.0)
@@ -65,7 +69,7 @@ internal sealed record WorldHostSettings(
     /// defaults (an absent flag keeps the authored default). Stays PURE: it returns the degraded backend plus the
     /// <see cref="BackendUnsatisfiable"/> / <see cref="BackendDowngraded"/> flags, and the caller decides whether to
     /// exit (a CLI assertion) or continue (a document preference).</summary>
-    /// <param name="defaults">The world-doc host defaults (absence already coalesced to <see cref="WorldHostDefaults.Default"/>).</param>
+    /// <param name="defaults">The world-doc host defaults (absence already coalesced to <see cref="WorldHostDefaults.Absent"/> — no presentation).</param>
     /// <param name="directXAvailable">Whether the Direct3D 12 backend is available on this OS.</param>
     /// <param name="backendOverride">The parsed <c>--backend</c> value, or <see langword="null"/> to let the document decide.</param>
     /// <param name="widthOverride">The <c>--width</c> value, or <see langword="null"/>.</param>
@@ -92,7 +96,7 @@ internal sealed record WorldHostSettings(
         ArgumentNullException.ThrowIfNull(argument: defaults);
 
         // The document's own backend is settled by WorldDrawBootResolver before anything reaches here (a drawn
-        // backendDraw becomes an ordinary literal), so a null at this point means the document authored neither —
+        // a backendRow read settles the literal), so a null at this point means the document authored neither —
         // which reads as Auto, exactly as it did when the field was non-nullable.
         var requested = (backendOverride ?? (defaults.Backend ?? WorldBackendPreference.Auto));
         var fromCli = (backendOverride is not null);

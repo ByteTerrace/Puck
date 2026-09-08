@@ -1,10 +1,11 @@
 using System.Numerics;
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
 using Puck.Physics;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
@@ -39,8 +40,8 @@ public abstract record WorldCollider {
     /// <param name="Rotation">The body-local orientation.</param>
     public sealed record Box(DocumentVector3 HalfExtents, DocumentQuaternion Rotation) : WorldCollider;
     /// <summary>The finite primitive bounds emitted by a creation, composed into one compound body collider.</summary>
-    /// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/>.</param>
-    public sealed record FromCreation(string CreationId) : WorldCollider;
+    /// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/>.</param>
+    public sealed record FromCreation(string PrototypeId) : WorldCollider;
 }
 /// <summary>The contact solver's world-scale tuning.</summary>
 /// <param name="Requirements">The contact qualities the world requires. An empty list permits analytic primitive
@@ -51,18 +52,133 @@ public abstract record WorldCollider {
 /// further from the body's up axis than this pushes the body but never grounds it — the walkable-slope limit.</param>
 /// <param name="GradientProbe">The finite-difference step field contact samples the surface normal with, in world
 /// units; 0 takes the evaluator's own default. Meaningful only when a requirement selects field contact.</param>
+/// <param name="DefaultHold">Whether a body's surface hold may take any solid surface by default. A placement's own
+/// <see cref="WorldPlacementGrip"/> overrides this for the colliders it compiles; the field lattice's own terrain,
+/// which no placement row owns, has only this. <see langword="false"/> (the default) holds nothing.</param>
+/// <param name="GridCellSize">The world-space cell edge of the distance grid the solid field bakes its program into,
+/// so a query far from every surface reads a corner bound instead of marching the program; 0 (the default) bakes no
+/// grid and every query reads the exact program. A smaller cell tightens the bound and enlarges the grid. Meaningful
+/// only when a requirement selects field contact.</param>
+/// <param name="EventsRaw">The bounded body-overlap event policy. ABSENT takes
+/// <see cref="WorldCollisionEvents.Default"/>; author <c>maxPairsPerBody: 0</c> to disable body-pair events while
+/// retaining ordinary world contact.</param>
+/// <param name="BodyContactsRaw">The bounded dynamic-body depenetration policy. ABSENT takes
+/// <see cref="WorldBodyContactPolicy.Default"/>. This is independent of overlap events.</param>
 public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requirements, float ContactSkin,
-    int MaxIterations, float MaxSlopeDegrees, float GradientProbe) {
-    /// <summary>Gets the inert contact tuning — no requirements (the cheapest analytic path), a minimal skin, the
-    /// smallest working iteration count, a conservative walkable-slope floor, and the evaluator's own gradient-probe
-    /// default.</summary>
-    public static WorldCollision Default { get; } = new(
-        Requirements: [],
-        ContactSkin: 0.02f,
-        MaxIterations: 4,
-        MaxSlopeDegrees: 60f,
-        GradientProbe: 0f
+    int MaxIterations, float MaxSlopeDegrees, float GradientProbe, bool DefaultHold = false,
+    [property: JsonPropertyName("events"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCollisionEvents? EventsRaw = null,
+    [property: JsonPropertyName("bodyContacts"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBodyContactPolicy? BodyContactsRaw = null,
+    float GridCellSize = 0f) {
+    /// <summary>The smallest accepted non-zero <see cref="GridCellSize"/>, in world units.</summary>
+    public const float MinGridCellSize = 0.05f;
+    /// <summary>The largest accepted <see cref="GridCellSize"/>, in world units.</summary>
+    public const float MaxGridCellSize = 64f;
+    /// <summary>Gets the effective bounded body-overlap event policy.</summary>
+    [JsonIgnore]
+    public WorldCollisionEvents Events => (EventsRaw ?? WorldCollisionEvents.Default);
+    /// <summary>Gets the effective bounded dynamic-body contact policy.</summary>
+    [JsonIgnore]
+    public WorldBodyContactPolicy BodyContacts => (BodyContactsRaw ?? WorldBodyContactPolicy.Default);
+    /// <summary>Gets the inert absence — no requirements, zero skin, zero iterations, a solver that never relaxes.
+    /// The engine holds no contact tuning of its own: the standard tuning is AUTHORED, in
+    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that document as its basis. A
+    /// document whose census implies a body is refused for authoring no <c>collision</c>, so only a bodyless world
+    /// ever reads this.</summary>
+    public static WorldCollision Absent { get; } = new(
+        ContactSkin: 0f,
+        DefaultHold: false,
+        EventsRaw: null,
+        GradientProbe: 0f,
+        GridCellSize: 0f,
+        MaxIterations: 0,
+        MaxSlopeDegrees: 0f,
+        Requirements: []
     );
+}
+/// <summary>Bounds body-pair overlap sensing independently of physical contact. The event feed retains established
+/// overlaps first, then considers at most <see cref="CandidateBudget"/> broadphase candidates per body, starts at
+/// most <see cref="BeginBudget"/> relationships per tick, and admits at most <see cref="MaxPairsPerBody"/>
+/// simultaneous pairs incident to any body. All choices are deterministic; a
+/// saturated crowd therefore degrades by omitting lower-priority new pairs rather than by missing its frame budget.</summary>
+/// <param name="CandidateBudget">The most sweep-and-prune candidates inspected for one body while discovering new
+/// overlaps. Must be at least <paramref name="MaxPairsPerBody"/>.</param>
+/// <param name="MaxPairsPerBody">The maximum retained overlap-event degree of one body; zero disables collision
+/// begin/end sensing.</param>
+/// <param name="BeginBudget">The maximum collision-begin relationships admitted in one authority tick. Existing
+/// relationships and their ends are not delayed.</param>
+public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairsPerBody = 8, int BeginBudget = 1024) {
+    /// <summary>The largest accepted per-body candidate budget.</summary>
+    public const int MaximumCandidateBudget = 256;
+    /// <summary>The largest accepted retained overlap degree per body.</summary>
+    public const int MaximumPairsPerBody = 64;
+    /// <summary>The largest accepted per-tick begin budget.</summary>
+    public const int MaximumBeginBudget = 8192;
+    /// <summary>The policy used when <c>collision.events</c> is absent.</summary>
+    public static WorldCollisionEvents Default { get; } = new();
+}
+/// <summary>Bounds physical depenetration between kits that both author <see cref="WorldBodyContactMode.Solid"/>.
+/// The sweep inspects at most <see cref="CandidateBudget"/> x-overlapping candidates for each solid body and resolves
+/// at most <see cref="MaxPairsPerBody"/> contacts incident to one body in a tick. Choices are stable population order;
+/// a saturated crowd omits lower-priority pairs instead of turning one authority tick into quadratic work.</summary>
+/// <param name="CandidateBudget">The most sweep candidates inspected for one solid body. Must be at least
+/// <paramref name="MaxPairsPerBody"/>.</param>
+/// <param name="MaxPairsPerBody">The most physical pair corrections incident to one body in a tick.</param>
+/// <param name="RigidSubstepCeiling">The most substeps one rigid body's static-contact integration may take in a
+/// tick — the derived-count's own ceiling: the actual count is derived per body per tick from its speed and collider
+/// size (a fast ball takes more, a resting one takes one), never authored directly, but the ceiling bounds the
+/// worst-case per-tick cost and is echoed in <c>world.budget</c>.</param>
+/// <param name="RigidRestLinearSpeed">Below this linear speed (world units/second) a grounded rigid body counts
+/// toward the resting hold window (<see cref="RigidRestHoldSeconds"/>). Non-negative; the default reproduces the
+/// engine's original hard-coded threshold.</param>
+/// <param name="RigidRestAngularSpeed">Below this angular speed (radians/second) a grounded rigid body counts toward
+/// the resting hold window, on the same terms as <see cref="RigidRestLinearSpeed"/>. Non-negative.</param>
+/// <param name="RigidRestHoldSeconds">How long a rigid body must stay under both rest thresholds while grounded
+/// before the resting latch actually closes — long enough that crossing a contact skin's noise band for one tick
+/// never freezes a body mid-roll. Non-negative.</param>
+/// <param name="RigidSubstepTravelFraction">The fraction of a rigid body's own bounding radius one continuous-
+/// collision substep may travel — the derived substep COUNT stays derived (never authored directly), but how
+/// conservative that derivation is IS a document field: a smaller fraction takes more, cheaper substeps for the same
+/// speed; a larger one risks a fast body tunneling through a thin wall before <see cref="RigidSubstepCeiling"/> forces
+/// it to stop deriving more. Strictly positive.</param>
+/// <param name="RigidSubstepMinimumTravel">The floor under one continuous-collision substep's travel bound (world
+/// units), independent of <see cref="RigidSubstepTravelFraction"/> — guards a body whose collider is small enough
+/// that the fraction alone would derive a near-zero bound. Strictly positive.</param>
+/// <param name="RigidPairRestitutionSpeed">Below this closing speed (world units/second), a rigid-vs-rigid contact
+/// restitutes at zero rather than the authored coefficient — a pure momentum-conserving separation. A rigid pair
+/// carries no rising-edge latch (unlike a body-vs-static-world contact), so without this floor two touching bodies
+/// at rest would restitute a hair apart every tick they are found overlapping, separating, and falling back
+/// together — a stable micro-bounce that never reaches either rest threshold. Non-negative; small enough that a
+/// real strike is unaffected.</param>
+/// <param name="RigidManifoldIterations">The sequential-impulse pass count a box or capsule rigid body's own ground
+/// support manifold (<see cref="Puck.Physics.FixedRigidWitness.SupportManifold"/> — up to four box corners or two
+/// capsule cap points) resolves over each substep, distributing the normal impulse across every manifold point
+/// rather than one. Strictly positive.</param>
+/// <param name="RigidPairIterationCeiling">The most EXTRA full sweeps <c>WorldPopulation.ResolveDynamicContacts</c>
+/// runs past the first — fresh broadphase and narrowphase, over the same bodies' now-current positions — so an
+/// impulse crosses more than one pair-hop within the same tick (a rack break, a falling domino line). The count
+/// actually run is derived DOWN from this ceiling by <see cref="RigidPairIterationBudget"/> divided by the first
+/// pass's own resolved-pair count, so a lightly loaded tick gets every authored pass and a crowded one stays
+/// bounded. Strictly positive.</param>
+/// <param name="RigidPairIterationBudget">The total pair-pass work one tick's extra rigid-pair sweeps may spend,
+/// before <see cref="RigidPairIterationCeiling"/> caps it — see that field. Strictly positive.</param>
+public sealed record WorldBodyContactPolicy(int CandidateBudget = 16, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
+    float RigidRestLinearSpeed = 0.05f, float RigidRestAngularSpeed = 0.1f, float RigidRestHoldSeconds = 0.25f,
+    float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f,
+    int RigidManifoldIterations = 4, int RigidPairIterationCeiling = 4, int RigidPairIterationBudget = 64) {
+    /// <summary>The largest accepted candidate budget per solid body.</summary>
+    public const int MaximumCandidateBudget = 32;
+    /// <summary>The largest accepted resolved-contact degree per solid body.</summary>
+    public const int MaximumPairsPerBody = 16;
+    /// <summary>The largest accepted rigid-body substep ceiling.</summary>
+    public const int MaximumRigidSubstepCeiling = 32;
+    /// <summary>The largest accepted ground-manifold sequential-impulse pass count.</summary>
+    public const int MaximumRigidManifoldIterations = 16;
+    /// <summary>The largest accepted rigid-pair extra-pass ceiling.</summary>
+    public const int MaximumRigidPairIterationCeiling = 16;
+    /// <summary>The largest accepted rigid-pair extra-pass work budget.</summary>
+    public const int MaximumRigidPairIterationBudget = 4096;
+    /// <summary>The policy used when <c>collision.bodyContacts</c> is absent.</summary>
+    public static WorldBodyContactPolicy Default { get; } = new();
 }
 /// <summary>A contact quality authored by the world, independent of the engine implementation that supplies it.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldContactRequirement>))]
@@ -117,7 +233,7 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
     ).Normalize();
 
     /// <summary>Compiles authored collider floats and creation primitive copies to fixed point.</summary>
-    public static FixedWorldCollider? Compile(WorldCollider? collider, IReadOnlyList<WorldCreation> creations) {
+    public static FixedWorldCollider? Compile(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations) {
         if (collider is null) {
             return null;
         }
@@ -170,37 +286,39 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
             case WorldCollider.FromCreation fromCreation: {
                     var creation = (WorldDefinitionRows.FindCreation(
                         creations: creations,
-                        id: fromCreation.CreationId
+                        id: fromCreation.PrototypeId
                     )
-                        ?? throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.CreationId}' is not defined."));
+                        ?? throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.PrototypeId}' is not defined."));
 
-                    CreationStampEmitter.VisitPrimitiveCopies(
+                    // The fixed-point enumeration, not a single-precision one: every value below lands in a collider
+                    // volume, and a body collider decides where a body stops.
+                    CreationStampEmitter.VisitFixedPrimitiveCopies(
                         document: creation.EngineDocument,
-                        transform: new CreationStampTransform(
-                            Origin: Vector3.Zero,
-                            Rotation: Quaternion.Identity,
-                            Scale: 1f,
+                        transform: new FixedCreationStampTransform(
+                            Origin: FixedVector3.Zero,
+                            Rotation: FixedQuaternion.Identity,
+                            Scale: FixedQ4816.One,
                             ReflectionNormal: null
                         ),
                         visitor: copy => {
-                            if (copy.Shape.Type == AvatarPrimitive.Plane) {
-                                throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.CreationId}' contains an unbounded plane.");
+                            if (copy.Shape.Type == SdfSolidPrimitive.Plane) {
+                                throw new InvalidOperationException(message: $"Body collider creation '{fromCreation.PrototypeId}' contains an unbounded plane.");
                             }
 
                             if (
-                                (copy.Shape.Type == AvatarPrimitive.Sphere) &&
-                                (copy.UniformScale > 0f)
+                                (copy.Shape.Type == SdfSolidPrimitive.Sphere) &&
+                                (copy.UniformScale > FixedQ4816.Zero)
                             ) {
-                                var sphere = CreationGeometry.GetLocalBounds(type: AvatarPrimitive.Sphere);
+                                var sphere = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
                                 volumes.Add(item: Sphere(
-                                    center: FixedVector3.FromVector3(value: copy.Center),
-                                    radius: FixedQ4816.FromDouble(value: (sphere.HalfExtents.X * copy.UniformScale))
+                                    center: copy.Center,
+                                    radius: (FixedQ4816.FromDouble(value: sphere.HalfExtents.X) * copy.UniformScale)
                                 ));
                             } else {
                                 volumes.Add(item: Box(
-                                    center: FixedVector3.FromVector3(value: copy.Center),
-                                    halfExtents: FixedVector3.FromVector3(value: copy.HalfExtents),
+                                    center: copy.Center,
+                                    halfExtents: copy.HalfExtents,
                                     rotation: FixedQuaternion.Identity
                                 ));
                             }
@@ -222,14 +340,17 @@ public readonly record struct FixedWorldCollider(FixedBodyColliderVolume[] Volum
 /// <summary>The one-time fixed-point compilation of the world's contact tuning — read by the analytic contact field
 /// and the grounded integrator. <see cref="GroundedThreshold"/> is the compiled <c>cos(maxSlopeDegrees)</c> a contact
 /// normal's up-alignment must clear to ground a body (the same test both providers use). <see cref="GradientUp"/> is
-/// the compiled <see cref="WorldContactRequirement.GradientDerivedUp"/> requirement: without it the body up axis stays
-/// world <c>+Y</c>, so a vertical face pushes but never grounds.</summary>
+/// the compiled <see cref="WorldContactRequirement.GradientDerivedUp"/> requirement: it lets field gradients and
+/// measured support normals supply surface-relative up; without it, the caller's ambient up owns the walkable
+/// contact test. <see cref="GridCellSize"/> is the solid field's distance-grid cell edge; zero bakes no grid.</summary>
 public readonly record struct FixedWorldCollision(
     FixedQ4816 ContactSkin,
     int MaxIterations,
     FixedQ4816 GroundedThreshold,
     FixedQ4816 GradientProbe,
-    bool GradientUp
+    bool GradientUp,
+    bool DefaultHold,
+    FixedQ4816 GridCellSize
 ) {
     /// <summary>Compiles the authored contact tuning to fixed point.</summary>
     public static FixedWorldCollision Compile(WorldCollision collision) => new(
@@ -237,6 +358,8 @@ public readonly record struct FixedWorldCollision(
         MaxIterations: collision.MaxIterations,
         GroundedThreshold: FixedQ4816.Cos(angle: FixedQ4816.FromDouble(value: (collision.MaxSlopeDegrees * (Math.PI / 180.0)))),
         GradientProbe: FixedQ4816.FromDouble(value: collision.GradientProbe),
-        GradientUp: ((collision.Requirements?.Contains(value: WorldContactRequirement.GradientDerivedUp)) ?? false)
+        GradientUp: ((collision.Requirements?.Contains(value: WorldContactRequirement.GradientDerivedUp)) ?? false),
+        DefaultHold: collision.DefaultHold,
+        GridCellSize: FixedQ4816.FromDouble(value: collision.GridCellSize)
     );
 }

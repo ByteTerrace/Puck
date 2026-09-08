@@ -15,14 +15,15 @@ namespace Puck.World;
 /// <c>first matching context row's group (document order) ?? the profile's default group (the first row's)</c>,
 /// applied as a pointer-level switch on the compiled profile. Context rows are the composed document's
 /// <c>contexts</c> section keyed on the published per-seat family states (<see cref="WorldContextFamilies"/>) pushed
-/// in through <see cref="SetContextState"/> — roster and engagement by the post-step sync, editor by its session,
+/// in through <see cref="SetContextState"/> — roster, engagement, and layout by the post-step sync, AUTHORED
+/// <see cref="WorldSeatModeFamily"/> families by <c>player.mode</c>,
 /// and <c>state:&lt;row&gt;</c> families from the routed definition's delivered state revision, so gameplay rules can
 /// switch controls by writing ordinary world state;
 /// across families the first matching row wins and a shadowed later match is reported, never silent
 /// (<see cref="DescribeContextDerivation"/> — the <c>player.bindings</c> read-back).
 /// </summary>
 /// <remarks>Single-threaded, like every input-fold type here: recomposition runs on the launcher's window-pump thread
-/// (a verb handler, a roster mutation, or the post-step overlay sync), and <see cref="Resolve(int, in InputSignal)"/>
+/// (a verb handler, a roster mutation, or the post-step overlay sync), and <see cref="Resolve(int, in InputSignal, bool)"/>
 /// runs on the same thread inside the router's snapshot fold. No lock guards this state. Constructed early in
 /// composition (before the container is built) from the boot world definition; the per-seat profile and session
 /// layers start null, and the roster/verbs push them in as they change. Chord-command edges (<see cref="IChordEdgeSource"/>) forward to the
@@ -32,7 +33,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private static readonly string[] BuiltInContextFamilies = [.. WorldContextFamilies.Families];
 
     /// <summary>The number of local seats this router resolves for.</summary>
-    public const int SeatCount = WorldPopulationLimits.LocalSeatCount;
+    public const int SeatCount = WorldBodiesLimits.LocalSeatCount;
 
     // The exact channel row list each seat's m_channels entry was compiled from — the second half of SyncSeat's
     // per-seat change test, so a channels-only mutation (which leaves the overlay list reference-equal) still
@@ -47,6 +48,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // the filtered composed document or channel-name ordinal map warrants resetting chord/page/latch state.
     private readonly byte[][] m_effectiveDocuments;
     private readonly WorldDefinition[] m_definitions;
+    // The exact seatModes list reference each seat's m_contextStates defaults were last seeded from — SyncSeat
+    // reseeds only on a reference change, mirroring m_stateSource's own change test.
+    private readonly IReadOnlyList<WorldSeatModeFamily>[] m_modeSource;
     private readonly int[] m_stateEntityIndices;
     private readonly IReadOnlyList<WorldStateRow>[] m_stateSource;
     private readonly ulong[] m_stateTicks;
@@ -56,6 +60,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // starts seeded from the boot definition; SyncSeat re-points one seat's own entries the instant its resolved
     // definition changes reference.
     private readonly IReadOnlyList<WorldBindingOverlay>[] m_overlays;
+    // The last-observed OverlayGateSignature per seat, so a routed state row's own version move (never a per-tick
+    // poll) is what notices a gated overlay's activation flip.
+    private readonly ulong[] m_overlayGateSignature;
     private readonly BindingProfileDocument?[] m_profileBindings;
     private readonly IReadOnlyList<BindingContextDefinition>[] m_seatContexts;
     private readonly PagedInputBindings[] m_seats;
@@ -68,11 +75,41 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
     private event Action<int?>? Reloading;
 
-    private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, BindingProfileDocument? profile, BindingProfileDocument? session) {
+    /// <summary>Raised with a 0-based seat slot whose authored mode-family reseed (<see cref="SyncSeat"/>, on a
+    /// world load/reload/reset or a route change) just dropped a published state targeting
+    /// <see cref="WorldSeatModeState.CameraTarget"/> — the state a live camera control application was composed from.
+    /// This type owns the published state, not the possession route, so the composition root closes the teardown
+    /// through the same exit <c>player.mode</c> takes when it leaves such a state.</summary>
+    public event Action<int>? CameraApplicationDropped;
+
+    // The bit-per-overlay signature SyncSeat compares tick to tick: bit i is overlay i's own When (absent counts as
+    // never set). Two documents whose gates disagree past bit 63 alias to the same signature, so a false-negative
+    // recompose skip is possible only past a 64-overlay document — a scale WorldResponseCapacity-shaped documents
+    // never reach.
+    private static ulong OverlayGateSignature(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick) {
+        var signature = 0UL;
+
+        for (var index = 0; (index < overlays.Count); index++) {
+            if ((overlays[index].When is { } when) && when.Holds(definition: definition, tick: tick)) {
+                signature |= (1UL << (index & 63));
+            }
+        }
+
+        return signature;
+    }
+    // An overlay's own When (WorldPlacementResponseCondition.StateCondition) gates whether it composes this call —
+    // the reveal's carrier: a gated overlay's chords/pages appear only once the fact it names is set. Absence always
+    // composes (today's behavior). Unfilled trailing slots stay null, which WorldBindingComposer.Compose already
+    // skips (profile/session are routinely null too), so no second pass to re-size the array is needed.
+    private BindingProfileDocument?[] BaseLayers(IReadOnlyList<WorldBindingOverlay> overlays, WorldDefinition definition, ulong tick, BindingProfileDocument? profile, BindingProfileDocument? session) {
         var layers = new BindingProfileDocument?[(overlays.Count + 2)];
         var index = 0;
 
         foreach (var overlay in overlays) {
+            if ((overlay.When is { } when) && !when.Holds(definition: definition, tick: tick)) {
+                continue;
+            }
+
             layers[index++] = overlay.Document;
         }
 
@@ -95,16 +132,20 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // in since there is no "the" world overlay list any more (each seat carries its own, per SyncSeat).
     private BindingProfileDocument ComposeBase() {
         return WorldBindingComposer.Compose(BaseLayers(
+            definition: m_definitions[0],
             overlays: m_overlays[0],
             profile: null,
-            session: null
+            session: null,
+            tick: m_stateTicks[0]
         ));
     }
     private BindingProfileDocument ComposeSeat(int slot) {
         return WorldBindingComposer.Compose(BaseLayers(
+            definition: m_definitions[slot],
             overlays: m_overlays[slot],
             profile: m_profileBindings[slot],
-            session: m_sessionRebinds[slot]
+            session: m_sessionRebinds[slot],
+            tick: m_stateTicks[slot]
         ));
     }
     // The derivation, applied: first matching context row's group (document order) ?? null (the profile default). The
@@ -115,8 +156,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         var previousGroup = m_seats[slot].ViewFor(slot: slot).Group;
 
         _ = m_seats[slot].SetActiveGroup(
-            slot: slot,
-            group: winnerGroup
+            group: winnerGroup,
+            slot: slot
         );
 
         if (
@@ -175,6 +216,198 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return result;
     }
+    // Finds the routed definition's own declared seatModes family by name — the ONE lookup both the admission gate
+    // (SetContextState) and player.mode's handler (PlayerCommandModule.Mode.cs, via TryResolveMode) resolve through,
+    // so a state a document declares is never validated one way and admitted another.
+    private static WorldSeatModeFamily? FindSeatMode(WorldDefinition? definition, string family) {
+        foreach (var mode in (definition?.SeatModes ?? [])) {
+            if (string.Equals(
+                a: mode.Name,
+                b: family,
+                comparisonType: StringComparison.Ordinal
+            )) {
+                return mode;
+            }
+        }
+
+        return null;
+    }
+    // Whether the seat's currently published state for any of these families targets the camera control application —
+    // its own activation condition, read against a family list so the caller can ask it either side of a reseed (the
+    // "was on / is no longer" edge CameraApplicationDropped reports).
+    private bool PublishesCameraTarget(int slot, IReadOnlyList<WorldSeatModeFamily> families) {
+        foreach (var family in families) {
+            if (
+                string.IsNullOrWhiteSpace(value: family.Name) ||
+                !m_contextStates[slot].TryGetValue(
+                    key: family.Name,
+                    value: out var published
+                )
+            ) {
+                continue;
+            }
+
+            foreach (var state in family.States) {
+                if (
+                    string.Equals(
+                        a: state.Name,
+                        b: published,
+                        comparisonType: StringComparison.Ordinal
+                    ) &&
+                    string.Equals(
+                        a: state.Target,
+                        b: WorldSeatModeState.CameraTarget,
+                        comparisonType: StringComparison.Ordinal
+                    )
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+    // Reseeds a seat's published state for every currently-declared seatModes family to its authored default,
+    // dropping the published state of a family the PREVIOUS definition declared that the new one no longer does —
+    // a route/definition change starts every authored mode fresh rather than carrying a state from a document that
+    // may not even declare the family any more. previous/current are compared by name only (never by reference: a
+    // basis-composed document rebuilds its seatModes list on every load even when the authored content is identical).
+    private void SyncSeatModes(int slot, IReadOnlyList<WorldSeatModeFamily> previous, IReadOnlyList<WorldSeatModeFamily> current) {
+        // A reseed can drop the camera-targeting state a live fly application composed from, and nothing in this type
+        // can reach the rig; measure the edge here and let the composition root perform the teardown.
+        var wasCamera = PublishesCameraTarget(
+            families: previous,
+            slot: slot
+        );
+
+        foreach (var family in previous) {
+            if (string.IsNullOrWhiteSpace(value: family.Name)) {
+                continue;
+            }
+
+            var stillDeclared = false;
+
+            foreach (var candidate in current) {
+                if (string.Equals(
+                    a: candidate.Name,
+                    b: family.Name,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    stillDeclared = true;
+
+                    break;
+                }
+            }
+
+            if (!stillDeclared) {
+                _ = m_contextStates[slot].Remove(key: family.Name);
+            }
+        }
+
+        SeedSeatModeDefaults(
+            families: current,
+            slot: slot
+        );
+
+        if (
+            wasCamera &&
+            !PublishesCameraTarget(
+                families: current,
+                slot: slot
+            )
+        ) {
+            CameraApplicationDropped?.Invoke(obj: slot);
+        }
+    }
+    // Publishes each named family's authored default for the seat — the one write both the route-change reseed and
+    // the departure reset run.
+    private void SeedSeatModeDefaults(int slot, IReadOnlyList<WorldSeatModeFamily> families) {
+        foreach (var family in families) {
+            if (!string.IsNullOrWhiteSpace(value: family.Name)) {
+                m_contextStates[slot][family.Name] = family.DefaultState;
+            }
+        }
+    }
+
+    /// <summary>Resets every AUTHORED mode family the seat's routed document declares to its default state and
+    /// re-derives the seat's active group, so a slot rejoined by a different occupant never inherits the departed
+    /// one's published mode (and the group that mode selected). The seat-departure fact
+    /// (<see cref="PlayerRoster.VacateSeat"/>) is its only caller; it raises no <see cref="CameraApplicationDropped"/>
+    /// (a departed seat submits nothing, so any possession route it held goes inert regardless of the published-state
+    /// reset here — the same standing behavior any other possession target's departure already has).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public void ResetSeatModes(int slot) {
+        if (((uint)slot) >= SeatCount) {
+            return;
+        }
+
+        SeedSeatModeDefaults(
+            families: m_definitions[slot].SeatModes,
+            slot: slot
+        );
+        DeriveActiveGroup(slot: slot);
+    }
+    /// <summary>Returns a value indicating whether seat <paramref name="slot"/>'s currently published state, on any
+    /// AUTHORED family its routed document declares, targets <see cref="WorldSeatModeState.CameraTarget"/> — the
+    /// frame source's own condition for resolving <see cref="WorldViewDefaults.CameraRig"/> instead of
+    /// <see cref="WorldViewDefaults.SeatRig"/>.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public bool IsCameraModeActive(int slot) => ((((uint)slot) < SeatCount) && PublishesCameraTarget(
+        families: m_definitions[slot].SeatModes,
+        slot: slot
+    ));
+    /// <summary>Resolves the AUTHORED family and state that compose seat <paramref name="slot"/>'s camera control
+    /// application — the first state, in document order, whose <see cref="WorldSeatModeState.Target"/> is
+    /// <see cref="WorldSeatModeState.CameraTarget"/>. <see langword="null"/> when the seat's routed document declares
+    /// no such state.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <returns>The family and its camera-targeting state.</returns>
+    /// <remarks>The one lookup a no-token Free Cam binding resolves through, so a wheel sector and an explicit
+    /// <c>player.mode</c> line compose the identical application.</remarks>
+    public (WorldSeatModeFamily Family, WorldSeatModeState State)? TryResolveCameraMode(int slot) {
+        if (((uint)slot) >= SeatCount) {
+            return null;
+        }
+
+        foreach (var family in m_definitions[slot].SeatModes) {
+            foreach (var state in family.States) {
+                if (string.Equals(
+                    a: state.Target,
+                    b: WorldSeatModeState.CameraTarget,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    return (Family: family, State: state);
+                }
+            }
+        }
+
+        return null;
+    }
+    /// <summary>Resolves an AUTHORED (world-declared) seat-mode family by name for seat <paramref name="slot"/>'s
+    /// currently routed document — the lookup <c>player.mode</c> validates a family/state token through. Built-in
+    /// families (roster, engagement, layout) are never resolved here; they are not player-settable.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="family">The family name to resolve.</param>
+    public WorldSeatModeFamily? TryResolveMode(int slot, string family) => ((((uint)slot) < SeatCount)
+        ? FindSeatMode(
+            definition: m_definitions[slot],
+            family: family
+        )
+        : null
+    );
+    /// <summary>The seat's currently published state for an authored mode family, or <see langword="null"/> when the
+    /// family has never been published (unreachable once <see cref="SyncSeatModes"/> has seeded it from the routed
+    /// document, which happens before any seat can act).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="family">The family name.</param>
+    public string? ModeState(int slot, string family) => (((((uint)slot) < SeatCount) && m_contextStates[slot].TryGetValue(
+        key: family,
+        value: out var state
+    ))
+        ? state
+        : null
+    );
+
     // Publishes only the state-backed families the seat's composed document actually references. Called on a state
     // revision, route/entity change, or binding recompose — never on an unchanged tick.
     private void PublishStateContexts(int slot, ulong tick) {
@@ -201,15 +434,14 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     private void RecomposeSeat(int slot) {
         var label = $"seat {(slot + 1)}";
         // Drop any page (or bare-command/channel row) naming a command outside this composition's registered
-        // vocabulary, or a channel this seat's currently routed table cannot carry — the engine-default document
-        // always compiles in the editor/sculpt groups, but a headless boot never registers EditorCommandModule, so
-        // those pages are unreachable by construction; a channel row goes stale the same way the moment a seat
-        // crosses into a world that never declared it. One narration line per skipped page/row, keyed on the
-        // registration fact (WorldAffordances.IsCommandRegistered) or the channel-table lookup — a mixed page (e.g.
-        // the play group's base page, which folds editor.enter beside its movement rows) keeps its registered and
-        // compatible entries and loses only the ones this composition cannot carry. Compatibility includes the
-        // destination's shape: a non-default scale valid for an analog channel becomes unavailable when a different
-        // world declares the same name as binary, just as surely as when that world omits the name entirely.
+        // vocabulary, or a channel this seat's currently routed table cannot carry — a world-authored group can name
+        // a command a leaner boot shape never registers, and a channel row goes stale the moment a seat crosses into
+        // a world that never declared it. One narration line per skipped page/row, keyed on the registration fact
+        // (WorldAffordances.IsCommandRegistered) or the channel-table lookup — a mixed page (e.g. a resting page that
+        // folds player.mode beside its movement rows) keeps its registered and compatible entries and loses only the
+        // ones this composition cannot carry. Compatibility includes the destination's shape: a non-default scale
+        // valid for an analog channel becomes unavailable when a different world declares the same name as binary,
+        // just as surely as when that world omits the name entirely.
         var document = SkipUnregisteredPages(
             document: ComposeSeat(slot: slot),
             channels: m_channels[slot],
@@ -224,6 +456,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         if (RejectedByVocabulary(
             document: document,
             channels: m_channels[slot],
+            seatModes: m_definitions[slot].SeatModes,
             label: label
         )) {
             return;
@@ -255,6 +488,16 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 )
             );
 
+            // The compose path clamps to the overlay feed's per-seat modifier reservation, so an unchecked overflow
+            // would silently drop modifiers rather than fail. player.bind mints one implicit modifier per raw
+            // chord/held source, unbounded — refuse a composed profile past the ceiling by name (the same metric and
+            // ceiling the boot-time validator uses) instead, keeping the seat on its prior mapping.
+            if (profile.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
+                Console.Error.WriteLine(value: $"[player.bindings] {label} recompose rejected: composes {profile.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling; keeping the prior mapping.");
+
+                return;
+            }
+
             Reloading?.Invoke(obj: slot);
             m_seats[slot].Reload(profile: profile);
             m_effectiveDocuments[slot] = documentBytes;
@@ -273,8 +516,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             tick: m_stateTicks[slot]
         );
         DeriveActiveGroup(
-            slot: slot,
-            releasePriorGroup: false
+            releasePriorGroup: false,
+            slot: slot
         );
     }
     // The STRUCTURAL half of the recompose gate, run on whatever survives the skip above: print every finding and
@@ -284,13 +527,14 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // wrong destination. WorldAffordances itself skips only the unavailable command-registry half before install;
     // channel and structural context admission remain unconditional; state-row resolution is owned by the world
     // document validator and explicit live-rebind preflight.
-    private static bool RejectedByVocabulary(BindingProfileDocument document, WorldChannelTable channels, string label) {
+    private static bool RejectedByVocabulary(BindingProfileDocument document, WorldChannelTable channels, IReadOnlyList<WorldSeatModeFamily> seatModes, string label) {
         var errors = new List<string>();
 
         WorldAffordances.Validate(
             channels: channels,
             document: document,
-            errors: errors
+            errors: errors,
+            seatModes: seatModes
         );
 
         if (errors.Count == 0) {
@@ -339,8 +583,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         );
     }
     // One row's half of the skip: a PAGE keeps its registered/resolvable entries and loses only the ones this
-    // composition cannot carry (a mixed page — the play group's base page folds editor.enter beside its movement
-    // rows — narrates once per finding and survives with the rest intact); a bare-COMMAND/CHANNEL row has no smaller
+    // composition cannot carry (a mixed page — a resting page that folds player.mode beside its movement rows —
+    // narrates once per finding and survives with the rest intact); a bare-COMMAND/CHANNEL row has no smaller
     // unit to keep, so an unregistered command or an unresolved channel drops it whole. Returns the row UNCHANGED
     // (by reference — the ReferenceEquals check above skips the allocation) when nothing in it is unregistered or
     // unavailable, or a rewritten row when any page entry is dropped. A page itself remains even when filtering
@@ -462,15 +706,46 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // already narrated the same finding; echoing it again on every read would trade one flood for another.
     private static BindingProfileDocument SkipUnregisteredPages(BindingProfileDocument document, WorldChannelTable channels, string? label) {
         var rows = document.Chords;
-        List<BindingChordDefinition>? rewritten = null;
-
-        for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
-            var row = rows[rowIndex];
-            var filtered = SkipUnregisteredEntries(
+        var chords = FilterRows(
+            rows: rows,
+            state: channels,
+            label: label,
+            filter: static (row, channels, label) => SkipUnregisteredEntries(
                 channels: channels,
                 label: label,
                 row: row
-            );
+            )
+        );
+        var wheels = SkipUnregisteredWheels(
+            wheels: document.Wheels,
+            chords: chords,
+            label: label
+        );
+
+        if (
+            ReferenceEquals(
+            objA: chords,
+            objB: rows
+        ) &&
+            ReferenceEquals(
+            objA: wheels,
+            objB: document.Wheels
+        )
+        ) {
+            return document;
+        }
+
+        return (document with { Chords = chords, Wheels = wheels });
+    }
+    // The copy-on-write row filter both skips share: returns ROWS ITSELF (by reference) when every row survives
+    // unchanged, else a fresh list of the survivors, each possibly rewritten — so the common nothing-dropped path
+    // allocates nothing and a caller tells "changed" from reference identity alone.
+    private static IReadOnlyList<T> FilterRows<T, TState>(IReadOnlyList<T> rows, TState state, string? label, Func<T, TState, string?, T?> filter) where T : class {
+        List<T>? rewritten = null;
+
+        for (var rowIndex = 0; (rowIndex < rows.Count); rowIndex++) {
+            var row = rows[rowIndex];
+            var filtered = filter(row, state, label);
 
             if (ReferenceEquals(
                 objA: filtered,
@@ -488,24 +763,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             }
         }
 
-        var chords = (((IReadOnlyList<BindingChordDefinition>?)rewritten) ?? rows);
-        var wheels = SkipUnregisteredWheels(
-            wheels: document.Wheels,
-            chords: chords,
-            label: label
-        );
-
-        if (
-            (rewritten is null) &&
-            ReferenceEquals(
-            objA: wheels,
-            objB: document.Wheels
-        )
-        ) {
-            return document;
-        }
-
-        return (document with { Chords = chords, Wheels = wheels });
+        return (((IReadOnlyList<T>?)rewritten) ?? rows);
     }
     // One wheel's half of the skip — see SkipUnregisteredWheels.
     private static BindingWheelDefinition? SkipUnregisteredSectors(BindingWheelDefinition wheel, IReadOnlyList<BindingChordDefinition> chords, string? label) {
@@ -597,43 +855,31 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     // unregistered command drops (one narration per ring, the page-skip convention), a ring the drops leave below
     // the compiled minimum drops whole (a one-sector radial band selects nothing honestly), a wheel left ringless —
     // or whose hold page was itself dropped — drops whole. What survives always recompiles, so a registration gap
-    // (a headless boot never registering the editor verbs a wheel's sectors commit) degrades the wheel instead of
+    // (a leaner boot shape never registering a verb a wheel's sectors commit) degrades the wheel instead of
     // rejecting the whole seat document. Returns the list UNCHANGED (by reference) when nothing was dropped.
     private static IReadOnlyList<BindingWheelDefinition>? SkipUnregisteredWheels(IReadOnlyList<BindingWheelDefinition>? wheels, IReadOnlyList<BindingChordDefinition> chords, string? label) {
         if (wheels is null) {
             return null;
         }
 
-        List<BindingWheelDefinition>? rewritten = null;
-
-        for (var wheelIndex = 0; (wheelIndex < wheels.Count); wheelIndex++) {
-            var wheel = wheels[wheelIndex];
-            var filtered = SkipUnregisteredSectors(
+        var filtered = FilterRows(
+            rows: wheels,
+            state: chords,
+            label: label,
+            filter: static (wheel, chords, label) => SkipUnregisteredSectors(
                 chords: chords,
                 label: label,
                 wheel: wheel
-            );
+            )
+        );
 
-            if (ReferenceEquals(
-                objA: filtered,
-                objB: wheel
-            )) {
-                rewritten?.Add(item: wheel);
-
-                continue;
-            }
-
-            rewritten ??= [.. wheels.Take(count: wheelIndex)];
-
-            if (filtered is not null) {
-                rewritten.Add(item: filtered);
-            }
-        }
-
-        return ((rewritten is null)
+        return (ReferenceEquals(
+            objA: filtered,
+            objB: wheels
+        )
             ? wheels
-            : ((rewritten.Count > 0)
-                ? rewritten
+            : ((filtered.Count > 0)
+                ? filtered
                 : null
         ));
     }
@@ -668,6 +914,20 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         return false;
     }
 
+    /// <summary>Gets the live definition and completed tick seat <paramref name="slot"/> currently resolves through.
+    /// Both values move with <see cref="SyncSeat"/>, so presentation derived from binding state reads the destination
+    /// authority after a crossing rather than the boot client's document. An out-of-range slot reads slot 0.</summary>
+    /// <param name="slot">The 0-based local roster slot.</param>
+    /// <param name="definition">The seat's routed definition.</param>
+    /// <param name="tick">The completed tick at that authority.</param>
+    public void GetRoutedState(int slot, out WorldDefinition definition, out ulong tick) {
+        slot = ((((uint)slot) < SeatCount)
+            ? slot
+            : 0
+        );
+        definition = m_definitions[slot];
+        tick = m_stateTicks[slot];
+    }
     /// <summary>The channel vocabulary seat <paramref name="slot"/>'s bindings resolve against — that seat's own
     /// currently-routed document's live table (see <see cref="SyncSeat"/>), so a crossed seat is linted against the
     /// destination's channels, never always the boot world's. An out-of-range slot reads slot 0's table.</summary>
@@ -675,7 +935,14 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     public WorldChannelTable Channels(int slot) => m_channels[((((uint)slot) < SeatCount)
         ? slot
         : 0)];
-    /// <summary>The document the seat currently resolves through — the full composed stack (engine default ⊕ overlays ⊕
+    /// <summary>The AUTHORED per-seat mode families seat <paramref name="slot"/>'s currently-routed document
+    /// declares — the same per-seat, per-route rule <see cref="Channels"/> follows. An out-of-range slot reads
+    /// slot 0's document.</summary>
+    /// <param name="slot">The 0-based local roster slot.</param>
+    public IReadOnlyList<WorldSeatModeFamily> SeatModes(int slot) => m_definitions[((((uint)slot) < SeatCount)
+        ? slot
+        : 0)].SeatModes;
+    /// <summary>The document the seat currently resolves through — the full composed stack (world overlays ⊕
     /// profile ⊕ session), with the same unregistered-command/unavailable-channel skip <see cref="RecomposeSeat"/>
     /// applies (silent here — this read never narrates; the recompose that already ran, or the boot sweep, already
     /// did) so the <c>player.bindings</c> echo never claims a dead page or a channel this seat's routed world cannot
@@ -731,6 +998,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         for (var familyIndex = 0; (familyIndex < reportedFamilies.Count); familyIndex++) {
             var family = reportedFamilies[familyIndex];
+
             _ = m_contextStates[slot].TryGetValue(
                 key: family,
                 value: out var state
@@ -811,6 +1079,32 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         m_seats[((((uint)slot) < SeatCount)
             ? slot
             : 0)].ViewFor(slot: slot);
+    /// <summary>Attempts to resolve a NAMED page's view in the seat's currently compiled profile, independent of
+    /// which page is currently active — the binding bar's per-bank read seam (a bank renders a page other than the
+    /// seat's active one).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="pageId">The page id to resolve.</param>
+    /// <param name="view">The page's view, when found.</param>
+    /// <returns><see langword="true"/> when the seat's compiled profile declares a page with this id.</returns>
+    public bool TryPageView(int slot, string pageId, out BindingPageView view) {
+        if (((uint)slot) < SeatCount) {
+            return m_seats[slot].TryGetPageView(
+                pageId: pageId,
+                view: out view
+            );
+        }
+
+        view = null!;
+
+        return false;
+    }
+    /// <inheritdoc/>
+    public bool HoldsSource(int slot, string source) {
+        return ((((uint)slot) < SeatCount) && m_seats[slot].HoldsSource(
+            slot: slot,
+            source: source
+        ));
+    }
     /// <inheritdoc/>
     public void Reset(int slot) {
         if (((uint)slot) < SeatCount) {
@@ -834,9 +1128,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         );
     }
     /// <inheritdoc/>
-    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal) {
+    public IReadOnlyList<CommandBinding>? Resolve(int slot, in InputSignal signal, bool pressesWithheld) {
         return ((((uint)slot) < SeatCount)
             ? m_seats[slot].Resolve(
+                pressesWithheld: pressesWithheld,
                 signal: in signal,
                 slot: slot
             )
@@ -847,6 +1142,14 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     /// <param name="slot">The 0-based seat slot.</param>
     public BindingProfileDocument? SessionRebind(int slot) => ((((uint)slot) < SeatCount)
         ? m_sessionRebinds[slot]
+        : null
+    );
+    /// <summary>The seat's currently delivered profile binding layer (see <see cref="SetProfileLayers"/>), or
+    /// <see langword="null"/> when it has none — the source of a player's own binding-bar LOOK preferences
+    /// (<see cref="BindingProfileDocument.BindingBar"/>).</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    public BindingProfileDocument? ProfileBindings(int slot) => ((((uint)slot) < SeatCount)
+        ? m_profileBindings[slot]
         : null
     );
     /// <summary>Gets the group the seat's composed <c>contexts</c> rows map a family state to — the first row
@@ -892,10 +1195,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return (group, (m_seats[slot].RestingPageIdOf(group: group) ?? group));
     }
-    /// <summary>Publishes one built-in context family's current state for a seat (see
-    /// <see cref="WorldContextFamilies"/>) and re-derives the seat's active group when the state changed. The roster,
-    /// engagement, and editor publishers use this path; state-backed families are published only from the routed
-    /// definition by <see cref="SyncSeat"/>. An unknown or state-backed family is ignored.</summary>
+    /// <summary>Publishes one context family's current state for a seat — a built-in family (see
+    /// <see cref="WorldContextFamilies"/>) or an AUTHORED <see cref="WorldSeatModeFamily"/> the routed document
+    /// declares — and re-derives the seat's active group when the state changed. The roster, engagement, and layout
+    /// publishers, plus <c>player.mode</c>, use this path; state-backed families are published only from the routed
+    /// definition by <see cref="SyncSeat"/>. An unknown, state-backed, or undeclared-authored family is ignored.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="family">The admitted family name (e.g. <see cref="WorldContextFamilies.Engagement"/>).</param>
     /// <param name="state">The family's current state for the seat (e.g.
@@ -903,7 +1207,14 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     public void SetContextState(int slot, string family, string state) {
         if (
             (((uint)slot) >= SeatCount) ||
-            (WorldContextFamilies.StatesOf(family: family) is null) ||
+            (
+                (WorldContextFamilies.StatesOf(family: family) is null) &&
+                !WorldContextFamilies.IsOpenStates(family: family) &&
+                (FindSeatMode(
+                    definition: m_definitions[slot],
+                    family: family
+                ) is null)
+            ) ||
             (m_contextStates[slot].TryGetValue(
                 key: family,
                 value: out var current
@@ -968,12 +1279,17 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         var overlays = definition.BindingOverlays;
         var channels = definition.Channels;
         var state = definition.State;
+        var modes = definition.SeatModes;
         var stateChanged = (
             !ReferenceEquals(
                 objA: state,
                 objB: m_stateSource[slot]
             ) ||
             (entityIndex != m_stateEntityIndices[slot])
+        );
+        var modesChanged = !ReferenceEquals(
+            objA: modes,
+            objB: m_modeSource[slot]
         );
         var bindingsChanged = (
             !ReferenceEquals(
@@ -986,8 +1302,37 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             )
         );
 
+        if (modesChanged) {
+            SyncSeatModes(
+                slot: slot,
+                previous: (m_modeSource[slot] ?? []),
+                current: modes
+            );
+            m_modeSource[slot] = modes;
+        }
+
         m_definitions[slot] = definition;
         m_stateTicks[slot] = CompletedTick(endpointNextInputTick: nextInputTick);
+
+        // A gated overlay's own When is state, not a document swap — its holds() value can flip on any tick that
+        // moves the routed state section, never only on an overlay-list mutation. This is the cheap check (a bit
+        // per When-bearing overlay) that turns that flip into exactly one recompose on the tick it crosses.
+        var gateChanged = false;
+
+        if (stateChanged || bindingsChanged) {
+            var signature = OverlayGateSignature(
+                definition: m_definitions[slot],
+                overlays: (bindingsChanged ? (overlays ?? []) : m_overlays[slot]),
+                tick: m_stateTicks[slot]
+            );
+
+            gateChanged = (signature != m_overlayGateSignature[slot]);
+            m_overlayGateSignature[slot] = signature;
+        }
+
+        if (modesChanged && !stateChanged && !bindingsChanged) {
+            DeriveActiveGroup(slot: slot);
+        }
 
         if (stateChanged) {
             m_stateSource[slot] = state;
@@ -996,19 +1341,23 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 slot: slot,
                 tick: m_stateTicks[slot]
             );
-            if (!bindingsChanged) {
+            if (!bindingsChanged && !gateChanged) {
                 DeriveActiveGroup(slot: slot);
             }
         }
 
-        if (!bindingsChanged) {
+        if (bindingsChanged) {
+            m_overlays[slot] = (overlays ?? []);
+            m_channelSource[slot] = channels;
+            m_channels[slot] = WorldChannelTable.Compile(channels: channels);
+            RecomposeSeat(slot: slot);
+
             return;
         }
 
-        m_overlays[slot] = (overlays ?? []);
-        m_channelSource[slot] = channels;
-        m_channels[slot] = WorldChannelTable.Compile(channels: channels);
-        RecomposeSeat(slot: slot);
+        if (gateChanged) {
+            RecomposeSeat(slot: slot);
+        }
     }
     /// <summary>Checks a prospective live session layer against the seat's actual current composition and routed
     /// channel table without installing it. Stale route-local rows in older layers receive the same surgical filtering
@@ -1031,9 +1380,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         try {
             var channels = m_channels[slot];
             var document = WorldBindingComposer.Compose(BaseLayers(
+                definition: m_definitions[slot],
                 overlays: m_overlays[slot],
                 profile: m_profileBindings[slot],
-                session: rebinds
+                session: rebinds,
+                tick: m_stateTicks[slot]
             ));
 
             document = SkipUnregisteredPages(
@@ -1047,6 +1398,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             WorldAffordances.Validate(
                 channels: channels,
                 document: document,
+                seatModes: m_definitions[slot].SeatModes,
                 errors: errors
             );
             WorldStateBindingContext.Validate(
@@ -1061,13 +1413,22 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
                 return false;
             }
 
-            _ = BindingProfile.Compile(
+            var compiled = BindingProfile.Compile(
                 document: document,
                 channelCommandName: channel => RoutedChannelCommandName(
                     channel: channel,
                     channels: channels
                 )
             );
+
+            // Refuse a player.bind that would carry the composed profile past the modifier ceiling (each raw
+            // chord/held source it mints an implicit modifier for is unbounded) — the same metric and ceiling
+            // RecomposeSeat and the boot-time validator enforce, so the preflight and the install agree.
+            if (compiled.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
+                reason = $"composes {compiled.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling";
+
+                return false;
+            }
         } catch (ArgumentException exception) {
             reason = exception.Message.ReplaceLineEndings(replacementText: " ");
 
@@ -1083,8 +1444,8 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
     /// existed (the world's boot overlays compile at construction, pre-container). Findings do
     /// not un-bind anything: the boot mapping already resolved, and a dead entry resolves to nothing at dispatch — the
     /// sweep exists so that silence is loud instead. Runs the same unregistered-command/unavailable-channel skip
-    /// <see cref="RecomposeSeat"/> applies first (one narration line per page/row, e.g. the whole <c>editor</c>/
-    /// <c>sculpt</c> groups on a boot shape that never registered them), then reports whatever vocabulary findings
+    /// <see cref="RecomposeSeat"/> applies first (one narration line per page/row, e.g. a whole authored group whose
+    /// commands a leaner boot shape never registered), then reports whatever vocabulary findings
     /// remain in the filtered document per entry — a genuine bindability or value-kind mistake still
     /// gets its full detail. Every seat is swept individually (never deduplicated by "no profile/session layer")
     /// because <see cref="SyncSeat"/> can leave two such seats composed against different worlds the instant they
@@ -1105,6 +1466,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             WorldAffordances.Validate(
                 document: document,
                 channels: m_channels[slot],
+                seatModes: m_definitions[slot].SeatModes,
                 errors: errors
             );
             foreach (var error in errors) {
@@ -1135,11 +1497,13 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         m_contextStates = new Dictionary<string, string>[SeatCount];
         m_seatContexts = new IReadOnlyList<BindingContextDefinition>[SeatCount];
         m_overlays = new IReadOnlyList<WorldBindingOverlay>[SeatCount];
+        m_overlayGateSignature = new ulong[SeatCount];
         m_channelSource = new IReadOnlyList<WorldChannel>[SeatCount];
         m_channels = new WorldChannelTable[SeatCount];
         m_effectiveDocuments = new byte[SeatCount][];
         m_effectiveChannelNames = new string[SeatCount][];
         m_definitions = new WorldDefinition[SeatCount];
+        m_modeSource = new IReadOnlyList<WorldSeatModeFamily>[SeatCount];
         m_stateEntityIndices = new int[SeatCount];
         m_stateSource = new IReadOnlyList<WorldStateRow>[SeatCount];
         m_stateTicks = new ulong[SeatCount];
@@ -1150,8 +1514,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         var bootChannels = definition.Channels;
         var bootTable = WorldChannelTable.Compile(channels: bootChannels);
 
+        var bootGateSignature = OverlayGateSignature(overlays: bootOverlays, definition: definition, tick: 0UL);
+
         for (var slot = 0; (slot < SeatCount); slot++) {
             m_overlays[slot] = bootOverlays;
+            m_overlayGateSignature[slot] = bootGateSignature;
             m_channelSource[slot] = bootChannels;
             m_channels[slot] = bootTable;
             m_definitions[slot] = definition;
@@ -1177,18 +1544,23 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             m_contextStates[slot] = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
                 [WorldContextFamilies.Roster] = WorldContextFamilies.RosterUnjoined,
                 [WorldContextFamilies.Engagement] = WorldContextFamilies.EngagementNone,
-                [WorldContextFamilies.Editor] = WorldContextFamilies.EditorNone,
             };
             m_seatContexts[slot] = (seedDocument.Contexts ?? []);
             m_effectiveDocuments[slot] = seedDocumentBytes;
             m_effectiveChannelNames[slot] = seedChannelNames;
+            SyncSeatModes(
+                current: definition.SeatModes,
+                previous: [],
+                slot: slot
+            );
+            m_modeSource[slot] = definition.SeatModes;
             PublishStateContexts(
                 slot: slot,
                 tick: 0UL
             );
             DeriveActiveGroup(
-                slot: slot,
-                releasePriorGroup: false
+                releasePriorGroup: false,
+                slot: slot
             );
         }
     }

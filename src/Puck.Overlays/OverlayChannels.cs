@@ -1,8 +1,8 @@
 namespace Puck.Overlays;
 
 /// <summary>
-/// The overlay's eight declared writer channels. The value is the priority for the five first-party writers (0 draws
-/// first/bottom, 4 draws last/top), pinned to the order <see cref="UnifiedOverlayNode"/> emits them in when they run
+/// The overlay's seven declared writer channels. The value is the priority for the four first-party writers (0 draws
+/// first/bottom, 3 draws last/top), pinned to the order <see cref="UnifiedOverlayNode"/> emits them in when they run
 /// — draw order stops being an implicit contract nobody states and becomes the lease table's first column.
 /// <see cref="Hud"/> is the odd one out: it is not part of that fixed loop at all — <see cref="UnifiedOverlayNode"/>'s
 /// banded pipeline opens it up to four separate times per frame (under, base-slot-when-replacing, over — the
@@ -19,27 +19,27 @@ public enum OverlayChannel {
     Console = 0,
     /// <summary>The per-seat binding bars (one instance per joined seat).</summary>
     BindingBar = 1,
-    /// <summary>The per-seat editor gizmo chips (one instance per editing seat).</summary>
-    Gizmos = 2,
-    /// <summary>The per-seat editor HUD strips (one instance per editing seat).</summary>
-    EditorHud = 3,
+    /// <summary>The per-seat marker chips (one instance per seat) — an authored <c>markers</c> row's projected
+    /// world-space overlay, per <see cref="MarkerWriter"/>.</summary>
+    Markers = 2,
     /// <summary>The transient toast echo (one singleton instance).</summary>
-    Toast = 4,
+    Toast = 3,
     /// <summary>The authored world-scope AND player-scope HUD panels (<see cref="HudWriter"/>) — opened up to four
     /// times per frame across the under/base/over bands plus the unbanded seat-panel pass; see this enum's
     /// remarks.</summary>
-    Hud = 5,
+    Hud = 4,
     /// <summary>The per-seat drawn pointer cursor (<see cref="CursorWriter"/>) — the frame's last, topmost channel
     /// scope; see this enum's remarks.</summary>
-    Cursor = 6,
+    Cursor = 5,
     /// <summary>The per-seat radial action menu (<see cref="WheelWriter"/>) — drawn immediately under the cursor,
     /// outside the replace-band suppression; see this enum's remarks.</summary>
-    Wheel = 7,
+    Wheel = 6,
 }
 /// <summary>One channel's hard reservation across the four frame resources. A channel may write up to these counts
 /// and not one record more: it clips at its own boundary, attributed to itself, and can never consume another
 /// channel's capacity.</summary>
-/// <param name="Elements">The element records (rects, rings, text runs, icon chips) the channel may write.</param>
+/// <param name="Elements">The element records (rects, rings, wedges, text runs, icon chips, sampled frames) the
+/// channel may write.</param>
 /// <param name="TextWords">The glyph-code words the channel's text runs may consume.</param>
 /// <param name="Panels">The panel-chrome records the channel may write.</param>
 /// <param name="Clips">The clip-table rects the channel may open.</param>
@@ -68,20 +68,40 @@ public readonly record struct OverlayChannelUsage(
 /// emit, and how many authored HUD panels and elements its document contract admits at each scope. These are the
 /// HOST's declarations, handed down as data at composition (a game's composition root supplies them from its own
 /// schema); the render cost each writer expands one authored unit into — a gauge's <see cref="HudWriter.GaugeElementCost"/>
-/// records, a text run's <see cref="HudWriter.TextRunChars"/> glyph words, a seat's <see cref="EditorGizmoWriter.MaxChipsPerSeat"/>
-/// chips — is the writer's own constant and lives beside the writer. <see cref="OverlayChannelLeases"/> multiplies
-/// the two into the reservation table.</summary>
+/// records, a text run's <see cref="HudWriter.TextRunChars"/> glyph words, a seat's <see cref="OverlayCapacity.MarkerMaxChipsPerSeat"/>
+/// chips — is the writer's own constant and lives beside the writer, EXCEPT the marker ceiling, which is
+/// schema-derived (see that field's own remarks). <see cref="OverlayChannelLeases"/> multiplies the two into the
+/// reservation table.</summary>
 /// <param name="Seats">The most local seats any per-seat writer will be asked to emit in one frame.</param>
 /// <param name="HudPanels">The most world-scope authored HUD panels one frame carries.</param>
 /// <param name="HudElementsPerPanel">The most elements one world-scope HUD panel carries.</param>
 /// <param name="HudSeatPanelsPerSeat">The most seat-scope authored HUD panels one seat carries.</param>
 /// <param name="HudElementsPerSeatPanel">The most elements one seat-scope HUD panel carries.</param>
+/// <param name="BindingBarMaxBanks">The most stacked banks one seat's binding bar authors.</param>
+/// <param name="BindingBarMaxSlotsPerBank">The most physical-button slots one bank's authored slot set carries.</param>
+/// <param name="BindingBarMaxModifiers">The most modifier indicators one seat's binding bar draws — the same ceiling
+/// the document validator refuses a composed profile past, so the bar's per-seat reservation, the feed's modifier
+/// array, and the validator's boot-time count all size from one number.</param>
+/// <param name="MarkerMaxChipsPerSeat">The most projected marker chips one seat draws — the same ceiling the
+/// marker feed culls to (nearest the camera) and <see cref="MarkerWriter"/> refuses past, so the channel's
+/// reservation and the render-side cull never disagree.</param>
+/// <param name="WheelMaxRings">The most concentric rings one seat's radial action menu presents — mirrors the
+/// binding substrate's wheel bound, so the channel's reservation and <see cref="WheelWriter"/>'s render-side
+/// backstop never disagree.</param>
+/// <param name="WheelMaxSectorsPerRing">The most sector pieces one wheel ring presents — <see cref="WheelMaxRings"/>'
+/// per-ring twin.</param>
 public readonly record struct OverlayCapacity(
     int Seats,
     int HudPanels,
     int HudElementsPerPanel,
     int HudSeatPanelsPerSeat,
-    int HudElementsPerSeatPanel
+    int HudElementsPerSeatPanel,
+    int BindingBarMaxBanks,
+    int BindingBarMaxSlotsPerBank,
+    int BindingBarMaxModifiers,
+    int MarkerMaxChipsPerSeat,
+    int WheelMaxRings,
+    int WheelMaxSectorsPerRing
 );
 /// <summary>
 /// The lease table: every channel's reservation, each sized at the writer's measured maximum — the largest record
@@ -99,9 +119,13 @@ public readonly record struct OverlayCapacity(
 /// authored-HUD one, means growing it here, in the open, against the sum — never drawing silently from the unclaimed
 /// remainder.</remarks>
 public sealed class OverlayChannelLeases {
-    // Binding bar, per JOINED seat — the twelve slot chips, the page label, the modifier pips, and the hint lines.
-    // Every one of its text runs (label and hints alike) rides the same character clamp.
-    private const int BindingBarElementsPerSeat = (((BindingBarLayout.SlotCount + 1) + BindingBarWriter.MaxModifierPips) + BindingBarWriter.MaxHintLines);
+    // Binding bar, per JOINED seat — every stacked bank's own slot cluster (BindingBarMaxBanks x
+    // BindingBarMaxSlotsPerBank) plus the ONE page label, the modifier indicators (BindingBarMaxModifiers), and the
+    // hint lines the bar draws once regardless of bank count, inside one viewport clip — all computed in the constructor from the host's
+    // capacity, so the modifier count crosses from the document contract exactly as the bank/slot ceilings do. Every
+    // one of its text runs (label and hints alike) rides the same character clamp; a slot's letter badge (LB/RB, the
+    // menu trio, the exotics) packs into the icon record itself (OverlayFrameBuilder.PackBadgeLabel), never this
+    // text-word budget.
     private const int BindingBarTextWordsPerSeat = ((BindingBarWriter.MaxHintLines + 1) * BindingBarWriter.MaxLineChars);
     private const int ConsoleElements = (ConsolePanelWriter.MaxRows + 3);
     private const int ConsoleTextWords = ((ConsoleTitleChars + ((ConsolePanelWriter.MaxRows - 1) * ConsolePanelWriter.MaxColumns)) + ConsolePanelWriter.MaxColumns);
@@ -117,15 +141,6 @@ public sealed class OverlayChannelLeases {
     // clamps its label WriteText call to, so the two can never drift apart). No panel.
     private const int CursorElementsPerSeat = 3;
     private const int CursorTextWordsPerSeat = CursorWriter.MaxLabelChars;
-    private const int EditorHudElementsPerSeat = (EditorHudWriter.MaxLines + 1);
-    private const int EditorHudTextWordsPerSeat = (EditorHudTitleChars + (EditorHudWriter.MaxLines * EditorHudWriter.MaxLineChars));
-    // Editor HUD, per EDITING seat — one strip panel inside the seat's one clip scope, the title run and the four
-    // readout lines; text is the title (EditorHudWriter.TitleChars — shared with the writer's own clamp) plus every
-    // line at its character clamp.
-    private const int EditorHudTitleChars = EditorHudWriter.TitleChars;
-    // Editor gizmos, per EDITING seat — each admitted chip writes its presence ring and its icon chip, all inside
-    // the seat's one clip scope. No text, no panel.
-    private const int GizmoElementsPerSeat = (EditorGizmoWriter.MaxChipsPerSeat * 2);
     // Hud — the AUTHORED-HUD reservation, computed in the constructor from the host's OverlayCapacity: world-scope
     // panels x elements PLUS the seat-scope budget (per-seat panels x elements x seats). Each authored element's
     // render cost is taken at its OWN worst case per resource: a GAUGE costs the most render elements
@@ -142,15 +157,16 @@ public sealed class OverlayChannelLeases {
     // character clamp.
     private const int ToastLabelChars = ToastWriter.LabelChars;
     private const int ToastTextWords = (ToastLabelChars + (ToastWriter.MaxMessageChars * ToastWriter.MaxMessageLines));
-    // Wheel, per OPEN seat — the hub dot, one outline per ring plus the active ring's second stroke, every ring's
-    // sector labels, the hovered sector's marker, and the active ring's hub label, all inside the seat's one clip
-    // scope. Every count and clamp reads the writer's own declared caps (the CursorWriter discipline), so a cap
-    // change moves the reservation with it. No panel.
-    private const int WheelElementsPerSeat = ((1 + (WheelWriter.MaxRings + 1)) + ((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) + (1 + 1)));
-    private const int WheelTextWordsPerSeat = (((WheelWriter.MaxRings * WheelWriter.MaxSectorsPerRing) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
+
+    // Wheel, per PRESENTED seat (open or lingering through its outcome fade) — the hub disc, every ring's sector
+    // pieces each with its icon chip OR text fallback (two elements per sector at most), and the hub's two text
+    // lines (hovered/outcome sector, active ring), all inside the seat's one clip scope. No panel. The ring/sector
+    // counts are schema-derived (OverlayCapacity.WheelMaxRings/WheelMaxSectorsPerRing, the MarkerMaxChipsPerSeat
+    // pattern), never a writer-baked constant; the per-sector/ring label clamps still read the writer's own caps
+    // (the CursorWriter discipline), so a clamp change moves the reservation with it.
 
     /// <summary>The number of declared channels.</summary>
-    public const int Count = 8;
+    public const int Count = 7;
 
     // Indexed by (int)OverlayChannel — the enum's declared values are the array index.
     private readonly OverlayChannelReservation[] m_reservations;
@@ -168,71 +184,49 @@ public sealed class OverlayChannelLeases {
         RequireNonNegative(count: capacity.HudElementsPerPanel, name: nameof(OverlayCapacity.HudElementsPerPanel));
         RequireNonNegative(count: capacity.HudSeatPanelsPerSeat, name: nameof(OverlayCapacity.HudSeatPanelsPerSeat));
         RequireNonNegative(count: capacity.HudElementsPerSeatPanel, name: nameof(OverlayCapacity.HudElementsPerSeatPanel));
+        RequireNonNegative(count: capacity.BindingBarMaxBanks, name: nameof(OverlayCapacity.BindingBarMaxBanks));
+        RequireNonNegative(count: capacity.BindingBarMaxSlotsPerBank, name: nameof(OverlayCapacity.BindingBarMaxSlotsPerBank));
+        RequireNonNegative(count: capacity.BindingBarMaxModifiers, name: nameof(OverlayCapacity.BindingBarMaxModifiers));
+        RequireNonNegative(count: capacity.MarkerMaxChipsPerSeat, name: nameof(OverlayCapacity.MarkerMaxChipsPerSeat));
+        RequireNonNegative(count: capacity.WheelMaxRings, name: nameof(OverlayCapacity.WheelMaxRings));
+        RequireNonNegative(count: capacity.WheelMaxSectorsPerRing, name: nameof(OverlayCapacity.WheelMaxSectorsPerRing));
 
-        var seats = capacity.Seats;
-        var hudWorldElements = (capacity.HudPanels * capacity.HudElementsPerPanel);
-        var hudSeatElements = ((seats * capacity.HudSeatPanelsPerSeat) * capacity.HudElementsPerSeatPanel);
-        var hudPanels = (capacity.HudPanels + (capacity.HudSeatPanelsPerSeat * seats));
+        // The public host counts are ints, but their products are not allowed to wrap before the backstop check.
+        // UInt128 covers the largest possible product here (three non-negative Int32 counts times a small writer
+        // cost), so even an adversarial capacity is refused by its exact total instead of wrapping negative and
+        // slipping through construction.
+        var seats = ((UInt128)((uint)capacity.Seats));
+        var hudWorldElements = (((UInt128)((uint)capacity.HudPanels)) * ((uint)capacity.HudElementsPerPanel));
+        var hudSeatElements = ((seats * ((uint)capacity.HudSeatPanelsPerSeat)) * ((uint)capacity.HudElementsPerSeatPanel));
+        var hudPanels = (((UInt128)((uint)capacity.HudPanels)) + (((UInt128)((uint)capacity.HudSeatPanelsPerSeat)) * seats));
+        var bindingBarFixedElementsPerSeat = ((((UInt128)1) + ((uint)capacity.BindingBarMaxModifiers)) + BindingBarWriter.MaxHintLines);
+        var bindingBarElementsPerSeat = (bindingBarFixedElementsPerSeat + (((UInt128)((uint)capacity.BindingBarMaxBanks)) * ((uint)capacity.BindingBarMaxSlotsPerBank)));
+        // Markers, per seat — each admitted chip writes its presence ring and its icon chip, all inside the seat's
+        // one clip scope. No text, no panel. Schema-derived (OverlayCapacity.MarkerMaxChipsPerSeat), never a
+        // writer-baked constant.
+        var markerElementsPerSeat = (((UInt128)((uint)capacity.MarkerMaxChipsPerSeat)) * 2);
+        var wheelSectorsPerSeat = (((UInt128)((uint)capacity.WheelMaxRings)) * ((uint)capacity.WheelMaxSectorsPerRing));
+        var wheelElementsPerSeat = ((1 + (wheelSectorsPerSeat * 2)) + 2);
+        var wheelTextWordsPerSeat = (((wheelSectorsPerSeat + 1) * WheelWriter.MaxSectorLabelChars) + WheelWriter.MaxRingLabelChars);
 
         Capacity = capacity;
-        m_reservations = [
-            new OverlayChannelReservation(
-                Clips: 0,
-                Elements: ConsoleElements,
-                Panels: 1,
-                TextWords: ConsoleTextWords
-            ),
-            new OverlayChannelReservation(
-                Clips: 0,
-                Elements: (BindingBarElementsPerSeat * seats),
-                Panels: 0,
-                TextWords: (BindingBarTextWordsPerSeat * seats)
-            ),
-            new OverlayChannelReservation(
-                Clips: seats,
-                Elements: (GizmoElementsPerSeat * seats),
-                Panels: 0,
-                TextWords: 0
-            ),
-            new OverlayChannelReservation(
-                Clips: seats,
-                Elements: (EditorHudElementsPerSeat * seats),
-                Panels: seats,
-                TextWords: (EditorHudTextWordsPerSeat * seats)
-            ),
-            new OverlayChannelReservation(
-                Clips: 0,
-                Elements: ToastElements,
-                Panels: 1,
-                TextWords: ToastTextWords
-            ),
-            new OverlayChannelReservation(
-                Clips: hudPanels,
-                Elements: ((hudWorldElements + hudSeatElements) * HudElementCost),
-                Panels: hudPanels,
-                TextWords: ((hudWorldElements + hudSeatElements) * HudTextWordCost)
-            ),
-            new OverlayChannelReservation(
-                Clips: seats,
-                Elements: (CursorElementsPerSeat * seats),
-                Panels: 0,
-                TextWords: (CursorTextWordsPerSeat * seats)
-            ),
-            new OverlayChannelReservation(
-                Clips: seats,
-                Elements: (WheelElementsPerSeat * seats),
-                Panels: 0,
-                TextWords: (WheelTextWordsPerSeat * seats)
-            ),
+        (UInt128 Clips, UInt128 Elements, UInt128 Panels, UInt128 TextWords)[] wideReservations = [
+            (0, ConsoleElements, 1, ConsoleTextWords),
+            (seats, (bindingBarElementsPerSeat * seats), 0, (((UInt128)BindingBarTextWordsPerSeat) * seats)),
+            (seats, (markerElementsPerSeat * seats), 0, 0),
+            (0, ToastElements, 1, ToastTextWords),
+            (hudPanels, ((hudWorldElements + hudSeatElements) * HudElementCost), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
+            (seats, (((UInt128)CursorElementsPerSeat) * seats), 0, (((UInt128)CursorTextWordsPerSeat) * seats)),
+            (seats, (wheelElementsPerSeat * seats), 0, (wheelTextWordsPerSeat * seats)),
         ];
 
-        var totalClips = 0;
-        var totalElements = 0;
-        var totalPanels = 0;
-        var totalTextWords = 0;
+        UInt128 totalClips = 0;
+        UInt128 totalElements = 0;
+        UInt128 totalPanels = 0;
+        UInt128 totalTextWords = 0;
 
-        for (var index = 0; (index < m_reservations.Length); index++) {
-            ref readonly var reservation = ref m_reservations[index];
+        for (var index = 0; (index < wideReservations.Length); index++) {
+            ref readonly var reservation = ref wideReservations[index];
 
             totalClips += reservation.Clips;
             totalElements += reservation.Elements;
@@ -240,15 +234,27 @@ public sealed class OverlayChannelLeases {
             totalTextWords += reservation.TextWords;
         }
 
-        TotalClips = totalClips;
-        TotalElements = totalElements;
-        TotalPanels = totalPanels;
-        TotalTextWords = totalTextWords;
-
         RequireWithinBackstop(resource: "clip-table rects", total: totalClips, backstop: OverlayFrameBuilder.MaxClips, backstopName: nameof(OverlayFrameBuilder.MaxClips));
         RequireWithinBackstop(resource: "element records", total: totalElements, backstop: OverlayFrameBuilder.MaxElements, backstopName: nameof(OverlayFrameBuilder.MaxElements));
         RequireWithinBackstop(resource: "panel records", total: totalPanels, backstop: OverlayFrameBuilder.MaxPanels, backstopName: nameof(OverlayFrameBuilder.MaxPanels));
         RequireWithinBackstop(resource: "glyph-code words", total: totalTextWords, backstop: OverlayFrameBuilder.TextWordCapacity, backstopName: nameof(OverlayFrameBuilder.TextWordCapacity));
+
+        TotalClips = ((int)totalClips);
+        TotalElements = ((int)totalElements);
+        TotalPanels = ((int)totalPanels);
+        TotalTextWords = ((int)totalTextWords);
+        m_reservations = new OverlayChannelReservation[Count];
+
+        for (var index = 0; (index < wideReservations.Length); index++) {
+            ref readonly var reservation = ref wideReservations[index];
+
+            m_reservations[index] = new OverlayChannelReservation(
+                Clips: ((int)reservation.Clips),
+                Elements: ((int)reservation.Elements),
+                Panels: ((int)reservation.Panels),
+                TextWords: ((int)reservation.TextWords)
+            );
+        }
     }
 
     /// <summary>Gets the host's declared counts this table was derived from.</summary>
@@ -273,8 +279,8 @@ public sealed class OverlayChannelLeases {
             );
         }
     }
-    private static void RequireWithinBackstop(string resource, int total, int backstop, string backstopName) {
-        if (total > backstop) {
+    private static void RequireWithinBackstop(string resource, UInt128 total, int backstop, string backstopName) {
+        if (total > ((UInt128)((uint)backstop))) {
             throw new ArgumentOutOfRangeException(
                 actualValue: total,
                 message: $"The overlay lease table over-subscribes its {resource}: the channels reserve {total} together, but OverlayFrameBuilder.{backstopName} addresses only {backstop}. Lower the host's OverlayCapacity or a writer's declared cap; a backstop grows only with the GPU region it sizes.",
@@ -302,8 +308,7 @@ public sealed class OverlayChannelLeases {
     public static string NameOf(OverlayChannel channel) => channel switch {
         OverlayChannel.Console => "console",
         OverlayChannel.BindingBar => "binding-bar",
-        OverlayChannel.Gizmos => "gizmos",
-        OverlayChannel.EditorHud => "editor-hud",
+        OverlayChannel.Markers => "markers",
         OverlayChannel.Toast => "toast",
         OverlayChannel.Hud => "hud",
         OverlayChannel.Cursor => "cursor",

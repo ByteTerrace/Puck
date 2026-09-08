@@ -1,7 +1,8 @@
 using System.Numerics;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.Physics;
+using Puck.Physics.Fields;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 
@@ -10,989 +11,219 @@ namespace Puck.World.Server;
 /// <summary>
 /// The SDF-backed <see cref="IContactField"/> — the second provider behind the same seam the analytic
 /// <see cref="WorldColliderSet"/> answers. It compiles solid screens as axis-aligned boxes and solid placements as
-/// their emitted creation primitives
-/// into one <see cref="SdfProgram"/> and reads it through a fixed-point
-/// <see cref="SdfFieldEvaluator"/>, so
-/// the contact surface a body solves against is the rendered geometry — smooth-union blends are solid where they are
-/// drawn. A solid screen's contact box is axis-aligned because the renderer only ever <c>Translate</c>s a screen
-/// slab — a screen's right/up is a UV frame only, never a geometry rotation (see
-/// <see cref="SdfProgramBuilder"/>'s <c>ScreenSlab</c> overload doc) — and the editor picker agrees (see
-/// <c>Puck.World.Client.WorldEditorPicker</c>'s own comment on the same box — this project cannot hold a
-/// <c>cref</c> to it: <c>Puck.World.Server</c> is structurally unable to reference <c>Puck.World</c>). Orienting a screen's contact
-/// volume for real is a three-surface arc — render, contact, and picker must all rotate together — and none of the
-/// three does today. "Up" is world <c>+Y</c> unless the world authors
-/// <see cref="WorldContactRequirement.GradientDerivedUp"/>, which derives it from the field gradient instead (a
-/// planetoid, an inverted ceiling, or the inside of a sphere are all walkable); without that requirement a vertical
-/// face pushes a body but never grounds it, so a flat-up world's walls stay walls.
+/// their emitted creation primitives into one <see cref="SdfProgram"/>, reads it through a fixed-point
+/// <see cref="SdfFieldEvaluator"/>, and hands both to <see cref="FixedFieldContactSolver"/>, so the contact surface a
+/// body solves against is the rendered geometry — smooth-union blends are solid where they are drawn.
 /// </summary>
 /// <remarks>
-/// <para>Immutable and per-revision: it holds no per-body state, so one instance is shared by reference across all 128
+/// <para>This type owns the document half: which rows are solid, how they compile, and the read-backs
+/// <c>world.collision.status</c> reports. Contact resolution itself belongs to the solver.</para>
+/// <para>A world authoring <c>collision.gridCellSize</c> reads the program through an
+/// <see cref="SdfBandedFieldEvaluator"/> over an <see cref="SdfDistanceGrid"/>: exact within the band a body's
+/// contact can reach — the largest kit collider extent at the world's largest body scale, plus the contact skin,
+/// plus the grid's own slack — and the grid's corner bound beyond it. The grid covers every finite instance bound in
+/// the program padded by <see cref="GridPadding"/>; a query outside it reads the exact program. The band is read
+/// from the kits and the scale row at build; a live whole-row upsert raising the scale row's ceiling past the band
+/// takes effect at the next solid rebuild, and until then a body scaled beyond the old ceiling can be pushed out of
+/// a surface by up to the grid's slack more than its exact penetration, never less.</para>
+/// <para>A solid screen's contact box is axis-aligned because the renderer only ever <c>Translate</c>s a screen slab —
+/// a screen's right/up is a UV frame only, never a geometry rotation (see <see cref="SdfProgramBuilder"/>'s
+/// <c>ScreenSlab</c> overload doc). Orienting a screen volume for real is a two-surface arc — render and contact must
+/// both rotate together — and neither does today.</para>
+/// <para>The field's ambient "up" is world <c>+Y</c> unless the world authors
+/// <see cref="WorldContactRequirement.GradientDerivedUp"/>, which derives it from the field gradient instead (a
+/// planetoid, an inverted ceiling, or the inside of a sphere are all walkable). Contact resolution receives the
+/// body's already-resolved ambient up separately, so authored gravity may still define another walkability axis.</para>
+/// <para>Immutable and per-revision: it holds no per-body state, so one instance is shared by reference across every
 /// bodies and installing a rebuild is a single reference swap on <see cref="WorldServer"/>. The wrapped
-/// <see cref="SdfFieldEvaluator"/> holds only a managed <c>CompiledInstruction[]</c> (no unmanaged handle), so a replaced
-/// instance needs no disposal.</para>
+/// <see cref="SdfFieldEvaluator"/> holds only a managed <c>CompiledInstruction[]</c>, so a replaced instance needs no
+/// disposal.</para>
 /// <para>The "which op can be solid" ceiling is <see cref="SdfFieldEvaluator"/>'s warp-free excluded-op set:
 /// <see cref="TryBuild"/> forwards the constructor's <see cref="ArgumentException"/> message verbatim as its reject
 /// reason, so <see cref="WorldServer"/> turns an unsupported solid into a loud apply-time rejection instead of a
 /// constructor throw at install time.</para>
-/// <para>Only collider-bearing kits are solved. Under <see cref="WorldContactRequirement.GradientDerivedUp"/> each
-/// iteration spends six samples on the body-root up gradient (the central-difference probe); a flat-up world spends
-/// zero there (the constant <c>+Y</c> short-circuits before the evaluator). A
-/// capsule then spends at most 1,033 samples on its non-embedded worst case: two endpoint distances, a 512-sample
-/// forward trace, a 512-sample reverse trace, one midpoint distance, and a six-sample midpoint gradient (the march no
-/// longer takes a gradient tap on the trace hits themselves — see <see cref="Puck.SignedDistance.Queries.RayHit.Normal"/>'s
-/// remarks). Sphere and box volumes spend at most seven samples each. Therefore the <see cref="WorldCollider.MaxVolumes"/>
-/// ceiling bounds one iteration at <c>6 + (1,033 * 16) = 16,534</c> samples gradient-up (<c>16,528</c> flat-up) and the
-/// validator's four-iteration shipped tuning at 66,136 (66,112 flat-up).
-/// The shipped single-capsule rows carry 1,039-sample iteration and 4,156-sample step ceilings
-/// gradient-up (1,033 / 4,132 flat-up). A penetrating-but-degenerate endpoint sphere (<c>0 &lt;= distance &lt;
-/// minimum</c>, gradient tap unmeasurable) still costs seven samples (the confirming <c>TryDistance</c> plus the failed
-/// <c>TryFieldGradient</c>) and pushes via the bare-position fallback rather than no-op, so the capsule ceiling is
-/// unchanged: the worst case remains two clean-miss endpoint spheres plus the full core sweep (<c>2 + 512 + 512 + 1 +
-/// 6</c>), and the degenerate-fallback path never exceeds it — two degenerate endpoint spheres cost fourteen samples
-/// total and skip the core resolve entirely.</para>
-/// <para><b>Embedded-iteration cost</b> (the opposing-face straddle fix — see <see cref="ResolveCapsule"/>,
-/// <see cref="TrialResolveSphere"/>, and <see cref="ExtractCapsule"/>): <see cref="ResolveCapsule"/> classifies
-/// before any committed push, but preserves the pre-hardening sequential (Gauss-Seidel) numerics bit-exactly on
-/// every non-embedded tick via defer-commit rather than sampling both centers from one shared snapshot. The lower
-/// center is sampled first (one bare <c>TryDistance</c> — identical to the pre-hardening hot path's first tap). If
-/// it samples embedded (<c>distance &lt; 0</c> — unreachable by ordinary locomotion alone, a 24-unit/s max fall
-/// speed at 240 Hz penetrating at most 0.1 per tick against a 0.35 radius, but reachable by a live geometry mutation
-/// that rebuilds and swaps the field under a standing body, or a kit collider swap, not only a non-swept teleport),
-/// the upper center is peeked (one more bare <c>TryDistance</c>, no push attempted) and the whole capsule extracts
-/// via <see cref="ExtractCapsule"/> — 2 samples total, +0 if the peek also finds upper embedded (direction is
-/// <c>up</c> unconditionally, magnitude reads both already-known depths, no further field query), +7 if the peek
-/// finds upper clean (a confirming <c>TryDistance</c> at the midpoint, then, only if that confirms, a six-tap
-/// <c>TryFieldGradient</c> for direction) — 2 or 9 total, exactly as before. If the lower center is not embedded,
-/// its ordinary push is computed as a trial by <see cref="TrialResolveSphere"/> — the identical arithmetic
-/// <see cref="ApplyPush"/>/<see cref="ApplyDegeneratePush"/> would run (same gradient tap, only on confirmed
-/// penetration, up to the existing seven-sample per-sphere ceiling) — but not committed to
-/// position/velocity/grounded yet. The upper center is then sampled exactly once, at the position the trial would
-/// produce if committed (one bare <c>TryDistance</c> — the identical second tap the pre-hardening hot path already
-/// paid, just gating a commit-or-discard decision instead of being unconditional). If that sample is embedded, the
-/// trial is discarded in full (no position push, no velocity edit, no grounded latch ever lands) and the whole
-/// capsule extracts via <see cref="ExtractCapsule"/> from the current, unpushed centers, reusing both already-taken
-/// samples — no third field query. This is the most expensive embedded shape: up to 7 (the lower's own discarded
-/// ordinary ceiling) + 1 (the upper's classify sample) + 7 (the one-sided extraction — bothEmbedded is impossible
-/// here, since lower is confirmed not embedded) = 15, or as low as 1 + 1 + 7 = 9 when the lower's trial was a clean
-/// miss. If the upper's sample is not embedded, the lower's trial commits (position/velocity/grounded now update for
-/// real) and the upper's own ordinary resolve reuses that same sample (no third query there either) — this is the
-/// non-embedded hot path, and its total cost — two distance samples, gradient taps only on confirmed per-sphere
-/// penetration — and its output are bit-identical to the pre-hardening path, because the trial computes the exact
-/// same formula the direct-apply path always did before either commits or discards. The 1,033-sample capsule
-/// ceiling (and the 16,534 / 66,136 totals it feeds) therefore still hold exactly as documented; nothing about this
-/// restructure touches the non-embedded worst case at all. A standalone sphere or box volume follows the same
-/// single-sample-then-optional-seven-sample shape at its own center (see <see cref="ResolveSphere"/>,
-/// <see cref="ResolveBox"/>), so their seven-sample ceiling is likewise unchanged.</para>
 /// </remarks>
 public sealed class WorldSolidField : IContactField {
+    // The same float-safety margin the client stamper adds around a placement's render reach, in world units.
+    private const float InstanceBoundMargin = 0.4f;
+    /// <summary>How far the distance grid extends past the outermost finite instance bound, in world units — the open
+    /// air around the solids where a body or a sight line is far from every surface and a corner bound answers.</summary>
+    public const float GridPadding = 32f;
+
     private static readonly FixedVector3 UnitY = new(
         X: FixedQ4816.Zero,
         Y: FixedQ4816.One,
         Z: FixedQ4816.Zero
     );
-    private static readonly FixedQ4816 CoreInset = FixedQ4816.FromDouble(value: 0.002);
 
+    private readonly IFieldEvaluator m_contactField;
+    // The field every query reads: the banded evaluator when a grid is authored, the exact program otherwise.
+    private readonly IFieldEvaluator m_field;
     private readonly SdfFieldEvaluator m_evaluator;
-    private readonly FixedQ4816 m_gradientProbe;
-    private readonly bool m_gradientUp;
-    private readonly FixedQ4816 m_groundedThreshold;
-    private readonly int m_iterations;
-    private readonly FixedQ4816 m_skin;
+    private readonly SdfBandedFieldEvaluator? m_banded;
+    private readonly FieldLattice? m_lattice;
+    private readonly SdfProgram m_program;
+    private readonly IWorldQuery m_query;
+    private readonly FixedFieldContactSolver m_solver;
+    // The largest extent any kit collider volume reaches from its own sample point, at the world's largest body
+    // scale, in world units; the contact skin is added per tuning.
+    private readonly FixedQ4816 m_kitReach;
+    // The hold policy per compiled material id — TryBuild adds exactly one material per solid screen and per solid
+    // placement, so a probe's reported material id IS the row that composed it. A material id outside these (the
+    // field lattice's own terrain, which no placement row owns) falls back to the world's collision.defaultHold.
+    // How far back along a grip ray the surface gradient is sampled. A hit point sits ON the isosurface, where the
+    // sign of the field is exactly what is in question; one contact-skin-scale step back into open space gives the
+    // gradient a side to face. Small enough that no authored surface curves meaningfully across it.
+    private static readonly FixedQ4816 GradientBackoff = FixedQ4816.FromDouble(value: 0.02);
 
-    private WorldSolidField(SdfFieldEvaluator evaluator, int instructionCount, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning) {
+    private readonly bool[] m_holdableMaterials;
+    private readonly bool[] m_holdableGrantedByOverride;
+    private readonly bool m_defaultGrip;
+
+    private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, FieldLattice? lattice, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
+        m_program = program;
         m_evaluator = evaluator;
-        InstructionCount = instructionCount;
+        m_kitReach = kitReach;
+        m_lattice = lattice;
+        m_holdableMaterials = holdableMaterials;
+        m_holdableGrantedByOverride = holdableGrantedByOverride;
+        m_defaultGrip = defaultGrip;
+        InstructionCount = program.Instructions.Count;
         PlacementShapeCount = placementShapeCount;
-        Census = census;
-        m_skin = tuning.ContactSkin;
-        m_groundedThreshold = tuning.GroundedThreshold;
-        m_gradientProbe = tuning.GradientProbe;
-        m_iterations = Math.Max(
-            val1: 1,
-            val2: tuning.MaxIterations
+
+        if (grid is null) {
+            m_field = evaluator;
+            m_query = evaluator;
+        } else {
+            m_banded = new SdfBandedFieldEvaluator(
+                contactReach: (kitReach + tuning.ContactSkin),
+                exact: evaluator,
+                grid: grid
+            );
+            m_field = m_banded;
+            m_query = m_banded;
+        }
+
+        Census = (census with {
+            SolidBakeHash = BakeHash(
+                cellSize: tuning.GridCellSize,
+                contactReach: (kitReach + tuning.ContactSkin),
+                program: program
+            ),
+        });
+        // A field lattice's height columns union with the authored solids for contact; sweeps and line of sight
+        // still march the authored program alone.
+        m_contactField = ((lattice is null)
+            ? m_field
+            : new UnionField(
+                a: m_field,
+                b: new FieldLatticeSolid(lattice: lattice)
+            ));
+        m_solver = new FixedFieldContactSolver(
+            contactSkin: tuning.ContactSkin,
+            field: m_contactField,
+            gradientProbe: tuning.GradientProbe,
+            gradientUp: tuning.GradientUp,
+            groundedThreshold: tuning.GroundedThreshold,
+            maxIterations: tuning.MaxIterations,
+            query: m_query
         );
-        m_gradientUp = tuning.GradientUp;
     }
 
-    /// <inheritdoc/>
+    /// <summary>Gets the analytic collider census measured from the same definition, so the read-back is comparable
+    /// whichever provider the world selected, carrying this field's <see cref="WorldContactCensus.SolidBakeHash"/>.</summary>
     public WorldContactCensus Census { get; }
+    /// <summary>Gets the field value below which every query reads the exact program: the contact band when a grid is
+    /// authored, zero otherwise.</summary>
+    public FixedQ4816 ContactBand => (m_banded?.Band ?? FixedQ4816.Zero);
     /// <summary>Gets the field evaluator the <c>world.collision.probe</c> verb reads distance/material/gradient from, so the
-    /// surface the simulation itself solves against is directly observable.</summary>
-    public IFieldEvaluator Evaluator => m_evaluator;
+    /// surface the simulation itself solves against is directly observable — beyond <see cref="ContactBand"/> it
+    /// reads the grid's corner bound, as the simulation does.</summary>
+    public IFieldEvaluator Evaluator => m_field;
+    /// <summary>Gets the baked distance grid, or <see langword="null"/> when the world authors no cell size or the
+    /// program has nothing finite to cover.</summary>
+    public SdfDistanceGrid? Grid => m_banded?.Grid;
+    /// <summary>Gets the deterministic gameplay-query view over the same compiled solid program.</summary>
+    public IWorldQuery Query => m_query;
     /// <summary>Gets a value indicating whether this field's collision tuning authors <see cref="WorldContactRequirement.GradientDerivedUp"/>.</summary>
-    public bool GradientUp => m_gradientUp;
+    public bool GradientUp => m_solver.GradientUp;
     /// <summary>Gets the compiled program's instruction count — the <c>world.collision.status</c> read-back (a rough size of
     /// the solid field the solver walks).</summary>
     public int InstructionCount { get; }
     /// <summary>Gets the placement primitive-shape emissions in the compiled field.</summary>
     public long PlacementShapeCount { get; }
 
-    // A degenerate gradient after confirmed penetration means the sample point is mirror-symmetric in the field —
-    // no measured surface normal exists. Eject by bare position push along reverse-of-motion (the de-tunneling
-    // direction), or up for a body at rest; touch nothing else: the direction is not a measured normal, so clamping
-    // velocity along it would fabricate physics, and it must never ground a body. Defensive — no shipped world's
-    // geometry reaches it. The claim depends on every call site gating this to a confirmed, non-interior
-    // penetration (0 <= distance < minimum) before the gradient tap that can degenerate; all three call sites
-    // (ResolveSphere, ResolveBox, ResolveCore) share that gate.
-    private void ApplyDegeneratePush(ref FixedVector3 position, in FixedVector3 velocity, FixedQ4816 penetration, FixedVector3 up) {
-        var direction = (-velocity).Normalize();
-
-        if (direction == FixedVector3.Zero) {
-            direction = up;
-        }
-
-        position += (direction * penetration);
-    }
-    // Extraction push for a single embedded center (distance < 0, already confirmed by the caller's TryDistance —
-    // this method pays only the direction gradient tap). Direction is the center's own gradient; a degenerate
-    // (unmeasured) gradient falls back to `up` directly, never to -velocity like ApplyDegeneratePush, since an
-    // embedded center's stored velocity carries no reliable de-tunneling direction. Clamps approach velocity along
-    // the extraction direction like an ordinary contact push, but never grounds. Callers own the iteration's one
-    // extraction authority; this method does not check or set it. Takes no lastNormal parameter by design: a body
-    // ejected from inside a wall did not just get blocked by it.
-    private void ApplyExtractionPush(ref FixedVector3 position, ref FixedVector3 velocity, FixedPosition coord, FixedQ4816 magnitude, FixedVector3 up) {
-        var direction = (m_evaluator.TryFieldGradient(
-            epsilon: m_gradientProbe,
-            gradient: out var gradient,
-            position: coord
-        )
-            ? gradient
-            : up
-        );
-
-        position += (direction * magnitude);
-
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: direction
-        );
-
-        if (into < FixedQ4816.Zero) {
-            velocity -= (direction * into);
-        }
-    }
-    private void ApplyPush(ref FixedVector3 position, ref FixedVector3 velocity, FixedVector3 normal,
-        FixedQ4816 penetration, FixedVector3 up, ref bool grounded, ref FixedVector3 lastNormal) {
-        position += (normal * penetration);
-
-        var walkable = (FixedVector3.Dot(
-            left: normal,
-            right: up
-        ) >= m_groundedThreshold);
-
-        if (walkable) {
-            grounded = true;
-        } else {
-            // world.contacts' obstruction witness tracks only a NON-walkable push (a wall, not the ground/a ramp) —
-            // a standing body re-resolves its ground contact every solver iteration, so an unconditional "last push"
-            // would have the ground overwrite a genuine wall push from an earlier iteration in the SAME tick and
-            // hide it again.
-            lastNormal = normal;
-        }
-
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: normal
-        );
-
-        if (into < FixedQ4816.Zero) {
-            velocity -= (normal * into);
-        }
-    }
-    // Commits a trial computed by TrialResolveSphere: applies its position/velocity deltas, latches grounded if
-    // the trial says so (a one-way latch — never cleared, matching ApplyPush), and records the obstruction witness
-    // exactly like ApplyPush's else-branch — only when the trial was non-walkable AND carries a measured normal
-    // (never for a degenerate-gradient trial, matching ApplyDegeneratePush's silence on lastNormal).
-    private static void CommitSpherePush(ref FixedVector3 position, ref FixedVector3 velocity, ref bool grounded, ref FixedVector3 lastNormal, in SphereResolveTrial trial) {
-        position += trial.PositionDelta;
-        velocity += trial.VelocityDelta;
-
-        if (trial.Grounded) {
-            grounded = true;
-        } else if (trial.Normal is { } normal) {
-            lastNormal = normal;
-        }
-    }
-    // Capsule extraction — the opposing-face straddle escape: a capsule can land with both spheres inside one
-    // solid, straddling its Y-midplane, not only via a non-swept teleport but any live geometry mutation that
-    // rebuilds and swaps the field under a standing body, or a kit collider swap. Per-sphere resolution is the
-    // failure mode there: the lower center pushes toward the nearer floor face, the upper toward the roof, against
-    // one shared position, netting to a stable fixed point (a transient intermediate push can even latch `grounded`
-    // dishonestly). One authority replaces both: push the whole capsule one way, and only one volume claims that
-    // authority per body per iteration (see the Resolve loop).
-    //
-    // Magnitude keys to embed depth, not midpoint clearance: the max, over whichever center(s) sample embedded, of
-    // that center's own already-sampled |distance| + (radius + skin) — never the midpoint's clearance to whatever
-    // surface happens to be nearest it. Keying to midpoint clearance is backwards (a clear midpoint between two
-    // embedded centers means a shallow straddle, not a deep one) and admits a period-2 limit cycle: overshoot past
-    // the surface on one push, then overshoot back the next iteration. Keying to the embedded center's own measured
-    // depth bounds the push at the actual embed and cannot construct that cycle. A two-sided straddle takes the max
-    // of both centers' depths with no further field query; a one-sided embed still needs a direction (below), which
-    // is the only case that samples the midpoint.
-    //
-    // The position push clamps approach velocity along the extraction direction exactly like an ordinary contact
-    // push, but never grounds: extraction is honest displacement, never a resolved contact. Once no center samples
-    // inside geometry, the next iteration finds the ordinary per-sphere/core path clean and settles the body
-    // honestly on the exterior surface it exited through.
-    //
-    // Direction: a two-sided straddle forces `up` rather than trusting the midpoint's own gradient, because the
-    // capsule's sphere-center midpoint does not generally coincide with the straddled solid's own symmetry plane —
-    // a midpoint on the lower side of an off-center straddle can still read a gradient pointing further down even
-    // though the upper sphere has already crossed into the upper half, which would tunnel the body downward through
-    // the floor instead of extracting it upward. `up` is authored, never zero, and is the same per-iteration value
-    // TryUp resolved, so it matches gradient-derived-up worlds too. A one-sided embed keeps the midpoint-gradient
-    // direction instead, since it has no opposing-authority conflict to mis-resolve, gated behind a confirming
-    // TryDistance so a program with no geometry to answer never pays for a gradient tap guaranteed to fail.
-    //
-    // Known residual: this is a floor-biased heuristic. A two-sided straddle under a ceiling still forces `up`,
-    // extracting the body through the overhead structure rather than back down into the room, and a pitched capsule
-    // (not Y-aligned) breaks the "split across a Y-midplane" framing entirely, since `up` need not align with
-    // either sphere's own local axis.
-    private bool ExtractCapsule(ref FixedVector3 position, ref FixedVector3 velocity, FixedVector3 lowerCenter, FixedVector3 upperCenter,
-        FixedQ4816 lowerDistance, FixedQ4816 upperDistance, bool lowerEmbedded, bool upperEmbedded, FixedQ4816 radius, FixedVector3 up) {
-        var bothEmbedded = (lowerEmbedded && upperEmbedded);
-        var minimum = (radius + m_skin);
-        var lowerDepth = (lowerEmbedded
-            ? FixedQ4816.Abs(value: lowerDistance)
-            : FixedQ4816.Zero
-        );
-        var upperDepth = (upperEmbedded
-            ? FixedQ4816.Abs(value: upperDistance)
-            : FixedQ4816.Zero
-        );
-        var depth = ((lowerDepth > upperDepth)
-            ? lowerDepth
-            : upperDepth
-        );
-        var magnitude = (depth + minimum);
-        var midpoint = ((lowerCenter + upperCenter) / FixedQ4816.FromInteger(value: 2L));
-        var coord = FixedPosition.FromLocal(local: midpoint);
-        FixedVector3 direction;
-
-        if (bothEmbedded) {
-            direction = up;
-        } else if (
-            m_evaluator.TryDistance(
-            distance: out _,
-            material: out _,
-            position: coord
-        ) &&
-            m_evaluator.TryFieldGradient(
-            epsilon: m_gradientProbe,
-            gradient: out var gradient,
-            position: coord
-        )
-        ) {
-            direction = gradient;
-        } else {
-            direction = up;
-        }
-
-        position += (direction * magnitude);
-
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: direction
-        );
-
-        if (into < FixedQ4816.Zero) {
-            velocity -= (direction * into);
-        }
-
-        return true;
-    }
-    private bool ResolveBox(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume, FixedVector3 up, ref bool grounded, ref bool extracted, ref FixedVector3 lastNormal) {
-        var center = (position + orientation.Rotate(vector: volume.Center));
-        var coord = FixedPosition.FromLocal(local: center);
-
-        if (!m_evaluator.TryDistance(
-            distance: out var distance,
-            material: out _,
-            position: coord
-        )) {
-            return false;
-        }
-
-        // The tight per-normal support needs the gradient tap, which has not run yet — pre-screen against the
-        // orientation-independent worst case (Cauchy-Schwarz: no unit normal projects the half-extents past their
-        // vector length) so a clean miss never pays for a gradient sample.
-        var conservativeMinimum = (volume.HalfExtents.Length + m_skin);
-
-        if (distance >= conservativeMinimum) {
-            return false;
-        }
-
-        if (distance < FixedQ4816.Zero) {
-            // EMBEDDED (center strictly inside geometry — see ResolveSphere's remarks on the opposing-face straddle
-            // class): extraction push along the center's own gradient (degenerate -> up), sized off the
-            // conservative bound — extraction only needs to clear the outer envelope, not find the tightest
-            // support. Claims the iteration's one extraction authority (see the Resolve loop) if nothing already
-            // has; skips entirely (no push at all this iteration) if something already claimed it.
-            if (extracted) {
-                return false;
-            }
-
-            extracted = true;
-
-            ApplyExtractionPush(
-                position: ref position,
-                velocity: ref velocity,
-                coord: coord,
-                magnitude: (FixedQ4816.Abs(value: distance) + conservativeMinimum),
-                up: up
-            );
-
-            return true;
-        }
-
-        if (!m_evaluator.TryFieldGradient(
-            epsilon: m_gradientProbe,
-            gradient: out var normal,
-            position: coord
-        )) {
-            ApplyDegeneratePush(
-                penetration: (conservativeMinimum - distance),
-                position: ref position,
-                up: up,
-                velocity: in velocity
-            );
-
-            return true;
-        }
-
-        var rotation = (orientation * volume.Rotation).Normalize();
-        var localNormal = rotation.RotateInverse(vector: normal);
-        var support = (((FixedQ4816.Abs(value: localNormal.X) * volume.HalfExtents.X) +
-                       (FixedQ4816.Abs(value: localNormal.Y) * volume.HalfExtents.Y)) +
-                       (FixedQ4816.Abs(value: localNormal.Z) * volume.HalfExtents.Z));
-        var minimum = (support + m_skin);
-
-        if (distance >= minimum) {
-            return false;
-        }
-
-        ApplyPush(
-            grounded: ref grounded,
-            lastNormal: ref lastNormal,
-            normal: normal,
-            penetration: (minimum - distance),
-            position: ref position,
-            up: up,
-            velocity: ref velocity
-        );
-
-        return true;
-    }
-    // Resolve one capsule volume: classify both centers as embedded or not BEFORE any push commits, without
-    // changing the ordinary (non-embedded) path's sequential (Gauss-Seidel) numerics. Sampling both centers from one
-    // shared pre-push snapshot would also classify correctly, but would change the ordinary path's trajectory on
-    // every tick where both centers are simultaneously in ordinary contact (Jacobi instead of sequential), so it is
-    // not used here.
-    //
-    // Lower is sampled first (one bare TryDistance). If it is embedded, upper is peeked (one more bare TryDistance,
-    // no push attempted) purely to tell a two-sided straddle from a one-sided embed, and the whole capsule extracts
-    // via ExtractCapsule.
-    //
-    // If lower is not embedded, its ordinary push is computed as a trial (TrialResolveSphere) but not committed.
-    // Upper is then sampled exactly once, at the position the trial would produce if committed. If that sample is
-    // embedded, the trial is discarded wholesale (no position push, no velocity edit, no grounded latch) and the
-    // capsule extracts via ExtractCapsule from the current, unpushed centers, reusing both already-taken samples. If
-    // upper's sample is clean, the trial commits for real and upper's own ordinary resolve reuses that same sample
-    // (ResolveSphere's presampledDistance parameter) — bit-identical to the sequential path, since the trial's
-    // arithmetic is that path's arithmetic, just deferred by one branch.
-    private bool ResolveCapsule(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation,
-        in FixedBodyColliderVolume volume, FixedVector3 up, ref bool grounded, ref bool extracted, ref FixedVector3 lastNormal) {
-        var lowerCenter = (position + orientation.Rotate(vector: volume.Center));
-        var lowerSampled = m_evaluator.TryDistance(
-            position: FixedPosition.FromLocal(local: lowerCenter),
-            distance: out var lowerDistance,
-            material: out _
-        );
-        var lowerEmbedded = (lowerSampled && (lowerDistance < FixedQ4816.Zero));
-
-        if (lowerEmbedded) {
-            var peekCenter = (position + orientation.Rotate(vector: volume.Endpoint));
-            var upperPeeked = m_evaluator.TryDistance(
-                position: FixedPosition.FromLocal(local: peekCenter),
-                distance: out var upperPeek,
-                material: out _
-            );
-            var upperPeekEmbedded = (upperPeeked && (upperPeek < FixedQ4816.Zero));
-
-            if (extracted) {
-                return false;
-            }
-
-            extracted = true;
-
-            return ExtractCapsule(
-                position: ref position,
-                velocity: ref velocity,
-                lowerCenter: lowerCenter,
-                upperCenter: peekCenter,
-                lowerDistance: lowerDistance,
-                upperDistance: upperPeek,
-                lowerEmbedded: true,
-                upperEmbedded: upperPeekEmbedded,
-                radius: volume.Radius,
-                up: up
-            );
-        }
-
-        var trial = (lowerSampled
-            ? TrialResolveSphere(
-                center: lowerCenter,
-                velocity: in velocity,
-                radius: volume.Radius,
-                up: up,
-                distance: lowerDistance
-            )
-            : default
-        );
-        var trialPosition = (trial.Pushed
-            ? (position + trial.PositionDelta)
-            : position
-        );
-        var upperCenter = (trialPosition + orientation.Rotate(vector: volume.Endpoint));
-        var upperSampled = m_evaluator.TryDistance(
-            position: FixedPosition.FromLocal(local: upperCenter),
-            distance: out var upperDistance,
-            material: out _
-        );
-        var upperEmbedded = (upperSampled && (upperDistance < FixedQ4816.Zero));
-
-        if (upperEmbedded) {
-            // Discard the trial WHOLESALE — no committed push, no grounded, no velocity edit — and classify from
-            // the CURRENT (unpushed) centers: this is what defect 2 actually demands. lowerDistance/upperDistance
-            // are already the correct samples for extraction's embed-depth accounting (Item 2) — no third query.
-            if (extracted) {
-                return false;
-            }
-
-            extracted = true;
-
-            var currentLowerCenter = (position + orientation.Rotate(vector: volume.Center));
-            var currentUpperCenter = (position + orientation.Rotate(vector: volume.Endpoint));
-
-            return ExtractCapsule(
-                position: ref position,
-                velocity: ref velocity,
-                lowerCenter: currentLowerCenter,
-                upperCenter: currentUpperCenter,
-                lowerDistance: lowerDistance,
-                upperDistance: upperDistance,
-                lowerEmbedded: false,
-                upperEmbedded: true,
-                radius: volume.Radius,
-                up: up
-            );
-        }
-
-        var pushed = false;
-
-        if (trial.Pushed) {
-            CommitSpherePush(
-                grounded: ref grounded,
-                lastNormal: ref lastNormal,
-                position: ref position,
-                trial: in trial,
-                velocity: ref velocity
-            );
-            pushed = true;
-        }
-
-        if (upperSampled) {
-            pushed |= ResolveSphere(
-                position: ref position,
-                velocity: ref velocity,
-                center: upperCenter,
-                radius: volume.Radius,
-                up: up,
-                grounded: ref grounded,
-                allowEmbedExtraction: false,
-                distance: out _,
-                extracted: ref extracted,
-                lastNormal: ref lastNormal,
-                presampledDistance: upperDistance
-            );
-        }
-
-        if (pushed) {
-            return true;
-        }
-
-        lowerCenter = (position + orientation.Rotate(vector: volume.Center));
-        var coreUpperCenter = (position + orientation.Rotate(vector: volume.Endpoint));
-        var core = (coreUpperCenter - lowerCenter);
-        var coreLength = core.Length;
-
-        return (
-            (coreLength > FixedQ4816.Zero) &&
-            ResolveCore(
-            position: ref position,
-            velocity: ref velocity,
-            lowerCenter: lowerCenter,
-            coreLength: coreLength,
-            radius: volume.Radius,
-            direction: (core / coreLength),
-            up: up,
-            grounded: ref grounded,
-            extracted: ref extracted,
-            lastNormal: ref lastNormal
-        )
-        );
-    }
-    // Sweeps the capsule CORE (the segment between the two endpoint spheres) via a forward and backward SphereCast,
-    // then samples the midpoint of the two hits for a contact. distance < 0 at that midpoint means the swept core
-    // itself is embedded — a thin slab through the capsule waist that BOTH endpoint centers can sample clean of (see
-    // ResolveCapsule's remarks): an interior sample, not an ordinary contact, so it extracts (Item 5's guard below)
-    // exactly like a capsule-endpoint or standalone-volume embed rather than running the ordinary ApplyPush path,
-    // which would push, clamp, AND ground from an interior sample.
-    private bool ResolveCore(ref FixedVector3 position, ref FixedVector3 velocity, FixedVector3 lowerCenter,
-        FixedQ4816 coreLength, FixedQ4816 radius, FixedVector3 direction, FixedVector3 up, ref bool grounded, ref bool extracted, ref FixedVector3 lastNormal) {
-        var sweptLength = (coreLength - (CoreInset + CoreInset));
-
-        if (sweptLength <= FixedQ4816.Zero) {
-            return false;
-        }
-
-        var minimum = (radius + m_skin);
-        var start = FixedPosition.FromLocal(local: (lowerCenter + (direction * CoreInset)));
-
-        if (!m_evaluator.SphereCast(
-            dir: direction,
-            hit: out var forward,
-            maxDist: sweptLength,
-            origin: start,
-            radius: minimum
-        )) {
-            return false;
-        }
-
-        var end = FixedPosition.FromLocal(local: (lowerCenter + (direction * (coreLength - CoreInset))));
-        var midpointDistance = (CoreInset + forward.Distance);
-
-        if (m_evaluator.SphereCast(
-            dir: -direction,
-            hit: out var backward,
-            maxDist: sweptLength,
-            origin: end,
-            radius: minimum
-        )) {
-            var backwardDistance = ((coreLength - CoreInset) - backward.Distance);
-
-            midpointDistance = ((midpointDistance + backwardDistance) / FixedQ4816.FromInteger(value: 2L));
-        }
-
-        var midpoint = FixedPosition.FromLocal(local: (lowerCenter + (direction * midpointDistance)));
-
-        if (
-            !m_evaluator.TryDistance(
-            distance: out var distance,
-            material: out _,
-            position: midpoint
-        ) ||
-            (distance >= minimum)
-        ) {
-            return false;
-        }
-
-        if (distance < FixedQ4816.Zero) {
-            // EMBEDDED at the swept-core midpoint (see this method's remarks): extraction, not an ordinary contact —
-            // never grounds, and cedes the iteration's one extraction authority (see the Resolve loop) exactly like
-            // every other embedded volume/center.
-            if (extracted) {
-                return false;
-            }
-
-            extracted = true;
-
-            ApplyExtractionPush(
-                position: ref position,
-                velocity: ref velocity,
-                coord: midpoint,
-                magnitude: (FixedQ4816.Abs(value: distance) + minimum),
-                up: up
-            );
-
-            return true;
-        }
-
-        if (!m_evaluator.TryFieldGradient(
-            epsilon: m_gradientProbe,
-            gradient: out var normal,
-            position: midpoint
-        )) {
-            ApplyDegeneratePush(
-                penetration: (minimum - distance),
-                position: ref position,
-                up: up,
-                velocity: in velocity
-            );
-
-            return true;
-        }
-
-        ApplyPush(
-            grounded: ref grounded,
-            lastNormal: ref lastNormal,
-            normal: normal,
-            penetration: (minimum - distance),
-            position: ref position,
-            up: up,
-            velocity: ref velocity
-        );
-
-        return true;
-    }
-    // Depenetrate one sphere volume from the field: sample the distance at its center (the common cost — one
-    // TryDistance), and only on actual penetration take the gradient tap for the push direction. Grounds the body
-    // when the surface normal's alignment with the body up clears the compiled walkable-slope threshold.
-    //
-    // distance < 0 means the center itself sits strictly inside geometry — reachable not just by a non-swept
-    // teleport but by a live geometry mutation that rebuilds and swaps the field under a standing body, or a kit
-    // collider swap; ordinary locomotion's worst-case fall penetration never closes a 0.35 radius to zero. A
-    // standalone sphere volume (allowEmbedExtraction: true) extracts itself along its own gradient, claiming the
-    // iteration's one extraction authority if nothing already has. A capsule's embed classification never routes
-    // through this method — ResolveCapsule samples both centers directly so it can decide before any push commits —
-    // so this method's embed branch (allowEmbedExtraction: false) is reachable only defensively.
-    //
-    // The embed branch below never touches lastNormal — it returns through ApplyExtractionPush, not ApplyPush — so
-    // a body ejected from embedded geometry never reports a wall obstruction; only the ordinary confirmed-
-    // penetration branch's ApplyPush call can record one.
-    private bool ResolveSphere(ref FixedVector3 position, ref FixedVector3 velocity, FixedVector3 center, FixedQ4816 radius, FixedVector3 up, ref bool grounded, bool allowEmbedExtraction, out FixedQ4816 distance, ref bool extracted, ref FixedVector3 lastNormal, FixedQ4816? presampledDistance = null) {
-        var coord = FixedPosition.FromLocal(local: center);
-
-        if (presampledDistance is { } sampled) {
-            distance = sampled;
-        } else if (!m_evaluator.TryDistance(
-            distance: out distance,
-            material: out _,
-            position: coord
-        )) {
-            return false;
-        }
-
-        var minimum = (radius + m_skin);
-
-        if (distance >= minimum) {
-            return false;
-        }
-
-        if (distance < FixedQ4816.Zero) {
-            if (!allowEmbedExtraction) {
-                return false;
-            }
-
-            if (extracted) {
-                return false;
-            }
-
-            extracted = true;
-
-            ApplyExtractionPush(
-                position: ref position,
-                velocity: ref velocity,
-                coord: coord,
-                magnitude: (FixedQ4816.Abs(value: distance) + minimum),
-                up: up
-            );
-
-            return true;
-        }
-
-        // Penetration confirmed, center outside geometry — NOW take the gradient tap for the surface normal.
-        if (!m_evaluator.TryFieldGradient(
-            epsilon: m_gradientProbe,
-            gradient: out var normal,
-            position: coord
-        )) {
-            ApplyDegeneratePush(
-                penetration: (minimum - distance),
-                position: ref position,
-                up: up,
-                velocity: in velocity
-            );
-
-            return true;
-        }
-
-        ApplyPush(
-            grounded: ref grounded,
-            lastNormal: ref lastNormal,
-            normal: normal,
-            penetration: (minimum - distance),
-            position: ref position,
-            up: up,
-            velocity: ref velocity
-        );
-
-        return true;
-    }
-    private static FixedQ4816 SmallestSweepRadius(ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var smallest = FixedQ4816.MaxValue;
-
-        foreach (ref readonly var volume in volumes) {
-            var radius = ((volume.Kind == FixedBodyColliderKind.Box)
-                ? FixedQ4816.Min(
-                    x: volume.HalfExtents.X,
-                    y: FixedQ4816.Min(
-                        x: volume.HalfExtents.Y,
-                        y: volume.HalfExtents.Z
-                    )
-                )
-                : volume.Radius
-            );
-
-            if (
-                (radius > FixedQ4816.Zero) &&
-                (radius < smallest)
-            ) {
-                smallest = radius;
-            }
-        }
-        return ((smallest == FixedQ4816.MaxValue)
-            ? FixedQ4816.Zero
-            : smallest
-        );
-    }
-    // Computes the would-be ordinary push for a sphere center already confirmed not embedded (distance >= 0, sampled
-    // by the caller) without applying it to position/velocity/grounded: the caller samples the other center at the
-    // position this trial's PositionDelta would produce if committed, and only actually commits (CommitSpherePush)
-    // once that second sample proves clean. The arithmetic below is a byte-for-byte mirror of
-    // ApplyPush/ApplyDegeneratePush — a change to either of those two methods must be mirrored here too.
-    private SphereResolveTrial TrialResolveSphere(FixedVector3 center, in FixedVector3 velocity, FixedQ4816 radius, FixedVector3 up, FixedQ4816 distance) {
-        var minimum = (radius + m_skin);
-
-        if (distance >= minimum) {
-            return default;
-        }
-
-        var coord = FixedPosition.FromLocal(local: center);
-        var penetration = (minimum - distance);
-
-        if (!m_evaluator.TryFieldGradient(
-            epsilon: m_gradientProbe,
-            gradient: out var normal,
-            position: coord
-        )) {
-            var direction = (-velocity).Normalize();
-
-            if (direction == FixedVector3.Zero) {
-                direction = up;
-            }
-
-            return new SphereResolveTrial(
-                Pushed: true,
-                PositionDelta: (direction * penetration),
-                VelocityDelta: FixedVector3.Zero,
-                Grounded: false,
-                Normal: null
-            );
-        }
-
-        var grounded = (FixedVector3.Dot(
-            left: normal,
-            right: up
-        ) >= m_groundedThreshold);
-        var into = FixedVector3.Dot(
-            left: velocity,
-            right: normal
-        );
-        var velocityDelta = ((into < FixedQ4816.Zero)
-            ? -(normal * into)
-            : FixedVector3.Zero
-        );
-
-        return new SphereResolveTrial(
-            Grounded: grounded,
-            Normal: normal,
-            PositionDelta: (normal * penetration),
-            Pushed: true,
-            VelocityDelta: velocityDelta
-        );
-    }
-
     /// <summary>Queries the wrapped deterministic SDF evaluator for an unobstructed segment.</summary>
+    /// <param name="from">The segment start.</param>
+    /// <param name="to">The segment end.</param>
+    /// <returns><see langword="true"/> when nothing solid lies between the two points.</returns>
     public bool LineOfSight(in FixedVector3 from, in FixedVector3 to) =>
-        m_evaluator.LineOfSight(
-            from: FixedPosition.FromLocal(local: from),
-            to: FixedPosition.FromLocal(local: to)
+        m_solver.LineOfSight(
+            from: in from,
+            to: in to
         );
-    /// <summary>Reads the field at a point the way the solver does — the <c>world.collision.probe</c> diagnostic. The
-    /// gradient uses the same authored probe step the resolver walks, so the printed direction is exactly the surface
-    /// normal a contact push reads. It is the body UP axis only under
-    /// <see cref="WorldContactRequirement.GradientDerivedUp"/>; a flat-up world's bodies integrate against constant
-    /// <c>+Y</c> regardless of what this prints.</summary>
-    /// <param name="position">The world-space point to sample.</param>
-    /// <param name="distance">The signed nearest-surface distance (negative inside geometry), when the field answered.</param>
+    /// <summary>Reads the compiled field at a point — the <c>world.collision.probe</c> verb's observation.</summary>
+    /// <param name="position">The world-space point to read.</param>
+    /// <param name="distance">The signed nearest-surface distance, when the field answered.</param>
     /// <param name="material">The nearest surface's material id, when the field answered.</param>
-    /// <param name="gradient">The unit gradient (up direction), or <see cref="FixedVector3.Zero"/> on a degenerate query.</param>
-    /// <returns><see langword="true"/> when the field has geometry to answer against.</returns>
-    public bool Probe(in FixedVector3 position, out FixedQ4816 distance, out int material, out FixedVector3 gradient) {
-        var coord = FixedPosition.FromLocal(local: position);
-
-        gradient = FixedVector3.Zero;
-
-        if (!m_evaluator.TryDistance(
+    /// <param name="gradient">The unit-length field gradient, or zero where none exists.</param>
+    /// <returns><see langword="true"/> when the field answered.</returns>
+    public bool Probe(in FixedVector3 position, out FixedQ4816 distance, out int material, out FixedVector3 gradient) =>
+        m_solver.Probe(
             distance: out distance,
-            material: out material,
-            position: coord
-        )) {
-            return false;
-        }
-
-        _ = m_evaluator.TryFieldGradient(
-            epsilon: m_gradientProbe,
             gradient: out gradient,
-            position: coord
+            material: out material,
+            position: in position
         );
-
-        return true;
-    }
     /// <inheritdoc/>
-    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        var grounded = false;
-        var lastNormal = FixedVector3.Zero;
-
-        for (var iteration = 0; (iteration < m_iterations); iteration++) {
-            if (!TryUp(
-                position: in position,
-                up: out var up
-            )) {
-                break;
-            }
-
-            var pushed = false;
-            // One extraction authority per body per iteration: a FromCreation collider compiles up to
-            // WorldCollider.MaxVolumes (16) sphere/box volumes, all sharing one position, so extracting more than
-            // one per iteration would tug-of-war. The first embedded volume this iteration claims extraction; every
-            // volume visited after it skips its own extraction and runs only ordinary non-embedded handling this
-            // pass. A skipped volume is re-classified next iteration against wherever the claiming volume moved
-            // the body.
-            var extracted = false;
-
-            foreach (var volume in volumes) {
-                pushed |= volume.Kind switch {
-                    FixedBodyColliderKind.Sphere => ResolveSphere(
-                    position: ref position,
-                    velocity: ref velocity,
-                    center: (position + orientation.Rotate(vector: volume.Center)),
-                    radius: volume.Radius,
-                    up: up,
-                    grounded: ref grounded,
-                    allowEmbedExtraction: true,
-                    distance: out _,
-                    extracted: ref extracted,
-                    lastNormal: ref lastNormal
-                ),
-                    FixedBodyColliderKind.Capsule => ResolveCapsule(
-                    extracted: ref extracted,
-                    grounded: ref grounded,
-                    lastNormal: ref lastNormal,
-                    orientation: in orientation,
-                    position: ref position,
-                    up: up,
-                    velocity: ref velocity,
-                    volume: in volume
-                ),
-                    FixedBodyColliderKind.Box => ResolveBox(
-                    extracted: ref extracted,
-                    grounded: ref grounded,
-                    lastNormal: ref lastNormal,
-                    orientation: in orientation,
-                    position: ref position,
-                    up: up,
-                    velocity: ref velocity,
-                    volume: in volume
-                ),
-                    _ => throw new InvalidOperationException(message: $"Unknown body collider kind {volume.Kind}."),
-                };
-            }
-
-            if (!pushed) {
-                break;
-            }
-        }
-
-        return new ContactResolution(
-            Grounded: grounded,
-            ObstructionNormal: lastNormal
-        );
-    }
-    /// <inheritdoc/>
-    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
-        in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        // An endpoint inside a thin floor has an ambiguous nearest gradient; near an edge it can point sideways or
-        // downward. Walk the deterministic segment until the ordinary endpoint solver first reports contact. That
-        // sample is still on the approached exterior, so its measured normal resolves the same top face the body
-        // actually reached instead of extracting through an arbitrary nearer side.
-        var delta = (position - previousPosition);
-        var distance = delta.Length;
-        var stepLength = SmallestSweepRadius(volumes: volumes);
-
-        if (
-            (distance <= stepLength) ||
-            (stepLength <= FixedQ4816.Zero)
-        ) {
-            return Resolve(
-                orientation: in orientation,
-                position: ref position,
-                velocity: ref velocity,
-                volumes: volumes
-            );
-        }
-
-        var steps = Math.Max(
-            val1: 2,
-            val2: checked((int)(((distance.Value + stepLength.Value) - 1L) / stepLength.Value))
-        );
-        var denominator = FixedQ4816.FromInteger(value: steps);
-        var originalVelocity = velocity;
-
-        for (var step = 1; (step <= steps); step++) {
-            var proposed = (previousPosition + (delta * (FixedQ4816.FromInteger(value: step) / denominator)));
-            var candidate = proposed;
-            var candidateVelocity = originalVelocity;
-            var resolution = Resolve(
-                orientation: in orientation,
-                position: ref candidate,
-                velocity: ref candidateVelocity,
-                volumes: volumes
-            );
-
-            if (
-                resolution.Grounded ||
-                (resolution.ObstructionNormal != FixedVector3.Zero) ||
-                (candidate != proposed)
-            ) {
-                position = candidate;
-                velocity = candidateVelocity;
-                return resolution;
-            }
-        }
-
-        return Resolve(
+    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
+        m_solver.Resolve(
             orientation: in orientation,
             position: ref position,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
-    }
+    /// <inheritdoc/>
+    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
+        in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
+        m_solver.ResolveSweep(
+            orientation: in orientation,
+            position: ref position,
+            previousPosition: in previousPosition,
+            up: in up,
+            velocity: ref velocity,
+            volumes: volumes
+        );
     /// <summary>Builds the SDF contact field from a definition without installing it, or reports the offending op by name.</summary>
     /// <param name="definition">The world definition supplying the collision tuning and solid rows.</param>
     /// <param name="built">The built field on success; <see langword="null"/> on failure.</param>
     /// <param name="reason">The forwarded <see cref="SdfFieldEvaluator"/> reject reason when a solid names an op the
     /// warp-free evaluator cannot interpret; empty on success.</param>
+    /// <param name="lattice">The field lattice whose height columns union with the solids for contact, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the field compiled, <see langword="false"/> with a named reason otherwise.</returns>
-    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason) {
+    public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, FieldLattice? lattice = null) {
         built = null;
         reason = string.Empty;
 
         var tuning = FixedWorldCollision.Compile(collision: definition.Collision);
+        var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var builder = new SdfProgramBuilder();
         var placementShapeCount = 0L;
+
+        var defaultGrip = definition.Collision.DefaultHold;
+        var holdableMaterials = new List<bool>();
+        var holdableGrantedByOverride = new List<bool>();
+
+        void RecordGrip(int material, bool holdable, bool grantedByOverride) {
+            while (holdableMaterials.Count <= material) {
+                holdableMaterials.Add(item: defaultGrip);
+                holdableGrantedByOverride.Add(item: false);
+            }
+
+            holdableMaterials[material] = holdable;
+            holdableGrantedByOverride[material] = grantedByOverride;
+        }
 
         foreach (var screen in definition.Screens) {
             if (screen.Solid is not { } solid) {
@@ -1000,6 +231,13 @@ public sealed class WorldSolidField : IContactField {
             }
 
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            // A screen carries no grip facet of its own, so only the world-level policy can admit it.
+            RecordGrip(
+                holdable: defaultGrip,
+                grantedByOverride: false,
+                material: material
+            );
             // The same center derivation the frame source and picker bake: the geometry box sits one HalfDepth behind the
             // lit face along the face normal.
             var normal = Vector3.Normalize(value: Vector3.Cross(
@@ -1023,24 +261,33 @@ public sealed class WorldSolidField : IContactField {
         }
 
         foreach (var placement in definition.Placements) {
+            // A dealt template collides with nothing itself; its solid facet is what its dealt children carry.
             if (
                 (placement.Solid is not { } solid) ||
+                (placement.Deal is not null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;
             }
 
             var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            RecordGrip(
+                holdable: (placement.Grip?.Holdable ?? defaultGrip),
+                grantedByOverride: (placement.Grip is not null),
+                material: material
+            );
+            var resolvedFrame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
             // The one transform conversion boundary: the program is encoded single-precision, but every placement
             // transform reaching it is derived in fixed point first (yaw via integer SinCos, origins via the fixed
             // lattice, reflected frames via fixed quaternion composition) and rounded exactly to float, so every
             // machine encodes bit-identical constants — the evaluator itself stays fixed point throughout.
             var fixedRotation = FixedQuaternion.FromAxisAngle(
                 axis: UnitY,
-                angle: FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)))
+                angle: FixedQ4816.FromDouble(value: (resolvedFrame.YawDegrees * (Math.PI / 180.0)))
             );
 
             // A creation whose parts carve each other is one candidate against the solid field, never a carve of it.
@@ -1052,12 +299,21 @@ public sealed class WorldSolidField : IContactField {
                 CreationStampEmitter.ComposesInternally(document: creation.EngineDocument)
             );
 
+            // Each placed copy is one program instance carrying a conservative world-space bound: the creation's
+            // render reach at the placement's scale, plus the contact margin the shapes are dilated by. The
+            // evaluator's exact cull skips a hard-union instance the bound proves cannot win a query, so the bound
+            // decides only which work runs, never what distance results; a plane is never culled whatever its bound.
+            var reach = (CreationStampEmitter.RenderReach(document: creation.EngineDocument, scale: placement.Scale, fontFor: null) + (solid.Margin > 0f ? solid.Margin : 0f) + InstanceBoundMargin);
+
             CreationStampLattice.ForEachFixedInstance(
-                origin: FixedVector3.FromVector3(value: placement.Position),
+                origin: FixedVector3.FromVector3(value: resolvedFrame.Position),
                 rotation: fixedRotation,
                 pattern: WorldPlacementStamp.PatternFor(placement: placement),
+                sampledOffsets: WorldPlacementStamp.SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed),
                 mirror: WorldPlacementStamp.MirrorFor(placement: placement),
                 visitor: instance => {
+                    _ = builder.BeginInstance(boundCenter: instance.Origin.ToVector3(), boundRadius: reach);
+
                     if (scoped) {
                         _ = builder.PushField(compose: SdfBlendOp.Union);
                     }
@@ -1079,6 +335,7 @@ public sealed class WorldSolidField : IContactField {
                         _ = builder.PopField();
                     }
 
+                    _ = builder.EndInstance();
                     placementShapeCount += (creation.Document.Shapes?.Count ?? 0);
                 }
             );
@@ -1097,62 +354,216 @@ public sealed class WorldSolidField : IContactField {
 
         built = new WorldSolidField(
             evaluator: evaluator,
-            instructionCount: program.Instructions.Count,
+            grid: CoverGrid(
+                cellSize: tuning.GridCellSize,
+                evaluator: evaluator,
+                program: program
+            ),
+            kitReach: KitReach(definition: definition),
+            lattice: lattice,
             placementShapeCount: placementShapeCount,
+            program: program,
             census: WorldColliderSet.Measure(definition: definition),
+            holdableGrantedByOverride: [.. holdableGrantedByOverride],
+            holdableMaterials: [.. holdableMaterials],
+            defaultGrip: defaultGrip,
             tuning: tuning
         );
 
         return true;
     }
-    /// <inheritdoc/>
-    public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
-        // Gradient-derived up is authored (WorldContactRequirement.GradientDerivedUp), never assumed: a flat-up world
-        // keeps world +Y so its walls push without ever grounding, at zero field-query cost.
-        if (!m_gradientUp) {
-            up = UnitY;
-
-            return true;
+    // The bake's inputs, folded so two fields with equal hashes carry equal grids: the packed program, the cell size,
+    // and the contact reach the band starts from. Zero when no grid is authored.
+    private static ulong BakeHash(SdfProgram program, FixedQ4816 cellSize, FixedQ4816 contactReach) {
+        if (cellSize <= FixedQ4816.Zero) {
+            return 0UL;
         }
 
-        if (m_evaluator.TryFieldGradient(
-            position: FixedPosition.FromLocal(local: position),
-            epsilon: m_gradientProbe,
-            gradient: out var gradient
-        )) {
-            // The gradient is the direction of steepest distance INCREASE — the direction pointing directly away from the
-            // nearest surface, i.e. UP. A grounded body's gravity opposes it and the standing test aligns against it.
-            up = gradient;
+        var hash = Fnv1aHash.Create();
 
-            return true;
+        foreach (var word in program.Words) {
+            hash.Add(value: word);
         }
 
-        up = UnitY;
+        hash.Add(value: cellSize.Value);
+        hash.Add(value: contactReach.Value);
 
-        return false;
+        return hash.Value;
     }
+    private static SdfDistanceGrid? CoverGrid(SdfFieldEvaluator evaluator, SdfProgram program, FixedQ4816 cellSize) =>
+        ((cellSize > FixedQ4816.Zero)
+            ? SdfDistanceGrid.TryCover(
+                cellSize: cellSize,
+                exact: evaluator,
+                padding: FixedQ4816.FromDouble(value: GridPadding),
+                program: program
+            )
+            : null
+        );
+    // The farthest any kit's contact sample compares the field against, at the largest scale a body can wear: a
+    // sphere's or capsule's radius, a box's half-extent length. A body absent from the scale row reads scale 1, so
+    // the row's ceiling never shrinks the reach below the unscaled collider.
+    private static FixedQ4816 KitReach(WorldDefinition definition) {
+        var reach = FixedQ4816.Zero;
+
+        foreach (var kit in definition.Kits) {
+            if (FixedWorldCollider.Compile(
+                collider: kit.Collider,
+                creations: definition.Creations
+            ) is not { } collider) {
+                continue;
+            }
+
+            foreach (var volume in collider.Volumes) {
+                reach = FixedQ4816.Max(
+                    x: reach,
+                    y: ((volume.Kind == FixedBodyColliderKind.Box)
+                        ? volume.HalfExtents.Length
+                        : volume.Radius
+                    )
+                );
+            }
+        }
+
+        var scale = FixedQ4816.One;
+
+        if (
+            (definition.Population.ScaleRow is { } scaleRow) &&
+            (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: scaleRow
+            ) is { Max: { } scaleMax })
+        ) {
+            scale = FixedQ4816.Max(
+                x: scale,
+                y: FixedQ4816.FromRawBits(value: scaleMax)
+            );
+        }
+
+        return (reach * scale);
+    }
+    /// <inheritdoc/>
+    public bool TryUp(in FixedVector3 position, out FixedVector3 up) =>
+        m_solver.TryUp(
+            position: in position,
+            up: out up
+        );
     /// <summary>Re-wraps this field's already-compiled program with fresh solver scalars, reusing the wrapped
-    /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array). A
-    /// <c>SetCollision</c> edit touches only the collision tuning row, never the geometry the program bakes (screens and
-    /// placements), so a slope/skin/probe/iteration tweak reuses the program instead of
-    /// recompiling it. The result is a distinct instance (per-revision immutability) so the install-time reference swap
-    /// still bumps the revision.</summary>
+    /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array) and
+    /// the distance grid when the cell size is unchanged. A <c>SetCollision</c> edit touches only the collision tuning
+    /// row, never the geometry the program bakes (screens and placements), so a slope/skin/probe/iteration tweak
+    /// reuses the program instead of recompiling it; a new cell size bakes a new grid over the same program. The
+    /// result is a distinct instance (per-revision immutability) so the install-time reference swap still bumps the
+    /// revision.</summary>
     /// <param name="tuning">The recompiled collision tuning to adopt.</param>
     /// <returns>A new field over the same evaluator with the new scalars.</returns>
     public WorldSolidField WithTuning(FixedWorldCollision tuning) =>
         new(
             evaluator: m_evaluator,
-            instructionCount: InstructionCount,
+            grid: (((m_banded is { } banded) && (banded.Grid.CellSize == tuning.GridCellSize))
+                ? banded.Grid
+                : CoverGrid(
+                    cellSize: tuning.GridCellSize,
+                    evaluator: m_evaluator,
+                    program: m_program
+                )),
+            kitReach: m_kitReach,
+            lattice: m_lattice,
             placementShapeCount: PlacementShapeCount,
+            program: m_program,
             census: Census,
+            holdableGrantedByOverride: m_holdableGrantedByOverride,
+            holdableMaterials: m_holdableMaterials,
+            defaultGrip: m_defaultGrip,
             tuning: tuning
         );
+    /// <inheritdoc/>
+    /// <remarks>The aim-assist cone is not honoured: a field has no candidate LIST to score bearings over, only the
+    /// one surface its own march reaches. A caller wanting assisted aim against a field has to widen its own sweep.</remarks>
+    public bool TryNearestSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 assistHalfAngle, out FixedSurfaceAttachCandidate candidate) {
+        _ = assistHalfAngle;
 
-    // The uncommitted outcome of an ordinary (confirmed non-embedded) sphere push — see TrialResolveSphere. Pushed
-    // is false for a clean miss (distance >= minimum); the deltas are meaningless in that case and left default.
-    // Normal mirrors ApplyPush's measured surface normal and is null exactly when the degenerate-gradient branch
-    // (ApplyDegeneratePush's mirror) ran — CommitSpherePush reads it to record the obstruction witness the same way
-    // ApplyPush does, never fabricating a normal for a degenerate push.
-    private readonly record struct SphereResolveTrial(bool Pushed, FixedVector3 PositionDelta, FixedVector3 VelocityDelta, bool Grounded, FixedVector3? Normal);
+        return TryCast(
+            candidate: out candidate,
+            direction: in direction,
+            maxDistance: maxDistance,
+            origin: in origin
+        );
+    }
+    // The one directed march both grip and anchor queries read: the first surface along the ray, with the surface
+    // orientation read from the field gradient one step back into open space (a march reports WHERE, never which
+    // way -- RayHit.Normal is documented zero).
+    private bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) {
+        candidate = default;
 
+        if (!m_query.Raycast(
+            dir: direction,
+            hit: out var hit,
+            maxDist: maxDistance,
+            origin: FixedPosition.FromLocal(local: origin)
+        )) {
+            return false;
+        }
+
+        var point = hit.Point.Local;
+
+        if (!m_evaluator.TryFieldGradient(
+            gradient: out var gradient,
+            position: FixedPosition.FromLocal(local: (point - (direction.Normalize() * GradientBackoff)))
+        )) {
+            return false;
+        }
+        if (gradient == FixedVector3.Zero) {
+            return false;
+        }
+
+        candidate = new FixedSurfaceAttachCandidate(
+            Point: point,
+            Normal: gradient,
+            Distance: hit.Distance,
+            Source: FixedSurfaceColliderSource.Static,
+            ColliderIndex: hit.Material
+        );
+
+        return true;
+    }
+    /// <inheritdoc/>
+    /// <remarks>A ray, not a nearest-point search: the field's own deterministic march reports the FIRST surface
+    /// along the direction, which is what makes a grip immune to the nearer geometry beside it (the floor under a
+    /// wall's foot, the underside of the ledge above). A hit inside geometry cannot arise from a grip that never
+    /// lets itself embed, so no inside-out case is invented here.</remarks>
+    public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
+        candidate = default;
+        grantedByOverride = false;
+
+        if (!TryCast(
+            candidate: out candidate,
+            direction: in direction,
+            maxDistance: maxDistance,
+            origin: in origin
+        )) {
+            return false;
+        }
+        if (!Holdable(
+            grantedByOverride: out grantedByOverride,
+            material: candidate.ColliderIndex
+        )) {
+            candidate = default;
+            grantedByOverride = false;
+
+            return false;
+        }
+
+        return true;
+    }
+    // The compiled material id's hold verdict — one material per solid screen and per solid placement, so an id
+    // outside the recorded range is the field lattice's own terrain and falls back to the world-level policy.
+    private bool Holdable(int material, out bool grantedByOverride) {
+        grantedByOverride = ((material >= 0) && (material < m_holdableGrantedByOverride.Length) && m_holdableGrantedByOverride[material]);
+
+        return (((material >= 0) && (material < m_holdableMaterials.Length))
+            ? m_holdableMaterials[material]
+            : m_defaultGrip
+        );
+    }
 }

@@ -35,6 +35,9 @@ internal sealed class WatchpointAccessPcStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -99,7 +102,7 @@ internal sealed class WatchpointAccessPcStage : IPostStage<PostContext> {
         );
 
         using var instance = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
 

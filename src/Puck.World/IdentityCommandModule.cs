@@ -1,8 +1,10 @@
 using System.Globalization;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 
@@ -22,7 +24,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             : m_worlds.Defaults.NeutralColor
         );
 
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: id,
             name: out var safeId,
             reason: out var nameReason
@@ -47,7 +49,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
     // carries the REQUESTED operation through even though the door refuses Add for text unconditionally — a harness
     // that only ever sent Set could never exercise that refusal, only assert it exists. StorageKind is a meaningless
     // placeholder (ActionStateKind.Counter): Decide ignores it once Text is populated, the SAME asymmetry
-    // WorldStateCell.Value/.Text already carries.
+    // StateCell.Value/.Text already carries.
     private CommandResult Deliver(CommandContext context, WireArgs args) {
         if (args.Count < 4) {
             return CommandResult.Error(output: "[identity.deliver: expected <source-id> <owner-id> <row> <set|add> <text...>]");
@@ -103,10 +105,25 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             context: context,
             tokens: 5
         );
+    // discarded=/refused= are the boot-time sweep's read-back, and this is the only surface that still names either
+    // after the boot lines have scrolled away: discarded= names what was moved out of the directory once, refused=
+    // what is still sitting there with its original bytes and will be refused again on the next boot.
     private string Describe() => $"[identity.list: {string.Join(
         separator: ", ",
         values: m_worlds.All.Select(selector: identity => $"{identity.Id}:{identity.Name}:{identity.ColorHex}")
-    )} root={m_worlds.FilePath}]";
+    )} root={m_worlds.FilePath} discarded={((m_worlds.Discarded.Count == 0)
+        ? "none"
+        : $"{m_worlds.Discarded.Count}:{string.Join(
+            separator: ",",
+            values: m_worlds.Discarded.Select(selector: entry => entry.FileName)
+        )}"
+    )} refused={((m_worlds.Refused.Count == 0)
+        ? "none"
+        : $"{m_worlds.Refused.Count}:{string.Join(
+            separator: ",",
+            values: m_worlds.Refused.Select(selector: entry => entry.FileName)
+        )}"
+    )}]";
     // identity.hud's read-back half: identity.show already reports every other identity-owned setting as one
     // space-delimited key=value line, so the panel state joins it in the SAME space-free-value shape (rather than a
     // separate no-arg identity.hud overload, which would collide with identity.hud's own required <panel-json>
@@ -147,7 +164,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
 
         if (!row.IsSlot) {
-            return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={row.Kind.ToString().ToLowerInvariant()} cells={(row.Cells?.Count ?? 0)}]");
+            return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={StateSpelling.Kind(kind: row.Kind)} cells={(row.Cells?.Count ?? 0)}]");
         }
 
         var cell = row.Cells![0];
@@ -156,7 +173,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             : cell.Value.ToString(provider: CultureInfo.InvariantCulture)
         );
 
-        return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={row.Kind.ToString().ToLowerInvariant()} value={value}]");
+        return new CommandResult(Output: $"[identity.state: {id}.{rowName} kind={StateSpelling.Kind(kind: row.Kind)} value={value}]");
     }
     private string DescribeWriteback() {
         if (m_worlds.LastReceipt is not { } receipt) {
@@ -172,28 +189,19 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             ? "accepted"
             : "refused")} reason={receipt.Reason}]";
     }
-    // Strips the verb token (WorldCommandArguments.Raw), then — only when a trailing player token is present
-    // (args.Count == 2) — the LAST whitespace-delimited token, the same trailing-token split
-    // WorldMutationCommandModule.TryParseLoadArgs uses for world.load's own optional "force" tail. Reconstructed
-    // from the raw command text rather than args[0] so the JSON's quotes survive the console tokenizer.
-    private static string RawPanelJson(CommandContext context, in WireArgs args) {
-        var raw = WorldCommandArguments.Raw(
+    // Strips the verb token, then — only when a trailing player token is present (args.Count == 2) — the last
+    // whitespace-delimited token. Reconstructed from the raw command text rather than args[0] so the JSON's quotes
+    // survive the console tokenizer, and delegated to WorldCommandArguments so both ends of that reconstruction
+    // split on the rule the registry's own tokenizer split the line with.
+    private static string RawPanelJson(CommandContext context, in WireArgs args) =>
+        WorldCommandArguments.RawBetween(
             args: in args,
-            context: context
+            context: context,
+            leadingTokens: 1,
+            trailingTokens: ((args.Count < 2)
+                ? 0
+                : 1)
         );
-
-        if (args.Count < 2) {
-            return raw;
-        }
-
-        var trimmed = raw.TrimEnd();
-        var lastSeparator = trimmed.LastIndexOfAny(anyOf: [' ', '\t']);
-
-        return ((lastSeparator < 0)
-            ? trimmed
-            : trimmed[..lastSeparator].TrimEnd()
-        );
-    }
     // The identity-owned PRIVATE seat panel: identity.hud <panel-json> [player]. panel-json is required to be one
     // compact (whitespace-free) WorldHudPanel token — the same authoring convention world.row.set hud.panels and the
     // deleted profile.section door both used — so an optional trailing player index (like identity.motion's) can be
@@ -204,10 +212,12 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
         if (!TryPlayer(
             args: in args,
+            context: context,
             error: out var error,
             identity: out var identity,
             optionalAt: 1,
-            player: out var player
+            player: out var player,
+            verb: "identity.hud"
         )) {
             return CommandResult.Error(output: error);
         }
@@ -255,6 +265,95 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
 
         return new CommandResult(Output: $"[identity.hud: p{player} panel '{panel.Id}' updated in world:{identity.Id}]");
     }
+    // identity.facts [player]: the catalog's own row for the identity driving a seat, never the lane — the lane is
+    // world.state's to echo.
+    private CommandResult DescribeFacts(CommandContext context, WireArgs args) {
+        if (!TryPlayer(
+            args: in args,
+            context: context,
+            error: out var error,
+            identity: out var identity,
+            optionalAt: 0,
+            player: out var player,
+            verb: "identity.facts"
+        )) {
+            return CommandResult.Error(output: error);
+        }
+
+        var owned = (m_worlds.FindById(id: identity!.Id) ?? identity);
+        var definition = owned.FactsDefinition;
+        var cells = (owned.Facts?.Cells ?? []);
+        var facts = ((cells.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ",",
+                values: cells.Select(selector: cell => string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"{cell.Key}:{cell.Value}"
+                ))
+            )
+        );
+
+        return new CommandResult(Output: $"[identity.facts: p{player} world={owned.Id} row={definition.State} count={cells.Count}/{definition.Capacity} facts={facts}]");
+    }
+    // identity.fact.set <key> <value> [player]: writes the catalog's row under the acting principal's own identity —
+    // a seat may name no seat but its own; the console names the seat it addresses. The lane follows on the next
+    // tick through the identity's facts revision.
+    private CommandResult SetFact(CommandContext context, WireArgs args) {
+        if (args.Count is not (2 or 3)) {
+            return CommandResult.Error(output: "[identity.fact.set: expected <key> <value> [player]]");
+        }
+        if (!TryPlayer(
+            args: in args,
+            context: context,
+            error: out var error,
+            identity: out var identity,
+            optionalAt: 2,
+            player: out var player,
+            verb: "identity.fact.set"
+        )) {
+            return CommandResult.Error(output: error);
+        }
+
+        var acting = context.ActingPrincipal();
+
+        if (
+            (acting.Kind == PrincipalKind.Seat) &&
+            (acting.Index != PlayerRoster.SlotFromDisplay(number: player))
+        ) {
+            return CommandResult.Error(output: $"[identity.fact.set: refused — {acting.Describe()} writes only its own identity's facts, not p{player}'s]");
+        }
+        if (m_worlds.FindById(id: identity!.Id) is not { } owned) {
+            return CommandResult.Error(output: $"[identity.fact.set: p{player} world:{identity.Id} is not an owned world here]");
+        }
+        if (!CellName.TryParse(
+            candidate: args[0].ToString(),
+            name: out var key,
+            reason: out var keyReason
+        )) {
+            return CommandResult.Error(output: $"[identity.fact.set: refused — key '{args[0]}' {keyReason}]");
+        }
+        if (!args.TryLong(
+            index: 1,
+            value: out var value
+        )) {
+            return CommandResult.Error(output: $"[identity.fact.set: refused — value '{args[1]}' is not an integer]");
+        }
+        if (!m_worlds.TrySetFact(
+            identity: owned,
+            key: key,
+            value: value,
+            changed: out var changed,
+            reason: out var reason
+        )) {
+            return CommandResult.Error(output: $"[identity.fact.set: refused — {reason}]");
+        }
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[identity.fact.set: p{player} {key}={value} in world:{owned.Id}{(changed ? string.Empty : " (unchanged)")}]"
+        ));
+    }
     private CommandResult SetMotion(CommandContext context, WireArgs args) {
         if (
             (args.Count < 2) ||
@@ -264,14 +363,23 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         }
         if (!TryPlayer(
             args: in args,
+            context: context,
             error: out var error,
             identity: out var identity,
             optionalAt: 2,
-            player: out var player
+            player: out var player,
+            verb: "identity.motion"
         )) {
             return CommandResult.Error(output: error);
         }
         var key = args[0].ToString();
+
+        // The write lands on the CATALOG's identity — the object the seated body reads its rates off live — and is
+        // mirrored onto the roster's rehydrated copy so client read-backs agree. A seat driving under an identity
+        // this catalog does not own (a visiting traveler's) has no document here to persist into, so it refuses.
+        if (m_worlds.FindById(id: identity!.Id) is not { } owned) {
+            return CommandResult.Error(output: $"[identity.motion: p{player} world:{identity.Id} is not an owned world here]");
+        }
 
         if (
             !args.TryFloat(
@@ -287,44 +395,57 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             b: "speed",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            identity!.MoveSpeed = value;
+            owned.SetMoveSpeed(value: value);
+            identity.SetMoveSpeed(value: value);
         } else if (string.Equals(
             a: key,
             b: "turn-speed",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            identity!.TurnSpeed = value;
+            owned.SetTurnSpeed(value: value);
+            identity.SetTurnSpeed(value: value);
         } else {
             return CommandResult.Error(output: $"[identity.motion: unknown key '{key}']");
         }
         m_worlds.Save();
-        return new CommandResult(Output: $"[identity.motion: p{player} {key} updated in world:{identity!.Id}]");
+        return new CommandResult(Output: $"[identity.motion: p{player} {key} updated in world:{identity.Id}]");
     }
     private CommandResult Show(CommandContext context, WireArgs args) {
         if (!TryPlayer(
             args: in args,
+            context: context,
             error: out var error,
             identity: out var identity,
             optionalAt: 0,
-            player: out var player
+            player: out var player,
+            verb: "identity.show"
         )) {
             return CommandResult.Error(output: error);
         }
         var hud = DescribeHudSummary(identity: identity!);
         // moveEffective is WorldBody's OWN read-back (EffectiveMoveSpeed), never a re-derivation here, so this line
-        // can never disagree with what the body is really doing — grounded, swim, or vehicle, WorldBody's per-arm
+        // can never disagree with what the body is really doing — WorldBody's own
         // resolve decides which envelope (if any) clamps which base rate. No live body (not yet seated) reports the
-        // requested rate unchanged — the same answer an absent/wide-open envelope gives.
+        // claimed rate, or "kit" for an identity claiming none.
         var effectiveMoveSpeed = ((m_server.Body(index: PlayerRoster.SlotFromDisplay(number: player)) is { } body)
-            ? (float)((double)body.EffectiveMoveSpeed)
-            : identity!.MoveSpeed
+            ? DescribeRate(rate: body.EffectiveMoveSpeed)
+            : DescribeRate(rate: identity!.FixedMoveSpeed)
         );
 
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[identity.show: p{player} world={identity!.Id} name={identity.Name} color={identity.ColorHex} move={identity.MoveSpeed:0.####} moveEffective={effectiveMoveSpeed:0.####} turn={identity.TurnSpeed:0.####} hud={hud} path={m_worlds.FilePath}]"
+            handler: $"[identity.show: p{player} world={identity!.Id} name={identity.Name} color={identity.ColorHex} move={DescribeRate(rate: identity.FixedMoveSpeed)} moveEffective={effectiveMoveSpeed} turn={DescribeRate(rate: identity.FixedTurnSpeed)} hud={hud} path={m_worlds.FilePath}]"
         ));
     }
+    // An identity claiming no rate reads "kit": the seat integrates under the kit's own authored rate.
+    private static string DescribeRate(FixedQ4816? rate) =>
+        ((rate is { } value)
+            ? ((double)value).ToString(
+                format: "0.####",
+                provider: CultureInfo.InvariantCulture
+            )
+            : "kit"
+        );
     private static bool TryBool(ReadOnlySpan<char> token, out bool value) {
         value = (token.Equals(
             comparisonType: StringComparison.OrdinalIgnoreCase,
@@ -345,25 +466,33 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         )
         );
     }
-    private bool TryPlayer(in WireArgs args, int optionalAt, out int player, out WorldIdentity? identity, out string error) {
-        player = 1;
+    private bool TryPlayer(CommandContext context, in WireArgs args, int optionalAt, string verb, out int player, out WorldIdentity? identity, out string error) {
         identity = null;
         error = string.Empty;
-        if (
-            (args.Count > optionalAt) &&
-            (!args.TryInt(
-            index: optionalAt,
-            value: out player
-        ) || (player < 1) || (player > PlayerRoster.MaxSlots))
-        ) {
-            error = $"[identity: player must be 1..{PlayerRoster.MaxSlots}]";
+
+        var (slot, seatError) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: optionalAt,
+            context: context,
+            verb: verb
+        );
+
+        if (seatError is { } refusal) {
+            player = 0;
+            error = refusal.Output;
+
             return false;
         }
-        identity = m_roster.ProfileAt(slot: PlayerRoster.SlotFromDisplay(number: player));
+
+        player = PlayerRoster.DisplayNumber(slot: slot);
+        identity = m_roster.ProfileAt(slot: slot);
+
         if (identity is null) {
-            error = $"[identity: player {player} is not joined]";
+            error = $"[{verb}: player {player} is not joined]";
+
             return false;
         }
+
         return true;
     }
 
@@ -372,7 +501,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "identity.list",
-            description: "Lists owned identity worlds and their paths.",
+            description: "Lists owned identity worlds, their paths, any documents this catalog discarded at boot (moved into unloadable/), and any it refused in place (still in the catalog directory with their original bytes).",
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: Describe())
         );
@@ -385,7 +514,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.show",
-            description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as requested and as actually applied: identity.show [player]. move= is the profile's own requested rate; moveEffective= is what the sim integrates under, arm-aware — under a grounded OR SWIM kit, the profile's rate after the kit's own speed envelope (grounded's moveSpeedEnvelope, or swim's thrustSpeedEnvelope, which compiles into the SAME shared slot) clamps it, equal unless the kit pins/bounds that rate narrower than the profile's request; under a VEHICLE kit, the kit's OWN topSpeed after its topSpeedEnvelope (if authored) clamps it — move= never applies to a vehicle seat, since a kart's speed is the kit's, not the profile's.",
+            description: "Shows the identity driving a seat, including its private HUD panel (id/layer/style/rect/element count, or 'none') and its move rate BOTH as claimed and as actually applied: identity.show [player]. move= is the profile's own claimed rate, or 'kit' for an identity claiming none (the kit's authored rate then drives, until identity.motion mints a claim); moveEffective= is what the sim integrates under — the claimed-or-kit rate after the kit's own speed.envelope clamps it, so a kit whose envelope pins min == max reads its own pinned rate regardless of what the profile claims.",
             handler: Show
         );
         yield return CommandDefinition.WithWireArgs(
@@ -402,6 +531,20 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
             handler: SetHud,
             routing: CommandRouting.Simulation
         );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "identity.facts",
+            description: "Reads back the facts the identity driving a seat carries on its own document — the row identity.facts names, its fill against identity.facts.capacity, and every key:value — identity.facts [player]. The body's lane in the world's reserved 'identity' row is world.state's to echo.",
+            handler: DescribeFacts,
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "identity.fact.set",
+            description: "Writes one integer fact on the identity driving a seat and persists it through the owned-world catalog: identity.fact.set <key> <value> [player]. A seat principal may address only its own seat; the console addresses the seat it names. The seat's body lane follows on the next tick. Refuses by name an unowned identity, a key that is not a cell name, and a row already holding identity.facts.capacity distinct keys.",
+            handler: SetFact,
+            routing: CommandRouting.Simulation
+        );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "identity.writebacks",
@@ -412,7 +555,7 @@ internal sealed class IdentityCommandModule(WorldOwnedWorlds worlds, PlayerRoste
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "identity.deliver",
-            description: "DEV/TEST cross-document TEXT delivery — issues one WorldDocumentSubmission carrying a TEXT operand through the SAME write-back door the sim's own per-tick numeric outputs use (Server.WorldOwnedWorlds.Decide): identity.deliver <source-id> <owner-id> <row> <set|add> <text...>. <source-id> is the asking document (the door checks OWNER'S OWN grants section for a Mutate/state:<row> hold naming document:<source-id> with a write mask admitting the requested operation); <owner-id> is the document the row lives in; <row> names an ALREADY-DECLARED text-kind state row in the OWNER's document (declare it there first — there is no spooled delivery for an undeclared row, which refuses by name with the remedy); <set|add> is the requested WorldDocumentWriteKind — carried through even though <add> against a text row ALWAYS refuses by name at the door regardless of what the write mask admits (text is Set-only; this harness carries both so that refusal is exercisable, not merely asserted), which is why it is a required token here rather than assumed Set; <text...> is the raw tail (everything after <set|add>, spaces included, capped at WorldStateCapacity.MaxTextValueLength). Applies inline and echoes the receipt immediately; identity.writebacks re-echoes the same receipt afterward. This is the MINIMAL test harness for the door only — the real, chat-integrated whisper verb (source id derived from the acting player's own identity) is chat.whisper (ChatCommandModule); this dev harness stays for probing the door with an arbitrary source id chat.whisper can never send from its own identity.",
+            description: "DEV/TEST cross-document TEXT delivery — issues one WorldDocumentSubmission carrying a TEXT operand through the SAME write-back door the sim's own per-tick numeric outputs use (Server.WorldOwnedWorlds.Decide): identity.deliver <source-id> <owner-id> <row> <set|add> <text...>. <source-id> is the asking document (the door checks OWNER'S OWN grants section for a Mutate/state:<row> hold naming document:<source-id> with a write mask admitting the requested operation); <owner-id> is the document the row lives in; <row> names an ALREADY-DECLARED text-kind state row in the OWNER's document (declare it there first — there is no spooled delivery for an undeclared row, which refuses by name with the remedy); <set|add> is the requested WorldDocumentWriteKind — carried through even though <add> against a text row ALWAYS refuses by name at the door regardless of what the write mask admits (text is Set-only; this harness carries both so that refusal is exercisable, not merely asserted), which is why it is a required token here rather than assumed Set; <text...> is the raw tail (everything after <set|add>, spaces included, capped at StateCapacity.MaxTextValueLength). Applies inline and echoes the receipt immediately; identity.writebacks re-echoes the same receipt afterward. This is the MINIMAL test harness for the door only — the real, chat-integrated whisper verb (source id derived from the acting player's own identity) is chat.whisper (ChatCommandModule); this dev harness stays for probing the door with an arbitrary source id chat.whisper can never send from its own identity.",
             handler: (context, args) => Deliver(
                 args: args,
                 context: context

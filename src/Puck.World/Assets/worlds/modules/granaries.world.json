@@ -1,0 +1,2553 @@
+{
+  "exports": {
+    "reads": [
+      "granaryNames",
+      "granaryResources",
+      "granaryRegions",
+      "granaryKinds",
+      "granarySkus"
+    ],
+    "actions": [
+      "granarySurveyRequest",
+      "granaryIrrigationRequest",
+      "granaryPowerRequest"
+    ],
+    "bindings": [
+      "granaryWaterCoverage",
+      "granaryPowerCoverage",
+      "granarySurveyPage",
+      "granaryIrrigationStage",
+      "granaryPowerStage"
+    ]
+  },
+  "navigation": {
+    "domains": [
+      {
+        "agentHeight": 0.5,
+        "agentRadius": 0.2,
+        "arrivalDistance": 0.9,
+        "cellSize": 1,
+        "depth": 32,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 1024,
+        "maxPathNodes": 128,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.55,
+        "name": "granaryYard",
+        "parent": "granaryCourt",
+        "origin": [
+          -30,
+          -2,
+          -30
+        ],
+        "probeDown": 3,
+        "probeUp": 2.5,
+        "width": 40
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "granary-water-coverage-cleanup",
+      "forEach": "granaryWaterCoverage",
+      "gate": {
+        "$type": "not",
+        "predicate": {
+          "$type": "compareState",
+          "state": "$influence:water:granaryStores",
+          "key": "$each",
+          "comparison": "Equal",
+          "comparandState": "$influence:water:granaryStores",
+          "comparandKey": "$each"
+        }
+      },
+      "effects": [
+        {
+          "$type": "removeStateCell",
+          "state": "granaryWaterCoverage",
+          "key": "$each"
+        }
+      ],
+      "mode": "Level"
+    },
+    {
+      "name": "granary-power-coverage-cleanup",
+      "forEach": "granaryPowerCoverage",
+      "gate": {
+        "$type": "not",
+        "predicate": {
+          "$type": "compareState",
+          "state": "$influence:power:granaryStores",
+          "key": "$each",
+          "comparison": "Equal",
+          "comparandState": "$influence:power:granaryStores",
+          "comparandKey": "$each"
+        }
+      },
+      "effects": [
+        {
+          "$type": "removeStateCell",
+          "state": "granaryPowerCoverage",
+          "key": "$each"
+        }
+      ],
+      "mode": "Level"
+    },
+    {
+      "name": "granary-water-coverage",
+      "forEach": "granaryNames",
+      "gate": {
+        "$type": "not",
+        "predicate": {
+          "$type": "compareState",
+          "state": "granaryWaterCoverage",
+          "key": "$each",
+          "comparison": "Equal",
+          "comparandState": "$influence:water:granaryStores",
+          "comparandKey": "$each"
+        }
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "granaryWaterCoverage",
+          "key": "$each",
+          "fromState": "$influence:water:granaryStores",
+          "fromKey": "$each"
+        }
+      ],
+      "mode": "Level"
+    },
+    {
+      "name": "granary-power-coverage",
+      "forEach": "granaryNames",
+      "gate": {
+        "$type": "not",
+        "predicate": {
+          "$type": "compareState",
+          "state": "granaryPowerCoverage",
+          "key": "$each",
+          "comparison": "Equal",
+          "comparandState": "$influence:power:granaryStores",
+          "comparandKey": "$each"
+        }
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "granaryPowerCoverage",
+          "key": "$each",
+          "fromState": "$influence:power:granaryStores",
+          "fromKey": "$each"
+        }
+      ],
+      "mode": "Level"
+    },
+    {
+      "name": "granary-survey-cycle",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "granarySurveyApplied",
+          "expression": "granarySurveyRequest"
+        },
+        {
+          "$type": "setState",
+          "state": "granarySurveyPage",
+          "expression": "(granarySurveyPage + 1) % 3"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "granarySurveyRequest",
+            "comparison": "Greater",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "granarySurveyRequest",
+            "comparandState": "granarySurveyApplied",
+            "comparison": "NotEqual"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "granary-irrigation-stage",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "granaryIrrigationStage",
+              "expression": "granaryIrrigationRequest"
+            },
+            {
+              "$type": "setState",
+              "state": "granaryIrrigationSelected",
+              "fromState": "granaryIrrigationChoices",
+              "fromKey": "$expr:granaryIrrigationRequest"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "state": "granaryIrrigationRequest",
+        "comparandState": "granaryIrrigationStage",
+        "comparison": "NotEqual"
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "granary-power-stage",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "granaryPowerStage",
+              "expression": "granaryPowerRequest"
+            },
+            {
+              "$type": "setState",
+              "state": "granaryPowerSelected",
+              "fromState": "granaryPowerChoices",
+              "fromKey": "$expr:granaryPowerRequest"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "state": "granaryPowerRequest",
+        "comparandState": "granaryPowerStage",
+        "comparison": "NotEqual"
+      },
+      "mode": "Level"
+    }
+  ],
+  "hud": {
+    "defaults": { "enabled": true },
+    "panels": [
+      {
+        "id": "granary-coverage",
+        "rect": { "x": 0.03, "y": 0.72, "width": 0.3, "height": 0.23 },
+        "layer": "Over",
+        "style": "Panel",
+        "elements": [
+          {
+            "id": "survey",
+            "kind": "Text",
+            "rect": { "x": 0.06, "y": 0.08, "width": 0.88, "height": 0.2 },
+            "style": "Primary",
+            "template": "GRANARY SURVEY {state.granarySurveyPage}"
+          },
+          {
+            "id": "irrigation",
+            "kind": "Text",
+            "rect": { "x": 0.06, "y": 0.34, "width": 0.88, "height": 0.2 },
+            "style": "Positive",
+            "template": "WATER EXPANSION {state.granaryIrrigationStage}"
+          },
+          {
+            "id": "power",
+            "kind": "Text",
+            "rect": { "x": 0.06, "y": 0.6, "width": 0.88, "height": 0.2 },
+            "style": "Warning",
+            "template": "POWER EXPANSION {state.granaryPowerStage}"
+          }
+        ]
+      }
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "granaryCourt",
+        "prototypeId": "granaryCourt",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "granarySurveyTable",
+        "prototypeId": "granarySurveyTable",
+        "parent": "granaryCourt",
+        "position": [-2, 0, 2.5],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "granaryStores",
+        "prototypeId": "granaryStore",
+        "parent": "granaryCourt",
+        "position": [
+          -10,
+          0,
+          -15
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "spatial": [
+          {
+            "name": "store-occupation",
+            "role": "Occupation",
+            "shape": {
+              "kind": "Box",
+              "center": [0, 1.5, 0],
+              "halfExtents": [1.5, 1.5, 1.5]
+            }
+          },
+          {
+            "name": "store-clearance",
+            "role": "Clearance",
+            "shape": {
+              "kind": "Box",
+              "center": [0, 1.5, 0],
+              "halfExtents": [1.75, 1.5, 1.75]
+            }
+          }
+        ],
+        "distribution": {
+          "fill": {
+            "name": "none",
+            "offset": 0,
+            "step": 0
+          },
+          "region": {
+            "$type": "scatter",
+            "cellSize": 1.6,
+            "depth": 16,
+            "radius": 1,
+            "seed": 7,
+            "spacing": 4,
+            "width": 16
+          }
+        },
+        "deal": {
+          "preserve": { "transform": true, "facets": true },
+          "reflow": { "candidateBudget": 4096 },
+          "row": "granaryNames",
+          "variants": {
+            "row": "granaryNames",
+            "map": {
+              "bytrcstp001": "granaryAnchor"
+            }
+          }
+        }
+      },
+      {
+        "id": "granaryIrrigation",
+        "prototypeId": "granaryIrrigation",
+        "parent": "granaryCourt",
+        "position": [-10, 0, -15],
+        "yawDegrees": 0,
+        "scale": 1,
+        "spatial": [
+          {
+            "name": "irrigation-coverage",
+            "role": "Influence",
+            "channel": "water",
+            "shape": {
+              "kind": "Box",
+              "center": [0, 1.5, 0],
+              "halfExtents": "state.granaries_granaryIrrigationSelected"
+            }
+          }
+        ]
+      },
+      {
+        "id": "granaryPower",
+        "prototypeId": "granaryPower",
+        "parent": "granaryCourt",
+        "position": [-10, 0, -15],
+        "yawDegrees": 0,
+        "scale": 1,
+        "spatial": [
+          {
+            "name": "power-coverage",
+            "role": "Influence",
+            "channel": "power",
+            "shape": {
+              "kind": "Box",
+              "center": [0, 1.5, 0],
+              "halfExtents": "state.granaries_granaryPowerSelected"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "id": "granaryStore",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granaryStore",
+        "palette": [
+          {
+            "color": "#AE7144"
+          },
+          {
+            "color": "#513F33"
+          },
+          {
+            "color": "#E6D1A3"
+          },
+          {
+            "color": "#496F68"
+          },
+          {
+            "color": "#879889"
+          },
+          {
+            "color": "#D6B465"
+          },
+          {
+            "color": "#263D43"
+          },
+          {
+            "color": "#B4A283"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "stone-foot",
+            "type": "Box",
+            "position": [
+              0,
+              0.18,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              2.1,
+              0.18,
+              2
+            ],
+            "material": 7,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "timber-store",
+            "type": "Box",
+            "position": [
+              0,
+              1.65,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.75,
+              1.3,
+              1.6
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "roof-west",
+            "type": "Box",
+            "position": [
+              -0.94,
+              3.18,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.2419219,
+              0.9702957
+            ],
+            "scale": [
+              1.18,
+              0.16,
+              1.95
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "roof-east",
+            "type": "Box",
+            "position": [
+              0.94,
+              3.18,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.2419219,
+              0.9702957
+            ],
+            "scale": [
+              1.18,
+              0.16,
+              1.95
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 4,
+            "name": "ridge",
+            "type": "Box",
+            "position": [
+              0,
+              3.68,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.13,
+              0.13,
+              2
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 5,
+            "name": "door",
+            "type": "Box",
+            "position": [
+              0,
+              1.25,
+              1.615
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.64,
+              0.9,
+              0.04
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 6,
+            "name": "lintel",
+            "type": "Box",
+            "position": [
+              0,
+              2.22,
+              1.69
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.82,
+              0.1,
+              0.09
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 7,
+            "name": "door-brace-a",
+            "type": "Box",
+            "position": [
+              -0.27,
+              1.25,
+              1.69
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.1736482,
+              0.9848078
+            ],
+            "scale": [
+              0.07,
+              0.92,
+              0.07
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 8,
+            "name": "door-brace-b",
+            "type": "Box",
+            "position": [
+              0.27,
+              1.25,
+              1.69
+            ],
+            "rotation": [
+              0,
+              0,
+              0.1736482,
+              0.9848078
+            ],
+            "scale": [
+              0.07,
+              0.92,
+              0.07
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 9,
+            "name": "step",
+            "type": "Box",
+            "position": [
+              0,
+              0.28,
+              1.98
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.95,
+              0.15,
+              0.38
+            ],
+            "material": 7,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 10,
+            "name": "name-board",
+            "type": "Box",
+            "position": [
+              0,
+              2.65,
+              1.69
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.36,
+              0.25,
+              0.09
+            ],
+            "material": 6,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 11,
+            "name": "corner--1.67--1.58",
+            "type": "Box",
+            "position": [
+              -1.67,
+              1.65,
+              -1.58
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              1.3,
+              0.09
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 12,
+            "name": "corner--1.67-1.58",
+            "type": "Box",
+            "position": [
+              -1.67,
+              1.65,
+              1.58
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              1.3,
+              0.09
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 13,
+            "name": "corner-1.67--1.58",
+            "type": "Box",
+            "position": [
+              1.67,
+              1.65,
+              -1.58
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              1.3,
+              0.09
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 14,
+            "name": "corner-1.67-1.58",
+            "type": "Box",
+            "position": [
+              1.67,
+              1.65,
+              1.58
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              1.3,
+              0.09
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 15,
+            "name": "beam-0.58",
+            "type": "Box",
+            "position": [
+              0,
+              0.58,
+              1.63
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.72,
+              0.04,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 16,
+            "name": "beam-1.35",
+            "type": "Box",
+            "position": [
+              0,
+              1.35,
+              1.63
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.72,
+              0.04,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 17,
+            "name": "beam-2.1",
+            "type": "Box",
+            "position": [
+              0,
+              2.1,
+              1.63
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.72,
+              0.04,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 18,
+            "name": "bin--2.45",
+            "type": "Cylinder",
+            "position": [
+              -2.45,
+              1.1,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.53,
+              1.1,
+              0.53
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 19,
+            "name": "cap--2.45",
+            "type": "Cylinder",
+            "position": [
+              -2.45,
+              2.2,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.61,
+              0.13,
+              0.61
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 20,
+            "name": "band--2.45",
+            "type": "Cylinder",
+            "position": [
+              -2.45,
+              0.45,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.55,
+              0.06,
+              0.55
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 21,
+            "name": "bin-2.45",
+            "type": "Cylinder",
+            "position": [
+              2.45,
+              1.1,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.53,
+              1.1,
+              0.53
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 22,
+            "name": "cap-2.45",
+            "type": "Cylinder",
+            "position": [
+              2.45,
+              2.2,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.61,
+              0.13,
+              0.61
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 23,
+            "name": "band-2.45",
+            "type": "Cylinder",
+            "position": [
+              2.45,
+              0.45,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.55,
+              0.06,
+              0.55
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "granaryIrrigation",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granaryIrrigation",
+        "palette": [
+          { "color": "#2E9FD0" },
+          { "color": "#174E6A" }
+        ],
+        "shapes": [
+          {
+            "id": 2,
+            "name": "water-coverage-patch",
+            "type": "Box",
+            "position": [0, 0.05, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": "state.granaries_granaryIrrigationSelected",
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 0,
+            "name": "water-marker",
+            "type": "Box",
+            "position": [-2, 1, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.45, 1, 0.45],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "water-cap",
+            "type": "Cylinder",
+            "position": [-2, 2.1, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.7, 0.15, 0.7],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "granaryPower",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granaryPower",
+        "palette": [
+          { "color": "#E0B84C" },
+          { "color": "#76551B" }
+        ],
+        "shapes": [
+          {
+            "id": 2,
+            "name": "power-coverage-patch",
+            "type": "Box",
+            "position": [0, 0.05, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": "state.granaries_granaryPowerSelected",
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 0,
+            "name": "power-marker",
+            "type": "Box",
+            "position": [2, 1.2, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.5, 1.2, 0.5],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "power-cap",
+            "type": "Box",
+            "position": [2, 2.55, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.75, 0.12, 0.75],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "granarySurveyTable",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granarySurveyTable",
+        "palette": [
+          { "color": "#AE7144" },
+          { "color": "#E6D1A3" },
+          { "color": "#263D43" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "survey-top",
+            "type": "Box",
+            "position": [0, 1.2, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [2.4, 0.16, 1.05],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "survey-sign",
+            "type": "Box",
+            "position": [0, 1.85, -0.42],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1.9, 0.5, 0.08],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "survey-leg-left",
+            "type": "Box",
+            "position": [-1.75, 0.58, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.14, 0.58, 0.14],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "survey-leg-right",
+            "type": "Box",
+            "position": [1.75, 0.58, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [0.14, 0.58, 0.14],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ],
+        "textRuns": [
+          {
+            "text": "SURVEY TABLE",
+            "position": [0, 1.88, -0.52],
+            "rotation": [0, 0, 0, 1],
+            "emHeight": 0.24,
+            "depth": 0.012,
+            "mode": "emboss",
+            "material": 1,
+            "align": "center"
+          },
+          {
+            "text": "WATER / POWER",
+            "position": [0, 1.58, -0.52],
+            "rotation": [0, 0, 0, 1],
+            "emHeight": 0.12,
+            "depth": 0.008,
+            "mode": "emboss",
+            "material": 1,
+            "align": "center"
+          }
+        ]
+      }
+    },
+    {
+      "id": "granaryAnchor",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granaryAnchor",
+        "palette": [
+          {
+            "color": "#AE7144"
+          },
+          {
+            "color": "#513F33"
+          },
+          {
+            "color": "#E6D1A3"
+          },
+          {
+            "color": "#496F68"
+          },
+          {
+            "color": "#879889"
+          },
+          {
+            "color": "#D6B465"
+          },
+          {
+            "color": "#263D43"
+          },
+          {
+            "color": "#B4A283"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "stone-foot",
+            "type": "Box",
+            "position": [
+              0,
+              0.18,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              2.1,
+              0.18,
+              2
+            ],
+            "material": 7,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "timber-store",
+            "type": "Box",
+            "position": [
+              0,
+              1.65,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.75,
+              1.3,
+              1.6
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "roof-west",
+            "type": "Box",
+            "position": [
+              -0.94,
+              3.18,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.2419219,
+              0.9702957
+            ],
+            "scale": [
+              1.18,
+              0.16,
+              1.95
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "roof-east",
+            "type": "Box",
+            "position": [
+              0.94,
+              3.18,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.2419219,
+              0.9702957
+            ],
+            "scale": [
+              1.18,
+              0.16,
+              1.95
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 4,
+            "name": "ridge",
+            "type": "Box",
+            "position": [
+              0,
+              3.68,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.13,
+              0.13,
+              2
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 5,
+            "name": "door",
+            "type": "Box",
+            "position": [
+              0,
+              1.25,
+              1.615
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.64,
+              0.9,
+              0.04
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 6,
+            "name": "lintel",
+            "type": "Box",
+            "position": [
+              0,
+              2.22,
+              1.69
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.82,
+              0.1,
+              0.09
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 7,
+            "name": "door-brace-a",
+            "type": "Box",
+            "position": [
+              -0.27,
+              1.25,
+              1.69
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.1736482,
+              0.9848078
+            ],
+            "scale": [
+              0.07,
+              0.92,
+              0.07
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 8,
+            "name": "door-brace-b",
+            "type": "Box",
+            "position": [
+              0.27,
+              1.25,
+              1.69
+            ],
+            "rotation": [
+              0,
+              0,
+              0.1736482,
+              0.9848078
+            ],
+            "scale": [
+              0.07,
+              0.92,
+              0.07
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 9,
+            "name": "step",
+            "type": "Box",
+            "position": [
+              0,
+              0.28,
+              1.98
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.95,
+              0.15,
+              0.38
+            ],
+            "material": 7,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 10,
+            "name": "name-board",
+            "type": "Box",
+            "position": [
+              0,
+              2.65,
+              1.69
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.36,
+              0.25,
+              0.09
+            ],
+            "material": 6,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 11,
+            "name": "corner--1.67--1.58",
+            "type": "Box",
+            "position": [
+              -1.67,
+              1.65,
+              -1.58
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              1.3,
+              0.09
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 12,
+            "name": "corner--1.67-1.58",
+            "type": "Box",
+            "position": [
+              -1.67,
+              1.65,
+              1.58
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              1.3,
+              0.09
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 13,
+            "name": "corner-1.67--1.58",
+            "type": "Box",
+            "position": [
+              1.67,
+              1.65,
+              -1.58
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              1.3,
+              0.09
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 14,
+            "name": "corner-1.67-1.58",
+            "type": "Box",
+            "position": [
+              1.67,
+              1.65,
+              1.58
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              1.3,
+              0.09
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 15,
+            "name": "beam-0.58",
+            "type": "Box",
+            "position": [
+              0,
+              0.58,
+              1.63
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.72,
+              0.04,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 16,
+            "name": "beam-1.35",
+            "type": "Box",
+            "position": [
+              0,
+              1.35,
+              1.63
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.72,
+              0.04,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 17,
+            "name": "beam-2.1",
+            "type": "Box",
+            "position": [
+              0,
+              2.1,
+              1.63
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              1.72,
+              0.04,
+              0.05
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 18,
+            "name": "bin--2.45",
+            "type": "Cylinder",
+            "position": [
+              -2.45,
+              1.1,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.53,
+              1.1,
+              0.53
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 19,
+            "name": "cap--2.45",
+            "type": "Cylinder",
+            "position": [
+              -2.45,
+              2.2,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.61,
+              0.13,
+              0.61
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 20,
+            "name": "band--2.45",
+            "type": "Cylinder",
+            "position": [
+              -2.45,
+              0.45,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.55,
+              0.06,
+              0.55
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 21,
+            "name": "bin-2.45",
+            "type": "Cylinder",
+            "position": [
+              2.45,
+              1.1,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.53,
+              1.1,
+              0.53
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 22,
+            "name": "cap-2.45",
+            "type": "Cylinder",
+            "position": [
+              2.45,
+              2.2,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.61,
+              0.13,
+              0.61
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 23,
+            "name": "band-2.45",
+            "type": "Cylinder",
+            "position": [
+              2.45,
+              0.45,
+              -0.7
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.55,
+              0.06,
+              0.55
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 24,
+            "name": "beacon-mast",
+            "type": "Box",
+            "position": [
+              0,
+              4.28,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.1,
+              0.62,
+              0.1
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 25,
+            "name": "beacon-housing",
+            "type": "Box",
+            "position": [
+              0,
+              4.78,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.38,
+              0.35,
+              0.38
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 26,
+            "name": "beacon-crown",
+            "type": "Box",
+            "position": [
+              0,
+              5.19,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.5,
+              0.09,
+              0.5
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 27,
+            "name": "public-banner",
+            "type": "Box",
+            "position": [
+              0.55,
+              4.15,
+              0.02
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.5,
+              0.29,
+              0.06
+            ],
+            "material": 5,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "granaryCourt",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "granaryCourt",
+        "palette": [
+          {
+            "color": "#AE7144"
+          },
+          {
+            "color": "#513F33"
+          },
+          {
+            "color": "#E6D1A3"
+          },
+          {
+            "color": "#496F68"
+          },
+          {
+            "color": "#879889"
+          },
+          {
+            "color": "#D6B465"
+          },
+          {
+            "color": "#263D43"
+          },
+          {
+            "color": "#B4A283"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "court",
+            "type": "Box",
+            "position": [
+              -10,
+              -0.1,
+              -15
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              18,
+              0.1,
+              13
+            ],
+            "material": 7,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "welcome-stone",
+            "type": "Box",
+            "position": [
+              0,
+              0.65,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              2.9,
+              0.65,
+              0.35
+            ],
+            "material": 6,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 2,
+            "name": "ledger-roof",
+            "type": "Box",
+            "position": [
+              0,
+              1.48,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              3.2,
+              0.12,
+              0.6
+            ],
+            "material": 3,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 3,
+            "name": "fence--7",
+            "type": "Box",
+            "position": [
+              7,
+              0.7,
+              -15
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              0.09,
+              13
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 4,
+            "name": "rail--7",
+            "type": "Box",
+            "position": [
+              7,
+              1.2,
+              -15
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              0.07,
+              13
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 5,
+            "name": "fence-27",
+            "type": "Box",
+            "position": [
+              -27,
+              0.7,
+              -15
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              0.09,
+              13
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 6,
+            "name": "rail-27",
+            "type": "Box",
+            "position": [
+              -27,
+              1.2,
+              -15
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.09,
+              0.07,
+              13
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 7,
+            "name": "post--7-3",
+            "type": "Box",
+            "position": [
+              7,
+              0.8,
+              -3
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.16,
+              0.8,
+              0.16
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 8,
+            "name": "post-27-3",
+            "type": "Box",
+            "position": [
+              -27,
+              0.8,
+              -3
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.16,
+              0.8,
+              0.16
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 9,
+            "name": "post--7-10",
+            "type": "Box",
+            "position": [
+              7,
+              0.8,
+              -10
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.16,
+              0.8,
+              0.16
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 10,
+            "name": "post-27-10",
+            "type": "Box",
+            "position": [
+              -27,
+              0.8,
+              -10
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.16,
+              0.8,
+              0.16
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 11,
+            "name": "post--7-18",
+            "type": "Box",
+            "position": [
+              7,
+              0.8,
+              -18
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.16,
+              0.8,
+              0.16
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 12,
+            "name": "post-27-18",
+            "type": "Box",
+            "position": [
+              -27,
+              0.8,
+              -18
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.16,
+              0.8,
+              0.16
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 13,
+            "name": "post--7-26",
+            "type": "Box",
+            "position": [
+              7,
+              0.8,
+              -26
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.16,
+              0.8,
+              0.16
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 14,
+            "name": "post-27-26",
+            "type": "Box",
+            "position": [
+              -27,
+              0.8,
+              -26
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.16,
+              0.8,
+              0.16
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 15,
+            "name": "lane--3",
+            "type": "Box",
+            "position": [
+              3,
+              -0.005,
+              -15
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.45,
+              0.025,
+              12
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 16,
+            "name": "lane-7",
+            "type": "Box",
+            "position": [
+              -7,
+              -0.005,
+              -15
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.45,
+              0.025,
+              12
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 17,
+            "name": "lane-17",
+            "type": "Box",
+            "position": [
+              -17,
+              -0.005,
+              -15
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.45,
+              0.025,
+              12
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ],
+        "textRuns": [
+          {
+            "text": "GRANARIES",
+            "position": [
+              0,
+              0.86,
+              0.365
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "emHeight": 0.37,
+            "depth": 0.012,
+            "mode": "emboss",
+            "material": 2,
+            "align": "center"
+          }
+        ]
+      }
+    }
+  ],
+  "spawnPoints": [
+    {
+      "id": "granaries-arrival",
+      "position": [
+        -10,
+        0,
+        1.5
+      ],
+      "yawDegrees": 180
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "name": "granaryNames",
+        "kind": "Text",
+        "capacity": 16,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryResources",
+        "kind": "Text",
+        "capacity": 16,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryRegions",
+        "kind": "Text",
+        "capacity": 16,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryKinds",
+        "kind": "Text",
+        "capacity": 16,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granarySkus",
+        "kind": "Text",
+        "capacity": 16,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryWaterCoverage",
+        "kind": "Int",
+        "capacity": 16,
+        "min": 0,
+        "max": 9223372036854775807,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerCoverage",
+        "kind": "Int",
+        "capacity": 16,
+        "min": 0,
+        "max": 9223372036854775807,
+        "cells": [],
+        "visibility": {}
+      },
+      {
+        "name": "granaryIrrigationChoices",
+        "kind": "Text",
+        "capacity": 3,
+        "cells": [
+          { "key": "0", "value": "[3.5, 2, 3.5]" },
+          { "key": "1", "value": "[6.5, 2, 6.5]" },
+          { "key": "2", "value": "[8, 2, 8]" }
+        ],
+        "visibility": {}
+      },
+      {
+        "name": "granaryIrrigationSelected",
+        "kind": "Text",
+        "value": "[3.5, 2, 3.5]",
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerChoices",
+        "kind": "Text",
+        "capacity": 3,
+        "cells": [
+          { "key": "0", "value": "[8.5, 2, 8.5]" },
+          { "key": "1", "value": "[10, 2, 10]" },
+          { "key": "2", "value": "[12, 2, 12]" }
+        ],
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerSelected",
+        "kind": "Text",
+        "value": "[8.5, 2, 8.5]",
+        "visibility": {}
+      },
+      {
+        "name": "granarySurveyRequest",
+        "kind": "Int",
+        "min": 0,
+        "max": 9223372036854775807,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granarySurveyApplied",
+        "kind": "Int",
+        "min": 0,
+        "max": 9223372036854775807,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granarySurveyPage",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granaryIrrigationRequest",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granaryIrrigationStage",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerRequest",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      },
+      {
+        "name": "granaryPowerStage",
+        "kind": "Int",
+        "min": 0,
+        "max": 2,
+        "value": 0,
+        "visibility": {}
+      }
+    ]
+  },
+  "text": {
+    "defaultFont": "inter",
+    "fonts": [
+      {
+        "name": "inter",
+        "source": "fonts/inter-regular.ttf",
+        "hash": "sha256-64/47e488e1fc92d640",
+        "codePointRanges": [
+          "U+0020-U+007E"
+        ]
+      }
+    ]
+  }
+}

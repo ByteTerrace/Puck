@@ -49,6 +49,20 @@ internal sealed class Sm83SstBus : ISystemBus {
         m_accesses.Add(item: (address, value, true));
     }
     /// <inheritdoc/>
+    /// <remarks>This flat vector bus has no display, so every write commits on the pins' own drive instant and
+    /// nothing is ever in transition.</remarks>
+    public int RecordDisplayWrite(ushort address, byte value, out bool settles) {
+        settles = false;
+
+        return 0;
+    }
+    /// <inheritdoc/>
+    /// <remarks>No-op: this flat vector bus has no display to settle.</remarks>
+    public void OpenDisplayWriteSettle() { }
+    /// <inheritdoc/>
     /// <remarks>No-op: this flat vector bus has no watchpoint machinery to witness.</remarks>
     public void NoteInstructionStart(ushort pc) { }
+    /// <inheritdoc/>
+    /// <remarks>No-op: this flat vector bus has no PPU to corrupt.</remarks>
+    public void NoteRegisterAddressBus(ushort address) { }
 }

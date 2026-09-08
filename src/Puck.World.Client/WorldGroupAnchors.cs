@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.SdfVm.Views;
 
 namespace Puck.World.Client;
 
@@ -7,8 +8,9 @@ namespace Puck.World.Client;
 /// Resolves every <see cref="WorldAnchor.Group"/> once per frame into its smoothed <c>(Centroid, Spread)</c> — the
 /// establishing-shot anchor's live pose. The centroid is exponentially smoothed at the anchor's <c>SmoothRate</c> against
 /// the presentation delta and seeded un-smoothed on first resolve (so a camera does not fly in from the origin); the
-/// spread (mean distance from the centroid) is what <see cref="WorldCameraMotion.Follow"/>'s <c>SpreadPullback</c> consumes to
-/// widen as the group scatters. Presentation-only, client-side, no simulation feedback.
+/// spread (mean distance from the centroid) is what <see cref="WorldCameraProgramOp.Offset"/>'s
+/// <see cref="WorldCameraProgramOp.Offset.SpreadPullback"/> consumes to widen as the group scatters.
+/// Presentation-only, client-side, no simulation feedback.
 /// </summary>
 public sealed class WorldGroupAnchors {
     private readonly Dictionary<string, State> m_states = new(comparer: StringComparer.Ordinal);
@@ -103,14 +105,7 @@ public sealed class WorldGroupAnchors {
             return (state.Centroid, state.Spread);
         }
 
-        // Frame-rate-independent exponential ease: a = 1 - e^(-rate * dt).
-        var alpha = (1f - MathF.Exp(x: (-MathF.Max(
-            x: group.SmoothRate,
-            y: 0f
-        ) * MathF.Max(
-            x: deltaSeconds,
-            y: 0f
-        ))));
+        var alpha = FirstOrderLag.Alpha(rate: group.SmoothRate, deltaSeconds: deltaSeconds);
 
         state.Centroid = Vector3.Lerp(
             amount: alpha,

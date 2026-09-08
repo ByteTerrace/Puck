@@ -51,6 +51,23 @@ internal static unsafe class Win32D3D11 {
         context = createdContext;
         device = createdDevice;
     }
+    // Ends the event query, flushes, and spins until everything submitted before End has completed: GetData writes the
+    // BOOL only on S_OK and leaves it untouched while pending (S_FALSE); a device-removal HRESULT throws out of the
+    // generated wrapper. Issued on a camera worker at camera cadence, never on the render thread.
+    public static void WaitForCompletion(ID3D11DeviceContext* context, ID3D11Query* query) {
+        context->End(pAsync: ((ID3D11Asynchronous*)query));
+        context->Flush();
+
+        BOOL done = false;
+
+        while (!done) {
+            context->GetData(DataSize: ((uint)sizeof(BOOL)), GetDataFlags: 0, pAsync: ((ID3D11Asynchronous*)query), pData: &done);
+
+            if (!done) {
+                Thread.SpinWait(iterations: 64);
+            }
+        }
+    }
     public static void ThrowIfFailed(HRESULT hr, string operation) {
         if (hr.Value < 0) {
             throw new COMException(errorCode: hr.Value, message: $"{operation} failed");

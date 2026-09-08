@@ -638,7 +638,7 @@ public readonly struct IntegerMaterial : ISignedMaterial<BigInteger, IntegerMate
     public BigInteger Subtract(BigInteger left, BigInteger right) =>
         (left - right);
 }
-/// <summary>The exact rationals as a field material, carried by the rational values of <see cref="QuadraticSurd"/> — no
+/// <summary>The exact rationals as a field material, carried by the rational values of <see cref="RealQuadratic"/> — no
 /// new primitive, and the resolvent lane every exact solve wants.</summary>
 /// <remarks>The carrier is the rational surds only, and admission enforces it. The surd type also represents
 /// <c>a + b·√d</c> for a nonzero <c>b</c>, and those values are not a field between them: each real quadratic field is
@@ -646,24 +646,24 @@ public readonly struct IntegerMaterial : ISignedMaterial<BigInteger, IntegerMate
 /// carrier and the field material would stop being a field. A coefficient carrying a square root is therefore refused
 /// at admission, where the offending value can still be named, rather than later at an operator that only knows the two
 /// operands disagree.</remarks>
-public readonly struct RationalMaterial : IFieldMaterial<QuadraticSurd, RationalMaterial> {
+public readonly struct RationalMaterial : IFieldMaterial<RealQuadratic, RationalMaterial> {
     /// <summary>Gets the multiplicative identity, one.</summary>
-    public QuadraticSurd One => QuadraticSurd.One;
+    public RealQuadratic One => RealQuadratic.One;
     /// <summary>Gets the additive identity, zero.</summary>
-    public QuadraticSurd Zero => QuadraticSurd.Zero;
+    public RealQuadratic Zero => RealQuadratic.Zero;
 
     /// <summary>Adds two rationals.</summary>
     /// <param name="left">The first addend.</param>
     /// <param name="right">The second addend.</param>
     /// <returns>The sum.</returns>
-    public QuadraticSurd Add(QuadraticSurd left, QuadraticSurd right) =>
+    public RealQuadratic Add(RealQuadratic left, RealQuadratic right) =>
         (left + right);
     /// <summary>Admits an exact rational, refusing a value that carries a square root.</summary>
     /// <param name="value">The carrier value to validate.</param>
-    /// <returns><paramref name="value"/> when it is rational; <see cref="QuadraticSurd"/> already normalizes its own
+    /// <returns><paramref name="value"/> when it is rational; <see cref="RealQuadratic"/> already normalizes its own
     /// representation, so a rational is canonical as it stands.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is irrational.</exception>
-    public QuadraticSurd Canonicalize(QuadraticSurd value) {
+    public RealQuadratic Canonicalize(RealQuadratic value) {
         if (!value.IsRational) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(value),
@@ -679,8 +679,8 @@ public readonly struct RationalMaterial : IFieldMaterial<QuadraticSurd, Rational
     /// <param name="values">The per-term values.</param>
     /// <param name="lane">Ignored; the rational material is exact.</param>
     /// <returns>The folded value.</returns>
-    public QuadraticSurd FusedChargedLinear(ReadOnlySpan<QuadraticSurd> charges, ReadOnlySpan<QuadraticSurd> values, ChargeLane lane) {
-        var accumulator = QuadraticSurd.Zero;
+    public RealQuadratic FusedChargedLinear(ReadOnlySpan<RealQuadratic> charges, ReadOnlySpan<RealQuadratic> values, ChargeLane lane) {
+        var accumulator = RealQuadratic.Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
             accumulator += (charges[index] * values[index]);
@@ -694,8 +694,8 @@ public readonly struct RationalMaterial : IFieldMaterial<QuadraticSurd, Rational
     /// <param name="right">The per-term right coefficients.</param>
     /// <param name="lane">Ignored; the rational material is exact.</param>
     /// <returns>The folded value.</returns>
-    public QuadraticSurd FusedChargedSum(ReadOnlySpan<QuadraticSurd> charges, ReadOnlySpan<QuadraticSurd> left, ReadOnlySpan<QuadraticSurd> right, ChargeLane lane) {
-        var accumulator = QuadraticSurd.Zero;
+    public RealQuadratic FusedChargedSum(ReadOnlySpan<RealQuadratic> charges, ReadOnlySpan<RealQuadratic> left, ReadOnlySpan<RealQuadratic> right, ChargeLane lane) {
+        var accumulator = RealQuadratic.Zero;
 
         for (var index = 0; (index < charges.Length); ++index) {
             accumulator += (charges[index] * (left[index] * right[index]));
@@ -706,37 +706,37 @@ public readonly struct RationalMaterial : IFieldMaterial<QuadraticSurd, Rational
     /// <summary>Indicates whether a rational is zero.</summary>
     /// <param name="value">The value to test.</param>
     /// <returns><see langword="true"/> when the value is zero.</returns>
-    public bool IsZero(QuadraticSurd value) =>
+    public bool IsZero(RealQuadratic value) =>
         (0 == value.Sign);
     /// <summary>Multiplies two rationals.</summary>
     /// <param name="left">The multiplicand.</param>
     /// <param name="right">The multiplier.</param>
     /// <returns>The product.</returns>
-    public QuadraticSurd Multiply(QuadraticSurd left, QuadraticSurd right) =>
+    public RealQuadratic Multiply(RealQuadratic left, RealQuadratic right) =>
         (left * right);
     /// <summary>Negates a rational.</summary>
     /// <param name="value">The value to negate.</param>
     /// <returns>The negation.</returns>
-    public QuadraticSurd Negate(QuadraticSurd value) =>
+    public RealQuadratic Negate(RealQuadratic value) =>
         -value;
     /// <summary>Subtracts one rational from another.</summary>
     /// <param name="left">The minuend.</param>
     /// <param name="right">The subtrahend.</param>
     /// <returns>The difference.</returns>
-    public QuadraticSurd Subtract(QuadraticSurd left, QuadraticSurd right) =>
+    public RealQuadratic Subtract(RealQuadratic left, RealQuadratic right) =>
         (left - right);
     /// <summary>Attempts to invert a rational.</summary>
     /// <param name="value">The value to invert.</param>
     /// <param name="inverse">On success, the reciprocal; otherwise zero.</param>
     /// <returns><see langword="true"/> unless the value is zero.</returns>
-    public bool TryInvert(QuadraticSurd value, out QuadraticSurd inverse) {
+    public bool TryInvert(RealQuadratic value, out RealQuadratic inverse) {
         if (0 == value.Sign) {
-            inverse = QuadraticSurd.Zero;
+            inverse = RealQuadratic.Zero;
 
             return false;
         }
 
-        inverse = (QuadraticSurd.One / value);
+        inverse = (RealQuadratic.One / value);
 
         return true;
     }

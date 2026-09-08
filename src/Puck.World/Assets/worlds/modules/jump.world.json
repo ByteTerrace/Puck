@@ -1,0 +1,402 @@
+{
+  "prototypes": [
+    {
+      "id": "jumpDeck",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "jumpDeck",
+        "palette": [
+          { "color": "#8C8780" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "deck",
+            "type": "Box",
+            "position": [ 0, 0.2, 0 ],
+            "rotation": [ 0, 0, 0, 1 ],
+            "scale": [ 4, 0.2, 4 ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "jumpPlatform",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "jumpPlatform",
+        "palette": [
+          { "color": "#6FA383" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "step",
+            "type": "Box",
+            "position": [ 0, 0.2, 0 ],
+            "rotation": [ 0, 0, 0, 1 ],
+            "scale": [ 1.5, 0.2, 1.5 ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "jumpWall",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "jumpWall",
+        "palette": [
+          { "color": "#4E5C55" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "panel",
+            "type": "Box",
+            "position": [ 0, 3, 0 ],
+            "rotation": [ 0, 0, 0, 1 ],
+            "scale": [ 0.15, 3, 2 ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "jumpTrophy",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "jumpTrophy",
+        "palette": [
+          { "color": "#4A4A52" },
+          { "color": "#FFD24C", "emissive": 0.6 }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "pedestal",
+            "type": "Box",
+            "position": [ 0, 0.3, 0 ],
+            "rotation": [ 0, 0, 0, 1 ],
+            "scale": [ 0.5, 0.3, 0.5 ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "prize",
+            "type": "Sphere",
+            "position": [ 0, 0.95, 0 ],
+            "rotation": [ 0, 0, 0, 1 ],
+            "scale": [ 0.35, 0.35, 0.35 ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "jumpFallMarker",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "jumpFallMarker",
+        "palette": [
+          { "color": "#B23A3A" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "net",
+            "type": "Box",
+            "position": [ 0, 0.05, 0 ],
+            "rotation": [ 0, 0, 0, 1 ],
+            "scale": [ 20, 0.05, 20 ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "jumpCourt",
+        "prototypeId": "jumpDeck",
+        "position": [ 0, 0, 0 ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "platform1",
+        "prototypeId": "jumpPlatform",
+        "position": [ 0, 2, -6 ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "parent": "jumpCourt",
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "wallSegment",
+        "prototypeId": "jumpWall",
+        "position": [ 3.4, 4, -12 ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "parent": "jumpCourt",
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "platform2",
+        "prototypeId": "jumpPlatform",
+        "position": [ 1.5, 4, -12 ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "parent": "jumpCourt",
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "platform3",
+        "prototypeId": "jumpPlatform",
+        "position": [ 0, 6, -18 ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "parent": "jumpCourt",
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "platform4",
+        "prototypeId": "jumpPlatform",
+        "position": [ 0, 8, -24 ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "parent": "jumpCourt",
+        "solid": { "margin": 0 }
+      },
+      {
+        "id": "jumpTrophy",
+        "prototypeId": "jumpTrophy",
+        "position": [ 6, 3, -10 ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "parent": "jumpCourt",
+        "region": { "radius": 1.2 }
+      },
+      {
+        "id": "jumpFallZone",
+        "prototypeId": "jumpFallMarker",
+        "position": [ 0, -6, -12 ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "parent": "jumpCourt",
+        "region": { "radius": 20 }
+      }
+    ]
+  },
+  "spawnPoints": [
+    {
+      "id": "jump-arrival",
+      "position": [ 0, 0.4, 3 ],
+      "yawDegrees": 0
+    }
+  ],
+  "navigation": {
+    "domains": [
+      {
+        "name": "jumpSurface",
+        "kind": "Surface",
+        "origin": [ -8, 4, -28 ],
+        "cellSize": 1,
+        "width": 24,
+        "depth": 32,
+        "layers": 1,
+        "agentRadius": 0.35,
+        "agentHeight": 1.2,
+        "arrivalDistance": 0.5,
+        "maxExpandedNodes": 512,
+        "maxPathNodes": 128,
+        "probeUp": 8,
+        "probeDown": 6,
+        "maxStepHeight": 0.6,
+        "maxSlopeDegrees": 55
+      }
+    ]
+  },
+  "state": {
+    "world": [
+      {
+        "name": "reached",
+        "kind": "Int",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "name": "falls",
+        "kind": "Int",
+        "nonNegative": true,
+        "value": 0
+      }
+    ],
+    "body": [
+      {
+        "name": "jumpCounter",
+        "kind": "Counter",
+        "initial": 0,
+        "resetFact": "Grounded"
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "jumpFallsCounter",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": "$region:jumpFallZone",
+        "comparison": "Greater",
+        "value": 0
+      },
+      "effects": [
+        { "$type": "addState", "state": "falls", "value": 1 }
+      ]
+    },
+    {
+      "name": "jumpTrophyReached",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": "$region:jumpTrophy",
+        "comparison": "Greater",
+        "value": 0
+      },
+      "effects": [
+        { "$type": "setState", "state": "reached", "value": 1 }
+      ]
+    }
+  ],
+  "bodyMotionPrograms": [
+    {
+      "name": "vaultMotion",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "vaulter",
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "vaultMotion",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [ 0, 1, 0 ],
+          "radius": 0.35
+        },
+        "motion": {
+          "facingSnap": false,
+          "holds": [
+            {
+              "name": "ledge",
+              "bond": "Surface",
+              "cone": [ 112, 150 ],
+              "hold": "Pull",
+              "pull": 1.2,
+              "reach": 1.0,
+              "upLean": 0.7,
+              "speed": 1.6,
+              "forward": "Heading",
+              "release": "jump"
+            },
+            {
+              "name": "wall",
+              "bond": "Surface",
+              "cone": [ 65, 110 ],
+              "hold": "Pull",
+              "pull": 1.0,
+              "reach": 0.8,
+              "upLean": 0.0,
+              "speed": 2.0,
+              "forward": "Heading",
+              "onDrive": true,
+              "driveAlignment": 0.5,
+              "release": "jump"
+            },
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [ 0, 60 ],
+              "hold": "Gravity",
+              "gravity": { "fall": 46, "rise": 28 },
+              "envelope": { "sinkSpeed": 40 },
+              "reach": 1.2,
+              "thrust": 0.6
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": { "fall": 46, "rise": 28 },
+              "envelope": { "sinkSpeed": 40 },
+              "thrust": 0.6
+            }
+          ],
+          "shaping": [
+            { "along": {} }
+          ],
+          "speed": { "value": 5 },
+          "turn": { "rate": 2.5 }
+        },
+        "actions": {
+          "jump": {
+            "onPress": {
+              "gate": {
+                "$type": "compareState",
+                "state": "jumpCounter",
+                "comparison": "Less",
+                "value": 2
+              },
+              "latchSeconds": 0.1,
+              "effects": [
+                { "$type": "setVerticalVelocity", "velocity": 11 },
+                { "$type": "addState", "state": "jumpCounter", "value": 1 }
+              ]
+            },
+            "onRelease": {
+              "gate": { "$type": "now", "fact": "Rising" },
+              "latchSeconds": 0,
+              "effects": [
+                { "$type": "scaleVerticalVelocity", "factor": 0.45 }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "exports": {
+    "reads": [ "reached", "falls" ],
+    "actions": [],
+    "bindings": [ "reached" ]
+  }
+}

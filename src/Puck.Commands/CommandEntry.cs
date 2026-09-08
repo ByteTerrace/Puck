@@ -20,7 +20,8 @@ public readonly record struct CommandEntry {
     /// <param name="phase">The edge this tick represents.</param>
     /// <param name="origin">How the command entered the command pipeline.</param>
     /// <param name="dispatch">Whether this entry's handler fires when the snapshot is applied.</param>
-    /// <param name="text">The original text line for a simulation-routed console command; <see langword="null"/> for physical input.</param>
+    /// <param name="text">The submitted line for a simulation-routed console command or an argument-bearing binding
+    /// press; otherwise <see langword="null"/>.</param>
     /// <param name="device">The local device that produced this command.</param>
     /// <param name="source">The deterministic binding owner: a provider-neutral physical source, or a stable
     /// synthesized destination id for a chord or toggle. <see langword="null"/> for non-binding injections.</param>
@@ -50,9 +51,9 @@ public readonly record struct CommandEntry {
         Value = value;
     }
 
-    /// <summary>Whether applying this local live entry releases <see cref="TextCommandSource"/>'s deferred-mutation
-    /// drain barrier. Local-only like <see cref="Device"/>; a re-driven entry reconstructs it as <see langword="false"/>.</summary>
-    internal bool CompletesTextSubmission { get; init; }
+    /// <summary>The per-session read-after-write barrier this entry releases when it is applied, or
+    /// <see langword="null"/>. Local-only coordination like <see cref="Device"/>, never deterministic snapshot
+    /// identity; a re-driven entry reconstructs it as <see langword="null"/>.</summary>
     internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
 
     /// <summary>Whether the physical signal that produced this entry created its device-to-slot assignment. Unlike
@@ -91,9 +92,9 @@ public readonly record struct CommandEntry {
     /// must distinguish independent contributions dispatching commands reads this, never <see cref="Device"/>.
     /// Use <see cref="Origin"/> for ingress.</summary>
     public string? Source { get; internal init; }
-    /// <summary>The original text line for a simulation-routed console command. <see langword="null"/> for physical
-    /// input. This is deterministic snapshot payload; it lets argument-bearing verbs execute at their assigned
-    /// tick.</summary>
+    /// <summary>The submitted line for a simulation-routed console command or an argument-bearing binding press;
+    /// otherwise <see langword="null"/>. This is deterministic snapshot payload; it lets argument-bearing verbs
+    /// execute at their assigned tick.</summary>
     public string? Text { get; internal init; }
     /// <summary>The command's value for this tick.</summary>
     public CommandValue Value { get; internal init; }

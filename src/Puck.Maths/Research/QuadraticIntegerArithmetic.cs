@@ -805,10 +805,9 @@ public static class QuadraticIntegerArithmetic {
         internal BigInteger P { get; }
     }
 
-    // ---- Fixed-width fast tier ----
-    //
-    // The norm and divide-out inner loop dominate the factorization profile; this tier extracts the coefficients
-    // (P, Q) and an element's parts as machine words, computes in Int128 when they clear a proven bound, and
+    // Fixed-width fast tier. The norm and divide-out inner loop dominate the factorization profile; this tier
+    // extracts the coefficients (P, Q) and an element's parts as machine words, computes in Int128 when they clear
+    // a proven bound, and
     // otherwise falls through to the BigInteger methods above — bit-identically. Callers never choose a tier.
     //
     // Bound proof. Let B be the routing bound, so |P|, |Q|, |U|, |V| ≤ B for every accepted operand. The norm

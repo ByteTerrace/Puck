@@ -12,7 +12,7 @@ public sealed class InputRouterTests {
     [Fact]
     public void TwoControlsOnOneCommandPressOnFirstDownAndReleaseOnLastUp() {
         var router = Router(registry: out _);
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         // First control down: the logical press edge fires (Dispatch true) and the command is now carried.
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
@@ -44,6 +44,28 @@ public sealed class InputRouterTests {
         Assert.False(condition: router.IsCommandHeld(command: Command, slot: 0));
     }
     [Fact]
+    public void AuthoredLaneSignalBypassesTheSlotResolverAndLeavesNoPresence() {
+        // The resolver knows no device: an ordinary signal finds no lane, an authored-lane signal lands on its seat.
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
+            bindings: new FixedBindings(binding: new CommandBinding(Command: Command)),
+            principalResolver: new ConsolePrincipal(),
+            slotResolver: static _ => -1
+        );
+        var device = InputDeviceId.FromConnectionKey(key: "sense:3");
+
+        router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
+        Assert.Empty(collection: router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes);
+
+        router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device) with { Slot = 2 });
+
+        var lane = Assert.Single(collection: router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue).Lanes);
+
+        Assert.Equal(expected: 2, actual: lane.Slot);
+        Assert.True(condition: router.IsCommandHeld(command: Command, slot: 2));
+        Assert.False(condition: router.TryGetLastInputTick(slot: 2, tick: out _));
+    }
+    [Fact]
     public void DeviceDisconnectCancelsAndDropsTheHoldItCarried() {
         var router = new InputRouter(
             registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
@@ -51,7 +73,7 @@ public sealed class InputRouterTests {
             principalResolver: new ConsolePrincipal(),
             slotResolver: new FakeSlotResolver(raiseDisconnect: out var raiseDisconnect)
         );
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
@@ -113,7 +135,7 @@ public sealed class InputRouterTests {
     [Fact]
     public void RecycledHeldStateDoesNotRetainItsPreviousControl() {
         var router = Router(registry: out _);
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
@@ -137,7 +159,7 @@ public sealed class InputRouterTests {
             principalResolver: new ConsolePrincipal(),
             slotResolver: new FakeSlotResolver(raiseDisconnect: out var raiseDisconnect)
         );
-        var deviceA = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var deviceA = InputDeviceId.FromConnectionKey(key: "keyboard-1");
         var deviceB = InputDeviceId.FromConnectionKey(key: "pad-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: deviceA));
@@ -265,7 +287,7 @@ public sealed class InputRouterTests {
             )),
             principalResolver: new ConsolePrincipal()
         );
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
@@ -316,7 +338,7 @@ public sealed class InputRouterTests {
     [Fact]
     public void KeyRepeatRefreshesLastInputWithoutDispatchingASecondPress() {
         var router = Router(registry: out _);
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "key.w", deviceId: device));
         _ = router.SnapshotForTick(tick: 10UL, windowEndTick: ulong.MaxValue);
@@ -337,6 +359,44 @@ public sealed class InputRouterTests {
         Assert.Empty(collection: snapshot.Lanes);
         Assert.True(condition: router.TryGetLastInputTick(slot: 0, tick: out var lastInput));
         Assert.Equal(actual: lastInput, expected: 7UL);
+    }
+    [Fact]
+    public void RestBandAndPostureSamplesDoNotCountAsPlayerActivity() {
+        var router = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
+            bindings: new EmptyBindings(),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        router.Capture(signal: new InputSignal(
+            Source: "gamepad.accelerometer",
+            DeviceId: default,
+            Value: CommandValue.Axis(value: new System.Numerics.Vector3(x: 0f, y: 1f, z: 0f)),
+            Phase: CommandPhase.Active,
+            Posture: true
+        ));
+        _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
+
+        router.Capture(signal: new InputSignal(
+            Source: "gamepad.leftTrigger",
+            DeviceId: default,
+            Value: CommandValue.Axis(value: (InputRouter.ActivityRestBand - 0.01f)),
+            Phase: CommandPhase.Active
+        ));
+        _ = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
+
+        Assert.False(condition: router.TryGetLastInputTick(slot: 0, tick: out _));
+
+        router.Capture(signal: new InputSignal(
+            Source: "gamepad.leftTrigger",
+            DeviceId: default,
+            Value: CommandValue.Axis(value: InputRouter.ActivityRestBand),
+            Phase: CommandPhase.Active
+        ));
+        _ = router.SnapshotForTick(tick: 3UL, windowEndTick: ulong.MaxValue);
+
+        Assert.True(condition: router.TryGetLastInputTick(slot: 0, tick: out var lastInput));
+        Assert.Equal(actual: lastInput, expected: 3UL);
     }
     [Fact]
     public void SnapshotIdentityIsStructuralAndExcludesLocalDeviceAnnotations() {
@@ -448,6 +508,53 @@ public sealed class InputRouterTests {
 
         return retired;
     }
+
+    [Fact]
+    public void BoundDispatchCarriesTheBindingRowsTextAndNeverTheSignalsTypedPayload() {
+        // A bound press with authored argument text: the entry carries the LINE the binding row composes, which is
+        // what CommandRegistry.ApplySnapshot re-parses at tick time.
+        var authored = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
+            bindings: new FixedBindings(binding: new CommandBinding(Command: Command, Text: "8")),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        authored.Capture(signal: InputSignal.Press(source: "key.w"));
+
+        var press = Assert.Single(collection: Assert.Single(collection: authored.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Equal(expected: $"{Command} 8", actual: press.Text);
+
+        // A TEXT-BEARING signal reaching that same authored row does not get to overwrite the line: the row still
+        // decides, so the payload is "<command> 8" rather than the typed character. A typed character is not a
+        // command line, and forwarding it would have the registry refuse it as an unknown verb once per keystroke.
+        // Its own router, because the press above is still held and would fold this tick into a dispatch-less edge.
+        var overtyped = new InputRouter(
+            registry: new CommandRegistry(modules: [new DigitalModule(command: Command)]),
+            bindings: new FixedBindings(binding: new CommandBinding(Command: Command, Text: "8")),
+            principalResolver: new ConsolePrincipal()
+        );
+
+        overtyped.Capture(signal: InputSignal.Typed(source: "keyboard.text", text: "n"));
+
+        Assert.Equal(
+            actual: Assert.Single(collection: Assert.Single(collection: overtyped.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries).Text,
+            expected: $"{Command} 8"
+        );
+
+        // And where the row authors NO text there is nothing for the signal's payload to be mistaken for: the entry
+        // carries null rather than "n". See the remarks on InputSignal.Typed for why this is the settled behaviour
+        // rather than an oversight.
+        var typed = Router(registry: out _);
+
+        typed.Capture(signal: InputSignal.Typed(source: "keyboard.text", text: "n"));
+
+        var character = Assert.Single(collection: Assert.Single(collection: typed.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue).Lanes).Entries);
+
+        Assert.Null(@object: character.Text);
+        Assert.Equal(expected: CommandPhase.Started, actual: character.Phase);
+    }
+
     private static InputRouter Router(out CommandRegistry registry) {
         registry = new CommandRegistry(modules: [new DigitalModule(command: Command)]);
 

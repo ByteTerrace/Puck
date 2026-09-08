@@ -15,12 +15,11 @@ public sealed partial class ApuWaveChannel {
     private int m_frequency;
     private int m_frequencyTimer;
     private int m_samplePosition;
-    private int m_lengthCounter;
+    private ApuLengthCounter m_length;
     private int m_volumeShift;
     private bool m_forceVolume75; // NR32 bit 7 (AGB-only): forces 75% regardless of the 2-bit volume field
     private bool m_dacEnabled;
     private bool m_enabled;
-    private bool m_lengthEnabled;
     private bool m_twoBank;       // NR30 bit 5: 0 = single 32-sample bank, 1 = double 64-sample
     private int m_bank;           // NR30 bit 6: the bank that plays first
 
@@ -105,7 +104,7 @@ public sealed partial class ApuWaveChannel {
         : 0)));
     /// <summary>Reloads the length counter (NR31).</summary>
     public void WriteLength(byte value) {
-        m_lengthCounter = (256 - value);
+        m_length.Counter = (256 - value);
     }
     /// <summary>Sets the coarse output volume (NR32): mute / 100% / 50% / 25%, or the AGB 75% override (bit 7).</summary>
     public void WriteVolume(byte value) {
@@ -132,29 +131,25 @@ public sealed partial class ApuWaveChannel {
     /// <summary>Sets the high frequency bits and control (NR34); bit 7 triggers the channel.</summary>
     public void WriteControl(byte value) {
         m_frequency = (m_frequency & 0xFF) | ((value & 0x7) << 8);
-        m_lengthEnabled = ((value & 0x40) != 0);
+        m_length.Enabled = ((value & 0x40) != 0);
 
         if ((value & 0x80) != 0) {
             m_enabled = m_dacEnabled;
             m_samplePosition = 0;
             m_frequencyTimer = ((2048 - m_frequency) * 8);
 
-            if (m_lengthCounter == 0) {
-                m_lengthCounter = 256;
+            if (m_length.Counter == 0) {
+                m_length.Counter = 256;
             }
         }
     }
     /// <summary>Reads back NR34's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => ((byte)(m_lengthEnabled
+    public byte ReadControl() => ((byte)(m_length.Enabled
         ? 0x40
         : 0));
     /// <summary>Clocks the length counter (256&#160;Hz), disabling the channel when it reaches zero.</summary>
     public void ClockLength() {
-        if (
-            m_lengthEnabled &&
-            (m_lengthCounter > 0) &&
-            (--m_lengthCounter == 0)
-        ) {
+        if (m_length.Clock()) {
             m_enabled = false;
         }
     }

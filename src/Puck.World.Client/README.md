@@ -13,22 +13,42 @@ vocabulary and the link-query seam; never `Puck.World.Server` — a live
 
 `WorldClientSeats` (implements the Server seam `IWorldEmbodiedSeats`) and
 `WorldAudioDirector` stay in `Puck.World` itself rather than living here: the
-audio director imports `Puck.World.Audio` types directly. `WorldFrameSource`,
+audio director imports `Puck.World.Audio` types directly. `WorldFramePresenter`,
 `WorldSceneEmitter`, and `WorldViewComposer` live here — their only
 root-crossing dependency was the audio director, narrowed to
 `IWorldAudioFrameFeed`/`IWorldAudioCueSink` below.
+
+Live static-placement admission reserves both rendering forms at boot: whole
+creation stamps and per-shape instances. Each `authoringHeadroomPlacements` slot
+reserves a whole stamp and up to `WorldPlacementPolicy.MaxShapesPerStamp` entries
+in the per-shape floor. The floors are conservative GPU capacity reservations,
+not a strict count of editable rows. This keeps newly discovered or authored
+simple creations inside the same frozen envelope as scoped creations.
 
 ## Seats and input
 
 - `PlayerRoster.cs` — seat metadata: which devices sit at which of the four
   local slots, each seat's selected or pending profile, and the join/confirm
   flow (a pending seat's inputs drive the profile picker, not locomotion).
+  `PlayerRoster.Devices.cs` (a sibling partial) carries the per-kind device
+  vocabulary: a keyboard, mouse, or gamepad is learned through the router's own
+  first-touch discovery (`InputRouter.ObserveDeviceKind` classifies the kind
+  from the signal's source family before the roster ever resolves a slot for
+  it), while a camera is recorded explicitly via `ObserveDevice` and seated by
+  its own default policy (the lowest occupied, camera-less slot, player 1
+  first — never minting a player). Tokens are minted per kind (`keyboard<N>`,
+  `mouse<N>`, `gamepad<N>`, `camera<N>`) and `TryGetSeatDevice`/`AssignDevice`
+  move a camera between occupied seats; assigning one to an empty slot is
+  refused because a camera never creates or counts toward player presence.
+  When several devices of one
+  kind share a seat, `TryGetSeatDevice` resolves whichever was assigned to it
+  most recently (`world.devices` marks that one `*`).
 - `SeatController.cs` — the per-seat device-intent producer: typed movement
   and look samples, toggled motion input, and held channel lanes folded into
   the seat's per-tick `PlayerIntent` submission.
 - `WorldPerceptionAnchor.cs` — the per-seat perception anchor: the ONE body
   index all seat-relative presentation derives from — the chase-camera anchor
-  pose and seat-join cue site (`WorldFrameSource`), the spatial-audio listener
+  pose and seat-join cue site (`WorldFramePresenter`), the spatial-audio listener
   (through the seat's view-camera pose), the crowd soft-shadow centers
   (`WorldSceneEmitter`), and the
   `seat.<n>.position.*` HUD binding family. It resolves to the seat's bound
@@ -37,7 +57,7 @@ root-crossing dependency was the audio director, narrowed to
   place and every derivation follows together — a mirror route (capture off)
   or a screen route never swaps it. `WorldSeatContextSync.Publish` (in
   `Puck.World`) writes it every tick off the same grant-table read that
-  publishes the `engagement` context family. `player.where` echoes it
+  publishes the `engagement` context family. `body.where` echoes it
   (`anchor=body:<n>`, 0-based) for local seats.
 - `WorldGroupAnchors.cs` — resolves each group anchor's smoothed centroid and
   spread once per frame (the establishing-shot camera's live pose;
@@ -45,14 +65,37 @@ root-crossing dependency was the audio director, narrowed to
 
 ## The entity view
 
+Catalog appearance and body identity are independent. `WorldRigCatalog` holds
+128 reusable looks; each body has a separate transform range large enough for
+any of them. A pinned or transferred look therefore keeps every leaf, even when
+its destination slot originally wore a smaller rig. Restyling one body does not
+move another body's transforms or attachment slots. Render-capacity probes
+reserve the largest rig for each of the lowest `WorldBodiesLimits.DetailedRenderBand`
+(128) detailed bodies and one coarse capsule for every remaining body;
+repeated looks do not change that hybrid ceiling, and the number of catalog
+entries is not the population limit.
+This is a buffer and input-complexity bound, not a frame-rate guarantee. A dense
+crowd with a hard presentation target needs a non-per-creature SDF lane such as
+raster impostors or an authored aggregate representation.
+
+Each catalog leaf retains its own culling instance and animated transform. Its
+sphere fits the emitted primitive, including the unscaled authored offset, so
+small looks stay enclosed and a tile touching one hand need not evaluate the
+whole creature. `world.population` reports leaves, culling instances, and
+authored instructions separately. The renderer's instance ceiling remains a
+separate constraint on dense populations; reusable appearances do not remove it.
+
 - `WorldClient.cs` — consumes each tick's snapshot into a double-buffered
   entity view (previous/current pose per entity) and resolves per-frame
   render poses: position lerp plus shortest-path orientation nlerp at the
   fixed-step accumulator's residual, with per-entity correction easers so an
   authority correction glides visually while the simulation pose snaps. A
   snapshot entry flagged as a teleport snaps both endpoints so nothing
-  interpolates across a jump.
-- `WorldFrameSource.cs` — composes the frame the SDF renderer draws: the
+  interpolates across a jump. `DeliverDefinition` (a shape change) recompiles
+  the channel and target-register tables and bumps `DefinitionRevision`;
+  `DeliverState` (a value-only write) stores the fresh definition for state
+  reads and recompiles neither.
+- `WorldFramePresenter.cs` — composes the frame the SDF renderer draws: the
   avatar catalog's animated leaves, the static scene, placements, screens, and
   viewport layout; publishes the audio director's per-frame snapshot through
   `IWorldAudioFrameFeed`.
@@ -66,9 +109,26 @@ root-crossing dependency was the audio director, narrowed to
   the numbers cross the layering as constructor data, never restated.
 - `WorldSeatCameraPose.cs` — one seat's resolved listener-policy camera pose,
   the frame source's own input to the audio director's `Publish`.
-- `WorldPlacementStamper.cs`, `WorldStampPool.cs`, `WorldCreationFacets.cs` —
+- `WorldPlacementStamper.cs`, `WorldStampPool.cs`, `WorldPrototypeFacets.cs` —
   the document-to-geometry emission path for scene rows and `puck.creation.v1`
-  placements; `WorldSceneEmitter` drives them for the boot world.
+  placements; `WorldSceneEmitter` drives them for the boot world. A
+  body-rooted `BodyStamp` carrying a `WorldLookMotion` with `Dynamics`/
+  `PartDynamics` gets a root `SecondOrderFollower3`/`4` (position/orientation)
+  plus one per-part position follower per named part — the presentation-only
+  float twin of `Puck.Maths.SecondOrderDynamics`, stepped once per frame in
+  `PackTransforms` off a `Tick`-latched delta; `WorldSceneEmitter`'s
+  catalog-avatar-root path carries the identical root follower for a
+  catalog-sourced look. `WorldGaitDrivers.cs` is the per-body animation-driver
+  runtime beside them: a stamped creation's declared `drivers` yield a phase and
+  an eased weight each, advanced once per `PackTransforms` from the body's
+  rendered pose delta and its `WorldClient.Facts`, gated by a conjunction of
+  tokens that may include the client-derived `moving`/`still` (an eased rendered
+  speed against `WorldGaitDrivers.MovingSpeed`, so a stride releases on a stop
+  with no sim fact involved); the shapes' `swings`/`slides` compose off them —
+  presentation-only, written into the dynamic transform buffer and read nowhere
+  else. Both reseed on `WorldClient.PoseEpoch` moving (an
+  activation, a teleport, an over-threshold correction) rather than streak a
+  discontinuous pose.
 - `WorldSessionSceneEmitter.cs`, `WorldAdjacencySceneEmitter.cs` — the session
   projection's and adjacency neighbour's own content emission, parallel to
   `WorldSceneEmitter`'s boot-world path.
@@ -81,11 +141,17 @@ root-crossing dependency was the audio director, narrowed to
   `SdfDocumentModel.cs`) and its declared refusals (`SdfRefusal.cs`).
 - `WorldCompositionState.cs` — the delivered composition state
   `WorldViewComposer` writes and readers consume.
-- `WorldChangeShimmer.cs` — the delivery-time highlight on changed rows.
-- `WorldSessionLeverSink.cs` — writes an accepted session lever onto the live
-  presentation service it names (render settings, present pacing, audio mix
-  gain via `IWorldAudioLever`) — the only write path for those knobs, reached
-  only past the server's grant check.
+- `WorldSessionLeverSink.cs` — the name-keyed applier: writes an accepted
+  session lever onto whichever live presentation service was registered under
+  its token, the only write path for those knobs, reached only past the
+  server's grant check. An unregistered token is refused by name.
+- `WorldSessionLevers.cs` — the knob vocabulary (the `world.<knob>` verb names
+  without their prefix) and the composition-time registration binding each to
+  render settings, present pacing, the audio mix gain (`IWorldAudioLever`), or
+  the binding-bar visibility.
+- `WorldBindingBarVisibility.cs` — the live per-seat binding-bar visibility
+  override the `binding-bar` lever writes and the root's bar-policy resolver
+  reads.
 - `WorldSessionRenderEnvelope.cs` — the session projection's joint
   word/instance capacity measurer, and the process-wide window-lease counter
   (`WorldSessionWindowLeases`) `world.faces` reads back.
@@ -99,49 +165,43 @@ root-crossing dependency was the audio director, narrowed to
   published per-seat viewport + camera a pointer consumer reads.
 - `WorldTextCatalog.cs` — deterministic glyph-atlas generation for a
   world-authored font.
-- `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs`, `WorldAvatarCatalog.cs`,
-  `WorldScreenTextDecal.cs` — compiled camera rigs, static placement/shape
-  anchor geometry, the avatar instance layout, and screen decal text.
-- `FiniteGuard.cs` — the editor state-setters' finite guard (rejects NaN and
-  infinite values before they enter client state).
+- `WorldCameraRigCompiler.cs`, `WorldAnchorGeometry.cs`, `WorldRigCatalog.cs`,
+  `WorldScreenTextDecal.cs` — the camera-program translation, static
+  placement/shape anchor geometry, the avatar instance layout, and screen decal
+  text.
 
-## The editor
+## Camera programs
 
-The in-session editor is client state end to end; its committed acts are
-ordinary protocol mutations submitted with the acting seat's principal.
-
-- `WorldEditorSession.cs` — editor-mode tenancy per seat: binding-group flip,
-  camera-rig swap, and the layout seam.
-- `WorldEditorTargeting.cs` — the selection (`section`, id-or-index), pure
-  client state that self-heals against every delivered definition.
-- `WorldEditorPicker.cs` — the look-ray pick: a fixed-point picking program
-  built from the document, rebuilt only on a definition delivery.
-- `WorldEditorDrag.cs` — the pending-row preview channel: a drag composes its
-  preview over the delivered definition and commits exactly one whole-row
-  mutation on release (one journal entry, one undo step).
-- `WorldWorkbench.cs` — the sculpt sub-editor: a client-local
-  `Puck.Forge.Authoring.SculptModel` bench whose live preview renders through
-  the same stamping path a committed creation uses.
-
-**Known limitations worth knowing before debugging them.** Authoring gestures
-sit outside the simulation-replay contract by design: a stick drag integrates
-presentation `deltaSeconds` and persists the resulting float row, so replaying
-identical command snapshots need not reproduce authored coordinates (the
-committed mutation and the journal are deterministic once the row exists). A
-new controller's first South press can both seat the player and fire its bound
-action, because seating and command dispatch consume the same snapshot. Losing
-window focus can strand a held edge (a release that never reaches the input
-router) until another edge clears it, and a signal from an unbound control can
-reserve an input slot that dispatches nothing until the mapping is replaced.
+- `WorldCameraRigCompiler.cs` translates an authored `WorldCameraProgram` into
+  the document-blind IR in `Puck.SdfVm.Views` and returns an
+  `IWorldCameraProgramRig`: authored subjects and `state.<row>[.<key>]` bindings
+  become per-frame slots the rig refills from the live document inside
+  `Resolve`, so no caller can evaluate against a stale binding by missing an
+  ordering step. `Retarget` repoints a cached rig at a newly delivered document;
+  `Look` carries the seat's live orbit delta (inert on a program compiled
+  non-interactive); `Spread` feeds an authored `spreadPullback`.
+  `WorldCameraRigCompiler.Cache` is the one compiled-rig cache slot every
+  caching call site holds: it recompiles when the authored program instance or
+  any definition collection `Compile` reads (`cameras`, `curves`, `dynamics`,
+  `views`) has been replaced, and retargets otherwise.
+- Free Cam is a possession, not a second integrator: a `seatModes` state
+  targeting `"camera"` possesses the seat's `camera-seat-<slot>` inhabited
+  placement through the ordinary Engage door, and the seat's view resolves
+  through `views.cameraRig` on this same pipeline.
 
 ## The binding-authoring layer
 
 - `WorldSeatBindings.cs` — the per-seat compiled `IInputBindings`: engine
   default ⊕ world overlays ⊕ profile bindings ⊕ live session rebinds, and the
   context-derivation state machine that picks a seat's active group. Besides
-  roster, engagement, and editor state, a `state:<row>` family reads the
-  routed world's scalar value or the controlled body's keyed value, allowing
-  gameplay-rule state writes to swap whole control groups.
+  the built-in roster/engagement/layout families and a world's own AUTHORED
+  `seatModes` families (`WorldSeatModeFamily`, flipped by `player.mode`), a
+  `state:<row>` family reads the routed world's scalar value or the
+  controlled body's keyed value, allowing gameplay-rule state writes to swap
+  whole control groups. A world overlay carrying its own `when` composes only
+  while that state condition holds; `SyncSeat` recomposes the seat the tick a
+  gated overlay's own condition flips (a per-overlay signature compared
+  against the routed definition, never a per-tick poll).
 - `WorldAffordances.cs` — the process command vocabulary check every binding
   document validates against.
 - `CommandVocabulary.cs` — the command-name string constants (and the two
@@ -149,6 +209,9 @@ reserve an input slot that dispatches nothing until the mapping is replaced.
   `AddonSourceVocabulary.TryResolve`) nine root `*CommandModule` classes in
   `Puck.World` forward their own declarations to, single-sourced here since
   the binding-authoring files above cannot reference those root types.
+- `PlayerAssignmentCommand.cs` — the shared `player.assign` definition and
+  outcome narration over `PlayerRoster`; the root module registers this exact
+  definition and command-level laws drive it through `CommandRegistry`.
 
 ## Audio and documents
 
@@ -158,7 +221,7 @@ reserve an input slot that dispatches nothing until the mapping is replaced.
   `IWorldSimulationClock`/`IWorldScreenPresenter` use.
 - `IWorldAudioCueSink.cs` — the narrow write (`SubmitCue`) `WorldSceneEmitter`
   fires world-event cues through.
-- `IWorldAudioFrameFeed.cs` — the narrow read/write `WorldFrameSource` drives
+- `IWorldAudioFrameFeed.cs` — the narrow read/write `WorldFramePresenter` drives
   every produced frame (`Publish`, `ReconcileSpeakers`,
   `TryResolveSpeakerPose`, the `MachineSourceResolver` binding); extends
   `IWorldAudioCueSink` rather than re-declaring `SubmitCue`, since a frame
@@ -170,6 +233,6 @@ reserve an input slot that dispatches nothing until the mapping is replaced.
 
 Client behavior is verified by running the game and looking, plus the console
 read-backs that echo client state (`world.players`, `player.bindings`,
-`screen.state`, `editor.status`). See
+`screen.state`, `player.mode`). See
 [`../Puck.World/README.md`](../Puck.World/README.md) for the run recipe and
 console contract.

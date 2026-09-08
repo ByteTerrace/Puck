@@ -1,54 +1,67 @@
 # Puck.World.Tests
 
-Executable laws for the **settled** Puck.World substrate. This project exists to
-FAIL when the substrate's observable contract breaks — not to describe the code.
+These tests check the document, protocol, authoritative simulation, and the
+shipped games' state programs. Rendering and complete game interaction still
+need verification by running Puck.World.
 
-## What it gates
+## Keep the feedback loop short
 
-- `Puck.World.Schema` — the document model, validators, serialization.
-- `Puck.World.Protocol` — the Protocol wire surface.
-- `Puck.World.Server` — the sim contract: authority/grants, the mutation pipeline, the ordered domain, replay determinism.
-- The Schema→presentation capacity seam — `Puck.World.Client.WorldOverlayCapacity.FromSchema()` builds a
-  `Puck.Overlays.OverlayChannelLeases` that fits the overlay's backstops (the one cross-assembly property neither
-  side can state alone; not a HUD/presentation feature test).
+Use the smallest fixture that exercises the behavior under test:
 
-Nothing else.
+- `Fixtures.BuildDocument` supplies a compiler-maintained world for engine laws.
+  `FreshServer` validates its serialized document and owns a fresh server and
+  scratch directory for every case.
+- `AuthoredGameFixtures.Program` loads a shipped game's state, rules, patterns,
+  and tables into that minimal world. A poker hand must not build the Nexus
+  navigation graph or simulate unrelated creatures.
+- `RuleFrameFixture` compiles a state program once per test, then reloads every
+  candidate's values and derived boards. Exhaustive rule checks retain all
+  candidate combinations; physical sampling and mutation admission use server
+  tests alongside them.
+- Composition checks load the complete Nexus once. Placement-identity checks
+  retain its complete placement order and kit assignments, but use one-cell
+  navigation domains because they do not advance the simulation.
 
-## Red-lines (a test that violates one is a DEFECT, not a style nit)
+Step until the observable operation completes, with a finite failure bound.
+Use a fixed tick window when elapsed simulation time is itself the claim.
+Independent card games run in separate test collections; live servers and
+shuffle streams are never shared between tests.
 
-1. **Laws, not values or structure.** Assert a property that must hold across
-   every valid change — never a count, an enum's cardinality, a field list, an
-   exact string, or any internal shape. If a mutation-kind count or a
-   refusal-catalog size appears in an assertion, the test is wrong: it punishes
-   the next person for adding a kind or deleting a dead refusal.
-2. **Every test can fail for a real reason.** A denial test carries a passing
-   control, with actor ≠ target; a new law is proven once by breaking it. A test
-   that passes regardless of correctness is worse than none — delete it.
-3. **Determinism is the only hash gate, and it is self-referential.** Pin the
-   MAPPING — same document + same input → bit-identical state across runs,
-   machines, backends. A deliberate logic change is EXPECTED to move the hash:
-   re-record it in the same change. Never pin a historical value; never preserve
-   a wrong result to stay green.
-4. **Settled substrate only.** No test of the overworld, the reveal ladder,
-   arcade content, HUD/presentation, or any game feature — those are greenfield,
-   verified by RUNNING the game (`CLAUDE.md` rule 3). No console-output goldens.
+Allocation checks run with tiered compilation disabled, so optimized code is
+available from startup. Warm enough to cover initialization and a complete
+relevant cadence, rather than running thousands of ticks to wait for JIT
+promotion. Preserve population sizes, work limits, and allocation controls.
+Network deadline tests use controlled timers and wait for the relevant work
+to arrive before expiring it; production timeout lengths need not elapse.
 
-## Enforcement is architectural first, this file second
+Extension hosting tests use fake providers and controlled scheduling time.
+`WorldConfiguredExtensionLawTests` composes multiple providers from configuration,
+drives request/status tables through the real authority, and checks restart,
+revocation, failed composition cleanup, and isolation of invalid requests.
+`WorldObservationLawTests` checks complete collection projection into rows of any
+cell kind (each field parsed and refused by its own row's kind), unchanged-read
+suppression, retained state on failures, ordinary authority refusal, and replay
+revocation. `WorldRenderEnvelopeLawTests` exercises the real scene capacity probe
+without a GPU, including new per-shape placements within authored headroom.
+`ConfinedStorageLawTests` uses real files for link, namespace, concurrent
+replacement, and conditional-write behavior. Run that class on Windows and
+Linux x64: Windows covers junctions and hard links, while Linux also covers
+file symlinks without the Windows symlink privilege. No live Azure mutation is
+part of these tests.
 
-The guard lives in the test base, not in this prose: a law is written against a
-base that REQUIRES its control, so the wrong shape is the awkward one to write.
-Mirror `tests/Puck.Maths.Tests` (Domains / Oracles / Laws + a coverage ratchet
-that lifts without pinning structure) — extend that architecture, do not invent a
-parallel one. This file records the red-lines for review; it is not the primary
-guard.
+## What an assertion must prove
 
-## This file's own limits (so it stays a decision record, not pollution)
+Assert behavior, not an incidental implementation shape. Counts that belong to
+a game or capacity contract are meaningful; enum cardinalities and private
+field lists are not. Denial tests need an accepted control. Determinism checks
+compare independent runs of the same inputs rather than a historical hash.
+Changing a fixture must preserve the condition that can make its law fail.
 
-- It lives here, and NOTHING else references it — no skill, no `CLAUDE.md` edit,
-  no cross-doc tendrils.
-- It records only what cannot be re-derived — the red-lines and the scope. It
-  does not list the tests (the code shows them), restate the framework, or grow
-  per test.
-- If it ever disagrees with the code it is hostile, not stale: delete or correct
-  it in the same change. It earns its place only by staying small enough to be
-  obviously right.
+Measure execution separately from restore and build:
+
+```powershell
+dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-build --logger trx
+```
+
+Review slow TRX cases before reducing workloads. Do not make the default run
+fast by silently excluding functional coverage.

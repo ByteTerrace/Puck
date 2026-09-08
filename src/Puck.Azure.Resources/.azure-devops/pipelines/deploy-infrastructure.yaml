@@ -1,0 +1,102 @@
+parameters:
+  - name: "agentPoolName"
+    default: "bytrcmdpp000"
+    displayName: "Agent Pool Name"
+    type: "string"
+  - name: "forceBicepUpgrade"
+    default: true # TODO: Set to false when Bicep CLI is updated in Microsoft-hosted agent images.
+    displayName: "Force Bicep Upgrade"
+    type: "boolean"
+  - name: "resourceGroupName"
+    default: "byteterrace"
+    displayName: "Resource Group Name"
+    type: "string"
+  - name: "serviceConnectionName"
+    default: "byteterrace-mpn | byteterrace"
+    displayName: "Service Connection Name"
+    type: "string"
+
+schedules:
+  - cron: "0 18 * * *"
+    always: true
+    displayName: "Daily Sync"
+    branches:
+      include:
+        - main
+
+trigger: none
+
+jobs:
+  - deployment: "main"
+    displayName: "main"
+    environment: "production"
+    pool:
+      name: "${{ parameters.agentPoolName }}"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: "self"
+              clean: true
+              displayName: "checkout repository"
+              enabled: true
+              fetchDepth: 1
+              timeoutInMinutes: 3
+            - task: AzureCLI@2
+              displayName: "az bicep upgrade"
+              enabled: ${{ parameters.forceBicepUpgrade }}
+              inputs:
+                azureSubscription: "${{ parameters.serviceConnectionName }}"
+                failOnStandardError: false
+                inlineScript: |
+                  [CmdletBinding()]
+                  param()
+                  begin {}
+                  process {
+                      az bicep upgrade;
+                  }
+                  end {
+                      if ((Test-Path -LiteralPath 'variable:\LASTEXITCODE')) {
+                          exit $LASTEXITCODE;
+                      }
+                  }
+                powerShellIgnoreLASTEXITCODE: true
+                scriptLocation: "inlineScript"
+                scriptType: "pscore"
+                visibleAzLogin: false
+            - task: AzureCLI@2
+              displayName: "deploy infrastructure"
+              enabled: true
+              inputs:
+                arguments: >-
+                  -DeploymentName '$(Build.BuildId)'
+                  -ParametersFilePath '$(Pipeline.Workspace)/s/main.bicepparam'
+                  -ResourceGroupName '${{ parameters.resourceGroupName }}'
+                azureSubscription: "${{ parameters.serviceConnectionName }}"
+                failOnStandardError: true
+                inlineScript: |
+                  [CmdletBinding()]
+                  param(
+                      [Parameter(Mandatory = $true, Position = 0)]
+                      [string]$DeploymentName,
+                      [Parameter(Mandatory = $true, Position = 1)]
+                      [string]$ParametersFilePath,
+                      [Parameter(Mandatory = $true, Position = 2)]
+                      [string]$ResourceGroupName
+                  )
+                  begin {}
+                  process {
+                      az deployment group create `
+                          --name $DeploymentName `
+                          --parameters $ParametersFilePath `
+                          --resource-group $ResourceGroupName;
+                  }
+                  end {
+                      if ((Test-Path -LiteralPath 'variable:\LASTEXITCODE')) {
+                          exit $LASTEXITCODE;
+                      }
+                  }
+                powerShellIgnoreLASTEXITCODE: true
+                scriptLocation: "inlineScript"
+                scriptType: "pscore"
+                visibleAzLogin: false

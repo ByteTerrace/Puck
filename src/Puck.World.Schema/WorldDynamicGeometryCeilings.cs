@@ -29,7 +29,7 @@ namespace Puck.World;
 /// case), Uniform (a centered 3D grid, spacing grows with N), FarCorners (N split across eight local clusters ~8
 /// units from the origin)} x {static (baked, grid-invariant) or moving (one dynamic-transform slot per instance,
 /// orbiting every produced frame — forces <c>SdfProgram.RequiresFrameInstanceGridRebuild</c>'s per-frame CPU
-/// rebuild)}. Resolution 1280x800 (<c>WorldHostDefaults.Default</c> — Puck.World's own shipped default). Quality
+/// rebuild)}. Resolution 1280x800 (the standard host extent <c>standard.world.json</c> authors). Quality
 /// preset: <c>SdfFrame</c>'s own defaults, unmodified (soft shadows on, ambient occlusion on, exact — not fast —
 /// shadow/AO march; the harness overrides nothing) — i.e. the full production-quality shading path, not a cheapened
 /// one. Both backends (Vulkan and Direct3D 12). Medians over >=300 sampled frames (20 warm-up frames discarded)

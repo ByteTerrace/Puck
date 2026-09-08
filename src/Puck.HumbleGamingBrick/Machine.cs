@@ -157,6 +157,8 @@ public sealed class Machine : ISnapshotableMachine {
     /// it runs.</summary>
     /// <exception cref="InvalidOperationException">The machine has no bus master.</exception>
     public void StepInstruction() {
+        m_componentClock.Invalidate();
+
         if (m_busMaster is null) {
             throw new InvalidOperationException(message: "The machine has no bus master to step.");
         }
@@ -175,6 +177,8 @@ public sealed class Machine : ISnapshotableMachine {
     /// the exact integer T-cycle count its frame elapsed so pacing carries no floating-point drift.</summary>
     /// <param name="tCycles">The number of T-cycles to advance this call.</param>
     public void Run(ulong tCycles) {
+        m_componentClock.Invalidate();
+
         if (m_busMaster is null) {
             for (var remaining = tCycles; (remaining != 0UL); --remaining) {
                 m_componentClock.AdvanceCpuTCycle();
@@ -190,11 +194,15 @@ public sealed class Machine : ISnapshotableMachine {
         while (m_componentClock.Clock.CycleCount < m_runTargetCycles) {
             m_busMaster.StepInstruction();
         }
+
+        m_componentClock.Settle();
     }
     /// <summary>Captures the machine's entire mutable state at the current instant into a self-contained snapshot that
     /// aliases nothing live. Restore it into this machine to rewind, or into a fresh machine to fork a divergent run.</summary>
     /// <returns>The snapshot.</returns>
     public MachineSnapshot Snapshot() {
+        m_componentClock.Settle();
+
         // The retained writer keeps its backing buffer sized to the last snapshot; Reset rewinds it so repeated
         // snapshots reuse one allocation instead of newing a writer (and churning its doubling growth) every call. The
         // snapshot then takes ownership of one exact-size copy of the written bytes — the only per-snapshot allocation.
@@ -238,6 +246,7 @@ public sealed class Machine : ISnapshotableMachine {
     /// zero-copy producer half of a pooled fork: the sibling reads it straight back through <see cref="RestoreState"/>.</summary>
     /// <param name="writer">The sink to serialize into.</param>
     public void SerializeState(StateWriter writer) {
+        m_componentClock.Settle();
         writer.WriteUInt64(value: Now.RawBits);
 
         foreach (var snapshotable in m_snapshotables) {
@@ -250,7 +259,9 @@ public sealed class Machine : ISnapshotableMachine {
     /// calling) and does not validate exact consumption (the snapshot restore path does).</summary>
     /// <param name="reader">The source to read state from.</param>
     public void RestoreState(StateReader reader) {
+        m_componentClock.Invalidate();
         m_componentClock.Clock.ResetTo(instant: Tick.FromRawBits(rawBits: reader.ReadUInt64()));
+        m_componentClock.Invalidate();
 
         foreach (var snapshotable in m_snapshotables) {
             snapshotable.LoadState(reader: reader);

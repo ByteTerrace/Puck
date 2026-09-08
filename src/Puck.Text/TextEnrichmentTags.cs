@@ -178,15 +178,6 @@ public static class TextEnrichmentTags {
 
         return effect;
     }
-    private static ulong HashStringFnv1A(string value) {
-        var hash = Fnv1aHash.Create();
-
-        foreach (var character in value) {
-            hash.Add(value: character);
-        }
-
-        return hash.Value;
-    }
     private static TextEnrichmentTagRecord ParseTagRecord(string payload) {
         var fields = payload.Split(
             options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
@@ -380,7 +371,7 @@ public static class TextEnrichmentTags {
 
         parameter = new TextEffectParameter(
             BaseValue: baseValue,
-            VariableHash: HashStringFnv1A(value: variableName),
+            VariableHash: Fnv1aHash.Compute(values: variableName),
             BindingMode: mode
         );
 

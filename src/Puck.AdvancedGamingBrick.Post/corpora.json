@@ -1,0 +1,16 @@
+[
+  {
+    "Name": "gba-tests",
+    "Version": "a7113b67e63f83a9b321696ddd7042ccfad6c881",
+    "Archive": "https://github.com/jsmolka/gba-tests/archive/a7113b67e63f83a9b321696ddd7042ccfad6c881.zip",
+    "Sha256": "a3cfa223de6df5460837a37ac4547468a6150d860ecd29e7591f2387f3157c8e",
+    "Root": "gba-tests-a7113b67e63f83a9b321696ddd7042ccfad6c881"
+  },
+  {
+    "Name": "fuzzarm",
+    "Version": "a675329cd57da48e3e406216ba2d79dd7e09ee20",
+    "Archive": "https://github.com/DenSinH/FuzzARM/archive/a675329cd57da48e3e406216ba2d79dd7e09ee20.zip",
+    "Sha256": "289870c6a46a5f40538667bd6d778768feee80a3931cf549df2726afb8a178cb",
+    "Root": "FuzzARM-a675329cd57da48e3e406216ba2d79dd7e09ee20"
+  }
+]

@@ -4,37 +4,39 @@
     "null"
   ],
   "items": {
-    "description": "One row of the admission section \u2014 durable configuration naming one identity or issuer this world admits over its TCP socket, and what a peer verified under it is minted (see Grants). Never a live grant row itself: WorldAdmissionDoor is the only consumer, and only at the pre-population Hello handshake, off the tick thread \u2014 this section carries no WorldSection axis and nothing mutates it live, exactly like WorldReference/WorldPortalsSection. Absent (the default) admits no remote peer at all \u2014 deny by default, the same posture an empty Puck.Attestation.TrustList already carries.",
+    "description": "One row of the admission section \u2014 durable configuration naming one identity or issuer this world admits through a trusted transport, and what a peer verified under it is minted (see Grants). Never a live grant row itself: WorldAdmissionDoor matches verified identities before population admission. This section carries no WorldSection axis and nothing mutates it live, exactly like WorldReference/WorldPortalsSection. Absent (the default) admits no remote peer at all \u2014 deny by default, the same posture an empty Puck.Attestation.TrustList already carries.",
     "type": [
       "object",
       "null"
     ],
     "properties": {
       "domain": {
-        "description": "The trusted key\u0027s own id domain \u2014 a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey\u0027s own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key\u0027s hash. For FederatedAuthority it is not a key id at all: it names the authenticated source-authority namespace, or AnyAuthority for any authority that completes the federation handshake.",
+        "description": "The trusted key\u0027s own id domain \u2014 a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey\u0027s own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key\u0027s hash. For FederatedAuthority it is not a key id at all: it names the authenticated source-authority namespace, or AnyAuthority for any authority that completes the federation handshake. For OAuth it is the exact HTTPS issuer.",
         "type": "string"
       },
       "subject": {
-        "description": "The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here).",
+        "description": "The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here). OAuth requires an exact subject within its issuer, never a wildcard.",
         "type": [
           "string",
           "null"
         ]
       },
       "mode": {
-        "description": "Whether this entry signs directly or vouches for a chain.",
+        "description": "The trusted identity proof this row accepts.",
         "enum": [
           "SignsDirectly",
           "Vouches",
-          "FederatedAuthority"
-        ]
+          "FederatedAuthority",
+          "OAuth"
+        ],
+        "title": "WorldAdmissionTrustMode"
       },
       "algorithm": {
-        "description": "Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door\u0027s mandatory attestation-v1-base profile. Sealing algorithms and optional signing extensions are refused by document validation.",
+        "description": "Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door\u0027s mandatory attestation-v1-base profile. Sealing algorithms and optional signing extensions are refused by document validation. OAuth and federated-authority rows require an empty string.",
         "type": "string"
       },
       "publicKey": {
-        "description": "The pinned key\u0027s actual SubjectPublicKeyInfo bytes, base64-encoded \u2014 carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, \u0022Signed attestation\u0022: consulting the issuer at verification time is a ruled-out design).",
+        "description": "The pinned key\u0027s actual SubjectPublicKeyInfo bytes, base64-encoded \u2014 carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, \u0022Signed attestation\u0022: consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.",
         "type": "string"
       },
       "grants": {
@@ -45,17 +47,16 @@
           "type": "object",
           "properties": {
             "capability": {
-              "description": "The capability minted.",
-              "enum": [
-                "Drive",
-                "Observe",
-                "Control",
-                "Mutate",
-                "Edit"
-              ]
+              "$ref": "./common.schema.json#/$defs/WorldCapability",
+              "description": "The capability minted."
             },
             "subject": {
-              "description": "The subject it scopes to; null means the body this admission assigns, resolved by SubjectFor once that index is known. An authored template cannot name a body index \u2014 the door runs before the population picks one \u2014 so a row that must follow the admitted body omits its subject."
+              "description": "The subject it scopes to; null means the body this admission assigns, resolved by SubjectFor once that index is known. An authored template cannot name a body index \u2014 the door runs before the population picks one \u2014 so a row that must follow the admitted body omits its subject.",
+              "title": "GrantSubject",
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "exclusive": {
               "description": "Whether the mint is exclusive.",
@@ -76,10 +77,13 @@
               ]
             },
             "kindMask": {
-              "description": "The verb-scoped narrowing beneath a Mutate/section:\u003Cname\u003E row \u2014 required by the live grant door on an untrusted principal\u0027s such a row (an absent mask there is refused rather than read as full reach)."
+              "description": "The verb-scoped narrowing beneath a Mutate/section:\u003Cname\u003E row \u2014 required by the live grant door on an untrusted principal\u0027s such a row (an absent mask there is refused rather than read as full reach).",
+              "title": "MutationKindMask",
+              "type": "string"
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "title": "WorldAdmissionGrant"
         }
       },
       "disclosure": {
@@ -90,7 +94,8 @@
           "Replica",
           null
         ],
-        "default": null
+        "default": null,
+        "title": "WorldDisclosureTier"
       }
     },
     "required": [
@@ -101,7 +106,8 @@
       "publicKey",
       "grants"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldAdmissionEntry"
   },
   "default": null
 }

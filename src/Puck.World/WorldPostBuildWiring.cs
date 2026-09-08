@@ -1,10 +1,13 @@
+using System.Globalization;
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Puck.Commands;
 using Puck.Launcher;
 using Puck.Overlays;
+using Puck.World.Addons;
 using Puck.World.Client;
+using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -13,7 +16,8 @@ namespace Puck.World;
 /// The post-build wiring step every boot shape runs: the affordance vocabulary install, the boot document's genuine
 /// binding-vocabulary re-validation (see the remarks on <see cref="Install"/>), the accepted-session-lever
 /// attachment, the outstanding-capture drain (see the end of <see cref="Install"/>), and the server's
-/// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/
+/// <see cref="WorldServer.EchoTap"/>/<see cref="WorldServer.SaveEffectTap"/>/<see cref="WorldServer.MusicTransitionTap"/>/
+/// <see cref="WorldServer.MusicLayerTap"/>/<see cref="WorldServer.MusicEmbellishmentTap"/>/
 /// <see cref="WorldMachineHost.MachineLifecycleTap"/> closures — moved out of the old presentation-only render-root
 /// factory so <c>wire.errors</c> stays honest headless (a deferred Simulation-routed refusal is counted regardless of
 /// boot shape). Called once from <c>Program.cs</c> right after <c>IHost.Build()</c>, for both boot shapes. The
@@ -50,13 +54,33 @@ internal static class WorldPostBuildWiring {
     public static bool Install(IServiceProvider services) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
-        var consoleRegistry = services.GetRequiredService<CommandRegistry>();
+        // The addon runtime resolves lazily as a DI singleton (WorldBootComposition), and WorldAddonCommandModule —
+        // one of the modules CommandRegistry aggregates below — takes it as a constructor dependency, so resolving
+        // CommandRegistry first would transitively construct it INSIDE that call, with no narrow catch around it.
+        // Resolving it explicitly here first gives it its own catch, matching every sibling boot gate's
+        // false + printed-reason shape; the transitive resolution CommandRegistry triggers moments later just
+        // returns this same cached singleton.
+        try {
+            _ = services.GetRequiredService<WorldAddonRuntime>();
+        } catch (WorldAddonInstallRefusedException refusal) {
+            Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");
 
-        // The TCP socket door: bound ONLY when host.listen/--listen names an endpoint — a world with no Listen field
+            return false;
+        }
+
+        var consoleRegistry = services.GetRequiredService<CommandRegistry>();
+        try {
+            services.GetRequiredService<WorldServiceExtensions>().Initialize();
+        } catch (Exception exception) when (exception is ArgumentException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException or IOException) {
+            Console.Error.WriteLine($"[world.extensions: configuration refused: {exception.Message}]");
+            return false;
+        }
+
+        // The QUIC socket door: bound ONLY when host.listen/--listen names an endpoint — a world with no Listen field
         // never opens a socket, exactly like a headless flag never opening a window. Started here (not a factory)
         // so it observes the fully-built container's WorldHostSettings singleton.
         if (services.GetRequiredService<WorldHostSettings>().Listen is { } listen) {
-            services.GetRequiredService<WorldTcpHost>().Start(listen: listen);
+            services.GetRequiredService<WorldPeerHost>().Start(listen: listen);
         }
 
         // The affordance vocabulary goes live here — the first post-container point on the boot path where the built
@@ -94,6 +118,32 @@ internal static class WorldPostBuildWiring {
                 );
             }
         };
+
+        // THE CAMERA-APPLICATION TEARDOWN SEAM: a world load/reload/reset (or a crossing) reseeds a seat's authored
+        // mode families to their defaults, dropping the camera-targeting state a live camera application was composed
+        // from — but WorldSeatBindings owns the published state, not the possession route, so the two halves meet
+        // here, where both resolve in EVERY boot shape. Disengaging through the SAME exit player.mode takes releases
+        // the seat's possession route, so a reseed can never leave a body idled under a route no mode state is asking
+        // for. Stamped with the seat's own acting principal: the restore targets that seat's own body, which is
+        // exactly the authority PrincipalOf reports. Unconditional — Disengage on an already-clear route is the
+        // ordinary NotEngaged no-op.
+        var cameraRoster = services.GetRequiredService<PlayerRoster>();
+        var cameraLink = services.GetRequiredService<IServerLink>();
+
+        services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => {
+            for (var slot = 0; slot < WorldSeatBindings.SeatCount; slot++) {
+                if (seatRouter.TryRoute(slot) is { } route && route.Endpoint.ClockOwnedHere &&
+                    route.Endpoint.Identity == WorldInstanceHost.BootInstanceName) {
+                    _ = seatRouter.CompareExchangeEntity(slot, route, route.Entity, out _);
+                }
+            }
+        };
+
+        seatBindings.CameraApplicationDropped += slot => WorldCameraApplication.Deactivate(
+            actingPrincipal: cameraRoster.PrincipalOf(slot: slot),
+            link: cameraLink,
+            slot: slot
+        );
 
         // The genuine boot-document re-validation (see this method's remarks): the FIRST validation, at
         // WorldDefinitionLoader.TryResolve, ran before WorldAffordances.Installed — its command half was a no-op in
@@ -154,7 +204,8 @@ internal static class WorldPostBuildWiring {
             seatBindings: services.GetRequiredService<WorldSeatBindings>(),
             roster: services.GetRequiredService<PlayerRoster>(),
             grants: services.GetRequiredService<WorldServer>().Grants,
-            anchor: services.GetRequiredService<WorldPerceptionAnchor>()
+            anchor: services.GetRequiredService<WorldPerceptionAnchor>(),
+            activeLayout: services.GetRequiredService<Puck.World.Client.WorldViewComposer>().ActiveLayoutName
         );
 
         // Close the lever path here, where both halves are resolvable in EVERY shape: an accepted lever reaches the
@@ -164,21 +215,35 @@ internal static class WorldPostBuildWiring {
 
 
         // The echo fan-out's halves — resolved ONCE so the tap closure below never queries the container per-echo.
-        // toasts/overlayFeed are presentation-only (AddWorldPresentation registers both or neither); the stable
+        // toasts are presentation-only (AddWorldPresentation registers it); the stable
         // terminal-session proxy exists in both shapes and mirrors edit outcomes when a windowed bank is attached.
-        // editorDrag/editorWorkbench are CORE (command-vocabulary parity moved
-        // the whole editor/sculpt surface into AddWorldAuthoritativeCore — see WorldBootComposition's remarks), so
-        // they are ALWAYS present now — a headless script can grab/drag or open a sculpt bench purely over the
-        // console, same as windowed.
         var toasts = services.GetService<OverlayToastStore>();
-        var overlayFeed = services.GetService<WorldOverlayFeed>();
-        var editorDrag = services.GetRequiredService<WorldEditorDrag>();
-        var editorWorkbench = services.GetRequiredService<WorldWorkbench>();
         var consoleSessions = services.GetRequiredService<TerminalConsoleSessions>();
         var audioDirector = services.GetRequiredService<WorldAudioDirector>();
         var definitionSource = services.GetRequiredService<WorldDefinitionSource>();
+        var deferredVerbEchoes = services.GetRequiredService<WorldDeferredVerbEchoes>();
 
         services.GetRequiredService<WorldServer>().EchoTap = echo => {
+            // The per-verb half of a deferred verdict: a buffered mutation verb registered its minted correlation at
+            // submit, so a LOCAL submission's verdict prints an accountable "[<verb>: …]" line beside the
+            // verb-agnostic "[world.mutation …]" narration — stderr on rejection (alongside "[world.mutation
+            // rejected: …]"), stdout on acceptance (the verb's own confirmation, distinct from the narration's
+            // "[world.mutation: …]" stderr line), so a script can account either verdict under the verb it submitted
+            // rather than only the reason it was refused.
+            if (
+                (echo.ConnectionId == SubmissionEnvelope.LocalConnectionId) &&
+                deferredVerbEchoes.TryTake(
+                correlationId: echo.CorrelationId,
+                verb: out var submittingVerb
+            )
+            ) {
+                if (echo.Rejected) {
+                    Console.Error.WriteLine(value: $"[{submittingVerb}: {echo.Message}]");
+                } else {
+                    Console.WriteLine(value: $"[{submittingVerb}: {echo.Message}]");
+                }
+            }
+
             // world.load/world.reload move what the console considers "the current origin" — but only once the
             // SERVER's own echo confirms the rebuild actually applied (this tap fires from the tick boundary, after
             // every gate — authority, dirty-guard, validation, capacity, solids — has already passed), never eagerly
@@ -213,30 +278,7 @@ internal static class WorldPostBuildWiring {
                 consoleRegistry.NoteDeferredRejection();
             }
 
-            // Only applied DOCUMENT edits stamp the act-class tag — grant-table changes narrate as toasts alone.
-            // Presentation-only: nothing else reads the HUD act-class tag headless.
-            if (
-                !echo.Rejected &&
-                (echo.Kind != WorldEditEchoKind.GrantTable)
-            ) {
-                overlayFeed?.NoteMutationApplied(documentOnly: (echo.Kind == WorldEditEchoKind.DocumentDefaults));
-            }
-
-            // A rejected mutation correlates back to the frozen released drag preview that submitted it: the
-            // matched seat's overlay retires NOW and the row snaps honestly back, instead of waiting out the
-            // deadline. CORE in every boot shape now (see the resolution above) — a headless drag preview is client-
-            // local state with nothing to render, but the correlation still keeps it honest.
-            if (
-                echo.Rejected &&
-                (echo.Mutation is { } rejectedMutation)
-            ) {
-                editorDrag.NoteRejected(mutation: rejectedMutation);
-                // A rejected sculpt commit clears its bench's pending flag WITHOUT flipping clean — the work stays
-                // counted as uncommitted (the accept, in WorldWorkbench.Tick, is the only clean edge).
-                editorWorkbench.NoteCommitRejected(mutation: rejectedMutation);
-            }
-
-            // THE EDIT-ECHO CUE LANE (the shimmer's audio twin): the same outcome fires its cue token — capability
+            // THE EDIT-ECHO CUE LANE: the same outcome fires its cue token — capability
             // denials as grant.denied, other rejections as mutation.rejected, applied edits as mutation.applied AT
             // the changed row's authored position where the mutation payload carries one. The audio director is
             // CORE, so this runs unconditionally; a headless boot's cues simply accumulate in a queue no device pump
@@ -257,7 +299,7 @@ internal static class WorldPostBuildWiring {
         };
 
         // THE SAVE-EFFECT TAP: a world rule's 'save' effect performs engine I/O directly rather than composing a
-        // WorldMutation (see ActionEffect.Save's remarks for why), so WorldServer cannot run it through the ordinary
+        // WorldMutation (see WorldEffect.Save's remarks for why), so WorldServer cannot run it through the ordinary
         // mutation pipeline — and cannot run the CAPTURE itself either: Puck.World.Server references no rendering or
         // input, and WorldSessionCapture.Capture (the world.save fold) needs the live render levers, screen binder,
         // audio director, and pacing control, all composition-root state. This closure runs the IDENTICAL fold
@@ -270,6 +312,22 @@ internal static class WorldPostBuildWiring {
         var renderSettings = services.GetRequiredService<WorldRenderSettings>();
         var screenBinder = services.GetRequiredService<WorldScreenBinder>();
         var pacing = services.GetRequiredService<PresentPacingControl>();
+        var bindingBarVisibility = services.GetRequiredService<WorldBindingBarVisibility>();
+
+        // The authored gameplay-cue lane: emitCue publishes a deterministic token from simulation. Audio consumes
+        // that token through the same document-authored cue table as built-in events; an optional body association
+        // supplies the body's authoritative position at delivery time, otherwise listener placement applies.
+        worldServer.GameplayCueTap = cue => {
+            var site = ((cue.Body is { } index) && (worldServer.Body(index: index) is { } body)
+                ? body.FixedPosition.ToVector3()
+                : (Vector3?)null
+            );
+
+            audioDirector.SubmitCue(
+                eventToken: cue.Name,
+                site: site
+            );
+        };
 
         worldServer.SaveEffectTap = tick => {
             var target = definitionSource.SourcePath;
@@ -281,20 +339,22 @@ internal static class WorldPostBuildWiring {
                     population: worldServer.Population,
                     binder: screenBinder,
                     audio: audioDirector,
+                    bindingBar: bindingBarVisibility,
                     pacing: pacing,
                     tick: tick
                 );
                 var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                     basisPath: out var basisPath,
                     definition: snapshot,
+                    imports: out var preservedImports,
                     note: out var note,
                     path: target
                 );
 
                 worldServer.Compact();
 
-                var derivation = ((basisPath is { })
-                    ? $", basis: {basisPath}"
+                var derivation = (((basisPath is { }) || (preservedImports.Count > 0))
+                    ? $", basis: {(basisPath is { } ? basisPath : "none")}, imports: {preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture)}"
                     : ((note.Length > 0)
                         ? $", {note}"
                         : ""
@@ -305,6 +365,13 @@ internal static class WorldPostBuildWiring {
                 Console.Error.WriteLine(value: $"[world.rule: save effect refused — could not write {target} ({exception.Message.ReplaceLineEndings(replacementText: " ")})]");
             }
         };
+
+        // Binds the instance host's own cross-instance narration to stderr — the boot server's own hub and
+        // WorldMachineHost's already bound a sink at DI construction time (WorldBootComposition), before either one
+        // could narrate anything of its own; WorldInstanceHost narrates nothing during construction, so attaching
+        // here, after the container finishes building, loses nothing. Every headless script and canary reads the
+        // identical lines a direct Console.Error write would have produced.
+        services.GetRequiredService<WorldInstanceHost>().AttachNarrationSink(sink: new WorldConsoleNarrationSink());
 
         // THE MACHINE LIFECYCLE CUE LANE: machine boot/fault outcomes fire screen.boot / screen.fault at the screen
         // row's authored face origin. CORE: Server.WorldMachineHost and WorldClient are both core-registered, so
@@ -332,6 +399,31 @@ internal static class WorldPostBuildWiring {
             );
         };
 
+        // THE MUSIC-TRANSITION CUE LANE: a committed segment transition fires music.transition, listener-placed (a
+        // transition carries no world site) — the SAME tap-and-wiring shape the machine lifecycle lane above uses.
+        // CORE: WorldServer and the audio director are both core-registered, so this runs unconditionally in EVERY
+        // boot shape; a headless boot's cue accumulates harmlessly like every other cue here.
+        worldServer.MusicTransitionTap = _ => {
+            audioDirector.SubmitCue(
+                eventToken: WorldAudioCue.MusicTransition,
+                site: null
+            );
+        };
+
+        // THE MUSIC-LAYER LANE: the active conditional-layer tune id set is level-triggered (never queued), so the
+        // audio director re-derives its bed plan against it EVERY tick the set changes — see
+        // WorldAudioDirector.SetActiveMusicLayers. CORE, same posture as the transition lane above.
+        worldServer.MusicLayerTap = tuneIds => {
+            audioDirector.SetActiveMusicLayers(tuneIds: tuneIds);
+        };
+
+        // THE MUSIC-EMBELLISHMENT CUE LANE: a fired director embellishment voices its OWN authored patch directly —
+        // see WorldAudioDirector.SubmitEmbellishment's remarks for why this cannot ride the ordinary SubmitCue
+        // token→row lookup the transition lane above uses. CORE, same posture as the transition lane above.
+        worldServer.MusicEmbellishmentTap = patchId => {
+            audioDirector.SubmitEmbellishment(patchId: patchId);
+        };
+
         // THE CAPTURE-REQUEST DRAIN: world.screenshot arms a readback of the NEXT composed frame, so a run that ends
         // before that frame writes nothing at all. Left alone, the caller's only evidence is the arming echo, which
         // is indistinguishable from a capture that succeeded — the silent-success shape this repository has already
@@ -345,6 +437,33 @@ internal static class WorldPostBuildWiring {
                 }
             });
         }
+
+        // THE RENDER-CAPACITY PRE-FLIGHT. The composed scene's construction-time probe is the first and only point
+        // where the WHOLE worst case exists — the boot document's own rows, the avatar catalog, and one reservation
+        // per adjacency band — and it is pure CPU, so it runs here, before any hosted service starts. A world whose
+        // composed scene cannot fit an engine ceiling refuses BY NAME with the same shape every other refused boot
+        // document takes, instead of tearing the host down from inside a service factory mid-startup. Presentation-
+        // only: a headless boot composes no frame source and this resolves to null.
+        try {
+            if (services.GetService<WorldFramePresenter>() is { } composed) {
+                // The probed envelope's own read-back: the frozen ceilings every live rebuild fits inside, stated
+                // once at boot beside the other origin lines, so the headroom a world is running on is observable
+                // rather than inferred from whether it crashed.
+                Console.Error.WriteLine(value: $"[world.render] envelope: {composed.InstanceCapacity} instances, {composed.ProgramWordCapacity} program words, {composed.DynamicTransformCapacity} dynamic slots");
+            }
+        } catch (WorldRenderCapacityRefusedException refusal) {
+            Console.Error.WriteLine(value: $"[world] definition refused: {refusal.Message}");
+
+            return false;
+        }
+
+        // The document-composition read-back, stated once beside the other origin lines: how many basis-and-imports
+        // merges this boot performed, how many reaches it answered from a document it had already composed, and what
+        // the images it is holding cost. A shard boot is the shape this counts for — its own basis, its four
+        // adjacency neighbours and every derived corner all name the same island document, and the shared figure is
+        // what says so out loud instead of leaving it to a wall-clock reading of the boot. world.status answers the
+        // same four numbers on demand.
+        Console.Error.WriteLine(value: $"[world.documents] {WorldDefinitionFileSource.DocumentsComposed} composed, {WorldDefinitionFileSource.DocumentCompositionsShared} shared, {WorldDefinitionFileSource.ComposedDocumentsHeld} held ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)");
 
         return true;
     }

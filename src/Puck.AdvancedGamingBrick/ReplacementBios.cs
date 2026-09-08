@@ -1,9 +1,9 @@
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
-/// The default <see cref="IBios"/>: an open-source replacement BIOS image, supplied as bytes. It keeps the
-/// emulator self-contained and legally clean; for full hardware accuracy a real dumped BIOS can be registered
-/// in its place. The image is copied on construction so the source buffer may be reused or discarded.
+/// An owned <see cref="IBios"/> image supplied by the caller: a zeroed stub, replacement image, or retail dump.
+/// This type stores bytes; it does not generate BIOS routines. The image is copied on construction so the
+/// source buffer may be reused or discarded.
 /// </summary>
 public sealed class ReplacementBios : IBios {
     /// <summary>The exact size of the Advanced GamingBrick BIOS, in bytes.</summary>

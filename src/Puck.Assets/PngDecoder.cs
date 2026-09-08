@@ -6,12 +6,13 @@ using System.Text;
 namespace Puck.Assets;
 
 /// <summary>
-/// A minimal PNG decoder — <see cref="PngEncoder"/>'s read-side half: 8-bit, non-interlaced,
-/// color types 0 (grayscale), 2 (RGB), 4 (grayscale + alpha), and 6 (RGBA), with all five scanline filters,
-/// every chunk CRC-checked, tRNS transparent-color metadata applied, and unknown critical chunks refused.
-/// APNG animations are read back as full-size, source-blended frames; sub-rectangle and 'over'-blended frames
-/// are refused. Output is always tightly packed 8-bit RGBA. Just enough to read the files Puck itself writes
-/// and bakes — not a general image library.
+/// A minimal PNG decoder — <see cref="PngEncoder"/>'s read-side half: non-interlaced color types 0 (grayscale, bit
+/// depths 1/2/4/8), 2 (RGB, 8-bit), 3 (palette, bit depths 1/2/4/8, via a PLTE chunk), 4 (grayscale + alpha, 8-bit),
+/// and 6 (RGBA, 8-bit), with all five scanline filters, every chunk CRC-checked, tRNS transparent-color/per-index-alpha
+/// metadata applied, and unknown critical chunks refused. APNG animations are read back as full-size, source-blended
+/// frames; sub-rectangle and 'over'-blended frames are refused. Output is always tightly packed 8-bit RGBA. Just
+/// enough to read the files Puck itself writes and bakes, plus the sub-8-bit and palette PNGs third-party test-ROM
+/// corpora ship their reference screenshots as — not a general image library.
 /// </summary>
 public static class PngDecoder {
     private static readonly byte[] Signature = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -23,7 +24,7 @@ public static class PngDecoder {
         public required bool UsesIdat { get; init; }
     }
 
-    private static PngImage DecodeImageData(int width, int height, byte bitDepth, byte colorType, byte interlaceMethod, byte[] idatBytes, byte[]? transparency) {
+    private static PngImage DecodeImageData(int width, int height, byte bitDepth, byte colorType, byte interlaceMethod, byte[] idatBytes, byte[]? transparency, byte[]? palette) {
         if (
             (width <= 0) ||
             (height <= 0)
@@ -31,21 +32,36 @@ public static class PngDecoder {
             throw new InvalidDataException(message: "PNG image dimensions must be greater than zero.");
         }
 
-        if (bitDepth != 8) {
-            throw new InvalidDataException(message: $"Unsupported PNG bit depth '{bitDepth}'. Only 8-bit PNGs are supported.");
-        }
-
         if (interlaceMethod != 0) {
             throw new InvalidDataException(message: "Interlaced PNG images are not supported.");
         }
 
-        var bytesPerPixel = colorType switch {
+        // Grayscale (0) and palette (3) are the only color types this decoder reads below 8 bits per sample — both
+        // are single-channel, so a sample never straddles more than the packed-byte reader below handles. RGB/
+        // grayscale-alpha/RGBA stay 8-bit-only, matching what PngEncoder ever writes.
+        var isSubBytePossible = ((colorType == 0) || (colorType == 3));
+
+        if (isSubBytePossible
+            ? (bitDepth is not (1 or 2 or 4 or 8))
+            : (bitDepth != 8)) {
+            throw new InvalidDataException(message: $"Unsupported PNG bit depth '{bitDepth}' for color type '{colorType}'.");
+        }
+
+        var channels = colorType switch {
             6 => 4,
             4 => 2,
             2 => 3,
             0 => 1,
+            3 => 1,
             _ => throw new InvalidDataException(message: $"Unsupported PNG color type '{colorType}'.")
         };
+
+        if (
+            (colorType == 3) &&
+            (palette is null)
+        ) {
+            throw new InvalidDataException(message: "PNG color type 3 (palette) requires a PLTE chunk.");
+        }
 
         var transparentGray = -1;
         var transparentRed = -1;
@@ -70,14 +86,29 @@ public static class PngDecoder {
                     transparentGreen = BinaryPrimitives.ReadUInt16BigEndian(source: transparency.AsSpan(start: 2));
                     transparentBlue = BinaryPrimitives.ReadUInt16BigEndian(source: transparency.AsSpan(start: 4));
                     break;
+                case 3:
+                    // One alpha byte per palette entry, in index order; entries beyond the tRNS chunk's length stay
+                    // fully opaque (the PNG spec's own default), so no length check beyond "fits the palette" applies.
+                    if (transparency.Length > (palette!.Length / 3)) {
+                        throw new InvalidDataException(message: "PNG tRNS chunk carried more entries than the PLTE palette.");
+                    }
+
+                    break;
                 default:
                     throw new InvalidDataException(message: "PNG tRNS chunk is prohibited for color types that carry alpha.");
             }
         }
 
         // The declared dimensions bound the inflation: read exactly the expected bytes, then probe for excess,
-        // so a small file cannot claim a small image while carrying an arbitrarily expanding stream.
-        var stride = checked((width * bytesPerPixel));
+        // so a small file cannot claim a small image while carrying an arbitrarily expanding stream. A scanline is
+        // packed to whole bytes per the PNG spec (ceil(width * bitDepth * channels / 8)); the per-filter reference
+        // offset ("bpp") is at least one byte even when a pixel is packed several-to-a-byte.
+        var bitsPerPixel = (bitDepth * channels);
+        var stride = checked((((width * bitsPerPixel) + 7) / 8));
+        var filterBpp = Math.Max(
+            val1: 1,
+            val2: (bitsPerPixel / 8)
+        );
         var expectedLength = checked(((stride + 1) * height));
         var decodedBytes = new byte[expectedLength];
 
@@ -113,6 +144,9 @@ public static class PngDecoder {
         var previousRow = new byte[stride];
         var currentRow = new byte[stride];
         var sourceOffset = 0;
+        var maxSample = (bitDepth < 8
+            ? ((1 << bitDepth) - 1)
+            : 255);
 
         for (var rowIndex = 0; (rowIndex < height); rowIndex++) {
             var filterType = decodedBytes[sourceOffset++];
@@ -126,51 +160,97 @@ public static class PngDecoder {
             );
             sourceOffset += stride;
             UnfilterRow(
-                bytesPerPixel: bytesPerPixel,
+                bytesPerPixel: filterBpp,
                 currentRow: currentRow,
                 filterType: filterType,
                 previousRow: previousRow
             );
 
-            for (var pixelIndex = 0; (pixelIndex < width); pixelIndex++) {
-                var sourcePixelOffset = (pixelIndex * bytesPerPixel);
-                var destinationPixelOffset = (((rowIndex * width) + pixelIndex) * 4);
+            if (bitDepth < 8) {
+                // Only reachable for colorType 0 or 3 (validated above), both single-channel, so each sample is a
+                // bare index or gray level packed several-to-a-byte, MSB first.
+                for (var pixelIndex = 0; (pixelIndex < width); pixelIndex++) {
+                    var raw = ReadPackedSample(
+                        bitDepth: bitDepth,
+                        pixelIndex: pixelIndex,
+                        row: currentRow
+                    );
+                    var destinationPixelOffset = (((rowIndex * width) + pixelIndex) * 4);
 
-                switch (colorType) {
-                    case 6:
-                        rgbaPixels[destinationPixelOffset] = currentRow[sourcePixelOffset];
-                        rgbaPixels[(destinationPixelOffset + 1)] = currentRow[(sourcePixelOffset + 1)];
-                        rgbaPixels[(destinationPixelOffset + 2)] = currentRow[(sourcePixelOffset + 2)];
-                        rgbaPixels[(destinationPixelOffset + 3)] = currentRow[(sourcePixelOffset + 3)];
-                        break;
-                    case 2:
-                        rgbaPixels[destinationPixelOffset] = currentRow[sourcePixelOffset];
-                        rgbaPixels[(destinationPixelOffset + 1)] = currentRow[(sourcePixelOffset + 1)];
-                        rgbaPixels[(destinationPixelOffset + 2)] = currentRow[(sourcePixelOffset + 2)];
-                        rgbaPixels[(destinationPixelOffset + 3)] = ((
-                            (currentRow[sourcePixelOffset] == transparentRed) &&
-                            (currentRow[(sourcePixelOffset + 1)] == transparentGreen) &&
-                            (currentRow[(sourcePixelOffset + 2)] == transparentBlue)
-                        )
+                    if (colorType == 3) {
+                        WriteIndexedPixel(
+                            destinationOffset: destinationPixelOffset,
+                            index: raw,
+                            palette: palette!,
+                            rgbaPixels: rgbaPixels,
+                            transparency: transparency
+                        );
+                    } else {
+                        // The PNG spec's own scaling for sub-8-bit grayscale: replicate the sample across the full
+                        // 8-bit range (sample * 255 / maxSample) rather than left-shifting, so 0/1 at bit depth 1
+                        // becomes exactly 0/255. tRNS for grayscale stores the RAW sample value (0..maxSample), so
+                        // the transparency compare happens before scaling.
+                        var gray = ((byte)((raw * 255) / maxSample));
+
+                        rgbaPixels[destinationPixelOffset] = gray;
+                        rgbaPixels[(destinationPixelOffset + 1)] = gray;
+                        rgbaPixels[(destinationPixelOffset + 2)] = gray;
+                        rgbaPixels[(destinationPixelOffset + 3)] = ((raw == transparentGray)
                             ? byte.MinValue
                             : byte.MaxValue
                         );
-                        break;
-                    case 4:
-                        rgbaPixels[destinationPixelOffset] = currentRow[sourcePixelOffset];
-                        rgbaPixels[(destinationPixelOffset + 1)] = currentRow[sourcePixelOffset];
-                        rgbaPixels[(destinationPixelOffset + 2)] = currentRow[sourcePixelOffset];
-                        rgbaPixels[(destinationPixelOffset + 3)] = currentRow[(sourcePixelOffset + 1)];
-                        break;
-                    case 0:
-                        rgbaPixels[destinationPixelOffset] = currentRow[sourcePixelOffset];
-                        rgbaPixels[(destinationPixelOffset + 1)] = currentRow[sourcePixelOffset];
-                        rgbaPixels[(destinationPixelOffset + 2)] = currentRow[sourcePixelOffset];
-                        rgbaPixels[(destinationPixelOffset + 3)] = ((currentRow[sourcePixelOffset] == transparentGray)
-                            ? byte.MinValue
-                            : byte.MaxValue
-                        );
-                        break;
+                    }
+                }
+            } else {
+                for (var pixelIndex = 0; (pixelIndex < width); pixelIndex++) {
+                    var sourcePixelOffset = (pixelIndex * channels);
+                    var destinationPixelOffset = (((rowIndex * width) + pixelIndex) * 4);
+
+                    switch (colorType) {
+                        case 6:
+                            rgbaPixels[destinationPixelOffset] = currentRow[sourcePixelOffset];
+                            rgbaPixels[(destinationPixelOffset + 1)] = currentRow[(sourcePixelOffset + 1)];
+                            rgbaPixels[(destinationPixelOffset + 2)] = currentRow[(sourcePixelOffset + 2)];
+                            rgbaPixels[(destinationPixelOffset + 3)] = currentRow[(sourcePixelOffset + 3)];
+                            break;
+                        case 2:
+                            rgbaPixels[destinationPixelOffset] = currentRow[sourcePixelOffset];
+                            rgbaPixels[(destinationPixelOffset + 1)] = currentRow[(sourcePixelOffset + 1)];
+                            rgbaPixels[(destinationPixelOffset + 2)] = currentRow[(sourcePixelOffset + 2)];
+                            rgbaPixels[(destinationPixelOffset + 3)] = ((
+                                (currentRow[sourcePixelOffset] == transparentRed) &&
+                                (currentRow[(sourcePixelOffset + 1)] == transparentGreen) &&
+                                (currentRow[(sourcePixelOffset + 2)] == transparentBlue)
+                            )
+                                ? byte.MinValue
+                                : byte.MaxValue
+                            );
+                            break;
+                        case 4:
+                            rgbaPixels[destinationPixelOffset] = currentRow[sourcePixelOffset];
+                            rgbaPixels[(destinationPixelOffset + 1)] = currentRow[sourcePixelOffset];
+                            rgbaPixels[(destinationPixelOffset + 2)] = currentRow[sourcePixelOffset];
+                            rgbaPixels[(destinationPixelOffset + 3)] = currentRow[(sourcePixelOffset + 1)];
+                            break;
+                        case 0:
+                            rgbaPixels[destinationPixelOffset] = currentRow[sourcePixelOffset];
+                            rgbaPixels[(destinationPixelOffset + 1)] = currentRow[sourcePixelOffset];
+                            rgbaPixels[(destinationPixelOffset + 2)] = currentRow[sourcePixelOffset];
+                            rgbaPixels[(destinationPixelOffset + 3)] = ((currentRow[sourcePixelOffset] == transparentGray)
+                                ? byte.MinValue
+                                : byte.MaxValue
+                            );
+                            break;
+                        case 3:
+                            WriteIndexedPixel(
+                                destinationOffset: destinationPixelOffset,
+                                index: currentRow[sourcePixelOffset],
+                                palette: palette!,
+                                rgbaPixels: rgbaPixels,
+                                transparency: transparency
+                            );
+                            break;
+                    }
                 }
             }
 
@@ -225,6 +305,15 @@ public static class PngDecoder {
             ColorType: chunkData[9],
             InterlaceMethod: chunkData[12]
         );
+    }
+    // Reads one MSB-first-packed sample (a palette index or a raw gray level) from a bit depth below 8, where a
+    // single byte holds (8 / bitDepth) consecutive samples.
+    private static int ReadPackedSample(ReadOnlySpan<byte> row, int pixelIndex, int bitDepth) {
+        var bitOffset = (pixelIndex * bitDepth);
+        var shift = (8 - bitDepth - (bitOffset % 8));
+        var mask = ((1 << bitDepth) - 1);
+
+        return ((row[(bitOffset / 8)] >> shift) & mask);
     }
     private static bool TryReadChunk(ReadOnlySpan<byte> pngBytes, ref int offset, out string chunkType, out ReadOnlySpan<byte> chunkData) {
         chunkType = string.Empty;
@@ -328,6 +417,23 @@ public static class PngDecoder {
             throw new InvalidDataException(message: $"PNG chunk '{Encoding.ASCII.GetString(bytes: chunkType)}' failed its CRC check.");
         }
     }
+    // Looks up a color-type-3 pixel's RGB in the PLTE palette (3 bytes per entry) and its alpha in the tRNS array
+    // (1 byte per entry, present starting at index 0; an index beyond the array's length is fully opaque, per spec).
+    private static void WriteIndexedPixel(byte[] rgbaPixels, int destinationOffset, byte[] palette, byte[]? transparency, int index) {
+        var paletteOffset = (index * 3);
+
+        if ((paletteOffset + 2) >= palette.Length) {
+            throw new InvalidDataException(message: $"PNG palette index {index} is outside the PLTE chunk's {(palette.Length / 3)} entries.");
+        }
+
+        rgbaPixels[destinationOffset] = palette[paletteOffset];
+        rgbaPixels[(destinationOffset + 1)] = palette[(paletteOffset + 1)];
+        rgbaPixels[(destinationOffset + 2)] = palette[(paletteOffset + 2)];
+        rgbaPixels[(destinationOffset + 3)] = (((transparency is not null) && (index < transparency.Length))
+            ? transparency[index]
+            : byte.MaxValue
+        );
+    }
 
     /// <summary>Decodes a PNG file's still image into tightly packed 8-bit RGBA pixels; for an APNG this is the default image.</summary>
     /// <param name="pngBytes">The complete PNG file bytes, signature included.</param>
@@ -342,6 +448,7 @@ public static class PngDecoder {
         var idatBytes = new MemoryStream();
         var header = default((int Width, int Height, byte BitDepth, byte ColorType, byte InterlaceMethod));
         var headerSeen = false;
+        byte[]? palette = null;
         byte[]? transparency = null;
 
         while (TryReadChunk(
@@ -366,7 +473,14 @@ public static class PngDecoder {
                     headerSeen = true;
                     header = ParseHeaderChunk(chunkData: chunkData);
                     break;
-                case "PLTE": // a suggested palette for truecolor; palette-indexed images are refused by color type
+                case "PLTE":
+                    // A suggested palette for truecolor, or the required lookup table for color type 3; validated
+                    // (multiple-of-3, index range) once the color type is known, in DecodeImageData.
+                    if ((chunkData.Length % 3) != 0) {
+                        throw new InvalidDataException(message: "PNG PLTE chunk length must be a multiple of 3.");
+                    }
+
+                    palette = chunkData.ToArray();
                     break;
                 case "tRNS":
                     transparency = chunkData.ToArray();
@@ -382,6 +496,7 @@ public static class PngDecoder {
                         colorType: header.ColorType,
                         interlaceMethod: header.InterlaceMethod,
                         idatBytes: idatBytes.ToArray(),
+                        palette: palette,
                         transparency: transparency
                     );
                 default:
@@ -409,6 +524,7 @@ public static class PngDecoder {
         var idatSeen = false;
         var header = default((int Width, int Height, byte BitDepth, byte ColorType, byte InterlaceMethod));
         var headerSeen = false;
+        byte[]? palette = null;
         byte[]? transparency = null;
         var declaredFrameCount = -1;
         var playCount = 0u;
@@ -438,7 +554,14 @@ public static class PngDecoder {
                     headerSeen = true;
                     header = ParseHeaderChunk(chunkData: chunkData);
                     break;
-                case "PLTE": // a suggested palette for truecolor; palette-indexed images are refused by color type
+                case "PLTE":
+                    // A suggested palette for truecolor, or the required lookup table for color type 3; validated
+                    // (multiple-of-3, index range) once the color type is known, in DecodeImageData.
+                    if ((chunkData.Length % 3) != 0) {
+                        throw new InvalidDataException(message: "PNG PLTE chunk length must be a multiple of 3.");
+                    }
+
+                    palette = chunkData.ToArray();
                     break;
                 case "tRNS":
                     transparency = chunkData.ToArray();
@@ -544,6 +667,7 @@ public static class PngDecoder {
                 colorType: header.ColorType,
                 interlaceMethod: header.InterlaceMethod,
                 idatBytes: idatBytes.ToArray(),
+                palette: palette,
                 transparency: transparency
             );
 
@@ -579,6 +703,7 @@ public static class PngDecoder {
                 idatBytes: (frame.UsesIdat
                 ? idatBytes.ToArray()
                 : frame.Data.ToArray()),
+                palette: palette,
                 transparency: transparency
             );
 

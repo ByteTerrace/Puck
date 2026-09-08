@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography.X509Certificates;
 using Puck.Networking.Peers;
 using Xunit;
 
@@ -8,14 +9,24 @@ namespace Puck.Networking.Tests.Peers;
 internal static class PeerTestSupport {
     public static readonly TimeSpan EventTimeout = TimeSpan.FromSeconds(value: 5);
 
-    private static QuicPeerTransport NewTransport(PeerIdentity certificateOwner) {
-        if (!QuicPeerTransport.IsSupported) {
-            throw new PlatformNotSupportedException(message: "the peer laws need QUIC (msquic with TLS 1.3) on this host");
-        }
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(value: 10);
 
-        return new QuicPeerTransport(certificate: certificateOwner.CreateTransportCertificate());
+    private static QuicPeerTransport NewTransport(PeerIdentity certificateOwner) => NewTransport(certificate: certificateOwner.CreateTransportCertificate());
+
+    /// <summary>Dials a fresh listening peer from another fresh peer and takes the accepted link, so a law that
+    /// needs an established link on both sides starts from one line. The caller owns both peers.</summary>
+    public static async Task<(Peer PeerA, Peer PeerB, PeerLink LinkAtoB, PeerLink LinkBtoA)> ConnectAsync(CancellationToken ct) {
+        var peerA = NewPeer();
+        var peerB = NewPeer();
+        var endpointB = await ListenLoopbackAsync(peer: peerB);
+        var linkAtoB = await peerA.DialAsync(
+            ct: ct,
+            endpoint: endpointB
+        );
+        var linkBtoA = await peerB.IncomingLinks.ReadAsync(cancellationToken: ct);
+
+        return (peerA, peerB, linkAtoB, linkBtoA);
     }
-
     public static IPEndPoint Loopback(int port = 0) => new(
         address: IPAddress.Loopback,
         port: port
@@ -42,6 +53,15 @@ internal static class PeerTestSupport {
             identity: identity,
             transport: tap
         ), tap);
+    }
+    /// <summary>Creates the real QUIC transport over <paramref name="certificate"/>, which the transport then owns —
+    /// any certificate, so a law can dial with a key no <see cref="PeerIdentity"/> could ever be built over.</summary>
+    public static QuicPeerTransport NewTransport(X509Certificate2 certificate) {
+        if (!QuicPeerTransport.IsSupported) {
+            throw new PlatformNotSupportedException(message: "the peer laws need QUIC (msquic with TLS 1.3) on this host");
+        }
+
+        return new QuicPeerTransport(certificate: certificate);
     }
     public static Task<IPEndPoint> ListenLoopbackAsync(Peer peer) => peer.ListenAsync(
         ct: TestContext.Current.CancellationToken,
@@ -80,15 +100,26 @@ internal static class PeerTestSupport {
         return WireFrame.WriteAsync(
             body: writer.ToArray(),
             ct: ct,
-            kind: (byte)PeerFrameKind.Message,
+            kind: ((byte)PeerFrameKind.Message),
             stream: controlStream
         );
+    }
+    /// <summary>Polls until <paramref name="condition"/> holds — for a precondition a law can only observe, never
+    /// await, such as a link's event channel having filled. Bounded by <paramref name="ct"/>.</summary>
+    public static async Task WaitUntilAsync(Func<bool> condition, CancellationToken ct) {
+        while (!condition()) {
+            await Task.Delay(
+                cancellationToken: ct,
+                delay: PollInterval
+            );
+        }
     }
 }
 /// <summary>An <see cref="IPeerTransport"/> decorator that records every control stream a connection opens or
 /// accepts, so a law can write onto the same stream a peer's link reads.</summary>
 internal sealed class TappedPeerTransport : IPeerTransport {
     private readonly IPeerTransport m_inner;
+
     private readonly List<Stream> m_streams = [];
     private readonly Lock m_streamsLock = new();
 
@@ -145,12 +176,12 @@ internal sealed class TappedPeerTransport : IPeerTransport {
         public async ValueTask<IPeerConnection?> AcceptAsync(CancellationToken ct = default) {
             var connection = await m_inner.AcceptAsync(ct: ct);
 
-            return (connection is null)
+            return ((connection is null)
                 ? null
                 : new TappedConnection(
                     inner: connection,
                     record: m_record
-                );
+                ));
         }
         public ValueTask DisposeAsync() => m_inner.DisposeAsync();
     }

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+    <PropertyGroup>
+        <AssemblyName>Puck.Actors</AssemblyName>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <IsAotCompatible>false</IsAotCompatible>
+        <Nullable>enable</Nullable>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Composition roots</PuckLayer>
+        <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+        <RootNamespace>Puck.Actors</RootNamespace>
+        <TargetFramework>net10.0</TargetFramework>
+        <UserSecretsId>e1b0662e-9c2a-4c04-9b53-4e4dbf1a6a10</UserSecretsId>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="[1.*,2.0)" />
+        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="[1.*,2.0)" />
+        <PackageReference Include="Azure.Identity" Version="[1.*,2.0)" />
+        <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="[1.*,2.0)" />
+        <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="[10.*,11.0)" />
+        <PackageReference Include="Microsoft.Azure.AppConfiguration.AspNetCore" Version="[8.*,9.0)" />
+        <PackageReference Include="Microsoft.Graph" Version="[6.*,7.0)" />
+        <PackageReference Include="Microsoft.Orleans.Clustering.AzureStorage" Version="[10.*, )" />
+        <PackageReference Include="Microsoft.Orleans.Persistence.AzureStorage" Version="[10.*, )" />
+        <PackageReference Include="Microsoft.Orleans.Reminders.AzureStorage" Version="[10.*, )" />
+        <PackageReference Include="Microsoft.Orleans.Server" Version="[10.*, )" />
+        <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="[1.*,2.0)" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="[1.*,2.0)" />
+        <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="[1.*,2.0)" />
+    </ItemGroup>
+</Project>

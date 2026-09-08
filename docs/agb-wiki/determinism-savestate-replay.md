@@ -53,12 +53,12 @@ that dead cost, since a full-state delta stream would spend CPU and
 allocation on bytes a keyframe-plus-replay restore never reads.
 `QueuedMachineHost`/`QueuedMachineWorker` expose the layer as
 `ITimeTravelMachine` (`SetRewindEnabled`/`RewindBy`), but no console verb
-currently wires rewind to a booted screen machine. The quarantined
-`experimental/Puck.Demo/AgbDebug/AgbDebugCommandModule.cs` (out of the
-build) carries a comment naming an aspirational `TimeTravelCommandModule`
-that was never built; its own live verbs are `agb.snap`/`agb.restore`
-(in-memory savestate slots, a coarser mechanism than the ring) and
-`agb.light`/`agb.poke` — none of them rewind.
+currently wires rewind to a booted screen machine. The deleted `Puck.Demo`
+tree's `AgbDebugCommandModule` (see git history) carried a comment naming an
+aspirational `TimeTravelCommandModule` that was never built, and its own
+verbs — `agb.snap`/`agb.restore` (in-memory savestate slots, a coarser
+mechanism than the ring) and `agb.light`/`agb.poke` — never shipped with a
+successor; none of them rewind.
 
 ## Runahead
 

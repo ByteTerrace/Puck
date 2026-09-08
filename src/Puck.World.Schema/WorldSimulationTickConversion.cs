@@ -38,11 +38,9 @@ public static class WorldSimulationTickConversion {
             seconds: seconds
         )));
     }
-    /// <summary>Converts a duration to the smallest whole simulation-tick count no less than its exact value — a
-    /// positive duration always advances by at least one tick; a non-positive duration converts to zero.
-    /// <see cref="Puck.Maths.FixedQ4816"/> input and <see cref="Int128"/> intermediate arithmetic keep the
-    /// conversion exact, so a duration that divides <paramref name="ratePerSecond"/> evenly always round-trips to
-    /// the same tick count. Rounds up rather than refusing an inexact duration; a world-rule countdown authored via
+    /// <summary>Converts a duration to the smallest whole simulation-tick count no less than its exact value — the
+    /// engine's one round-up rule, <see cref="FixedTickConversion.DurationTicks(FixedQ4816, ulong)"/>, at the world's
+    /// authored rate. Rounds up rather than refusing an inexact duration; a world-rule countdown authored via
     /// <c>valueSeconds</c> must use <see cref="FixedTickConversion.TryDurationEngineTicksExact"/> instead, which
     /// refuses.</summary>
     /// <param name="seconds">The duration to convert.</param>
@@ -50,15 +48,10 @@ public static class WorldSimulationTickConversion {
     /// <see cref="WorldDefinition.SimulationRateHz"/>.</param>
     /// <returns><paramref name="seconds"/> in simulation ticks, rounded up; <c>0</c> when <paramref name="seconds"/>
     /// is zero or negative.</returns>
-    public static ulong DurationTicks(FixedQ4816 seconds, uint ratePerSecond) {
-        if (seconds <= FixedQ4816.Zero) {
-            return 0UL;
-        }
-
-        var scaled = (((Int128)seconds.Value) * ratePerSecond);
-
-        return checked((ulong)scaled.CeilingDivide(divisor: ((Int128)(1L << FixedQ4816.FractionBitCount))));
-    }
+    public static ulong DurationTicks(FixedQ4816 seconds, uint ratePerSecond) => FixedTickConversion.DurationTicks(
+        ratePerSecond: ratePerSecond,
+        seconds: seconds
+    );
     /// <summary>Convenience overload for the common <c>float</c>-authored document case — see
     /// <see cref="DurationTicks(FixedQ4816, uint)"/>.</summary>
     public static ulong DurationTicks(float seconds, uint ratePerSecond) {

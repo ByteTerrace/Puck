@@ -3,14 +3,14 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --accuracy-suite <rom>: the menu-driven accuracy suite, run headlessly.
-internal static partial class Diagnostics {
+internal sealed partial class Diagnostics {
     /// <summary>
     /// Runs the menu-driven accuracy suite head-lessly: a <see cref="SuiteDebugBus"/> emulates the debug-log register
     /// (so the suite prints each category's "BEGIN:"/"END: passes/total") and injects the controller input that drives
     /// the menu — press A to run each suite, read its result, press B then Down to advance. Returns the number of
     /// suites with at least one failing subtest.
     /// </summary>
-    public static int RunAccuracySuite(string romPath, string name) {
+    public int RunAccuracySuite(string romPath, string name, string? focus = null) {
         if (!File.Exists(path: romPath)) {
             Console.WriteLine(value: $"  [SKIP] {name}: not found at {romPath}");
 
@@ -22,7 +22,7 @@ internal static partial class Diagnostics {
 
         using var instance = AgbMachineFactory.Create(
             configuration: new AgbMachineConfiguration(
-                bios: BiosImage,
+                bios: BiosImage, options: MachineOptions,
                 rom: File.ReadAllBytes(path: romPath)
             ),
             compose: services => {
@@ -117,9 +117,8 @@ internal static partial class Diagnostics {
                     ++failedSuites;
 
                     // Per-subtest detail: the suite logs each FAILING subtest between BEGIN: and END:. Dump them
-                    // (gated/focusable via PUCK_AGB_SUITE_FOCUS=<substring>) so we can fix real mechanism failures rather
+                    // (focusable with --suite-focus <substring>) so we can fix real mechanism failures rather
                     // than guess from the aggregate score. Capped to keep the output readable.
-                    var focus = Environment.GetEnvironmentVariable(variable: "PUCK_AGB_SUITE_FOCUS");
                     var wantDetail = ((focus is null) || suiteName.Contains(
                         comparisonType: StringComparison.OrdinalIgnoreCase,
                         value: focus

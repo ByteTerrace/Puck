@@ -5,12 +5,19 @@ with hand-rolled first-positional verb dispatch:
 
 | Verb | What it is |
 |---|---|
+| [`puck nuget`](../../docs/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches. |
+| [`puck docs`](#automation-commands) | build and stage the website documentation. |
+| [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
+| [`puck world`](#automation-commands) | prepare hosted world documents or probe a QUIC endpoint. |
+| [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
+| [`puck mcp`](../Puck.Mcp/README.md) | Puck Console tools over local stdio or OAuth-protected HTTP. `--silo <silo.json> --http <remote.json>` installs the optional host extension; standalone silo and World have no MCP dependency. MCP 2026-07-28. |
 | [`puck canary`](#puck-canary--real-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck citations`](#puck-citations--cited-verb-token-check) | checks every verb-shaped token skills and XML docs cite against vocabularies swept from the code, including a live `Puck.World` console boot. |
 | [`puck search`](#puck-search--content-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
-| [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet). |
+| [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
+| [`puck registry`](#puck-registry--world-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
@@ -19,6 +26,7 @@ with hand-rolled first-positional verb dispatch:
 | [`puck packages`](#puck-packages--published-nuget-package-report) | the published `ByteTerrace.Puck.*` NuGet package report — id/description/tags — checked and regenerated against `docs/site/index.html`. |
 | [`puck wasm-stdlib`](#puck-wasm-stdlib--wasm-standard-library-sources) | regenerates every generated Rust source of the WASM standard library — currently `FixedQ4816`'s Rust port and known-answer vectors. |
 | [`puck worktree-base`](#puck-worktree-base--worktree-base-guard) | puts a worktree's HEAD at a named base commit, refusing rather than resetting a dirty tree. |
+| [`puck official`](#puck-official--the-local-official-tree-producer) | builds, serves, and verifies a local `puck.official.v1` tree — the shipped engine, world documents, and their assets, content-addressed. No upload, no signing, no GitHub workflow. |
 
 Unlike its retired `tools/` predecessors, this project is a **first-class member
 of `Puck.slnx`** and joins the full root build regime (warnings-as-errors,
@@ -43,13 +51,23 @@ other verbs print working-directory-relative paths.
 
 ## Publishing
 
+The installable package is `ByteTerrace.Puck.Cli`, a .NET tool whose command is
+`puck`. Its version comes from the same `build/Packaging.targets` as the libraries.
+`puck --version` reports the running CLI's version and source revision;
+`puck nuget version` reads the release version from the current checkout.
+See [CI tool installation and first-release bootstrap](../../docs/ci.md#the-cli-used-by-ci)
+for official pins, package installation checks, and release adoption.
+
+To build the candidate directly for local development:
+
 ```sh
 dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 ```
 
-produces `src/Puck.Cli/publish/puck.exe` — a framework-dependent .NET
-executable. A trivial invocation costs ~0.18 s wall (measured quiet,
-2026-07-24), cheap enough to call per query though not per file.
+produces `src/Puck.Cli/publish/puck.exe` on Windows or `src/Puck.Cli/publish/puck`
+elsewhere — a framework-dependent .NET executable. A trivial invocation costs
+~0.18 s wall (measured quiet, 2026-07-24), cheap enough to call per query
+though not per file.
 Do not attempt AOT: the search engine's F# runtime dependency and the
 BenchmarkDotNet host code both preclude it. `publish/` is git-ignored.
 
@@ -59,6 +77,57 @@ sibling) beside the executable. That is the out-of-process build host
 `contentFiles` copied to the output. Adding `ExcludeAssets` or
 `PrivateAssets=contentfiles` to either workspace package reference would silently
 remove it and break every `references` run.
+
+---
+
+## Automation commands
+
+```sh
+puck nuget --help
+puck docs build [output-directory]
+puck bundle create <directory> <commit>
+puck bundle verify <directory> <commit>
+puck world prepare <worlds-directory> <output-directory>
+puck world probe <host> <port> <public-key-file>
+puck wasm build
+```
+
+`docs build` runs the pinned DocFX tool and stages `/reference/` and `/_theme/`;
+use an output directory without those prefixes. `bundle create` writes a stable
+deployment manifest containing the source commit and every file's SHA-256.
+`bundle verify` checks provenance, containment, hashes, and the complete inventory,
+including hidden files.
+
+`world prepare` uses the engine's composer and validator to package Puck and its
+referenced neighbours under canonical hosted file names. `world probe` checks
+QUIC reachability and the endpoint's expected public key; it requires QUIC support
+and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
+committed default addon, printing the content hash needed by its document rows.
+Azure credentials, deployment ordering, and access restoration remain in the
+[C# deployment app](../../build/Azure.cs).
+
+## `puck official` — the local official tree producer
+
+```sh
+puck official build --out <dir> --channel <name> --engine <AppBundle dir> [--worlds <dir>] [--allow-dirty]
+puck official verify --base <dir> --channel <name> [--expect-commit <hex>]
+puck official serve --tree <dir> [--port 61102]
+```
+
+Writes, serves, and verifies a `puck.official.v1` tree: the shipped browser-wasm
+engine (a `dotnet publish src/Puck.World.Browser -c Release`
+AppBundle), the world schema bundle (the same `WorldSchema.Export`/`Bundle` path
+`puck schema --bundle` uses), every world document under the worlds directory,
+the one fully-composed root world (`puck.world.json`, resolved through its whole
+basis-and-imports graph, parsed, migrated, validated, and re-serialized), and
+every off-disk asset a music/table/tune/patch row references — all
+content-addressed under `<out>/objects/sha256/<hex[0..2]>/<hex64>` (the same
+layout `puck publish`'s dry-run and `Puck.Launcher.Release.DirectoryReleaseSource`
+already read) and hash-checked, so `verify` and a client both catch a mismatch
+by name. `build` refuses unless `puck schema --check` and `puck registry --check`
+both pass, and unless the working tree is clean (or `--allow-dirty` is given).
+No sub-verb here uploads, signs, or drives a GitHub workflow — publishing a
+signed release to a real channel is a separate, later concern.
 
 ---
 
@@ -128,8 +197,19 @@ its confirmation there instead of stdout — the shape server narration
 accept/refuse, unlike an ordinary accepted command's stdout read-back.
 Assertions cover stream-specific exact/contained lines, verb/occurrence/
 exact-cardinality responses, ordered sequences, named response field
-extraction, equality/inequality, inclusive bounds, minimum margins, and
-byte-level file equality/inequality. A manifest may start a companion authority
+extraction, equality/inequality, inclusive bounds, minimum margins,
+byte-level file equality/inequality (`filesDiffer`), and image agreement
+between two captured frames (`framesAgree`, stating `agree` explicitly —
+`CanaryFrameNoise` counts the pixels that moved by at least 2 LSB and compares
+that against a 64-pixel noise budget). Two live windowed captures of identical
+simulation state are never bit-equal: silhouette shading carries ±1-LSB
+variance, so a byte comparison of two live frames reports a difference on
+roughly one run in three. A frame proof therefore states `framesAgree`, never
+`filesDiffer`, over a `.png` pair; `filesDiffer` remains the right shape for a
+file whose bytes really are the claim. Note this is NOT the relaxed parity
+envelope `puck parity` uses: that guards a whole-frame mean, which a body
+relocation covering a fraction of a percent of the frame slips under.
+A manifest may start a companion authority
 world, pass its allocated endpoint through `connect`, and use `{run}` in scripts
 and assertions for per-leg capture paths. There are no regex programs, loops,
 callbacks, conditionals, shell, or embedded scripts.
@@ -165,45 +245,43 @@ future transport arm, not a reshape of `authorities`' current members.
 
 ---
 
-## `puck parity` — cross-backend composed-frame comparison
+## `puck parity` — cross-backend parity over the authored parity world
 
-For every corpus entry — the authored pattern worlds under
-[tests/Puck.Parity/](../../tests/Puck.Parity/README.md)
-(gradient, edges, modifiers, glyphs, each stressing one contract slice) plus the
-shipped default world — `puck parity` boots the real `Puck.World` windowed
-twice, once on Vulkan and once on Direct3D 12, arms `world.screenshot` at the
-same fenced simulation moment in each run, and compares the backend pair under
-the relaxed parity envelope: mean absolute channel delta at most 0.35 LSB over
-every pixel, and at most 20% of pixels differing at all. Benign ±1-LSB
-shader-codegen noise passes; a missing, relocated, or recolored region lands
-in multiples of 1.0 and fails. There are no stored baselines — both frames of
-a pair come from the same build, so content changes cannot fail the check.
-Two different patterns rendered by the same backend must fail the same
-envelope — a comparator that cannot refuse cannot report green.
+`puck parity` boots `tests/Puck.Parity/parity.world.json` once per graphics
+backend (Vulkan, Direct3D 12) with `host.presentation: offscreen` — no window
+is shown — and lets the world's own `captures` rows land every tick-scheduled
+capture and write a `puck.parity.manifest.v1`. Because both backends capture
+the same simulation ticks, each pair observes one moment by construction.
+The two manifest directories are then compared by `puck parity compare` under
+the contract versioned beside the world
+(`tests/Puck.Parity/parity.contract.json`).
 
 ```
-puck parity                                 run the pattern corpus plus the shipped default world
-puck parity --world <path>                  additionally run the named world as a corpus entry
-puck parity --generate [--hashes id=hex64,...]   regenerate tests/Puck.Parity/*.world.json from their pattern definitions
+puck parity                                            full run: both backends, then compare
+puck parity compare <leftDir> <rightDir> --contract <file> [--out <dir>]   compare two captured runs
 ```
 
+Per capture, three independent verdicts, in order:
+
+1. **Content gate** — a capture refused as camera-inside-geometry
+   (`map(cameraPos) <= 0`), missing, or below its station's census floor never
+   reaches comparison: agreement between degenerate frames is vacuous.
+2. **State verdict** — `stateHash` equality, exact, no envelope. A one-bit
+   sim-state divergence is a defect, never noise.
+3. **Pixel verdict** — per-tile mean/max deltas against the station's contract
+   thresholds. A localized defect cannot dilute itself across a whole-frame
+   mean.
+
+Failures write both frames, a per-pixel delta heatmap, and a per-verdict
+summary into the run's `evidence/` directory — a red names its tile and shows
+its pixels. There are no stored baselines: both runs come from the same build,
+so content changes cannot fail the check, only a cross-backend divergence can.
 The runner builds `Puck.World` once, runs each leg from fresh state with its
-own `--state-dir`, requires every scripted command accepted (`wire.errors`
-must close the transcript with zero rejections), and leaves the frames and
-both transcripts in a per-run temp directory it names on stdout. It needs a
-display and both GPU devices, and it covers composed-frame agreement only —
-nothing about the SDF ISA, document schemas, or deterministic numerics.
-Exit codes are 0 for parity held and the discriminator refused, 1 for an
-observed failure, and 2 for usage, build, or infrastructure refusal.
-
-`--generate` rebuilds every pattern world from its shape/material/screen
-definitions in `ParityCorpusGenerator.cs` — edit that file, never the JSON, the
-same discipline `tests/Puck.Parity/README.md` states for editing a pattern. A
-regenerated creation's canonical hash cannot be derived by the generator (the
-validator's canonicalizer sits outside `Puck.Cli`); boot the affected world
-once, read the canonical hash the validator's own refusal names, and pass every
-pattern's hash back via `--hashes id=hex64,...` (an id with no override is
-stamped with the all-zero placeholder).
+own `--state-dir`, and requires every scripted command accepted
+(`wire.errors` closes each transcript with zero rejections). It needs both
+GPU devices but takes over no display. Exit codes: 0 every capture held all
+three verdicts, 2 a verdict failed or a leg/build refused, 3 malformed
+manifest or contract.
 
 ---
 
@@ -325,14 +403,13 @@ not the verdict.
 | Speed | Fast, runs in CI | Slow, run by hand on a quiet machine |
 | Determinism | Fixed seeds, zero-alloc asserted | Same fixed seeds and regimes; framework owns the timing loop |
 
-### Scenario ↔ bench mapping
+### Benchmark inventory
 
-Every benchmark class is named **1:1** after a scenario of the standalone
-quadratic-algebra bench, and every method name is stable, so a row here lines up
-with a row that bench produced on the same machine. That bench no longer builds;
-of the grid below, **only scenario 1's generic/hand ratio is measured by anything
-automatic** (the test-suite ratio gate). The other seven are exercised by this
-verb, by hand, and nowhere else.
+The original algebra benchmark classes retain a **1:1** mapping to scenarios
+from the retired standalone quadratic-algebra bench. Their method names remain
+stable so historical rows can be compared on the same machine. Of the grid
+below, **only scenario 1's generic/hand ratio is measured automatically** by the
+test-suite ratio gate; the other seven are manual microscope workloads.
 
 | Bench scenario | Class here | Methods |
 |---|---|---|
@@ -344,6 +421,26 @@ verb, by hand, and nowhere else.
 | `5. dual quaternion mul (latency)`  | `DualQuaternionMul`  | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
 | `6a. extension mul (latency)`       | `ExtensionMul`       | `Hand` (baseline), `GenericStatic`, `GenericLocal` |
 | `6b. extension-only operations`     | `ExtensionOnly`      | `Frobenius`, `BatchInverse` (no generic counterpart — structural gap) |
+
+The microscope also contains workload-specific classes that never belonged to
+that retired scenario grid. Transform families include direct/naive baselines,
+pristine-input forward/inverse latency, and explicit plan-construction cost:
+
+| Workload | Classes | What is measured |
+|---|---|---|
+| Number-theoretic transform | `NttConvolveVsNaive`, `NttForwardInverse` | Cyclic convolution against the O(N²) definition; forward/inverse latency. |
+| Walsh–Hadamard transform | `WhtForwardVsNaive`, `WhtForwardInverse` | Network against the O(N²) definition; forward/inverse latency. |
+| Fixed Fourier transform | `FftForwardVsDirectSum`, `FftForwardInverse`, `FftConvolveVsNaive` | Forward/convolution against direct definitions; forward/inverse latency. |
+| Fixed cosine transform | `DctForwardVsDirectSum`, `DctForwardInverse` | Fourier route against the direct DCT; forward/inverse latency. |
+| Reusable transform plans | `TransformPlanCreation` | Construction time and allocated bytes for NTT, FFT and DCT plans. |
+| Encoded square and hex coordinates | `EncodedOperations` | Direct norm/sum, swap, scale and translation against decode–operate–encode, plus specialized hex radius against the general layer locator; 1024 deterministic mixed small and wide inputs, normalized per cell. |
+| Combination and permutation identities | `CombinationQueries`, `PermutationQueries` | Counts, ranking, unranking, and single combination elements over 512 deterministic inputs; permutations also compare with a validated quadratic inversion-count baseline. |
+
+Each forward/inverse latency class uses one invocation per iteration and
+restores its working array in `IterationSetup`, outside the timed operation, so
+every sample measures the same data regime rather than another transform of the
+previous sample. Inverse inputs are valid spectra precomputed once from the
+matching forward inputs during global setup.
 
 `GenericStatic` reads the algebra from a static-readonly field (the JIT may fold
 `P`/`Q` to constants after tier-up); `GenericLocal` receives it as a
@@ -397,7 +494,58 @@ wide path is deliberate and is not "fixed" here). Do not commit result artifacts
 this verb produces evidence for a decision, not baselines to pin — the
 `BenchmarkDotNet.Artifacts/` directory it writes under the cwd is git-ignored.
 
+### `puck bench world`
+
+The `Puck.World.Server` tick-path lane: `puck bench world` boots the shipped
+`puck.world.json` and a checked-in Klondike fixture document
+(`Bench/klondike.fixture.world.json`, spliced the way
+`tests/Puck.World.Tests/SolitaireFixtures.cs`'s `Game` builds one, without this
+project referencing the test project) and prints one row per number —
+shipped-world server construction time, idle-tick time and quiet-tick
+allocation (median over a sampled window, after a warmup), and a scripted
+Klondike deal's per-tick time and per-mutation allocation. A server
+construction against the shipped world costs tens of seconds
+(`Puck.Physics.Navigation.NavigationRuntime.Domain.BuildEdges` sphere-casting
+through the static SDF program) — far past what an iteration-based
+BenchmarkDotNet job can amortize honestly — so this lane is a plain stopwatch
+harness (`WorldBenchmarks.cs`,
+`WorldBenchHarness.cs`) rather than a `[Benchmark]` class, run directly by
+`BenchRunner` before it reaches `BenchmarkSwitcher`:
+
+```sh
+puck bench world
+```
+
+Regenerate the fixture document only when
+`Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Puck.World.Tests/Fixtures.cs) or
+`src/Puck.World/Assets/worlds/games/klondike.world.json` changes underneath
+it — it is a checked-in snapshot, not derived at run time.
+
 ---
+
+## `puck registry` — world name registry
+
+Writes `docs/world-name-registry.md` from `Puck.World.WorldNameRegistry`
+(`src/Puck.World.Schema/WorldNameRegistry.cs`): every document field that
+carries a state, zone, rule, table, pattern, topology, generator, field, or
+dynamics name, with the role it carries the name in, the JSON paths derived by
+walking the same source-generated `WorldJsonContext` the loader reads through.
+`WorldModuleNamespace` reads the same registry to prefix an aliased import's
+names at compose time, so the table and the compose path cannot disagree.
+
+```
+puck registry               write docs/world-name-registry.md
+puck registry --check       regenerate in memory and compare against the file on disk;
+                            write nothing, exit 1 naming the first differing line
+puck registry -h / --help   this text
+```
+
+Both modes first refuse, exit 1, on a name-shaped document member the registry
+neither registers nor excludes with a reason — a `CellName`, `ValueExpression`,
+`BindableScalar`, `BindableColor`, or `WorldLatticeScalar` member, or a string
+member whose C# name reads like a name position — so a field added to the model
+without a registration cannot pass. Exit codes: **0** wrote or matched, **1**
+drift or an uncovered member, **2** usage error or missing repository root.
 
 ## `puck scan` — source sweep
 
@@ -472,6 +620,18 @@ from the shipped `puck.shader.v1` manifests under `src/*/Assets/Shaders`
 id — so an entry's config validates by id in an editor, and adding a shader
 set changes the schema (`--check` catches a manifest edit not regenerated).
 
+Every array and dictionary carries `items`/`additionalProperties`, including
+a converter-hidden shape the exporter cannot introspect on its own (a
+`StateRowJsonConverter<TRow>`-owned row, a fixed-arity vector array, a
+document-identifier list); a raw `JsonElement` slot decided by an id named
+elsewhere in the document (`render.extensions[].config`, `probes[].config`,
+`metadata.custom`) stays open but carries a `$comment` saying so. The root
+carries `x-puck: {schemaVersion, generator, commit}` (the silo root carries
+its own) and `properties.schema.const` pins the exact tag a well-formed
+document's own `schema` field must equal; `--check` masks `x-puck.commit`
+before comparing, since the commit a checked-in file was generated at can
+never equal the commit that first introduces the file.
+
 The output is SPLIT, not one file: a small root plus one file per top-level
 document section (`kits.schema.json`, `screens.schema.json`, …), plus
 `common.schema.json` for every subschema referenced from more than one
@@ -489,8 +649,8 @@ puck schema --check         regenerate in memory and compare EVERY file (root, e
 puck schema --stdout        emit the ROOT document to stdout instead of writing
                             (skips --check)
 puck schema --bundle [path] emit the single-file equivalent with every cross-file $ref
-                            inlined (not a checked-in artifact) — to [path] if given,
-                            else stdout
+                            resolved through named $defs (not a checked-in artifact) —
+                            to [path] if given, else stdout
 puck schema -h / --help     this text
 ```
 
@@ -515,10 +675,27 @@ parse-and-write per file.
 
 ```
 puck format [<root=src>] [-WhatIf] [-Verify] [-h]
+            [-Files <json-array-of-relative-paths>]
             [-Only attr-order,member-groups,member-spacing,member-order,null-pattern,
                    string-merge,paren-clarity,logical-lines,arg-lines,ternary-lines,
                    init-order,trailing-comma,decl-spacing,literal-var,named-args]
+puck format ci <base-sha> <head-sha> <empty-output-directory>
 ```
+
+`-Files` limits every phase, including SDK whitespace formatting, to the given
+JSON array of paths relative to the root. An empty array selects nothing.
+Missing paths, parent traversal, and symbolic links are errors. The full owning
+project still supplies semantic context. Standalone C# files use disposable,
+built SDK projects; their original directives survive and their operational
+bodies are never run. A semantic phase that cannot analyze an owning project
+fails rather than reporting unchecked source as clean.
+
+`format ci` requires a clean tracked checkout at the specified head. It selects
+added, modified, and renamed C# files from the PR comparison, excluding generated
+and quarantined code, applies the defaults, verifies convergence, and writes
+format.json plus format.patch. It never commits or pushes. The
+[CI formatting workflow](../../docs/ci.md#automatic-pr-formatting) compiles that
+result before its separate trusted submitter can append a bot commit.
 
 **Phase 0 always runs first**, for every mode and every `-Only` selection:
 `dotnet format whitespace` over the projects that own corpus files (so the
@@ -527,6 +704,19 @@ corpus pruning governs which projects it can reach), establishing the
 restored — and in **write mode it rewrites any whitespace drift in the root**,
 which on an unswept root is the whitespace sweep for that root. Run `-WhatIf`
 first; the tree-wide sweep is deliberately its own, separately-landed change.
+
+Choosing the projects is only half the scoping, because a project formats every
+compile item it carries and some of those are LINKED IN from outside it.
+`build/VerifiedCodeAttribute.cs` is linked into every project, so a run over one
+project used to rewrite a file two directories above the root it was handed.
+Phase 0 therefore also passes `--include <root>/`, which confines each
+invocation to the requested root. `dotnet format` matches that pattern against
+each document's path relative to the WORKING DIRECTORY, and it reads a pattern
+as a directory only when the pattern ends in a separator, so a root that cannot
+be spelled that way, meaning one that does not sit under the working directory,
+gets no pattern at all rather than one the matcher would quietly match nothing
+for.
+That run is unscoped, and it says so on stderr before it starts.
 
 | Pass | Rewrite | In the bare-`format` set |
 |---|---|---|
@@ -578,7 +768,11 @@ failure in write mode.
 - **Custom rewrites preserve source newline trivia.** Ordinary whitespace policy
   belongs to phase 0. The disk writer does not normalize the complete file text,
   because doing so would change newline characters inside verbatim or raw string
-  literals.
+  literals. A break a pass SYNTHESIZES is a bare line feed, taken from the one
+  declaration `RewriteShaping.EndOfLine`, matching what `.editorconfig` and
+  `.gitattributes` already pin for the whole tree. Phase 0 runs first in every
+  invocation, so a rewriter never inserts into a file it has not already
+  normalized.
 - **Annotated code is left alone.** The four reordering passes (`attr-order`,
   `member-order`, `init-order`, `named-args`) reassign trivia by *slot*, so a
   reorder would leave a comment — or an `#if` — describing whichever element
@@ -611,10 +805,11 @@ failure in write mode.
 - **`named-args` needs the project built.** It resolves symbols against the
   project's real build closure — the built output under `bin/`, the restore's
   package assemblies from `obj/project.assets.json`, the generated global-usings
-  file, and any emitted generator output. Without a build it reports which
-  projects were degraded and leaves the calls it could not resolve positional.
-  A file whose directory chain holds no `.csproj` is reported as skipped rather
-  than counted as clean.
+  file, and any emitted generator output. Without a build, only the framework
+  set resolves there, so the project's files are SKIPPED entire and named, in
+  every mode, rather than named from a framework-only closure; the run exits 1.
+  Build them and run again. A file whose directory chain holds no `.csproj` is
+  likewise reported as skipped rather than counted as clean.
 
 ---
 
@@ -756,9 +951,8 @@ entry lowers or disappears. Raising the ceiling itself is a deliberate edit to `
 
 Enumerates every csproj under `src/` declaring `<IsPackable>true</IsPackable>`
 (see `build/Packaging.targets`) and reads the same fields `dotnet pack` reads:
-`<PackageId>`, `<Description>`, `<PackageTags>`. `src/Web.Functions` is
-excluded, for the reason `Architecture.props`' `PuckArchitectureGateEnabled`
-predicate states beside its own matching exclusion.
+`<PackageId>`, `<Description>`, `<PackageTags>`. Projects without an explicit
+packing opt-in are omitted.
 
 ```
 puck packages                list every packable project: id, description, tags

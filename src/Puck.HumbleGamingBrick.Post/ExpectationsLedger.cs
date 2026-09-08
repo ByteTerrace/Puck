@@ -1,0 +1,155 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Puck.Maths;
+
+namespace Puck.HumbleGamingBrick.Post;
+
+/// <summary>Reads and writes <c>Expectations.json</c>, the generated per-ROM outcome ledger the corpus-wide Post
+/// stages gate against. Every run writes a candidate beside its report and <c>--accept</c> promotes it; the file is
+/// sorted by (suite, path, model) so a diff shows only what actually changed, and written with LF line endings.</summary>
+internal static partial class ExpectationsLedger {
+    private sealed class EntryDto {
+        public required string Suite { get; init; }
+        public required string Path { get; init; }
+        public required string Model { get; init; }
+        public required string Probe { get; init; }
+        public required string RomHash { get; init; }
+        public required string Outcome { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Reason { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? DiffPixels { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ExpectedImageHash { get; init; }
+    }
+
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    [JsonSerializable(typeof(EntryDto[]))]
+    private sealed partial class EntryDtoJsonContext : JsonSerializerContext;
+
+    /// <summary>Resolves the committed <c>Expectations.json</c> in the running checkout, independently of compiler
+    /// source-path mapping.</summary>
+    public static string ResolvePath() =>
+        RepositoryPaths.Resolve(relativePath: "src/Puck.HumbleGamingBrick.Post/Expectations.json");
+    /// <summary>Loads the ledger, keyed by (suite, path, model).</summary>
+    /// <param name="path">The ledger file's path.</param>
+    /// <returns>The loaded entries, or an empty ledger when the file does not exist yet.</returns>
+    public static IReadOnlyDictionary<(string Suite, string Path, string Model), LedgerEntry> Load(string path) {
+        if (!File.Exists(path: path)) {
+            return new Dictionary<(string, string, string), LedgerEntry>();
+        }
+
+        var dtos = (JsonSerializer.Deserialize(
+            json: File.ReadAllText(path: path),
+            jsonTypeInfo: EntryDtoJsonContext.Default.EntryDtoArray
+        ) ?? []);
+        var entries = new Dictionary<(string, string, string), LedgerEntry>(capacity: dtos.Length);
+
+        foreach (var dto in dtos) {
+            var entry = new LedgerEntry(
+                DiffPixels: dto.DiffPixels,
+                ExpectedImageHash: dto.ExpectedImageHash,
+                Model: dto.Model,
+                Outcome: ParseOutcome(text: dto.Outcome),
+                Path: dto.Path,
+                Probe: dto.Probe,
+                Reason: dto.Reason,
+                RomHash: dto.RomHash,
+                Suite: dto.Suite
+            );
+
+            if (!entries.TryAdd(
+                key: entry.Key,
+                value: entry
+            )) {
+                // A duplicate (suite, path, model) row folds silently to whichever one lands last unless this throws —
+                // the file is generated and sorted by that same key, so two rows sharing it is always a bug, either in
+                // whatever produced the file or in a hand edit, never a legitimate shape to tolerate.
+                throw new InvalidDataException(message: $"Duplicate ledger entry for suite '{entry.Suite}', path '{entry.Path}', model '{entry.Model}' in {path}.");
+            }
+        }
+
+        return entries;
+    }
+    /// <summary>Computes a file's ledger hash.</summary>
+    /// <param name="path">The file's absolute path.</param>
+    /// <returns>The lowercase hexadecimal FNV-1a hash of the file's bytes.</returns>
+    public static string HashFile(string path) =>
+        Fnv1aHash.Compute(values: File.ReadAllBytes(path: path)).ToString(format: "x16");
+    /// <summary>Computes a ROM image's ledger hash.</summary>
+    /// <param name="romPath">The ROM's absolute path.</param>
+    /// <returns>The lowercase hexadecimal FNV-1a hash of the file's bytes.</returns>
+    public static string HashRom(string romPath) =>
+        HashFile(path: romPath);
+    /// <summary>Renders a probe kind as the ledger's stable string form.</summary>
+    public static string ProbeName(ProbeKind probe) =>
+        probe switch {
+            ProbeKind.ConformanceSerial => "conformance-serial",
+            ProbeKind.AcceptanceFibonacci => "acceptance-fibonacci",
+            ProbeKind.RegisterSignature => "register-signature",
+            ProbeKind.GbMicrotest => "gb-microtest",
+            ProbeKind.Screenshot => "screenshot",
+            ProbeKind.HexPattern => "hex-pattern",
+            ProbeKind.Audio => "audio",
+            _ => throw new NotSupportedException(message: $"Unhandled probe kind '{probe}'."),
+        };
+    /// <summary>Writes the ledger, sorted by (suite, path, model), with LF line endings and a trailing newline.</summary>
+    /// <param name="path">The ledger file's path.</param>
+    /// <param name="entries">The entries to write.</param>
+    public static void Save(string path, IEnumerable<LedgerEntry> entries) {
+        var dtos = entries
+            .OrderBy(
+            keySelector: static entry => entry.Suite,
+            comparer: StringComparer.Ordinal
+        )
+            .ThenBy(
+            keySelector: static entry => entry.Path,
+            comparer: StringComparer.Ordinal
+        )
+            .ThenBy(
+            keySelector: static entry => entry.Model,
+            comparer: StringComparer.Ordinal
+        )
+            .Select(selector: static entry => new EntryDto {
+                DiffPixels = entry.DiffPixels,
+                ExpectedImageHash = entry.ExpectedImageHash,
+                Model = entry.Model,
+                Outcome = RenderOutcome(outcome: entry.Outcome),
+                Path = entry.Path,
+                Probe = entry.Probe,
+                Reason = entry.Reason,
+                RomHash = entry.RomHash,
+                Suite = entry.Suite,
+            })
+            .ToArray();
+        var json = JsonSerializer.Serialize(
+            value: dtos,
+            jsonTypeInfo: EntryDtoJsonContext.Default.EntryDtoArray
+        ).Replace(
+            oldValue: "\r\n",
+            newValue: "\n"
+        );
+
+        File.WriteAllText(
+            contents: (json + "\n"),
+            path: path
+        );
+    }
+
+    private static LedgerOutcome ParseOutcome(string text) =>
+        text switch {
+            "pass" => LedgerOutcome.Pass,
+            "fail" => LedgerOutcome.Fail,
+            "unrunnable" => LedgerOutcome.Unrunnable,
+            "inconclusive" => LedgerOutcome.Inconclusive,
+            _ => throw new InvalidDataException(message: $"Unknown ledger outcome '{text}'."),
+        };
+    private static string RenderOutcome(LedgerOutcome outcome) =>
+        outcome switch {
+            LedgerOutcome.Pass => "pass",
+            LedgerOutcome.Fail => "fail",
+            LedgerOutcome.Unrunnable => "unrunnable",
+            LedgerOutcome.Inconclusive => "inconclusive",
+            _ => throw new NotSupportedException(message: $"Unhandled ledger outcome '{outcome}'."),
+        };
+}

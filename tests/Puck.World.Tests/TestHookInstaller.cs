@@ -1,22 +1,22 @@
 using System.Runtime.CompilerServices;
+using Puck.World.Client;
 
 namespace Puck.World.Tests;
 
 /// <summary>
-/// This project's OWN wiring of <c>Puck.World.Schema</c>'s composition-root injection seams
-/// (<see cref="BindingVocabularyHook"/>, <see cref="WorldExtensionVocabularyHook"/>) — the same shape
-/// <c>src/Puck.World/WorldDataHookInstaller.cs</c> installs for the real engine, minimal here because this suite
-/// never boots a machine or resolves a live command registry. <see cref="BindingVocabularyHook.VocabularyCheck"/>
-/// is left unset — its own contract is absent-tolerant (a command-registry lint that no-ops until a composition root
-/// exists); nothing here needs it.
+/// This project's wiring of <c>Puck.World.Schema</c>'s composition-root injection seams — the same
+/// <see cref="WorldSchemaVocabularyHooks.Install"/> both real roots call, so a law here exercises the real refusals
+/// rather than a stand-in that could drift from them. The engine and post-render predicates are permissive: this
+/// suite exercises the document and authority substrate, so every engine and post-render key a shipped world names
+/// is accepted rather than checked against the real registrations (see README.md). The cartridge predicate is the
+/// real one, since which engine compiles a cartridge document is what the machine-cartridge laws hold.
 /// </summary>
 internal static class TestHookInstaller {
     [ModuleInitializer]
-    internal static void Install() {
-        // Permissive rather than a real registry: this suite exercises the DOCUMENT/AUTHORITY substrate, never
-        // machine boot, so every engine id a shipped world names is accepted rather than checked against
-        // Puck.HumbleGamingBrick/Puck.AdvancedGamingBrick's real registrations (out of scope; see README.md).
-        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = static _ => true;
-        Protocol.MutationKindVocabularyHook.Describe = Protocol.WorldMutationKindCatalog.DescribeMask;
-        Protocol.MutationKindVocabularyHook.TryParse = Protocol.WorldMutationKindCatalog.TryParseMask;
-    }}
+    internal static void Install() => WorldSchemaVocabularyHooks.Install(
+        postRenderExtensionCheck: static _ => true,
+        probeKindCheck: static _ => true,
+        screenMachineCartridgeCheck: WorldScreenMachineEngines.CompilesCartridges,
+        screenMachineEngineCheck: static _ => true
+    );
+}

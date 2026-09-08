@@ -10,16 +10,20 @@ namespace Puck.World;
 /// <summary>
 /// The audio sections' READ-BACK + LEVER surface: <c>world.speakers</c> (the document rows), <c>audio.state</c> +
 /// <c>speaker.state</c> (live device/per-row status), <c>audio.emitters</c> (the derived emitter table),
-/// <c>world.volume</c> (the master-volume session lever), and <c>music.state</c> + <c>judge.state</c> (the live
-/// music clock/director state and the declared judge window sets, both routed through seat 1's currently claimed
+/// <c>voice.state</c> + <c>voice.babble</c> (the live voice-babble status and its debug/test trigger — see
+/// <see cref="WorldAudioDirector.TriggerBabble"/>), <c>world.volume</c> (the master-volume session lever), and
+/// <c>music.state</c> (the live music clock/director state, routed through seat 1's currently claimed
 /// <see cref="WorldAuthorityEndpoint.Submissions"/> — never the boot instance's own injected link directly — so the
 /// answer tracks a transferred seat the same way <see cref="PlayerCommandModule"/>'s drive-a-player verbs do). This
-/// module WRITES nothing: the four
-/// document sections it reads are authored through the general <see cref="WorldRowCommandModule"/> —
-/// <c>world.row.set</c>/<c>world.row.remove</c> over <c>speakers</c>/<c>tunes</c>/<c>patches</c>, and
-/// <c>world.row.set audio &lt;json&gt;</c> for the keyless defaults row (<c>music</c>/<c>judges</c> are boot-only —
-/// no live write door exists yet) — so no section is reachable through two doors. A SEPARATE module from
-/// <see cref="WorldMutationCommandModule"/> to keep every class under its analyzer ceilings.
+/// module WRITES no DOCUMENT section: the four document sections it reads are authored through the general
+/// <see cref="WorldRowCommandModule"/> — <c>world.row.set</c>/<c>world.row.remove</c> over
+/// <c>speakers</c>/<c>tunes</c>/<c>patches</c>, and <c>world.row.set audio &lt;json&gt;</c> for the keyless defaults
+/// row (<c>music</c> is boot-only — no live write door exists yet) — so no section is reachable through two doors.
+/// <c>voice.babble</c> is the one
+/// exception, and a narrower one: it mutates only the director's own presentation-side scheduled-trigger state
+/// (never a document field, nothing <c>world.save</c> folds back), so it carries no grant check — there is nothing
+/// to gate a session lever over. A SEPARATE module from <see cref="WorldMutationCommandModule"/> to keep every
+/// class under its analyzer ceilings.
 /// </summary>
 /// <remarks><c>world.volume</c> is a session LEVER rather than a mutation, but the same grant discipline reaches it:
 /// it routes through <c>WorldServer.ApplySessionLever</c>, which applies the per-section
@@ -34,24 +38,21 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
     // published for every boot, so this never throws for want of a claim. The query carries the routed endpoint's
     // OWN 1-based entity index (never the local roster display number) — its Observe grant check narrows to that
     // body, the one subject a routed seat is always seeded with, so a transferred seat never needs a standing
-    // world-wide grant just to read music/judge state.
-    private static CommandResult RoutedQuery(Func<int, WorldQuery> query, WorldAuthorityRoute route) {
-        var result = default(CommandResult);
-
-        route.Endpoint.Submissions.Query(
-            query: query((route.EntityIndex + 1)),
-            completion: answer => {
-                result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
-            }
-        );
-
-        return result;
-    }
+    // world-wide grant just to read music state.
+    private CommandResult RoutedQuery(Func<int, WorldQuery> query) => (seatRouter.TryRouteQuery(
+        factory: query,
+        result: out var result,
+        slot: 0,
+        tagInstance: false
+    )
+        ? result
+        : CommandResult.Error(output: "[query: seat 1 has no authority claim]")
+    );
     // The world.speakers listing: one segment per declared row off the LIVE definition, so a speaker mutation's new
     // source narrates honestly, the same live-definition read world.screens uses.
     private CommandResult SpeakersHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[world.speakers: no arguments — lists every declared speaker]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "world.speakers") is { } refusal) {
+            return refusal;
         }
 
         var speakers = server.Definition.Speakers;
@@ -90,8 +91,8 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
     // reads), mixer meters off the service-owned mixer, and the derived-emitter count off the director. The fault
     // detail is a free-form tail so its spaces never split the machine-read fields before it.
     private CommandResult StateHandler(CommandContext context, WireArgs args) {
-        if (args.Count != 0) {
-            return CommandResult.Error(output: "[audio.state: no arguments — echoes the live speaker-device state]");
+        if (CommandResult.RequireNoArguments(args: args, verb: "audio.state") is { } refusal) {
+            return refusal;
         }
 
         var mixer = device.Mixer;
@@ -99,6 +100,40 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         return new CommandResult(Output: string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"[audio.state: device={device.StateToken} frames={device.FramesDelivered} rebinds={device.RebindAttempts} fillFaults={device.FillFaults} sources={mixer.BoundSourceCount} voices={mixer.Synth.ActiveVoiceCount} peak={mixer.OutputPeak} droppedTriggers={mixer.DroppedTriggerCount} emitters={director.EmitterCount} fault={(device.Fault ?? "none")}]"
+        ));
+    }
+    // The voice.babble debug/test trigger: no game-facing producer estimates a syllable count from dialogue/caption
+    // text yet (see WorldAudioDirector.TriggerBabble's own remarks), so this verb is the mechanism's one call site
+    // until a real one lands. <identityId> <syllableCount> <utteranceOrdinal>. Echoes its OWN confirmation (never
+    // voice.state's bracket text) so the two verbs' occurrences are never conflated by a piped proof.
+    private CommandResult BabbleHandler(CommandContext context, WireArgs args) {
+        if (
+            (args.Count != 3) ||
+            (args[0].Length == 0) ||
+            !args.TryInt(
+            index: 1,
+            value: out var syllableCount
+        ) ||
+            (syllableCount < 0) ||
+            !args.TryUnsignedDigits(
+            index: 2,
+            value: out var utteranceOrdinal
+        )
+        ) {
+            return CommandResult.Error(output: "[voice.babble: expected <identityId> <syllableCount> <utteranceOrdinal>]");
+        }
+
+        var identityId = args[0].ToString();
+
+        director.TriggerBabble(
+            identityId: identityId,
+            syllableCount: syllableCount,
+            utteranceOrdinal: utteranceOrdinal
+        );
+
+        return new CommandResult(Output: string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[voice.babble: identity={identityId} syllables={syllableCount} utterance={utteranceOrdinal}]"
         ));
     }
     // The world.volume lever: one float argument engages the session lever (bounded by the shared audio gain
@@ -115,17 +150,14 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
 
         if (
             (args.Count != 1) ||
-            !float.TryParse(
-            s: args[0],
-            style: System.Globalization.NumberStyles.Float,
-            provider: CultureInfo.InvariantCulture,
-            result: out var volume
+            !args.TryFloat(
+            index: 0,
+            value: out var volume
         ) ||
-            !float.IsFinite(f: volume) ||
             (volume < 0f) ||
-            (volume > Puck.Forge.Authoring.CreationSoundDocument.MaxLevel)
+            (volume > Puck.World.Authoring.CreationSoundDocument.MaxLevel)
         ) {
-            return CommandResult.Error(output: $"[world.volume: expected one value within [0, {Puck.Forge.Authoring.CreationSoundDocument.MaxLevel}]]");
+            return CommandResult.Error(output: $"[world.volume: expected one value within [0, {Puck.World.Authoring.CreationSoundDocument.MaxLevel}]]");
         }
 
         // Routed, not written: the server checks Mutate over section:audio — the section this lever folds into — and the
@@ -136,7 +168,7 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         link.SubmitSessionLever(
             lever: new WorldSessionLever(
                 Section: WorldSection.Audio,
-                Kind: WorldLeverKind.MasterVolume,
+                Name: WorldSessionLevers.MasterVolume,
                 A: volume
             ),
             principal: context.ActingPrincipal()
@@ -167,9 +199,9 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "speaker.state",
-            description: "Echoes every speaker row's AND every placement Emission facet's LIVE status (the per-row runtime half beside audio.state's device facts): kind, source token, binding status (bound | silent(no-machine|no-tune|no-device|no-source) | faulted(no-patch)), the last published resolved position (unresolved for an absent anchor — an inactive Attach carrier included), and inMix=y|n (whether the listener sits inside the row's finite support), plus the live transient-cue tail (cue:<token>=<patch>). A query — always echoes.",
-            handler: (context, args) => ((args.Count != 0)
-            ? CommandResult.Error(output: "[speaker.state: no arguments — echoes every speaker row's live status]")
+            description: "Echoes every speaker row's, every placement Emission facet's, AND every active music-layer bed's LIVE status (the per-row runtime half beside audio.state's device facts): kind, source token, binding status (bound | silent(no-machine|no-tune|no-device|no-source) | faulted(no-patch)), the last published resolved position (unresolved for an absent anchor — an inactive Attach carrier included), and inMix=y|n (whether the listener sits inside the row's finite support), plus the live transient-cue tail (cue:<token>=<patch>, an embellishment included) and the monotone last-fired tail (lastCue:<token>=<patch>, never reset — the fact that proves a cue fired without racing the live pool's expiry). A query — always echoes.",
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "speaker.state") is { } refusal)
+            ? refusal
             : new CommandResult(Output: director.DescribeSpeakerState()))
         );
         yield return CommandDefinition.WithWireArgs(
@@ -182,29 +214,41 @@ internal sealed class WorldAudioCommandModule(WorldServer server, IServerLink li
             bindability: CommandBindability.Unbindable,
             name: "audio.emitters",
             description: "Dumps the derived audio emitter table, one segment each — stable id, key (speaker:<name>|scene:<id>|placement:<id>|sound:<placement>:<name>), kind, source token, channel, gain, and support radii. Deterministic document-derived facts (never live poses), so a piped proof asserts the derivation. A query — always echoes.",
-            handler: (context, args) => ((args.Count != 0)
-            ? CommandResult.Error(output: "[audio.emitters: no arguments — dumps the derived emitter table]")
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "audio.emitters") is { } refusal)
+            ? refusal
             : new CommandResult(Output: director.DescribeEmitters()))
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "voice.state",
+            description: "Echoes the live voice-babble status (presentation-derived, beside audio.state's device facts and speaker.state's per-row facts): the delivered definition's identity id (or none), its authored voice selectors (none | patch:<id>/cadence:<ticks>), how many syllable triggers remain scheduled for the current utterance, how many voice.babble cue transients are currently live, and the cumulative fired count (monotone — never resets). A query — always echoes.",
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "voice.state") is { } refusal)
+            ? refusal
+            : new CommandResult(Output: director.DescribeVoiceState()))
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "voice.babble",
+            description: "DEBUG/TEST TRIGGER (no game-facing producer estimates syllables from text yet — see WorldAudioDirector.TriggerBabble): voice.babble <identityId> <syllableCount> <utteranceOrdinal> schedules one babbled utterance's syllable triggers off the delivered definition's authored voice profile, echoing what it scheduled — read voice.state separately for live status. A lever — always echoes.",
+            handler: BabbleHandler
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "music.state",
-            description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, and the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music). Follows a transferred seat the same way player.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
+            description: "Reads the live music clock/director state authoritatively off seat 1's currently claimed authority — the current segment, any pending transition, elapsed clock ticks, transition count, the tick/from/to of the most recent committed transition (none= before the first one, or when the world declares no music), the currently active conditional-layer tune ids, the patch/tick of the most recent director embellishment, and $clock:phaseError's own live value (0 when the world declares no music). Follows a transferred seat the same way body.where does, so it answers correctly whether that authority is local or remote. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
             handler: _ => RoutedQuery(
-                query: static index => new WorldQuery.MusicState(Index: index),
-                route: seatRouter.Route(slot: 0)
+                query: static index => new WorldQuery.MusicState(Index: index)
             ),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
-            name: "judge.state",
-            description: "Reads the declared judge window sets, and the last judged grade/tick, authoritatively off seat 1's currently claimed authority. Follows a transferred seat the same way player.where does. A query — always echoes.",
+            name: "instrument.state",
+            description: "Reads which diegetic instrument screen (if any) the routed seat holds a screen application to, authoritatively off seat 1's currently claimed authority — screen index, whether the booted machine there carries the instrument-clock capability, its authored tempo in engine ticks per beat, and whether it is driving the world's music clock (holding the application is the whole gate — see world.instrument-clock). Follows a transferred seat the same way music.state does. A query — always echoes.",
             valueKind: CommandValueKind.Digital,
             handler: _ => RoutedQuery(
-                query: static index => new WorldQuery.JudgeState(Index: index),
-                route: seatRouter.Route(slot: 0)
+                query: static index => new WorldQuery.InstrumentState(Index: index)
             ),
             routing: CommandRouting.Immediate
         );

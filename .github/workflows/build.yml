@@ -1,0 +1,72 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - name: Install pinned DXC
+        run: dotnet run -c Release --file build/InstallDxc.cs
+
+      - name: Restore locked dependencies
+        run: dotnet restore Puck.slnx --locked-mode
+
+      - name: Compile standalone automation without running its operations
+        run: |
+          dotnet build build/Azure.cs -c Release
+          dotnet build build/Toolchain.cs -c Release
+          dotnet build build/InstallDxc.cs -c Release
+          dotnet build build/FormatSubmit.cs -c Release
+          dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
+
+      - name: Build the solution
+        run: dotnet build Puck.slnx --configuration Release --no-restore -bl:artifacts/build.binlog
+
+      - name: Test the solution
+        run: >-
+          dotnet test Puck.slnx --configuration Release --no-build --no-restore
+          --logger trx --results-directory artifacts/test-results
+          --filter Category!=Performance
+          --blame-hang-timeout 15m --blame-hang-dump-type mini
+
+      - name: Publish the Windows world artifact
+        run: dotnet publish src/Puck.World --configuration Release --no-build --no-restore --output artifacts/world
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: world-windows-framework-dependent
+          path: artifacts/world
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: build-diagnostics
+          path: |
+            artifacts/build.binlog
+            artifacts/test-results
+          if-no-files-found: warn

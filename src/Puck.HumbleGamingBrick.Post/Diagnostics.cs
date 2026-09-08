@@ -1,5 +1,6 @@
+using System.Runtime.InteropServices;
 using Puck.Assets;
-using Puck.GamingBricks;
+using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Interfaces;
 using Puck.HumbleGamingBrick.Timing;
 using Puck.Maths;
@@ -74,6 +75,18 @@ internal static class Diagnostics {
             exitCode: out var bessExitCode
         )) {
             exitCode = bessExitCode;
+
+            return true;
+        }
+
+        // --cosim <rom> --sameboy <sb-trace.exe> --boot <dir> [--model dmg|cgb] [--frames N] [--kind cpu|ppu|pcm|all]
+        // [--out <dir>]: the SameBoy co-simulation diagnostic — reports the first divergent conceptual event between
+        // Puck and SameBoy for a ROM. Its own file to bound this method.
+        if (CosimDiagnostic.TryRun(
+            args: args,
+            exitCode: out var cosimExitCode
+        )) {
+            exitCode = cosimExitCode;
 
             return true;
         }
@@ -180,9 +193,10 @@ internal static class Diagnostics {
             }
         }
 
-        // --render <rom> <out.png> [frames] [dmg|cgb|agb]: boot a ROM (no boot ROM, seeded post-boot state), run N frames,
-        // and dump the framebuffer, to eyeball the PPU output. The model defaults to what the cartridge header asks
-        // for (CGB flag at 0x0143), so a dual-mode cart renders in color unless "dmg" forces the monochrome costume.
+        // --render <rom> <out.png> [frames] [dmg|cgb|agb] [--boot puck]: boot a ROM, run N frames, and dump the
+        // framebuffer, to eyeball the PPU output. The model defaults to what the cartridge header asks for (CGB flag at
+        // 0x0143), so a dual-mode cart renders in color unless "dmg" forces the monochrome costume. Without --boot the
+        // machine starts at the seeded post-boot state; --boot puck runs the forge's authored boot ROM from reset.
         for (var index = 0; (index < (args.Length - 2)); ++index) {
             if (string.Equals(
                 a: args[index],
@@ -207,7 +221,11 @@ internal static class Diagnostics {
                     romPath: romPath,
                     outputPath: args[(index + 2)],
                     frames: frames,
-                    model: model
+                    model: model,
+                    bootRom: AuthoredBootRom(
+                        args: args,
+                        model: model
+                    )
                 );
 
                 return true;
@@ -303,13 +321,14 @@ internal static class Diagnostics {
         ? args[(index + offset)]
         : null);
     // The value following a named flag (e.g. --frames 300), or null when the flag is absent or has no following token.
+    // A model token is either a family name (which selects that family's target revision) or a revision's own name.
     private static bool TryParseModel(string value, out ConsoleModel model) {
         if (string.Equals(
             a: value,
             b: "dmg",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            model = ConsoleModel.Dmg;
+            model = ConsoleModel.DmgC;
 
             return true;
         }
@@ -319,29 +338,28 @@ internal static class Diagnostics {
             b: "cgb",
             comparisonType: StringComparison.OrdinalIgnoreCase
         )) {
-            model = ConsoleModel.Cgb;
+            model = ConsoleModel.CgbE;
 
             return true;
         }
 
-        if (string.Equals(
-            a: value,
-            b: "agb",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )) {
-            model = ConsoleModel.Agb;
-
+        if (Enum.TryParse(
+            ignoreCase: true,
+            result: out model,
+            value: value
+        ) && Enum.IsDefined(value: model)) {
             return true;
         }
 
-        model = ConsoleModel.Dmg;
+        model = ConsoleModel.DmgC;
 
         return false;
     }
+    // The family's target revision for whichever hardware the cartridge's color flag asks for.
     private static ConsoleModel ModelFromHeader(byte[] rom) =>
         (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
-        ? ConsoleModel.Cgb
-        : ConsoleModel.Dmg);
+        ? ConsoleModel.CgbE
+        : ConsoleModel.DmgC);
     // Warm the machine with the fast Run path, then instruction-step under the clock, attributing each instruction's
     // consumed cycles to halted time when it began halted (a wake instruction lands in the halted bucket — off by one
     // instruction, immaterial at this scale).
@@ -418,8 +436,25 @@ internal static class Diagnostics {
 
         Console.WriteLine(value: $"  stat-trace {Path.GetFileName(path: romPath)} ({model}, {frames} frames, ly {lyMin:X2}-{lyMax:X2}) -> {outputPath}");
     }
-    private static void Render(string romPath, string outputPath, int frames, ConsoleModel model) {
+    // Resolves --boot: the literal "puck" selects the forge's authored image for the model, anything else (including
+    // its absence) leaves the machine on the seeded post-boot state.
+    private static byte[]? AuthoredBootRom(string[] args, ConsoleModel model) {
+        var boot = CommandLineArguments.Value(
+            args: args,
+            name: "--boot"
+        );
+
+        return (string.Equals(
+            a: boot,
+            b: "puck",
+            comparisonType: StringComparison.OrdinalIgnoreCase
+        )
+            ? BootRomBuilder.Build(model: model)
+            : null);
+    }
+    private static void Render(string romPath, string outputPath, int frames, ConsoleModel model, byte[]? bootRom) {
         using var machine = PostMachine.Build(
+            bootRom: bootRom,
             model: model,
             rom: File.ReadAllBytes(path: romPath)
         );
@@ -457,104 +492,38 @@ internal static class Diagnostics {
             height: framebuffer.Height
         );
 
-        Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} ({model}, {frames} frames, {speedDetail}) -> {outputPath} [fb-hash 0x{HashPixels(pixels: pixels):X16}]");
-    }
-    private static ulong HashPixels(ReadOnlySpan<uint> pixels) {
-        var hash = 14_695_981_039_346_656_037ul;
+        var pixelHash = Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels));
 
-        foreach (var pixel in pixels) {
-            hash = ((hash ^ pixel) * 1_099_511_628_211ul);
-        }
+        var bootDetail = ((bootRom is null)
+            ? "seeded handoff"
+            : "authored boot ROM");
 
-        return hash;
+        Console.WriteLine(value: $"  rendered {Path.GetFileName(path: romPath)} ({model}, {bootDetail}, {frames} frames, {speedDetail}) -> {outputPath} [fb-hash 0x{pixelHash:X16}]");
     }
     // Parses --dump-snapshot's knobs, boots the machine, runs the requested frames, and writes the snapshot image plus
     // its section-table sidecar. Returns 2 when --rom names a missing file, otherwise 0.
-    private static int DumpSnapshot(string[] args) {
-        var romPath = CommandLineArguments.Value(
+    private static int DumpSnapshot(string[] args) =>
+        SnapshotDumpDiagnostic.Run<MachineSnapshot, MachineIdentity, Tick>(
             args: args,
-            name: "--rom"
+            capture: static (rom, isSynthetic, frames) => {
+                var model = (isSynthetic
+                    ? ConsoleModel.DmgC
+                    : ModelFromHeader(rom: rom));
+
+                using var machine = PostMachine.Build(
+                    model: model,
+                    rom: rom
+                );
+
+                PostMachine.RunFrames(
+                    frames: frames,
+                    instance: machine
+                );
+
+                return (machine.Machine.Snapshot(), $"{model}, {frames} frames");
+            },
+            defaultArtifactsSubpath: "gb-post",
+            defaultFrames: DefaultDumpSnapshotFrames,
+            syntheticRom: static () => SyntheticRom.Create()
         );
-        byte[] rom;
-        string romLabel;
-        var model = ConsoleModel.Dmg;
-
-        if (string.IsNullOrEmpty(value: romPath)) {
-            rom = SyntheticRom.Create();
-            romLabel = "synthetic";
-        } else if (File.Exists(path: romPath)) {
-            rom = File.ReadAllBytes(path: romPath);
-            romLabel = Path.GetFileName(path: romPath);
-            model = ModelFromHeader(rom: rom);
-        } else {
-            Console.WriteLine(value: $"  [SKIP] --dump-snapshot: rom not found at {romPath}");
-
-            return 2;
-        }
-
-        var framesArg = CommandLineArguments.Value(
-            args: args,
-            name: "--frames"
-        );
-        var frames = (((framesArg is not null) && int.TryParse(
-            result: out var parsedFrames,
-            s: framesArg
-        ))
-            ? parsedFrames
-            : DefaultDumpSnapshotFrames);
-        var imagePath = (CommandLineArguments.Value(
-            args: args,
-            name: "--out"
-        ) ?? Path.Combine(
-            path1: "artifacts",
-            path2: "gb-post",
-            path3: "snapshot.bin"
-        ));
-        var imageDirectory = Path.GetDirectoryName(path: Path.GetFullPath(path: imagePath));
-
-        if (!string.IsNullOrEmpty(value: imageDirectory)) {
-            Directory.CreateDirectory(path: imageDirectory);
-        }
-
-        using var machine = PostMachine.Build(
-            model: model,
-            rom: rom
-        );
-
-        PostMachine.RunFrames(
-            frames: frames,
-            instance: machine
-        );
-
-        var snapshot = machine.Machine.Snapshot();
-
-        File.WriteAllBytes(
-            path: imagePath,
-            bytes: snapshot.Data.ToArray()
-        );
-
-        var sectionsPath = $"{imagePath}.sections.txt";
-
-        WriteSectionTable(
-            path: sectionsPath,
-            sections: snapshot.Sections
-        );
-
-        // The same repo fingerprint HashDivergenceProbe hashes a snapshot with, so a --dump-snapshot fingerprint and a
-        // --hash-divergence report describe the same instant the same way.
-        var fingerprint = Fnv1aHash.Compute(values: snapshot.Data);
-
-        Console.WriteLine(value: $"  dump-snapshot {romLabel} ({model}, {frames} frames) -> {imagePath} ({snapshot.Size:N0} bytes) [fingerprint 0x{fingerprint:X16}], sections -> {sectionsPath}");
-
-        return 0;
-    }
-    // One line per section: name, offset, length — enough to localize an offline byte-shift between two snapshot
-    // images to the component that owns it (a cross-build diff has no running machine to walk).
-    private static void WriteSectionTable(string path, IReadOnlyList<SnapshotSection> sections) {
-        using var writer = new StreamWriter(path: path);
-
-        foreach (var section in sections) {
-            writer.WriteLine(value: $"{section.Name}\t{section.Offset}\t{section.Length}");
-        }
-    }
 }

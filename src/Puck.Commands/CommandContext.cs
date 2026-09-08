@@ -27,6 +27,7 @@ public readonly record struct CommandContext {
     /// <param name="slot">The logical player lane that owns the invocation.</param>
     /// <param name="assignedSlot">Whether this invocation's physical signal created its device-to-slot assignment.</param>
     /// <param name="principal">The identity acting through this invocation, as stamped by its ingress door.</param>
+    /// <param name="textSession">The originating immediate text session, or null outside session dispatch.</param>
     internal CommandContext(
         CommandValue value,
         CommandPhase phase,
@@ -38,7 +39,8 @@ public readonly record struct CommandContext {
         string? source = null,
         int slot = 0,
         bool assignedSlot = false,
-        CommandPrincipal principal = default
+        CommandPrincipal principal = default,
+        TextCommandSession? textSession = null
     ) {
         AssignedSlot = assignedSlot;
         DeviceId = deviceId;
@@ -50,6 +52,7 @@ public readonly record struct CommandContext {
         Slot = slot;
         Source = source;
         Text = text;
+        TextSession = textSession;
         Value = value;
     }
 
@@ -92,6 +95,9 @@ public readonly record struct CommandContext {
     public string? Source { get; internal init; }
     /// <summary>An optional text payload supplied by the activation.</summary>
     public string? Text { get; internal init; }
+    /// <summary>The originating immediate text session. A handler may hold its subsequent work without holding
+    /// other sessions. Null for direct registry calls and snapshot dispatch; never serialized as simulation state.</summary>
+    public TextCommandSession? TextSession { get; internal init; }
     /// <summary>The command value for this invocation.</summary>
     public CommandValue Value { get; internal init; }
 }

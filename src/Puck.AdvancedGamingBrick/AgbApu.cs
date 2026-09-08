@@ -45,6 +45,8 @@ public sealed partial class AgbApu : IAgbApu {
             m_outputRing = Array.Empty<short>();
             m_sampleRate = 0;
             m_samplePhase = 0L;
+            m_outputWrite = 0;
+            m_outputRead = 0;
 
             return;
         }
@@ -142,6 +144,9 @@ public sealed partial class AgbApu : IAgbApu {
 
         return requested;
     }
+
+    // A non-consuming readiness check lets an idle CPU bus access avoid both FIFO callbacks.
+    internal bool HasPendingFifoRefill => (m_fifoARefill || m_fifoBRefill);
     /// <inheritdoc/>
     public bool ConsumeFifoBRefill() {
         var requested = m_fifoBRefill;

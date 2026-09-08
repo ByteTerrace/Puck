@@ -23,13 +23,31 @@ public static class WorldFrameCodec {
         WorldSubmissionKind.Composition => (16 * 1024),
         WorldSubmissionKind.Lever => 64,
         WorldSubmissionKind.Query => (4 * 1024),
-        WorldSubmissionKind.AddonLifecycle => (4 * 1024),
         // A screen.insert content path is a filesystem path, never file bytes — 4 KiB matches the other small
         // structural leaves (Command/Grant/Query) rather than Rebuild's document-embedding cap.
         WorldSubmissionKind.ScreenOp => (4 * 1024),
         WorldSubmissionKind.Designation => (4 * 1024),
         _ => 0,
     };
+
+    // WireRefusal (Puck.Networking, the transport-neutral frame/wire grammar) and WorldCodecRefusal (this leaf
+    // vocabulary) are deliberately separate enums — this is the one seam a WireFailure crosses into a
+    // WorldCodecFailure, so the map lives here rather than forcing the two vocabularies into one. Every name both
+    // sides declare maps by identity; the tail arm covers the WireRefusal members FrameCodec.TrySplit's own frame-
+    // length gate can reach today (FrameLengthInvalid) plus every member neither TrySplit nor this decode path can
+    // produce (CountOutOfRange, StringTooLong, ConnectionClosed, LaneUnavailable, RequestTimedOut, None) — a length
+    // problem is the correct default for an otherwise-unreachable wire refusal surfacing from a length-prefixed
+    // grammar's own split step.
+    private static WorldCodecRefusal ToCodecRefusal(WireRefusal refusal) => refusal switch {
+        WireRefusal.PayloadTooLarge => WorldCodecRefusal.PayloadTooLarge,
+        WireRefusal.FrameKindUnknown => WorldCodecRefusal.FrameKindUnknown,
+        WireRefusal.PayloadTruncated => WorldCodecRefusal.PayloadTruncated,
+        WireRefusal.PayloadTrailingBytes => WorldCodecRefusal.PayloadTrailingBytes,
+        WireRefusal.PayloadMalformed => WorldCodecRefusal.PayloadMalformed,
+        WireRefusal.EnumValueUnknown => WorldCodecRefusal.EnumValueUnknown,
+        _ => WorldCodecRefusal.FrameLengthInvalid,
+    };
+
     /// <summary>Decodes exactly one complete frame through the canonical leaf codec.</summary>
     /// <param name="frame">The complete frame bytes.</param>
     /// <param name="payload">The decoded payload on success.</param>
@@ -51,9 +69,7 @@ public static class WorldFrameCodec {
         )) {
             failure = new WorldCodecFailure(
                 Detail: wireFailure.Detail,
-                Refusal: ((wireFailure.Refusal == WireRefusal.PayloadTooLarge)
-                ? WorldCodecRefusal.PayloadTooLarge
-                : WorldCodecRefusal.FrameLengthInvalid)
+                Refusal: ToCodecRefusal(refusal: wireFailure.Refusal)
             );
 
             return false;

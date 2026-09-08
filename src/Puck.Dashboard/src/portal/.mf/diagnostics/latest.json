@@ -1,0 +1,10 @@
+{
+  "latestErrorEvent": {
+    "code": "TYPE-001",
+    "message": "Failed to generate type declaration. Execute the below cmd to reproduce and fix the error. #TYPE-001\nargs: {\"cmd\":\"npx tsc --project D:\\\\Source\\\\ByteTerrace\\\\Puck\\\\.claude\\\\worktrees\\\\integration\\\\src\\\\Puck.Dashboard\\\\src\\\\portal\\\\node_modules\\\\.federation\\\\tsconfig.94353dc54920635553ed2b0660d18263.json\"}\nView the docs to see how to solve: https://module-federation.io/guide/troubleshooting/type#type-001",
+    "args": {
+      "cmd": "npx tsc --project D:\\Source\\ByteTerrace\\Puck\\.claude\\worktrees\\integration\\src\\Puck.Dashboard\\src\\portal\\node_modules\\.federation\\tsconfig.94353dc54920635553ed2b0660d18263.json"
+    },
+    "timestamp": 1788772173148
+  }
+}

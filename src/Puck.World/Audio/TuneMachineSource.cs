@@ -1,6 +1,6 @@
 using Puck.Audio.Mixing;
-using Puck.Forge.Authoring;
-using Puck.Forge.Tune;
+using Puck.Assets.Documents;
+using Puck.HumbleGamingBrick.Forge.Tune;
 using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Interfaces;
 using MachineInstance = Puck.GamingBricks.MachineInstance<Puck.HumbleGamingBrick.Machine, Puck.HumbleGamingBrick.MachineConfiguration>;
@@ -35,7 +35,7 @@ public sealed class TuneMachineSource : IAudioBlockSource, IDisposable {
         ArgumentNullException.ThrowIfNull(argument: document);
         m_machine = MachineFactory.Create(
             configuration: new MachineConfiguration(
-                model: ConsoleModel.Cgb,
+                model: ConsoleModel.CgbE,
                 cartridgeRom: TuneRom.Build(document: document)
             ),
             compose: static services => services.AddHumbleGamingBrickComponents()

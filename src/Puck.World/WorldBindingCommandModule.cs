@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text;
 using Puck.Commands;
+using Puck.Input;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -11,8 +13,9 @@ namespace Puck.World;
 /// one source OR declares a chord row for a seat (its unsaved SESSION layer, recomposed and hot-reloaded at once);
 /// <c>player.bindings</c> echoes a seat's composed ACTIVE mapping (its context-group derivation first — see
 /// <see cref="WorldSeatBindings.DescribeContextDerivation"/> — then resting-page entries plus every chord row's
-/// meaning); <c>player.signal</c> synthesizes a raw input signal into the router (the scripted twin of a physical
-/// pad, so an agent can drive chords over the pipe); <c>identity.bindings.save</c> folds a seat's session rebinds
+/// meaning); <c>player.signal</c> synthesizes a raw input signal (the scripted twin of a physical pad or mouse, so
+/// an agent can drive chords, sticks, and pointer drags over the pipe — a mouse control enters through the same
+/// window-input observers and router door a physical mouse does); <c>identity.bindings.save</c> folds a seat's session rebinds
 /// into its selected identity's durable <c>bindingOverlays</c> section on the owned world document (persisted
 /// through <see cref="WorldOwnedWorlds.Save()"/>, UNGATED like every other identity door — no grant check, the
 /// document is the seat's own), then empties the session layer. A SEPARATE
@@ -22,7 +25,7 @@ namespace Puck.World;
 /// streams (Puck.World is not determinism-gated). <c>player.bind</c>/<c>player.signal</c>/<c>identity.bindings.save</c>
 /// route Simulation so the stdin barrier serializes a following <c>player.bindings</c> read-after-write;
 /// <c>player.bindings</c> is an Immediate read.</remarks>
-internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, IInputClock clock, WorldDefinition definition, WorldOwnedWorlds ownedWorlds) : ICommandModule {
+internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBindings seatBindings, IServerLink link, Func<InputRouter> router, Func<CommandRegistry> registry, Func<WorldWindowInputObservers?> windowObservers, IInputClock clock, WorldDefinition definition, WorldOwnedWorlds ownedWorlds) : ICommandModule {
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldSeatBindings m_seatBindings = seatBindings;
     private readonly IServerLink m_link = link;
@@ -31,6 +34,9 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
     private readonly Func<InputRouter> m_router = router;
     // LAZY for the same cycle: the registry aggregates this module, so world.affordances resolves it at dispatch.
     private readonly Func<CommandRegistry> m_registry = registry;
+    // The raw window-input fan-out a synthesized mouse control enters through, ahead of the router — lazy for the
+    // same cycle (its console sink reaches the registry), and null on a headless boot, which has no window.
+    private readonly Func<WorldWindowInputObservers?> m_windowObservers = windowObservers;
     private readonly IInputClock m_clock = clock;
     private readonly WorldOwnedWorlds m_ownedWorlds = ownedWorlds;
     // The declared channel table world.affordances echoes alongside the command manifest — the second vocabulary
@@ -95,15 +101,15 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return CommandResult.Error(output: "[player.bind: expected <seat> <source> <destination> [scale:<value>|value:<value>] — seat 1..4; <source> may be chord:<m1>+<m2> (press order) or held:<m1>+<m2> (any order), either as <prefix>:<group>:<m1>+<m2>; <destination> a command name or channel:<name>]");
         }
 
-        if (!WorldArgs.TryParseIndex(
-            args: args,
+        var (seatSlot, seatError) = SeatCommandArgs.ResolveSlot(
+            args: in args,
             at: 0,
-            fallback: null,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var seat
-        )) {
-            return CommandResult.Error(output: $"[player.bind: <seat> must be an integer 1..{PlayerRoster.MaxSlots}]");
+            context: context,
+            verb: "player.bind"
+        );
+
+        if (seatError is { } seatRefusal) {
+            return seatRefusal;
         }
 
         var source = args[1].ToString();
@@ -159,15 +165,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                     return CommandResult.Error(output: "[player.bind: scale:<value> is only meaningful beside a channel destination]");
                 }
 
-                if (
-                    !float.TryParse(
-                    s: token.AsSpan(start: ScaleTokenPrefix.Length),
-                    style: System.Globalization.NumberStyles.Float,
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    result: out var parsedScale
-                ) ||
-                    !float.IsFinite(f: parsedScale)
-                ) {
+                if (!CommandArgs.TryParseFloat(
+                    text: token.AsSpan(start: ScaleTokenPrefix.Length),
+                    value: out var parsedScale
+                )) {
                     return CommandResult.Error(output: "[player.bind: expected scale:<value> as the fourth argument]");
                 }
 
@@ -188,15 +189,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                     return CommandResult.Error(output: $"[player.bind: value:<value> only applies to a destination whose declared value kind is Axis1D — '{command}' takes {destinationMetadata.ValueKind.ToString().ToLowerInvariant()}]");
                 }
 
-                if (
-                    !float.TryParse(
-                    s: token.AsSpan(start: ValueTokenPrefix.Length),
-                    style: System.Globalization.NumberStyles.Float,
-                    provider: System.Globalization.CultureInfo.InvariantCulture,
-                    result: out var parsedValue
-                ) ||
-                    !float.IsFinite(f: parsedValue)
-                ) {
+                if (!CommandArgs.TryParseFloat(
+                    text: token.AsSpan(start: ValueTokenPrefix.Length),
+                    value: out var parsedValue
+                )) {
                     return CommandResult.Error(output: "[player.bind: expected value:<value> as the fourth argument]");
                 }
 
@@ -204,7 +200,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             }
         }
 
-        var slot = PlayerRoster.SlotFromDisplay(number: seat);
+        var slot = seatSlot;
         var current = m_seatBindings.SessionRebind(slot: slot);
         var restingPage = m_seatBindings.RestingPage(slot: slot);
         BindingProfileDocument rebind;
@@ -296,6 +292,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         WorldAffordances.Validate(
             document: probe,
             channels: m_seatBindings.Channels(slot: slot),
+            seatModes: m_seatBindings.SeatModes(slot: slot),
             errors: vocabularyErrors
         );
 
@@ -319,27 +316,27 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             slot: slot
         );
 
-        return new CommandResult(Output: $"[player.bind: seat {seat} '{source}' → '{destinationLabel}' (unsaved — identity.bindings.save to persist)]");
+        return new CommandResult(Output: $"[player.bind: seat {PlayerRoster.DisplayNumber(slot: slot)} '{source}' → '{destinationLabel}' (unsaved — identity.bindings.save to persist)]");
     }
     private CommandResult BindingsHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
             return CommandResult.Error(output: "[player.bindings: expected at most 1 value — an optional seat index]");
         }
 
-        if (!WorldArgs.TryParseIndex(
-            args: args,
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
+            args: in args,
             at: 0,
-            fallback: 1,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var seat
-        )) {
-            return CommandResult.Error(output: $"[player.bindings: seat must be an integer 1..{PlayerRoster.MaxSlots}]");
+            context: context,
+            defaultSlot: 0,
+            verb: "player.bindings"
+        );
+
+        if (error is { } refusal) {
+            return refusal;
         }
 
-        var slot = PlayerRoster.SlotFromDisplay(number: seat);
         var document = m_seatBindings.ComposedDocument(slot: slot);
-        var builder = new StringBuilder(value: $"[player.bindings: seat {seat}");
+        var builder = new StringBuilder(value: $"[player.bindings: seat {PlayerRoster.DisplayNumber(slot: slot)}");
         var defaultGroup = ((document.Chords is { Count: > 0 } chords)
             ? (string)chords[0].Group
             : string.Empty
@@ -591,25 +588,23 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return CommandResult.Error(output: "[identity.bindings.save: expected at most 1 value — an optional seat index]");
         }
 
-        if (!WorldArgs.TryParseIndex(
-            args: args,
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
+            args: in args,
             at: 0,
-            fallback: 1,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var seat
-        )) {
-            return CommandResult.Error(output: $"[identity.bindings.save: seat must be an integer 1..{PlayerRoster.MaxSlots}]");
+            context: context,
+            verb: "identity.bindings.save"
+        );
+
+        if (error is { } refusal) {
+            return refusal;
         }
 
-        var slot = PlayerRoster.SlotFromDisplay(number: seat);
-
         if (m_roster.ProfileAt(slot: slot) is not { } profile) {
-            return CommandResult.Error(output: $"[identity.bindings.save: seat {seat} is not joined — see world.players]");
+            return CommandResult.Error(output: $"[identity.bindings.save: seat {PlayerRoster.DisplayNumber(slot: slot)} is not joined — see world.players]");
         }
 
         if (m_seatBindings.SessionRebind(slot: slot) is not { } session) {
-            return CommandResult.Error(output: $"[identity.bindings.save: seat {seat} has no unsaved rebinds]");
+            return CommandResult.Error(output: $"[identity.bindings.save: seat {PlayerRoster.DisplayNumber(slot: slot)} has no unsaved rebinds]");
         }
 
         // Fold the session rebinds into the identity's existing binding layer (or start one) and persist directly
@@ -636,7 +631,95 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             slot: slot
         );
         RefreshSeatsBoundTo(profileId: profile.Id);
-        return new CommandResult(Output: $"[identity.bindings.save: seat {seat} → world:{profile.Id}]");
+        return new CommandResult(Output: $"[identity.bindings.save: seat {PlayerRoster.DisplayNumber(slot: slot)} → world:{profile.Id}]");
+    }
+    // The mouse half of player.signal: a mouse source is synthesized as the RAW WindowInputEvent the native window
+    // would have emitted, so it can take the physical mouse's own door (see SignalHandler). Returns false for a
+    // source outside the mouse vocabulary; a mouse source whose sample shape does not fit its control is a refusal.
+    private static bool TryMouseEvent(string source, CommandPhase phase, in CommandValue value, out WindowInputEvent inputEvent, out CommandResult? refusal) {
+        inputEvent = default;
+        refusal = null;
+
+        if (!source.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "mouse."
+        )) {
+            return false;
+        }
+
+        if (string.Equals(
+            a: source,
+            b: InputSources.Mouse.Motion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            if (phase != CommandPhase.Active) {
+                refusal = CommandResult.Error(output: $"[player.signal: {InputSources.Mouse.Motion} takes <x> <y> — a relative delta in device units]");
+
+                return true;
+            }
+
+            inputEvent = WindowInputEvent.PointerDelta(delta: value.AsAxis2D);
+
+            return true;
+        }
+
+        if (string.Equals(
+            a: source,
+            b: InputSources.Mouse.Wheel,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            if (phase != CommandPhase.Active) {
+                refusal = CommandResult.Error(output: $"[player.signal: {InputSources.Mouse.Wheel} takes <x> <y> (or one vertical value) in notches]");
+
+                return true;
+            }
+
+            inputEvent = WindowInputEvent.PointerWheel(notches: ((value.Kind == CommandValueKind.Axis2D)
+                ? value.AsAxis2D
+                : new System.Numerics.Vector2(
+                    x: 0f,
+                    y: value.AsAxis1D
+                )
+            ));
+
+            return true;
+        }
+
+        const string ButtonPrefix = "mouse.button";
+
+        if (
+            source.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: ButtonPrefix
+        ) &&
+            int.TryParse(
+            s: source.AsSpan(start: ButtonPrefix.Length),
+            style: NumberStyles.None,
+            provider: CultureInfo.InvariantCulture,
+            result: out var button
+        ) &&
+            (button >= 1) &&
+            (button < ushort.MaxValue)
+        ) {
+            if (phase is not (CommandPhase.Started or CommandPhase.Completed)) {
+                refusal = CommandResult.Error(output: $"[player.signal: {source} takes press or release]");
+
+                return true;
+            }
+
+            // The window's button index is zero-based; the mouse vocabulary's is one-based (WindowInputMapper's
+            // projection adds the one back).
+            inputEvent = WindowInputEvent.PointerButton(
+                button: (button - 1),
+                phase: phase
+            );
+
+            return true;
+        }
+
+        refusal = CommandResult.Error(output: $"[player.signal: {source} is not a mouse control — {InputSources.Mouse.Motion}, {InputSources.Mouse.Wheel}, or mouse.button<n>]");
+
+        return true;
     }
     private CommandResult SignalHandler(CommandContext context, WireArgs args) {
         if (args.Count is not (2 or 3)) {
@@ -651,6 +734,10 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
 
         CommandPhase phase;
         CommandValue value;
+        // A relative source's sample is a DELTA in device units (pixels, notches) rather than a deflection, so it
+        // rides through unclamped exactly as the window pump hands it up; clamping it to [-1, 1] would turn an
+        // 800-pixel drag into a one-pixel one.
+        var relative = InputSourceVocabulary.IsRelative(sourceId: source);
 
         if (args.Count == 3) {
             if (
@@ -668,16 +755,22 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
                 return CommandResult.Error(output: "[player.signal: axis values must be finite numbers]");
             }
             phase = CommandPhase.Active;
-            value = CommandValue.Axis(value: new System.Numerics.Vector2(
-                x: Math.Clamp(
-                    max: 1f,
-                    min: -1f,
-                    value: x
-                ),
-                y: Math.Clamp(
-                    max: 1f,
-                    min: -1f,
-                    value: y
+            value = CommandValue.Axis(value: (relative
+                ? new System.Numerics.Vector2(
+                    x: x,
+                    y: y
+                )
+                : new System.Numerics.Vector2(
+                    x: Math.Clamp(
+                        max: 1f,
+                        min: -1f,
+                        value: x
+                    ),
+                    y: Math.Clamp(
+                        max: 1f,
+                        min: -1f,
+                        value: y
+                    )
                 )
             ));
         } else if (args.Is(
@@ -692,11 +785,9 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         )) {
             phase = CommandPhase.Completed;
             value = CommandValue.Digital(active: false);
-        } else if (float.TryParse(
-            s: args[1],
-            style: System.Globalization.NumberStyles.Float,
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            result: out var sample
+        } else if (args.TryFloat(
+            index: 1,
+            value: out var sample
         )) {
             phase = CommandPhase.Active;
             value = CommandValue.Axis(value: sample);
@@ -704,13 +795,37 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             return CommandResult.Error(output: "[player.signal: the second value must be press, release, or a number]");
         }
 
-        m_router().Capture(signal: new InputSignal(
-            CaptureTick: m_clock.NowTicks,
-            DeviceId: default,
-            Phase: phase,
-            Source: source,
-            Value: value
-        ));
+        var captureTick = m_clock.NowTicks;
+
+        if (TryMouseEvent(
+            inputEvent: out var inputEvent,
+            phase: phase,
+            refusal: out var refusal,
+            source: source,
+            value: in value
+        )) {
+            if (refusal is { } mouseRefusal) {
+                return mouseRefusal;
+            }
+
+            // A mouse control takes the physical mouse's own door, in the window pump's order: the raw event to
+            // the window-input observers first (the pointer store a held player.orbit/player.steer drains camera
+            // motion from, the cursor's held buttons), then the same event mapped into the router. The router alone
+            // would leave the pointer store empty — a synthesized drag that orbits nothing. Headless, there are no
+            // observers and only the router half applies.
+            m_windowObservers()?.Observe(inputEvent: in inputEvent);
+            m_router().Capture(signal: WindowInputMapper.ToInputSignal(inputEvent: in inputEvent) with {
+                CaptureTick = captureTick,
+            });
+        } else {
+            m_router().Capture(signal: new InputSignal(
+                CaptureTick: captureTick,
+                DeviceId: default,
+                Phase: phase,
+                Source: source,
+                Value: value
+            ));
+        }
 
         var describedSample = ((args.Count == 3)
             ? $"{args[1].ToString().ToLowerInvariant()} {args[2].ToString().ToLowerInvariant()}"
@@ -878,7 +993,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.bind",
-            description: "Live-remaps one binding for a seat's SESSION layer (unsaved until identity.bindings.save): player.bind <seat> <source> <destination> [scale:<value>|value:<value>] — <seat> 1..4. <destination> is a command name (e.g. editor.enter) or channel:<name> (e.g. channel:jump). [scale:<value>] is only meaningful beside a channel destination (raw [-1, 1]; defaults to +1) and is refused on a BINARY channel. [value:<value>] is only meaningful beside a COMMAND destination whose declared value kind is Axis1D — the constant a digital source drives it with (the step-twin shape: a key bound with value:1 steps one way, value:-1 the other, exactly like world.affordances reports the destination taking); REQUIRED there (no default — there is no natural direction to assume), and refused by name on any other destination kind (Digital included — every other bindable verb keeps today's plain source→command behavior with no constant at all). scale: and value: are mutually exclusive; naming both is refused. <source> is a provider-neutral input source id (e.g. keyboard.e, gamepad.buttonEast) for a resting-page entry, or a CHORD ROW declaration: chord:<m1>+<m2> binds the ordered modifier chord to the destination in the default (play) group, chord:<group>:<m1>+<m2> targets an explicit group (modifier ids: lt, rt). Recomposes and hot-reloads that seat's mapping at once; a later bind of the same source or (group, chord) replaces it. This changes the input→command mapping mid-run (replay streams shift — World is not determinism-gated).",
+            description: "Live-remaps one binding for a seat's SESSION layer (unsaved until identity.bindings.save): player.bind <seat> <source> <destination> [scale:<value>|value:<value>] — <seat> 1..4. <destination> is a command name (e.g. player.look.recenter) or channel:<name> (e.g. channel:jump). [scale:<value>] is only meaningful beside a channel destination (raw [-1, 1]; defaults to +1) and is refused on a BINARY channel. [value:<value>] is only meaningful beside a COMMAND destination whose declared value kind is Axis1D — the constant a digital source drives it with (the step-twin shape: a key bound with value:1 steps one way, value:-1 the other, exactly like world.affordances reports the destination taking); REQUIRED there (no default — there is no natural direction to assume), and refused by name on any other destination kind (Digital included — every other bindable verb keeps today's plain source→command behavior with no constant at all). scale: and value: are mutually exclusive; naming both is refused. <source> is a provider-neutral input source id (e.g. keyboard.e, gamepad.buttonEast) for a resting-page entry, or a CHORD ROW declaration: chord:<m1>+<m2> binds the ordered modifier chord to the destination in the default (play) group, chord:<group>:<m1>+<m2> targets an explicit group (modifier ids: lt, rt). Recomposes and hot-reloads that seat's mapping at once; a later bind of the same source or (group, chord) replaces it. This changes the input→command mapping mid-run (replay streams shift — World is not determinism-gated).",
             handler: BindHandler,
             routing: CommandRouting.Simulation
         );
@@ -891,7 +1006,7 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "player.signal",
-            description: "Synthesizes one raw input signal into the router — the scripted twin of a physical control, so chords, sticks, and bindings are drivable over the pipe: player.signal <source> <press|release|value> or player.signal <source> <x> <y>. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick). The signal folds into the NEXT simulation tick's snapshot exactly like device input and remains carried until a release/zero sample, matching the physical backend rather than bypassing its binding.",
+            description: "Synthesizes one raw input signal — the scripted twin of a physical control, so chords, sticks, bindings, and pointer drags are drivable over the pipe: player.signal <source> <press|release|value> or player.signal <source> <x> <y>. A scalar is an Axis1D Active sample; x/y is an Axis2D Active sample (for example gamepad.leftStick), clamped to full deflection unless the source is relative (mouse.motion in pixels, mouse.wheel in notches), whose delta rides through as-is. A mouse control (mouse.motion, mouse.wheel, mouse.button<n>) enters through the physical mouse's own door — the raw window-input observers first, so a held player.orbit/player.steer drags the seat camera and the cursor sees the held button, then the router — exactly as a native pointer event does; every other source enters the router alone. The signal folds into the NEXT simulation tick's snapshot exactly like device input and remains carried until a release/zero sample, matching the physical backend rather than bypassing its binding.",
             handler: SignalHandler,
             routing: CommandRouting.Simulation
         );
@@ -899,8 +1014,8 @@ internal sealed class WorldBindingCommandModule(PlayerRoster roster, WorldSeatBi
             bindability: CommandBindability.Unbindable,
             name: "world.affordances",
             description: "Echoes the affordance manifest — every dispatchable command with its declared value kind, routing, and BINDABILITY — as one compact JSON array sorted by name: world.affordances. This is the SINGLE machine-readable vocabulary binding documents are validated against: a binding entry naming a command absent from this list, sending it the wrong value kind, or naming one whose \\\"bindable\\\" is false (an authority verb — the world grant/mutation surface, the editor apply paths, profile administration) is refused loudly at player.bind, at world.row.set bindingOverlays, at every recompose, and by the document validators, instead of resolving to a silently dead key or a reachable escalation. Immediate.",
-            handler: (_, args) => ((args.Count > 0)
-            ? CommandResult.Error(output: "[world.affordances: expected no arguments]")
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.affordances") is { } refusal)
+            ? refusal
             : new CommandResult(Output: DescribeAffordances()))
         );
         yield return CommandDefinition.WithWireArgs(

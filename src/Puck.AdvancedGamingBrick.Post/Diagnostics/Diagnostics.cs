@@ -9,10 +9,14 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// (<see cref="AccuracySuiteStage"/> / <see cref="AgsStage"/>). Split by mode across the <c>Diagnostics/</c> folder
 /// (partial-class files, one per CLI flag); this file holds only the dispatch entry and the state every mode shares.
 /// </summary>
-internal static partial class Diagnostics {
-    /// <summary>The BIOS image every machine is built with. Defaults to a zeroed stub; the entry point loads the
-    /// open-source replacement BIOS into it when one is available.</summary>
-    public static ReadOnlyMemory<byte> BiosImage { get; set; } = new byte[ReplacementBios.ImageSize];
+internal sealed partial class Diagnostics {
+    /// <summary>Creates a diagnostic runner with explicit BIOS and per-machine options.</summary>
+    public Diagnostics(ReadOnlyMemory<byte> biosImage, AgbMachineOptions? machineOptions = null) {
+        BiosImage = biosImage;
+        MachineOptions = machineOptions ?? new AgbMachineOptions();
+    }
+    private ReadOnlyMemory<byte> BiosImage { get; }
+    private AgbMachineOptions MachineOptions { get; }
 
     /// <summary>The number of suites the menu-driven accuracy suite steps through.</summary>
     public const int AccuracySuiteCount = 14;
@@ -23,15 +27,19 @@ internal static partial class Diagnostics {
     /// <param name="exitCode">The exit code the handled mode produced (0 when it does not gate).</param>
     /// <returns><see langword="true"/> when a diagnostic flag was handled (return <paramref name="exitCode"/>, skip the
     /// battery); otherwise <see langword="false"/>.</returns>
-    public static bool TryRun(string[] args, out int exitCode) {
+    public bool TryRun(string[] args, out int exitCode) {
         exitCode = 0;
+
+        if (TryCompareExecution(args: args, exitCode: out exitCode)) {
+            return true;
+        }
 
         // --oracle: run the self-authored cycle-oracle probe battery — measured vs documented per probe.
         if (Array.IndexOf(
             array: args,
             value: "--oracle"
         ) >= 0) {
-            exitCode = OracleProbes.RunOracle(args: args);
+            exitCode = new OracleProbes(bios: BiosImage).RunOracle(args: args);
 
             return true;
         }
@@ -45,7 +53,7 @@ internal static partial class Diagnostics {
                 b: "--bench",
                 comparisonType: StringComparison.OrdinalIgnoreCase
             )) {
-                exitCode = BenchDiagnostic.Run(args: args);
+                exitCode = BenchDiagnostic.Run(args: args, bios: BiosImage);
 
                 return true;
             }
@@ -121,7 +129,8 @@ internal static partial class Diagnostics {
                 Render(
                     romPath: args[(index + 1)],
                     outputPath: args[(index + 2)],
-                    steps: steps
+                    steps: steps,
+                    fullBoot: args.Contains(value: "--full-boot", comparer: StringComparer.OrdinalIgnoreCase)
                 );
 
                 return true;
@@ -202,6 +211,8 @@ internal static partial class Diagnostics {
                 }
 
                 exitCode = Lockstep(
+                    cosimExe: CommandLineArguments.Value(args: args, name: "--ares"),
+                    biosPath: CommandLineArguments.Value(args: args, name: "--bios"),
                     romPath: args[(index + 1)],
                     steps: long.Parse(s: args[(index + 2)]),
                     direct: (Array.IndexOf(
@@ -256,6 +267,7 @@ internal static partial class Diagnostics {
         for (var index = 0; (index < (args.Length - 1)); ++index) {
             if (args[index] == "--accuracy-suite") {
                 exitCode = RunAccuracySuite(
+                    focus: CommandLineArguments.Value(args: args, name: "--suite-focus"),
                     romPath: args[(index + 1)],
                     name: "accuracy suite"
                 );
@@ -268,6 +280,7 @@ internal static partial class Diagnostics {
         for (var index = 0; (index < (args.Length - 1)); ++index) {
             if (args[index] == "--ags") {
                 _ = RunAgs(
+                    trace: args.Contains(value: "--ags-trace", comparer: StringComparer.OrdinalIgnoreCase),
                     romPath: args[(index + 1)],
                     name: Path.GetFileName(path: args[(index + 1)])
                 );

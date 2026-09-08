@@ -237,7 +237,7 @@ internal static class BessDiagnostic {
         if (string.IsNullOrEmpty(value: romPath)) {
             rom = SyntheticRom.Create();
             romLabel = "synthetic";
-            model = ConsoleModel.Dmg;
+            model = ConsoleModel.DmgC;
 
             return true;
         }
@@ -247,7 +247,7 @@ internal static class BessDiagnostic {
 
             rom = [];
             romLabel = string.Empty;
-            model = ConsoleModel.Dmg;
+            model = ConsoleModel.DmgC;
 
             return false;
         }
@@ -255,8 +255,8 @@ internal static class BessDiagnostic {
         rom = File.ReadAllBytes(path: romPath);
         romLabel = Path.GetFileName(path: romPath);
         model = (((rom.Length > 0x0143) && (0 != (rom[0x0143] & 0x80)))
-            ? ConsoleModel.Cgb
-            : ConsoleModel.Dmg);
+            ? ConsoleModel.CgbE
+            : ConsoleModel.DmgC);
 
         return true;
     }

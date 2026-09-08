@@ -1,3 +1,5 @@
+using Puck.HumbleGamingBrick.Timing;
+
 namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
@@ -16,37 +18,23 @@ internal sealed class DeterminismStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var rom = SyntheticRom.Create();
 
-        using var first = PostMachine.Build(
-            model: ConsoleModel.Dmg,
-            rom: rom
-        );
-        using var second = PostMachine.Build(
-            model: ConsoleModel.Dmg,
-            rom: rom
-        );
-
-        PostMachine.RunFrames(
+        return MachineStageProbes.VerifyDeterminism<MachineInstance, MachineSnapshot, MachineIdentity, Tick>(
+            build: () => PostMachine.Build(
+                model: ConsoleModel.DmgC,
+                rom: rom
+            ),
+            describeDivergence: HashDivergenceProbe.DescribeDivergence,
             frames: Frames,
-            instance: first
+            runFrames: PostMachine.RunFrames,
+            snapshot: static instance => instance.Machine.Snapshot()
         );
-        PostMachine.RunFrames(
-            frames: Frames,
-            instance: second
-        );
-
-        var firstState = first.Machine.Snapshot();
-        var secondState = second.Machine.Snapshot();
-
-        return (firstState.ContentEquals(other: secondState)
-            ? PostStageOutcome.Pass(detail: $"two independent machines byte-identical after {Frames} frames ({firstState.Size} state bytes)")
-            : PostStageOutcome.Fail(detail: $"two independent machines diverged after {Frames} frames — {HashDivergenceProbe.DescribeDivergence(
-            a: firstState,
-            b: secondState
-        )}"));
     }
 }

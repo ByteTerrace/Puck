@@ -17,10 +17,9 @@ public interface IWorldScreenPresenter {
     void NotifyDeviceLost();
     /// <summary>Publishes this tick's declared-screen content to the device.</summary>
     /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
-    /// <param name="elapsedTicks">The exact completed simulation time in engine ticks, used by feed deadlines.</param>
     /// <param name="deviceContext">The live GPU device context to upload on.</param>
     /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    void Publish(ulong tick, ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu);
+    void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu);
     /// <summary>Reconciles the offscreen camera-view pool against a mutated camera list.</summary>
     /// <param name="cameras">The mutated camera list (the live definition's cameras).</param>
     void ReconcileCameras(IReadOnlyList<WorldCamera> cameras);
@@ -35,7 +34,7 @@ public interface IWorldScreenPresenter {
     /// <param name="time">The frame's content clock (seconds).</param>
     /// <param name="authoritativeTick">The latest authoritative simulation tick available to presentation.</param>
     /// <param name="hostFrame">The frame the room is rendering this frame.</param>
-    void RenderViews(in Puck.Hosting.FrameContext context, SdfProgram program, int revision, IReadOnlyList<DynamicTransform> transforms, float time, ulong authoritativeTick, SdfFrame hostFrame);
+    void RenderViews(in Puck.Hosting.FrameContext context, SdfProgram program, int revision, DynamicTransform[] transforms, float time, ulong authoritativeTick, SdfFrame hostFrame);
     /// <summary>Gets the live decal-text source at a screen index, or <see langword="null"/> when the slot's current
     /// source is not text.</summary>
     /// <param name="index">The engine screen-surface index.</param>

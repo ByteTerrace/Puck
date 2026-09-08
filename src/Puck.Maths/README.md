@@ -77,7 +77,7 @@ simulation state:
   generate and version the constants instead of rebuilding them.
 
 One more exclusion, narrower but easy to trip over: **`GetHashCode` is not part
-of the bit-identical promise.** `QuadraticSurd` and `QuadraticAlgebra` fold
+of the bit-identical promise.** `RealQuadratic` and `QuadraticAlgebra` fold
 their hashes through the framework's `HashCode`, which .NET randomizes per
 process. The same value may therefore produce a different number in another
 process, within the ordinary `GetHashCode` contract. Hashes are for hash tables.
@@ -114,11 +114,11 @@ graph TB
     FP(["🔢 FixedPoint<br/>scalars · vectors · rotations · positions"])
     SA(["🎲 Sampling<br/>seeded randomness · noise · evenly spread point sets"])
     FF(["🧮 FiniteFields<br/>binary fields · prime fields · primality"])
-    GE(["📏 Geometry<br/>hex grids · Hilbert · layers"])
+    GE(["📏 Geometry<br/>square and hex grids · Hilbert · layers"])
     AL(["🏗️ Algebra<br/>configurable number systems"])
     OR(["🔮 Oracle<br/>graphs · paths · patterns"])
     RE(["🔬 Research<br/>exploratory, never the hot path"])
-    TR(["🎛️ Transforms<br/>NTT · fixed-point FFT"])
+    TR(["🎛️ Transforms<br/>NTT · Walsh–Hadamard · fixed-point FFT and DCT"])
     Root --- FP
     Root --- SA
     Root --- FF
@@ -135,10 +135,10 @@ graph TB
 | [`Sampling/`](Sampling/README.md) | The seeded generator, weighted choice, spatial noise, low-discrepancy sequences and digital nets (point sets that spread evenly by construction), and the two non-simulation paths (`SecureRandom`, `ProbabilityFunctions`). | Anything random, scattered, or noisy. |
 | [`FiniteFields/`](FiniteFields/README.md) | Binary fields over fixed-size bit patterns, prime fields and their extensions, error-correction arithmetic, and exact primality on `ulong`. | Error-correcting codes, checksums, and modular arithmetic. |
 | [`Algebra/`](Algebra/README.md) | Configurable number systems that can add a root, add generators, raise a degree, or double an existing number type. | A relationship chosen at runtime, or a proof that the same operation agrees across number types. |
-| [`Geometry/`](Geometry/README.md) | Hex grids, the locality-preserving Hilbert curve, layered index spaces, and exact integer geometry. | A grid, a space-filling order, or a layered index. |
+| [`Geometry/`](Geometry/README.md) | Square and hex grids, the locality-preserving Hilbert curve, layered index spaces, and exact integer geometry. | A grid, a space-filling order, or a layered index. |
 | [`Oracle/`](Oracle/README.md) | One configurable product operation evaluated with different rules for combining values, then used to build graphs, geometric algebras, planar tangles, divisor arithmetic, and pattern languages. | Reachability, shortest paths, pattern matching, holes in a structure, or group words. |
 | [`Research/`](Research/README.md) | Exploratory exact tools: continued-fraction and radical tails, positional and Ostrowski automatic sequences, Sturmian and quasicrystal words, Fibonacci and metallic-mean arithmetic, odd-cyclic incidence, and real-quadratic orders. Partly in `namespace Puck.Maths.Research`; that folder README says which types. | Research questions and compiled random-access integer patterns, never the simulation hot path. |
-| [`Transforms/`](Transforms/README.md) | The exact number-theoretic transform over `PrimeField64`, and the fixed-point FFT over `FixedComplex` — forward/inverse radix-2, cached twiddle plans, exact cyclic convolution. | A frequency-domain transform, or an exact convolution. |
+| [`Transforms/`](Transforms/README.md) | The exact number-theoretic transform over `PrimeField64` and the exact Walsh–Hadamard transform over any binary integer; the fixed-point FFT over `FixedComplex` and the fixed-point DCT over `FixedQ4816` — one plan-then-in-place shape, cached twiddle plans, cyclic convolution on both spectral transforms. | A frequency-domain or sequency-domain transform, or a cyclic convolution. |
 
 The [root-level type map](#root-level-types) below introduces the types that do
 not belong to one of those folders: integer routines, exact discrete rates,
@@ -162,6 +162,8 @@ operation I need. Pick a row, then follow its link for the detailed contract.
 | A 3D rotation | `FixedQuaternion`; add a translation and it becomes `FixedRigidTransform` | [FixedPoint](FixedPoint/README.md#fixedquaternion) |
 | To interpolate or clamp | `FixedQ4816.Lerp` / `FixedQ4816.Clamp`, `FixedVector2.Lerp` / `FixedVector3.Lerp`, `FixedQuaternion.Slerp`, `FixedRigidTransform.ScLerp` (the screw) | [FixedPoint](FixedPoint/README.md#fixedq4816) |
 | Drift-free rate integration (velocity → position, acceleration → velocity) | `FixedRateAccumulator` / `FixedVector3RateAccumulator` — the division remainder carries across ticks | [FixedPoint](FixedPoint/README.md#fixedrateaccumulator-and-fixedvector3rateaccumulator) |
+| A pole-matched second-order response — a target that eases, overshoots, or anticipates instead of snapping | `SecondOrderDynamics` — `Create(f, ζ, r)` derives the coefficients, `Compile`+`Step` for per-tick advance, `Evaluate` for a closed-form read from initial conditions | [FixedPoint](FixedPoint/README.md#secondorderdynamics) |
+| A curve authored by knot curvature rather than control points | `CurvatureSpline.Compile` — knots declare position, tangent direction, and signed curvature; the compiled tangent lengths and a Simpson arc-length table come out exactly. `CompiledCurvatureSpline.Evaluate(arcLength)` samples position, tangent, and curvature per tick | [FixedPoint](FixedPoint/README.md#curvaturespline) |
 | A seeded RNG you can snapshot and resume | `Pcg32XshRr` — one stream per system | [Sampling](Sampling/README.md#pcg32xshrr) |
 | To shuffle a list reproducibly | `Pcg32XshRr.Shuffle` — in-place Fisher–Yates from the high end down | [Sampling](Sampling/README.md#pcg32xshrr) |
 | A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` in constant time with two generator advances | [Sampling](Sampling/README.md#weightedsampler-and-aliastabletelement) |
@@ -171,17 +173,23 @@ operation I need. Pick a row, then follow its link for the detailed contract.
 | Arithmetic over fixed-size bit patterns, written `GF(2^k)` | `BinaryField<T>` over a chosen modulus, or the canonical `BinaryFields.Degree8/16/32/64/128` | [FiniteFields](FiniteFields/README.md#binaryfieldt) |
 | Error-correction symbols over a binary field, and reading a codeword back | `ReedSolomon.BuildGenerator` once, then `ComputeCheckSymbols` per message and `ComputeSyndromes` to verify | [FiniteFields](FiniteFields/README.md#reedsolomon) |
 | Modular arithmetic mod an odd prime, exact square roots, exact primality on `ulong` | `PrimeField64`, or `QuadraticExtensionField64` when each value needs two prime-field parts | [FiniteFields](FiniteFields/README.md#primefield64) |
-| An exact cyclic convolution, or a frequency-domain transform over a finite field | `NttPlan.Create` once, then `NumberTheoreticTransform.Forward` / `.Inverse` / `.Convolve` | [Transforms](Transforms/README.md#numbertheoretictransform) |
-| A fixed-point FFT — forward/inverse over `FixedComplex`, or a real sequence via `ForwardReal`/`InverseReal` | `FixedFourierPlan.Create` once, then `FixedFourierTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#fixedfouriertransform) |
+| An exact cyclic convolution, or a frequency-domain transform over a finite field | `NumberTheoreticTransformPlan.Create` once, then `NumberTheoreticTransform.Forward` / `.Inverse` / `.Convolve` | [Transforms](Transforms/README.md#numbertheoretictransform) |
+| A fixed-point FFT — forward/inverse over `FixedComplex`, or a real sequence via `ForwardReal`/`InverseReal` | `FixedFourierTransformPlan.Create` once, then `FixedFourierTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#fixedfouriertransform) |
+| A plan-free exact ±1 transform over integer lanes | `WalshHadamardTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#walshhadamardtransform) |
+| A fixed-point DCT-II/DCT-III pair over real values | `FixedCosineTransformPlan.Create` once, then `FixedCosineTransform.Forward` / `.Inverse` | [Transforms](Transforms/README.md#fixedcosinetransform) |
 | Reachability, shortest paths, walk counts, best-probability routes | A `Presentations.Quiver` with the matching material — the rules used to combine path values | [Oracle](Oracle/README.md#choosing-an-entry-point) |
 | Pattern matching represented by algebra values | `TokenPattern` then `PatternMatcher.TryCompile` | [Oracle](Oracle/README.md#the-language-axis) |
 | An exact integer allocation over intervals (jobs per frame, samples per video frame) | `DiscreteMeasure`, compiled to `CompiledDiscreteMeasure64` for the hot path | [below](#root-level-types) |
-| An exact value involving a square root — no floating point, no drift | `QuadraticSurd` | [below](#root-level-types) |
-| Proof that a quantized slope reproduces exact Beatty floors — and the exact index where it first stops | `BeattyQuantization.CertifySlope`; `ContinuedFraction.Convergents` supplies the worst-case indices | [below](#root-level-types) |
+| An exact value involving a square root — no floating point, no drift | `RealQuadraticField` names the field, `RealQuadratic` carries the value | [below](#root-level-types) |
+| Proof that a quantized slope reproduces exact Beatty floors — and the exact index where it first stops | `BeattyQuantization.CertifySlope`; `ContinuedFraction.Convergents` supplies the worst-case indices | [Research](Research/README.md) |
 | The fraction with the smallest denominator inside an interval | `SimplestRational.InOpenInterval` | [below](#root-level-types) |
 | A hex grid whose 60° rotations are exact | `HexagonalCoordinate` | [Geometry](Geometry/README.md#hexagonalcoordinate) |
+| Dense hex-disk storage with a continuous neighbour walk and ring symmetries | `HexagonalIndex` | [Geometry](Geometry/README.md#hexagonalindex) |
+| Signed square-grid cells with exact quarter turns and checked Gaussian arithmetic | `SquareCoordinate` | [Geometry](Geometry/README.md#squarecoordinate) |
+| Dense centered square storage with a continuous cardinal walk and direct symmetries | `SquareIndex` | [Geometry](Geometry/README.md#squareindex) |
+| Dense nonnegative square coordinates with direct swap, common translation, scale and component queries | `ElegantPair` / `ElegantUnpair` and `ElegantSwap`, `ElegantTranslate`, `ElegantScale`, `ElegantMinimum`, `ElegantMaximum`, `ElegantDifference`, `ElegantSum` | `UnsignedNumberFunctions` |
 | Cache-coherent tile/chunk ordering | `HilbertCurve` (locality-preserving) rather than Morton order | [Geometry](Geometry/README.md#hilbertcurve) |
-| A layered index space — rings, shells, shards | `LayerSequence` — constant-time index → layer, pure integer | [Geometry](Geometry/README.md#layersequence) |
+| A layered index space — rings, shells, shards | `LayerSequence` — constant-time index → layer, exact integer result | [Geometry](Geometry/README.md#layersequence) |
 | One algebraic relationship over several number types, or a proof that two number systems agree | `QuadraticAlgebra<TScalar>` and the rest of the configurable algebra types | [Algebra](Algebra/README.md) |
 | To fold a per-tick state hash for a determinism or replay check | `Fnv1aHash` — allocation-free, endianness-independent | [below](#root-level-types) |
 | A restriction that can only narrow — a capability mask under AND, a quantity under minimum, or both paired as one value | `MeetMask64`, `MeetQuantity64`, `MeetProduct<TFirst, TSecond>` | [below](#root-level-types) |
@@ -323,19 +331,116 @@ surface, including parameters, return values, and exceptions.
 
 | Type | Role |
 |------|------|
-| `QuadraticSurd` / `ContinuedFraction` | Represent exact real-quadratic values and their repeating continued-fraction expansions — including the convergents, the best rational approximations — without floating point. |
+| `Rational` / `RealQuadraticField` / `RealQuadratic` / `ContinuedFraction` | The exact rational (reduced on construction); the descriptor of a real quadratic field `ℚ(√d)`, its radicand canonicalized once; the exact value `(a + b·√d)/c` of such a field, with conjugate, norm and trace; and the repeating continued-fraction expansions of those values — including the convergents, the best rational approximations — without floating point. |
 | `SimplestRational` | Locate the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot descent. |
-| `BeattyQuantization` / `BeattyQuantizationCertificate` | Certify the nearest dyadic quantization of an exact irrational slope and the exact first index at which the quantized Beatty floors diverge from the true ones, with a verifiable witness. |
 | `DiscreteMeasure` / `CompiledDiscreteMeasure64` / `DiscreteMeasureCompilationFailure` | Allocate an exact integer amount across integer intervals, then compile supported measures into a bounded, allocation-free form for frequently run code. |
 | `NumberTheoryFunctions` / `BigIntegerFunctions` | Provide prime enumeration, modular roots and inverses, primality, and factorization when the calculation needs arbitrary-width integers. |
+| `Combinatorics` | Count subsets and permutations exactly, and give them dense integer identities; see [combination and permutation ranks](#combination-and-permutation-ranks). |
 | `MonotonicPartitioner` / `MonotonicPartitionerMetrics` | Route a value to one of 1–1024 buckets while minimizing movement when another bucket is added, and report when that value moves. |
-| `CyclicRotation` / `SymmetryLattice` | Provide a bit-exact 30-tick rotation loop and the fixed, symmetric node set behind it in eight dimensions. |
+| `CyclicRotation` / `SymmetryLattice` / `SymmetryWord` | Provide a bit-exact rotation loop (the thirty-step table, or any order's root of unity), the fixed, symmetric node set behind it in eight dimensions with its exact root pairing and ring walks, and a word of its reflections baked to a permutation with a derived order and a constant-time counted power. |
 | `Fnv1aHash` | Accumulate an explicit, stable 64-bit digest for replay and determinism checks. |
 | `IMeetSemilattice<TSelf>` / `MeetMask64` / `MeetQuantity64` / `MeetProduct<TFirst, TSecond>` | Combine restrictions so the result never grants more than either input, whether the restriction is a bit mask, a quantity, or a pair of both. |
 | `BinaryIntegerFunctions` / `UnsignedNumberFunctions` / `PrimeExtensions` | Supply generic bit and decimal-digit operations, integer roots and pairing, and exact 32-bit primality and factorization. |
 
 The chooser above is the quickest way into these types. The API reference is
 the place to check a particular overload or failure condition.
+
+`ElegantPair` follows alternating square shells: for `m = max(x, y)`, the
+index is `m(m + 1) + (m odd ? x - y : y - x)`. Shell `m` occupies exactly
+`m²` through `(m + 1)² - 1`, and successive indices are grid neighbours.
+`ElegantSwap` exchanges the coordinates; `ElegantTranslate(k)` adds the same
+nonnegative `k` to both; `ElegantScale(k)` multiplies both by `k`. These direct
+transforms retain the unsigned carrier and throw `OverflowException` if the
+encoded result cannot fit. `ElegantMinimum`, `ElegantMaximum`,
+`ElegantDifference` (absolute difference), and `ElegantSum` query the components
+from the shell and its displacement from the diagonal. The original
+`ElegantPair<TInput, TResult>` requires the caller to choose a result width
+large enough; `ElegantUnpair` similarly requires sufficient component width.
+
+For example, `2u.ElegantPair<uint, ulong>(1u)` is `5UL`; its swap is `7UL`,
+translation by one is `13UL`, and scale by two is `18UL`. These operations
+act on coordinates; adding two raw indices does not add their coordinates.
+
+For repeating bit patterns, `BinaryIntegerFunctions.ReplicationMask<T>` places
+one bit at the bottom of each block: `8.ReplicationMask<uint>()` gives
+`0x01010101`. Multiplying by a pattern that fits in one block copies it across
+the word; `0xABu.RepeatBits(8)` gives `0xABABABAB`. Both functions require a block
+width that divides the fixed word width exactly. Signed types carry the same
+bits, so the repeated result can be negative; a whole-word block returns the
+input unchanged. `BigInteger` has no fixed word width and is refused. The
+[source documentation](BinaryIntegerFunctions.cs) derives the replication
+constant from a geometric series.
+
+The internal Fermat masks used by bit permutations share these repetition
+primitives. For 128-bit words, proper blocks repeat within a 64-bit half first,
+then that half is copied. This keeps wide division and multiplication out of
+mask construction and allows constant masks to fold into constant loads.
+
+### Combination and permutation ranks
+
+`Combinatorics` assigns consecutive `ulong` identities to finite subsets and
+permutations. A combination forgets selection order; a permutation preserves
+it. Supply zero-based ordinals, with a stable mapping from your domain's keys.
+The library does not sort keys or infer that mapping.
+
+```csharp
+ReadOnlySpan<int> hand = [0, 1, 2, 3, 5];
+ulong hands = Combinatorics.Binomial(52, 5);             // 2,598,960
+ulong identity = Combinatorics.CombinationRank(52, hand); // 1
+Span<int> restored = stackalloc int[5];
+Combinatorics.CombinationUnrank(52, identity, restored);
+int largest = Combinatorics.CombinationElement(52, 5, identity, 4); // 5
+
+ReadOnlySpan<int> order = [2, 0, 1];
+ulong permutation = Combinatorics.PermutationRank(order); // 4 of 3! = 6
+Span<int> restoredOrder = stackalloc int[3];
+Combinatorics.PermutationUnrank(permutation, restoredOrder);
+```
+
+Combination input must be strictly increasing, with each element below `n`.
+Ranks use **colexicographic order**: compare the largest differing element
+first. Thus the pairs start `[0,1], [0,2], [1,2], [0,3]`. For elements `a[i]`,
+the rank is `Σ Binomial(a[i], i + 1)`. Increasing `n` preserves a subset's rank
+as long as the complete space still fits. This follows the combinatorial
+number system described by
+[Derrick Stolee](https://computationalcombinatorics.wordpress.com/2012/09/10/ranking-and-unranking-of-combinations-and-permutations/).
+Poker hand identity means the particular set of cards, not its poker strength
+or an equivalence class under suit changes.
+
+Permutation input contains every ordinal in `[0, length)` exactly once.
+Ranks use ordinary **lexicographic order**, with each Lehmer digit counting
+the still-available smaller ordinals. The digits have factorial place values;
+[Keith Schwarz's factoradic explanation](https://www.keithschwarz.com/interesting/code/factoradic-permutation/FactoradicPermutation)
+develops that correspondence. Arbitrary keyed rows must first be mapped to
+these ordinals by their consumer.
+
+All public results are exact. `Binomial(n, k)` accepts nonnegative `int`
+arguments, returns zero for `k > n`, and throws on `ulong` overflow.
+Combination encoding and decoding require the **entire** `Binomial(n, k)`
+space to fit, even when an individual rank would fit. `Factorial` fits through
+20!, and permutation operations accept lengths 0 through 20. Larger complete
+permutation spaces require a wider encoding than these APIs provide. Empty
+combinations and permutations each form a one-element space with rank zero.
+Invalid ranks are refused before writing any output; destination length
+determines how many elements to decode.
+
+Successful calls allocate no managed memory. Binomial arithmetic stays in
+64 bits when its intermediate product fits and uses an exact 128-bit
+intermediate otherwise. Combination unranking updates binomial coefficients
+by recurrence for universes through 128 elements and uses binary search for
+larger universes, so a large universe does not require a linear scan.
+`CombinationElement` decodes from the
+largest position down to the requested one; it is useful for a single query,
+while `CombinationUnrank` avoids repeating that work when all elements are
+needed. Permutation ranking uses a bit set and population counts.
+
+The registered laws compare ordering against independent enumeration, check
+large counts with `BigInteger`, and exercise invalid inputs and unchanged
+destinations on failure. The Deep tier checks every five-card hand.
+`CombinationQueries` and `PermutationQueries` in the
+[Maths benchmark harness](../Puck.Cli/README.md#puck-bench--the-puckmaths-microscope)
+measure representative small and wide spaces, including an independent
+quadratic permutation-ranking baseline.
 
 ---
 

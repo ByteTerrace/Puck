@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <PuckKind>Test</PuckKind>
+    </PropertyGroup>
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <!-- Same reflection surface Puck.World.Schema/Puck.World.Authoring/Puck.Assets carry (see their own
+             IsAotCompatible remarks); this project reads them directly, never through reflection of its own. -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <!-- Facts document themselves by name; CS1591 would demand XML docs on every public test member. -->
+        <NoWarn>$(NoWarn);CS1591</NoWarn>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="[18.*, )" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="[3.*, )" />
+        <PackageReference Include="xunit.v3" Version="[3.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- A browser-wasm exe (Puck.World.Browser itself) cannot be referenced as an ordinary assembly — its
+             [SupportedOSPlatform("browser")] surface and RID-specific output make it unloadable outside a wasm
+             host. Engine/*.cs carries no JS-interop attribute at all (only Exports/ does), so it links unmodified
+             as source and runs under the ordinary net10.0 test host, proving the same code the AppBundle ships. -->
+        <Compile Include="..\..\src\Puck.World.Browser\Engine\**\*.cs" LinkBase="Engine" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+        <Using Include="Puck.World.Browser.Engine" />
+    </ItemGroup>
+</Project>

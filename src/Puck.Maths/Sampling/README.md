@@ -11,19 +11,20 @@ recipe, so the same seed always produces the same values in the same order.
 That is what lets a recorded game be replayed and come out identical.
 
 The wing holds a seeded sequential generator whose whole state is readable and
-restorable; three stateless index-to-value maps — spatial noise, additive
-low-discrepancy recurrences (low discrepancy means the points spread themselves
-out evenly instead of clumping the way independent draws do), and digital nets —
-each of which turns an index or a position straight into a value and remembers
-nothing in between; the one index permutation (a rearrangement of the whole
-range of indices, one index in and one index out) those nets may be re-indexed
-by; the invertible mix, a bit-scrambling step you can run backwards exactly,
-that their keys and coordinate shifts are derived through; and an immutable
-weighted-choice table. Only one type here carries mutable state, `Pcg32XshRr`,
-so only one thing has to ride a snapshot — the saved copy of simulation state
-that a replay resumes from. Everything else is a pure function of its arguments
-(same arguments in, same result out, no hidden memory), an immutable table built
-once and read many times, or `SecureRandom`, whose values come from the platform
+restorable, and its k-dimensionally equidistributed extended form; three
+stateless index-to-value maps — spatial noise, additive low-discrepancy
+recurrences (low discrepancy means the points spread themselves out evenly
+instead of clumping the way independent draws do), and digital nets — each of
+which turns an index or a position straight into a value and remembers nothing
+in between; the one index permutation (a rearrangement of the whole range of
+indices, one index in and one index out) those nets may be re-indexed by; the
+invertible mix, a bit-scrambling step you can run backwards exactly, that their
+keys and coordinate shifts are derived through; and an immutable weighted-choice
+table. Two types here carry mutable state, `Pcg32XshRr` and `Pcg32Extended`, so
+only those two have to ride a snapshot — the saved copy of simulation state that
+a replay resumes from. Everything else is a pure function of its arguments (same
+arguments in, same result out, no hidden memory), an immutable table built once
+and read many times, or `SecureRandom`, whose values come from the platform
 generator's own hidden state and never enter simulation state.
 
 The default tier is **cross-machine bit-identical**: pure integer arithmetic, no
@@ -69,9 +70,11 @@ to meet them here than to discover them later.
 
 | Type | Kind | What it's for |
 |------|------|---------------|
-| `Pcg32XshRr` | `struct` | The seeded sequential generator: each draw hands back a value and moves the generator on to its next state. Reference-exact PCG32 XSH-RR, one sequence per stream, logarithmic seek, uniform / bounded / fraction / standard-normal draws, and an in-place shuffle. It is the only simulation state in the wing. |
+| `Pcg32XshRr` | `struct` | The seeded sequential generator: each draw hands back a value and moves the generator on to its next state. Reference-exact PCG32 XSH-RR, one sequence per stream, logarithmic seek and distance, state inversion (`Preimage`/`Seeking`), uniform / bounded / fraction / standard-normal draws, and an in-place shuffle. |
+| `Pcg32Extended` | `struct` | O'Neill's extended PCG32: a `Pcg32XshRr` base XOR'd with a `k`-word extension table for k-dimensional equidistribution. Same seek/bounded/fraction shape as the base type, over its own draw. |
 | `WeightedSampler` / `AliasTable<TElement>` | `static` / `sealed class` | Weighted choice, where some outcomes are meant to come up more often than others. Exact-integer Walker/Vose construction from ordered entries; constant-time sampling at exactly two generator advances per draw. |
-| `FieldNoise` | `static` | Spatial randomness. A stateless pure-integer map from a seed and a world position to smooth value noise in `[−1, 1]`, with an exact analytic gradient (the direction and rate the noise is changing, solved in closed form rather than estimated by sampling twice) and a planet-scale hierarchical overload. |
+| `FieldNoise` | `static` | Spatial randomness. A stateless pure-integer map from a seed and a world position to smooth value noise in `[−1, 1]`, with an exact analytic gradient (the direction and rate the noise is changing, solved in closed form rather than estimated by sampling twice) and a planet-scale hierarchical overload. `Prepare(seed)` derives the seed's three per-axis states once into a `FieldNoiseSeed`; every overload taking it returns the same bits as its `ulong` twin. |
+| `Pcg3dLatticeNoise` | `static` | PCG3D hash-lattice value noise over a cell index, in `[0, 1)`. The shared kernel behind a world's field-lattice Noise/Scatter fills and a placement distribution's own Noise/Scatter regions, so both agree bit for bit on what a seed means. |
 | `LowDiscrepancy` | `static` | Even coverage by additive recurrence — keep adding a fixed step and read off the fractional part. Golden-ratio (`R1`) and plastic-number (`R2`) index-to-point maps: one multiply per component, no state. |
 | `DigitalNetSampler` | `static` | Even coverage by theorem. Digital `(0, m, 2)`-nets over the two-element field — the number system whose only values are 0 and 1, where addition is exclusive-or — in which a point is the exclusive-or of the direction vectors its index's set bits select. It offers only those randomizations that provably preserve stratification (the guarantee that every equal-sized box receives its exact share of the points): a digital shift of the coordinate, and a net-safe re-indexing. |
 | `StratifiedShuffle` | `static` | The index permutation a net may be re-indexed by: it carries every aligned dyadic block — a run of indices whose length is a power of two, beginning at a multiple of that length — onto an aligned dyadic block of the same size. |
@@ -86,7 +89,9 @@ There is one primitive per shape of randomness, and the shapes do not overlap,
 so the question is usually which shape you have.
 
 - **Sequential randomness with history** — combat rolls, wander decisions,
-  anything drawn over time: `Pcg32XshRr`. Its state is simulation state.
+  anything drawn over time: `Pcg32XshRr`. Its state is simulation state. Reach
+  for `Pcg32Extended` instead when a consumer draws grouped tuples at a rate
+  where one-dimensional equidistribution is not enough.
 - **Weighted choice** — loot, spawn kinds, production rules: build an
   `AliasTable<TElement>` once at load through `WeightedSampler.Create`, then
   sample it with a `Pcg32XshRr`.
@@ -141,12 +146,15 @@ rejects a stream id above the public `MaxStream` (`2⁶³ − 1`).
 | `Create(multiplier, state, stream)` | The same, with an explicit multiplier congruent to 1 (mod 4). |
 | `FromRawBits(increment, multiplier, state)` | Exact restore from a snapshot. |
 | `Advance(count)` | Skips `count` whole-state advances in logarithmic time by composing the affine step — the step's multiply-and-add — with itself; passing `2⁶⁴ − n` steps backward by `n`. |
+| `Distance(other)` | The number of draws from this state to `other`'s, on the same stream; the inverse of `Advance`, at the same logarithmic cost. |
 | `NextUInt32()` | Thirty-two uniform bits; exactly one advance. |
 | `NextUInt32(minimum, maximum)` | Unbiased draw on the inclusive range, bounds accepted in either order. It is a nearly-divisionless bounded draw: the high half of `draw · bound`, rejecting the small biased window of width `2³² mod bound`. The full-width range short-circuits to one plain draw. |
 | `NextUnitFraction16()` / `NextUnitFraction32()` | The draw's top sixteen bits, or the whole draw, as the corresponding unit-fraction domain type — a value in `[0, 1)` carried as an integer. One advance each. |
 | `NextGaussianPair()` | Two independent standard normals — draws from the bell curve with mean 0 and standard deviation 1 — as `FixedQ4816`; exactly two advances. |
 | `NextGaussian()` | The pair's first component; still exactly two advances, discarding the second. |
 | `Shuffle(values)` | Fisher–Yates (Durstenfeld): walk the span from the high end down, swapping each element with one chosen at random at or below it. A span of length `n` makes `n − 1` bounded draws. |
+| `Preimage(output, lowBits)` | A state whose next draw is `output`, inverting the output permutation; `lowBits` chooses among its `2³²` equally valid solutions. |
+| `Seeking(stream, drawIndex, output, lowBits)` | A generator on `stream` whose draw number `drawIndex` is exactly `output`: the preimage, stepped back with `Advance`. |
 
 **Exactness of the normals.** The generator uses Box–Muller, the classical
 recipe that turns two uniform draws into two normally distributed ones, over the
@@ -174,6 +182,79 @@ counts calls will drift. The fixed-cost draws are the ones a seek can rely on:
 `NextUInt32` and both fraction draws at one advance each, and the Gaussian pair
 at exactly two, `NextGaussian` included even though it discards the second
 value.
+
+**Distance and preimages.** `Distance` runs the same affine-skip structure
+`Advance` does, in reverse, to recover the draw count between two states on one
+stream rather than to apply it; both cost the same sixty-four halving steps
+regardless of how far apart the states are. Its result is a `long` whose bits,
+reinterpreted as `ulong`, are always the exact forward distance — read as
+signed, a non-negative result is that many draws forward and a negative
+result's magnitude is the shorter number of draws backward, and either reading
+feeds straight back into `Advance`. `Preimage` inverts the output permutation
+itself: the low thirty-seven bits of a state are all the output reads, so
+`lowBits` fills the state's low twenty-seven free bits and picks one of the
+thirty-two equally valid rotations, all `2³²` of them producing the requested
+draw. `Seeking` composes the two — a preimage stepped back to a chosen draw
+index on a chosen stream — to place a wanted value at a wanted position in a
+sequence a caller has not drawn yet.
+
+---
+
+## `Pcg32Extended`
+
+O'Neill's extended PCG32 generator: a `Pcg32XshRr` base plus an extension table
+of `k` 32-bit words, `k` a power of two from 2 to 1024, fixed for the life of
+the instance. Each draw is the base draw XOR'd with the word the base state's
+low bits select, so the sequence is equidistributed across `k` dimensions
+rather than one — successive draws no longer merely look independent, they
+provably fill `k`-tuples of consecutive output space evenly, which matters for
+Monte Carlo–style sampling that groups draws into tuples. The published shapes
+this type reproduces bit for bit are `pcg32_k1024` and its smaller siblings
+(`pcg32_k2`, `pcg32_k64`, …); pick `k` for how much equidistribution a consumer
+needs against the memory a table costs.
+
+**Determinism tier.** Cross-machine bit-identical, like the base type.
+
+**Simulation state.** The base generator's `State`, `Increment`, and
+`Multiplier`, plus the whole extension table (`Extension`, `GetExtension`,
+`SetExtension`). The struct owns its extension array: a plain value copy
+shares it with the original, so mutating one's table through `SetExtension`
+mutates the other's too — call `Clone` for an independent copy before handing
+one instance elsewhere.
+
+**Allocation.** None after construction; `Create` allocates the `k`-word table
+once.
+
+| Operation | Semantics |
+|---|---|
+| `Create(state, stream, k)` | Builds the base generator exactly as `Pcg32XshRr.Create` does, then self-seeds the table from its own next `k + 2` draws (an XOR difference of two opening draws masks every entry), so a caller who never calls `SetExtension` still gets a well-mixed table. |
+| `CreateWithTable(state, stream, table)` | Builds the base generator exactly as `Create` does, but the base starts at the SAME state a fresh `Pcg32XshRr.Create` would (no draws consumed self-seeding) and the table is `table` verbatim — the document-data counterpart of `Create`'s own self-seeding. |
+| `NextUInt32()` | The base draw XOR'd with the table word the pre-draw base state's low `log₂ k` bits select; once every 65536 draws (independent of `k`) the whole table takes one step of its own first. |
+| `NextUInt32(minimum, maximum)` / `NextUnitFraction16()` / `NextUnitFraction32()` | Built on this type's own `NextUInt32`, exactly as the base type's are built on its. |
+| `Advance(count)` | Skips `count` draws in logarithmic time: the base by the affine skip, the table by however many of its own ticks that skip crosses — never by looping the individual draws. |
+| `GetExtension(index)` / `SetExtension(index, word)` | Reads or overwrites one table word directly. |
+| `SetExtension(words)` | Overwrites the whole table; `words.Length` must equal `k`. |
+| `Clone()` | An independent copy whose table shares no storage with this instance. |
+
+**Choosing outputs ahead of a draw.** `SetExtension` is a raw table write, not
+an on-the-fly XOR: to make an upcoming draw come out to a wanted value, XOR the
+wanted value with the base draw that will occur when that word's index is next
+selected — computable ahead of time from a copy of the base generator's raw
+bits, since the base draw never depends on the table — and write the result to
+that word's index.
+
+`Puck.State.GeneratorEngine`'s extended draw site is the worked consumer of both
+`CreateWithTable` and the chosen-outputs recipe above: it authors a
+`GeneratorExtended` table directly, or a script compiled to one by that exact
+XOR construction, and caches the built generator across ticks.
+
+**What `Advance` does not give back.** Unlike the base type, a huge `count`
+near `2⁶⁴` is not a cheap way to step this generator backward: the base alone
+has a clean `2⁶⁴` period, but the combined generator's period is
+`2⁶⁴ · (2³²)ᵏ`, so the table does not return to its starting values after only
+one lap of the base. A huge count is still computed correctly, and still in
+logarithmic time — it is simply a different point in the enormous combined
+period, not the base's own point run backward.
 
 ---
 
@@ -290,6 +371,39 @@ Seed handling is domain-separated at every coordinate stage, meaning each stage
 gets its own derived seed rather than a shared one: independent seed states are
 injected at `x`, `y`, and `z`, so no single shift of the seed state translates
 the whole field, and each octave derives its own lattice.
+
+---
+
+## `Pcg3dLatticeNoise`
+
+Value noise over a 2D cell index, built on the Jarzynski & Olano PCG3D integer
+mix — the same mix `Puck.ShaderVm.ShaderIsa.Pcg3d` and the renderer's
+`sdfPcg3d` HLSL kernel carry, hand-kept in sync across those language
+boundaries. A corner's value is the hash's top 16 bits read directly as a
+`FixedQ4816` fraction; corners blend by the same quintic fade `FieldNoise`
+uses. Unlike `FieldNoise`, the domain is a discrete cell index rather than a
+continuous position, and the hash tree is PCG3D rather than an avalanche mix —
+the two types are not interchangeable, and neither is a special case of the
+other.
+
+**Determinism tier.** Cross-machine bit-identical, pure integer and
+fixed-point throughout.
+
+**Simulation state.** None. Every entry point is a pure function of its
+arguments.
+
+**Allocation.** None.
+
+| Operation | Semantics |
+|---|---|
+| `Pcg3d(x, y, z)` | The raw three-lane mix. |
+| `ValueNoise01(cellX, cellZ, noiseCells, seed)` | One octave of quintic-smoothed value noise over the cell index, in `[0, 1)`. A caller sums octaves itself, as `FieldLattice.ApplyNoiseFill` and `CreationStampSampling.ResolveNoise` both do. |
+
+Both `Puck.Physics.Fields.FieldLattice` (a world's live `fields` section)
+and `Puck.World.Authoring.CreationStampSampling` (a placement's Noise/Scatter
+distribution regions) route their cell fills through this type instead of
+each keeping its own copy, so the two agree on what "the same seed" means by
+construction rather than by two hand-kept copies staying in sync.
 
 ---
 
@@ -821,17 +935,23 @@ ordinary law suite, under the `sampling` family:
 dotnet test tests/Puck.Maths.Tests/Puck.Maths.Tests.csproj -c Release
 ```
 
-Nine cases run there in a couple of seconds, and between them every public
+The cases there run in a couple of seconds, and between them every public
 member of this wing except `InvertibleBitMix` is owned by one — the published
 PCG32 reference vector and the snapshot, advance, bounded-draw, fraction and
-shuffle contracts; the alias factories' shared refusals and the fixed-point
-overloads as twins of the raw table; the net's radical inverse and Pascal
-identities and the `(0, m, 2)` property through order ten; the noise field's
-bounds, its integer-lattice tie to the public hash, and its gradient against an
-exact-integer central difference; the cone table's layout, refusals and
+shuffle contracts; `Pcg32Extended`'s own published reference vectors, its
+all-zero base equivalence, its chosen-output and advance-agrees-with-drawing
+contracts, and its delegation and refusal ladder; `Pcg32XshRr.Distance` and
+`Preimage`/`Seeking`'s round-trip contracts; the alias factories' shared
+refusals and the fixed-point overloads as twins of the raw table; the net's
+radical inverse and Pascal identities and the `(0, m, 2)` property through
+order ten; the noise field's bounds, its integer-lattice tie to the public
+hash, and its gradient against an exact-integer central difference;
+`Pcg3dLatticeNoise`'s mix against a wide-integer PCG3D reference and its
+corner collapse at cell boundaries; the cone table's layout, refusals and
 stored-norm envelope; the quantile ladder and its antisymmetry; the additive
 recurrences against a wide-integer oracle; and the secure draw's interval
-contracts. `InvertibleBitMix` was deliberately waived to the `digital-net` stage
+contracts. `InvertibleBitMix` was deliberately waived to the `digital-net`
+stage
 above, which round-tripped it over all `2³²` words — a statement no fast case can
 make — so with that stage gone it is **the one public member of this wing that
 nothing gates at all**. What the fast layer is *for* is that a small change to

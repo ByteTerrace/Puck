@@ -1,0 +1,6 @@
+console off 1
+world.status
+world.wait 5
+music.state
+speaker.state
+wire.errors

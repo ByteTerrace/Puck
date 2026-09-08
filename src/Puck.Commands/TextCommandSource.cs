@@ -18,19 +18,30 @@ namespace Puck.Commands;
 /// </remarks>
 public sealed class TextCommandSource : ITextCommandSink {
     private readonly TextCommandSession m_administrativeSession;
-    // One queue token per submitted line, while the line itself lives in its session's FIFO. Rotating a blocked
+    // One queue token per submitted work item, while the work itself lives in its session's FIFO. Rotating a blocked
     // session therefore cannot move that session's oldest line behind a concurrently appended later line.
     private readonly ConcurrentQueue<TextCommandSession> m_pending = new();
     private readonly CommandRegistry m_registry;
+    /// <summary>Describes registered commands selected by a trusted host policy, without exposing handlers.</summary>
+    /// <param name="include">The disclosure filter, evaluated on the command pump.</param>
+    /// <returns>Registered names and descriptions in ordinal order.</returns>
+    public string DescribeCommands(Func<CommandMetadata, bool> include) => m_registry.BuildHelpText(include);
 
-    /// <summary>Gets or sets an optional per-frame hold gate the drain honors: while it returns <see langword="true"/>,
-    /// <see cref="Collect"/> dequeues nothing (and a line whose handler turns the gate on stops the drain immediately),
-    /// so a queued command stream resumes only once the gate lets go. This is the seam that lets a scripted-console
-    /// verb (a <c>step &lt;n&gt;</c> / <c>settle</c>) defer the rest of the piped script by a number of produced frames
-    /// or until a transition quiesces: the host sets a gate that counts produced frames, and the queued verbs after the
-    /// gate wait on the frame boundary rather than all running the frame they arrive. <see langword="null"/> (the
-    /// default) never holds, so an unwired run drains every line each frame exactly as before.</summary>
-    public Func<bool>? HoldGate { get; set; }
+    // See HoldGate's remarks: volatile because a host may arm the gate from a thread other than the one that drains.
+    private volatile Func<bool>? m_holdGate;
+
+    /// <summary>Gets or sets a source-wide hold gate. While it returns true, no session drains; a handler that
+    /// arms it stops the current drain too. Use <see cref="TextCommandSession.HoldWhile"/> for a wait that belongs
+    /// to only one session. Null leaves all ready sessions eligible to drain.</summary>
+    /// <remarks>THREADING: unlike <see cref="Enqueue"/>, which any producer may call, this is read on the frame thread
+    /// inside <see cref="Collect"/> and is expected to be set from there too — in practice by a handler the drain
+    /// itself just ran. The backing field is <see langword="volatile"/> so a host that arms the gate from another
+    /// thread is seen by the next drain rather than by whichever one the JIT decides to reload on; the gate's own
+    /// delegate is invoked on the frame thread, so whatever it reads must be safe to read there.</remarks>
+    public Func<bool>? HoldGate {
+        get => m_holdGate;
+        set => m_holdGate = value;
+    }
 
     /// <summary>Initializes a new instance of the <see cref="TextCommandSource"/> class.</summary>
     /// <param name="registry">The registry whose text path each enqueued line is submitted to.</param>
@@ -49,8 +60,8 @@ public sealed class TextCommandSource : ITextCommandSink {
         );
     }
 
-    internal void EnqueueSession(TextCommandSession session, string line) {
-        session.EnqueuePending(line: line);
+    internal void EnqueueSession(TextCommandSession session, TextSessionWork work) {
+        session.EnqueuePending(work: work);
         m_pending.Enqueue(item: session);
     }
 
@@ -58,10 +69,10 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// simulation submissions rotates independently, so it cannot stall another seat's ready input.</summary>
     public void Collect() {
         // Honor the HOLD gate BEFORE draining and AGAIN after each submitted line: a line whose handler arms the gate
-        // (a step/settle verb) stops the drain for this frame, and the remaining queued lines wait for the gate to
+        // stops the drain for this frame, and the remaining queued lines wait for the gate to
         // release on a later frame — the queue itself is FIFO, so their order is preserved across the pause.
         //
-        // The deferred-mutation barrier holds ONLY Immediate-routed lines: a pending simulation submission means an
+        // The deferred-mutation barrier holds Immediate-routed lines and host operations: a pending simulation submission means an
         // inline read-back would observe pre-mutation state, so it waits for the snapshot to apply. Further
         // Simulation-routed lines keep draining — they fold into the same pending snapshot in FIFO order, so a burst
         // of scripted mutations lands in one tick instead of one per frame.
@@ -77,8 +88,8 @@ public sealed class TextCommandSource : ITextCommandSink {
             m_pending.TryDequeue(result: out var session)
         ) {
             if (
-                !session.TryPeekPending(line: out var line) ||
-                (line is null)
+                !session.TryPeekPending(work: out var work) ||
+                (work is null)
             ) {
                 continue;
             }
@@ -86,31 +97,38 @@ public sealed class TextCommandSource : ITextCommandSink {
             // Blank lines and '#' COMMENT lines are skipped, so a piped driving SCRIPT can be self-documenting: an
             // agent pipes a commented list of verbs (a "# what this run proves" header, per-step notes) and only the
             // real verbs run. A comment is a line whose first non-whitespace character is '#'.
+            if (work.IsTerminal) {
+                _ = session.TryDequeuePending(work: out _);
+                work.Execute();
+                continue;
+            }
+
+            var line = work.Line;
             var content = line.AsSpan().TrimStart();
-            var isComment = (content.IsEmpty || (content[0] == '#'));
+            var isComment = line is not null && (content.IsEmpty || (content[0] == '#'));
 
             if (blockedSessions?.Contains(item: session) ?? false) {
                 m_pending.Enqueue(item: session);
                 continue;
             }
 
-            // A session's own hold — e.g. a per-row world.wait tick barrier — rotates it to the tail exactly like a
+            // A session's own hold — e.g. a world.wait deadline on the issuing session — rotates it to the tail exactly like a
             // read-after-write-blocked session below: nothing of THIS session's drains (comments included) while its
             // own hold stands, but every other session keeps draining independently.
-            if (session.Hold?.Invoke() ?? false) {
+            if (session.IsHolding()) {
                 (blockedSessions ??= []).Add(item: session);
                 m_pending.Enqueue(item: session);
                 continue;
             }
 
             if (isComment) {
-                _ = session.TryDequeuePending(line: out _);
+                _ = session.TryDequeuePending(work: out _);
                 continue;
             }
 
             if (
                 session.HasPendingSimulationSubmission &&
-                !m_registry.RoutesToSimulation(line: line)
+                (line is null || !m_registry.RoutesToSimulation(line: line))
             ) {
                 (blockedSessions ??= []).Add(item: session);
                 m_pending.Enqueue(item: session);
@@ -118,20 +136,25 @@ public sealed class TextCommandSource : ITextCommandSink {
             }
 
             if (
-                !session.TryDequeuePending(line: out line) ||
-                (line is null)
+                !session.TryDequeuePending(work: out work) ||
+                (work is null)
             ) {
+                continue;
+            }
+
+            if (work.Line is not { } commandLine) {
+                work.Execute(scope: session.Scope);
                 continue;
             }
 
             using (session.Scope?.Invoke()) {
                 var result = m_registry.SubmitSession(
-                    line: line,
+                    line: commandLine,
                     session: session
                 );
 
                 session.PublishResult(
-                    line: line,
+                    line: commandLine,
                     result: result
                 );
             }
@@ -175,10 +198,12 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// <param name="simulationSink">This session's fixed simulation ingress, or <see langword="null"/> for a session
     /// with no simulation lane.</param>
     /// <param name="scope">An optional ambient scope entered around this session's own dispatch of an
-    /// <c>Immediate</c> line and disposed once the result is computed — see <see cref="TextCommandSession.Scope"/>.
+    /// <c>Immediate</c> line or a host operation and disposed once the result is computed — see <see cref="TextCommandSession.Scope"/>.
     /// <see langword="null"/> (the default) enters nothing.</param>
     /// <returns>A text sink permanently stamped with <paramref name="principal"/>.</returns>
-    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null) {
+    /// <param name="authorize">Optional command-metadata predicate checked before session dispatch; false refuses
+    /// the command. Null adds no session-specific authorization predicate.</param>
+    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null) {
         return new TextCommandSession(
             hold: hold,
             onResult: onResult,
@@ -186,7 +211,8 @@ public sealed class TextCommandSource : ITextCommandSink {
             scope: scope,
             simulationSink: simulationSink,
             slot: slot,
-            source: this
+            source: this,
+            authorize: authorize
         );
     }
     /// <summary>Queues a command line to be submitted on the next <see cref="Collect"/>.</summary>

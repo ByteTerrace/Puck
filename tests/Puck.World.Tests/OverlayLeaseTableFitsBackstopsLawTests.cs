@@ -16,7 +16,7 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
     public void SchemaDerivedCapacityBuildsALeaseTableWithinEveryBackstop() {
         var leases = new OverlayChannelLeases(capacity: WorldOverlayCapacity.FromSchema());
 
-        Assert.Equal(expected: WorldPopulationLimits.LocalSeatCount, actual: leases.MaxSeats);
+        Assert.Equal(expected: WorldBodiesLimits.LocalSeatCount, actual: leases.MaxSeats);
         Assert.True(condition: (leases.TotalClips <= OverlayFrameBuilder.MaxClips), userMessage: $"clips {leases.TotalClips} exceed the backstop {OverlayFrameBuilder.MaxClips}");
         Assert.True(condition: (leases.TotalElements <= OverlayFrameBuilder.MaxElements), userMessage: $"elements {leases.TotalElements} exceed the backstop {OverlayFrameBuilder.MaxElements}");
         Assert.True(condition: (leases.TotalPanels <= OverlayFrameBuilder.MaxPanels), userMessage: $"panels {leases.TotalPanels} exceed the backstop {OverlayFrameBuilder.MaxPanels}");
@@ -43,5 +43,27 @@ public sealed class OverlayLeaseTableFitsBackstopsLawTests {
 
         Assert.Contains(actualString: refusal.Message, expectedSubstring: "OverlayFrameBuilder.");
         Assert.NotNull(@object: new OverlayChannelLeases(capacity: control));
+    }
+    /// <summary>An adversarial host count is multiplied exactly before the backstop check; it cannot wrap the four
+    /// per-seat clip reservations negative and masquerade as spare capacity.</summary>
+    [Fact]
+    public void OversubscribedCapacityArithmeticCannotWrapPastTheBackstop() {
+        var adversarial = new OverlayCapacity(
+            BindingBarMaxBanks: 0,
+            BindingBarMaxModifiers: 0,
+            BindingBarMaxSlotsPerBank: 0,
+            HudElementsPerPanel: 0,
+            HudElementsPerSeatPanel: 0,
+            HudPanels: 0,
+            HudSeatPanelsPerSeat: 0,
+            MarkerMaxChipsPerSeat: 0,
+            Seats: (1 << 30),
+            WheelMaxRings: 0,
+            WheelMaxSectorsPerRing: 0
+        );
+
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new OverlayChannelLeases(capacity: adversarial));
+
+        Assert.Contains(actualString: refusal.Message, expectedSubstring: "4294967296");
     }
 }

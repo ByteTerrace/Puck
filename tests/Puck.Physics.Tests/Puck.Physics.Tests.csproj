@@ -18,4 +18,8 @@
              budget is measured against the real evaluator rather than an analytic stand-in. No GPU host is touched. -->
         <ProjectReference Include="..\..\src\Puck.SignedDistance\Puck.SignedDistance.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <!-- Allocation laws measure optimized code directly; JIT promotion must not require thousands of warmup ticks. -->
+        <RuntimeHostConfigurationOption Include="System.Runtime.TieredCompilation" Value="false" />
+    </ItemGroup>
 </Project>

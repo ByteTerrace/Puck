@@ -19,7 +19,7 @@ public sealed class HeldCommandReleaseLawTests {
                 bindings: new FixedBindings(binding: new CommandBinding(Command: command)),
                 principalResolver: new ConsolePrincipal()
             );
-            var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+            var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
             router.Capture(signal: InputSignal.Press(source: "keyboard.q", deviceId: device));
             var pressed = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);
@@ -28,9 +28,9 @@ public sealed class HeldCommandReleaseLawTests {
 
             router.Capture(signal: InputSignal.Release(source: "keyboard.q", deviceId: device));
             var released = router.SnapshotForTick(tick: 2UL, windowEndTick: ulong.MaxValue);
-            var releaseEntries = (released.Lanes.Length == 0)
+            var releaseEntries = ((released.Lanes.Length == 0)
                 ? []
-                : released.Lanes[0].Entries.ToArray();
+                : released.Lanes[0].Entries.ToArray());
 
             if (expectsRelease) {
                 Assert.Contains(collection: releaseEntries, filter: static entry => ((entry.Phase == CommandPhase.Completed) && entry.Dispatch));
@@ -47,7 +47,7 @@ public sealed class HeldCommandReleaseLawTests {
             bindings: new FixedBindings(binding: new CommandBinding(Command: HeldVerb, ActivateOn: CommandPhase.Started)),
             principalResolver: new ConsolePrincipal()
         );
-        var device = InputDeviceId.FromConnectionKey(key: "kbd-1");
+        var device = InputDeviceId.FromConnectionKey(key: "keyboard-1");
 
         router.Capture(signal: InputSignal.Press(source: "keyboard.q", deviceId: device));
         _ = router.SnapshotForTick(tick: 1UL, windowEndTick: ulong.MaxValue);

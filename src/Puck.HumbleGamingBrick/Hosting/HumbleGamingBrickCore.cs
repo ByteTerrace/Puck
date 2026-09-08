@@ -7,10 +7,10 @@ namespace Puck.HumbleGamingBrick;
 /// The SM83-family GamingBrick core adapted to the machine-neutral <see cref="IQueuedMachineCore"/>: it assembles the
 /// machine, loads any battery save, and exposes the run/framebuffer/input/save surface a <see cref="QueuedMachineWorker"/>
 /// drives, plus the bus peek/poke the host surfaces through <see cref="IMachineMemoryPeek"/>. Every machine-facing call —
-/// stepping and the debug peek/poke alike — runs on the worker's single execution thread, so a peek/poke never races the
-/// running core.
+/// stepping and the debug peek/poke alike — must run on one owning thread (a queued worker or the caller's own loop),
+/// so a peek/poke never races the running core.
 /// </summary>
-internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
+public sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     // The machine's CPU T-cycle rate (2^22 per second); with EngineTicks.PerSecond it forms the exact rational the tick
     // accumulator carries remainders in.
     private const ulong MachineCyclesPerSecond = 4_194_304UL;
@@ -36,16 +36,19 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <param name="savePath">The cartridge's battery-save path, or <see langword="null"/> for an in-memory-only save.</param>
     /// <param name="dmgSpeed">When <see langword="true"/>, the FAIRNESS pin: the tick-to-cycle budget stays at the DMG rate
     /// regardless of the KEY1 double-speed latch, so the budget is a function of configuration alone.</param>
-    public HumbleGamingBrickCore(ConsoleModel model, byte[] cartridgeRom, string? savePath, bool dmgSpeed) {
+    public HumbleGamingBrickCore(ConsoleModel model, byte[] cartridgeRom, string? savePath = null, bool dmgSpeed = false)
+        : this(configuration: new MachineConfiguration(model: model, cartridgeRom: cartridgeRom), savePath: savePath, dmgSpeed: dmgSpeed) { }
+
+    /// <summary>Builds a core for an external host's own update loop, with optional boot ROM and clock configuration.
+    /// No renderer or background worker is required. Drive and dispose the core on its owning thread.</summary>
+    /// <param name="configuration">The hardware model, cartridge, optional boot ROM, and tick resolution.</param>
+    /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
+    /// <param name="dmgSpeed">Whether to hold the reported pacing rate at 4,194,304 LCD dots/second, including
+    /// double speed. Choose true when using <see cref="CyclesPerSecond"/> to pace a hardware-speed host loop.</param>
+    public HumbleGamingBrickCore(MachineConfiguration configuration, string? savePath = null, bool dmgSpeed = false) {
         m_savePath = savePath;
         m_dmgSpeed = dmgSpeed;
-        m_machine = MachineFactory.Create(
-            configuration: new MachineConfiguration(
-                model: model,
-                cartridgeRom: cartridgeRom
-            ),
-            compose: static services => services.AddHumbleGamingBrickComponents()
-        );
+        m_machine = MachineFactory.Create(configuration: configuration);
         m_audioSink = m_machine.GetRequiredService<IAudioSink>();
         m_cartridge = m_machine.GetRequiredService<ICartridge>();
         m_framebuffer = m_machine.GetRequiredService<IFramebuffer>();
@@ -71,20 +74,26 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public ReadOnlySpan<uint> Framebuffer =>
         m_framebuffer.Pixels;
+    /// <summary>Gets the core's machine instance — the seam a cable link's group core resolves the serial port and the
+    /// pair-stepper's machine driver through. Touch it only from the thread currently stepping this core.</summary>
+    public MachineInstance Instance =>
+        m_machine;
 
     /// <inheritdoc/>
-    public void ApplyInput(in MachinePadState input) {
-        m_joypad.SetButtons(pressed: BrickPad.ToJoypad(pad: in input));
-
-        // Recorded per-segment sensor input: a no-op on any cartridge that never reads the tilt sensor.
-        m_tiltSensor.SetTilt(
-            x: input.Tilt.X,
-            y: input.Tilt.Y
+    public void ApplyInput(in MachinePadState input) =>
+        BrickPad.Apply(
+            joypad: m_joypad,
+            pad: in input,
+            tiltSensor: m_tiltSensor
         );
+    /// <summary>Advances by a budget of LCD dots, carrying instruction overshoot into the next call. CPU double
+    /// speed is handled inside the machine; nonpositive budgets do nothing.</summary>
+    /// <param name="cycles">The master-clock budget in LCD dots.</param>
+    public void RunCycles(long cycles) {
+        if (cycles > 0) {
+            m_machine.Machine.Run(tCycles: ((ulong)cycles));
+        }
     }
-    /// <inheritdoc/>
-    public void RunCycles(long cycles) =>
-        m_machine.Machine.Run(tCycles: ((ulong)cycles));
     /// <inheritdoc/>
     public int CaptureState(ref byte[] buffer) {
         m_timeTravelWriter.Reset();
@@ -115,6 +124,15 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
         (((address < 0x0000) || (address > 0xFFFF))
         ? (byte)0
         : m_systemBus.DebugReadByte(address: ((ushort)address)));
+    /// <summary>Reads a run of bytes for the host's <see cref="IMachineMemoryPeek"/>, each a side-effect-free poll; an
+    /// address outside the bus reads as 0.</summary>
+    /// <param name="address">The first 16-bit bus address.</param>
+    /// <param name="destination">Receives one byte per address, in order.</param>
+    public void PeekBytes(int address, Span<byte> destination) {
+        for (var offset = 0; (offset < destination.Length); ++offset) {
+            destination[offset] = PeekByte(address: (address + offset));
+        }
+    }
     /// <summary>Forces one byte into a writable bus region for the host's <see cref="IMachineMemoryPeek"/> — a debug
     /// mutation outside replay determinism (the host drops rewind history). A no-op for an out-of-range address.</summary>
     /// <param name="address">A 16-bit bus address.</param>
@@ -142,7 +160,7 @@ internal sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             return false;
         }
 
-        // The live device swap (dmg<->cgb<->agb): retarget the emulated hardware WITHOUT a reboot, poking the game's
+        // The live device swap: retarget the emulated hardware WITHOUT a reboot, poking the game's
         // cached detection flag (from the recipe table, keyed by title) so a dual-mode cartridge re-renders natively.
         // The fairness pin is construction-fixed (it sizes the tick->cycle budget for determinism), so options only
         // move the model here; a bare capability flip with no recipe is honest, not a fake native retarget.

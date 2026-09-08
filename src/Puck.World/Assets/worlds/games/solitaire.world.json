@@ -1,0 +1,48 @@
+{
+  "exports": {
+    "actions": [
+      "solitaire",
+      "solitaireFreecell",
+      "solitaireKlondike",
+      "solitaireSpider"
+    ],
+    "bindings": [
+      "solitaire",
+      "solitaireFreecell",
+      "solitaireKlondike",
+      "solitaireSpider"
+    ],
+    "reads": [
+      "solitaire",
+      "solitaireFreecell",
+      "solitaireKlondike",
+      "solitaireSpider"
+    ]
+  },
+  "imports": [
+    {
+      "document": "klondike.world.json"
+    },
+    {
+      "document": "spider.world.json"
+    },
+    {
+      "document": "freecell.world.json"
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "name": "solitaire",
+        "kind": "Int",
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "table",
+            "value": 0
+          }
+        ]
+      }
+    ]
+  }
+}

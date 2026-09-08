@@ -1,9 +1,23 @@
 using Puck.Networking;
+using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
+    private static void WriteTargetDesignation(WireWriter writer, WorldTargetDesignation target) {
+        writer.WriteInt32(value: target.Index);
+        writer.WriteFixedVector(value: target.Point);
+    }
+    private static WorldTargetDesignation ReadTargetDesignation(ref WireReader reader) {
+        var index = reader.ReadInt32();
+        var point = reader.ReadFixedVector();
+
+        return new WorldTargetDesignation(
+            Index: index,
+            Point: point
+        );
+    }
     private static void WritePopulationEntry(WireWriter writer, WorldPopulation.WorldPopulationEntryCheckpoint entry) {
         writer.WriteInt32(value: entry.Index);
         writer.WriteByte(value: entry.KitIndex);
@@ -12,7 +26,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteArray(
             writer: writer,
             items: entry.Designations,
-            writeItem: static (w, v) => w.WriteInt32(value: v)
+            writeItem: WriteTargetDesignation
         );
         writer.WriteInt32(value: entry.Generation);
         writer.WriteBoolean(value: entry.IsAuthorityTransferred);
@@ -20,7 +34,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteOptional(
             writer: writer,
             value: entry.Mobility,
-            writeValue: WriteMobility
+            writeValue: WorldWireLeaves.WriteMobility
         );
         writer.WriteInt32(value: entry.MobilityGeneration);
         writer.WriteBoolean(value: entry.Parked);
@@ -41,7 +55,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: entry.AdmissionRevokedKeys,
             writeItem: static (w, row) => {
-                w.WriteByte(value: ((byte)row.Capability));
+                WriteCapability(
+                    capability: row.Capability,
+                    writer: w
+                );
                 WriteSubject(
                     subject: row.Subject,
                     writer: w
@@ -56,6 +73,28 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteFixed(value: entry.ProducerPhase);
         writer.WriteFixed(value: entry.ProducerPreferredAltitude);
         writer.WriteFixed(value: entry.ProducerWeaveFrequency);
+        writer.WriteInt64(value: entry.ProducerCurveArcRaw);
+        writer.WriteNullableString(value: entry.ProducerActiveName);
+        writer.WriteInt32(value: entry.ProducerActiveCurveIndex);
+        writer.WriteBoolean(entry.Flock.Seeded);
+        writer.WriteInt32(entry.Flock.Generation);
+        writer.WriteFixedVector(entry.Flock.Desired);
+        writer.WriteUInt64(entry.Flock.RemainingTicks);
+        writer.WriteUInt64(entry.Flock.SampleOrdinal);
+        writer.WriteBoolean(entry.Flock.Target is not null);
+        if (entry.Flock.Target is { } observed) {
+            writer.WriteInt32(observed.Index);
+            writer.WriteInt32(observed.Generation);
+            writer.WriteFixedVector(observed.Position);
+        }
+        writer.WriteUInt64(entry.Autonomy.MotionPeriodTicks);
+        writer.WriteUInt64(entry.Autonomy.MotionElapsedTicks);
+        writer.WriteUInt64(entry.Autonomy.MotionRemainingTicks);
+        writer.WriteUInt64(entry.Autonomy.SteeringPeriodTicks);
+        writer.WriteUInt64(entry.Autonomy.SteeringElapsedTicks);
+        writer.WriteUInt64(entry.Autonomy.SteeringRemainingTicks);
+        WorldWireCodec.WriteIntent(writer, entry.Autonomy.SteeringIntent);
+        writer.WriteBoolean(entry.Autonomy.SteeringSeeded);
         writer.WriteFixedVector(value: entry.Position);
         writer.WriteFixed(value: entry.Yaw);
         WriteTransferState(
@@ -71,6 +110,19 @@ public static partial class WorldAuthorityCheckpointCodec {
             value: entry.Profile,
             writeValue: WriteIdentityProjection
         );
+        WriteOptional(
+            writer: writer,
+            value: entry.Navigation,
+            writeValue: static (w, navigation) => {
+                w.WriteInt32(value: navigation.ActiveProducerDomainIndex);
+                w.WriteInt32(value: navigation.DomainIndex);
+                w.WriteInt32(value: navigation.GoalCell);
+                w.WriteInt32(value: navigation.Waypoint);
+                w.WriteInt32(value: navigation.ExpandedLast);
+                w.WriteByte(value: checked((byte)navigation.Status));
+                WorldAuthorityCheckpointCodec.WriteArray(writer: w, items: navigation.Path, writeItem: static (pathWriter, value) => pathWriter.WriteInt32(value: value));
+            }
+        );
     }
     private static WorldPopulation.WorldPopulationEntryCheckpoint ReadPopulationEntry(ref WireReader reader) {
         var index = reader.ReadInt32();
@@ -80,14 +132,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         var designations = ReadArray(
             reader: ref reader,
             field: "population entry designations",
-            readItem: static (ref WireReader r) => r.ReadInt32()
+            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r)
         );
         var generation = reader.ReadInt32();
         var isAuthorityTransferred = reader.ReadBoolean();
         var isRemoteHuman = reader.ReadBoolean();
         var mobility = ReadOptional(
             reader: ref reader,
-            readValue: static (ref WireReader r) => ReadMobility(reader: ref r)
+            readValue: static (ref WireReader r) => WorldWireLeaves.ReadMobility(reader: ref r)
         );
         var mobilityGeneration = reader.ReadInt32();
         var parked = reader.ReadBoolean();
@@ -110,18 +162,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "population entry admission revoked keys",
             readItem: static (ref WireReader r) => {
-                var capability = ((WorldCapability)r.ReadByte());
-
-                if (
-                    !r.Failed &&
-                    !Enum.IsDefined(value: capability)
-                ) {
-                    r.Fail(
-                        detail: $"{nameof(WorldCapability)} wire value {((byte)capability)} is not declared",
-                        refusal: WireRefusal.EnumValueUnknown
-                    );
-                }
-
+                var capability = ReadCapability(reader: ref r);
                 var subject = ReadSubject(reader: ref r);
 
                 return (capability, subject);
@@ -141,6 +182,27 @@ public static partial class WorldAuthorityCheckpointCodec {
         var producerPhase = reader.ReadFixed();
         var producerPreferredAltitude = reader.ReadFixed();
         var producerWeaveFrequency = reader.ReadFixed();
+        var producerCurveArcRaw = reader.ReadInt64();
+        var producerActiveName = reader.ReadNullableString(
+            field: "population entry producer active name",
+            maxBytes: MaxStringBytes
+        );
+        var producerActiveCurveIndex = reader.ReadInt32();
+        var flock = new WorldPopulation.WorldPopulationFlockCheckpoint(reader.ReadBoolean(), reader.ReadInt32(),
+            reader.ReadFixedVector(), reader.ReadUInt64(), reader.ReadUInt64());
+        if (reader.ReadBoolean()) {
+            flock = flock with { Target = new WorldFlockObservation(reader.ReadInt32(), reader.ReadInt32(), reader.ReadFixedVector()) };
+        }
+        var autonomy = new WorldPopulation.WorldPopulationAutonomyCheckpoint(
+            MotionPeriodTicks: reader.ReadUInt64(),
+            MotionElapsedTicks: reader.ReadUInt64(),
+            MotionRemainingTicks: reader.ReadUInt64(),
+            SteeringPeriodTicks: reader.ReadUInt64(),
+            SteeringElapsedTicks: reader.ReadUInt64(),
+            SteeringRemainingTicks: reader.ReadUInt64(),
+            SteeringIntent: WorldWireCodec.ReadIntent(reader: ref reader),
+            SteeringSeeded: reader.ReadBoolean()
+        );
         var position = reader.ReadFixedVector();
         var yaw = reader.ReadFixed();
         var dynamicState = ReadTransferState(reader: ref reader);
@@ -148,6 +210,23 @@ public static partial class WorldAuthorityCheckpointCodec {
         var profile = ReadOptional(
             reader: ref reader,
             readValue: static (ref WireReader r) => ReadIdentityProjection(reader: ref r)
+        );
+        var navigation = ReadOptional(
+            reader: ref reader,
+            readValue: static (ref WireReader r) => new WorldPopulation.WorldPopulationNavigationCheckpoint(
+                ActiveProducerDomainIndex: r.ReadInt32(),
+                DomainIndex: r.ReadInt32(),
+                GoalCell: r.ReadInt32(),
+                Waypoint: r.ReadInt32(),
+                ExpandedLast: r.ReadInt32(),
+                Status: (NavigationStatus)r.ReadByte(),
+                Path: WorldAuthorityCheckpointCodec.ReadArray(
+                    reader: ref r,
+                    field: "population entry navigation path",
+                    readItem: static (ref WireReader pathReader) => pathReader.ReadInt32(),
+                    maximum: WorldNavigationCapacity.MaxPathNodes
+                )
+            )
         );
 
         return new WorldPopulation.WorldPopulationEntryCheckpoint(
@@ -171,8 +250,13 @@ public static partial class WorldAuthorityCheckpointCodec {
             PlacementId: placementId,
             Position: position,
             ProducerAcquiredTarget: producerAcquiredTarget,
+            ProducerActiveCurveIndex: producerActiveCurveIndex,
+            Flock: flock,
+            Autonomy: autonomy,
+            ProducerActiveName: producerActiveName,
             ProducerActivityPhase: producerActivityPhase,
             ProducerActivityRate: producerActivityRate,
+            ProducerCurveArcRaw: producerCurveArcRaw,
             ProducerPhase: producerPhase,
             ProducerPreferredAltitude: producerPreferredAltitude,
             ProducerWeaveFrequency: producerWeaveFrequency,
@@ -180,7 +264,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             Residue: residue,
             SpawnPosition: spawnPosition,
             SpawnYaw: spawnYaw,
-            Yaw: yaw
+            Yaw: yaw,
+            Navigation: navigation
         );
     }
     private static byte[] EncodePopulation(WorldPopulation.WorldPopulationCheckpoint section) {
@@ -189,6 +274,24 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteInt32(value: section.SimulatedCount);
         writer.WriteInt32(value: section.Revision);
         writer.WriteByte(value: section.SeatKit);
+        WriteArray(writer, section.Generations, static (w, generation) => w.WriteInt32(generation));
+        writer.WriteBoolean(section.SharedNavigation is not null);
+        if (section.SharedNavigation is { } domains) {
+            WriteArray(writer, domains, static (w, domain) => {
+                w.WriteInt32(domain.Cursor);
+                WriteArray(w, domain.Trees, static (treeWriter, tree) => {
+                    treeWriter.WriteInt32(tree.Goal);
+                    treeWriter.WriteInt32(tree.Age);
+                    WriteArray(treeWriter, tree.Nodes, static (nodeWriter, node) => {
+                        nodeWriter.WriteInt32(node.Node);
+                        nodeWriter.WriteInt32(node.Cost);
+                        nodeWriter.WriteInt32(node.Next);
+                        nodeWriter.WriteBoolean(node.Settled);
+                    });
+                    WriteArray(treeWriter, tree.Pending, static (pendingWriter, node) => pendingWriter.WriteInt32(node));
+                });
+            });
+        }
         WriteArray(
             writer: writer,
             items: section.Entries,
@@ -202,6 +305,21 @@ public static partial class WorldAuthorityCheckpointCodec {
         var simulatedCount = reader.ReadInt32();
         var revision = reader.ReadInt32();
         var seatKit = reader.ReadByte();
+        var generations = ReadArray(ref reader, "population slot generations", static (ref WireReader r) => r.ReadInt32(), maximum: WorldBodiesLimits.CapacityCeiling);
+        var shared = reader.ReadBoolean() ? ReadArray(ref reader, "shared navigation domains", static (ref WireReader domainReader) => {
+            var cursor = domainReader.ReadInt32();
+            var trees = ReadArray(ref domainReader, "shared navigation trees", static (ref WireReader treeReader) => {
+                var goal = treeReader.ReadInt32();
+                var age = treeReader.ReadInt32();
+                var nodes = ReadArray(ref treeReader, "shared navigation nodes", static (ref WireReader nodeReader) =>
+                    new NavigationTreeNode(nodeReader.ReadInt32(), nodeReader.ReadInt32(), nodeReader.ReadInt32(), nodeReader.ReadBoolean()),
+                    maximum: WorldNavigationCapacity.MaxCellsPerDomain);
+                var pending = ReadArray(ref treeReader, "shared navigation pending starts", static (ref WireReader pendingReader) => pendingReader.ReadInt32(),
+                    maximum: WorldBodiesLimits.CapacityCeiling);
+                return new NavigationTreeCheckpoint(goal, age, nodes, pending);
+            }, maximum: WorldNavigationCapacity.MaxSharedGoals);
+            return new NavigationSharedCheckpoint(cursor, trees);
+        }, maximum: WorldNavigationCapacity.MaxDomains) : null;
         var entries = ReadArray(
             reader: ref reader,
             field: "population entries",
@@ -217,6 +335,8 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         section = new WorldPopulation.WorldPopulationCheckpoint(
             Entries: entries,
+            Generations: generations,
+            SharedNavigation: shared,
             Revision: revision,
             SeatKit: seatKit,
             SimulatedCount: simulatedCount

@@ -4,8 +4,8 @@ namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
 /// The native ARM7TDMI AdvancedGamingBrick screen-machine engine. Its stable id is
-/// <c>advanced-gaming-brick</c>; cartridges direct-boot against either the legal zeroed replacement BIOS or an explicit
-/// <c>bios=&lt;path&gt;</c> image supplied by the host.
+/// <c>advanced-gaming-brick</c>; cartridges direct-boot against an explicit <c>bios=&lt;path&gt;</c> image.
+/// <c>stub</c> explicitly selects a zeroed image for diagnostics that never call BIOS services or dispatch IRQs.
 /// </summary>
 public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
     /// <inheritdoc/>
@@ -25,10 +25,9 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
 
     private static byte[] ResolveBios(string? options) {
         if (
-            string.IsNullOrWhiteSpace(value: options) ||
-            options.Equals(
+            options is not null && options.Equals(
             comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: "direct"
+            value: "stub"
         )
         ) {
             return new byte[ReplacementBios.ImageSize];
@@ -36,11 +35,11 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
 
         const string BiosPrefix = "bios=";
 
-        if (!options.StartsWith(
+        if (string.IsNullOrWhiteSpace(value: options) || !options.StartsWith(
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: BiosPrefix
         )) {
-            throw new ArgumentException(message: $"unknown advanced-gaming-brick option '{options}' — expected direct, bios=<path>, or no option");
+            throw new ArgumentException(message: "Advanced GamingBrick requires bios=<path>. Use stub only for BIOS-independent diagnostics; direct boot does not replace BIOS services.", paramName: nameof(options));
         }
 
         var path = options[BiosPrefix.Length..].Trim();
@@ -54,6 +53,10 @@ public sealed class AdvancedGamingBrickEngine : IScreenMachineEngine {
 
             if (bios.Length != ReplacementBios.ImageSize) {
                 throw new ArgumentException(message: $"advanced-gaming-brick BIOS '{path}' must be {ReplacementBios.ImageSize} bytes; got {bios.Length}");
+            }
+
+            if (AgbBiosProfile.Identify(image: bios).Kind == AgbBiosKind.ReplacementStub) {
+                throw new ArgumentException(message: "The BIOS image is zero-filled and cannot execute BIOS services. Use a working BIOS image, or stub explicitly for BIOS-independent diagnostics.", paramName: nameof(options));
             }
 
             return bios;

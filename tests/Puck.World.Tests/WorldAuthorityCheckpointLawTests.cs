@@ -6,6 +6,109 @@ using Puck.World.Server;
 namespace Puck.World.Tests;
 
 public sealed class WorldAuthorityCheckpointLawTests {
+    [Fact]
+    public void EventFeedCheckpointRefusesBeforeMutatingAuthority() {
+        using var fixture = Fixtures.FreshServer();
+        fixture.Step();
+        Assert.True(fixture.Server.TryCaptureCheckpoint(
+            hostRow: EmptyHostRow(),
+            checkpoint: out var captured,
+            reason: out var reason
+        ), reason);
+        var beforeHash = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL);
+        var beforeDefinition = fixture.DefinitionBytes();
+        var malformed = captured! with {
+            EventFeed = captured.EventFeed with { SeatOccupied = [false] },
+        };
+
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+        Assert.Equal(beforeDefinition, fixture.DefinitionBytes());
+
+    }
+
+    [Fact]
+    public void AutonomousCadenceCheckpointRefusesBeforeMutatingAuthority() {
+        var source = Fixtures.BuildDocument();
+        var definition = source with {
+            PopulationRaw = source.Population with {
+                CapacityRaw = 5,
+                NetworkPlayers = 1,
+                DefaultPeerSourceRaw = IntentSource.Producer(name: "roam"),
+            },
+            KitRowsRaw = [source.Kits[0] with {
+                AutonomyRaw = new WorldAutonomyCadence(MotionSeconds: 0.1f, SteeringSeconds: 0.1f),
+            }],
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+        Assert.Equal(1, fixture.Server.Population.SetSimulatedCount(count: 1));
+        fixture.Step();
+        Assert.True(fixture.Server.TryCaptureCheckpoint(
+            hostRow: EmptyHostRow(),
+            checkpoint: out var captured,
+            reason: out var reason
+        ), reason);
+        var entries = captured!.Population.Entries.ToArray();
+        var peer = Array.FindIndex(entries, entry => entry.Index == 4);
+        Assert.InRange(peer, 0, entries.Length - 1);
+        entries[peer] = entries[peer] with {
+            Autonomy = new WorldPopulation.WorldPopulationAutonomyCheckpoint(
+                MotionPeriodTicks: 1UL,
+                MotionElapsedTicks: 1UL,
+                MotionRemainingTicks: 1UL,
+                SteeringPeriodTicks: 0UL,
+                SteeringElapsedTicks: 0UL,
+                SteeringRemainingTicks: 0UL,
+                SteeringIntent: default,
+                SteeringSeeded: false
+            ),
+        };
+        var malformed = captured with { Population = captured.Population with { Entries = entries } };
+        var beforeHash = WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL);
+        var beforeDefinition = fixture.DefinitionBytes();
+
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+        Assert.Equal(beforeDefinition, fixture.DefinitionBytes());
+
+        entries[peer] = entries[peer] with {
+            Autonomy = entries[peer].Autonomy with {
+                MotionPeriodTicks = 2UL,
+                MotionElapsedTicks = 0UL,
+                MotionRemainingTicks = 1UL,
+            },
+        };
+        malformed = captured with { Population = captured.Population with { Entries = entries } };
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+
+        entries = captured.Population.Entries.ToArray();
+        entries[peer] = entries[peer] with { KitIndex = byte.MaxValue };
+        malformed = captured with { Population = captured.Population with { Entries = entries } };
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+
+        malformed = captured with {
+            Population = captured.Population with { SimulatedCount = fixture.Server.Population.PeerCapacity + 1 },
+        };
+        Assert.Throws<InvalidOperationException>(() => fixture.Server.RestoreCheckpoint(malformed));
+        Assert.Equal(beforeHash, WorldRuntimeStateHash.HashAuthoritative(fixture.Server, tick: 0UL));
+    }
+
+    [Fact]
+    public void CurrentContractsRemainVersionThreeAndRejectAnotherCheckpointVersion() {
+        using var fixture = Fixtures.FreshServer();
+        Assert.True(fixture.Server.TryCaptureCheckpoint(checkpoint: out var checkpoint, reason: out var reason, hostRow: EmptyHostRow()), reason);
+        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint!);
+        Assert.Equal((ushort)3, System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(4)));
+        Assert.Equal(0x314C52574B435550UL, WorldProtocol.WireProtocolKey);
+        Assert.Equal(0x314445464B435550UL, WorldFederationCodec.WireKey);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out _, out reason), reason);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(4), 4);
+        Assert.False(WorldAuthorityCheckpointCodec.TryDecode(bytes, out _, out reason));
+        Assert.Contains("version 4", reason);
+    }
+
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
         AnnouncedCrossingHolds: [],
         AppliedTransferHighWater: null,
@@ -112,8 +215,8 @@ public sealed class WorldAuthorityCheckpointLawTests {
             b: restoredFinal
         ));
     }
-    // Discriminating control: corrupting one entry's Generation before restore must diverge the restored trajectory
-    // from the uninterrupted one — the restore path must actually consult the captured value, not silently ignore it.
+    // Discriminating control: an entry generation must agree with the full slot-generation image. Reject a
+    // corrupted entry before mutating the authority rather than silently accepting contradictory identities.
     [Fact]
     public void Activation_roundtrip_identity_control_corrupted_generation_reads_red() {
         using var fixture = Fixtures.FreshServer();
@@ -149,16 +252,11 @@ public sealed class WorldAuthorityCheckpointLawTests {
             screens: definition.Screens
         );
 
-        var (restoredServer, restoredPopulation) = WorldServer.FromCheckpoint(
+        Assert.Throws<InvalidOperationException>(() => WorldServer.FromCheckpoint(
             checkpoint: corrupted,
             instanceIdentity: "boot",
             machines: machines,
             profiles: FreshProfiles(definition: definition)
-        );
-
-        Assert.NotEqual(
-            expected: entries[0].Generation,
-            actual: restoredPopulation.Generation(index: entries[0].Index)
-        );
+        ));
     }
 }

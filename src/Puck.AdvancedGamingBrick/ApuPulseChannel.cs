@@ -15,13 +15,8 @@ public sealed partial class ApuPulseChannel {
     private int m_dutyStep;
     private int m_frequency;
     private int m_frequencyTimer;
-    private int m_lengthCounter;
-    private bool m_lengthEnabled;
-    private int m_envelopeVolume;
-    private int m_envelopeInitial;
-    private bool m_envelopeIncrease;
-    private int m_envelopePeriod;
-    private int m_envelopeTimer;
+    private ApuLengthCounter m_length;
+    private ApuEnvelopeUnit m_envelope;
     private bool m_dacEnabled;
     private bool m_enabled;
     private int m_sweepPeriod;
@@ -47,7 +42,7 @@ public sealed partial class ApuPulseChannel {
             }
 
             return ((((DutyPatterns[m_dutyPattern] >> m_dutyStep) & 1) != 0)
-                ? m_envelopeVolume
+                ? m_envelope.Volume
                 : 0);
         }
     }
@@ -75,24 +70,20 @@ public sealed partial class ApuPulseChannel {
     /// <summary>Reads back the duty field of NRx1 (the length sub-field is write-only and reads as zero).</summary>
     public byte ReadDutyLength() => ((byte)(m_dutyPattern << 6));
     /// <summary>Reads back the envelope register (NRx2): initial volume, direction, and period.</summary>
-    public byte ReadEnvelope() => ((byte)((m_envelopeInitial << 4) | (m_envelopeIncrease
-        ? 0x8
-        : 0) | m_envelopePeriod));
+    public byte ReadEnvelope() =>
+        m_envelope.Read();
     /// <summary>Reads back NRx4's length-enable bit (the only readable bit).</summary>
-    public byte ReadControl() => ((byte)(m_lengthEnabled
+    public byte ReadControl() => ((byte)(m_length.Enabled
         ? 0x40
         : 0));
     /// <summary>Sets duty and reloads the length counter (NRx1).</summary>
     public void WriteDutyLength(byte value) {
         m_dutyPattern = (value >> 6) & 0x3;
-        m_lengthCounter = (64 - (value & 0x3F));
+        m_length.Counter = (64 - (value & 0x3F));
     }
     /// <summary>Sets the envelope (NRx2); clearing the upper five bits disables the channel's DAC.</summary>
     public void WriteEnvelope(byte value) {
-        m_envelopeInitial = (value >> 4) & 0xF;
-        m_envelopeIncrease = ((value & 0x8) != 0);
-        m_envelopePeriod = value & 0x7;
-        m_dacEnabled = ((value & 0xF8) != 0);
+        m_dacEnabled = m_envelope.Write(value: value);
 
         if (!m_dacEnabled) {
             m_enabled = false;
@@ -105,7 +96,7 @@ public sealed partial class ApuPulseChannel {
     /// <summary>Sets the high frequency bits and control (NRx4); bit 7 triggers (restarts) the channel.</summary>
     public void WriteControl(byte value) {
         m_frequency = (m_frequency & 0xFF) | ((value & 0x7) << 8);
-        m_lengthEnabled = ((value & 0x40) != 0);
+        m_length.Enabled = ((value & 0x40) != 0);
 
         if ((value & 0x80) != 0) {
             Trigger();
@@ -113,36 +104,13 @@ public sealed partial class ApuPulseChannel {
     }
     /// <summary>Clocks the length counter (256&#160;Hz), disabling the channel when it reaches zero.</summary>
     public void ClockLength() {
-        if (
-            m_lengthEnabled &&
-            (m_lengthCounter > 0) &&
-            (--m_lengthCounter == 0)
-        ) {
+        if (m_length.Clock()) {
             m_enabled = false;
         }
     }
     /// <summary>Clocks the volume envelope (64&#160;Hz).</summary>
-    public void ClockEnvelope() {
-        if (m_envelopePeriod == 0) {
-            return;
-        }
-
-        if (--m_envelopeTimer <= 0) {
-            m_envelopeTimer = m_envelopePeriod;
-
-            if (
-                m_envelopeIncrease &&
-                (m_envelopeVolume < 15)
-            ) {
-                ++m_envelopeVolume;
-            } else if (
-                !m_envelopeIncrease &&
-                (m_envelopeVolume > 0)
-            ) {
-                --m_envelopeVolume;
-            }
-        }
-    }
+    public void ClockEnvelope() =>
+        m_envelope.Clock();
     /// <summary>Clocks the frequency sweep (128&#160;Hz, channel 1 only).</summary>
     public void ClockSweep() {
         if (
@@ -189,13 +157,12 @@ public sealed partial class ApuPulseChannel {
     private void Trigger() {
         m_enabled = m_dacEnabled;
 
-        if (m_lengthCounter == 0) {
-            m_lengthCounter = 64;
+        if (m_length.Counter == 0) {
+            m_length.Counter = 64;
         }
 
         m_frequencyTimer = ((2048 - m_frequency) * 16);
-        m_envelopeVolume = m_envelopeInitial;
-        m_envelopeTimer = m_envelopePeriod;
+        m_envelope.Trigger();
 
         if (m_hasSweep) {
             m_sweepShadow = m_frequency;

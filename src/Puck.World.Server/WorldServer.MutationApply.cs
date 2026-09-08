@@ -31,7 +31,11 @@ public sealed partial class WorldServer {
 
             if (!drive.IsAllowed) {
                 return Refuse(
-                    $"{principal.Describe()} cannot drive {sourceSubject.Describe()} ({drive.DescribeDenial()})",
+                    drive.DescribeRefusal(
+                        actor: principal,
+                        subject: sourceSubject.Describe(),
+                        verb: "drive"
+                    ),
                     denied: true
                 );
             }
@@ -53,6 +57,54 @@ public sealed partial class WorldServer {
                     denied: true
                 );
             }
+        }
+        if (designation.Point is { } point) {
+            if (!knownSubject) {
+                var pointRegister = m_definition.TargetRegisters[registerIndex];
+                var pointRange = WorldPopulation.EffectiveTargetValue(
+                    body: source,
+                    stateName: pointRegister.RangeState,
+                    authoredMaximum: pointRegister.MaximumRange
+                );
+                var pointHalfAngle = WorldPopulation.EffectiveTargetValue(
+                    body: source,
+                    stateName: pointRegister.HalfAngleState,
+                    authoredMaximum: pointRegister.MaximumHalfAngleDegrees
+                );
+
+                if (!m_population.DesignationWithinEnvelope(
+                    halfAngleDegrees: pointHalfAngle,
+                    point: in point,
+                    rangeValue: pointRange,
+                    reason: out var pointReason,
+                    register: pointRegister,
+                    sourceIndex: sourceIndex
+                )) {
+                    return Refuse(pointReason);
+                }
+            }
+
+            m_population.SetDesignation(
+                bodyIndex: sourceIndex,
+                registerIndex: registerIndex,
+                target: WorldTargetDesignation.AtPoint(point: point)
+            );
+            var pointMessage = string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"body:{sourceIndex} {designation.Register}=at:{((double)point.X):0.###},{((double)point.Y):0.###},{((double)point.Z):0.###}"
+            );
+
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.designation", text: $"[world.designation: {pointMessage}]");
+            }
+            EchoTap?.Invoke(obj: new WorldEditEcho(
+                Message: pointMessage,
+                Rejected: false,
+                Kind: WorldEditEchoKind.Designation,
+                ConnectionId: connectionId,
+                CorrelationId: correlationId
+            ));
+            return true;
         }
         if (designation.Subject.Kind != GrantSubjectKind.Body) {
             return Refuse($"subject '{designation.Subject.Describe()}' is not a body");
@@ -81,7 +133,11 @@ public sealed partial class WorldServer {
 
             if (!observe.IsAllowed) {
                 return Refuse(
-                    $"{principal.Describe()} cannot observe {targetSubject.Describe()} ({observe.DescribeDenial()})",
+                    observe.DescribeRefusal(
+                        actor: principal,
+                        subject: targetSubject.Describe(),
+                        verb: "observe"
+                    ),
                     denied: true
                 );
             }
@@ -115,11 +171,13 @@ public sealed partial class WorldServer {
         m_population.SetDesignation(
             bodyIndex: sourceIndex,
             registerIndex: registerIndex,
-            subjectIndex: targetIndex
+            target: WorldTargetDesignation.Body(index: targetIndex)
         );
         var message = $"body:{sourceIndex} {designation.Register}={targetSubject.Describe()}";
 
-        Console.Error.WriteLine(value: $"[world.designation: {message}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.designation", text: $"[world.designation: {message}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: false,
@@ -134,7 +192,9 @@ public sealed partial class WorldServer {
                 bodyIndex: sourceIndex,
                 reason: reason
             );
-            Console.Error.WriteLine(value: $"[world.designation refused: {reason}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.designation refused", text: $"[world.designation refused: {reason}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: reason,
                 Rejected: true,
@@ -148,8 +208,8 @@ public sealed partial class WorldServer {
     }
     // Dispatches one envelope to the apply method its payload kind names, stamping the envelope's connection/
     // correlation identity onto the WorldEditEcho those methods emit. Grant/Revoke's actor and Session/Mutation/
-    // Definition/Undo/Composition/Lever/AddonLifecycle's acting principal are ALWAYS the envelope's own Principal —
-    // the one field every submission kind funnels its acting identity through now, never a second copy.
+    // Definition/Undo/Composition/Lever's acting principal are ALWAYS the envelope's own Principal — the one field
+    // every submission kind funnels its acting identity through now, never a second copy.
     private WorldSubmissionResult ApplyEnvelope(SubmissionEnvelope envelope) {
         switch (envelope.Payload) {
             case WorldSubmissionPayload.Command command:
@@ -190,10 +250,26 @@ public sealed partial class WorldServer {
 
                 return WorldSubmissionResult.Ack.Instance;
             case WorldSubmissionPayload.Mutation mutation:
+                // The tape's one mutation ingress: fires here rather than at the loopback so a forwarded traveller's
+                // submission and an admitted peer's are captured on the same terms as a local one, each with the
+                // actor its own envelope stamped. See WorldServer.MutationTap.
+                MutationTap?.Invoke(
+                    arg1: mutation.Value,
+                    arg2: envelope.Principal
+                );
                 EnqueueMutation(
                     mutation: mutation.Value,
                     connectionId: envelope.ConnectionId,
-                    correlationId: envelope.CorrelationId
+                    correlationId: envelope.CorrelationId,
+                    // Threaded through the buffered op itself, never a generic drain-wide firing: only THIS dispatch
+                    // point — the one MutationTap above also covers — ever supplies a completion, so a guest's
+                    // decoded act and a rule's generate effect (both call EnqueueMutation directly) never produce one.
+                    outcomeObserved: ((MutationOutcomeTap is { } outcomeTap)
+                    ? (applied => outcomeTap(
+                        arg1: mutation.Value,
+                        arg2: applied
+                    ))
+                    : null)
                 );
 
                 return WorldSubmissionResult.Ack.Instance;
@@ -229,18 +305,9 @@ public sealed partial class WorldServer {
                     query: query.Value,
                     principal: envelope.Principal
                 ));
-            case WorldSubmissionPayload.AddonLifecycle lifecycle:
-                EnqueueAddonLifecycle(
-                    lifecycle: lifecycle.Value,
-                    principal: envelope.Principal,
-                    connectionId: envelope.ConnectionId,
-                    correlationId: envelope.CorrelationId
-                );
-
-                return WorldSubmissionResult.Ack.Instance;
             case WorldSubmissionPayload.ScreenOp screenOp:
                 // Synchronous, like Command/Grant/Revoke — never buffered to the tick boundary — so a following
-                // WorldCommand.Engage submitted in the same batch (player.engage's auto-insert precheck) observes
+                // WorldCommand.ComposeControl submitted in the same batch (body.engage's auto-insert precheck) observes
                 // this op's effect immediately. See WorldScreenOp's own remarks for why.
                 TryApplyScreenOp(
                     op: screenOp.Value,
@@ -354,17 +421,12 @@ public sealed partial class WorldServer {
             deniedSection: out var deniedSection,
             principal: principal
         )) {
-            var denial = $"{principal.Describe()} cannot mutate every section (section:{deniedSection.ToString().ToLowerInvariant()} — {deniedVerdict.DescribeDenial()}) — {verb} dropped";
-
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: denial,
-                Rejected: true,
-                Kind: WorldEditEchoKind.Rebuild,
-                Denied: true,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
+            DenyGrantTable(
+                denial: $"{principal.Describe()} cannot mutate every section (section:{deniedSection.ToString().ToLowerInvariant()} — {deniedVerdict.DescribeDenial()}) — {verb} dropped",
+                connectionId: connectionId,
+                correlationId: correlationId,
+                echoKind: WorldEditEchoKind.Rebuild
+            );
 
             return false;
         }
@@ -380,7 +442,9 @@ public sealed partial class WorldServer {
         ) {
             var denial = $"{m_journal.Count} unsaved mutation(s) would be discarded — world.save first, world.reset to discard them without loading a new document, or world.load {request.PathHint} force to discard them and load anyway";
 
-            Console.Error.WriteLine(value: $"[world.load rejected: {denial}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.load rejected", text: $"[world.load rejected: {denial}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: $"{verb} rejected: {denial}",
                 Rejected: true,
@@ -407,7 +471,8 @@ public sealed partial class WorldServer {
         // Step, so it repeats only document-local checks and never reaches transport from the tick path.
         if (!WorldDefinitionValidator.TryValidateLocally(
             definition: candidate,
-            reason: out var validationReason
+            reason: out var validationReason,
+            compilation: out var compilation
         )) {
             RejectRebuild(
                 connectionId: connectionId,
@@ -458,6 +523,20 @@ public sealed partial class WorldServer {
             return false;
         }
 
+        if (!m_population.CanInstallFields(
+            definition: candidate,
+            reason: out var fieldReason
+        )) {
+            RejectRebuild(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                reason: fieldReason!,
+                verb: verb
+            );
+
+            return false;
+        }
+
         // A rebuild rebuilds the field wholesale (loud rejection on an unsupported solid, definition unchanged) —
         // same as a whole-document swap always has.
         if (!TryBuildSolids(
@@ -475,14 +554,102 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        SwapSolids(solids: rebuildSolids);
-        if (request.Kind != WorldRebuildKind.Reset) {
-            m_machines.SetDocumentPath(documentPath: request.PathHint);
+        // Reconcile the addon runtime against the CANDIDATE document — unconditional, never gated on a per-mutation
+        // classification the way TryApplyMutation's own AffectsAddons predicate is: a whole-document swap can move
+        // ANY section, including the channel table TryPrepare's own dependency check watches for. Unconditional is
+        // cheap here too — a reused row costs a structural compare, never a recompile. A server with no addon host
+        // attached (a test double; the silo attaches its own refusing WorldNoAddonHost instead of leaving this null)
+        // is vacuous only for a candidate whose addon rows are all absent or disabled — an ENABLED row is refused by
+        // name below, the identical shape TryApplyMutation's own no-host gate and WorldNoAddonHost.TryPrepare use,
+        // rather than installing a candidate that claims a mounted addon no host can ever run.
+        IWorldAddonPreparedPlan? rebuildAddonPlan = null;
+        int[]? newRebuildTickWrittenEntity = null;
+        WorldPrincipal[]? newRebuildTickWrittenPrincipal = null;
+        bool[]? newRebuildTickCollided = null;
+        var rebuildAddonPlanCommitted = false;
+
+        // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
+        // shape for why: rebuildAddonPlan starts null, so a return before TryPrepare ever succeeds leaves the
+        // finally a no-op, and a downstream throw from contention-array staging, Install, or Commit alike still
+        // disposes an uncommitted plan.
+        try {
+            if (m_addons is { } addonsForRebuild) {
+                if (!addonsForRebuild.TryPrepare(
+                    candidate: candidate,
+                    current: m_definition,
+                    plan: out rebuildAddonPlan,
+                    reason: out var rebuildAddonReason
+                )) {
+                    RejectRebuild(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        reason: $"addon {rebuildAddonReason}",
+                        verb: verb
+                    );
+
+                    return false;
+                }
+
+                if (rebuildAddonPlan is not null) {
+                    StageAddonContentionArrays(
+                        mountedCount: rebuildAddonPlan.MountedCount,
+                        entity: out newRebuildTickWrittenEntity,
+                        principal: out newRebuildTickWrittenPrincipal,
+                        collided: out newRebuildTickCollided
+                    );
+                }
+            } else if (TryFindEnabledAddonRow(
+                candidate: candidate,
+                name: out var enabledRowName
+            )) {
+                RejectRebuild(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    reason: $"addon '{enabledRowName}' cannot mount — no addon host is attached to this server",
+                    verb: verb
+                );
+
+                return false;
+            }
+
+            SwapSolids(solids: rebuildSolids);
+            if (request.Kind != WorldRebuildKind.Reset) {
+                m_machines.SetDocumentPath(documentPath: request.PathHint);
+            }
+            // The lattice allocation and every evolved cell survive a rebuild, the hash and scatter paints included;
+            // a draw fill repaints only where the loaded document names a different pass than the one on the field.
+            var rebuiltFrom = m_definition;
+
+            Install(
+                definition: candidate,
+                compilation: compilation,
+                rebuildPopulation: true
+            );
+            RepaintChangedLatticeDraws(
+                previous: rebuiltFrom,
+                current: candidate
+            );
+
+            if (rebuildAddonPlan is not null) {
+                m_addons!.Commit(plan: rebuildAddonPlan);
+                rebuildAddonPlanCommitted = true;
+
+                if (newRebuildTickWrittenEntity is not null) {
+                    m_tickWrittenEntity = newRebuildTickWrittenEntity;
+                    m_tickWrittenPrincipal = newRebuildTickWrittenPrincipal!;
+                    m_tickCollided = newRebuildTickCollided!;
+                }
+            }
+        } finally {
+            if (!rebuildAddonPlanCommitted) {
+                rebuildAddonPlan?.Dispose();
+            }
         }
-        Install(
-            definition: candidate,
-            rebuildPopulation: true
-        );
+
+        // A new base starts a fresh deal lifecycle, even when its source rows equal the previous session's.
+        // Keeping a completed memo would skip materialization after reset or a live replay drive.
+        m_dealMemos.Clear();
+        m_dealSweptDefinition = null;
         m_journal.Clear();
 
         // Snapshot, for every CURRENTLY CONNECTED (admitted, not parked) peer, exactly
@@ -539,6 +706,14 @@ public sealed partial class WorldServer {
             preRebuildPeerRows: preRebuildPeerRows
         );
 
+        // Finish runs here, AFTER the candidate's own grants have installed, never earlier: its capability
+        // disclosure narration is computed lazily against the LIVE grant table at the moment each line actually
+        // prints (see WorldAddonRuntime.Finish), so a rebuild that also moves Grants reports what the addon is
+        // ACTUALLY granted under the candidate, never a mount report pinned to the table this rebuild just replaced.
+        if (rebuildAddonPlanCommitted) {
+            m_addons!.Finish(plan: rebuildAddonPlan!);
+        }
+
         // Reset targets the base WITHOUT moving it (the whole point: repeated resets always land on the same base
         // until the next save/load). Load/Reload REPLACE the base — the newly installed document becomes what the
         // NEXT reset targets, exactly like a swap always has.
@@ -554,7 +729,9 @@ public sealed partial class WorldServer {
 
         var message = $"{verb} applied — base is {origin}, journal cleared";
 
-        Console.Error.WriteLine(value: $"[world.definition: {message}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.definition", text: $"[world.definition: {message}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: false,
@@ -615,7 +792,25 @@ public sealed partial class WorldServer {
                 : body.PeekContinuity()),
                 Generation: m_population.Generation(index: index),
                 PlacementId: m_population.InhabitantPlacementId(index: index),
-                Heading: body.Yaw
+                Heading: body.Yaw,
+                Facts: body.Facts
+            );
+        }
+
+        var fieldsFull = false;
+        var latticeDeltas = (m_population.Fields?.TakeDeltas(
+            full: !consumeContinuity,
+            isFull: out fieldsFull
+        ) ?? []);
+        // The kernel's own delta shape carries no Puck.World.Protocol reference; the wire shape is minted here,
+        // the one caller that needs both.
+        var fieldCells = new FieldCellDelta[latticeDeltas.Length];
+
+        for (var index = 0; (index < latticeDeltas.Length); index++) {
+            fieldCells[index] = new FieldCellDelta(
+                Cell: latticeDeltas[index].Cell,
+                Field: latticeDeltas[index].Field,
+                Raw: latticeDeltas[index].Raw
             );
         }
 
@@ -627,31 +822,54 @@ public sealed partial class WorldServer {
                 length: count,
                 start: 0
             ),
-            Authority: AuthorityIdentity
+            Authority: AuthorityIdentity,
+            FieldCells: fieldCells,
+            FieldsFull: fieldsFull
         );
     }
-    // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo. Grant's
-    // administration and co-drive-consent refusals and Revoke's administration refusal differ only in what they say,
-    // never in how it is reported, so the echo's shape (GrantTable, Rejected, Denied) is decided once.
-    private void DenyGrantTable(string denial, int connectionId, long correlationId) {
-        Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+    // The ONE grant-table DENIAL emission — the loud stderr line plus the submitter-routed denied echo (Rejected,
+    // Denied). Grant's administration and co-drive-consent refusals, Revoke's administration refusal, a lever write
+    // lacking its section's Mutate hold, world.undo lacking every section's Mutate hold, and a rebuild lacking every
+    // section's Mutate hold all differ only in what they say and which verb's echo kind names the denied operation —
+    // never in how the denial is reported. echoKind defaults to GrantTable (a direct grant/revoke denial); a caller
+    // reporting a DIFFERENT verb's authority denial (Mutation, Rebuild) names that verb's own kind instead, so the
+    // echo still routes to the operation the caller actually attempted.
+    private void DenyGrantTable(string denial, int connectionId, long correlationId, WorldEditEchoKind echoKind = WorldEditEchoKind.GrantTable) {
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {denial}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: denial,
             Rejected: true,
-            Kind: WorldEditEchoKind.GrantTable,
+            Kind: echoKind,
             Denied: true,
             ConnectionId: connectionId,
             CorrelationId: correlationId
         ));
     }
     // Swap the live definition and rebuild the derived state that compiled from it. Sim-affecting sections (kits,
-    // assignment, motion, wander, seat kit, spawns) recompile the population's fixed tables and live bodies; the
+    // assignment, motion, producer, seat kit, spawns) recompile the population's fixed tables and live bodies; the
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
-    private void Install(WorldDefinition definition, bool rebuildPopulation) {
+    // What the tick has installed and not yet delivered: a shape change carries the definition, a value change
+    // carries state; the step delivers whichever is pending, once, through DeliverPending.
+    private bool m_pendingDefinitionDelivery;
+    private bool m_pendingStateDelivery;
+    private void DeliverPending() {
+        if (m_pendingDefinitionDelivery) {
+            m_output.DeliverDefinition(definition: m_definition);
+        } else if (m_pendingStateDelivery) {
+            m_output.DeliverState(definition: m_definition);
+        }
+
+        m_pendingDefinitionDelivery = false;
+        m_pendingStateDelivery = false;
+    }
+    private void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null) {
+        m_pendingDefinitionDelivery = true;
         m_definition = definition;
         m_inputHold.Reconfigure(settings: definition.CompiledInputHold);
-        RecompileRules(definition: definition);
+        definition = RecompileRules(definition: definition, compilation: compilation);
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.
@@ -660,25 +878,31 @@ public sealed partial class WorldServer {
             kinds: (definition.Groups ?? WorldGroupsSection.Empty).Kinds,
             ownership: (definition.Groups ?? WorldGroupsSection.Empty).Ownership
         );
-        // Unconditional for the identical reason — a drive-gate row lives in `state`, an ordinary section like any
-        // other, so there is no cheaper "did this mutation touch a gate row" classification worth maintaining
-        // either; this is what makes a live world.state.cell.set that flips a gate settle before the SAME tick's
-        // later intent drain reads it (Install always runs before the intents loop within one Step).
+        // Unconditional here (no touchedRow) — the mutation kinds that reach Install (a whole-document rebuild)
+        // are too varied to cheaply name the one row they touched, unlike the single-cell write InstallRuntimeStateValue
+        // below narrows. This is what makes a live world.state.cell.set that flips a gate settle before the SAME
+        // tick's later intent drain reads it (Install always runs before the intents loop within one Step).
         m_grants.SyncState(definition: definition);
+
+        // Field reactions are a compiled runtime product even when the mutation does not require a population
+        // rebuild. A compatible replacement swaps the typed plan in place and retains every lattice cell.
+        if (!rebuildPopulation) {
+            m_population.InstallFields(definition: definition);
+        }
 
         // Reconcile the machine host to the (possibly changed) screens section on EVERY install — cheap (a
         // dictionary diff over a handful of declared screens), and the one choke point every screen-affecting
         // mutation AND every whole-document rebuild both pass through. The host reports which indices it removed;
         // this project (not the host — see WorldMachineHost's own remarks on why) owns the engagement-side admin
-        // cleanup for them: m_engagement.DisengageScreen runs before the removed slot's machine is disposed.
+        // cleanup for them: m_engagement.DissolveScreen runs before the removed slot's machine is disposed.
         foreach (var removed in m_machines.ReconcileScreens(screens: definition.Screens)) {
-            m_engagement.DisengageScreen(screenIndex: removed);
+            m_engagement.DissolveScreen(screenIndex: removed);
         }
 
-        // Cable links reconcile AFTER screens (a link resolves against the live slot set) — the SAME choke point,
-        // so a live UpsertScreenLink/RemoveScreenLink mutation AND a whole-document rebuild (world.reset/.load/
+        // Cable groups reconcile AFTER screens (a group resolves against the live slot set) — the SAME choke
+        // point, so a live UpsertScreen carrying a cable port AND a whole-document rebuild (world.reset/.load/
         // .reload) both establish/tear down live links, not merely the boot constructor.
-        m_machines.ReconcileLinks(links: definition.Links);
+        m_machines.ReconcileLinks(links: definition.MachineCableGroups());
 
         if (rebuildPopulation) {
             m_population.Rebuild(
@@ -696,15 +920,166 @@ public sealed partial class WorldServer {
                 definition: definition,
                 disconnected: disconnected
             );
+            // The rebuild re-seeds every cell-driven count to zero; resolve them from their cells before anything reads.
+            m_population.ReconcileInhabitCounts(
+                admitted: admitted,
+                definition: definition,
+                disconnected: disconnected,
+                tick: NextInputTick
+            );
             ApplyLifecycleEvents(
                 admitted: admitted,
                 disconnected: disconnected,
                 ordered: true
             );
         }
+
+        // AFTER the population branch above: a rebuild replaces every WorldBody, so resyncing scale before it would
+        // read bodies.scaleRow's cells into instances Rebuild is about to discard, leaving the fresh ones at their
+        // constructed default until the next Install happens to touch state again.
+        m_population.SyncBodyScale(definition: definition);
+    }
+    // A state mutation changes runtime values, not declaration shape. Keep the authoritative document as the
+    // journal/save source while retaining the compiled rule/catalog/group/machine products that depend only on
+    // declarations; only state-sensitive grants and field reactions observe the new values immediately. The
+    // drive-gate rescan runs only when a touched row gates drive.
+    // Reused across every InstallRuntimeStateValue call so a state mutation unrelated to any cell-driven inhabit
+    // facet — the overwhelming majority — costs zero list allocation: Clear() keeps the backing array.
+    private readonly List<WorldPeerEventEntry> m_inhabitCountAdmitted = [];
+    private readonly List<WorldPeerEventEntry> m_inhabitCountDisconnected = [];
+
+    private void InstallRuntimeStateValue(WorldDefinition definition, WorldMutation mutation) {
+        m_definition = definition;
+        m_pendingStateDelivery = true;
+
+        if (TouchesDriveGate(definition: definition, mutation: mutation)) {
+            m_grants.SyncState(definition: definition);
+        }
+
+        m_population.InstallFields(definition: definition);
+        m_population.SyncBodyScale(definition: definition);
+
+        // A cell-driven inhabit count's row lives on this same state catalog, so a value-only mutation is exactly
+        // the moment its live raw value could have moved (a rule frame's end-of-tick fold, or a direct console
+        // write) — ReconcileInhabitCounts itself compares against its own cache and is a no-op walk when the
+        // touched row is unrelated to any tracked inhabit facet.
+        m_population.ReconcileInhabitCounts(
+            admitted: m_inhabitCountAdmitted,
+            definition: definition,
+            disconnected: m_inhabitCountDisconnected,
+            tick: NextInputTick
+        );
+
+        if ((m_inhabitCountAdmitted.Count > 0) || (m_inhabitCountDisconnected.Count > 0)) {
+            ApplyLifecycleEvents(
+                admitted: m_inhabitCountAdmitted,
+                disconnected: m_inhabitCountDisconnected,
+                ordered: true
+            );
+        }
+
+        m_inhabitCountAdmitted.Clear();
+        m_inhabitCountDisconnected.Clear();
+    }
+    private bool TouchesDriveGate(WorldDefinition definition, WorldMutation mutation) {
+        m_touchedRows.Clear();
+
+        if (!TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out _)) {
+            return true;
+        }
+
+        var catalog = definition.StateCatalog;
+
+        foreach (var name in m_touchedRows) {
+            if (
+                catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle) &&
+                catalog.TryGetDescriptor(descriptor: out var descriptor, handle: handle) &&
+                definition.State[descriptor.LaneOrdinal].GatesDrive
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // The mutation kinds that change state values and nothing else: a cell write or removal, a transform, a draw
+    // site fire, or a batch made only of those.
+    private static bool IsStateMutation(WorldMutation mutation) {
+        switch (mutation) {
+            case WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.TransformState or WorldMutation.Generate:
+                return true;
+            case WorldMutation.Batch batch:
+                foreach (var member in batch.Mutations) {
+                    if (!IsStateMutation(mutation: member)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private bool TryValidateMutationCandidate(WorldDefinition candidate, WorldMutation mutation, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation = true) {
+        compilation = null;
+
+        if (IsStateMutation(mutation: mutation)) {
+            return TryValidateStateMutation(candidate: candidate, mutation: mutation, reason: out reason);
+        }
+
+        return (retainCompilation
+            ? WorldDefinitionValidator.TryValidateLocally(candidate, out reason, out compilation)
+            : WorldDefinitionValidator.TryValidateLocally(candidate, out reason));
+    }
+    // A state mutation can only have changed the rows it names, so validation covers those rows and the rows keyed
+    // over them, with nothing compiled.
+    private bool TryValidateStateMutation(WorldDefinition candidate, WorldMutation mutation, out string reason) {
+        m_touchedRows.Clear();
+
+        return (TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out reason)
+            ? WorldDefinitionValidator.TryValidateTouchedStateRows(definition: candidate, rowNames: m_touchedRows, reason: out reason)
+            : WorldDefinitionValidator.TryValidateLocally(definition: candidate, reason: out reason));
+    }
+    // Scratch for the rows one mutation touches; the step is single-threaded, so one set serves every door.
+    private readonly HashSet<string> m_touchedRows = new(comparer: StringComparer.Ordinal);
+    // Collects the row names a state mutation touches; false (with an empty reason) when the mutation — or, for a
+    // Batch, any one of its members — is not one of the state kinds TryValidateStateMutation covers, which the
+    // caller reads as "fall back to whole-document validation" rather than a refusal.
+    private static bool TryCollectStateMutationRowNames(WorldMutation mutation, ISet<string> names, out string reason) {
+        reason = string.Empty;
+
+        switch (mutation) {
+            case WorldMutation.UpsertStateCell upsertCell:
+                names.Add(item: upsertCell.Row);
+
+                return true;
+            case WorldMutation.RemoveStateCell removeCell:
+                names.Add(item: removeCell.Row);
+
+                return true;
+            case WorldMutation.Generate generate:
+                names.Add(item: generate.Row);
+
+                return true;
+            case WorldMutation.TransformState transform:
+                return WorldDefinitionValidator.TryCollectTransformRowNames(transform: transform.Transform, names: names, reason: out reason);
+            case WorldMutation.Batch batch:
+                foreach (var member in batch.Mutations) {
+                    if (!TryCollectStateMutationRowNames(mutation: member, names: names, reason: out reason)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            default:
+                return false;
+        }
     }
     private void Reject(WorldMutation mutation, string reason, int connectionId, long correlationId) {
-        Console.Error.WriteLine(value: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.mutation rejected", text: $"[world.mutation rejected: {Describe(mutation: mutation)} — {reason}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: $"{Describe(mutation: mutation)} rejected: {reason}",
             Rejected: true,
@@ -717,7 +1092,9 @@ public sealed partial class WorldServer {
     // A refused whole-document rebuild: loud, and echoed so the same tap that counts a refused mutation counts this
     // too.
     private void RejectRebuild(string verb, string reason, int connectionId, long correlationId) {
-        Console.Error.WriteLine(value: $"[world.definition rejected: {verb} — {reason}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.definition rejected", text: $"[world.definition rejected: {verb} — {reason}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: $"{verb} rejected: {reason}",
             Rejected: true,
@@ -725,6 +1102,23 @@ public sealed partial class WorldServer {
             ConnectionId: connectionId,
             CorrelationId: correlationId
         ));
+    }
+    // ApplyRebuild's own null-host gate: with no addon host attached, a candidate whose addon rows are all absent or
+    // disabled is vacuous (nothing to mount either way), but an ENABLED row names a guest that would install into
+    // the document with no runtime ever able to run it — the same shape TryApplyMutation's own no-host gate and
+    // WorldNoAddonHost.TryPrepare both refuse.
+    private static bool TryFindEnabledAddonRow(WorldDefinition candidate, out string name) {
+        foreach (var row in candidate.Addons) {
+            if (row.Enabled) {
+                name = row.Name;
+
+                return true;
+            }
+        }
+
+        name = string.Empty;
+
+        return false;
     }
     // The screen index(es) an op's Control check runs over — see TryCheckScreenOpControl's own remarks for Link/
     // Unlink's multi-member shape.
@@ -762,83 +1156,6 @@ public sealed partial class WorldServer {
             m_solidRevision++;
         }
     }
-    // Apply one buffered addon-lifecycle op at the tick boundary — the SAME door TryApplyMutation runs (Mutate over
-    // section:addons, checked BEFORE the runtime is touched, so a denial changes nothing), drained from the SAME
-    // queue a document mutation drains from. Never journaled (it is not a WorldMutation and is not undo-able through
-    // world.undo — a runtime lifecycle change is not a document edit) and never touches WorldDefinition.Addons (that
-    // stays world.row.set addons/world.row.remove addons's document-only territory); this is the RUNTIME's own half.
-    private bool TryApplyAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal, int connectionId, long correlationId) {
-        var verb = ((lifecycle is WorldAddonLifecycle.Mount)
-            ? "world.addon.mount"
-            : "world.addon.unmount"
-        );
-
-        if (m_grants.Allows(
-            principal: principal,
-            capability: WorldCapability.Mutate,
-            subject: GrantSubject.Section(section: WorldSection.Addons)
-        ) is { IsAllowed: false } verdict) {
-            var denial = $"{principal.Describe()} cannot mutate section:addons ({verdict.DescribeDenial()}) — {verb} dropped";
-
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: denial,
-                Rejected: true,
-                Kind: WorldEditEchoKind.AddonLifecycle,
-                Denied: true,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
-        }
-
-        if (m_addons is not { } addons) {
-            var refusal = $"{verb} refused — this world enables no addon; there is no runtime to mount into";
-
-            Console.Error.WriteLine(value: $"[{verb}: {refusal}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: refusal,
-                Rejected: true,
-                Kind: WorldEditEchoKind.AddonLifecycle,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
-        }
-
-        var status = lifecycle switch {
-            WorldAddonLifecycle.Mount mount => addons.Mount(
-            name: mount.Name,
-            modulePath: mount.ModulePath,
-            hash: mount.Hash,
-            fuel: mount.Fuel,
-            requests: mount.Requests
-        ),
-            WorldAddonLifecycle.Unmount unmount => addons.Unmount(name: unmount.Name),
-            _ => throw new ArgumentOutOfRangeException(
-            paramName: nameof(lifecycle),
-            actualValue: lifecycle,
-            message: $"no {nameof(TryApplyAddonLifecycle)} arm for addon lifecycle kind '{lifecycle.GetType().Name}'."
-        ),
-        };
-        // Both Mount and Unmount report failure as a leading quote-mark on the status line ("'name' ...") — the same
-        // convention Reload/SetEnabled already use, so this narrow check is the one place that turns their prose back
-        // into the Rejected/Denied-shaped WorldEditEcho every other apply path emits.
-        var rejected = status.StartsWith(value: '\'');
-
-        Console.Error.WriteLine(value: $"[{verb}: {status}]");
-        EchoTap?.Invoke(obj: new WorldEditEcho(
-            Message: status,
-            Rejected: rejected,
-            Kind: WorldEditEchoKind.AddonLifecycle,
-            ConnectionId: connectionId,
-            CorrelationId: correlationId
-        ));
-
-        return !rejected;
-    }
     // Apply one mutation at the tick boundary: authority through the ONE admission predicate → compose a candidate
     // (with-expression) → revalidate the WHOLE document → capacity-check scene/screen edits against the probed render
     // envelope → on any failure reject loudly (definition unchanged) → on success swap the live definition, rebuild the
@@ -846,21 +1163,16 @@ public sealed partial class WorldServer {
     private bool TryApplyMutation(WorldMutation mutation, ulong tick, int connectionId, long correlationId, bool preMetered) {
         // THE ONE ADMISSION PREDICATE decides the whole authority question — section hold, the Mutate/section kind
         // mask, the row-scoped Edit hold and ITS mask, and the untrusted per-tick dispatch budget. Every ordered-domain
-        // ingress converges here (loopback, console, and the TCP peer door alike), so this call is what gives the peer
+        // ingress converges here (loopback, console, and the QUIC peer door alike), so this call is what gives the peer
         // door exactly the masks and metering the addon seam has, from the same code rather than from a second reading
         // of the same rules. `preMetered` says only whether THIS ingress already charged the dispatch (the addon seam
         // meters at its own pre-flight, before decode, deliberately); it never changes which rules run.
-        if (!TryAdmitMutation(
-            principal: mutation.Principal,
-            section: SectionOf(mutation: mutation),
-            kindOrdinal: WorldMutationKindCatalog.OrdinalOf(mutation: mutation),
-            rowScopedEditSubject: RowScopedEditSubjectOf(mutation: mutation),
-            meter: !preMetered,
-            admission: out var admission
-        )) {
+        if (!TryAdmitCompleteMutation(mutation, preMetered, out var admission)) {
             var denial = admission.Describe();
 
-            Console.Error.WriteLine(value: $"[world.grant denied: {mutation.Principal.Describe()} {denial} — {Describe(mutation: mutation)} dropped]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {mutation.Principal.Describe()} {denial} — {Describe(mutation: mutation)} dropped]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: $"{Describe(mutation: mutation)} denied: {denial}",
                 Rejected: true,
@@ -881,7 +1193,8 @@ public sealed partial class WorldServer {
             instanceIdentity: InstanceIdentity,
             candidate: out var candidate,
             reason: out var composeReason,
-            evictedKey: out var evictedKey
+            evictedKey: out var evictedKey,
+            patterns: m_patterns
         )) {
             Reject(
                 connectionId: connectionId,
@@ -893,7 +1206,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        candidate = RebaseAdvanceEpoch(
+        candidate = RebaseCellTraits(
             candidate: candidate,
             mutation: mutation,
             original: m_definition,
@@ -938,10 +1251,7 @@ public sealed partial class WorldServer {
             return false;
         }
 
-        if (!WorldDefinitionValidator.TryValidateLocally(
-            definition: candidate,
-            reason: out var validationReason
-        )) {
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out var validationReason, compilation: out var compilation)) {
             Reject(
                 connectionId: connectionId,
                 correlationId: correlationId,
@@ -978,6 +1288,20 @@ public sealed partial class WorldServer {
                 correlationId: correlationId,
                 mutation: mutation,
                 reason: capacityReason
+            );
+
+            return false;
+        }
+
+        if (!m_population.CanInstallFields(
+            definition: candidate,
+            reason: out var fieldReason
+        )) {
+            Reject(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                mutation: mutation,
+                reason: fieldReason!
             );
 
             return false;
@@ -1032,20 +1356,124 @@ public sealed partial class WorldServer {
             m_solidRevision++;
         }
 
-        Install(
-            definition: candidate,
-            rebuildPopulation: (AffectsPopulation(mutation: mutation) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
-        );
+        // THE LAST FALLIBLE GATE — expensive compilation after every cheap refusal above. Only an Addons-affecting
+        // mutation ever reaches here (AffectsAddons); every other mutation leaves the addon runtime untouched, both
+        // this call and TryPrepare's own diff. A server with no addon host attached refuses an addon-affecting
+        // mutation BY NAME rather than silently accepting configuration with no effect. Prepare-refusal rejects the
+        // WHOLE mutation with the candidate discarded and m_definition byte-identical — the tick still survives.
+        // The whole sequence from here through Commit runs under ONE try/finally: addonPlan starts null and TryPrepare
+        // only ever sets it on success, so the finally is a no-op for every path that never obtains a plan, and a
+        // downstream throw — from contention-array staging, Install, or Commit alike — still disposes an uncommitted
+        // plan rather than leaking it.
+        IWorldAddonPreparedPlan? addonPlan = null;
+        int[]? newTickWrittenEntity = null;
+        WorldPrincipal[]? newTickWrittenPrincipal = null;
+        bool[]? newTickCollided = null;
+        var addonPlanCommitted = false;
+
+        try {
+            if (AffectsAddons(mutation: mutation)) {
+                if (m_addons is not { } addonsForPrepare) {
+                    Reject(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        mutation: mutation,
+                        reason: "no addon host is attached to this server — addon-affecting mutations are refused"
+                    );
+
+                    return false;
+                }
+
+                if (!addonsForPrepare.TryPrepare(
+                    candidate: candidate,
+                    current: m_definition,
+                    plan: out addonPlan,
+                    reason: out var addonReason
+                )) {
+                    Reject(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        mutation: mutation,
+                        reason: (addonReason ?? "addon preparation refused")
+                    );
+
+                    return false;
+                }
+
+                if (addonPlan is not null) {
+                    StageAddonContentionArrays(
+                        mountedCount: addonPlan.MountedCount,
+                        entity: out newTickWrittenEntity,
+                        principal: out newTickWrittenPrincipal,
+                        collided: out newTickCollided
+                    );
+                }
+            }
+
+            // Commit runs only after Install below succeeds, so nothing observable (registration, disclosure
+            // narration, disposal of a superseded guest) moves until then. Narration and superseded-guest disposal
+            // (Finish) run only AFTER the journal write below, so neither can still be unwound by what Finish
+            // itself does.
+            // A scalar state write keeps the compiled rules, catalog, groups and machines only while the candidate
+            // still carries the SAME state catalog identity the rules were compiled against — a document-value refresh
+            // or a slot-to-keyed reshape mints a new one, and a look-assignment rebind needs the population rebuild —
+            // so those cases take the full install like every other mutation.
+            var previous = m_definition;
+
+            if (
+                IsStateMutation(mutation: mutation) &&
+                ReferenceEquals(objA: candidate.StateCatalog, objB: previous.StateCatalog) &&
+                !RefreshesLookAssignment(candidate: candidate, mutation: mutation)
+            ) {
+                InstallRuntimeStateValue(definition: candidate, mutation: mutation);
+            } else {
+                Install(
+                    definition: candidate,
+                    compilation: compilation,
+                    rebuildPopulation: (AffectsPopulation(mutation: mutation) || RefreshesLookAssignment(
+                    candidate: candidate,
+                    mutation: mutation
+                ) || (solidAffecting && WorldContactSelection.RequiresField(collision: candidate.Collision)))
+                );
+            }
+
+            // Whatever moved a lattice row's draw pass — a Generate, or a whole-row upsert that re-authored its
+            // cursor, drawn masks or fill — repaints that row; every other row keeps its evolved cells.
+            RepaintChangedLatticeDraws(
+                previous: previous,
+                current: candidate
+            );
+
+            if (addonPlan is not null) {
+                m_addons!.Commit(plan: addonPlan);
+                addonPlanCommitted = true;
+
+                if (newTickWrittenEntity is not null) {
+                    m_tickWrittenEntity = newTickWrittenEntity;
+                    m_tickWrittenPrincipal = newTickWrittenPrincipal!;
+                    m_tickCollided = newTickCollided!;
+                }
+            }
+        } finally {
+            if (!addonPlanCommitted) {
+                addonPlan?.Dispose();
+            }
+        }
+
         m_journal.Add(item: new JournalEntry(
             Mutation: mutation,
             Tick: tick
         ));
         MutationJournalTap?.Invoke(tick, mutation);
 
+        if (addonPlanCommitted) {
+            m_addons!.Finish(plan: addonPlan!);
+        }
+
         // A defaults-class mutation edits what the NEXT boot wakes on while the live
         // session levers keep their values (world.save folds them); every other mutation applies live on delivery.
         // SetAuthoringDefaults is the honest exception to the binary split: ONE whole-row mutation carries BOTH
-        // classes at once (WorldAuthoringDefaults' own remarks name which field is which) — the headroom/repeat-cap
+        // classes at once (WorldPlacementPolicyDefaults' own remarks name which field is which) — the headroom/repeat-cap
         // fields are boot-consumed by the frozen render-envelope probe, while candidate/layout/preview fields are
         // re-read live at every use site. The narration spells out the split rather than forcing the mutation into
         // either WorldEditEchoKind bucket; Kind stays Mutation because the live-consumed majority applies NOW.
@@ -1055,6 +1483,8 @@ public sealed partial class WorldServer {
             // SetPopulationDefaults is a THIRD timing class: the census figures are document defaults (next boot), but
             // the distribution is LIVE for future activations while INERT for bodies already standing — spell out the split.
             WorldMutation.SetPopulationDefaults => $"{Describe(mutation: mutation)} applied — census figures next boot; spawn policy live for future activations, standing bodies unmoved",
+            WorldMutation.SetPopulationDistribution => $"{Describe(mutation: mutation)} applied — spawn policy live for future activations, standing bodies unmoved",
+            WorldMutation.SetPopulationCensus => $"{Describe(mutation: mutation)} applied — census figures next boot",
             _ => $"{Describe(mutation: mutation)} applied{(documentOnly
             ? " — document default (next boot; live levers unchanged)"
             : string.Empty)}",
@@ -1066,7 +1496,9 @@ public sealed partial class WorldServer {
             message = $"{message} (evicted '{evicted}')";
         }
 
-        Console.Error.WriteLine(value: $"[world.mutation: {message}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.mutation", text: $"[world.mutation: {message}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: false,
@@ -1107,7 +1539,9 @@ public sealed partial class WorldServer {
         )) {
             var denial = $"{principal.Describe()} lacks Control over screen {deniedIndex} — {verb} dropped";
 
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {denial}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: denial,
                 Rejected: true,
@@ -1166,7 +1600,9 @@ public sealed partial class WorldServer {
         ),
         };
 
-        Console.Error.WriteLine(value: $"[{verb}: {message}]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "{verb}", text: $"[{verb}: {message}]");
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: message,
             Rejected: !ok,
@@ -1250,35 +1686,38 @@ public sealed partial class WorldServer {
     public void ApplyCommand(WorldCommand command, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
         ArgumentNullException.ThrowIfNull(argument: command);
 
-        // Engage/Disengage are Control-over-SCREEN commands, never Drive-over-BODY ones — the generic gate below does
-        // not apply to them at all, so they branch out first. Both apply through Server.WorldEngagement, which runs
-        // its own check-then-mutate (see its own remarks); nothing here duplicates that check.
+        // The control-application commands are Control-over-TARGET commands, never Drive-over-BODY ones — the
+        // generic gate below does not apply to them at all, so they branch out first. Both apply through
+        // Server.WorldEngagement, which runs its own check-then-mutate (see its own remarks); nothing here
+        // duplicates that check.
         switch (command) {
-            case WorldCommand.Engage engage:
+            case WorldCommand.ComposeControl compose:
                 if (!CheckEngagePolicy(
-                    entityIndex: engage.EntityIndex,
-                    target: engage.Target,
+                    entityIndex: compose.EntityIndex,
+                    target: compose.Target,
                     reason: out var reason
                 )) {
-                    Console.Error.WriteLine(value: $"[world.engage denied: {reason}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "world.engage denied", text: $"[world.engage denied: {reason}]");
+                    }
 
                     return;
                 }
 
-                _ = m_engagement.Engage(
-                    entityIndex: engage.EntityIndex,
-                    target: engage.Target,
-                    capture: engage.Capture,
-                    actingPrincipal: engage.Principal,
-                    targetPrincipal: engage.TargetPrincipal
+                _ = m_engagement.Compose(
+                    entityIndex: compose.EntityIndex,
+                    target: compose.Target,
+                    exclusive: compose.Exclusive,
+                    actingPrincipal: compose.Principal,
+                    targetPrincipal: compose.TargetPrincipal
                 );
 
                 return;
-            case WorldCommand.Disengage disengage:
-                _ = m_engagement.Disengage(
-                    entityIndex: disengage.EntityIndex,
-                    actingPrincipal: disengage.Principal,
-                    targetPrincipal: disengage.TargetPrincipal
+            case WorldCommand.DissolveControl dissolve:
+                _ = m_engagement.Dissolve(
+                    entityIndex: dissolve.EntityIndex,
+                    actingPrincipal: dissolve.Principal,
+                    targetPrincipal: dissolve.TargetPrincipal
                 );
 
                 return;
@@ -1286,7 +1725,7 @@ public sealed partial class WorldServer {
 
         // CC/death gating (Seam A) — see TryDriveGateVerdict's own remarks: the SAME rule ApplyIntentSubmission
         // consults, checked here BEFORE the ordinary grant-table lookup so a scripted tape segment
-        // (player.fly/EnqueueSegment) or any other authority command is refused by the identical state fact a raw
+        // (body.fly/EnqueueSegment) or any other authority command is refused by the identical state fact a raw
         // per-tick submission is, never a lesser door a script could walk around.
         var gated = TryDriveGateVerdict(
             bodyIndex: command.EntityIndex,
@@ -1302,9 +1741,16 @@ public sealed partial class WorldServer {
         );
 
         if (!verdict.IsAllowed) {
-            var denial = $"{command.Principal.Describe()} cannot drive body:{command.EntityIndex} ({verdict.DescribeDenial()}) — {command.GetType().Name} dropped";
+            var denial = verdict.DescribeRefusal(
+                actor: command.Principal,
+                dropped: $"{command.GetType().Name} dropped",
+                subject: $"body:{command.EntityIndex}",
+                verb: "drive"
+            );
 
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {denial}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: denial,
                 Rejected: true,
@@ -1348,6 +1794,73 @@ public sealed partial class WorldServer {
                 }
 
                 break;
+            case WorldCommand.RigidImpulse impulse:
+                if (!body.IsRigid) {
+                    var notRigidDenial = $"body:{command.EntityIndex} carries no rigid kit facet";
+
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.impulse denied", text: $"[body.impulse denied: {notRigidDenial}]");
+                    }
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: notRigidDenial
+                    );
+
+                    break;
+                }
+
+                if (
+                    !float.IsFinite(f: impulse.Impulse.X) ||
+                    !float.IsFinite(f: impulse.Impulse.Y) ||
+                    !float.IsFinite(f: impulse.Impulse.Z) ||
+                    !body.TryApplyRigidImpulse(
+                        impulse: FixedVector3.FromVector3(value: impulse.Impulse),
+                        velocityCeiling: m_population.RigidVelocityCeiling
+                    )
+                ) {
+                    var overflowDenial = $"body:{command.EntityIndex} impulse is not representable or would exceed the world's declared speed ceiling ({(double)m_population.RigidVelocityCeiling:0.###})";
+
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.impulse denied", text: $"[body.impulse denied: {overflowDenial}]");
+                    }
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: overflowDenial
+                    );
+                }
+
+                break;
+            case WorldCommand.CarryBody carry:
+                if (!m_population.TryBeginCarry(
+                    carrierIndex: command.EntityIndex,
+                    targetIndex: carry.TargetIndex,
+                    reason: out var carryDenial
+                )) {
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.carry denied", text: $"[body.carry denied: body:{command.EntityIndex} {carryDenial}]");
+                    }
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: carryDenial
+                    );
+                }
+
+                break;
+            case WorldCommand.ReleaseCarry:
+                if (!m_population.TryEndCarry(
+                    carrierIndex: command.EntityIndex,
+                    reason: out var releaseDenial
+                )) {
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.release denied", text: $"[body.release denied: body:{command.EntityIndex} {releaseDenial}]");
+                    }
+                    NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: releaseDenial
+                    );
+                }
+
+                break;
             case WorldCommand.EnqueueSegment segment:
                 body.EnqueueRun(
                     intent: segment.Intent,
@@ -1368,7 +1881,7 @@ public sealed partial class WorldServer {
                         authoredMaximum: holdCeiling
                     );
 
-                    // The submit drains synchronously, so player.press's handler can read this back immediately —
+                    // The submit drains synchronously, so body.press's handler can read this back immediately —
                     // the same MotionRefusal/StopOutcome read-back shape — and name a silent grant-budget truncation
                     // instead of echoing the requested duration as if it were honored. Clears any prior refusal note
                     // this body's press slot carried, so a stale denial can never bleed into a fresh success.
@@ -1390,7 +1903,7 @@ public sealed partial class WorldServer {
                 // is the SAME check WorldDefinitionValidator runs at boot (WorldDefinitionValidator.TryValidateProgramCoherence)
                 // — reusing it here is what keeps a document-legal kit from runtime-switching into an incoherent program.
                 // Refusal narrates through the SAME echo path world.designation/world.grant use (stderr line + EchoTap),
-                // and records on the population so the SYNCHRONOUS submitter (player.motion's handler) can read back the
+                // and records on the population so the SYNCHRONOUS submitter (body.motion's handler) can read back the
                 // true outcome instead of assuming success.
                 if (
                     !m_population.TryGetBodyMotionProgram(
@@ -1405,7 +1918,9 @@ public sealed partial class WorldServer {
                         bodyIndex: motion.EntityIndex,
                         reason: reason
                     );
-                    Console.Error.WriteLine(value: $"[player.motion refused: {reason}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.motion refused", text: $"[body.motion refused: {reason}]");
+                    }
                     EchoTap?.Invoke(obj: new WorldEditEcho(
                         Message: reason,
                         Rejected: true,
@@ -1414,7 +1929,7 @@ public sealed partial class WorldServer {
                         CorrelationId: correlationId
                     ));
                 } else if (!WorldDefinitionValidator.TryValidateProgramCoherence(
-                    model: m_population.KitMotion(index: motion.EntityIndex),
+                    motion: m_population.KitMotion(index: motion.EntityIndex),
                     program: resolvedMotionProgram,
                     reason: out var coherenceReason
                 )) {
@@ -1422,7 +1937,9 @@ public sealed partial class WorldServer {
                         bodyIndex: motion.EntityIndex,
                         reason: coherenceReason
                     );
-                    Console.Error.WriteLine(value: $"[player.motion refused: {coherenceReason}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.motion refused", text: $"[body.motion refused: {coherenceReason}]");
+                    }
                     EchoTap?.Invoke(obj: new WorldEditEcho(
                         Message: coherenceReason,
                         Rejected: true,
@@ -1454,7 +1971,9 @@ public sealed partial class WorldServer {
                 )) {
                     body.SetIntentSource(source: control.Source);
                 } else {
-                    Console.Error.WriteLine(value: $"[player.control refused: {sourceRefusal}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.control refused", text: $"[body.control refused: {sourceRefusal}]");
+                    }
                 }
 
                 break;
@@ -1465,13 +1984,15 @@ public sealed partial class WorldServer {
                     yawRadians: reconcile.YawRadians,
                     seconds: reconcile.Seconds
                 );
-                Console.Error.WriteLine(value: $"[player.reconcile: body:{reconcile.EntityIndex} continuity={continuity.ToString().ToLowerInvariant()} maxSmoothError={m_definition.Motion.MaxSmoothError:0.###}]");
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: "body.reconcile", text: $"[body.reconcile: body:{reconcile.EntityIndex} continuity={continuity.ToString().ToLowerInvariant()} maxSmoothError={m_definition.Motion.MaxSmoothError:0.###}]");
+                }
 
                 break;
             case WorldCommand.Stop:
-                // The submit drains synchronously (WorldServer.Submit), so player.stop's handler can read this back
+                // The submit drains synchronously (WorldServer.Submit), so body.stop's handler can read this back
                 // through WorldPopulation.LastStopOutcome the instant control returns to it — the same pattern
-                // player.motion's MotionRefusal read-back uses.
+                // body.motion's MotionRefusal read-back uses.
                 m_population.NoteStopOutcome(
                     bodyIndex: command.EntityIndex,
                     outcome: body.Stop()
@@ -1480,7 +2001,9 @@ public sealed partial class WorldServer {
                 break;
             case WorldCommand.LoadDurableState load:
                 if (load.Tick != NextInputTick) {
-                    Console.Error.WriteLine(value: $"[player.state-load refused: tick {load.Tick} is not next tick {NextInputTick}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.state-load refused", text: $"[body.state-load refused: tick {load.Tick} is not next tick {NextInputTick}]");
+                    }
                 } else if (!body.TryStageDurableState(
                     tick: load.Tick,
                     values: load.Values,
@@ -1488,7 +2011,9 @@ public sealed partial class WorldServer {
                     writer: load.Principal.Describe(),
                     reason: out var stateReason
                 )) {
-                    Console.Error.WriteLine(value: $"[player.state-load refused: {stateReason}]");
+                    if (m_output.HasNarrationSink) {
+                        m_output.Narrate(channel: "body.state-load refused", text: $"[body.state-load refused: {stateReason}]");
+                    }
                 }
 
                 break;
@@ -1512,9 +2037,16 @@ public sealed partial class WorldServer {
             capability: WorldCapability.Control,
             subject: GrantSubject.Composition
         ) is { IsAllowed: false } verdict) {
-            var denial = $"{principal.Describe()} cannot control composition ({verdict.DescribeDenial()}) — {composition.GetType().Name} dropped";
+            var denial = verdict.DescribeRefusal(
+                actor: principal,
+                dropped: $"{composition.GetType().Name} dropped",
+                subject: "composition",
+                verb: "control"
+            );
 
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {denial}]");
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: denial,
                 Rejected: true,
@@ -1547,8 +2079,8 @@ public sealed partial class WorldServer {
     /// <param name="principal">The acting identity the op is checked against.</param>
     /// <param name="expectedContentHash">Replay only: the CAS pin a recorded <see cref="WorldScreenOp.Insert"/> or
     /// machine-booting <see cref="WorldScreenOp.Select"/> entry carries (a real <c>sha256-64</c> hash, or
-    /// <see cref="WorldMachineHost"/>'s "content absent" sentinel when the recording itself never read the file) —
-    /// see <see cref="WorldMachineHost.TryInsert"/>'s own remarks. <see langword="null"/> for every other op kind
+    /// the concrete host's "content absent" sentinel when the recording itself never read the file) —
+    /// see <see cref="IWorldMachineHost.TryInsert"/>'s own remarks. <see langword="null"/> for every other op kind
     /// and for the live path.</param>
     public void ApplyScreenOp(WorldScreenOp op, WorldPrincipal principal, string? expectedContentHash = null) =>
         TryApplyScreenOp(
@@ -1564,22 +2096,53 @@ public sealed partial class WorldServer {
     /// writers that now exist beside the seat lanes.</summary>
     /// <param name="runtime">The mounted host.</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A tick-pumped host does not implement recomputed contributions.</exception>
     public void AttachAddons(IWorldAddonHost runtime) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
+        if (runtime.ReplayPolicy != WorldExtensionReplayPolicy.Recomputed) {
+            throw new InvalidOperationException("Tick-pumped addon hosts must implement Recomputed contributions; use WorldRecordedExtension for recorded providers.");
+        }
 
         m_addons = runtime;
 
-        // Two lanes per mounted guest beside the seats: an addon holds Drive over as many bodies as it was granted, so
-        // this is a sized BOUND on how many distinct entities one tick's contention tracking follows, never a limit on
-        // how many a guest may drive. Past it, ReportContention's defensive length check stops recording new entities
-        // and contention reporting saturates — deliberately, because the cost of exactness here is a per-tick resize on
-        // the hot path to sharpen a diagnostic that nothing depends on.
-        var capacity = (Population.LocalSeatCount + (runtime.MountedCount * 2));
+        StageAddonContentionArrays(
+            mountedCount: runtime.MountedCount,
+            entity: out var entity,
+            principal: out var principal,
+            collided: out var collided
+        );
 
-        m_tickWrittenEntity = new int[capacity];
-        m_tickWrittenPrincipal = new WorldPrincipal[capacity];
-        m_tickCollided = new bool[capacity];
+        if (entity is not null) {
+            m_tickWrittenEntity = entity;
+            m_tickWrittenPrincipal = principal!;
+            m_tickCollided = collided!;
+        }
     }
+
+    // Pre-sizes the per-tick addon contention tracking against a plan's own MountedCount (or, at boot/AttachAddons,
+    // the runtime's already-committed count) — called BEFORE the addon plan's own Commit, so the caller can adopt
+    // the new arrays by reference in the same breath as the plan itself publishes, with no allocation at that
+    // instant. Two lanes per mounted guest beside the seats: an addon holds Drive over as many bodies as it was
+    // granted, so this is a sized BOUND on how many distinct entities one tick's contention tracking follows, never
+    // a limit on how many a guest may drive. Past it, ReportContention's defensive length check stops recording new
+    // entities and contention reporting saturates. Every array stays null when the capacity did not move, so an
+    // addon-affecting mutation that leaves MountedCount unchanged allocates nothing here either.
+    private void StageAddonContentionArrays(int mountedCount, out int[]? entity, out WorldPrincipal[]? principal, out bool[]? collided) {
+        var capacity = (Population.LocalSeatCount + (mountedCount * 2));
+
+        if (capacity == m_tickWrittenEntity.Length) {
+            entity = null;
+            principal = null;
+            collided = null;
+
+            return;
+        }
+
+        entity = new int[capacity];
+        principal = new WorldPrincipal[capacity];
+        collided = new bool[capacity];
+    }
+
     /// <summary>Attaches a client sink the per-tick snapshot is delivered to, immediately delivering the live
     /// definition followed by a primer snapshot of the current table, so the client renders the current state before
     /// its first ordinary tick delivery. A subscribe, not an overwrite: <see cref="WorldOutputHub"/> supports more
@@ -1634,30 +2197,13 @@ public sealed partial class WorldServer {
                 sink.DeliverSnapshot(snapshot: in redacted);
             }
         } catch (Exception exception) {
-            Console.Error.WriteLine(value: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.output", text: $"[world.output: {sink.GetType().Name} threw during its own attach primer — detached] {exception}");
+            }
             lease.Dispose();
         }
 
         return lease;
-    }
-    /// <summary>Buffers a live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>)
-    /// for the next <see cref="Step"/> — drained at the same door <see cref="EnqueueMutation"/> uses (before
-    /// intents), so a mount lands at the same defined tick-boundary point a document mutation does. Retains the
-    /// submitting envelope's connection/correlation identity — see <see cref="EnqueueMutation"/>'s own remarks.</summary>
-    /// <param name="lifecycle">The mount/unmount action.</param>
-    /// <param name="principal">The acting identity the change is checked against.</param>
-    /// <param name="connectionId">The submitting envelope's connection id.</param>
-    /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="lifecycle"/> is <see langword="null"/>.</exception>
-    public void EnqueueAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0) {
-        ArgumentNullException.ThrowIfNull(argument: lifecycle);
-
-        m_pending.Enqueue(item: new PendingOp.AddonLifecycle(
-            ConnectionId: connectionId,
-            CorrelationId: correlationId,
-            Lifecycle: lifecycle,
-            Principal: principal
-        ));
     }
     /// <summary>Buffers one live world mutation for the next <see cref="Step"/> (drained before intents). Retains the
     /// submitting envelope's connection/correlation identity so the eventual accept/reject <see cref="WorldEditEcho"/>
@@ -1666,12 +2212,16 @@ public sealed partial class WorldServer {
     /// <param name="mutation">The mutation to apply.</param>
     /// <param name="connectionId">The submitting envelope's connection id.</param>
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
-    /// <param name="sourceAddonIndex">The mounted addon index this mutation was decoded from, or <c>-1</c> for a
-    /// console/client submission (the addon mutation seam's completion field — see <see cref="PendingOp.Mutate"/>).</param>
+    /// <param name="sourceAddonInstanceId">The mounted addon instance token this mutation was decoded from, or
+    /// <c>-1</c> for a console/client submission (the addon mutation seam's completion field — see
+    /// <see cref="PendingOp.Mutate"/>).</param>
     /// <param name="actOrdinal">The addon's own output-batch ordinal this mutation answers, when
-    /// <paramref name="sourceAddonIndex"/> is not <c>-1</c>.</param>
+    /// <paramref name="sourceAddonInstanceId"/> is not <c>-1</c>.</param>
+    /// <param name="outcomeObserved">Invoked once, with whether this exact mutation applied, the moment
+    /// <see cref="Step"/> drains and applies it — <see langword="null"/> for every caller but
+    /// <see cref="ApplyEnvelope"/>'s own dispatch (see <see cref="MutationOutcomeTap"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="mutation"/> is <see langword="null"/>.</exception>
-    public void EnqueueMutation(WorldMutation mutation, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, int sourceAddonIndex = -1, ushort actOrdinal = 0) {
+    public void EnqueueMutation(WorldMutation mutation, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, long sourceAddonInstanceId = -1L, ushort actOrdinal = 0, Action<bool>? outcomeObserved = null) {
         ArgumentNullException.ThrowIfNull(argument: mutation);
 
         m_pending.Enqueue(item: new PendingOp.Mutate(
@@ -1679,7 +2229,8 @@ public sealed partial class WorldServer {
             ConnectionId: connectionId,
             CorrelationId: correlationId,
             Mutation: mutation,
-            SourceAddonIndex: sourceAddonIndex
+            OutcomeObserved: outcomeObserved,
+            SourceAddonInstanceId: sourceAddonInstanceId
         ));
     }
     /// <summary>Buffers a whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>)

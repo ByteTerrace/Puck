@@ -9,6 +9,13 @@ internal static class PostStages {
         [
             // Tier A — core and queued-host self-tests (hand-assembled vectors + a synthetic cartridge; run anywhere).
             new SmokeStage(),
+            new LifecycleStage(),
+            new HostPersistenceStage(),
+            new EmbeddingStage(),
+            new PpuCompositionStage(),
+            new PpuTextRowStage(),
+            new CartridgeFetchStage(),
+            new CycleBudgetExecutionStage(),
             new DeterminismStage(),
             new StateRoundTripStage(),
             new ForkDeterminismStage(),
@@ -94,10 +101,10 @@ internal static class PostStages {
             new LinkChurnStage(),
             // Tier C — the same link stack under a REAL commercial multiplayer game (two full-booted consoles on one
             // cable); proves the game's SIO link probe engages over the cable and the linked scenario is
-            // replay-identical. Skips when PUCK_AGB_LINK_GAME or a real boot BIOS is absent.
+            // replay-identical. Skips when --link-game or a real boot BIOS is absent.
             new LinkGameReplayStage(),
             // Tier C — a recorded varying-light script replays byte-identically on a real solar-sensor cart. Skips
-            // when PUCK_AGB_SOLARROM or a real boot BIOS is absent (no solar-sensor dump ships with the repo).
+            // when --solar-rom or a real boot BIOS is absent (no solar-sensor dump ships with the repo).
             new SolarReplayStage(),
         ];
 }

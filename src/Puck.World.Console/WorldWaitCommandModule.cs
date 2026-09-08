@@ -27,17 +27,15 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.wait",
-            description: "Suspends the stdin stream until the addressed world's simulation has advanced a number of fixed ticks: world.wait <ticks> — exactly one whole number, 1..144000 (see world.rate for the world's own current step width and completed-tick count). The lines queued behind it stay queued and run, in order, on the tick the count is reached; the sequencing primitive a scripted 'drive for a span, then read the pose back' needs, and tick-based rather than wall-clock so the same script reads the same pose on every run and machine. It waits for TIME only — a preceding mutation is already serialized by the wire's own deferred-mutation barrier. Refuses outright (naming which) while the world is paused or authors rateHz 0 — neither ever produces another completed tick to release on, so world.rate resume would be the very command trapped behind the wait it could never satisfy; arm it only once the world is actually running. A wait already armed when a pause LANDS mid-hold is force-released with a named note on stderr rather than left hanging. Echoes the release tick on success.",
+            description: "Suspends only the issuing text session until the addressed world's simulation has advanced a number of fixed ticks: world.wait <ticks> — exactly one whole number, 1..144000 (see world.rate for the world's own current step width and completed-tick count). Later work in that session resumes in order at the next command-pump drain after the count is reached. Catch-up steps can overshoot the deadline; this is a tick-based minimum wait, not an exact-tick state snapshot. It waits for TIME only — a preceding mutation is already serialized by the wire's own deferred-mutation barrier. Refuses outright (naming which) while the world is paused or authors rateHz 0 — neither ever produces another completed tick to release on, so world.rate resume would be the very command trapped behind the wait it could never satisfy; arm it only once the world is actually running. A wait already armed when a pause LANDS mid-hold is force-released with a named note on stderr rather than left hanging. Echoes the release tick on success.",
             handler: (context, args) => {
                 if (args.Count != 1) {
                     return CommandResult.Error(output: "[world.wait: expected exactly one value — <ticks>]");
                 }
 
-                if (!ulong.TryParse(
-                    s: args[0],
-                    style: NumberStyles.None,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out var ticks
+                if (!args.TryUnsignedDigits(
+                    index: 0,
+                    value: out var ticks
                 )) {
                     return CommandResult.Error(output: $"[world.wait: '{args[0]}' is not a whole number of ticks]");
                 }
@@ -73,7 +71,15 @@ public sealed class WorldWaitCommandModule(IWorldConsoleAuthority authority, IWo
                     return CommandResult.Error(output: "[world.wait: refused (the world is paused — no further tick will complete until world.rate resume, so this wait could never release; resume it first)]");
                 }
 
-                var release = gate.Arm(ticks: ticks);
+                if (context.TextSession is not { } session) {
+                    return CommandResult.Error(output: "[world.wait: requires an originating text session]");
+                }
+
+                if (ticks > ulong.MaxValue - gate.Tick) {
+                    return CommandResult.Error(output: "[world.wait: release tick would overflow the host clock]");
+                }
+
+                var release = gate.Arm(session: session, ticks: ticks);
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,

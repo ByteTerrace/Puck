@@ -16,8 +16,6 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
     // The counter bit whose falling edge clocks TIMA, indexed by TAC's clock-select (low two bits): 4096, 262144,
     // 65536, and 16384 Hz respectively. The whole counter ticks every T-cycle, so bit N toggles every 2^(N+1) T-cycles.
     private const byte ClockEnableBit = 0x04;
-    // The monochrome boot ROM always hands off with the same counter value; the Color handoff is header-dependent.
-    private const ushort DmgPostBootDivCounter = 0xABCC;
     private const int OverflowReloadDelay = 4;
     private const byte TacWritableMask = 0x07;
 
@@ -36,12 +34,12 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
     private byte m_tma;
 
     /// <summary>Creates the timer wired to the interrupt controller it raises the timer line on. Without a boot ROM the
-    /// counter is seeded to the post-boot value — the fixed monochrome handoff, or the Color boot ROM's header-dependent
-    /// counter; with one it powers on at zero and the executing boot program produces the handoff phase itself.</summary>
+    /// counter is seeded to the revision's post-boot value (see <see cref="BootDivPrediction"/>); with one it powers on
+    /// at zero and the executing boot program produces the handoff phase itself.</summary>
     /// <param name="interrupts">The interrupt controller.</param>
     /// <param name="key1">The speed-switch/stop unit whose block windows freeze the counter.</param>
     /// <param name="configuration">The machine configuration, which selects the post-boot counter seed.</param>
-    /// <param name="header">The cartridge header steering the Color boot ROM's timing.</param>
+    /// <param name="header">The cartridge header steering the boot ROM's timing.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public TimerComponent(IInterruptController interrupts, IKey1 key1, MachineConfiguration configuration, CartridgeHeader header) {
         ArgumentNullException.ThrowIfNull(argument: interrupts);
@@ -53,17 +51,46 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
         m_key1 = key1;
 
         if (configuration.BootRom is null) {
-            // The AGB seed is canonicalized to the CGB prediction until measured on hardware (the ideal-machine plan
-            // tracks per-profile post-boot DIV seeds as INFORMATIVE, resolved by measurement — never copied blind).
-            m_counter = (configuration.Model.SupportsColor()
-                ? CgbBootDivPrediction.Compute(header: header)
-                : DmgPostBootDivCounter);
+            m_counter = BootDivPrediction.Compute(
+                header: header,
+                model: configuration.Model
+            );
         }
     }
 
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+
+    /// <summary>Returns how many further T-cycles this unit can absorb as a plain counter advance: none while stop or
+    /// the speed switch holds it, a reload is pending, or the selected bit is about to fall; every cycle up to that
+    /// fall otherwise, and unbounded with the timer disabled.</summary>
+    public int QuietCycles() {
+        if (
+            m_stopLatched ||
+            m_switchBlockLatched ||
+            m_key1.AreTimersBlocked ||
+            (m_overflowCountdown > 0)
+        ) {
+            return 0;
+        }
+
+        if (m_timaInputMask == 0) {
+            return int.MaxValue;
+        }
+
+        var period = (m_timaInputMask << 1);
+
+        return ((period - (m_counter & (period - 1))) - 1);
+    }
+    /// <summary>Advances the counter by <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed:
+    /// no falling edge of the selected bit lies inside them, so TIMA holds and only the detector's input follows.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        m_reloadedThisCycle = false;
+        m_counter = ((ushort)(m_counter + cycles));
+        m_lastTimaInput = ((m_counter & m_timaInputMask) != 0);
+    }
     /// <inheritdoc/>
     public ushort DivCounter =>
         m_counter;

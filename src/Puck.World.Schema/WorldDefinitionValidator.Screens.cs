@@ -49,57 +49,69 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{name} '{channel}' must be non-empty kebab-case.");
         }
     }
-    // The cable links: name required/kebab/unique; two or more screens; every index declared; no duplicate within a link;
-    // no screen in two links. NOT validated: engine identity of the members — that is a RUNTIME fact (a screen.insert
-    // changes it), so the binder reports a dormant link with a reason rather than the validator rejecting the row.
-    private static void ValidateLinks(IReadOnlyList<WorldScreenLink> links, HashSet<int> screenIndices, List<string> errors) {
-        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var claimed = new HashSet<int>();
+    // The machine cable groups, derived from the declared screens rows' machine-source cable ports: each port's name
+    // kebab-case, each cable plugged by two or more ports, positions unique and contiguous from 0 (cable order is the
+    // linking engine's player order, so a gap or duplicate is a lie about who runs when). A screen carries at most one
+    // port by construction (one Cable member per source). NOT validated: engine identity of the members — that is a
+    // RUNTIME fact (a screen.insert changes it), so the binder reports a dormant group with a reason rather than the
+    // validator rejecting the port.
+    private static void ValidateMachineCables(IReadOnlyList<WorldScreen> screens, List<string> errors) {
+        var cables = new Dictionary<string, List<(int Position, int Screen, string Path)>>(comparer: StringComparer.Ordinal);
 
-        for (var index = 0; (index < links.Count); index++) {
-            var link = links[index];
-            var path = $"links[{index}]";
+        foreach (var screen in screens) {
+            if (screen?.Source is not WorldScreenSource.Machine { Cable: { } cable }) {
+                continue;
+            }
 
-            if (link is null) {
-                errors.Add(item: $"{path} is required.");
+            var path = $"screens[{screen.Index}].source.machine.cable";
+
+            if (
+                string.IsNullOrWhiteSpace(value: cable.Name) ||
+                !IsKebabCase(value: cable.Name)
+            ) {
+                errors.Add(item: $"{path}.name '{cable.Name}' must be non-empty kebab-case.");
 
                 continue;
             }
 
-            if (
-                string.IsNullOrWhiteSpace(value: link.Name) ||
-                !IsKebabCase(value: link.Name)
-            ) {
-                errors.Add(item: $"{path}.name '{link.Name}' must be non-empty kebab-case.");
-            } else if (!names.Add(item: link.Name)) {
-                errors.Add(item: $"{path}.name '{link.Name}' is duplicated.");
-            }
-
-            if (
-                (link.Screens is null) ||
-                (link.Screens.Count < 2)
-            ) {
-                errors.Add(item: $"{path}.screens requires two or more screen indices.");
+            if (cable.Position < 0) {
+                errors.Add(item: $"{path}.position {cable.Position} must be non-negative.");
 
                 continue;
             }
 
-            var withinLink = new HashSet<int>();
+            if (!cables.TryGetValue(
+                key: cable.Name,
+                value: out var members
+            )) {
+                members = [];
+                cables[cable.Name] = members;
+            }
 
-            foreach (var screen in link.Screens) {
-                if (!screenIndices.Contains(item: screen)) {
-                    errors.Add(item: $"{path}.screens names undeclared screen {screen}.");
-                } else if (!withinLink.Add(item: screen)) {
-                    errors.Add(item: $"{path}.screens names screen {screen} twice.");
-                } else if (!claimed.Add(item: screen)) {
-                    errors.Add(item: $"{path}.screens: screen {screen} is already in another link.");
+            members.Add(item: (cable.Position, screen.Index, path));
+        }
+
+        foreach (var (name, members) in cables) {
+            if (members.Count < 2) {
+                errors.Add(item: $"cable '{name}' has one plugged port (screen {members[0].Screen}) — a cable links two or more machines; plug another declared machine source into it or drop the port.");
+
+                continue;
+            }
+
+            var positions = new HashSet<int>();
+
+            foreach (var member in members) {
+                if (!positions.Add(item: member.Position)) {
+                    errors.Add(item: $"{member.Path}.position {member.Position} is already taken on cable '{name}' — cable order needs one machine per position.");
+                } else if (member.Position >= members.Count) {
+                    errors.Add(item: $"{member.Path}.position {member.Position} leaves a gap on cable '{name}' — positions are contiguous 0..{(members.Count - 1)}.");
                 }
             }
         }
     }
     // The per-screen magazine: at least one entry, a selected index in range, and each entry crossing the SAME source
     // gate as a declared source.
-    private static void ValidateMagazine(WorldDefinition definition, WorldScreenMagazine? magazine, string path, HashSet<string> cameras, HashSet<string> destinationNames, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
+    private static void ValidateMagazine(WorldDefinition definition, WorldScreenMagazine? magazine, string path, ValidationScope scope, List<string> errors, ICollection<string>? deferred) {
         if (magazine is not { } value) {
             return;
         }
@@ -125,11 +137,10 @@ public static partial class WorldDefinitionValidator {
                 definition: definition,
                 source: value.Entries[index],
                 path: $"{path}.entries[{index}]",
-                cameras: cameras,
-                destinationNames: destinationNames,
-                fontNames: fontNames,
-                hasTextCatalog: hasTextCatalog,
-                errors: errors
+                scope: scope,
+                cablePermitted: false,
+                errors: errors,
+                deferred: deferred
             );
         }
     }
@@ -183,7 +194,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
 
-    // The references section: null names nothing. Each row's Name already crossed WorldSafeName at JSON parse, so
+    // The references section: null names nothing. Each row's Name already crossed SafeName at JSON parse, so
     // this pass owns only uniqueness within the section and a non-empty Document — no boot-time file-existence
     // check (resolving a reference's Document is a future consumer's job). Returns the validated name set so a
     // later pass (a placement face's portal facet) can refuse an undeclared destination by name.
@@ -192,118 +203,447 @@ public static partial class WorldDefinitionValidator {
     /// can never be handed to the local file resolver in place of a signature-checked one.</summary>
     private const string OwnerNeighbourKeyPrefix = "owner/";
 
-    // Camera motion, aim, lens, and tracks are presentation-only authoring state.
-    private static void ValidateRig(WorldCameraRig rig, string path, List<string> errors) {
-        if (rig is null) {
+    // One authored camera subject: a placement id must resolve, a world point must be finite; a reference needs no
+    // check of its own (it names the program's externally supplied reference pose).
+    private static void ValidateSubject(WorldCameraSubject? subject, string path, ISet<string> placementIds, List<string> errors) {
+        switch (subject) {
+            case null:
+            case WorldCameraSubject.Reference:
+                break;
+            case WorldCameraSubject.Placement placement:
+                if (
+                    string.IsNullOrWhiteSpace(value: placement.PlacementId) ||
+                    !placementIds.Contains(item: placement.PlacementId)
+                ) {
+                    errors.Add(item: $"{path} references undeclared placement '{placement.PlacementId}'.");
+                }
+
+                break;
+            case WorldCameraSubject.WorldPoint worldPoint:
+                if (!IsFinite(value: worldPoint.Point)) {
+                    errors.Add(item: $"{path}.point must contain finite coordinates.");
+                }
+
+                break;
+            default:
+                errors.Add(item: $"{path} is an unknown camera subject kind.");
+
+                break;
+        }
+    }
+    // An authored camera program: name/version/operation-count, per-op finiteness and subject references, and the
+    // op-ordering rules an evaluator relies on (an anchor op — if any — leads, and a clampPitch op — if any —
+    // precedes the orbit op it governs). Blend's cross-program name/cycle check runs once over the whole document's
+    // program table (ValidateCameraPrograms), not here — no single program's own validation can see its siblings.
+    private static void ValidateProgram(WorldCameraProgram program, WorldDefinition definition, string path, ISet<string> placementIds, ISet<string> dynamicsNames, ISet<string> curveNames, List<string> errors) {
+        if (program is null) {
             errors.Add(item: $"{path} is required.");
 
             return;
         }
 
+        if (string.IsNullOrWhiteSpace(value: program.Name)) {
+            errors.Add(item: $"{path}.name is required.");
+        }
+
+        if (!string.Equals(
+            a: program.Version,
+            b: WorldCameraProgram.CurrentVersion,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            errors.Add(item: $"{path}.version '{program.Version}' must be '{WorldCameraProgram.CurrentVersion}'.");
+        }
+
+        var operations = program.Operations;
+
         if (
-            (rig.Lens is null) ||
-            !float.IsFinite(f: rig.Lens.FieldOfViewRadians) ||
-            (rig.Lens.FieldOfViewRadians <= 0f) ||
-            (rig.Lens.FieldOfViewRadians >= MathF.PI)
+            (operations is null) ||
+            (operations.Count == 0) ||
+            (operations.Count > WorldCameraProgram.MaxOperations)
         ) {
-            errors.Add(item: $"{path}.lens.fieldOfViewRadians must be finite and between 0 and pi.");
+            errors.Add(item: $"{path}.operations count must be within 1..{WorldCameraProgram.MaxOperations}.");
+
+            return;
+        }
+
+        var seenAnchor = false;
+        var seenClampPitch = false;
+        var seenFov = false;
+        var seenOrbit = false;
+        var seenPath = false;
+        var seenDynamics = false;
+        var seenBlend = false;
+        var seenSelect = false;
+
+        for (var index = 0; (index < operations.Count); index++) {
+            var opPath = $"{path}.operations[{index}]";
+
+            switch (operations[index]) {
+                case null:
+                    errors.Add(item: $"{opPath} is required.");
+
+                    break;
+                case WorldCameraProgramOp.Anchor anchorOp:
+                    if (seenAnchor) {
+                        errors.Add(item: $"{opPath} is a second 'anchor' op — at most one is admitted.");
+                    } else if (index != 0) {
+                        errors.Add(item: $"{opPath} 'anchor' must be the first operation.");
+                    }
+
+                    seenAnchor = true;
+
+                    ValidateSubject(
+                        errors: errors,
+                        path: $"{opPath}.subject",
+                        placementIds: placementIds,
+                        subject: anchorOp.Subject
+                    );
+
+                    break;
+                case WorldCameraProgramOp.Offset offset:
+                    if (!IsFinite(value: offset.Value)) {
+                        errors.Add(item: $"{opPath}.value must contain finite coordinates.");
+                    }
+
+                    RequireFinite(
+                        value: offset.SpreadPullback,
+                        name: $"{opPath}.spreadPullback",
+                        errors: errors
+                    );
+
+                    break;
+                case WorldCameraProgramOp.LookAt lookAt:
+                    if (lookAt.Subject is null) {
+                        RequireNonNegative(
+                            value: lookAt.FocusDistance,
+                            name: $"{opPath}.focusDistance",
+                            errors: errors
+                        );
+                    } else {
+                        if (
+                            (lookAt.TargetOffset is { } lookAtOffset) &&
+                            !IsFinite(value: lookAtOffset)
+                        ) {
+                            errors.Add(item: $"{opPath}.targetOffset must contain finite coordinates.");
+                        }
+
+                        ValidateSubject(
+                            errors: errors,
+                            path: $"{opPath}.subject",
+                            placementIds: placementIds,
+                            subject: lookAt.Subject
+                        );
+                    }
+
+                    break;
+                case WorldCameraProgramOp.Orbit orbit:
+                    if (seenOrbit) {
+                        errors.Add(item: $"{opPath} is a second 'orbit' op — at most one is admitted.");
+                    }
+
+                    seenOrbit = true;
+
+                    RequirePositive(
+                        value: orbit.Distance,
+                        name: $"{opPath}.distance",
+                        errors: errors
+                    );
+
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.yaw",
+                        scalar: orbit.Yaw
+                    );
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.pitch",
+                        scalar: orbit.Pitch
+                    );
+
+                    if ((orbit.PivotOffset is { } pivotOffset) && !IsFinite(value: pivotOffset)) {
+                        errors.Add(item: $"{opPath} needs a finite pivotOffset.");
+                    }
+
+                    break;
+                case WorldCameraProgramOp.Path pathOp:
+                    if (seenPath) {
+                        errors.Add(item: $"{opPath} is a second 'path' op — at most one is admitted.");
+                    } else if (index != 0) {
+                        errors.Add(item: $"{opPath} 'path' must be the first operation.");
+                    }
+
+                    seenPath = true;
+
+                    RequireDeclared(
+                        declaredSet: curveNames,
+                        errors: errors,
+                        field: "curve",
+                        path: opPath,
+                        rowNoun: "curves",
+                        value: pathOp.Curve
+                    );
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.fraction",
+                        scalar: pathOp.Fraction
+                    );
+
+                    break;
+                case WorldCameraProgramOp.Dynamics dynamicsOp:
+                    if (seenDynamics) {
+                        errors.Add(item: $"{opPath} is a second 'dynamics' op — at most one is admitted.");
+                    }
+
+                    seenDynamics = true;
+
+                    RequireDeclared(
+                        value: dynamicsOp.Row,
+                        declaredSet: dynamicsNames,
+                        path: opPath,
+                        field: "row",
+                        rowNoun: "dynamics",
+                        errors: errors
+                    );
+
+                    break;
+                case WorldCameraProgramOp.ClampPitch clampPitch:
+                    if (seenClampPitch) {
+                        errors.Add(item: $"{opPath} is a second 'clampPitch' op — at most one is admitted.");
+                    } else if (seenOrbit) {
+                        errors.Add(item: $"{opPath} 'clampPitch' must precede the 'orbit' op it governs.");
+                    }
+
+                    seenClampPitch = true;
+
+                    RequireFinite(
+                        value: clampPitch.MinPitch,
+                        name: $"{opPath}.minPitch",
+                        errors: errors
+                    );
+                    RequireFinite(
+                        value: clampPitch.MaxPitch,
+                        name: $"{opPath}.maxPitch",
+                        errors: errors
+                    );
+
+                    if (
+                        float.IsFinite(f: clampPitch.MinPitch) &&
+                        float.IsFinite(f: clampPitch.MaxPitch) &&
+                        (clampPitch.MinPitch >= clampPitch.MaxPitch)
+                    ) {
+                        errors.Add(item: $"{opPath}.minPitch must be strictly less than maxPitch.");
+                    }
+
+                    break;
+                case WorldCameraProgramOp.Fov fov:
+                    if (seenFov) {
+                        errors.Add(item: $"{opPath} is a second 'fov' op — at most one is admitted.");
+                    }
+
+                    seenFov = true;
+
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.fieldOfViewRadians",
+                        scalar: fov.FieldOfViewRadians
+                    );
+
+                    break;
+                case WorldCameraProgramOp.Blend blend:
+                    if (seenBlend) {
+                        errors.Add(item: $"{opPath} is a second 'blend' op — at most one is admitted.");
+                    }
+
+                    seenBlend = true;
+
+                    if (
+                        string.IsNullOrWhiteSpace(value: blend.A) ||
+                        string.IsNullOrWhiteSpace(value: blend.B)
+                    ) {
+                        errors.Add(item: $"{opPath} needs non-empty program names 'a' and 'b'.");
+                    }
+
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.weight",
+                        scalar: blend.Weight
+                    );
+
+                    break;
+                case WorldCameraProgramOp.Select select:
+                    if (seenSelect) {
+                        errors.Add(item: $"{opPath} is a second 'select' op — at most one is admitted.");
+                    }
+
+                    seenSelect = true;
+
+                    RequireBindableScalar(
+                        definition: definition,
+                        errors: errors,
+                        path: $"{opPath}.key",
+                        scalar: select.Key
+                    );
+
+                    if (string.IsNullOrWhiteSpace(value: select.Default)) {
+                        errors.Add(item: $"{opPath} needs a non-empty 'default' program name.");
+                    }
+
+                    var cases = (select.Cases ?? []);
+
+                    if (cases.Count == 0) {
+                        errors.Add(item: $"{opPath}.cases must declare at least one candidate.");
+                    }
+
+                    var caseValues = new HashSet<long>();
+
+                    for (var caseIndex = 0; (caseIndex < cases.Count); caseIndex++) {
+                        var candidate = cases[caseIndex];
+                        var casePath = $"{opPath}.cases[{caseIndex}]";
+
+                        if (candidate is null) {
+                            errors.Add(item: $"{casePath} is required.");
+
+                            continue;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(value: candidate.Program)) {
+                            errors.Add(item: $"{casePath} needs a non-empty program name.");
+                        }
+
+                        if (!caseValues.Add(item: candidate.Value)) {
+                            errors.Add(item: $"{casePath}.value {candidate.Value} is declared more than once.");
+                        }
+                    }
+
+                    break;
+                default:
+                    errors.Add(item: $"{opPath} is an unknown camera program op kind.");
+
+                    break;
+            }
         }
 
         if (
-            !float.IsFinite(f: rig.SmoothRate) ||
-            (rig.SmoothRate < 0f)
+            !seenFov &&
+            !seenBlend &&
+            !seenSelect
         ) {
-            errors.Add(item: $"{path}.smoothRate must be finite and non-negative.");
+            errors.Add(item: $"{path}.operations must include a 'fov' op (or a 'blend'/'select' op resolving to programs that do) — every rig needs a rendered field of view.");
         }
 
-        switch (rig.Motion) {
-            case WorldCameraMotion.Follow follow:
-                if (!IsFinite(value: follow.Offset)) {
-                    errors.Add(item: $"{path}.motion.offset must contain finite coordinates.");
-                }
+        if (seenAnchor && seenPath) {
+            errors.Add(item: $"{path}.operations authors both 'anchor' and 'path' — each establishes its own subject; author only one.");
+        }
+    }
+    // Cross-program blend references: every cameras[].rig, views.seatRig, and views.cameraRig shares ONE name
+    // namespace (a blend op resolves any of them), so dangling names and cycles can only be checked once the whole
+    // table is assembled — never inside one program's own validation.
+    private static void ValidateCameraPrograms(IReadOnlyDictionary<string, WorldCameraProgram> programs, List<string> errors) {
+        var visiting = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var settled = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-                if (!float.IsFinite(f: follow.SpreadPullback)) {
-                    errors.Add(item: $"{path}.motion.spreadPullback must be finite.");
-                }
+        void Walk(string name, string path) {
+            if (
+                settled.Contains(item: name) ||
+                !programs.TryGetValue(
+                    key: name,
+                    value: out var program
+                )
+            ) {
+                return;
+            }
 
-                break;
-            case WorldCameraMotion.Orbit orbit:
+            if (!visiting.Add(item: name)) {
+                errors.Add(item: $"{path} names '{name}', which cycles back to a program already being blended.");
+
+                return;
+            }
+
+            if (program.BlendOp is { } blend) {
                 if (
-                    !float.IsFinite(f: orbit.Distance) ||
-                    (orbit.Distance <= 0f)
+                    !string.IsNullOrWhiteSpace(value: blend.A) &&
+                    !programs.ContainsKey(key: blend.A)
                 ) {
-                    errors.Add(item: $"{path}.motion.distance must be positive and finite.");
+                    errors.Add(item: $"{path} blend.a names undeclared camera program '{blend.A}'.");
+                } else if (!string.IsNullOrWhiteSpace(value: blend.A)) {
+                    Walk(
+                        name: blend.A,
+                        path: $"{path} -> '{blend.A}'"
+                    );
                 }
 
                 if (
-                    !float.IsFinite(f: orbit.Yaw) ||
-                    !float.IsFinite(f: orbit.Pitch) ||
-                    !IsFinite(value: orbit.PivotOffset)
+                    !string.IsNullOrWhiteSpace(value: blend.B) &&
+                    !programs.ContainsKey(key: blend.B)
                 ) {
-                    errors.Add(item: $"{path}.motion needs a finite yaw, pitch, and pivot offset.");
+                    errors.Add(item: $"{path} blend.b names undeclared camera program '{blend.B}'.");
+                } else if (!string.IsNullOrWhiteSpace(value: blend.B)) {
+                    Walk(
+                        name: blend.B,
+                        path: $"{path} -> '{blend.B}'"
+                    );
+                }
+            }
+
+            if (program.SelectOp is { } select) {
+                if (
+                    !string.IsNullOrWhiteSpace(value: select.Default) &&
+                    !programs.ContainsKey(key: select.Default)
+                ) {
+                    errors.Add(item: $"{path} select.default names undeclared camera program '{select.Default}'.");
+                } else if (!string.IsNullOrWhiteSpace(value: select.Default)) {
+                    Walk(
+                        name: select.Default,
+                        path: $"{path} -> '{select.Default}'"
+                    );
                 }
 
-                break;
-            case WorldCameraMotion.Static value:
-                if (!IsFinite(value: value.Position)) {
-                    errors.Add(item: $"{path}.motion.position must contain finite coordinates.");
+                foreach (var candidate in (select.Cases ?? [])) {
+                    if (candidate is not { Program: { Length: > 0 } candidateProgram }) {
+                        continue;
+                    }
+
+                    if (!programs.ContainsKey(key: candidateProgram)) {
+                        errors.Add(item: $"{path} select.cases names undeclared camera program '{candidateProgram}'.");
+
+                        continue;
+                    }
+
+                    Walk(
+                        name: candidateProgram,
+                        path: $"{path} -> '{candidateProgram}'"
+                    );
                 }
+            }
 
-                break;
-            case WorldCameraMotion.Track track:
-                ValidateTrack(
-                    errors: errors,
-                    path: $"{path}.motion",
-                    track: track
-                );
-                break;
-            default:
-                errors.Add(item: $"{path}.motion is an unknown camera motion kind.");
-
-                break;
+            _ = visiting.Remove(item: name);
+            _ = settled.Add(item: name);
         }
 
-        switch (rig.Aim) {
-            case WorldCameraAim.Anchor anchor:
-                if (!IsFinite(value: anchor.Offset)) {
-                    errors.Add(item: $"{path}.aim.offset must contain finite coordinates.");
-                }
-
-                break;
-            case WorldCameraAim.Forward forward:
-                if (
-                    !float.IsFinite(f: forward.FocusDistance) ||
-                    (forward.FocusDistance < 0f)
-                ) {
-                    errors.Add(item: $"{path}.aim.focusDistance must be finite and non-negative.");
-                }
-
-                break;
-            case WorldCameraAim.WorldPoint worldPoint:
-                if (!IsFinite(value: worldPoint.Target)) {
-                    errors.Add(item: $"{path}.aim.target must contain finite coordinates.");
-                }
-
-                break;
-            default:
-                errors.Add(item: $"{path}.aim is an unknown camera aim kind.");
-
-                break;
+        foreach (var name in programs.Keys) {
+            Walk(
+                name: name,
+                path: $"cameras program '{name}'"
+            );
         }
     }
     // The engage-route policy: a finite non-negative radius, plus authored channel names (kebab-case, non-empty),
-    // plus the context-routes widening's two route-row fields: the channel MASK (channelNames must resolve) and the
-    // authored TRANSLATION table (each row's channel must resolve to a defined WorldPadElement). engageChannel is
-    // CONSUMED (WorldServer.ResolveEngageProbes resolves it against the same declared-channel ordinal table), so it
-    // is held to the same "must resolve" bar — a misspelled name is otherwise a silent, permanent no-op. cycleChannel
-    // stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only bar.
-    private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, List<string> errors) {
-        if (
-            !float.IsFinite(f: route.EngageRadius) ||
-            (route.EngageRadius < 0f)
-        ) {
-            errors.Add(item: $"{path}.engageRadius {route.EngageRadius} must be finite and non-negative.");
-        }
+    // plus the channel MASK (channelNames must resolve) and the pad KIT reference (padKits must carry it).
+    // engageChannel is CONSUMED (WorldServer.ResolveEngageProbes resolves it against the same declared-channel
+    // ordinal table), so it is held to the same "must resolve" bar — a misspelled name is otherwise a silent,
+    // permanent no-op. cycleChannel stays unconsumed (no reader exists yet) and keeps its lighter kebab-case-only
+    // bar.
+    private static void ValidateRoute(WorldScreenRoute route, string path, ISet<string> channelNames, ISet<string> padKits, List<string> errors) {
+        RequireNonNegative(
+            value: route.EngageRadius,
+            name: $"{path}.engageRadius",
+            errors: errors
+        );
 
         ValidateChannel(
             channel: route.EngageChannel,
@@ -342,62 +682,147 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
-        if (route.Translation is { } translation) {
-            for (var index = 0; (index < translation.Count); index++) {
-                var row = translation[index];
+        if (
+            (route.Kit is { Length: > 0 } kit) &&
+            !padKits.Contains(item: kit)
+        ) {
+            errors.Add(item: $"{path}.kit '{kit}' names no kit carrying a pad map.");
+        }
+    }
+    // A screen's memory bindings: each window fits the engine's addressable bus, names a declared kind=Int row on
+    // the same (row, key) pair rule every other named-cell reference in this document follows, and spells a known
+    // direction.
+    private static void ValidateScreenMemory(WorldDefinition definition, IReadOnlyList<WorldScreenMemory>? bindings, string path, List<string> errors) {
+        if (bindings is not { Count: > 0 } memory) {
+            return;
+        }
 
-                if (!channelNames.Contains(item: row.Channel)) {
-                    errors.Add(item: $"{path}.translation[{index}].channel '{row.Channel}' names no declared channel.");
-                }
+        for (var index = 0; (index < memory.Count); index++) {
+            var binding = memory[index];
+            var entryPath = $"{path}[{index}]";
 
-                if (!Enum.IsDefined(value: row.Element)) {
-                    errors.Add(item: $"{path}.translation[{index}].element '{row.Element}' is not a defined WorldPadElement.");
-                }
+            if (binding is null) {
+                errors.Add(item: $"{entryPath} is required.");
+
+                continue;
+            }
+
+            if ((binding.Width != 1) && (binding.Width != 2)) {
+                errors.Add(item: $"{entryPath}.width must be 1 or 2, not {binding.Width}.");
+            }
+
+            var span = Math.Max(val1: binding.Width, val2: 1);
+
+            if (
+                (binding.Address < 0) ||
+                ((binding.Address + span - 1) > WorldScreenMemory.MaxAddress)
+            ) {
+                errors.Add(item: $"{entryPath}.address {binding.Address} (width {binding.Width}) is outside the engine's memory 0..{WorldScreenMemory.MaxAddress}.");
+            }
+
+            ValidateMemoryRow(row: binding.Row, key: binding.Key, entryPath: entryPath, definition: definition, errors: errors);
+
+            if (!Enum.IsDefined(value: binding.Direction)) {
+                errors.Add(item: $"{entryPath}.direction '{binding.Direction}' is unknown.");
             }
         }
     }
-    // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
-    // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
-    // live CONSOLE (the caller counts these against the one-live ceiling).
-    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, HashSet<string> cameras, HashSet<string> destinationNames, HashSet<string> fontNames, bool hasTextCatalog, List<string> errors) {
+    // The (row, key) pair rule every reader of a named cell enforces, specialized to a memory binding's own error
+    // text (kept separate from WorldDefinitionValidator.Response.cs's ValidateStateCell, which speaks of a response's
+    // comparand rather than a binding's mirrored cell).
+    private static void ValidateMemoryRow(string? row, string? key, string entryPath, WorldDefinition definition, List<string> errors) {
+        if ((row is null) || (WorldDefinitionRows.FindStateRow(rows: definition.State, name: row) is not { } declared)) {
+            errors.Add(item: $"{entryPath}.row '{row}' does not name a declared state.world row.");
+
+            return;
+        }
+
+        if (declared.Kind != CellKind.Int) {
+            errors.Add(item: $"{entryPath}.row '{row}' is kind={declared.Kind} — a machine-memory binding mirrors an Int cell only.");
+        }
+
+        if (declared.IsKeyed && (key is null)) {
+            errors.Add(item: $"{entryPath} names keyed row '{row}' without a 'key' — a keyed row has no single cell, so name the one you mean.");
+        } else if (!declared.IsKeyed && (key is not null)) {
+            errors.Add(item: $"{entryPath} names row '{row}' with a 'key', but the row is not keyed — omit 'key' to read its slot cell.");
+        } else if ((key is not null) && !CellName.TryParse(candidate: key, name: out _, reason: out var reason)) {
+            errors.Add(item: $"{entryPath} key '{key}' {reason}");
+        }
+    }
+
+    // The one frame-source gate, shared by a screen row/magazine entry's own Camera/View/Probe/Capture arms
+    // (ValidateScreenSource) and a probe socket (WorldDefinitionValidator.Probes.cs' ValidateProbeStream): a
+    // camera's sensor is defined (and, when authored, its profile/vendor controls/seat, the last within
+    // 1..population.localSeats — shared by every consumer naming a seat: screens, probe sockets, HUD frames); a view names a declared
+    // cameras[] row; a probe names another declared probes[] row; a capture's selector/profile are shaped like the
+    // screen validator's own capture gate. A probe socket binding a Camera source has no meaningful use for
+    // Profile (a probe kernel reads the hosting camera graph's existing feed rather than negotiating its own
+    // capture extent) — validated to the SAME shape as a screen row anyway rather than forking a second, looser
+    // gate for one field nobody reads. Self-reference (a probe socket naming its own enclosing row) is the ONE rule
+    // this method cannot see — the caller checks it, since only a probe socket call site knows which probe is
+    // enclosing. Internal (not private): HudRowValidation.ValidateElement (HudValidation.cs) is a separate class in
+    // this same assembly that reuses this exact gate for a hud.panels Frame element's own bound source — widening the
+    // member rather than granting InternalsVisibleTo to another project (there is none to grant it to; both types
+    // already share this assembly).
+    internal static void ValidateFrameSource(WorldDefinition definition, WorldFrameSource? source, string path, HashSet<string> cameras, List<string> errors) {
         switch (source) {
             case null:
                 errors.Add(item: $"{path} is required.");
 
-                return false;
-            case WorldScreenSource.Machine machine:
-                if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
-                    errors.Add(item: $"{path}.machine.engine is required.");
-                } else if (!WorldExtensionVocabularyHook.IsRegisteredScreenMachineEngine(engineId: machine.Engine)) {
-                    // Deny-by-default: an engine key the host never registered refuses HERE, at load, by name — not a
-                    // per-slot boot fault discovered only once WorldMachineHost tries to resolve it (screen.state
-                    // reported the fault, but boot itself succeeded regardless). The hook is REQUIRED, never skipped
-                    // when absent: an unchecked key is the one outcome this refusal exists to prevent.
-                    errors.Add(item: $"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
-                }
-
-                // An empty contentPath is a valid "unconfigured" screen; the binder faults the slot gracefully at boot.
-                // A present-but-missing file is a runtime fact, not a structural authoring error.
-                return false;
-            case WorldScreenSource.TestPattern pattern:
-                if (
-                    (pattern.Width <= 0) ||
-                    (pattern.Height <= 0) ||
-                    (pattern.Width > MaxSurfaceDimension) ||
-                    (pattern.Height > MaxSurfaceDimension)
-                ) {
-                    errors.Add(item: $"{path} test-pattern dimensions must be within 1..{MaxSurfaceDimension}.");
-                }
-
-                return false;
+                break;
             case WorldScreenSource.Camera camera:
-                ValidateProfile(
-                    profile: camera.Profile,
-                    path: $"{path}.camera",
-                    errors: errors
-                );
+                if (camera.Profile is { } cameraProfile) {
+                    ValidateProfile(
+                        errors: errors,
+                        path: $"{path}.camera",
+                        profile: cameraProfile
+                    );
+                }
 
-                return false;
+                if (!Enum.IsDefined(value: camera.Sensor)) {
+                    errors.Add(item: $"{path}.camera.sensor '{camera.Sensor}' is not recognized.");
+                }
+
+                if (
+                    (camera.Seat is { } seat) &&
+                    ((seat < 1) || (seat > definition.Population.LocalSeats))
+                ) {
+                    errors.Add(item: $"{path}.camera.seat {seat} is outside 1..{definition.Population.LocalSeats} (population.localSeats).");
+                }
+
+                if (camera.Controls?.Vendor is { } vendorControls) {
+                    for (var index = 0; (index < vendorControls.Count); index++) {
+                        var control = vendorControls[index];
+
+                        if (control is null) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}] is required.");
+
+                            continue;
+                        }
+
+                        if ((control.Id < byte.MinValue) || (control.Id > byte.MaxValue)) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].id {control.Id} is outside 0..255.");
+                        }
+
+                        if ((control.Value < byte.MinValue) || (control.Value > byte.MaxValue)) {
+                            errors.Add(item: $"{path}.camera.controls.vendor[{index}].value {control.Value} is outside 0..255.");
+                        }
+                    }
+                }
+
+                break;
+            case WorldScreenSource.View view:
+                if (!cameras.Contains(item: view.CameraName)) {
+                    errors.Add(item: $"{path}.view references undeclared camera '{view.CameraName}'.");
+                }
+
+                break;
+            case WorldScreenSource.Probe probe:
+                if (!DeclaresProbe(definition: definition, id: probe.Id)) {
+                    errors.Add(item: $"{path}.probe.id '{probe.Id}' names no declared probe.");
+                }
+
+                break;
             case WorldScreenSource.Capture capture:
                 // Selector: monitor mode validates the index; window mode requires a title (its unused counterpart).
                 if (capture.MonitorIndex is { } monitorIndex) {
@@ -414,11 +839,93 @@ public static partial class WorldDefinitionValidator {
                     errors: errors
                 );
 
+                break;
+            default:
+                errors.Add(item: $"{path} is an unrecognized frame source kind.");
+
+                break;
+        }
+    }
+
+    // The one screen-source gate, shared by a declared source and every magazine entry — a pure extraction that closes a
+    // real duplication risk (a magazine entry could otherwise name an undeclared camera). Returns whether the source is a
+    // live CONSOLE (the caller counts these against the one-live ceiling).
+    private static bool ValidateScreenSource(WorldDefinition definition, WorldScreenSource source, string path, ValidationScope scope, bool cablePermitted, List<string> errors, ICollection<string>? deferred) {
+        var cameras = scope.Cameras;
+        var destinationNames = scope.DestinationNames;
+        var fontNames = scope.FontNames;
+        var hasTextCatalog = scope.HasTextCatalog;
+
+        switch (source) {
+            case null:
+                errors.Add(item: $"{path} is required.");
+
                 return false;
-            case WorldScreenSource.View view:
-                if (!cameras.Contains(item: view.CameraName)) {
-                    errors.Add(item: $"{path}.view references undeclared camera '{view.CameraName}'.");
+            case WorldScreenSource.Machine machine:
+                // A cable port is a standing physical connection of the machine that owns the slot — a declared
+                // screens row's own source. A magazine entry rotates content through the slot and a placement face's
+                // source has no stable screen identity to fold a group back onto, so a port there is refused.
+                if (
+                    !cablePermitted &&
+                    (machine.Cable is not null)
+                ) {
+                    errors.Add(item: $"{path}.machine.cable is only legal on a declared screens row's own source — a magazine entry or face source cannot plug a cable.");
                 }
+
+                if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
+                    errors.Add(item: $"{path}.machine.engine is required.");
+                } else {
+                    // Deny-by-default: an engine key a host WITH A CATALOG never registered refuses HERE, at load,
+                    // by name — not a per-slot boot fault discovered only once WorldMachineHost tries to resolve it
+                    // (screen.state reported the fault, but boot itself succeeded regardless). A host with NO
+                    // catalog at all (Puck.World.Browser) defers the answer instead — never a refusal, never a
+                    // silent pass. The hook is REQUIRED, never skipped when absent: an unchecked key is the one
+                    // outcome this refusal exists to prevent.
+                    var engineRegistered = WorldExtensionVocabularyHook.IsRegisteredScreenMachineEngine(engineId: machine.Engine);
+
+                    if (engineRegistered == false) {
+                        errors.Add(item: $"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
+                    } else if (engineRegistered is null) {
+                        deferred?.Add(item: $"{path}.machine.engine: screen-machine engine '{machine.Engine}' registration deferred — this host carries no screen-machine engine catalog.");
+                    } else if (machine.NamesCartridgeDocument) {
+                        // A cartridge document is compiled at bind through the engine's own forge; an engine with no
+                        // forge would boot the JSON bytes as a ROM. Refused here, by name, like an unregistered
+                        // engine key; deferred, like the engine check above, on a host with no catalog at all.
+                        var cartridgeCompiling = WorldExtensionVocabularyHook.IsCartridgeCompilingScreenMachineEngine(engineId: machine.Engine);
+
+                        if (cartridgeCompiling == false) {
+                            errors.Add(item: $"{path}.machine.contentPath '{machine.ContentPath}' names a cartridge document ({WorldScreenSource.Machine.CartridgeDocumentSuffix}), but engine '{machine.Engine}' compiles none.");
+                        } else if (cartridgeCompiling is null) {
+                            deferred?.Add(item: $"{path}.machine.contentPath: engine '{machine.Engine}' cartridge-compilation registration deferred — this host carries no screen-machine engine catalog.");
+                        }
+                    }
+                }
+
+                // An empty contentPath is a valid "unconfigured" screen; the binder faults the slot gracefully at boot.
+                // A present-but-missing file is a runtime fact, not a structural authoring error, and so is a cartridge
+                // document the forge refuses — the bind faults with the forge's own message.
+                return false;
+            case WorldScreenSource.TestPattern pattern:
+                if (
+                    (pattern.Width <= 0) ||
+                    (pattern.Height <= 0) ||
+                    (pattern.Width > MaxSurfaceDimension) ||
+                    (pattern.Height > MaxSurfaceDimension)
+                ) {
+                    errors.Add(item: $"{path} test-pattern dimensions must be within 1..{MaxSurfaceDimension}.");
+                }
+
+                return false;
+            case WorldFrameSource frame:
+                // Camera/View/Probe/Capture — the frame-producing arms — share ONE gate with a probe socket's own
+                // bound source (ValidateFrameSource above).
+                ValidateFrameSource(
+                    cameras: cameras,
+                    definition: definition,
+                    errors: errors,
+                    path: path,
+                    source: frame
+                );
 
                 return false;
             case WorldScreenSource.Console console:
@@ -481,23 +988,34 @@ public static partial class WorldDefinitionValidator {
         if (!Enum.IsDefined(value: control.YawReference)) {
             errors.Add(item: $"{path}.yawReference is unknown.");
         }
+        RequireRange(
+            value: control.MinPitch,
+            min: (-MathF.PI / 2f),
+            max: (MathF.PI / 2f),
+            name: $"{path}.minPitch",
+            errors: errors
+        );
+        RequireRange(
+            value: control.MaxPitch,
+            min: (-MathF.PI / 2f),
+            max: (MathF.PI / 2f),
+            name: $"{path}.maxPitch",
+            errors: errors
+        );
+
         if (
-            !float.IsFinite(f: control.MinPitch) ||
-            !float.IsFinite(f: control.MaxPitch) ||
-            (control.MinPitch < (-MathF.PI / 2f)) ||
-            (control.MaxPitch > (MathF.PI / 2f))
+            float.IsFinite(f: control.MinPitch) &&
+            float.IsFinite(f: control.MaxPitch) &&
+            (control.MinPitch >= control.MaxPitch)
         ) {
-            errors.Add(item: $"{path}.minPitch and {path}.maxPitch must be finite and within [-pi/2, pi/2].");
-        } else if (control.MinPitch >= control.MaxPitch) {
             errors.Add(item: $"{path}.minPitch must be less than {path}.maxPitch.");
         }
-        if ((control.SwapRate is { } swapRate) && (!float.IsFinite(f: swapRate) || (swapRate < 0f))) {
-            errors.Add(item: $"{path}.swapRate must be finite and non-negative — 0 is an instant swap.");
-        }
         if (control.Follow is { } follow) {
-            if (!float.IsFinite(f: follow.Rate) || (follow.Rate <= 0f)) {
-                errors.Add(item: $"{path}.follow.rate must be finite and positive.");
-            }
+            RequirePositive(
+                value: follow.Rate,
+                name: $"{path}.follow.rate",
+                errors: errors
+            );
             if (control.YawReference != WorldSeatYawReference.World) {
                 errors.Add(item: $"{path}.follow needs {path}.yawReference 'World' — a body-relative yaw already rides the body.");
             }
@@ -506,33 +1024,32 @@ public static partial class WorldDefinitionValidator {
     // A seat's control feel (PRESENTATION-ONLY, REQUIRED): pointer sensitivities, stick look rate, and gyro response
     // finite and non-negative. The member itself is required — an absent row is refused by the caller before this
     // runs, never silently defaulted.
-    private static void ValidateSeatLook(WorldSeatLook seatLook, string path, List<string> errors) {
-        if (
-            !float.IsFinite(f: seatLook.YawSensitivity) ||
-            (seatLook.YawSensitivity < 0f)
-        ) {
-            errors.Add(item: $"{path}.yawSensitivity must be finite and non-negative.");
-        }
+    private static void ValidateSeatLook(WorldSeatCameraFeel seatLook, string path, List<string> errors) {
+        RequireNonNegative(
+            value: seatLook.YawSensitivity,
+            name: $"{path}.yawSensitivity",
+            errors: errors
+        );
 
-        if (
-            !float.IsFinite(f: seatLook.PitchSensitivity) ||
-            (seatLook.PitchSensitivity < 0f)
-        ) {
-            errors.Add(item: $"{path}.pitchSensitivity must be finite and non-negative.");
-        }
+        RequireNonNegative(
+            value: seatLook.PitchSensitivity,
+            name: $"{path}.pitchSensitivity",
+            errors: errors
+        );
 
-        if (
-            !float.IsFinite(f: seatLook.StickLookRate) ||
-            (seatLook.StickLookRate < 0f)
-        ) {
-            errors.Add(item: $"{path}.stickLookRate must be finite and non-negative.");
-        }
+        RequireNonNegative(
+            value: seatLook.StickLookRate,
+            name: $"{path}.stickLookRate",
+            errors: errors
+        );
 
         var gyro = seatLook.Gyro;
 
-        if (!float.IsFinite(f: gyro.Scale) || (gyro.Scale < 0f)) {
-            errors.Add(item: $"{path}.gyro.scale must be finite and non-negative.");
-        }
+        RequireNonNegative(
+            value: gyro.Scale,
+            name: $"{path}.gyro.scale",
+            errors: errors
+        );
         if (
             !IsFinite(value: gyro.DeadZone) ||
             (gyro.DeadZone.X < 0f) ||
@@ -555,17 +1072,13 @@ public static partial class WorldDefinitionValidator {
     // Camera, when present, is validated only as non-empty here — the destination's own definition is not joined at
     // boot, so an unknown camera name is a loud bind-time refusal (WorldScreenBinder), never a boot refusal.
     private static void ValidateSessionSource(WorldScreenSource.Session session, HashSet<string> destinationNames, WorldPlacementPortal? portal, string path, List<string> errors) {
-        if (
-            string.IsNullOrWhiteSpace(value: session.Destination) ||
-            !destinationNames.Contains(item: session.Destination)
-        ) {
-            errors.Add(item: ((destinationNames.Count > 0)
-                ? $"{path}.session.destination '{session.Destination}' names no destinations row; the world declares: {string.Join(
-                    separator: ", ",
-                    values: destinationNames
-                )}."
-                : $"{path}.session.destination '{session.Destination}' names no destinations row; the world declares none."));
-        }
+        RequireDeclaredListing(
+            declaredSet: destinationNames,
+            errors: errors,
+            rowNoun: "destinations row",
+            subject: $"{path}.session.destination '{session.Destination}'",
+            value: session.Destination
+        );
 
         if (
             (session.CameraName is { } camera) &&
@@ -669,85 +1182,72 @@ public static partial class WorldDefinitionValidator {
 
         if (
             (text.Foreground is { } foreground) &&
-            !IsColor(definition: definition, value: foreground)
+            !IsColor(
+            definition: definition,
+            value: foreground
+        )
         ) {
             errors.Add(item: $"{path}.text.foreground {WorldColor.Grammar}.");
         }
 
         if (
             (text.Background is { } background) &&
-            !IsColor(definition: definition, value: background)
+            !IsColor(
+            definition: definition,
+            value: background
+        )
         ) {
             errors.Add(item: $"{path}.text.background {WorldColor.Grammar}.");
         }
     }
-    private static void ValidateTrack(WorldCameraMotion.Track track, string path, List<string> errors) {
-        if (
-            (track.Definition is null) ||
-            (track.Playback is null)
-        ) {
-            errors.Add(item: $"{path} requires definition and playback state.");
-
-            return;
-        }
-        if (
-            !Enum.IsDefined(value: track.Definition.ClockDomain) ||
-            !Enum.IsDefined(value: track.Definition.Interpolation) ||
-            !Enum.IsDefined(value: track.Playback.LoopMode)
-        ) {
-            errors.Add(item: $"{path} contains an unknown clock, interpolation, or loop mode.");
-        }
-        var keyframes = track.Definition.Keyframes;
-
-        if (
-            (keyframes is null) ||
-            (keyframes.Count < 2)
-        ) {
-            errors.Add(item: $"{path}.definition.keyframes requires at least two rows.");
-
-            return;
-        }
-        for (var index = 0; (index < keyframes.Count); index++) {
-            var keyframe = keyframes[index];
-
-            if (keyframe is null) {
-                errors.Add(item: $"{path}.definition.keyframes[{index}] requires a finite position.");
-
-                continue;
-            }
-            if (!IsFinite(value: keyframe.Position)) {
-                errors.Add(item: $"{path}.definition.keyframes[{index}] requires a finite position.");
-            }
-            if (
-                (index > 0) &&
-                (keyframes[(index - 1)] is { } previous) &&
-                (keyframe.Tick <= previous.Tick)
-            ) {
-                errors.Add(item: $"{path}.definition.keyframes[{index}].tick must be greater than the preceding tick.");
-            }
-        }
-    }
-    // The window-composition defaults (PRESENTATION-ONLY): the seat rig valid, layout names unique, slot rects inside
-    // [0,1] and non-degenerate, and every named-camera slot resolving against the authored camera set.
-    private static void ValidateViews(WorldViewDefaults views, HashSet<string> cameras, List<string> errors) {
+    // The window composition (PRESENTATION-ONLY): the seat rig valid, layout names unique, slot rects inside
+    // [0,1] and non-degenerate, and every named-camera slot resolving against the authored camera set. ABSENT is a
+    // seatless document's right — the engine ships no rig, so a census implying a body must author one.
+    private static void ValidateViews(WorldViewDefaults? views, WorldDefinition definition, int capacity, HashSet<string> cameras, ISet<string> placementIds, ISet<string> dynamicsNames, ISet<string> curveNames, List<string> errors) {
         if (views is null) {
-            errors.Add(item: "views is required.");
+            if (capacity > 0) {
+                errors.Add(item: $"views is required when bodies.capacity ({capacity}) is nonzero; the engine declares no seat rig (author one, or name a basis document that does).");
+            }
 
             return;
         }
 
-        ValidateRig(
-            rig: views.SeatRig,
+        ValidateProgram(
+            curveNames: curveNames,
+            definition: definition,
+            dynamicsNames: dynamicsNames,
+            errors: errors,
             path: "views.seatRig",
-            errors: errors
+            placementIds: placementIds,
+            program: views.SeatRig
         );
         ValidateSeatControl(
             control: views.SeatControl,
             path: "views.seatControl",
             errors: errors
         );
-        if (views.SeatRig?.Motion is not WorldCameraMotion.Orbit) {
-            errors.Add(item: "views.seatRig.motion must be orbit because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
+        if (views.SeatRig?.OrbitOp is null) {
+            errors.Add(item: "views.seatRig must contain an 'orbit' op because seatControl declares live yaw/pitch input; use cameras for non-interactive authored views.");
+        }
+
+        if (views.CameraRig is { } cameraRig) {
+            ValidateProgram(
+                curveNames: curveNames,
+                definition: definition,
+                dynamicsNames: dynamicsNames,
+                errors: errors,
+                path: "views.cameraRig",
+                placementIds: placementIds,
+                program: cameraRig
+            );
+
+            if (
+                (cameraRig.OrbitOp is not null) ||
+                (cameraRig.OffsetOp is not null) ||
+                (cameraRig.PathOp is not null)
+            ) {
+                errors.Add(item: "views.cameraRig must author no 'orbit', 'offset', or 'path' op — it is the first-person rig a camera-targeting mode state resolves through, sitting exactly at the possessed body's own pose.");
+            }
         }
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -763,30 +1263,32 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: layout.Name)) {
-                errors.Add(item: $"{path}.name is required.");
-            } else if (!names.Add(item: layout.Name)) {
-                errors.Add(item: $"{path}.name '{layout.Name}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: layout.Name,
+                seen: names,
+                path: path,
+                field: "name",
+                errors: errors
+            );
 
             if (layout.SeatCount < 0) {
                 errors.Add(item: $"{path}.seatCount {layout.SeatCount} must be non-negative.");
             }
 
-            if (
-                !float.IsFinite(f: layout.TransitionSeconds) ||
-                (layout.TransitionSeconds < 0f)
-            ) {
-                errors.Add(item: $"{path}.transitionSeconds must be finite and non-negative.");
-            }
+            RequireNonNegative(
+                value: layout.TransitionSeconds,
+                name: $"{path}.transitionSeconds",
+                errors: errors
+            );
 
-            if (
-                !float.IsFinite(f: layout.TransitionRenderScale) ||
-                (layout.TransitionRenderScale <= 0f) ||
-                (layout.TransitionRenderScale > 1f)
-            ) {
-                errors.Add(item: $"{path}.transitionRenderScale must be finite and within (0, 1].");
-            }
+            RequireRange(
+                value: layout.TransitionRenderScale,
+                min: 0f,
+                max: 1f,
+                name: $"{path}.transitionRenderScale",
+                errors: errors,
+                minExclusive: true
+            );
 
             var slots = layout.Slots;
 

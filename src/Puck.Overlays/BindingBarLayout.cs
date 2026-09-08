@@ -1,113 +1,80 @@
+using Puck.Commands;
 using System.Numerics;
-using Puck.Input.Devices;
 
 namespace Puck.Overlays;
 
 /// <summary>
-/// Tunes the binding-bar layout. All lengths are fractions of the target HEIGHT (a 600-line reference: button 45px,
-/// center gap 60px, anchor 220px above the bottom), so the cluster scales with resolution and never depends on width.
+/// Tunes the binding-bar layout. Lengths are fractions of the target HEIGHT, so the cluster scales with resolution and
+/// never depends on width; every <c>*Ratio</c>/<c>*Lift</c>/<c>*Spacing</c> is a multiple of the SCALED button size,
+/// and every <c>*MinPx</c> is a device-pixel floor. All of it is authored data (<c>Puck.World.WorldBindingBarLayout</c>).
+/// Where each plate SITS is authored too (the layout's slot table, in button pitches); this carries only the sizes.
 /// </summary>
-/// <param name="ButtonSize">The slot plate size (45/600).</param>
-/// <param name="CenterGap">The extra half-gap between the two mirrored clusters (60/600).</param>
-/// <param name="AnchorOffsetY">The anchor's lift above the bottom edge (220/600).</param>
+/// <param name="ButtonSize">The slot plate size at most; see <see cref="CompiledBindingBarLayout.FitButtonSize(float, float)"/>.</param>
+/// <param name="AnchorEdge">The edge the bar's own anchor (modifier row, page label, hints) hangs from.</param>
+/// <param name="AnchorInset">That anchor's inset from its edge, in button pitches.</param>
 /// <param name="GlyphOffsetRatio">The gamepad glyph's corner offset, as a fraction of <paramref name="ButtonSize"/>.</param>
-/// <param name="GlyphSizeRatio">The gamepad glyph's size, as a fraction of <paramref name="ButtonSize"/> (24/45).</param>
+/// <param name="GlyphSizeRatio">The gamepad glyph's size, as a fraction of <paramref name="ButtonSize"/>.</param>
 /// <param name="Scale">The uniform cluster scale.</param>
+/// <param name="ModifierHalfRatio">The modifier indicator's plate half-extent, in scaled button sizes.</param>
+/// <param name="ModifierSpacingRatio">The modifier indicators' pitch, in scaled button sizes.</param>
+/// <param name="ModifierGlyphRatio">The modifier badge's half-extent, as a fraction of the modifier plate half.</param>
+/// <param name="LabelCellRatio">The page label's glyph-cell height, as a fraction of the modifier plate half.</param>
+/// <param name="LabelCellMinPx">The page label's glyph-cell floor, px.</param>
+/// <param name="LabelGapRatio">The page label's drop below the anchor, as a fraction of the modifier plate half.</param>
+/// <param name="HintCellRatio">A chord-hint line's glyph-cell height, as a fraction of the modifier plate half.</param>
+/// <param name="HintCellMinPx">A chord-hint line's glyph-cell floor, px.</param>
+/// <param name="HintLineStepRatio">The chord-hint line pitch, as a fraction of the hint cell height.</param>
+/// <param name="HintBaseGapRatio">The hint stack's lift above the anchor, as a fraction of the modifier plate half.</param>
 public readonly record struct BindingBarLayoutOptions(
     float ButtonSize,
-    float CenterGap,
-    float AnchorOffsetY,
+    BindingBarEdge AnchorEdge,
+    float AnchorInset,
     float GlyphOffsetRatio,
     float GlyphSizeRatio,
-    float Scale
+    float Scale,
+    float ModifierHalfRatio,
+    float ModifierSpacingRatio,
+    float ModifierGlyphRatio,
+    float LabelCellRatio,
+    float LabelCellMinPx,
+    float LabelGapRatio,
+    float HintCellRatio,
+    float HintCellMinPx,
+    float HintLineStepRatio,
+    float HintBaseGapRatio
 );
-/// <summary>One placed slot, in region-height units: x in [0, aspect], y in [0, 1], origin top-left.</summary>
-/// <param name="Center">The plate center.</param>
-/// <param name="GlyphCenter">The gamepad-glyph badge center (corner-offset from <paramref name="Center"/> by the modulo pattern).</param>
-/// <param name="HalfSize">The plate half-extent.</param>
-/// <param name="GlyphHalfSize">The glyph badge half-extent.</param>
-public readonly record struct BindingSlotPlacement(
-    Vector2 Center,
-    Vector2 GlyphCenter,
-    float HalfSize,
-    float GlyphHalfSize
-);
-/// <summary>
-/// The pure math that places one bar's twelve binding slots — two mirrored six-slot clusters around a bottom-center
-/// anchor: within a cluster the <c>index % 6</c> pattern shapes a diamond (d-pad / face buttons) with the stick press
-/// at its middle and the shoulder at its outer top; slots 6-11 mirror 0-5 across the center. Per-seat placement is
-/// the WRITER's job here (each seat's bar lays out inside its own viewport region), so the layout itself is always
-/// single-bar. No state, no rendering — indices in, placements out.
-/// </summary>
+/// <summary>The pure geometry of a bar: an anchor on a region edge, and plates at pitches from it. A plate's pitches
+/// arrive normalized to their frame (see <see cref="CompiledBindingBarLayout"/>): along the edge's axis
+/// 0 is the plate whose edge touches the inset, positive is inward; across it 0 is the group's center. Nothing here
+/// knows what a control is — the shape is the document's.</summary>
 public static class BindingBarLayout {
-    /// <summary>The number of slots a bar places — <see cref="SlotButtons"/>' length as a constant, so the binding
-    /// bar's channel reservation can be composed at compile time.</summary>
-    public const int SlotCount = 12;
-
-    /// <summary>The physical buttons a bar's twelve slots represent, in slot order (the d-pad diamond, left
-    /// shoulder, left stick, the face diamond, right shoulder, right stick). Exactly <see cref="SlotCount"/>
-    /// entries.</summary>
-    public static readonly GamepadButtons[] SlotButtons = [
-        GamepadButtons.DpadUp,
-        GamepadButtons.DpadRight,
-        GamepadButtons.DpadDown,
-        GamepadButtons.DpadLeft,
-        GamepadButtons.LeftShoulder,
-        GamepadButtons.LeftStickPress,
-        GamepadButtons.ButtonNorth,
-        GamepadButtons.ButtonWest,
-        GamepadButtons.ButtonSouth,
-        GamepadButtons.ButtonEast,
-        GamepadButtons.RightShoulder,
-        GamepadButtons.RightStickPress,
-    ];
-
-    /// <summary>The bar's bottom-center anchor, in region-height units (y-down-from-top). The modifier pips reuse
-    /// this so they sit with the bar rather than floating at region center.</summary>
-    /// <param name="aspect">The region aspect ratio (width / height).</param>
-    /// <param name="anchorOffsetY">The anchor's lift above the bottom edge, as a fraction of the height.</param>
+    /// <summary>The anchor point of an edge at its inset: the inset line's midpoint, region-height units, origin
+    /// top-left.</summary>
+    /// <param name="aspect">The region's width over its height.</param>
+    /// <param name="edge">The edge.</param>
+    /// <param name="inset">The inset from the edge, region-height units (pitches × button size).</param>
     /// <returns>The anchor point.</returns>
-    public static Vector2 BarAnchor(float aspect, float anchorOffsetY) =>
-        new(
-            x: (aspect * 0.5f),
-            y: (1f - anchorOffsetY)
-        );
-    /// <summary>Places one slot: the shared <see cref="PadPictogramLayout"/> compass geometry (button center + badge
-    /// direction from one source of truth), anchored at the bar's bottom-center point and converted to the overlay's
-    /// y-down frame. <see cref="SlotButtons"/> already feeds the LEFT cluster pre-flipped slot indices (d-pad RIGHT at
-    /// compass-west renders nearest the midpoint — the mirror puts it on the cluster's right side), per the
-    /// primitive's documented mirror semantics.</summary>
-    /// <param name="index">The layout slot index, 0-11.</param>
-    /// <param name="options">The layout tuning.</param>
-    /// <param name="aspect">The region aspect ratio (width / height).</param>
-    /// <returns>The slot's placement in region-height units.</returns>
-    public static BindingSlotPlacement Place(int index, in BindingBarLayoutOptions options, float aspect) {
-        var buttonSize = (options.ButtonSize * options.Scale);
-        var slot = PadPictogramLayout.Resolve(
-            index: index,
-            options: new PadPictogramOptions(
-                ButtonSize: buttonSize,
-                CenterGap: (options.CenterGap * options.Scale),
-                GlyphOffsetRatio: options.GlyphOffsetRatio
-            )
-        );
-        var anchor = BarAnchor(
-            aspect: aspect,
-            anchorOffsetY: options.AnchorOffsetY
-        );
-        var center = new Vector2(
-            x: (anchor.X + slot.X),
-            y: (anchor.Y - slot.YUp)
-        );
-
-        return new BindingSlotPlacement(
-            Center: center,
-            GlyphCenter: new Vector2(
-                x: (center.X + slot.GlyphX),
-                y: (center.Y - slot.GlyphYUp)
-            ),
-            GlyphHalfSize: ((buttonSize * options.GlyphSizeRatio) * 0.5f),
-            HalfSize: (buttonSize * 0.5f)
-        );
-    }
+    public static Vector2 BarAnchor(float aspect, BindingBarEdge edge, float inset) =>
+        edge switch {
+            BindingBarEdge.Top => new Vector2(x: (aspect * 0.5f), y: inset),
+            BindingBarEdge.Left => new Vector2(x: inset, y: 0.5f),
+            BindingBarEdge.Right => new Vector2(x: (aspect - inset), y: 0.5f),
+            _ => new Vector2(x: (aspect * 0.5f), y: (1f - inset)),
+        };
+    /// <summary>A plate's center from its normalized pitches: the anchor, plus half a plate so the pitch-0 plate's
+    /// edge sits on the inset line, plus the pitches scaled to the button size — x right, y up, in the overlay's
+    /// y-down frame.</summary>
+    /// <param name="anchor">The anchor (see <see cref="BarAnchor"/>).</param>
+    /// <param name="edge">The anchor's edge.</param>
+    /// <param name="pitchX">Pitches right of the anchor (for a left/right edge: inward is +/−).</param>
+    /// <param name="pitchY">Pitches above the anchor (for a top/bottom edge: inward is +/−).</param>
+    /// <param name="buttonSize">The scaled button size, region-height units.</param>
+    /// <returns>The plate center, region-height units.</returns>
+    public static Vector2 PlateCenter(Vector2 anchor, BindingBarEdge edge, float pitchX, float pitchY, float buttonSize) =>
+        edge switch {
+            BindingBarEdge.Top => new Vector2(x: (anchor.X + (pitchX * buttonSize)), y: (anchor.Y + ((0.5f - pitchY) * buttonSize))),
+            BindingBarEdge.Left => new Vector2(x: (anchor.X + ((0.5f + pitchX) * buttonSize)), y: (anchor.Y - (pitchY * buttonSize))),
+            BindingBarEdge.Right => new Vector2(x: (anchor.X - ((0.5f - pitchX) * buttonSize)), y: (anchor.Y - (pitchY * buttonSize))),
+            _ => new Vector2(x: (anchor.X + (pitchX * buttonSize)), y: (anchor.Y - ((0.5f + pitchY) * buttonSize))),
+        };
 }

@@ -22,6 +22,9 @@ internal sealed class SerialSuspendIdleGuardStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -29,11 +32,11 @@ internal sealed class SerialSuspendIdleGuardStage : IPostStage<PostContext> {
         var secondRom = SyntheticRom.Create(cartridgeType: 0x00);
 
         using var first = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: firstRom
         );
         using var second = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: secondRom
         );
 

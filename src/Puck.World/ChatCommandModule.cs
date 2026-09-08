@@ -2,6 +2,7 @@ using Puck.Commands;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 
@@ -31,22 +32,23 @@ namespace Puck.World;
 /// <c>Server.WorldOwnedWorlds.Decide</c> already applies to an undeclared cross-document delivery target,
 /// restated here for a self-write so the two never disagree about what "undeclared" means.</para>
 /// </remarks>
-internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster roster, WorldServer server) : ICommandModule {
+internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster roster, WorldServer server, WorldOverlayFacts facts) : ICommandModule {
     /// <summary>The bounded, evicting row every log/inbox declares — small enough to prove eviction with a short
     /// script, large enough to be a plausible chat window.</summary>
     private const int ChatCapacity = 8;
 
-    private static readonly WorldCellName LogRowName = WorldCellName.Parse(candidate: "chat-log");
-    private static readonly WorldCellName InboxRowName = WorldCellName.Parse(candidate: "chat-inbox");
+    private static readonly CellName LogRowName = CellName.Parse(candidate: "chat-log");
+    private static readonly CellName InboxRowName = CellName.Parse(candidate: "chat-inbox");
     private readonly WorldOwnedWorlds m_worlds = worlds;
     private readonly PlayerRoster m_roster = roster;
     private readonly WorldServer m_server = server;
+    private readonly WorldOverlayFacts m_facts = facts;
 
     private CommandResult Allow(CommandContext context, WireArgs args) {
         if (args.Count is not (1 or 2)) {
             return CommandResult.Error(output: "[chat.allow: expected <sender-id> [player]]");
         }
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: args[0].ToString(),
             name: out var senderId,
             reason: out var nameReason
@@ -109,7 +111,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         if (args.Count is not (1 or 2)) {
             return CommandResult.Error(output: "[chat.block: expected <sender-id> [player]]");
         }
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: args[0].ToString(),
             name: out var senderId,
             reason: out var nameReason
@@ -157,7 +159,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
             ? "true"
             : "false")}]");
     }
-    private static string DescribeRow(WorldIdentity identity, WorldCellName rowName) {
+    private static string DescribeRow(WorldIdentity identity, CellName rowName) {
         if (
             !identity.TryReadState(
             name: rowName,
@@ -289,10 +291,22 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         }
 
         m_worlds.Save();
+        NoteSpoke(player: player);
 
         return new CommandResult(Output: $"[chat.log: p{player} world:{identity.Id} appended{((evicted is { } victim)
             ? $" evicted={victim}"
             : string.Empty)}]");
+    }
+    // A spoken line stamps the speech clock for the body the player drives (its own body when the slot drives
+    // nothing), so a Speaking predicate or a RecentSpeaker anchor follows the driven avatar.
+    private void NoteSpoke(int player) {
+        var slot = PlayerRoster.SlotFromDisplay(number: player);
+        var target = m_roster.DriveTarget(slot: slot);
+
+        m_facts.NoteSpoke(bodyIndex: ((((uint)target) < ((uint)WorldClient.EntityCapacity))
+            ? target
+            : slot
+        ));
     }
     // The raw text tail after skipTokensIncludingVerb whitespace-delimited tokens (verb included) — the SAME
     // reconstruction-from-raw-line approach WorldStateCommandModule.RawTextTail/IdentityCommandModule.DeliverTextTail
@@ -357,7 +371,11 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         );
 
         if (!verdict.IsAllowed) {
-            error = $"[{verb}: {acting.Describe()} cannot author player {player}'s identity ({verdict.DescribeDenial()})]";
+            error = $"[{verb}: {verdict.DescribeRefusal(
+                actor: acting,
+                subject: $"player {player}'s identity",
+                verb: "author"
+            )}]";
 
             return false;
         }
@@ -370,20 +388,24 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
     // holds Drive over the player's body) BEFORE resolving the identity itself — a non-owner is refused before this
     // door tells them anything about whether the target is even joined.
     private bool TryAuthorizedIdentity(CommandContext context, in WireArgs args, int optionalAt, string verb, out int player, out WorldIdentity? identity, out string error) {
-        player = 1;
         identity = null;
 
-        if (
-            (args.Count > optionalAt) &&
-            (!args.TryInt(
-            index: optionalAt,
-            value: out player
-        ) || (player < 1) || (player > PlayerRoster.MaxSlots))
-        ) {
-            error = $"[{verb}: player must be 1..{PlayerRoster.MaxSlots}]";
+        var (slot, seatError) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: optionalAt,
+            context: context,
+            defaultSlot: 0,
+            verb: verb
+        );
+
+        if (seatError is { } refusal) {
+            player = 1;
+            error = refusal.Output;
 
             return false;
         }
+
+        player = PlayerRoster.DisplayNumber(slot: slot);
 
         return (
             TryAuthorize(
@@ -414,18 +436,24 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         return true;
     }
     private CommandResult Whisper(CommandContext context, WireArgs args) {
-        if (
-            (args.Count < 2) ||
-            !args.TryInt(
-            index: 0,
-            value: out var player
-        ) ||
-            (player < 1) ||
-            (player > PlayerRoster.MaxSlots)
-        ) {
+        if (args.Count < 2) {
             return CommandResult.Error(output: $"[chat.whisper: expected <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>]");
         }
-        if (!WorldSafeName.TryParse(
+
+        var (whisperSlot, whisperSeatError) = SeatCommandArgs.ResolveSlot(
+            args: in args,
+            at: 0,
+            context: context,
+            verb: "chat.whisper"
+        );
+
+        if (whisperSeatError is not null) {
+            return CommandResult.Error(output: $"[chat.whisper: expected <player 1..{PlayerRoster.MaxSlots}> <recipient-id> <text...>]");
+        }
+
+        var player = PlayerRoster.DisplayNumber(slot: whisperSlot);
+
+        if (!SafeName.TryParse(
             candidate: args[1].ToString(),
             name: out var recipientId,
             reason: out var nameReason
@@ -467,6 +495,10 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         );
         var receipt = m_worlds.Submit(submission: submission);
 
+        if (receipt.Accepted) {
+            NoteSpoke(player: player);
+        }
+
         return new CommandResult(Output: $"[chat.whisper: from=world:{identity.Id} to=world:{recipientId} verdict={(receipt.Accepted
             ? "accepted"
             : "refused")} reason={receipt.Reason}]");
@@ -504,7 +536,7 @@ internal sealed class ChatCommandModule(WorldOwnedWorlds worlds, PlayerRoster ro
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "chat.log",
-            description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: chat.log <player 1..{PlayerRoster.MaxSlots}> <text...>. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {WorldStateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
+            description: $"Appends one message to the acting player's OWN bounded, evicting chat-log row: chat.log <player 1..{PlayerRoster.MaxSlots}> <text...>. <player> is REQUIRED and LEADING (never a trailing optional index — free text could otherwise be misread as a player token); <text...> is the raw tail, spaces included, capped at {StateCapacity.MaxTextValueLength} UTF-16 code units. Refuses by name with the remedy (declare chat.inbox first) if chat-log is undeclared. Owner-only, identically to chat.inbox. The echo names the evicted key when the write pushed the row past its {ChatCapacity}-entry capacity.",
             handler: Log,
             routing: CommandRouting.Simulation
         );

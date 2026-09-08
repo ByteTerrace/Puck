@@ -258,7 +258,8 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 mirror: mirror,
                 lease: attach(mirror),
                 sourceDefinition: () => intermediate.Definition,
-                sourceDescription: $"{m_sourceInstanceName}/{key}"
+                sourceDescription: $"{m_sourceInstanceName}/{key}",
+                narrationHub: m_instances.Narration
             );
             m_handles[key] = existing;
         }
@@ -406,7 +407,8 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 mirror: mirror,
                 lease: lease,
                 sourceDefinition: () => source.Server.Definition,
-                sourceDescription: $"{m_sourceInstanceName}/{adjacencyName}"
+                sourceDescription: $"{m_sourceInstanceName}/{adjacencyName}",
+                narrationHub: m_instances.Narration
             );
             m_handles[adjacencyName] = handle;
         }
@@ -425,18 +427,18 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     // One adjacency's held observation: the mirror (kept live for the row's lifetime), the attach lease, and the
     // counterpart frame/solid field cache — refreshed only when the mirror's own delivery revision moves.
     private readonly record struct HandleIdentity(string Destination, string InstanceName, ulong GenerationId, string Counterpart, WorldFaceFrame SourceFrame);
-    private sealed class Handle(HandleIdentity identity, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription) : IWorldAdjacencyNeighbourContact, IDisposable {
-        private readonly bool[] m_active = new bool[WorldPopulationLimits.CapacityCeiling];
-        private readonly Protocol.WorldEntityAddress[] m_addresses = new Protocol.WorldEntityAddress[WorldPopulationLimits.CapacityCeiling];
-        private readonly System.Numerics.Vector3[] m_previousPositions = new System.Numerics.Vector3[WorldPopulationLimits.CapacityCeiling];
-        private readonly System.Numerics.Quaternion[] m_previousOrientations = new System.Numerics.Quaternion[WorldPopulationLimits.CapacityCeiling];
-        private readonly System.Numerics.Vector3[] m_currentPositions = new System.Numerics.Vector3[WorldPopulationLimits.CapacityCeiling];
-        private readonly System.Numerics.Quaternion[] m_currentOrientations = new System.Numerics.Quaternion[WorldPopulationLimits.CapacityCeiling];
-        private readonly System.Numerics.Vector3[] m_colors = new System.Numerics.Vector3[WorldPopulationLimits.CapacityCeiling];
-        private readonly WorldLook[] m_looks = new WorldLook[WorldPopulationLimits.CapacityCeiling];
-        private readonly byte[] m_catalogRigs = new byte[WorldPopulationLimits.CapacityCeiling];
-        private readonly FixedWorldCollider?[] m_colliders = new FixedWorldCollider?[WorldPopulationLimits.CapacityCeiling];
-        private readonly WorldBodyContactMode[] m_bodyContacts = new WorldBodyContactMode[WorldPopulationLimits.CapacityCeiling];
+    private sealed class Handle(HandleIdentity identity, WorldSessionMirror mirror, IDisposable lease, Func<WorldDefinition> sourceDefinition, string sourceDescription, WorldOutputHub narrationHub) : IWorldAdjacencyNeighbourContact, IDisposable {
+        private readonly bool[] m_active = new bool[WorldBodiesLimits.CapacityCeiling];
+        private readonly Protocol.WorldEntityAddress[] m_addresses = new Protocol.WorldEntityAddress[WorldBodiesLimits.CapacityCeiling];
+        private readonly System.Numerics.Vector3[] m_previousPositions = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
+        private readonly System.Numerics.Quaternion[] m_previousOrientations = new System.Numerics.Quaternion[WorldBodiesLimits.CapacityCeiling];
+        private readonly System.Numerics.Vector3[] m_currentPositions = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
+        private readonly System.Numerics.Quaternion[] m_currentOrientations = new System.Numerics.Quaternion[WorldBodiesLimits.CapacityCeiling];
+        private readonly System.Numerics.Vector3[] m_colors = new System.Numerics.Vector3[WorldBodiesLimits.CapacityCeiling];
+        private readonly WorldLook[] m_looks = new WorldLook[WorldBodiesLimits.CapacityCeiling];
+        private readonly byte[] m_catalogRigs = new byte[WorldBodiesLimits.CapacityCeiling];
+        private readonly FixedWorldCollider?[] m_colliders = new FixedWorldCollider?[WorldBodiesLimits.CapacityCeiling];
+        private readonly WorldBodyContactMode[] m_bodyContacts = new WorldBodyContactMode[WorldBodiesLimits.CapacityCeiling];
         private int m_builtRevision = -1;
         private string m_fieldReason = string.Empty;
         private string m_pinnedFieldReason = string.Empty;
@@ -463,7 +465,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         );
         public WorldDefinition Definition => (m_pinnedDefinition ?? mirror.Definition);
         public int DefinitionRevision => mirror.DefinitionRevision;
-        public int EntityCapacity => WorldPopulationLimits.CapacityCeiling;
+        public int EntityCapacity => WorldBodiesLimits.CapacityCeiling;
         public float InterpolationAlpha => (m_hasPin
             ? WorldSessionMirror.ResolveInterpolationAlpha(
                 arrivalTimestamp: m_pinnedArrivalTimestamp,
@@ -517,7 +519,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                             Truncated: false
                         )
                     );
-                    var collisionDefinition = mirror.Definition with { PlacementsRaw = selection.Placements };
+                    var collisionDefinition = mirror.Definition with { PlacementRowsRaw = selection.Placements };
 
                     m_field = (WorldSolidField.TryBuild(
                         built: out var built,
@@ -529,7 +531,12 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                     );
 
                     if (selection.Truncated) {
-                        Console.Error.WriteLine(value: $"[world.adjacency: '{sourceDescription}' neighbour geometry truncated identically for collision and rendering at {WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid placements]");
+                        if (narrationHub.HasNarrationSink) {
+                            narrationHub.Narrate(
+                                channel: "world.adjacency",
+                                text: $"[world.adjacency: '{sourceDescription}' neighbour geometry truncated identically for collision and rendering at {WorldAdjacencyGeometry.MaximumPlacementsPerBand} solid placements]"
+                            );
+                        }
                     }
                 } else {
                     m_frameResolved = false;

@@ -15,31 +15,31 @@ public readonly record struct SturmianReturnVector(int M, int Ell, int K);
 /// <summary>The exact colored and uncolored return maxima at one eventual phase.</summary>
 public readonly record struct SturmianReturnPhaseValue(
     SturmianCongruencePhase Matrix,
-    QuadraticSurd Delta,
-    QuadraticSurd X,
-    QuadraticSurd Colored,
-    QuadraticSurd Uncolored,
+    RealQuadratic Delta,
+    RealQuadratic X,
+    RealQuadratic Colored,
+    RealQuadratic Uncolored,
     SturmianReturnVector ColoredWitness,
     SturmianReturnVector UncoloredWitness
 );
 /// <summary>An exact eventual return spectrum for one congruence component.</summary>
 public sealed record SturmianReturnSpectrum(
     IReadOnlyList<SturmianReturnPhaseValue> Phases,
-    QuadraticSurd ColoredLimsup,
-    QuadraticSurd UncoloredLimsup
+    RealQuadratic ColoredLimsup,
+    RealQuadratic UncoloredLimsup
 );
 /// <summary>The least spectrum among every finite-preperiod congruence component.</summary>
 public sealed record SturmianComponentMinimum(
     int CycleCount,
     SturmianReturnSpectrum Minimum,
     SturmianCongruencePhase Representative,
-    IReadOnlyDictionary<QuadraticSurd, int> Histogram
+    IReadOnlyDictionary<RealQuadratic, int> Histogram
 );
 /// <summary>A Fibonacci component minimum computed by the optimized phase-independent path.</summary>
 public sealed record FibonacciFastComponentMinimum(
     int CycleCount,
-    QuadraticSurd Minimum,
-    IReadOnlyDictionary<QuadraticSurd, int> Histogram
+    RealQuadratic Minimum,
+    IReadOnlyDictionary<RealQuadratic, int> Histogram
 );
 /// <summary>
 /// Exact return-spectrum analysis for eventually periodic Sturmian directives under two
@@ -87,21 +87,21 @@ public static class SturmianReturnSpectrumResearch {
         );
     }
     private static IReadOnlyList<ReturnCandidate> BuildCandidates(
-        QuadraticSurd delta,
-        QuadraticSurd x,
+        RealQuadratic delta,
+        RealQuadratic x,
         int nextDigit,
         int determinant
     ) {
         var candidates = new List<ReturnCandidate>();
 
         for (var m = 0; (m < nextDigit); ++m) {
-            var numerator = (QuadraticSurd.Rational(value: (1 + m)) + x);
-            var tail = (delta - QuadraticSurd.Rational(value: m));
-            var firstWeight = (QuadraticSurd.Rational(value: m) + x);
+            var numerator = (RealQuadratic.Rational(value: (1 + m)) + x);
+            var tail = (delta - RealQuadratic.Rational(value: m));
+            var firstWeight = (RealQuadratic.Rational(value: m) + x);
             var maximumTotal = WeightedReturnSearchBound(
                 determinant: determinant,
                 firstWeight: firstWeight,
-                secondWeight: QuadraticSurd.One
+                secondWeight: RealQuadratic.One
             );
 
             for (var ell = 0; (ell <= maximumTotal); ++ell) {
@@ -112,12 +112,12 @@ public static class SturmianReturnSpectrumResearch {
                         K: k,
                         M: m
                     );
-                    var stripError = ((QuadraticSurd.Rational(value: ell) * tail) -
-                        QuadraticSurd.Rational(value: k)).Abs();
+                    var stripError = ((RealQuadratic.Rational(value: ell) * tail) -
+                        RealQuadratic.Rational(value: k)).Abs();
 
-                    if (!(stripError < (tail + QuadraticSurd.One))) { continue; }
-                    var denominator = (QuadraticSurd.Rational(value: (k + (ell * m))) +
-                        (QuadraticSurd.Rational(value: ell) * x));
+                    if (!(stripError < (tail + RealQuadratic.One))) { continue; }
+                    var denominator = (RealQuadratic.Rational(value: (k + (ell * m))) +
+                        (RealQuadratic.Rational(value: ell) * x));
 
                     candidates.Add(item: new ReturnCandidate(
                         Value: (numerator / denominator),
@@ -152,7 +152,7 @@ public static class SturmianReturnSpectrumResearch {
                 currentPhase,
                 step: -1
             );
-            var x = (QuadraticSurd.One / reversed);
+            var x = (RealQuadratic.One / reversed);
             var colored = BuildCandidates(
                 delta,
                 x,
@@ -359,8 +359,8 @@ public static class SturmianReturnSpectrumResearch {
     }
     private static int WeightedReturnSearchBound(
         int determinant,
-        QuadraticSurd firstWeight,
-        QuadraticSurd secondWeight
+        RealQuadratic firstWeight,
+        RealQuadratic secondWeight
     ) {
         // Among D+1 consecutive factor boundaries, two have the same value in the
         // order-D coloring group. Their intervening factor has at most D letters and
@@ -378,7 +378,7 @@ public static class SturmianReturnSpectrumResearch {
         if (minimum.Sign <= 0) {
             throw new InvalidOperationException(message: "return weights must be positive");
         }
-        var bound = ((QuadraticSurd.Rational(value: determinant) * maximum) / minimum).Ceiling();
+        var bound = ((RealQuadratic.Rational(value: determinant) * maximum) / minimum).Ceiling();
 
         if (bound > int.MaxValue) {
             throw new InvalidOperationException(message: "weighted return search bound exceeds Int32");
@@ -408,7 +408,7 @@ public static class SturmianReturnSpectrumResearch {
         SturmianReturnSpectrum? minimum = null;
         var representative = default(SturmianCongruencePhase);
         var cycleCount = 0;
-        var histogram = new Dictionary<QuadraticSurd, int>();
+        var histogram = new Dictionary<RealQuadratic, int>();
         var phaseData = BuildPhaseData(
             determinant: checked((leftColoringPeriod * rightColoringPeriod)),
             period: period
@@ -570,18 +570,18 @@ public static class SturmianReturnSpectrumResearch {
         var determinant = checked((leftColoringPeriod * rightColoringPeriod));
         var tau = FibonacciResearch.GoldenRatio;
         var tauSquared = (tau * tau);
-        var candidates = new List<(SturmianReturnVector Vector, QuadraticSurd Value)>();
+        var candidates = new List<(SturmianReturnVector Vector, RealQuadratic Value)>();
         var maximumTotal = WeightedReturnSearchBound(
             determinant: determinant,
-            firstWeight: QuadraticSurd.One,
+            firstWeight: RealQuadratic.One,
             secondWeight: tau
         );
 
         for (var ell = 0; (ell <= maximumTotal); ++ell) {
             for (var k = 0; (k <= (maximumTotal - ell)); ++k) {
                 if ((ell + k) == 0) { continue; }
-                var stripError = ((QuadraticSurd.Rational(value: ell) * tau) -
-                    QuadraticSurd.Rational(value: k)).Abs();
+                var stripError = ((RealQuadratic.Rational(value: ell) * tau) -
+                    RealQuadratic.Rational(value: k)).Abs();
 
                 if (!(stripError < tauSquared)) { continue; }
                 candidates.Add(item: (
@@ -590,8 +590,8 @@ public static class SturmianReturnSpectrumResearch {
                     K: k,
                     M: 0
                 ),
-                    (tauSquared / (QuadraticSurd.Rational(value: ell) +
-                        (QuadraticSurd.Rational(value: k) * tau)))
+                    (tauSquared / (RealQuadratic.Rational(value: ell) +
+                        (RealQuadratic.Rational(value: k) * tau)))
                 ));
             }
         }
@@ -599,9 +599,9 @@ public static class SturmianReturnSpectrumResearch {
 
         var common = leftColoringPeriod.GreatestCommonDivisor(other: rightColoringPeriod);
         var visited = new HashSet<CongruenceState>();
-        QuadraticSurd? minimum = null;
+        RealQuadratic? minimum = null;
         var cycleCount = 0;
-        var histogram = new Dictionary<QuadraticSurd, int>();
+        var histogram = new Dictionary<RealQuadratic, int>();
 
         for (var a = 0; (a < leftColoringPeriod); ++a) {
             for (var b = 0; (b < leftColoringPeriod); ++b) {
@@ -641,12 +641,12 @@ public static class SturmianReturnSpectrumResearch {
 
                         if (visited.Contains(item: start)) { continue; }
 
-                        QuadraticSurd? cycleMaximum = null;
+                        RealQuadratic? cycleMaximum = null;
                         var state = start;
 
                         do {
                             visited.Add(item: state);
-                            QuadraticSurd? phaseValue = null;
+                            RealQuadratic? phaseValue = null;
 
                             foreach (var candidate in candidates) {
                                 var ell = candidate.Vector.Ell;
@@ -703,7 +703,7 @@ public static class SturmianReturnSpectrumResearch {
         );
     }
     /// <summary>Returns the exact positive periodic continued-fraction tail at a phase.</summary>
-    public static QuadraticSurd PeriodicTail(
+    public static RealQuadratic PeriodicTail(
         IReadOnlyList<int> period,
         int start,
         int step = 1
@@ -745,7 +745,7 @@ public static class SturmianReturnSpectrumResearch {
         ) {
             throw new InvalidOperationException(message: "period matrix did not define a positive quadratic tail");
         }
-        return QuadraticSurd.Create(
+        return RealQuadratic.Create(
             denominator: (2 * product.C),
             radicand: discriminant,
             rationalNumerator: (product.A - product.D),
@@ -929,14 +929,14 @@ public static class SturmianReturnSpectrumResearch {
     private readonly record struct PrefixState(int PNm2, int PNm1, int QNm2, int QNm1);
     private readonly record struct PrefixParent(PrefixState Previous, int Digit);
     private sealed record PhaseData(
-        QuadraticSurd Delta,
-        QuadraticSurd X,
+        RealQuadratic Delta,
+        RealQuadratic X,
         IReadOnlyList<ReturnCandidate> ColoredCandidates,
         ReturnCandidate Uncolored
     );
     private readonly record struct ReturnCandidate(
         SturmianReturnVector Vector,
-        QuadraticSurd Value
+        RealQuadratic Value
     );
     private readonly record struct IntegerMatrix2(
         BigInteger A,

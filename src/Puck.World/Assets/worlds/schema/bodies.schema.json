@@ -1,0 +1,118 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "localSeats": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "seatActivation": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "Whether a local seat activates automatically at boot (Eager) or waits for a claim (OnDemand) \u2014 the per-seat authored policy SeatActivation declares. Both doors converge on the identical Server.WorldPopulation.ActivateSeat call through the same SessionRequest.Join/WorldServer.ApplySession session-join seam regardless of which policy admitted the seat \u2014 a seat activated on demand (player.join, or a controller\u0027s own hot-plug first touch via Client.PlayerRoster.ResolveDeviceSlot) is indistinguishable from one activated at boot the instant it is active.",
+        "enum": [
+          "Eager",
+          "OnDemand"
+        ],
+        "title": "SeatActivationPolicy"
+      }
+    },
+    "networkPlayers": {
+      "type": "integer"
+    },
+    "defaultPeerSource": {
+      "$ref": "./common.schema.json#/$defs/IntentSource"
+    },
+    "seatSpawns": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "distribution": {
+      "$ref": "./common.schema.json#/$defs/WorldDistribution"
+    },
+    "peerVariation": {
+      "$ref": "./common.schema.json#/$defs/WorldPopulationVariation"
+    },
+    "seatVariation": {
+      "$ref": "./common.schema.json#/$defs/WorldPopulationVariation"
+    },
+    "peerColors": {
+      "$ref": "./common.schema.json#/$defs/WorldSequenceNullable"
+    },
+    "capacity": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "reconnectGraceSeconds": {
+      "type": "number"
+    },
+    "capacityRow": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "disclosure": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "mode": {
+          "description": "Which bodies an observer is delivered.",
+          "enum": [
+            "All",
+            "Radius",
+            "SelfOnly"
+          ],
+          "default": "All",
+          "title": "WorldObserverDisclosureMode"
+        },
+        "radius": {
+          "description": "The disclosure radius in metres for Radius; authored only for that mode.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "updateSeconds": {
+          "description": "The minimum interval between remote projection snapshots. Zero requests every authority tick; the default is 0.03 seconds (30 Hz on the standard 240 Hz authority after whole-step quantization). Local in-process sinks are unaffected.",
+          "type": "number",
+          "default": 0.03
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldObserverDisclosure"
+    },
+    "scaleRow": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sleepAfterTicks": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldBodiesDefaults"
+}

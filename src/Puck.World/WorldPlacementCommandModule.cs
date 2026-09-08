@@ -2,12 +2,13 @@ using System.Globalization;
 using System.Text;
 using Puck.Commands;
 using Puck.World.Server;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
 /// <summary>
-/// The inhabitation and creation-facet read-back surface — six Immediate censuses:
-/// <c>world.inhabitants</c>, <c>world.faces</c>, <c>world.attachments</c>, <c>world.portals</c>,
+/// The inhabitation and creation-facet read-back surface — seven Immediate censuses:
+/// <c>world.placements</c>, <c>world.inhabitants</c>, <c>world.faces</c>, <c>world.attachments</c>, <c>world.portals</c>,
 /// <c>world.adjacencies</c>, <c>world.destinations</c>. A placement's <c>inhabit</c> and <c>faceSources</c> facets ride its whole row through
 /// the general <see cref="WorldRowCommandModule"/> (<c>world.row.set placements &lt;json&gt;</c>), and
 /// <c>world.placement.get</c> (<see cref="WorldMutationCommandModule"/>) is the round-trip twin that harvests its
@@ -20,7 +21,7 @@ namespace Puck.World;
 /// (see <see cref="TryResolveInstance"/>). <c>world.faces</c> has no instance-addressed form: screens, the
 /// derived-face index space, and session binding are the boot instance's own presentation state, and a spawned
 /// instance carries neither a client nor a real machine host to bind them from.</remarks>
-internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopulation population, WorldScreenBinder binder, WorldInstanceHost instances, WorldSessionResolver resolver) : ICommandModule {
+internal sealed partial class WorldPlacementCommandModule(WorldServer server, WorldPopulation population, WorldScreenBinder binder, WorldInstanceHost instances, WorldSessionResolver resolver, IServerLink link, WorldDeferredVerbEchoes echoes) : ICommandModule {
     // The resolver's own live state for one destination row — see WorldSessionResolver.DescribeActive. Occupancy
     // reads back "?" for a generation whose instance is no longer running (a stale echo, not a live one — the
     // resolver's own cache entry is cleared the moment WorldInstanceHost.TryStop/ReapIfEmpty actually retires it, so
@@ -125,7 +126,17 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
                     addresses.Add(item: neighbour.EntityAddress(index: index).ToString());
                 }
             }
-            _ = builder.Append(value: $" state=open overlap={overlap} tick={neighbour.SnapshotTick} entities={((addresses.Count == 0)
+            var composed = (instances.TryDescribeDocumentSharing(
+                name: neighbour.Authority,
+                shared: out var documentShared
+            )
+                ? (documentShared
+                    ? "shared"
+                    : "fresh")
+                : "unknown"
+            );
+
+            _ = builder.Append(value: $" state=open overlap={overlap} tick={neighbour.SnapshotTick} composed={composed} entities={((addresses.Count == 0)
                 ? "none"
                 : string.Join(
                     separator: ",",
@@ -321,12 +332,12 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
                 id: placementId,
                 placements: placements
             );
-            var creationId = (placement?.CreationId ?? "?");
+            var prototypeId = (placement?.PrototypeId ?? "?");
             var kit = ((placement?.Inhabit?.Kit) ?? "(locomotion)");
             var source = (placement?.Inhabit?.Source.ToString() ?? "?");
             var position = body.Position;
 
-            _ = builder.Append(value: $" {placementId}[creation={creationId} kit={kit} source={source} body={index} pos={position.X:0.0},{position.Y:0.0},{position.Z:0.0}]");
+            _ = builder.Append(value: $" {placementId}[creation={prototypeId} kit={kit} source={source} body={index} pos={position.X:0.0},{position.Y:0.0},{position.Z:0.0}]");
         }
 
         return builder.Append(value: (any
@@ -343,7 +354,7 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
 
         var seats = new List<string>();
 
-        for (var seat = 0; (seat < WorldPopulationLimits.LocalSeatCount); seat++) {
+        for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
             if (instance.PortalOccupancy.IsInside(
                 faceName: faceName,
                 placementId: placementId,
@@ -487,69 +498,61 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
             return false;
         }
 
-        if (!args[0].StartsWith(
-            comparisonType: StringComparison.OrdinalIgnoreCase,
-            value: InstanceTokenPrefix
-        )) {
+        if (!WorldArgs.IsInstanceToken(token: args[0])) {
             instance = null;
             error = CommandResult.Error(output: $"[{verb}: unrecognized '{args[0]}' — expected [instance:<name>]]");
 
             return false;
         }
 
-        var name = args[0][InstanceTokenPrefix.Length..].ToString();
-
-        if (string.IsNullOrWhiteSpace(value: name)) {
-            instance = null;
-            error = CommandResult.Error(output: $"[{verb}: instance: must name a running instance — see world.instance.status]");
-
-            return false;
-        }
-
-        if (string.Equals(
-            a: name,
-            b: WorldInstanceHost.BootInstanceName,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            instance = null;
-            error = CommandResult.Error(output: $"[{verb}: '{WorldInstanceHost.BootInstanceName}' is the world this process booted with — omit instance: to address it]");
-
-            return false;
-        }
-
-        if (
-            !instances.TryGet(
-            instance: out var resolved,
-            name: name
-        ) ||
-            (resolved is null)
-        ) {
-            instance = null;
-            error = CommandResult.Error(output: $"[{verb}: no instance named '{name}' — see world.instance.status]");
-
-            return false;
-        }
-
-        instance = resolved;
-        error = null;
-
-        return true;
+        return WorldArgs.TryResolveInstance(
+            token: args[0],
+            verb: verb,
+            instances: instances,
+            instance: out instance,
+            error: out error
+        );
     }
     // Splices ` instance:<name>` just inside a bracketed echo's closing ']' — the same surgery
     // PlayerCommandModule.WithInstanceTag uses, so a script can tell which instance answered. A no-op for the boot
     // instance (null): its own echoes carry no tag.
     private static string WithInstanceTag(string text, WorldInstance? instance) =>
-        (((instance is not null) && text.EndsWith(value: ']'))
-            ? $"{text[..^1]} instance:{instance.Name}]"
+        ((instance is not null)
+            ? CommandEcho.SpliceTag(
+                prefix: WorldArgs.InstanceTokenPrefix,
+                text: text,
+                value: instance.Name
+            )
             : text
         );
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        foreach (var command in ReflowCommands()) { yield return command; }
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.placements",
+            description: "Reports the placement census (Immediate; reads the settled state after any pending mutation): one entry per placement row — id, prototypeId, resolved world position/yaw (the parent chain composed), scale, parent, and every facet it carries; a dealt template echoes 'dealt from <row> (<children present> of <row capacity>)' and a dealt child 'dealt by <template>'. A trailing instance:<name> token reads a named running instance's own document instead of the boot world's.",
+            handler: (_, args) => {
+                if (!TryResolveInstance(
+                    args: in args,
+                    error: out var tokenError,
+                    instance: out var instance,
+                    verb: "world.placements"
+                )) {
+                    return tokenError!.Value;
+                }
+
+                return new CommandResult(Output: WithInstanceTag(
+                    text: ((instance?.Server ?? server).DescribePlacements()),
+                    instance: instance
+                ));
+            }
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.inhabitants",
-            description: "Reports the inhabited-placement census (Immediate; reads the settled state after any pending mutation): one line per inhabited body — placementId, creationId, kit, source, bodyIndex, position. A trailing instance:<name> token reads a named running instance's own population instead of the boot world's (see world.instance.status) — the same grammar every instance-addressed read-back shares.",
+            description: "Reports the inhabited-placement census (Immediate; reads the settled state after any pending mutation): one line per inhabited body — placementId, prototypeId, kit, source, bodyIndex, position. A trailing instance:<name> token reads a named running instance's own population instead of the boot world's (see world.instance.status) — the same grammar every instance-addressed read-back shares.",
             handler: (_, args) => {
                 if (!TryResolveInstance(
                     args: in args,
@@ -575,14 +578,11 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
                     return new CommandResult(Output: DescribeFaces());
                 }
 
-                if (args[0].StartsWith(
-                    comparisonType: StringComparison.OrdinalIgnoreCase,
-                    value: InstanceTokenPrefix
-                )) {
+                if (WorldArgs.IsInstanceToken(token: args[0])) {
                     return CommandResult.Error(output: "[world.faces: no instance-addressed form — screens are the boot instance's own; see world.inhabitants/world.attachments/world.portals/world.destinations for instance:<name>]");
                 }
 
-                return CommandResult.Error(output: $"[world.faces: unrecognized '{args[0]}' — expected no arguments]");
+                return CommandResult.RequireNoArguments(args: args, verb: "world.faces")!.Value;
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -666,8 +666,4 @@ internal sealed class WorldPlacementCommandModule(WorldServer server, WorldPopul
             }
         );
     }
-
-    // The reserved trailing token every instance-addressed read-back in this module shares — the same spelling
-    // PlayerCommandModule.TryStripInstanceToken and WorldRateCommandModule establish.
-    private const string InstanceTokenPrefix = "instance:";
 }

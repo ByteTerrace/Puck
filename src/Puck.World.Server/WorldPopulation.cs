@@ -1,6 +1,10 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics;
+using Puck.Physics.Fields;
+using Puck.Physics.Motion;
+using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
@@ -8,7 +12,7 @@ namespace Puck.World.Server;
 /// <summary>What a <see cref="WorldPopulation"/> entry stands for — the local seats driven by client-submitted intents,
 /// and the peer slice that hosts every other joined body: remote-human peers and the loopback-joined inhabitants alike.
 /// Every entry is an authoritative body advanced from a <see cref="PlayerIntent"/>; a driver (a client seat, a network
-/// peer, AI, an inhabitant's attend producer, a replay tape) may only produce intents, never write a pose. An inhabitant
+/// peer, AI, an inhabitant's sensing steering producer, a replay tape) may only produce intents, never write a pose. An inhabitant
 /// is not a separate kind — it is a <see cref="NetworkPeer"/> whose body is bound to a placement (see
 /// <see cref="WorldPopulation"/>), joined over the loopback link exactly as a peer is. The render path is driven by kind,
 /// so it never learns who is driving an entry.</summary>
@@ -17,7 +21,7 @@ internal enum PopulationKind {
     /// per-tick submitted intent.</summary>
     LocalSeat,
 
-    /// <summary>Slots 4..127 — a joined peer body. A remote-human peer owns its own <see cref="WorldBody"/> state and,
+    /// <summary>Slots 4 through capacity minus one — a joined peer body. A remote-human peer owns its own <see cref="WorldBody"/> state and,
     /// until a transport supplies its intent stream, runs its authored default producer; an inhabited peer (its
     /// entry carries a placement back-reference) is driven by its authored source. Admitted while a slot is free,
     /// bounded only by the entity table itself.</summary>
@@ -34,17 +38,17 @@ internal enum PopulationKind {
 /// <see cref="Revision"/> bumps whenever the declared set or palette changes — a seat joining, leaving, or recoloring,
 /// or the simulated count moving — never on a per-tick pose write, so the client rebuilds the avatar program exactly
 /// when the declared set moves. The simulated
-/// palette and wander seeds are baked once at construction (index-derived, no RNG), so activating an entry only flips
+/// palette and producer seeds are baked once at construction (index-derived, no RNG), so activating an entry only flips
 /// its <c>Active</c> flag and creates its own <see cref="WorldBody"/> within the frozen render envelope.
 /// </para>
 /// <para>
 /// <b>Simulation authority.</b> Every entry is an authoritative body: an entry owns its own <see cref="WorldBody"/>
 /// (created on activation, dropped on deactivation) and is advanced from an intent.
-/// <see cref="AdvanceSimulated"/> shapes each peer's wander into a submitted intent
+/// <see cref="AdvanceSimulated"/> shapes each peer's producer output into a submitted intent
 /// (<see cref="WorldBody.SubmitIntent"/>) and calls <see cref="WorldBody.Advance"/>;
 /// <see cref="AdvanceSeats"/> advances the seat bodies from the intents the client submitted this tick. Poses flow out
 /// of the sim, never in: the only outside writes into a body are the server-authoritative spawn at activation and the
-/// command wire (<c>player.pose</c> / <c>fly</c> / <c>stop</c>). A live <c>player.fly</c> tape overrides
+/// command wire (<c>body.pose</c> / <c>fly</c> / <c>stop</c>). A live <c>body.fly</c> tape overrides
 /// the submitted intent (tape &gt; submitted in the intent merge).
 /// </para>
 /// <para>
@@ -53,6 +57,13 @@ internal enum PopulationKind {
 /// </para>
 /// </remarks>
 public sealed partial class WorldPopulation {
+    /// <summary>The 0-based entity index for a 1-based display number — the body-axis peer of
+    /// <c>Client.PlayerRoster.SlotFromDisplay</c>, for a console verb that addresses an instance-targeted body by its
+    /// 1-based token.</summary>
+    /// <param name="number">The 1-based display number.</param>
+    /// <returns>The 0-based entity index.</returns>
+    public static int EntityFromDisplay(int number) => (number - 1);
+
     /// <summary>Gets the currently configured adjacency resolver — see <see cref="ConfigureAdjacencies"/>, the
     /// one writer.</summary>
     public IWorldAdjacencySource? Adjacencies => m_adjacencies;
@@ -76,18 +87,26 @@ public sealed partial class WorldPopulation {
     public IReadOnlyList<DurableStateOutput> DurableStateOutputs => m_durableStateOutputs;
     /// <summary>Number of pairs admitted to narrow phase by the most recently completed broadphase.</summary>
     public int DynamicContactNarrowPairs { get; private set; }
+    /// <summary>Number of x-overlapping sweep candidates inspected by the latest dynamic-body solve.</summary>
+    public int DynamicContactCandidates { get; private set; }
+    /// <summary>Number of solid bodies whose latest sweep search exhausted its candidate budget.</summary>
+    public int DynamicContactLimitedBodies { get; private set; }
     /// <summary>Number of solid-body pairs before broadphase pruning in the most recently completed solve.</summary>
     public int DynamicContactPotentialPairs { get; private set; }
-    /// <summary>Number of overlaps resolved by the most recently completed dynamic-body solve.</summary>
+    /// <summary>Number of overlaps resolved by the most recently completed dynamic-body solve, summed over every
+    /// pass <see cref="RigidPairPassesThisTick"/> counts.</summary>
     public int DynamicContactResolvedPairs { get; private set; }
+    /// <summary>Number of full broadphase-plus-narrowphase sweeps the most recently completed dynamic-body solve
+    /// actually ran: one first pass, plus up to <c>collision.bodyContacts.rigidPairIterationCeiling - 1</c> extra
+    /// sweeps over the SAME bodies' now-current positions — the count is derived DOWN from that ceiling by how many
+    /// pairs the first pass resolved through the rigid impulse path (<c>collision.bodyContacts.rigidPairIterationBudget</c>
+    /// divided by that count), so a lightly loaded tick gets every authored pass and a crowded one stays bounded; an
+    /// extra sweep that resolves nothing stops the run early.</summary>
+    public int RigidPairPassesThisTick { get; private set; }
     /// <summary>The <c>generate</c> effect firings staged by the most recently completed tick's advance — drained and
     /// enqueued through the ordinary mutation pipeline by <c>WorldServer.Step</c>, mirroring
     /// <see cref="DesignationOutputs"/>'s own shape.</summary>
     public IReadOnlyList<WorldGeneratorInvocation> GeneratorInvocationOutputs => m_generatorInvocations;
-    /// <summary>The <c>judge</c> effect firings staged by the most recently completed tick's advance — drained and
-    /// graded by <c>WorldServer.Step</c> immediately after the whole population advance, mirroring
-    /// <see cref="GeneratorInvocationOutputs"/>'s own shape.</summary>
-    public IReadOnlyList<WorldJudgeInvocation> JudgeInvocationOutputs => m_judgeInvocations;
     /// <summary>The live look rows (the authored rows, or the implicit single catalog look) the census resolves against.</summary>
     public IReadOnlyList<WorldLook> LookRows => m_lookRows;
     /// <summary>The number of entity-table slots currently eligible for destination-authored census bodies. Inhabitants,
@@ -118,15 +137,47 @@ public sealed partial class WorldPopulation {
     /// without a second boot build. A live rebuild instead receives the server's field back through
     /// <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>.</summary>
     public WorldSolidField? SolidField => (m_contactField as WorldSolidField);
+    /// <summary>Gets or sets the hub this population narrates through, the owning server's own; <see langword="null"/>
+    /// narrates nothing.</summary>
+    public WorldOutputHub? NarrationHub { get; set; }
+    /// <summary>Gets a counter a sleeping body compares against the value it last observed to decide whether the
+    /// contact surface it sleeps against could now answer a query differently — an install (a document rebuild or an
+    /// adjacency source (re)configured), an attached solid row RefreshAttached found at a new pose
+    /// (<see cref="WorldColliderSet.AttachedRevision"/>), or a field-lattice repaint/medium step
+    /// (<see cref="FieldLattice.Revision"/>). Every term only increases, so an unchanged sum proves none of them
+    /// changed since the value was last observed.</summary>
+    public ulong ContactFieldVersion => unchecked(
+        m_contactFieldInstallVersion +
+        ((m_contactField as WorldColliderSet)?.AttachedRevision ?? 0UL) +
+        ((ulong)(m_fields?.Revision ?? 0))
+    );
+    /// <summary>Gets the authored engine-tick idle floor (<c>bodies.sleepAfterTicks</c>) before a non-seat body's
+    /// motion program and contact solve stop running — 0 means never sleep.</summary>
+    public ulong SleepAfterTicks => m_sleepAfterTicks;
     /// <summary>The world's compiled target-register table sharing the Drive reach-mask ordinal space.</summary>
     public WorldTargetRegisterTable TargetRegisters => m_targets;
-
     /// <summary>Gets this world's reserved local-seat count — the document's own <c>population.localSeats</c>
     /// declaration, always at the front of the entity table, up to the host's seat ceiling
-    /// (<see cref="WorldPopulationLimits.LocalSeatCount"/>).</summary>
+    /// (<see cref="WorldBodiesLimits.LocalSeatCount"/>).</summary>
     public int LocalSeatCount { get; private set; }
 
     private readonly Entry[] m_entries;
+    // The placement:<id> body-reference token's ordinal table — index-aligned with the document's OWN
+    // definition.Placements order (a placement's ordinal IS its position in that list), rebuilt whenever
+    // ReconcileInhabitants runs (boot, and every mutation apply) so the tick-path rule read
+    // (WorldServer.ResolveBodyRef) is one array index, never a string lookup. -1 marks an uninhabited/unbound
+    // placement, the same convention an inactive body already reads as. Derived, never checkpointed — see its own
+    // rebuild site.
+    private int[] m_placementOrdinalToBody = [];
+    // Reused broadphase scratch. This used to be four population-sized stackallocs while the table ceiling was
+    // 128; the few-thousand-body representation makes that a stack-overflow hazard. Keeping it population-local
+    // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
+    private readonly DynamicContactBody[] m_dynamicContactBodies;
+    private readonly byte[] m_dynamicContactDegrees;
+    // Active carry relationships, sorted by carrier index. The backing store is population-sized and reused so the
+    // per-tick attachment pass visits only actual relationships and allocates nothing; it never scans Capacity.
+    private readonly CarryRelationship[] m_activeCarries;
+    private int m_activeCarryCount;
 
     private IWorldAdjacencySource? m_adjacencies;
     private WorldDefinition? m_adjacencyDefinition;
@@ -138,13 +189,33 @@ public sealed partial class WorldPopulation {
     // band, or m_baseContactField unwrapped otherwise. Composed by
     // ComposeContactField, the ONE place either input changes.
     private IContactField? m_baseContactField;
+    // Bumped once per ComposeContactField call — every document rebuild and every adjacency-source (re)configure,
+    // regardless of whether the resulting reference actually differs. Folds into ContactFieldVersion.
+    private ulong m_contactFieldInstallVersion;
+    // The compiled population.sleepAfterTicks — see ContactFieldVersion's own remarks and CompileFixedTables.
+    private ulong m_sleepAfterTicks;
+    // The authoritative body-frame policy compiled from the collision requirements. Contact providers report
+    // geometric facts; every body receives this policy separately so provider composition (including adjacency)
+    // never decides how those facts orient simulation state.
+    private WorldBodyUpPolicy m_bodyUpPolicy;
+    // The world's compiled cos(collision.maxSlopeDegrees), handed to every body on the same terms as the frame
+    // policy above so a hold and the ground it ends on cannot disagree about which faces are walkable.
+    private FixedQ4816 m_walkableThreshold = FixedQ4816.One;
     private WorldContactCensus m_contactCensus;
     private IContactField? m_contactField;
     // The compiled population distribution (fixed point). SIM-AFFECTING: SeedSimulated reads only this, never the authored floats.
     // Live for FUTURE activations, inert for bodies already standing (resetPhase: false keeps the running crowd put).
     private FixedWorldDistribution m_distribution;
+    private WorldBodyContactPolicy m_bodyContactPolicy = WorldBodyContactPolicy.Default;
+    // WorldBodyContactPolicy's rigid-specific fields, converted to fixed point/engine ticks once here (Resolve's own
+    // recompile) rather than every AdvanceRigid call — the same "authored float, compiled once" split every other
+    // per-document tunable in this file already keeps.
+    private RigidContactPolicy m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: WorldBodyContactPolicy.Default);
+    // The document-derived speed ceiling (WorldFacePortalPolicy.SpeedCeiling) a rigid impulse's resulting velocity
+    // is refused past — see RigidVelocityCeiling.
+    private FixedQ4816 m_rigidVelocityCeiling;
     // The fixed-point derived tables — recompiled in place by Rebuild when a sim-affecting section mutates (a live kit
-    // tune, motion/wander retune, seat-kit or assignment change), so they are no longer readonly.
+    // tune, motion/producer retune, seat-kit or assignment change), so they are no longer readonly.
     private FixedMotionDefaults m_fixedMotion;
     private byte[]? m_lookAssignmentRows;
     // The compiled population.reconnectGraceSeconds (see WorldDefinition.PopulationReconnectGraceTicks' own
@@ -158,7 +229,7 @@ public sealed partial class WorldPopulation {
     // live) so the peer slice is entirely free for inhabitants. Refreshed by CompileFixedTables on a swap/rebuild.
     private int m_remoteCap;
     // The lowest slot index a live inhabited body occupies (Capacity = none). Inhabited bodies claim the top of the
-    // entity table (slots 127 downward); the census ceiling reads this floor so census peers never reach an inhabitant.
+    // entity table (capacity minus one downward); the census ceiling reads this floor so census peers never reach an inhabitant.
     // Reconciled by ReconcileInhabitants.
     private int m_revision;
     private byte m_seatKit;
@@ -167,7 +238,17 @@ public sealed partial class WorldPopulation {
     private FixedSpawnPoint[] m_seatSpawns;
     private int m_simulatedCount;
     private WorldSolidField? m_targetField;
-    private FixedQ4816? m_waterline;
+    private FieldLattice? m_fields;
+    private bool m_fieldsCompiled;
+
+    /// <summary>Gets the field lattice, when the world declares a <c>fields</c> section.</summary>
+    public FieldLattice? Fields => m_fields;
+    /// <summary>Gets the compiled gravity declaration for read-back.</summary>
+    public FixedWorldGravity CompiledGravity => (m_gravityField?.Compiled ?? FixedWorldGravity.Inert);
+    /// <summary>Gets the last gravity solve's deterministic structural work counters.</summary>
+    public GravitySolveStatistics GravityStatistics => (m_gravityField?.Statistics ?? default);
+    /// <summary>Gets the last bounded-local-gravity evaluation counters.</summary>
+    public WorldGravityAreaStatistics GravityAreaStatistics => (m_gravityField?.AreaStatistics ?? default);
 
     private WorldPlayerDefaults m_playerDefaults = null!;
     private WorldPopulationVariation m_peerVariation = null!;
@@ -177,12 +258,23 @@ public sealed partial class WorldPopulation {
     // compilations (producer programs read their parameter maps), plus the resolved seat row. Assigned by CompileFixedTables from
     // the constructor (the empty seeds satisfy definite-assignment across that helper call).
     private IReadOnlyList<WorldKit> m_kitRows = [];
+
+    private WorldGravityField? m_gravityField;
+
+    // Reused across ticks: a steady-state population allocates nothing to solve its field.
+    private readonly List<WorldGravityTarget> m_gravityTargets = [];
     private FixedWorldKit[] m_kits = [];
     private IReadOnlyDictionary<string, CompiledBodyMotionProgram> m_bodyMotionPrograms = new Dictionary<string, CompiledBodyMotionProgram>();
     // The world's compiled channel table — kit Actions/PressChannel name resolution reads it once per compile pass.
     private WorldChannelTable m_channels = WorldChannelTable.Empty;
     private IReadOnlyList<WorldTargetRegister> m_targetRows = [];
     private WorldTargetRegisterTable m_targets = WorldTargetRegisterTable.Empty;
+    // The LIVE curves-row list a curve-follow producer's per-tick Evaluate reads through — see CompileFixedTables'
+    // own remarks on why this is the definition's own reference, never a copy.
+    private IReadOnlyList<WorldCurveRow> m_curveRows = [];
+    private WorldCurveTable m_curves = WorldCurveTable.Empty;
+    private WorldNavigationDomainTable m_navigationTable = WorldNavigationDomainTable.Empty;
+    private NavigationRuntime m_navigation = null!;
     // The definition's LOOK rows (empty ⇒ the implicit single catalog look), resolved by CompileFixedTables. Each
     // entry's LookIndex points into this list. PRESENTATION-ONLY — the snapshot carries it to the client's renderer.
     private IReadOnlyList<WorldLook> m_lookRows = [WorldLook.Implicit];
@@ -191,7 +283,6 @@ public sealed partial class WorldPopulation {
     private readonly List<BodyEffectOutput> m_effectOutputs = [];
     private readonly List<WorldDesignation> m_designationOutputs = [];
     private readonly List<WorldGeneratorInvocation> m_generatorInvocations = [];
-    private readonly List<WorldJudgeInvocation> m_judgeInvocations = [];
     private readonly List<DurableStateOutput> m_durableStateOutputs = [];
     private static readonly FixedQ4816 TwoPi = FixedQ4816.FromDouble(value: (2.0 * Math.PI));
     private static readonly FixedVector3 LocalForward = new(
@@ -209,7 +300,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Initializes a new instance of the <see cref="WorldPopulation"/> class: the four local slots reserved for
     /// session joins, every peer slot seeded with its deterministic color, kit, activity phase, and spawn pose. The census
     /// stands at zero at boot — <c>networkPlayers</c> is the remote admission cap, not a static reservation, so the whole
-    /// peer slice is free for inhabitants and later <c>world.population</c> raises. The color must be valid for all 128
+    /// peer slice is free for inhabitants and later <c>world.population</c> raises. The color must be valid for every
     /// from frame 1, since the program's material capacity is probed from a worst-case all-avatars build. An entry
     /// receives its <see cref="WorldBody"/> when activated.</summary>
     /// <param name="definition">The world definition supplying the kit rows, producer parameters, and the profileless
@@ -219,6 +310,9 @@ public sealed partial class WorldPopulation {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_entries = new Entry[definition.Population.Capacity];
+        m_dynamicContactBodies = new DynamicContactBody[m_entries.Length];
+        m_dynamicContactDegrees = new byte[m_entries.Length];
+        m_activeCarries = new CarryRelationship[m_entries.Length];
 
         m_seatSpawns = CompileSeatSpawns(
             spawnPoints: definition.SpawnPoints,
@@ -253,8 +347,13 @@ public sealed partial class WorldPopulation {
                 Kind = ((index < LocalSeatCount)
                 ? PopulationKind.LocalSeat
                 : PopulationKind.NetworkPeer),
-                CatalogRig = checked((byte)index),
+                CatalogRig = WorldLookSource.Catalog.DefaultIndex(index),
                 Designations = NewDesignations(),
+                ProducerState = new BodyProducerState {
+                    AcquiredTarget = -1,
+                    ActiveProducerCurveIndex = -1,
+                    ActiveProducerNavigationDomainIndex = -1,
+                },
             };
         }
 
@@ -279,18 +378,18 @@ public sealed partial class WorldPopulation {
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can
         // override it, but an authority handoff preserves it.
         public required byte CatalogRig { get; set; }
-        public required int[] Designations { get; set; }
+        public required WorldTargetDesignation[] Designations { get; set; }
         // Bumped every time this peer slot transitions inactive -> active. Never reset on disconnect.
         public int Generation { get; set; }
         // True when this entity-table occupant arrived through authority transfer rather than the destination's own
         // census/inhabitant authoring. Population edits must not reseed it; replay and abort carry this bit explicitly.
         public bool IsAuthorityTransferred { get; set; }
-        // Whether this slot is bound to a REMOTE-ADMITTED human connection (Server.WorldTcpHost's Hello door), as
+        // Whether this slot is bound to a REMOTE-ADMITTED human connection (Server.WorldPeerHost's Hello door), as
         // opposed to a locally-simulated census stand-in. Set by TryAdmitRemotePeer/ApplyPeerAdmitted, cleared by
         // ApplyPeerDisconnected — SetSimulatedCount skips a slot carrying it exactly like an inhabited one, so a
         // world.population edit can never silently reassign or deactivate a connected human's body.
         public bool IsRemoteHuman { get; set; }
-        // Kind is fixed at construction (LocalSeat for slots 0..3, NetworkPeer for 4..127) and never changes: an
+        // Kind is fixed at construction (LocalSeat for slots 0..3, NetworkPeer thereafter) and never changes: an
         // inhabitant is a NetworkPeer distinguished by its PlacementId, not a kind flip.
         public required PopulationKind Kind { get; init; }
         // Reassigned in place by Rebuild when the kit-assignment policy (or kit set) mutates; set at construction.
@@ -346,18 +445,20 @@ public sealed partial class WorldPopulation {
         public string IdentityDomain { get; set; } = string.Empty;
         public string IdentitySubject { get; set; } = string.Empty;
         public string DesignationRefusal { get; set; } = string.Empty;
-        // The most recent player.motion refusal reason (empty on the last switch's success) — the synchronous
+        // The most recent body.motion refusal reason (empty on the last switch's success) — the synchronous
         // submitter's read-back so an honest immediate echo never has to guess the outcome.
         public string MotionRefusal { get; set; } = string.Empty;
-        // The most recent player.stop refusal reason (empty on success) and outcome (released/cleared counts) —
+        // The most recent body.stop refusal reason (empty on success) and outcome (released/cleared counts) —
         // ALWAYS written together (see NoteStopOutcome/NoteStopRefusal) so the pair can never desync into a
         // refusal note pointing at stale success counts or vice versa.
         public string StopRefusal { get; set; } = string.Empty;
-        // The most recent player.press refusal reason (empty on success — timed or untimed alike, they share this
+        // The most recent body.press refusal reason (empty on success — timed or untimed alike, they share this
         // one slot) and the timed path's outcome (effective hold + which cap decided it) — ALWAYS written together,
         // the same pairing discipline as StopRefusal/StopOutcome above.
         public string PressRefusal { get; set; } = string.Empty;
 
         public BodyProducerState ProducerState;
+        public BodyAutonomyState AutonomyState;
+        public BodyNavigationState NavigationState { get; } = new();
     }
 }

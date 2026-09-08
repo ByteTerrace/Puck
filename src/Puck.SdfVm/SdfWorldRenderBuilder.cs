@@ -17,9 +17,11 @@ public sealed record SdfWorldRender(
     internal ICaptureRequestTarget? CaptureTarget { get; init; }
 
     /// <summary>The path of a capture armed through <see cref="RequestCapture"/> that no frame has served yet, or
-    /// <see langword="null"/> when nothing is outstanding. Checked BOTH halves of the chain because a decorator that
-    /// drew nothing forwards its request down to <see cref="Producer"/>, which then owns it. A caller reports an
-    /// outstanding path rather than letting a run end with a requester believing a file exists.</summary>
+    /// <see langword="null"/> when nothing is outstanding. The outermost decorator reports its whole chain (each one
+    /// falls through to its inner), so this covers every node between it and <see cref="Producer"/>, which is asked
+    /// directly when the chain carries no decorator at all. A caller reports an outstanding path rather than letting
+    /// a run end with a requester believing a file exists. Null is not proof of success; await the returned
+    /// request's completion to observe the write outcome.</summary>
     public string? PendingCapturePath => (CaptureTarget?.PendingCapturePath ?? Producer.PendingCapturePath);
 
     /// <summary>Arms a one-shot capture of the NEXT produced frame on the OUTERMOST decorator (the console overlay,
@@ -28,12 +30,18 @@ public sealed record SdfWorldRender(
     /// directly when the chain has no capture-capable decorator, matching the pre-overlay behavior in that case.
     /// Callers outside this file never need to name <see cref="ICaptureRequestTarget"/> themselves.</summary>
     /// <param name="path">The PNG path to write; the caller creates the parent directory.</param>
-    public void RequestCapture(string path) {
+    /// <returns>The request whose completion reports the actual PNG write or failure.</returns>
+    /// <exception cref="InvalidOperationException">The render chain already has a pending capture.</exception>
+    /// <exception cref="ObjectDisposedException">The serving target has been disposed.</exception>
+    public FrameCaptureRequest RequestCapture(string path) {
+        var request = new FrameCaptureRequest(path);
         if (CaptureTarget is { } target) {
-            target.RequestCapture(path: path);
+            target.RequestCapture(request: request);
         } else {
-            Producer.RequestCapture(path: path);
+            Producer.RequestCapture(request: request);
         }
+
+        return request;
     }
 }
 /// <summary>
@@ -86,6 +94,8 @@ public static class SdfWorldRenderBuilder {
             viewportCapacity: spec.ViewportCapacity,
             width: spec.Width
         );
+
+        producer.SetScreenSourceFrames(screenSourceFrames: spec.ScreenSourceFrames);
         var root = ((IRenderNode)producer);
 
         if (spec.Decorate is { } decorate) {

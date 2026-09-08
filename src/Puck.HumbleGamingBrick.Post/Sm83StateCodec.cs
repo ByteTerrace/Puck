@@ -15,6 +15,7 @@ internal static class Sm83StateCodec {
     public const int ByteCount = 20;
 
     private const int HaltedOffset = 12;
+    private const int LockedUpOffset = 14;
     private const int ImeOffset = 15;
     private const int InterruptEnableCountdownOffset = 16;
 
@@ -63,12 +64,14 @@ internal static class Sm83StateCodec {
     /// <param name="halted">Receives whether the CPU is parked in HALT.</param>
     /// <param name="ime">Receives the interrupt-master-enable flag.</param>
     /// <param name="eiPending">Receives whether an EI-armed enable is still pending.</param>
-    public static void ReadTail(Sm83 cpu, StateWriter scratch, byte[] buffer, out bool halted, out bool ime, out bool eiPending) {
+    /// <param name="lockedUp">Receives whether the CPU is wedged on an illegal opcode.</param>
+    public static void ReadTail(Sm83 cpu, StateWriter scratch, byte[] buffer, out bool halted, out bool ime, out bool eiPending, out bool lockedUp) {
         scratch.Reset();
         cpu.SaveState(writer: scratch);
         scratch.OpenReader().ReadBytes(destination: buffer);
 
         halted = (buffer[HaltedOffset] != 0);
+        lockedUp = (buffer[LockedUpOffset] != 0);
         ime = (buffer[ImeOffset] != 0);
         eiPending = (BitConverter.ToInt32(
             startIndex: InterruptEnableCountdownOffset,

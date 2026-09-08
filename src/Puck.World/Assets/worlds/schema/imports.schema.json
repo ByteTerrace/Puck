@@ -1,0 +1,33 @@
+{
+  "description": "Gets the ordered fragment documents this file imports \u2014 each a WorldImport naming a file path resolved against this document\u0027s own directory and an optional alias its names compose under \u2014 the fan-in half of composition beside Basis\u0027s single-parent chain (see WorldDocumentBasis). Composition order is the basis chain, then each import in list order, then this file\u0027s own body.",
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "One entry of the document root\u0027s imports list: the fragment document to fan in, and the optional alias every name the fragment declares composes under (see WorldModuleNamespace). An entry with no alias composes the fragment\u0027s names as authored, which is how a host that owns its modules\u0027 vocabulary imports them; an aliased entry lets the same fragment compose twice, or lets two fragments spelling the same name sit side by side.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "document": {
+        "description": "The fragment\u0027s file path, resolved against the importing document\u0027s own directory exactly like basis.",
+        "type": "string"
+      },
+      "as": {
+        "description": "The alias, or null to compose the fragment\u0027s names unchanged. An alias is a bare identifier \u2014 a letter or underscore, then letters, digits, and underscores \u2014 so an aliased name still lexes as one bare name inside an infix expression and still parses as a CellName (TryValidateAlias).",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "document"
+    ],
+    "additionalProperties": false,
+    "title": "WorldImport"
+  }
+}

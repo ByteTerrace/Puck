@@ -2,6 +2,9 @@ using System.Globalization;
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics;
+using Puck.Physics.Fields;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -88,14 +91,14 @@ public sealed partial class WorldBody {
         }
 
         m_bodyMotionProgram = program;
-        // A yaw-scalar program (grounded's frame, or the vehicle frame — which levels its pitch scalar too) re-pins
+        // A yaw-scalar program (the ordinary frame, or the drive frame — which levels its pitch scalar too) re-pins
         // the attitude from the extracted heading; the free 6DOF program keeps the attitude and re-seeds the scalar.
         var resolvesYawAttitude = (program.Contains(operation: BodyMotionOp.ResolveYawAttitudeAndPlanarFrame)
-            || program.Contains(operation: BodyMotionOp.ResolveVehicleFrame));
+            || program.Contains(operation: BodyMotionOp.ResolveDriveFrame));
 
         if (resolvesYawAttitude) {
             m_yaw = ExtractYaw(orientation: m_orientation);
-            m_vehiclePitch = FixedQ4816.Zero;
+            m_drivePitch = FixedQ4816.Zero;
             m_orientation = FixedQuaternion.FromAxisAngle(
                 angle: m_yaw,
                 axis: UnitY
@@ -108,57 +111,30 @@ public sealed partial class WorldBody {
             ? new ulong[m_tuning.RecencySlots]
             : []
         );
-        // A program that lacks the surface stage must not leave stale medium facts behind — a swim→other switch
-        // clears them here; the swim program rewrites them next tick if the switch lands back on it.
-        m_submerged = false;
-        m_atSurface = false;
+        // A program that lacks the medium law must not leave stale medium facts behind — a switch away from one
+        // clears them here; a switch back rewrites them next tick.
+        m_inMedium = false;
+        m_atMediumBand = false;
         CommitTeleport(resetVertical: program.OwnsVerticalContactState);
         m_continuity = EntityContinuity.Teleport;
     }
-    // The one dispatch point from a kit's declared WorldMotionModel to the compiled fixed-point tuning this class
-    // integrates under. A new model arm (swim/vehicle) is a localized addition here — a new case producing that
-    // model's own compiled/integrator state — never a hunt through Advance's op handlers, which stay generic over
-    // whatever the kit's body motion program selects. WorldDefinitionValidator has already refused an incoherent
-    // pairing (a program whose operations need a facet the declared model doesn't supply) before this ever runs.
-    //
-    // The vehicle arm also fills m_tuning, from its own gravity trio: ApplyVerticalGravity/ApplyVerticalDecay read
-    // m_tuning's Rise/Fall/MaxFall whichever model authored them (the validator's GravityArc/GravityBleed facets
-    // guarantee the vehicle row carries all three), and MoveSpeed/TurnSpeed mirror TopSpeed/SteerRate so the
-    // pre-dispatch Speed resolve stays well-formed — the vehicle ops themselves read only m_vehicleTuning. The swim
-    // arm compiles STRAIGHT into the shared m_tuning slots (FixedMotionTuning.Compile(WorldMotionModel.Swim) maps
-    // ThrustSpeed/ThrustSpeedEnvelope onto MoveSpeed/MoveSpeedEnvelope) — no fork, so the grounded-shaped resolve is
-    // already arm-correct for swim; only the swim-specific half (buoyancy, float depth, ...) needs its own record.
-    private void SetTuning(WorldMotionModel motion) {
-        switch (motion) {
-            case WorldMotionModel.Grounded grounded:
-                m_motionArm = CompiledMotionArm.Grounded;
-                m_tuning = FixedMotionTuning.Compile(tuning: grounded);
-                m_vehicleTuning = default;
-                m_swimTuning = null;
-                break;
-            case WorldMotionModel.Vehicle vehicle:
-                m_motionArm = CompiledMotionArm.Vehicle;
-                m_vehicleTuning = FixedVehicleTuning.Compile(tuning: vehicle);
-                m_tuning = FixedMotionTuning.Compile(tuning: new WorldMotionModel.Grounded(
-                    MoveSpeed: vehicle.TopSpeed,
-                    TurnSpeed: vehicle.SteerRate,
-                    RiseGravity: vehicle.RiseGravity,
-                    FallGravity: vehicle.FallGravity,
-                    MaxFallSpeed: vehicle.MaxFallSpeed,
-                    Response: [],
-                    SprintMultiplier: 1f
-                ));
-                m_swimTuning = null;
-                break;
-            case WorldMotionModel.Swim swim:
-                m_motionArm = CompiledMotionArm.Swim;
-                m_tuning = FixedMotionTuning.Compile(tuning: swim);
-                m_vehicleTuning = default;
-                m_swimTuning = FixedSwimTuning.Compile(tuning: swim);
-                break;
-            default:
-                throw new NotSupportedException(message: $"Motion model '{motion.GetType().Name}' has no compiled WorldBody integrator.");
+    // The one dispatch point from a kit's compiled locomotion tuning to the field this class integrates under —
+    // never a hunt through Advance's op handlers, which stay generic over whatever the kit's body motion program
+    // selects. WorldDefinitionValidator has already refused an incoherent pairing (a program whose operations need a
+    // facet the declared row doesn't supply) before this ever runs.
+    private void SetTuning(FixedMotionTuning tuning, FixedBodyHold[]? holds = null) {
+        m_holds = (holds ?? []);
+
+        if (m_holdIndex >= m_holds.Length) {
+            // A retune that shortened (or dropped) the list cannot leave the body holding a row that no longer
+            // exists; the next ResolveHold re-takes from the new list.
+            m_holdIndex = -1;
+            m_holdAnchor = FixedVector3.Zero;
+            m_holdNormal = FixedVector3.Zero;
+            m_holdSpendAccumulator.Reset();
         }
+
+        m_tuning = tuning;
     }
 
     /// <summary>Clears the scripted tape, dropping every queued segment. The held keys (if any) resume driving.</summary>
@@ -179,27 +155,60 @@ public sealed partial class WorldBody {
             handler: $"pos=({position.X:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: EulerRadians().Yaw):0}°"
         );
     }
-    /// <summary>Formats the standalone <c>player.where</c> echo — the bracket-tagged, index-prefixed line a piped run
-    /// asserts against — as the full 6DOF pose:
-    /// <c>[player.where: p{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd°]</c>. One format always. A grounded
-    /// entity keeps a canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot
-    /// point (<c>0.00</c> on the flat plane, following the contact field where solids lift it). The bare planar
-    /// fragment is <see cref="DescribePose"/>.</summary>
-    /// <param name="index">The 1-based player display index to tag the line with.</param>
-    /// <returns>The full bracketed <c>player.where</c> echo line.</returns>
+    /// <summary>Formats the standalone <c>body.where</c> echo — the bracket-tagged, index-prefixed line a piped run
+    /// asserts against — as the full 6DOF pose plus the fact mask:
+    /// <c>[body.where: body:{N} pos=(x.xx, y.yy, z.zz) yaw=ddd° pitch=ddd° roll=ddd° facts=grounded|holdingunwalkable
+    /// home=(x.xx, y.yy, z.zz) scale=s.ss com=(x.xx, y.yy, z.zz)]</c>. One format always. A grounded entity keeps a
+    /// canonical level orientation — <c>pitch=0 roll=0</c> — while <c>y</c> is its resolved ground foot point
+    /// (<c>0.00</c> on the flat plane, following the contact field where solids lift it). <c>facts=</c> is
+    /// <see cref="Facts"/> spelled lower-case and <c>|</c>-joined in bit order (<c>none</c> when empty), the same
+    /// mask the snapshot publishes. <c>scale=</c> is <see cref="Scale"/> — 1.00 for every body under a world
+    /// authoring no <c>bodies.scaleRow</c>. <c>com=</c> trails only for a rigid-kit body — <see cref="RigidCenterOfMass"/>,
+    /// which orbits away from <c>pos=</c> (the root) for a rolling or tumbling rigid body while <c>pos=</c> itself
+    /// stays the root every kit shares. <c>carrying=</c> trails only while <see cref="Carrying"/> is set, and
+    /// <c>carriedBy=</c> only while <see cref="CarriedBy"/> is — both absent for every body outside a carry
+    /// relationship. <c>tether=</c>/<c>anchor=</c> trail only while <see cref="TetherLength"/> is set — absent for
+    /// every body carrying no tether facet, or one that authors the facet but is not currently attached.
+    /// <c>asleep=</c> trails only while <see cref="Asleep"/> is set, naming the simulation tick it fell asleep at
+    /// (<see cref="AsleepSinceTick"/>) — absent for every body under a world authoring no <c>bodies.sleepAfterTicks</c>.
+    /// The bare planar fragment is <see cref="DescribePose"/>.</summary>
+    /// <param name="index">The 0-based body index to tag the line with.</param>
+    /// <returns>The full bracketed <c>body.where</c> echo line.</returns>
     public string DescribeWhere(int index) {
         var (yaw, pitch, roll) = EulerRadians();
+        var home = m_home.ToVector3();
         var position = m_position.ToVector3();
+        var scale = ((double)m_scale);
+        var com = (IsRigid ? RigidCenterOfMass.ToVector3() : default);
+        var comSuffix = (IsRigid
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" com=({com.X:0.00}, {com.Y:0.00}, {com.Z:0.00})"
+            )
+            : string.Empty
+        );
+        var carrySuffix = string.Concat(
+            (Carrying is { } carrying ? $" carrying={carrying}" : string.Empty),
+            (CarriedBy is { } carriedBy ? $" carriedBy={carriedBy}" : string.Empty)
+        );
+        var tetherSuffix = ((TetherLength is { } ropeLength)
+            ? string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $" tether={((double)ropeLength):0.00} anchor=({((double)TetherAnchorPointOrLocalOffset.X):0.00}, {((double)TetherAnchorPointOrLocalOffset.Y):0.00}, {((double)TetherAnchorPointOrLocalOffset.Z):0.00})"
+            )
+            : string.Empty
+        );
+        var asleepSuffix = (Asleep ? $" asleep={AsleepSinceTick}" : string.Empty);
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[player.where: p{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}°]"
+            handler: $"[body.where: body:{index} pos=({position.X:0.00}, {position.Y:0.00}, {position.Z:0.00}) yaw={CompassDegrees(radians: yaw):0}° pitch={CompassDegrees(radians: pitch):0}° roll={CompassDegrees(radians: roll):0}° facts={BodyFactVocabulary.Describe(facts: Facts)} home=({home.X:0.00}, {home.Y:0.00}, {home.Z:0.00}) scale={scale:0.00}{comSuffix}{carrySuffix}{tetherSuffix}{asleepSuffix}]"
         );
     }
     /// <summary>Enqueues a timed scripted segment onto the tape: while it is live it drives the avatar with
-    /// <paramref name="intent"/>, overriding the held keys (or, on a population entry, its wander), for
+    /// <paramref name="intent"/>, overriding the held keys (or, on a population entry, its producer), for
     /// <paramref name="seconds"/> of advance time. All six channels are clamped to <c>[-1, 1]</c> — the planar three
-    /// three leave the 6DOF three at their zero default, and <c>player.fly</c>'s full six carry all of them.
+    /// three leave the 6DOF three at their zero default, and <c>body.fly</c>'s full six carry all of them.
     /// A non-positive duration is ignored.</summary>
     /// <param name="intent">The intent the segment holds while live.</param>
     /// <param name="seconds">How long (advance seconds) the segment drives before it expires.</param>
@@ -234,7 +243,7 @@ public sealed partial class WorldBody {
     /// pitch about the body right, roll about the body forward). A hard teleport pops: the previous-pose anchor is reset to the new pose so the renderer never
     /// interpolates across the jump, and any in-flight <see cref="Reconcile"/> smoothing offset is dropped. The pose is
     /// written as-is regardless of model; a grounded entity's next <see cref="Advance"/> re-pins Y and levels the
-    /// attitude to its yaw, so a full pose only persists under the free model.</summary>
+    /// attitude to its yaw, so a full pose only persists under the free program.</summary>
     /// <param name="x">The world X coordinate.</param>
     /// <param name="y">The world Y coordinate.</param>
     /// <param name="z">The world Z coordinate.</param>
@@ -257,11 +266,11 @@ public sealed partial class WorldBody {
     public void Pose(FixedVector3 position, FixedQ4816 yawRadians, FixedQ4816 pitchRadians, FixedQ4816 rollRadians) {
         m_position = position;
         m_yaw = yawRadians;
-        // The vehicle pitch scalar mirrors the posed pitch inside its own clamp, so the next vehicle frame rebuilds
+        // The drive pitch scalar mirrors the posed pitch inside its own clamp, so the next drive frame rebuilds
         // an equivalent (never inverted) attitude from its scalars.
-        m_vehiclePitch = FixedQ4816.Clamp(
-            maximum: MaxVehiclePitch,
-            minimum: -MaxVehiclePitch,
+        m_drivePitch = FixedQ4816.Clamp(
+            maximum: MaxDrivePitch,
+            minimum: -MaxDrivePitch,
             value: pitchRadians
         );
         m_orientation = OrientationFromEuler(
@@ -269,6 +278,36 @@ public sealed partial class WorldBody {
             roll: rollRadians,
             yaw: m_yaw
         );
+        // A teleport invalidates the CONTACT state, not just the pose. The body did not walk anywhere: it is
+        // somewhere else, standing on nothing, and whatever surface it was grounded on a moment ago says nothing
+        // about where it is now. Carrying that state forward keeps the held up axis too, and a body integrating the
+        // new location's gravity along the OLD location's up falls sideways out of the world — a seat posed under a
+        // planetoid is pulled toward it, along an axis still pointing at the floor it left.
+        //
+        // The axis is re-seated rather than steered: the rate limit that keeps a walked reorientation continuous is
+        // exactly wrong here, because nothing continuous happened.
+        m_grounded = false;
+        m_lastContactCount = 0;
+        m_obstructionWitness = FixedVector3.Zero;
+        m_obstructionWitnessGraceTicks = 0;
+        m_upNeedsReseat = true;
+
+        if (m_rigid is not null) {
+            // A rigid kit's own contact state is the resting latch, not m_grounded above (AdvanceRigid never reads
+            // it): a body a moment ago resting on the floor it just left is not resting on wherever it landed,
+            // whatever this tick's stale hold-tick count and latched contacts still say — carrying them forward
+            // would leave AdvanceRigid's own rest-latch fast path (see WorldBody.Rigid.cs) skipping this body
+            // forever, never re-deriving a genuine grounded transition at the new pose.
+            m_rigidVelocity = FixedVector3.Zero;
+            m_angularVelocity = FixedVector3.Zero;
+            m_resting = false;
+            m_restingHoldTicks = 0UL;
+            m_rigidGroundContacting = false;
+            m_rigidObstructionContacting = false;
+            m_rigidGroundMissStreak = 0;
+            m_rigidObstructionMissStreak = 0;
+        }
+
         CommitTeleport();
         m_continuity = EntityContinuity.Teleport;
     }
@@ -289,7 +328,7 @@ public sealed partial class WorldBody {
         m_pendingDefaultChannelPress[ordinal] = true;
         m_pendingDefaultChannelValue[ordinal] = value;
     }
-    /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>player.press</c>), reaching
+    /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>body.press</c>), reaching
     /// any ordinal: the channel reads held at <paramref name="value"/> for <paramref name="holdSeconds"/> of sim time
     /// (clamped to the row's authored ceiling and the <see cref="MaxActionHoldSeconds"/> engine backstop), decremented
     /// per sub-step, then releases
@@ -301,7 +340,7 @@ public sealed partial class WorldBody {
     /// channel mid a long throttle hold takes effect immediately instead of being swallowed by the throttle's
     /// remaining ticks (see <see cref="MergeLaneTimer"/>, shared with <see cref="MaterializeDefaultLanePresses"/> so
     /// the timed and untimed press paths can never drift onto two different rules). Independent of the movement
-    /// tape, so <c>player.fly … ; player.press jump</c> jumps a runner mid-segment. A non-positive (or NaN) hold is
+    /// tape, so <c>body.fly … ; body.press jump</c> jumps a runner mid-segment. A non-positive (or NaN) hold is
     /// ignored outright — it never touches the lane timer at all, so it cannot cancel a genuine in-flight hold on the
     /// same ordinal under the different-value rule above. Unlike the device-held channel image (see
     /// <see cref="SetHeldChannels"/>), this wire path overlays under every <see cref="IntentSource"/>. N simultaneous
@@ -313,7 +352,7 @@ public sealed partial class WorldBody {
     /// <param name="value">The raw fixed-point value to hold the channel at.</param>
     /// <param name="holdSeconds">How long (sim seconds) the channel reads held before auto-releasing.</param>
     /// <param name="authoredMaximum">The deciding Drive grant row's compiled timed-press ceiling.</param>
-    /// <returns>The effective hold (in sim seconds) and which cap, if any, decided it — <c>player.press</c>'s
+    /// <returns>The effective hold (in sim seconds) and which cap, if any, decided it — <c>body.press</c>'s
     /// synchronous read-back, so its echo can name a silent truncation instead of assuming the request was
     /// honored.</returns>
     public PressOutcome PressChannel(int ordinal, FixedQ4816 value, float holdSeconds, FixedQ4816 authoredMaximum) {
@@ -386,8 +425,8 @@ public sealed partial class WorldBody {
     /// the body motion program. The body keeps its pose, velocity, tape, source, and engagement; only the compiled feel
     /// changes. The action runtime resets because it is bound to the old binding and named-state shapes, and an
     /// incompatible program switch re-pins the pose exactly as
-    /// <c>player.motion</c> does (a no-op when unchanged).</summary>
-    /// <param name="motion">The kit's authored motion model.</param>
+    /// <c>body.motion</c> does (a no-op when unchanged).</summary>
+    /// <param name="tuning">The kit's compiled locomotion tuning (<see cref="FixedWorldKit.Tuning"/>).</param>
     /// <param name="actions">The kit's compiled per-ordinal action bindings.</param>
     /// <param name="actionThresholds">The kit's per-ordinal binary crossing thresholds, parallel to <paramref name="actions"/>.</param>
     /// <param name="actionShapes">The world's per-ordinal declared channel shapes (every ordinal, not just bound ones).</param>
@@ -398,12 +437,19 @@ public sealed partial class WorldBody {
     /// <param name="programs">The world's compiled body motion program table.</param>
     /// <param name="collider">The kit's compiled body volume, or <see langword="null"/> for a volumeless kit.</param>
     /// <param name="maxSmoothError">The compiled world-distance correction smoothing threshold.</param>
-    /// <param name="sprintChannelOrdinal">The ordinal <see cref="WorldMotionModel.Grounded.SprintChannel"/> resolved to, or <c>-1</c>
-    /// for a kit with no sprint capability.</param>
-    /// <param name="driftChannelOrdinal">The ordinal <see cref="WorldMotionModel.Vehicle.DriftChannel"/> resolved to,
-    /// or <c>-1</c> for a kit that cannot drift.</param>
-    public void RecompileKit(WorldMotionModel motion, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, int sprintChannelOrdinal = -1, int driftChannelOrdinal = -1) {
-        SetTuning(motion: motion);
+    /// <param name="holds">The kit's compiled ordered hold list (<see cref="FixedWorldKit.Holds"/>), or
+    /// <see langword="null"/> for a kit authoring none.</param>
+    /// <param name="rigid">The kit's compiled rigid-dynamics facet (<see cref="FixedWorldKit.Rigid"/>), or
+    /// <see langword="null"/> for a locomotion kit.</param>
+    /// <param name="carry">The kit's compiled carry facet (<see cref="FixedWorldKit.Carry"/>), or
+    /// <see langword="null"/> for a kit that can never pick up a rigid body.</param>
+    /// <param name="tether">The kit's compiled tether facet (<see cref="FixedWorldKit.Tether"/>), or
+    /// <see langword="null"/> for a kit that carries no rope.</param>
+    public void RecompileKit(FixedMotionTuning tuning, CompiledActionSpec?[]? actions, FixedQ4816[]? actionThresholds, ChannelShape[]? actionShapes, bool[]? roleMask, RoleChannelOrdinals roleOrdinals, CompiledActionStateSlot[]? actionState, CompiledBodyMotionProgram program, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, FixedWorldCollider? collider, FixedQ4816 maxSmoothError, FixedBodyHold[]? holds = null, FixedWorldRigid? rigid = null, FixedWorldCarry? carry = null, FixedWorldTether? tether = null) {
+        SetTuning(
+            holds: holds,
+            tuning: tuning
+        );
         CopyChannelBindings(
             actionShapes: actionShapes,
             actionThresholds: actionThresholds,
@@ -413,9 +459,91 @@ public sealed partial class WorldBody {
         m_roleOrdinals = roleOrdinals;
         CompileActionState(state: actionState);
         m_collider = collider;
+
+        var hadRigidFacet = (m_rigid is not null);
+
+        m_rigid = rigid;
         m_maxSmoothError = maxSmoothError;
-        m_sprintChannelOrdinal = sprintChannelOrdinal;
-        m_driftChannelOrdinal = driftChannelOrdinal;
+
+        if (hadRigidFacet != (rigid is not null)) {
+            // The rigid facet's own presence just changed (a document mutation swapped this slot between a rigid
+            // kit and a locomotion one) — reset every rigid-solver-owned field rather than let the OTHER kind of
+            // body's stale state leak forward: slot reuse must never inherit a previous occupant's simulation state.
+            // A live retune that keeps the facet (mass/friction/etc change while staying rigid) does NOT hit this —
+            // its velocity survives, on the same terms m_planarVelocity survives a locomotion retune.
+            m_rigidVelocity = FixedVector3.Zero;
+            m_angularVelocity = FixedVector3.Zero;
+            m_resting = false;
+            m_restingHoldTicks = 0UL;
+            m_rigidGroundContacting = false;
+            m_rigidObstructionContacting = false;
+            m_rigidGroundMissStreak = 0;
+            m_rigidObstructionMissStreak = 0;
+        }
+
+        // A facet loss (rigid above, carry here) leaves both carry relationship indices in place: only
+        // WorldPopulation holds both sides, and its active-relationship pass clears the pair together on its next
+        // visit.
+        m_carry = carry;
+
+        var previousTetherFacet = m_tetherFacet;
+
+        m_tetherFacet = tether;
+
+        // Facet IDENTITY minus ModeState, not presence: a kit swap between two kits that both author a tether facet
+        // still changes which ordinals/params a live attach is judged against, so it must reset here too — presence
+        // alone would miss it, leaving the old FixedTetherConstraint and edge bits standing against the new facet.
+        // ModeState is excluded because it is orthogonal bookkeeping (cleared/republished on its own ordinal below);
+        // a retune changing only the modeState slot keeps a live attach rather than dropping it needlessly.
+        static FixedWorldTether? WithoutModeState(FixedWorldTether? facet) => (facet is { } value
+            ? (value with { ModeStateOrdinal = -1 })
+            : null
+        );
+        var tetherFacetChanged = (WithoutModeState(facet: previousTetherFacet) != WithoutModeState(facet: tether));
+        var tetherEdgeBindingChanged = (
+            (previousTetherFacet?.AttachChannelOrdinal ?? -1) != (tether?.AttachChannelOrdinal ?? -1) ||
+            (previousTetherFacet?.AttachThreshold ?? FixedQ4816.Zero) != (tether?.AttachThreshold ?? FixedQ4816.Zero) ||
+            (previousTetherFacet?.DetachChannelOrdinal ?? -1) != (tether?.DetachChannelOrdinal ?? -1) ||
+            (previousTetherFacet?.DetachThreshold ?? FixedQ4816.Zero) != (tether?.DetachThreshold ?? FixedQ4816.Zero)
+        );
+        var previousModeStateOrdinal = (previousTetherFacet?.ModeStateOrdinal ?? -1);
+        var modeStateOrdinal = (tether?.ModeStateOrdinal ?? -1);
+
+        if (tetherFacetChanged) {
+            // The tether facet's own identity just changed (a document mutation swapped this slot's kit to one
+            // gaining, losing, or simply authoring a DIFFERENT tether facet) — drop any live attach rather than let
+            // it dangle against ordinals/params a new facet no longer resolves, or a kept facet's own retuned values.
+            ClearTether();
+
+            // When the facet keeps the same mode row, the ordinal-change block below does not run; publish the
+            // cleared attach fact here rather than leaving the durable row at 1 after the rope is gone.
+            if (previousModeStateOrdinal == modeStateOrdinal) {
+                WriteTetherModeState();
+            }
+        }
+        if (tetherEdgeBindingChanged) {
+            // Each bit belongs to the old ordinal/threshold pair. Keeping it after either binding changes would make
+            // the first press under the new facet depend on a different channel's previous sample.
+            m_attachPreviousBit = false;
+            m_detachPreviousBit = false;
+        }
+        if (previousModeStateOrdinal != modeStateOrdinal) {
+            // The OLD facet's modeState row (bodyState/identityState declarations are world-global, so its ordinal
+            // resolves identically under any kit) may still read 1 from before the swap — CompileActionState just
+            // preserved every Durable slot's value across this recompile by name. Zero it directly before publishing
+            // the live attach fact through the new facet's ordinal.
+            if (previousModeStateOrdinal >= 0) {
+                ApplyRawState(
+                    reason: "tether.mode",
+                    requested: FixedQ4816.Zero.Value,
+                    slot: previousModeStateOrdinal,
+                    writer: "tether"
+                );
+                MarkDurableDirty(slot: previousModeStateOrdinal);
+            }
+
+            WriteTetherModeState();
+        }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             m_laneActions[lane] = default;
@@ -440,7 +568,7 @@ public sealed partial class WorldBody {
     /// <see cref="EntityContinuityKind.Correction"/> so the client eases its render error to zero over
     /// <paramref name="seconds"/>. Snap escape: if the position error exceeds
     /// the world's <see cref="WorldMotionDefaults.MaxSmoothError"/> the snapshot reports a plain teleport instead, so a huge
-    /// correction pops. Easing is client presentation state only — the sim never reads it and <c>player.where</c>
+    /// correction pops. Easing is client presentation state only — the sim never reads it and <c>body.where</c>
     /// never includes it.</summary>
     /// <param name="x">The authoritative world X coordinate.</param>
     /// <param name="z">The authoritative world Z coordinate.</param>
@@ -461,7 +589,7 @@ public sealed partial class WorldBody {
             Z: FixedQ4816.FromDouble(value: z)
         );
         m_yaw = fixedYaw;
-        m_vehiclePitch = FixedQ4816.Zero;
+        m_drivePitch = FixedQ4816.Zero;
         m_orientation = FixedQuaternion.FromAxisAngle(
             angle: fixedYaw,
             axis: UnitY
@@ -508,18 +636,69 @@ public sealed partial class WorldBody {
         SetBodyMotionProgram(program: program);
         return true;
     }
+    /// <summary>Sets the body's home — the position it was activated at. Written once per activation, beside the
+    /// pose that put the body there; nothing on the step path moves it.</summary>
+    /// <param name="home">The activation position.</param>
+    public void SetHome(FixedVector3 home) {
+        m_home = home;
+    }
     /// <summary>Sets (or clears) the world contact field this body's grounded integrator solves its swept position
-    /// against — the population hands it the live field on activation and every rebuild.</summary>
+    /// against — the population hands it the live field on activation and every rebuild. A rigid kit whose field
+    /// REFERENCE changes is woken: its rest latch was derived against the old static world (see
+    /// <see cref="AdvanceRigid"/>'s rest-latch fast path), and a live solid edit that moved or removed the floor
+    /// beneath it must let it fall rather than leave it frozen in the air — a checkpoint restore hands the field to a
+    /// fresh body BEFORE <see cref="ApplyIntegrationResidue"/> re-applies the captured latch, so a restore is never
+    /// perturbed by this wake.</summary>
     /// <param name="field">The world contact field.</param>
     public void SetContactField(IContactField? field) {
+        if (
+            (m_rigid is not null) &&
+            !ReferenceEquals(
+                objA: m_contactField,
+                objB: field
+            )
+        ) {
+            m_resting = false;
+            m_restingHoldTicks = 0UL;
+        }
+
         m_contactField = field;
     }
-    /// <summary>Sets the screen-engagement latch — the engagement route's write. A transition in either direction drops
-    /// the staged transient input images and clears the last routed intent, so a stale image cannot leak as a stuck
-    /// direction into the machine (engaging) or burst the avatar into motion (disengaging); the client seat drops its
-    /// own held device state in the same operation. The tape and any wire-timed lane press are untouched — a scripted
-    /// tape keeps driving whichever target now owns the intent. A no-op if the latch is unchanged.</summary>
-    /// <param name="engaged">Whether the player is engaged on a screen (its intent diverted to the screen's machine).</param>
+    /// <summary>Sets the contact field together with the body-frame policy compiled from the same live definition.
+    /// This is the population's activation/rebuild seam; keeping the policy out of <see cref="IContactField"/> leaves
+    /// that public physics abstraction provider-neutral.</summary>
+    /// <param name="field">The world contact field.</param>
+    /// <param name="upPolicy">The body-frame policy compiled from the live world's contact requirements.</param>
+    /// <param name="walkableThreshold">The compiled <c>cos(collision.maxSlopeDegrees)</c> a surface normal's
+    /// alignment with the body's up axis must clear to read as ground.</param>
+    internal void SetContactConfiguration(IContactField? field, WorldBodyUpPolicy upPolicy, FixedQ4816 walkableThreshold) {
+        SetContactField(field: field);
+        SetWalkableThreshold(threshold: walkableThreshold);
+
+        if (m_upPolicy != upPolicy) {
+            // A policy transition invalidates the authority that produced the held axis. Snap to the new ambient
+            // authority on the next resolve, and discard fractional turn budgets accumulated under the old one.
+            m_upNeedsReseat = true;
+            m_upTurnAccumulator.Reset();
+            m_contactUpTurnAccumulator.Reset();
+        }
+
+        m_upPolicy = upPolicy;
+    }
+    /// <summary>Sets (or clears) the world gravity field this body reads its solved acceleration and ambient up axis
+    /// from — the population hands it the live field on activation and every rebuild.</summary>
+    /// <param name="field">The world gravity field, or <see langword="null"/> for a world authoring none.</param>
+    public void SetGravityField(WorldGravityField? field) {
+        m_gravityField = field;
+    }
+    /// <summary>Sets the capture latch — a PROJECTION of the owning principal's control-application set, written by
+    /// <c>Server.WorldEngagement.SyncLatch</c> alone and never independently: engaged means that set omits this
+    /// body's own-body application. A transition in either direction drops the staged transient input images and
+    /// clears the last routed intent, so a stale image cannot leak as a stuck direction into the target (engaging) or
+    /// burst the avatar into motion (disengaging); the client seat drops its own held device state in the same
+    /// operation. The tape and any wire-timed lane press are untouched — a scripted tape keeps driving whichever
+    /// target now owns the intent. A no-op if the latch is unchanged.</summary>
+    /// <param name="engaged">Whether this body's own intent is diverted away from its avatar.</param>
     public void SetEngaged(bool engaged) {
         if (engaged == m_engaged) {
             return;
@@ -539,7 +718,7 @@ public sealed partial class WorldBody {
         m_hasTransferHeldChannels = false;
         m_heldChannels = channels;
     }
-    /// <summary>Sets the intent-source axis — <c>player.control</c>'s write and the peer sweep's per-entity half. A
+    /// <summary>Sets the intent-source axis — <c>body.control</c>'s write and the peer sweep's per-entity half. A
     /// transition drops the staged transient input images (the submitted, producer, and held-lane images), so a stale
     /// image cannot leak across the switch and nothing bursts when a source returns; a seat's client half drops its own
     /// held device state in the same command. The tape and any wire-timed lane press are untouched. A no-op if the
@@ -553,13 +732,13 @@ public sealed partial class WorldBody {
         m_source = source;
         ClearTransientInput();
     }
-    /// <summary>Sets (or clears) the waterline this body's swim stages integrate against — the population hands it
-    /// the world's compiled water level beside the contact field, on activation and every rebuild. Meaningful only
-    /// to a swim-model kit; every other body carries it inertly.</summary>
-    /// <param name="level">The waterline's world-space Y, or <see langword="null"/> for a dry world.</param>
-    public void SetWaterline(FixedQ4816? level) {
-        m_hasWaterline = level.HasValue;
-        m_waterline = level.GetValueOrDefault();
+    /// <summary>Sets (or clears) the medium free surface this body's medium hold integrates against — sampled fresh
+    /// every tick from the population's field lattice at this body's coupled cell, before this body's own Advance
+    /// runs. Meaningful only to a kit authoring a medium hold; every other body carries it inertly.</summary>
+    /// <param name="surface">The medium surface, or <see langword="null"/> for no medium at this body's
+    /// position.</param>
+    public void SetMediumSurface(FixedFieldSurface? surface) {
+        m_mediumSurface = surface;
     }
     /// <summary>Stages one deterministic producer intent for the next <see cref="Advance"/> — the producer tier below
     /// the submitted stream, used only while <see cref="Source"/> names its producer
@@ -571,18 +750,18 @@ public sealed partial class WorldBody {
         m_hasProducerIntent = true;
     }
     /// <summary>Clears every intent producer this body owns: drops the whole tape, the staged transient input images,
-    /// every in-flight timed press (<c>player.press</c> hold), and any not-yet-materialized argument-less tap staged
+    /// every in-flight timed press (<c>body.press</c> hold), and any not-yet-materialized argument-less tap staged
     /// by <see cref="PressChannel(int, FixedQ4816)"/> (see <see cref="MaterializeDefaultLanePresses"/>) — on role and
     /// composition ordinals alike, in every one of these three forms. Not an instantaneous halt — an in-flight jump
     /// arc still resolves under gravity and lands, and the ramped planar velocity decays to rest through the
-    /// response table rather than snapping to zero. This is the <c>player.stop</c> panic verb's server half; the
+    /// shaping row rather than snapping to zero. This is the <c>body.stop</c> panic verb's server half; the
     /// client seat drops its held device state in the same command. Unlike <see cref="SetIntentSource"/>/
     /// <see cref="SetEngaged"/>'s shared <see cref="ClearTransientInput"/> call, which deliberately leaves a timed
     /// press running across a source/engagement transition (that hold still belongs to whichever target now owns
     /// the intent — see its own remarks), Stop is the panic verb: a 60-second throttle hold left ticking after it
     /// would make "keys released" a lie.</summary>
     /// <returns>How many held channels were released and how many timed presses — materialized or still pending —
-    /// were cancelled. The synchronous read-back <c>player.stop</c>'s handler quotes in its echo.</returns>
+    /// were cancelled. The synchronous read-back <c>body.stop</c>'s handler quotes in its echo.</returns>
     public StopOutcome Stop() {
         ClearTape();
 
@@ -606,7 +785,7 @@ public sealed partial class WorldBody {
                 m_channelTimerValues[ordinal] = default;
             }
 
-            // A player.press with no holdSeconds hasn't materialized into a lane timer yet (MaterializeDefaultLanePresses
+            // A body.press with no holdSeconds hasn't materialized into a lane timer yet (MaterializeDefaultLanePresses
             // only runs at the next Advance) — panic-verb totality means this pending tap is cleared too, and counted
             // the same as an already-materialized one.
             if (m_pendingDefaultChannelPress[ordinal]) {
@@ -655,21 +834,44 @@ public sealed partial class WorldBody {
         m_ordinaryAdvanceAdmitted = true;
         return true;
     }
+    /// <summary>Marks this body as deliberately deferred by its authored autonomous cadence. Late population passes
+    /// must not mistake a prior tick's admission latch for an advance on this tick.</summary>
+    internal void DeferOrdinaryAdvance() => m_ordinaryAdvanceAdmitted = false;
+
+    /// <summary>Gets whether externally staged work must be consumed on this authority tick rather than waiting for
+    /// an autonomous motion cadence. A live submitted image, transferred held image, or command-side channel press
+    /// (pending or timed and already in flight) is latency-sensitive even when the body normally runs batched
+    /// producer motion.</summary>
+    internal bool RequiresFullRateAutonomy {
+        get {
+            if (m_hasSubmittedIntent || m_hasTransferHeldChannels) {
+                return true;
+            }
+
+            for (var ordinal = 0; ordinal < m_pendingDefaultChannelPress.Length; ordinal++) {
+                if (m_pendingDefaultChannelPress[ordinal] || (m_laneTimers[ordinal] > 0UL)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>Gets the body that applied the latest targeted effect, held for one recipient advance.</summary>
     internal int AffectingSubject => m_affectingSubject;
 
-    /// <summary>Gets a value indicating whether the body's origin is inside the swim model's surface bob band as of
-    /// its last surface stage — the <c>world.contacts</c> read-back's swim witness. Always <see langword="false"/>
-    /// for a non-swim kit.</summary>
-    public bool AtSurface => m_atSurface;
+    /// <summary>Gets a value indicating whether the body's origin is inside the medium's equilibrium band as of
+    /// the medium hold's last evaluation — the <c>world.contacts</c> read-back's medium witness. Always
+    /// <see langword="false"/> for a kit authoring no medium hold.</summary>
+    public bool AtMediumBand => m_atMediumBand;
     /// <summary>Gets the body motion program this player currently executes.</summary>
     public string BodyMotionProgram => m_bodyMotionProgram.Name;
     /// <summary>Gets the last intent after the admitted held overlay composed with the movement tier, retained only for
-    /// <c>player.channels</c>.</summary>
+    /// <c>body.channels</c>.</summary>
     public PlayerIntent ChannelReadComposed => m_channelReadComposed;
     /// <summary>Gets the held-channel overlay admitted by the last <see cref="Advance"/>, retained only for
-    /// <c>player.channels</c>.</summary>
+    /// <c>body.channels</c>.</summary>
     public PlayerIntent ChannelReadHeld => m_channelReadHeld;
     /// <summary>Gets the kit-authored body volumes, or <see langword="null"/> for a volumeless kit.</summary>
     public FixedWorldCollider? Collider => m_collider;
@@ -679,33 +881,36 @@ public sealed partial class WorldBody {
     /// <see cref="LastObstructionNormal"/> now surfaces instead. Introspection-only, surfaced by the
     /// <c>world.contacts</c> read-back.</summary>
     public int ContactCount => m_lastContactCount;
-    /// <summary>Gets the base move speed the sim integrates under right now, arm-aware. Under the grounded arm:
-    /// <see cref="Profile"/>'s requested rate (or the tuning's profileless fallback) after the kit's
-    /// <see cref="WorldMotionModel.Grounded.MoveSpeedEnvelope"/> clamp; a held sprint channel scales this after the
-    /// clamp (the envelope pins the base rate, not the sprinting rate). Under the swim arm: the same resolve,
-    /// verbatim — <see cref="WorldMotionModel.Swim.ThrustSpeedEnvelope"/> compiles into the identical shared
-    /// <c>MoveSpeedEnvelope</c> slot the grounded arm reads, so a seated player's live profile speed clamps the same
-    /// way. Under the vehicle arm: the kit's own <see cref="WorldMotionModel.Vehicle.TopSpeed"/> after its
-    /// <see cref="WorldMotionModel.Vehicle.TopSpeedEnvelope"/> clamp — the vehicle arm deliberately never reads
-    /// <see cref="Profile"/>'s speed (a kart's speed is the kit's, not the seat's identity), and a held boost
-    /// channel scales this after the clamp, on the same sprint-after-clamp precedent. Every arm, this is the same
-    /// resolve <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and
-    /// an unenveloped kit returns the requested/kit rate unchanged.</summary>
+    /// <summary>Gets the base move speed the sim integrates under right now: <see cref="Profile"/>'s requested rate
+    /// (or the tuning's profileless fallback) after the kit's
+    /// <see cref="WorldSpeed.Envelope"/> clamp. A held speed multiplier — a shaping row's boost
+    /// included — scales this after the clamp, so the envelope pins the base rate and not the boosted one; a kit
+    /// that means to pin its speed against any profile authors <c>min == max</c>. This is the same resolve
+    /// <see cref="Advance"/> performs every tick. A read-only echo: querying this never mutates state, and an
+    /// unenveloped kit returns the requested/kit rate unchanged.</summary>
     public FixedQ4816 EffectiveMoveSpeed => ResolveMoveSpeed();
-    /// <summary>Gets a value indicating whether this route captures this body — the route table's <c>RouteCapture</c> latched onto the body at
-    /// <c>Engage</c> time. While captured its resolved per-frame intent is diverted to the route's target (read via
-    /// <see cref="EngagedIntent"/>) instead of driving the avatar, which stands idle. <see langword="false"/> while
-    /// unrouted, or while routed under the mirrored (capture:false) policy — either way the avatar keeps integrating
-    /// normally.</summary>
+    /// <summary>Gets a value indicating whether this body's own-body control application has been dropped. While it
+    /// has, the resolved per-frame intent reaches only the set's other targets (read via <see cref="EngagedIntent"/>)
+    /// and the avatar stands idle. <see langword="false"/> while the own-body application is held — whether alone or
+    /// beside a mirrored target — and the avatar keeps integrating normally.</summary>
     public bool Engaged => m_engaged;
     /// <summary>Gets the intent resolved on the most recent <see cref="Advance"/> — captured every tick regardless of
-    /// capture policy, so a routed body's channels are available for translation/passthrough whether or not the
+    /// the latch, so an applied body's channels are available for translation/passthrough whether or not the
     /// avatar itself is idled. The <see cref="PlayerIntent"/> default (all channels zero) before the first advance.</summary>
     public PlayerIntent EngagedIntent => m_engagedIntent;
     /// <summary>Gets the authoritative deterministic orientation.</summary>
     public FixedQuaternion FixedOrientation => m_orientation;
     /// <summary>Gets the authoritative deterministic position.</summary>
     public FixedVector3 FixedPosition => m_position;
+    /// <summary>Gets the body's home — the position it was activated at (a seat's spawn point, an inhabitant's
+    /// placement plus its own distribution sample). Producers steer relative to this, so a population spread over
+    /// several placements keeps to its own ground instead of converging on the world origin. A teleport does not
+    /// move it: <see cref="Pose(FixedVector3, FixedQ4816, FixedQ4816, FixedQ4816)"/> puts a body somewhere,
+    /// <see cref="SetHome"/> says where it belongs.</summary>
+    public FixedVector3 FixedHome => m_home;
+    /// <summary>Gets the body's up axis — the direction its gravity opposes, its planar move plane is perpendicular
+    /// to, and its contact walkable test measures a surface normal against.</summary>
+    public FixedVector3 FixedUp => m_up;
     /// <summary>Gets the avatar's position at the top of the most recent <see cref="Advance"/> — the start point of
     /// the swept segment a portal-crossing scan tests against a slab. A hard teleport (<c>Pose</c>,
     /// <see cref="Reconcile"/>) resets this to the landing position, so the segment collapses to a point exactly
@@ -719,6 +924,23 @@ public sealed partial class WorldBody {
     /// <summary>Gets a value indicating whether the body is grounded this tick (resting on a walkable contact surface) — the
     /// <c>world.contacts</c> read-back.</summary>
     public bool Grounded => m_grounded;
+    /// <summary>Gets this body's publishable fact mask this tick — evaluated through the SAME predicate the kit's
+    /// action gates read (<c>FactHolds</c>), so the snapshot, the gates, and the <c>body.where</c> echo can never
+    /// disagree. Facts are not mutually exclusive: a body can be grounded and rising in one tick, and a body holding
+    /// an unwalkable surface keeps whichever grounded/airborne answer its last contact resolve produced.</summary>
+    public BodyFacts Facts {
+        get {
+            var facts = BodyFacts.None;
+
+            foreach (var fact in BodyFactVocabulary.Publishable) {
+                if (FactHolds(fact: fact)) {
+                    facts |= BodyFactVocabulary.Bit(fact: fact);
+                }
+            }
+
+            return facts;
+        }
+    }
     /// <summary>Gets the latched resolved non-walkable contact normal — <see cref="FixedVector3.Zero"/> when nothing
     /// obstructs the body, a unit surface normal otherwise. A walkable push (the ground, a ramp) never sets this —
     /// only a contact whose alignment fails the grounded test does, which is exactly the witness
@@ -734,7 +956,7 @@ public sealed partial class WorldBody {
     /// solve. A continuum-fenced body is immutable until a non-overlapping ordinary step admits it.</summary>
     public bool OrdinaryAdvanceAdmitted => m_ordinaryAdvanceAdmitted;
     /// <summary>Gets the avatar's full 6DOF attitude — the canonical orientation a camera rig or a dynamic transform rides.
-    /// Pure yaw about world up under the grounded model; an arbitrary body attitude under the free model.</summary>
+    /// Pure yaw about world up under the grounded program; an arbitrary body attitude under the free program.</summary>
     public Quaternion Orientation => m_orientation.ToQuaternion();
     /// <summary>The already-evaluated source-step trajectory awaiting ownership resolution before this body may
     /// advance normally on its destination authority.</summary>
@@ -742,7 +964,7 @@ public sealed partial class WorldBody {
     /// <summary>Gets the body's response-shaped planar speed (world units/second) — the coast/momentum witness the
     /// <c>world.contacts</c> read reports.</summary>
     public float PlanarSpeed => ((float)((double)m_planarVelocity.Length));
-    /// <summary>Gets the avatar's current world-space position (the ground foot point under the grounded model, where Y is
+    /// <summary>Gets the avatar's current world-space position (the ground foot point under the grounded program, where Y is
     /// pinned to the plane; a free craft's position is unconstrained in all three axes).</summary>
     public Vector3 Position => m_position.ToVector3();
     /// <summary>Gets the profile this player is seated on — the live source of its move/turn speeds and look-invert (read
@@ -750,18 +972,23 @@ public sealed partial class WorldBody {
     /// <see langword="null"/> before a profile is assigned, in which case the tuning's default rates apply.</summary>
     public WorldIdentity? Profile { get; set; }
     /// <summary>Gets what fills this entity's intent gaps between tape segments — the per-entity axis (the
-    /// <c>player.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
+    /// <c>body.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
     public IntentSource Source => m_source;
-    /// <summary>Gets a value indicating whether the body's origin is below the waterline as of the swim model's last
-    /// surface stage — the <c>world.contacts</c> read-back's swim witness. Always <see langword="false"/> for a
-    /// non-swim kit.</summary>
-    public bool Submerged => m_submerged;
+    /// <summary>Gets whether a scripted tape currently owns or awaits motion. Tapes retain full authority cadence even
+    /// on an autonomously throttled kit because one batched advance consumes only one segment.</summary>
+    internal bool HasMotionTape => (m_tapeCount > 0);
+    /// <summary>Gets the most recently staged producer image for population-owned cadence reuse.</summary>
+    internal PlayerIntent StagedProducerIntent => m_producerIntent;
+    /// <summary>Gets a value indicating whether the body's origin sits below the medium's free surface, along
+    /// its own resolved gravity-up, as of the medium hold's last evaluation — the <c>world.contacts</c> read-back's
+    /// medium witness. Always <see langword="false"/> for a kit authoring no medium hold.</summary>
+    public bool InMedium => m_inMedium;
     /// <summary>Gets the avatar's current heading in radians (0 = facing -Z; increases turning left / counter-clockwise).
-    /// Under the grounded model this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
-    /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot wander
-    /// path). Under the free model, where the full attitude is authoritative and <c>m_yaw</c> is inert, it is the yaw
-    /// component of <see cref="Orientation"/>. The <c>player.where</c> read-back and <see cref="DescribePose"/> decompose
+    /// Under the grounded program this returns the authoritative heading scalar <c>m_yaw</c> directly (the orientation is a
+    /// pure yaw rotation built from it, so decomposing it back out would be a redundant round-trip on the hot steering
+    /// path). Under the free program, where the full attitude is authoritative and <c>m_yaw</c> is inert, it is the yaw
+    /// component of <see cref="Orientation"/>. The <c>body.where</c> read-back and <see cref="DescribePose"/> decompose
     /// the canonical orientation directly, bypassing this property.</summary>
     public float Yaw => ((float)((double)FixedYaw));
 

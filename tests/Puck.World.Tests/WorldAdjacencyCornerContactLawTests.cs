@@ -1,5 +1,5 @@
 using System.Numerics;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
@@ -16,18 +16,18 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
 
         source = source with {
-            PlacementsRaw = [source.Placements[0] with { Position = new Vector3(x: 100f, y: 0f, z: 100f) }],
+            PlacementRowsRaw = [source.Placements[0] with { Position = new Vector3(x: 100f, y: 0f, z: 100f) }],
             References = [
-                new WorldReference(WorldSafeName.Parse(candidate: "unused-east-ref"), "unused-east.world.json"),
-                new WorldReference(WorldSafeName.Parse(candidate: "unused-south-ref"), "unused-south.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "unused-east-ref"), "unused-east.world.json"),
+                new WorldReference(SafeName.Parse(candidate: "unused-south-ref"), "unused-south.world.json"),
             ],
             Destinations = [
-                new WorldDestination(WorldSafeName.Parse(candidate: "unused-east"), "unused-east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
-                new WorldDestination(WorldSafeName.Parse(candidate: "unused-south"), "unused-south-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "unused-east"), "unused-east-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
+                new WorldDestination(SafeName.Parse(candidate: "unused-south"), "unused-south-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global),
             ],
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "east"), "unused-east", "west", Boundary(yaw: 90f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "south"), "unused-south", "north", Boundary(yaw: 0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "east"), "unused-east", "west", Boundary(yaw: 90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "south"), "unused-south", "north", Boundary(yaw: 0f)),
             ],
         };
         var corner = Fixtures.BuildGradientUpDocument(gradientUp: false);
@@ -156,7 +156,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         var shape = new ShapeDocument(
             Id: 0,
             Name: "ground",
-            Type: AvatarPrimitive.Box,
+            Type: SdfSolidPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: new Vector3(x: scale, y: 0.1f, z: scale),
@@ -171,22 +171,22 @@ public sealed class WorldAdjacencyCornerContactLawTests {
             Shapes: [shape],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "ground");
-        var creation = new WorldCreation(Id: "ground", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "ground", Document: canonical.Document, HashRaw: canonical.Hash);
         var spawn = (floorCenterZ / 2f);
 
         return source with {
             CollisionRaw = source.Collision with { Requirements = [WorldContactRequirement.SmoothUnionContact] },
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "ground", CreationId: creation.Id, Position: new Vector3(x: 0f, y: 0f, z: floorCenterZ), YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "ground", PrototypeId: creation.Id, Position: new Vector3(x: 0f, y: 0f, z: floorCenterZ), YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
             SpawnPointsRaw = [
                 new WorldSpawnPoint(Id: "seat-1", Position: new Vector3(x: 0f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-2", Position: new Vector3(x: 2f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-3", Position: new Vector3(x: 4f, y: 1f, z: spawn)),
                 new WorldSpawnPoint(Id: "seat-4", Position: new Vector3(x: 6f, y: 1f, z: spawn)),
             ],
-            References = [new WorldReference(WorldSafeName.Parse(candidate: "beyond-ref"), "beyond.world.json")],
-            Destinations = [new WorldDestination(WorldSafeName.Parse(candidate: "beyond"), "beyond-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
-            Adjacencies = [new WorldAdjacency(WorldSafeName.Parse(candidate: "seam"), "beyond", "seam", SeamBoundary(outwardYaw: ((floorCenterZ < 0f) ? 0f : 180f)))],
+            References = [new WorldReference(SafeName.Parse(candidate: "beyond-ref"), "beyond.world.json")],
+            Destinations = [new WorldDestination(SafeName.Parse(candidate: "beyond"), "beyond-ref", WorldDestinationDurability.Persisted, WorldDestinationScope.Global)],
+            Adjacencies = [new WorldAdjacency(SafeName.Parse(candidate: "seam"), "beyond", "seam", SeamBoundary(outwardYaw: ((floorCenterZ < 0f) ? 0f : 180f)))],
         };
     }
     private static SeamWalker SeamWalk(WorldDefinition local, bool neighbourHasField = true, bool attachSource = true) {

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Numerics;
 using Puck.Hosting;
+using Puck.Physics.Motion;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -40,10 +41,8 @@ namespace Puck.World.Client;
 /// its active flag's release write; readers acquire that flag before consuming the copied pose fields.</para>
 /// </remarks>
 public sealed class WorldSessionMirror : IClientSink {
-    // The bounded per-entity table width. WorldAvatarCatalog.Capacity (Puck.World, unreachable from here) and
-    // WorldClient.EntityCapacity are both 128 today but neither is reachable from this project; WorldPopulationLimits
-    // .CapacityCeiling is the schema-level source both trace to.
-    private const int EntityCapacity = WorldPopulationLimits.CapacityCeiling;
+    // The bounded entity table uses the same schema ceiling as the client. Appearance-catalog size is unrelated.
+    private const int EntityCapacity = WorldBodiesLimits.CapacityCeiling;
 
     private WorldDefinition m_definition;
     private int m_definitionRevision;
@@ -72,6 +71,7 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly Vector3[] m_currentPosition = new Vector3[EntityCapacity];
     private readonly Quaternion[] m_currentOrientation = new Quaternion[EntityCapacity];
     private readonly float[] m_heading = new float[EntityCapacity];
+    private readonly BodyFacts[] m_facts = new BodyFacts[EntityCapacity];
     private readonly Vector3[] m_bodyColor = new Vector3[EntityCapacity];
     private readonly byte[] m_look = new byte[EntityCapacity];
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
@@ -281,6 +281,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Gets an entity's latest authoritative heading in radians about world up (<see cref="EntitySnapshot.Heading"/>)
     /// — not interpolated; the composition seam that reads it wants the authority's current value.</summary>
     public float Heading(int index) => m_heading[index];
+    /// <summary>Gets an entity's latest authoritative fact mask (<see cref="EntitySnapshot.Facts"/>) — not
+    /// interpolated; the facts are discrete authority answers.</summary>
+    /// <param name="index">The 0-based entity index.</param>
+    public BodyFacts Facts(int index) => m_facts[index];
     /// <summary>The entity's latest-tick render position (the other interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Vector3 CurrentPosition(int index) => m_currentPosition[index];
@@ -309,6 +313,17 @@ public sealed class WorldSessionMirror : IClientSink {
             value: definition
         );
         _ = Interlocked.Increment(location: ref m_definitionRevision);
+    }
+    /// <inheritdoc/>
+    public void DeliverState(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
+        // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
+        Volatile.Write(
+            location: ref m_definition,
+            value: definition
+        );
     }
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
@@ -379,6 +394,7 @@ public sealed class WorldSessionMirror : IClientSink {
                 m_currentPosition[index] = entry.Position;
                 m_currentOrientation[index] = entry.Orientation;
                 m_heading[index] = entry.Heading;
+                m_facts[index] = entry.Facts;
                 // The release write is the publication edge for every pose/color/look field above. A local instance
                 // delivers and renders on one thread, but a federated observer necessarily writes from its socket task;
                 // IsActive's acquire read makes the completed record visible before an emitter consumes it.
@@ -443,20 +459,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// table instead.</summary>
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The entity's look row.</returns>
-    public WorldLook Look(int index) {
-        var rows = m_definition.Looks;
-
-        if (rows.Count == 0) {
-            return WorldLook.Implicit;
-        }
-
-        var lookIndex = m_look[index];
-
-        return ((lookIndex < rows.Count)
-            ? rows[lookIndex]
-            : WorldLook.Implicit
-        );
-    }
+    public WorldLook Look(int index) => WorldDefinitionRows.ResolveLook(
+        rows: m_definition.Looks,
+        index: m_look[index]
+    );
     /// <summary>The entity's previous-tick render attitude (one interpolation endpoint).</summary>
     /// <param name="index">The 0-based entity index.</param>
     public Quaternion PreviousOrientation(int index) => m_previousOrientation[index];
@@ -493,8 +499,8 @@ public sealed class WorldSessionMirror : IClientSink {
             );
 
             m_heading[index] = MathF.Atan2(
-                y: -facing.X,
-                x: -facing.Z
+                x: -facing.Z,
+                y: -facing.X
             );
             m_bodyColor[index] = route.BodyColor;
             m_kit[index] = route.Kit;

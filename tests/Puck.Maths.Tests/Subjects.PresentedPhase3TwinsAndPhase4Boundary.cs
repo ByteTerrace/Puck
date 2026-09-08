@@ -398,7 +398,7 @@ internal static partial class Subjects {
                 dimensions: dimensions,
                 incidences: incidences,
                 material: default(RationalMaterial),
-                weight: static cell => QuadraticSurd.Rational(
+                weight: static cell => RealQuadratic.Rational(
                     denominator: ((cell & 3) + 2),
                     numerator: (cell + 1)
                 )
@@ -1217,7 +1217,7 @@ internal static partial class Subjects {
             material: default(IntegerMaterial)
         )
             ?? (TangleRelations(
-            loopCharge: QuadraticSurd.Rational(
+            loopCharge: RealQuadratic.Rational(
                 denominator: 2,
                 numerator: 5
             ),

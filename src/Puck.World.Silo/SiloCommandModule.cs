@@ -40,7 +40,7 @@ public sealed class SiloCommandModule(WorldSiloHost host, IGrainFactory grainFac
             description: "Reads back this silo's own identity: master cadence (Hz), declared world count, store target, and clustering.",
             handler: (context, args) => new CommandResult(Output: string.Create(
                 provider: CultureInfo.InvariantCulture,
-                handler: $"[silo.status: master={host.MasterRateHz}Hz worlds={host.Definition.Worlds.Count} pinned={host.Definition.Worlds.Count(predicate: static row => row.Pinned)} budget={host.Definition.Doors.Budget} store={host.Definition.Store.Kind} clustering={host.Definition.Clustering.Kind} admitted={host.Instances.Names.Count}]"
+                handler: $"[silo.status: master={host.MasterRateHz}Hz worlds={host.Definition.Worlds.Count} pinned={host.Definition.Worlds.Count(predicate: static row => row.Pinned)} budget={host.Definition.Doors.Budget} store={host.Definition.Store.Type} clustering={host.Definition.Clustering.Kind} admitted={host.Instances.Names.Count} ready={host.Ready} draining={host.IsDraining} observer={host.Definition.Lifecycle?.Observer?.Type ?? "none"}]"
             ))
         );
         yield return CommandDefinition.WithWireArgs(

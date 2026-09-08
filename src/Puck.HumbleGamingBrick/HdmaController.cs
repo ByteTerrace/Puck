@@ -4,15 +4,19 @@ using Puck.HumbleGamingBrick.Timing;
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
-/// The Color VRAM DMA unit, a CPU-domain clocked component that is now timed: a transfer freezes the CPU (the CPU idles
-/// while <see cref="IsCpuStalled"/> holds) and moves one byte every two dots — so a sixteen-byte block costs eight
-/// machine cycles at normal speed and sixteen at double speed, plus a short start-up and wind-down, matching the
-/// hardware stall measured by the hardware-accurate DMA timing tests. It reads its source on its own bus path (holding the cartridge slot
-/// and internal RAM directly, never the system bus, so no dependency cycle forms) and writes into the currently
-/// selected VRAM bank; a source inside VRAM is invalid and reads open bus. A write to HDMA5 with bit 7 clear runs a
-/// general-purpose transfer; with bit 7 set it starts an HBlank transfer that moves one block each time the PPU enters
-/// mode 0, and a later bit-7-clear write stops it. The speed switch's DMA-block window and stop mode pause the unit.
-/// All state is plain fields captured in a fixed order.
+/// The Color VRAM DMA unit, a CPU-domain clocked component that is timed end to end: a transfer freezes the CPU (the
+/// CPU idles while <see cref="IsCpuStalled"/> holds), waits in <c>Requested</c> until the CPU's own yield point
+/// acknowledges the freeze (a pending interrupt's dispatch runs to completion first, since hardware only freezes the
+/// CPU at its next fetch), burns one further step as the unit's own setup advance, then moves one byte every two dots
+/// — so a sixteen-byte block costs one setup step plus eight machine cycles at normal speed, and their double-speed
+/// equivalents, matching the hardware stall measured by the hardware-accurate DMA timing tests. Every restart pays
+/// the same one-step setup: the first block of a general-purpose transfer and every later HBlank block leaving
+/// <c>Paused</c> both re-enter through <c>Requested</c>. It reads its source on its own bus path (holding the
+/// cartridge slot and internal RAM directly, never the system bus, so no dependency cycle forms) and writes into the
+/// currently selected VRAM bank; a source inside VRAM is invalid and reads open bus. A write to HDMA5 with bit 7
+/// clear runs a general-purpose transfer; with bit 7 set it starts an HBlank transfer that moves one block each time
+/// the PPU enters mode 0, and a later bit-7-clear write stops it. The speed switch's DMA-block window and stop mode
+/// pause the unit. All state is plain fields captured in a fixed order.
 /// </summary>
 public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     private const int BlockSize = 0x10;
@@ -21,19 +25,17 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     // per step at normal speed, four at double speed (the CPU T-cycle is half a dot there).
     private const int StepTCyclesNormal = 2;
     private const int StepTCyclesDouble = 4;
-    // The transfer state machine, mirroring the hardware's start-up latency: a requested transfer passes through
-    // Pending and Ready (one step each) before bytes move; an HBlank transfer parks in Paused between blocks.
+    // The transfer state machine, mirroring the hardware's start-up latency: a requested transfer burns one setup
+    // step in Requested before bytes move; an HBlank transfer parks in Paused between blocks.
     private const byte StateNone = 0;
-    private const byte StatePaused = 5;
-    private const byte StatePending = 2;
-    private const byte StateReady = 3;
+    private const byte StatePaused = 3;
     private const byte StateRequested = 1;
-    private const byte StateTransferring = 4;
+    private const byte StateTransferring = 2;
 
     private readonly ICartridgeSlot m_cartridgeSlot;
     private readonly IKey1 m_key1;
     private readonly SystemMemory m_memory;
-    private readonly IPpu m_ppu;
+    private readonly Ppu m_ppu;
 
     private bool m_active;
     private bool m_allowWakeArm;
@@ -60,7 +62,7 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     /// <param name="ppu">The PPU whose mode drives HBlank transfers.</param>
     /// <param name="key1">The speed-switch/stop unit.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public HdmaController(ICartridgeSlot cartridgeSlot, SystemMemory memory, IPpu ppu, IKey1 key1) {
+    public HdmaController(ICartridgeSlot cartridgeSlot, SystemMemory memory, Ppu ppu, IKey1 key1) {
         ArgumentNullException.ThrowIfNull(argument: cartridgeSlot);
         ArgumentNullException.ThrowIfNull(argument: memory);
         ArgumentNullException.ThrowIfNull(argument: ppu);
@@ -76,6 +78,37 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+
+    /// <summary>Gets a value indicating whether ticks can be absorbed as plain step-counter arithmetic: no transfer
+    /// is requested or moving, no wind-down is pending, and the last sampled display mode is the current one, so no
+    /// horizontal-blank edge is waiting to be seen.</summary>
+    public bool IsQuiet =>
+        (((m_state == StateNone) || (m_state == StatePaused)) && !m_windDownPending && !m_active && (m_previousMode == m_ppu.Mode));
+    /// <summary>Gets a value indicating whether ticks can be absorbed whatever the display does: no transfer exists at
+    /// all, so a horizontal-blank edge inside the stretch would change nothing but the sampled mode.</summary>
+    public bool IsIdle =>
+        ((m_state == StateNone) && !m_windDownPending && !m_active);
+    /// <summary>Samples the display mode the way a tick does: the mode before the display's own step on the same
+    /// cycle. The absorbing caller takes it before the last display dot of a stretch.</summary>
+    public void SampleMode() =>
+        m_previousMode = m_ppu.Mode;
+    /// <summary>Absorbs <paramref name="cycles"/> T-cycles while <see cref="IsQuiet"/>, or while <see cref="IsIdle"/>
+    /// and the display has been ticked through them with <see cref="SampleMode"/> taken before its last dot.</summary>
+    /// <param name="cycles">The T-cycles to absorb.</param>
+    public void Skip(int cycles) {
+        if (
+            m_key1.IsStopped ||
+            m_key1.IsHdmaBlocked
+        ) {
+            return;
+        }
+
+        var step = (m_key1.IsDoubleSpeed
+            ? StepTCyclesDouble
+            : StepTCyclesNormal);
+
+        m_stepCounter = ((m_stepCounter + cycles) % step);
+    }
     /// <inheritdoc/>
     public bool IsCpuStalled =>
         (((m_state != StateNone) && (m_state != StatePaused)) || m_active);
@@ -217,26 +250,27 @@ public sealed class HdmaController : IHdma, IClockedComponent, ISnapshotable {
         m_state = reader.ReadByte();
         m_stepCounter = reader.ReadInt32();
         m_windDownPending = reader.ReadBoolean();
+
+        // The state byte drives a switch with no default arm, so a value outside the four it can hold would run the
+        // unit off its own state machine rather than faulting.
+        if (m_state > StatePaused) {
+            throw new InvalidDataException(message: $"The video-RAM transfer unit's restored state byte is {m_state}, outside the {StateNone}-{StatePaused} range it can hold.");
+        }
     }
 
-    // One two-dot step of the unit: advance the start-up chain, move one byte, or wind down. The chain holds in
-    // Requested until the CPU acknowledges the freeze, so a pending interrupt's dispatch runs to completion first and
-    // the lead-in is measured from the CPU's own yield point — hardware only freezes the CPU at its next fetch.
+    // One two-dot step of the unit: wait for the CPU's freeze acknowledgment, move one byte, or wind down. The unit
+    // holds in Requested until the CPU acknowledges the freeze, so a pending interrupt's dispatch runs to completion
+    // first and the lead-in is measured from the CPU's own yield point — hardware only freezes the CPU at its next
+    // fetch. Once acknowledged, the same step that starts the transfer also pays its one-step setup advance: the
+    // acknowledged step flips the unit into Transferring without moving a byte, so the first byte lands one step
+    // later, exactly like every following byte.
     private void Step() {
         switch (m_state) {
             case StateRequested:
                 if (m_stallAcknowledged) {
-                    m_state = StatePending;
+                    m_state = StateTransferring;
+                    m_active = true;
                 }
-
-                break;
-            case StatePending:
-                m_state = StateReady;
-
-                break;
-            case StateReady:
-                m_state = StateTransferring;
-                m_active = true;
 
                 break;
             case StateTransferring:

@@ -1,0 +1,405 @@
+[
+  {
+    "Id": "integer.square-coordinate",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "NeighborCount"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Radius"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Direction"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Distance"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Neighbor"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "RotatedLeft"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "RotatedRight"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Round"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Signed square coordinates implement checked Gaussian arithmetic, cardinal movement, Manhattan distance, Chebyshev radius, norm, nearest-cell ties-to-even rounding, identities and component-only formatting.",
+        "Against": "Independent BigInteger coordinate arithmetic and existing rational rounding oracle. ENVELOPE: square-grid vector domain narrowed to int components, plus [-128,128] coordinates and factors [-8,8]; full long raws for fixed-point rounding.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.square-index",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "MaxRadius"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Radius"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "FromCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "ToCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Rotate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Conjugate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Swap"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Scale"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Translate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Neighbor"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Distance"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Signed square spiral encode/decode, shell and norm queries, direct signed scale, quarter turns, conjugation, swap, cardinal neighbours, Gaussian arithmetic, metric, symmetries, overflow refusals and successor adjacency.",
+        "Against": "BigInteger binary search over square cardinalities, corner interpolation and independent four-edge solving followed by coordinate arithmetic. ENVELOPE: square-grid full-domain indices folded modulo MaxValue+1; additional indices below 1089 and factors [-8,8].",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "integer.square-grid-boundaries",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "X"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Y"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "NeighborCount"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Radius"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Direction"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Distance"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Neighbor"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "RotatedLeft"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "RotatedRight"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "Round"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.SquareCoordinate",
+        "Name": "op_Multiply"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Value"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "MaxRadius"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "MaxValue"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Radius"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Norm"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "AdditiveIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "MultiplicativeIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "FromCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "ToCoordinate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Rotate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Conjugate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Swap"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Scale"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Translate"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Neighbor"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "Distance"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "op_Subtraction"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "op_UnaryNegation"
+      },
+      {
+        "Type": "Puck.Maths.SquareIndex",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Complete spiral prefix through radius 16, maximal complete shell, shell and corner seams, signed extrema, checked arithmetic cancellation, and rounding half-ties and refusal boundaries.",
+        "Against": "An independent walk taking 1,1,2,2,... cardinal steps; BigInteger cardinalities and coordinate arithmetic. ENVELOPE: 1089 cells; representative radii through MaxRadius, every side, signed extreme factors, int component extremes, fixed-point half ties and long extremes.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.square-coordinate",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of integer.square-coordinate at Deep sampling.",
+        "Against": "The same independent BigInteger references and folds; sampled evidence, not an exhaustive carrier proof.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "deep.square-index",
+    "Tier": "Deep",
+    "Members": [],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of integer.square-index at Deep sampling.",
+        "Against": "The same independent BigInteger references and folds; sampled evidence, not an exhaustive carrier proof.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

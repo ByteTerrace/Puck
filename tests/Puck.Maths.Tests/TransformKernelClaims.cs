@@ -8,7 +8,7 @@ namespace Puck.Maths.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Two of these are the ONLY gate over a shipped member: <c>FixedQ4816.SinCosRaw</c> — the full-unsigned-width
+/// These gates cover <c>FixedQ4816.SinCosRaw</c> — the full-unsigned-width
 /// entry point <see cref="FixedQuaternion.FromAxisAngle"/>, <see cref="FixedQuaternion.Exp"/> and
 /// <see cref="FixedRigidTransform.Exp"/> all reach their sine and cosine through — and
 /// <c>FixedVectorMath.TryNormalizeWithMagnitude</c>, the one-pass axis-and-norm those same three call first. Both are
@@ -28,10 +28,8 @@ internal static class TransformKernelClaims {
     // The guard bits every enclosure below carries under the Q48.16 grid, so a sub-ULP envelope is an integer
     // comparison rather than a rounding argument.
     private const int GuardBitCount = Oracles.GuardBitCount;
-    // The flat part of the envelope, in raw Q16 units: the Q60 polynomial's own 0.51 ULP plus the half ULP the Q60→Q16
-    // narrowing costs, rounded up to one raw, plus one raw for the two interval multiplies the angle-addition
-    // reference performs above the seam. Everything else in the envelope is PROPORTIONAL to the angle and is derived
-    // in SinCosRawEnvelope.
+    // A coarse integer-ULP companion to scalar.trigonometry-seams' tighter direct interval gate: one raw for the
+    // kernel plus narrowing, and one for the angle-addition reference's interval products above the signed seam.
     private const int SinCosRawFlatBudget = 2;
     // The mixed draws each sweep takes past its hand-listed ladder. Every draw is a pure function of a running
     // counter (SplitMix64), never System.Random and never the wall clock, so the operand stream is a fact of the
@@ -387,16 +385,13 @@ internal static class TransformKernelClaims {
     /// <param name="rawAngle">The unsigned raw angle.</param>
     /// <returns>The largest departure from the ideal sine or cosine the kernel may show at that angle.</returns>
     /// <remarks>
-    /// The reduction constant is <c>c = round(2⁶⁴/2π)</c>, so <c>|c − 2⁶⁴/2π| ≤ ½</c>. The kernel forms
-    /// <c>u·c</c> exactly and reads the fractional turn off bit 16 upward, which makes the phase error at most
-    /// <c>u/2⁸¹</c> turns — <c>2π·u/2⁸¹</c> radians. Since neither sine nor cosine moves faster than one per radian,
-    /// the value error that phase implies is at most <c>2¹⁶·2π·u/2⁸¹</c> raw, which is <c>π·u/2⁶⁴</c> and reaches π at
-    /// the top of the unsigned width. 355/113 stands in for π as a strict OVERESTIMATE, and the quotient is taken as a
-    /// CEILING, so the whole term is an upper bound reached in integers with no rounding slipped in.
+    /// The Q96 reciprocal is rounded within one half of a unit. Reading product bits from bit 48 gives a reciprocal
+    /// error at most <c>u/2¹¹³</c> turns, hence <c>π·u/2⁹⁶</c> raw Q16 units. The additional phase truncation is far
+    /// below the flat integer budget. The rational 355/113 strictly overestimates pi; ceiling preserves the bound.
     /// </remarks>
     private static BigInteger SinCosRawEnvelope(ulong rawAngle) {
         var numerator = (new BigInteger(value: rawAngle) * 355);
-        var denominator = (new BigInteger(value: 113) << 64);
+        var denominator = (new BigInteger(value: 113) << 96);
 
         return (SinCosRawFlatBudget + ((numerator + (denominator - BigInteger.One)) / denominator));
     }

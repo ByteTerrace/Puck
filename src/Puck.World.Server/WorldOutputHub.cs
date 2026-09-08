@@ -25,8 +25,9 @@ public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy
 /// server-owned array — see <see cref="WorldServer"/>'s own remarks) and must fully consume or copy it before its
 /// <see cref="IClientSink.DeliverSnapshot"/> call returns, because the next tick's snapshot overwrites the same
 /// backing array. <see cref="WorldServer.EmitSnapshot"/> only returns once every typed subscriber has done exactly
-/// that. The TCP transport (<see cref="Server.WorldTcpHost"/>) uses its own strictly request-then-response wire
-/// instead (<see cref="Server.WorldTcpWireFormat"/>) and never subscribes here.
+/// that. Interactive QUIC traffic uses a request-then-response wire
+/// (<see cref="WorldPeerWireFormat"/>); continuous federation projections subscribe here and copy each
+/// borrowed snapshot into a bounded wire queue before returning.
 /// </summary>
 /// <remarks><para>Play-and-host (a local sink plus N future connections, plus the tape) is first-class here: every
 /// <see cref="Subscribe(IClientSink)"/> call adds a subscriber; it never displaces one already attached.</para>
@@ -54,7 +55,7 @@ public readonly record struct WorldSinkDisclosure(WorldObserverDisclosure Policy
 /// narrated on stderr by its concrete type, and detached — never retried, and never allowed to unwind into the tick
 /// loop and take every other subscriber (and the tick itself) down with it. A broken observer stays broken; it does
 /// not get a second chance to corrupt delivery to the healthy ones.</para></remarks>
-public sealed class WorldOutputHub {
+public sealed partial class WorldOutputHub {
     // One typed-lane slot. Active starts true and is flipped exactly once, either by the lease's own Dispose or by a
     // fault caught during delivery — both routes are equivalent from the subscriber's point of view (detached,
     // compacted out, never delivered to again). Kept as a class (not a struct) because the lease Subscribe returns IS
@@ -113,7 +114,10 @@ public sealed class WorldOutputHub {
     // that HasTypedSubscribers reads false while healthy subscribers remain — silently starving them of every
     // subsequent snapshot the server then skips building.
     private void Detach(Subscription subscription, string callSite, Exception exception) {
-        Console.Error.WriteLine(value: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}");
+        Narrate(
+            channel: "world.output",
+            text: $"[world.output: {subscription.Sink.GetType().Name} threw in {callSite} — detached] {exception}"
+        );
 
         if (subscription.Active) {
             subscription.Active = false;
@@ -180,6 +184,16 @@ public sealed class WorldOutputHub {
         Deliver(
             callSite: nameof(DeliverDefinition),
             deliver: static (sink, payload) => sink.DeliverDefinition(definition: payload),
+            payload: definition
+        );
+    /// <summary>Fans the live world definition out to every typed subscriber after a value-only mutation (see
+    /// <see cref="IClientSink.DeliverState"/>). A faulting sink is isolated and detached — see the class
+    /// remarks.</summary>
+    /// <param name="definition">The definition now live on the server.</param>
+    public void DeliverState(WorldDefinition definition) =>
+        Deliver(
+            callSite: nameof(DeliverState),
+            deliver: static (sink, payload) => sink.DeliverState(definition: payload),
             payload: definition
         );
     /// <summary>Fans an accepted live session lever out to every typed subscriber. A faulting sink is isolated and

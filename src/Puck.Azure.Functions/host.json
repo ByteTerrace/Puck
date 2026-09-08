@@ -1,0 +1,28 @@
+{
+    "extensions": {
+        "mcp": {
+            "encryptClientState": true,
+            "instructions": "TODO: Write some...",
+            "messageOptions": {
+                "useAbsoluteUriForEndpoint": true
+            },
+            "serverName": "ByteTerrace MCP",
+            "serverVersion": "1.0.0",
+            "system": {
+                "webhookAuthorizationLevel": "Anonymous"
+            }
+        }
+    },
+    "logging": {
+        "applicationInsights": {
+            "enableLiveMetricsFilters": true,
+            "samplingSettings": {
+                "excludedTypes": "Request",
+                "isEnabled": true
+            }
+        }
+    },
+    "telemetryMode": "OpenTelemetry",
+    "version": "2.0"
+}
+

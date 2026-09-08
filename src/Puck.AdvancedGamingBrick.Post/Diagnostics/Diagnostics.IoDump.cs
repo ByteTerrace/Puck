@@ -1,10 +1,10 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --iodump <rom> <steps>: dump every I/O register halfword, to diff against the cosim oracle's iodump.
-internal static partial class Diagnostics {
+internal sealed partial class Diagnostics {
     /// <summary>Dumps every I/O register halfword after running a ROM, in the cosim oracle's <c>iodump</c> format
     /// (<c>IO &lt;offset&gt; &lt;value&gt;</c>), so the two streams diff to find I/O read-mask divergences.</summary>
-    public static void IoDump(string romPath, long steps) {
+    public void IoDump(string romPath, long steps) {
         if (!TryLoad(
             romPath: romPath,
             name: Path.GetFileName(path: romPath),

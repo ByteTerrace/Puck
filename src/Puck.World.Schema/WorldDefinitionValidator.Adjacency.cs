@@ -35,7 +35,7 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.destination '{destination.Name}' must be global and persisted — adjacency names one stable neighbouring authority.");
             }
-            if (!WorldSafeName.TryParse(
+            if (!SafeName.TryParse(
                 candidate: adjacency.Counterpart,
                 name: out _,
                 reason: out var counterpartReason
@@ -70,12 +70,21 @@ public static partial class WorldDefinitionValidator {
             if (adjacency.Capacity is { } borderCapacity) {
                 RequireIntRange(
                     errors: errors,
-                    max: WorldPopulationLimits.CapacityCeiling,
+                    max: WorldBodiesLimits.CapacityCeiling,
                     min: 1,
                     name: $"{path}.capacity",
                     value: borderCapacity
                 );
             }
+            // The same 0..600 band population.reconnectGraceSeconds carries: 0 disables, and a window past ten
+            // minutes has stopped being a liveness signal.
+            RequireRange(
+                value: adjacency.LivenessGraceSeconds,
+                min: 0f,
+                max: 600f,
+                name: $"{path}.livenessGraceSeconds",
+                errors: errors
+            );
             if (!proveNeighbours) {
                 continue;
             }

@@ -1,0 +1,9 @@
+world.population 128 idle
+world.flock
+body.where 4
+world.wait 240
+world.flock
+world.budget
+body.where 4
+world.state.hash
+wire.errors

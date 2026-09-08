@@ -124,6 +124,45 @@ internal static partial class Subjects {
         );
     }
 
+    /// <summary>Proves <c>FixedPointConvert.ScaleDecimalWide</c> reaches <c>FixedPointRounding.RoundRational</c> —
+    /// the module's ONE rational-rounding core — rather than a second, independently rounding body: for each sample,
+    /// the decimal is decomposed by <see cref="DecimalParts"/> exactly as <c>ScaleDecimalWide</c> itself decomposes
+    /// it, and <c>RoundRational</c> is called DIRECTLY on that decomposition; <c>ScaleDecimalWide</c>'s own result
+    /// must equal it exactly. The samples sit as close to an exact binary half as a base-10 fraction can reach at
+    /// these scales — one raw unit above and below — since <c>10^scale</c>'s only odd factor is <c>5^scale</c> and an
+    /// exact half needs a denominator that reduces to exactly two, which no decimal scale can produce against a
+    /// fraction bit count (32 or 48) at least as large as the decimal's own scale (at most 28): a genuine rounding
+    /// TIE is provably unreachable here, so the nearest-representable pair is the sharpest rounding-direction test
+    /// available.</summary>
+    /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
+    public static string? ScaleDecimalWideReachesCanonicalCore() {
+        (decimal Value, int FractionBitCount)[] samples = [
+            (0.5m, FixedQ1648.FractionBitCount), (-0.5m, FixedQ1648.FractionBitCount),
+            (1.5m, FixedQ1648.FractionBitCount), (-1.5m, FixedQ1648.FractionBitCount),
+            (0.4999999999999999999999999999m, FixedQ1648.FractionBitCount),
+            (0.5000000000000000000000000001m, FixedQ1648.FractionBitCount),
+            (0.5m, FixedQ3232.FractionBitCount), (-1.5m, FixedQ3232.FractionBitCount),
+            (0.4999999999999999999999999999m, FixedQ3232.FractionBitCount),
+            (0.5000000000000000000000000001m, FixedQ3232.FractionBitCount),
+            (decimal.MaxValue, FixedQ1648.FractionBitCount), (decimal.MinValue, FixedQ3232.FractionBitCount),
+        ];
+
+        foreach (var (value, fractionBitCount) in samples) {
+            var (numerator, decimalExponent) = DecimalParts(value: value);
+            var expected = FixedPointRounding.RoundRational(
+                denominator: BigInteger.Pow(exponent: decimalExponent, value: 10),
+                fractionBitCount: fractionBitCount,
+                numerator: numerator
+            );
+            var actual = FixedPointConvert.ScaleDecimalWide(value: value, fractionBitCount: fractionBitCount);
+
+            if (actual != expected) {
+                return $"ScaleDecimalWide({value}, {fractionBitCount}) = {actual}, but RoundRational on the same decomposed (numerator={numerator}, denominator=10^{decimalExponent}) is {expected}";
+            }
+        }
+
+        return null;
+    }
     /// <summary>Proves the three <c>INumberBase</c> conversion modes through a <c>decimal</c> source into
     /// <see cref="FixedQ1648"/> — one of the two public routes to <c>FixedPointConvert.ScaleDecimalWide</c>, the
     /// other being <see cref="Q3232DecimalConversionModes"/>: <see cref="GenericConversionModes"/> exercises the
@@ -884,33 +923,8 @@ internal static partial class Subjects {
             denominator: 2,
             numerator: 1
         ) + (high >> 44));
-    // The three committed circular regimes: 0.75 raw ULP over |θ| ≤ 2π, 1.0 below 2⁴⁸ raw, 2.5 over the full carrier.
-    // The bands follow the reduction constant's own error, which grows linearly in |raw|: |C − 2⁶⁴/2π| ≤ ½ admits up to
-    // 2π·|raw|/2⁶⁵ ≈ 1.57 raw ULP of argument error at |raw| = 2⁶³, on top of the kernel's own ≤ 0.5.
-    private static BigInteger SinCosToleranceUnits(long raw) {
-        var magnitude = ((long.MinValue == raw)
-            ? (BigInteger.One << 63)
-            : BigInteger.Abs(value: new BigInteger(value: raw))
-        );
-
-        if (magnitude <= 411775) {
-            return UlpUnits(
-            denominator: 4,
-            numerator: 3
-        );
-        }
-        if (magnitude < (BigInteger.One << 48)) {
-            return UlpUnits(
-            denominator: 1,
-            numerator: 1
-        );
-        }
-
-        return UlpUnits(
-            denominator: 2,
-            numerator: 5
-        );
-    }
+    // Q96 full-range reduction plus the local Q60 kernel and the final ties-to-even narrowing.
+    private static BigInteger SinCosToleranceUnits() => UlpUnits(numerator: 50000001, denominator: 100000000);
 
     /// <summary>Proves the square root is BIT-EXACTLY the documented floor at every swept raw, against a Newton descent
     /// in arbitrary width settled by the exact predicate; states that predicate directly on the returned raw, so the
@@ -941,12 +955,17 @@ internal static partial class Subjects {
         }
 
         var radicand = (new BigInteger(value: raw) << FixedQ4816.FractionBitCount);
-        var expected = Oracles.IntegerSquareRoot(value: radicand);
+        var floor = Oracles.IntegerSquareRoot(value: radicand);
+        // Nearest from the floor: consecutive squares differ by 2r + 1, so the radicand is nearer (r + 1)² exactly when
+        // its remainder above r² exceeds r, and an integer radicand can never sit halfway.
+        var expected = (((radicand - (floor * floor)) > floor)
+            ? (floor + BigInteger.One)
+            : floor);
         var exact = new BigInteger(value: actual);
+        var offset = (radicand - (exact * exact));
 
         if (exact != expected) { return $"the square root of {raw} is {actual}, expected {expected}"; }
-        if ((exact * exact) > radicand) { return $"the square root of {raw} squares above the radicand"; }
-        if (((exact + BigInteger.One) * (exact + BigInteger.One)) <= radicand) { return $"the square root of {raw} is not the greatest integer whose square fits"; }
+        if ((offset <= -exact) || (offset > exact)) { return $"the square root of {raw} is not the integer nearest the radicand's root: radicand - result² = {offset} lies outside (-result, result]"; }
 
         return null;
     }
@@ -1043,8 +1062,8 @@ internal static partial class Subjects {
         return null;
     }
     /// <summary>Proves both circular outputs lie inside the radian-domain series enclosure widened by the committed
-    /// per-regime envelope, that the two one-line projections are the pair's own components, that both outputs are
-    /// clamped into the unit interval, that the Pythagorean identity holds inside the regime's own budget, that the
+    /// full-range envelope, that the single-output paths equal the pair's own components, that both outputs stay
+    /// inside the unit interval, that the Pythagorean identity holds inside the same budget, that the
     /// origin is exact, and that the module's derived circle constant agrees with the published expansion.</summary>
     /// <param name="left">The first sampled operand lane.</param>
     /// <param name="right">The second sampled operand lane.</param>
@@ -1057,7 +1076,7 @@ internal static partial class Subjects {
             guardBitCount: Oracles.GuardBitCount,
             raw: raw
         );
-        var tolerance = SinCosToleranceUnits(raw: raw);
+        var tolerance = SinCosToleranceUnits();
         var one = (1L << FixedQ4816.FractionBitCount);
 
         if (WithinEnvelope(
@@ -1088,6 +1107,15 @@ internal static partial class Subjects {
         var residual = BigInteger.Abs(value: (((((BigInteger)sin.Value) * sin.Value) + (((BigInteger)cos.Value) * cos.Value)) - (BigInteger.One << 32)));
 
         if (residual > (((4 * one) * ulp) + ((4 * ulp) * ulp))) { return $"the Pythagorean identity fails at raw {raw} by {residual}"; }
+
+        // Odd sine, even cosine, bit for bit: the turn reduction, the radian product and the narrowing all run on the
+        // magnitude and re-sign, so negating the angle negates exactly the sine and leaves exactly the cosine.
+        if (raw != long.MinValue) {
+            var (mirrorSin, mirrorCos) = FixedQ4816.SinCos(angle: Raw(value: -raw));
+
+            if (mirrorSin.Value != -sin.Value) { return $"the sine is not odd at raw {raw}: Sin(-θ) = {mirrorSin.Value}, -Sin(θ) = {-sin.Value}"; }
+            if (mirrorCos != cos) { return $"the cosine is not even at raw {raw}: Cos(-θ) = {mirrorCos.Value}, Cos(θ) = {cos.Value}"; }
+        }
 
         var (originSin, originCos) = FixedQ4816.SinCos(angle: FixedQ4816.Zero);
 
@@ -1353,11 +1381,10 @@ internal static partial class Subjects {
         ("MinValue^−1", long.MinValue, -65536L, 0L),
     ];
 
-    /// <summary>Proves the power's FRACTIONAL path — the exponential of the Q16-rounded product of the exponent and the
-    /// subject's own logarithm — lies inside the enclosure of the true value widened by the DERIVED envelope: the
-    /// exponent carries at most (3·|yRaw| + 2¹⁷)/2³⁴ of error from the logarithm's 0.75 ULP and the Q16 quantization,
-    /// which scales the result by at most that factor, and the exponential contributes its own documented
-    /// envelope.</summary>
+    /// <summary>Proves the power's FRACTIONAL path — the exponential of the once-rounded Q32 product of the exponent and
+    /// the subject's own Q46 logarithm — lies inside the enclosure of the true value widened by the DERIVED envelope: the
+    /// exponent carries at most (8·|yRaw| + 2¹⁸)/2⁵¹ of error from the Q46 logarithm and the single Q32 rounding, which
+    /// scales the result by at most that factor, and the exponential contributes its own documented envelope.</summary>
     /// <param name="left">The first sampled operand lane.</param>
     /// <param name="right">The second sampled operand lane.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
@@ -1402,7 +1429,10 @@ internal static partial class Subjects {
             exponentBitCount: 32,
             guardBitCount: Oracles.GuardBitCount
         ).High;
-        var quantization = ((high * ((3 * BigInteger.Abs(value: new BigInteger(value: exponentRaw))) + (BigInteger.One << 17))) >> 34);
+        // The logarithm reaches the product at Q46 and the product is rounded once to Q32, so the exponent error is
+        // below |yRaw|·2⁻⁴⁸ (the Q46 logarithm's error, far under one Q46 unit per unit of y, stated at 2⁻³² for slack)
+        // plus 2⁻³³: in units of 2⁻⁵¹, 8·|yRaw| + 2¹⁸.
+        var quantization = ((high * ((8 * BigInteger.Abs(value: new BigInteger(value: exponentRaw))) + (BigInteger.One << 18))) >> 51);
 
         return WithinEnvelope(
             name: $"Pow({baseRaw}, {exponentRaw})",
@@ -1434,7 +1464,7 @@ internal static partial class Subjects {
             guardBitCount: Oracles.GuardBitCount,
             raw: raw
         );
-        var tolerance = SinCosToleranceUnits(raw: raw);
+        var tolerance = SinCosToleranceUnits();
 
         var (sin, cos) = FixedQ4816.SinCos(angle: Raw(value: raw));
 

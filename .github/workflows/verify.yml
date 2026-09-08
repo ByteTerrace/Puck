@@ -1,0 +1,219 @@
+name: Verify
+
+# The emulator gates. `gate` runs on every change: the Humble GamingBrick battery's self-contained stages plus every
+# ledger row recorded as passing, against the corpora pinned in src/Puck.HumbleGamingBrick.Post/corpora.json, and
+# fails the build on any regression. `advanced` runs the Advanced GamingBrick battery the same way against its own
+# corpora; its BIOS-dependent stages skip here. `frontier` runs nightly and on request: the rows recorded as failing
+# or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded so a
+# ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries are
+# pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check` and
+# `puck registry --check` from a freshly published CLI on every change, so a document field added without
+# regenerating the checked-in schema or the name registry fails the build here rather than only in a manual verb run.
+
+on:
+  workflow_call:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Which lane to run
+        type: choice
+        options: [gate, frontier, all]
+        default: gate
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('verify-pr-{0}', github.ref) || format('verify-run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+  POST: src/Puck.HumbleGamingBrick.Post
+  AGB_POST: src/Puck.AdvancedGamingBrick.Post
+
+jobs:
+  gate:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore corpus cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/Puck/corpora
+          key: corpora-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
+
+      - name: Build the battery
+        run: dotnet build "$POST" --configuration Release
+
+      - name: Fetch corpora
+        run: dotnet run --project "$POST" --configuration Release --no-build -- --fetch-corpora
+
+      - name: Run the gate lane
+        run: dotnet run --project "$POST" --configuration Release --no-build -- --lane ${{ github.event.inputs.lane || 'gate' }} --require-assets --artifacts artifacts/gb-post
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo '```'
+            cat artifacts/gb-post/post-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: gb-post-${{ github.event.inputs.lane || 'gate' }}
+          path: artifacts/gb-post
+          if-no-files-found: error
+
+
+  advanced:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore corpus cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/Puck/corpora
+          key: corpora-agb-${{ hashFiles('src/Puck.AdvancedGamingBrick.Post/corpora.json') }}
+
+      - name: Build the battery
+        run: dotnet build "$AGB_POST" --configuration Release
+
+      - name: Fetch corpora
+        run: dotnet run --project "$AGB_POST" --configuration Release --no-build -- --fetch-corpora
+
+      - name: Run the battery
+        run: dotnet run --project "$AGB_POST" --configuration Release --no-build -- --artifacts artifacts/agb-post
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo '```'
+            cat artifacts/agb-post/post-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: agb-post
+          path: artifacts/agb-post
+          if-no-files-found: error
+
+
+  frontier:
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Restore corpus cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/share/Puck/corpora
+          key: corpora-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
+
+      - name: Build the battery
+        run: dotnet build "$POST" --configuration Release
+
+      - name: Fetch corpora
+        run: dotnet run --project "$POST" --configuration Release --no-build -- --fetch-corpora
+
+      - name: Run the frontier lane
+        run: dotnet run --project "$POST" --configuration Release --no-build -- --lane frontier --require-assets --artifacts artifacts/gb-post
+
+      - name: Report
+        if: always()
+        run: |
+          {
+            echo '```'
+            cat artifacts/gb-post/post-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: gb-post-frontier
+          path: artifacts/gb-post
+          if-no-files-found: error
+
+  browser:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Install the wasm-tools workload
+        run: dotnet workload install wasm-tools
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "26.5.1"
+
+      - name: Build Puck.World.Browser
+        run: dotnet build src/Puck.World.Browser --configuration Release
+
+      - name: Test the pure Engine core
+        run: dotnet test tests/Puck.World.Browser.Tests --configuration Release
+
+      - name: Publish the browser-wasm AppBundle
+        # The project owns its RID. A command-line -r propagates it to every
+        # library and invalidates their ordinary locked restore graphs.
+        run: dotnet publish src/Puck.World.Browser --configuration Release --no-restore
+
+      - name: Run the Node harness against the AppBundle
+        working-directory: src/Puck.Dashboard/src/portal
+        run: node --test tests/engine-wasm.test.cjs
+
+  ledgers:
+    if: ${{ github.event_name != 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - uses: ./.github/actions/setup-puck
+        with:
+          candidate: true
+
+      - name: puck schema --check
+        run: puck schema --check
+
+      - name: puck registry --check
+        run: puck registry --check

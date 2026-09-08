@@ -135,25 +135,24 @@ public readonly record struct ModularTransform
         );
     private static long MultiplyAdd(long left, long right, long otherLeft, long otherRight) =>
         checked((long)(checked(((((Int128)left) * right) + (((Int128)otherLeft) * otherRight)))));
-    private static (long Numerator, long Denominator) NormalizeCusp(BigInteger numerator, BigInteger denominator) {
-        if (BigInteger.Zero == denominator) {
+    // The image coordinates are each a sum of two products of longs, so they fit Int128 exactly and never reach the
+    // extreme that would make Int128.Abs throw; the reduction runs entirely on machine-width words.
+    private static (long Numerator, long Denominator) NormalizeCusp(Int128 numerator, Int128 denominator) {
+        if (Int128.Zero == denominator) {
             // Every ∞ collapses to the canonical (1, 0), regardless of the numerator's sign.
             return (1L, 0L);
         }
 
-        if (BigInteger.Zero == numerator) {
+        if (Int128.Zero == numerator) {
             return (0L, 1L);
         }
 
-        var divisor = BigInteger.GreatestCommonDivisor(
-            left: BigInteger.Abs(value: numerator),
-            right: BigInteger.Abs(value: denominator)
-        );
+        var divisor = Int128.Abs(value: numerator).GreatestCommonDivisor(other: Int128.Abs(value: denominator));
 
         numerator /= divisor;
         denominator /= divisor;
 
-        if (BigInteger.Zero > denominator) {
+        if (Int128.Zero > denominator) {
             numerator = -numerator;
             denominator = -denominator;
         }
@@ -183,8 +182,8 @@ public readonly record struct ModularTransform
     /// <exception cref="OverflowException">A coordinate of the reduced image cusp exceeds <see cref="long"/>.</exception>
     public (long Numerator, long Denominator) Apply(long numerator, long denominator) =>
         NormalizeCusp(
-            numerator: ((((BigInteger)A) * numerator) + (((BigInteger)B) * denominator)),
-            denominator: ((((BigInteger)C) * numerator) + (((BigInteger)D) * denominator))
+            numerator: ((((Int128)A) * numerator) + (((Int128)B) * denominator)),
+            denominator: ((((Int128)C) * numerator) + (((Int128)D) * denominator))
         );
     /// <summary>Applies the Möbius map to an interior point of the upper half-plane.</summary>
     /// <param name="point">The fixed-point interior point.</param>

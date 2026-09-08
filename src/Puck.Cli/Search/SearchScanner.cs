@@ -22,8 +22,6 @@ internal static class SearchScanner {
 
         return new Regex(options: options, pattern: pattern);
     }
-    // ---- file enumeration -------------------------------------------------------------------
-
     // Null when a path argument names nothing on disk; SearchCommand turns that into a usage error.
     public static List<string>? EnumerateFiles(SearchOptions opt) =>
         FileWalk.Enumerate(verb: "search", roots: opt.Paths, include: opt.Include, exclude: opt.Exclude, admit: Admit);
@@ -51,8 +49,6 @@ internal static class SearchScanner {
     }
     private static void WarnUnreadable(string path, Exception ex) =>
         FileWalk.WarnUnreadable(exception: ex, path: path, verb: "search");
-
-    // ---- scanning ---------------------------------------------------------------------------
 
     public static SearchFileResult? ScanLines(string path, Regex regex, SearchOptions opt) {
         var text = ReadText(path: path);
@@ -114,8 +110,6 @@ internal static class SearchScanner {
 
         return new SearchFileResult(Path: path, Count: spans.Count, Lines: null, Hits: null, Spans: spans);
     }
-
-    // ---- helpers ----------------------------------------------------------------------------
 
     // The file as UTF-8 text with a leading byte-order mark removed, so '^' anchors line 1 and span mode's raw text
     // starts at the first real character. Null means unreadable, already warned.

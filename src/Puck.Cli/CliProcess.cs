@@ -7,8 +7,35 @@ namespace Puck.Cli;
 // both streams without merging them. The captured shape owns the pipe lifecycle because waiting for a child before
 // draining both streams can deadlock, and returning before the pumps finish loses the tail that often names a crash.
 internal static class CliProcess {
+    internal static async Task<string> RunCheckedAsync(string root, string executable, IEnumerable<string> arguments, bool capture = false) {
+        var info = new ProcessStartInfo(fileName: executable) {
+            RedirectStandardError = capture,
+            RedirectStandardOutput = capture,
+            UseShellExecute = false,
+            WorkingDirectory = root,
+        };
+
+        foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
+        using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {executable}."));
+        var output = (capture ? process.StandardOutput.ReadToEndAsync() : Task.FromResult(result: ""));
+        var errors = (capture ? process.StandardError.ReadToEndAsync() : Task.FromResult(result: ""));
+
+        await process.WaitForExitAsync();
+        var text = await output;
+        var errorText = await errors;
+
+        if (process.ExitCode != 0) {
+            throw new InvalidOperationException(message: $"{executable} exited with code {process.ExitCode}. {text}{errorText}");
+        }
+        return text;
+    }
+
     public static int RunStreamed(string fileName, params string[] arguments) {
-        var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false };
+        return RunStreamedInDirectory(fileName: fileName, workingDirectory: Environment.CurrentDirectory, arguments: arguments);
+    }
+
+    internal static int RunStreamedInDirectory(string fileName, string workingDirectory, params string[] arguments) {
+        var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false, WorkingDirectory = workingDirectory };
 
         foreach (var argument in arguments) {
             startInfo.ArgumentList.Add(item: argument);
@@ -23,6 +50,47 @@ internal static class CliProcess {
     }
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) =>
         RunCapturedAsync(arguments: arguments, fileName: fileName, input: input, timeout: timeout).GetAwaiter().GetResult();
+    /// <summary>Spawns <paramref name="fileName"/>, drains both streams to their end exactly as read (no line
+    /// splitting or re-joining, so byte content — including line endings — passes through unchanged), waits for
+    /// exit, and returns the raw text alongside the exit code. Unlike <see cref="RunCaptured"/> this leaves the
+    /// child's standard input inherited from the caller rather than redirected, and never times out or kills the
+    /// child — the shape a short, non-interactive, synchronous invocation (a local <c>git</c> query) needs.</summary>
+    public static CliRawProcessResult RunCapturedRaw(string fileName, IReadOnlyList<string> arguments) {
+        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        var startInfo = new ProcessStartInfo {
+            CreateNoWindow = true,
+            FileName = fileName,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            StandardErrorEncoding = utf8NoBom,
+            StandardOutputEncoding = utf8NoBom,
+            UseShellExecute = false,
+        };
+
+        foreach (var argument in arguments) {
+            startInfo.ArgumentList.Add(item: argument);
+        }
+
+        using var process = (Process.Start(startInfo: startInfo)
+            ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
+        // Both pipes drain concurrently: a child that fills one pipe before closing the other would deadlock a
+        // sequential ReadToEnd pair.
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = stderrTask.GetAwaiter().GetResult();
+
+        process.WaitForExit();
+
+        return new CliRawProcessResult(ExitCode: process.ExitCode, Stderr: stderr, Stdout: stdout);
+    }
+    /// <summary>Gets what remains of a suite-wide time budget after a running clock's elapsed time. The result is
+    /// zero or negative once the budget is spent.</summary>
+    /// <param name="clock">The running suite clock.</param>
+    /// <param name="budget">The suite-wide time budget.</param>
+    /// <remarks>A caller must refuse its work outright once this is too small to hold it, and never clamp a child's
+    /// timeout down to the remainder: <see cref="RunCaptured"/> kills a child whose timeout elapses, and on Windows a
+    /// killed child reports exit code -1 with both streams empty — indistinguishable from a failure to launch.</remarks>
+    public static TimeSpan RemainingBudget(Stopwatch clock, TimeSpan budget) => (budget - clock.Elapsed);
 
     private static async Task<CliProcessResult> RunCapturedAsync(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) {
         var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
@@ -121,3 +189,4 @@ internal sealed record CliProcessResult(
     string Stdout,
     bool TimedOut
 );
+internal readonly record struct CliRawProcessResult(int ExitCode, string Stderr, string Stdout);

@@ -14,14 +14,6 @@ namespace Puck.Physics.Tests;
 /// without re-deriving the substep trajectory that produced them.
 /// </summary>
 public sealed class RestitutionLawTests {
-    private static void AssertNear(FixedQ4816 actual, double expected, double tolerance, string subject) {
-        var difference = Math.Abs(value: (((double)actual) - expected));
-
-        Assert.True(
-            condition: (difference <= tolerance),
-            userMessage: $"{subject}: expected {expected}, measured {MeasurementReport.Format(value: actual)}"
-        );
-    }
     // A sphere already touching the floor (height == its own radius), given an authored downward speed and one
     // Advance() — the minimal shape that puts a live, solved contact under ApplyRestitution on the very first step.
     private static SpikeWorld Drop(FixedQ4816 restitution, double downwardSpeed, int substepCount = 4) {
@@ -175,7 +167,7 @@ public sealed class RestitutionLawTests {
             right: slot.Normal
         );
 
-        AssertNear(
+        MeasurementAssert.Near(
             actual: actualClosing,
             expected: ((double)expectedClosing),
             subject: $"post-restitution closing velocity at n={substepCount}",

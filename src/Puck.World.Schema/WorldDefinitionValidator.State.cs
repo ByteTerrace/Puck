@@ -4,10 +4,25 @@ using Puck.Maths;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    /// <summary>Describes the authored spelling of a source shape, for a refusal message.</summary>
-    private static string DescribeGeneratorSource(WorldGeneratorSource source) =>
-        (char.ToLowerInvariant(c: source.ToString()[0]) + source.ToString()[1..]);
-    private static string DescribeKind(CellKind kind) => kind.ToString().ToLowerInvariant();
+    /// <summary>Validates the one row an <c>UpsertStateCell</c>/<c>RemoveStateCell</c> mutation touched — the same
+    /// per-row and cross-row checks <see cref="TryValidateTouchedStateRows"/> runs for any state mutation, with no
+    /// rule, interaction, pattern, table, search plan, or flock affinity compiled.</summary>
+    public static bool TryValidateRuntimeStateCell(WorldDefinition definition, string rowName, string key, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (
+            WorldDefinitionRows.FindStateRow(rows: definition.State, name: rowName) is not { } row ||
+            !CellName.TryParse(candidate: key, name: out var cellKey, reason: out _) ||
+            StateRows.FindCell(cells: row.Cells, key: cellKey) is null
+        ) {
+            reason = $"state row '{rowName}' cell '{key}' did not resolve after composition";
+
+            return false;
+        }
+
+        return TryValidateTouchedStateRows(definition: definition, rowNames: [rowName], reason: out reason);
+    }
+
     // Fixed-kind values speak DECIMAL in refusal text — never the raw Q48.16 bit pattern — matching the document
     // JSON, console verb, and read-back conventions the same value crosses.
     private static string DescribeValue(CellKind kind, long raw) =>
@@ -15,9 +30,24 @@ public static partial class WorldDefinitionValidator {
             ? FixedQ4816.FromRawBits(value: raw).ToString()
             : raw.ToString(provider: CultureInfo.InvariantCulture)
         );
-    /// <summary>Validates a row's authored <see cref="WorldStateAdvance"/> continuous-accumulation trait. Whether
+    // Trait placement and trait fields are separate: scalar and keyed forms share the field laws below.
+    private static bool TraitSlotEligible(StateRow row) => row.Capacity is null &&
+        (row.Cells is null or { Count: 0 } || row.Cells is { Count: 1 } cells && cells[0].Key == StateRow.SlotKey);
+
+    private static void ValidateAdvanceFields(StateAdvance advance, string path, List<string> errors) {
+        if (advance.RateDenominator <= 0) {
+            errors.Add($"{path}.advance.rateDenominator {advance.RateDenominator} must be positive.");
+        }
+        RequireNonNegativeEpoch(advance.EpochTick, $"{path}.advance.epochTick", errors);
+    }
+    private static void ValidateDynamicsFields(StateDynamics dynamics, ISet<string> names, string path, List<string> errors) {
+        RequireDeclared(value: dynamics.Row, declaredSet: names, path: path, field: "dynamics.row", rowNoun: "dynamics", errors: errors);
+        RequireNonNegativeEpoch(dynamics.EpochTick, $"{path}.dynamics.epochTick", errors);
+    }
+
+    /// <summary>Validates a row's authored <see cref="StateAdvance"/> continuous-accumulation trait. Whether
     /// reaching a declared envelope bound clamps the computed value (it never rewrites the stored base/epoch) is the
-    /// settled read-side half of the envelope duality, documented on <see cref="WorldStateAdvance"/> itself and not a
+    /// settled read-side half of the envelope duality, documented on <see cref="StateAdvance"/> itself and not a
     /// validator concern — this method refuses only shapes the read side could not honestly compute over.</summary>
     private static void ValidateAdvance(WorldStateRow row, bool numeric, string path, List<string> errors) {
         if (row.Advance is not { } advance) {
@@ -29,33 +59,26 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{path} ('{row.Name}') declares advance on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows accumulate.");
+            errors.Add(item: $"{path} ('{row.Name}') declares advance on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows accumulate.");
         }
 
-        if (advance.RateDenominator <= 0) {
-            errors.Add(item: $"{path}.advance.rateDenominator {advance.RateDenominator} must be positive.");
-        }
-
-        if (advance.EpochTick < 0) {
-            errors.Add(item: $"{path}.advance.epochTick {advance.EpochTick} must be non-negative.");
-        }
+        ValidateAdvanceFields(advance, path, errors);
 
         // Advance is a SCALAR (slot) trait: legitimate only on a row declaring no capacity and holding at most its
         // one slot cell — empty (declared, never yet set) or exactly one cell keyed WorldStateRow.SlotKey. A row that
         // has grown past that (a keyed table, or a slot that later gained a second author-keyed cell) is refused
         // here rather than silently accumulating a value nothing addresses as "the" row value.
-        var cells = (row.Cells ?? []);
-        var slotEligible = ((row.Capacity is null) && ((cells.Count == 0) || ((cells.Count == 1) && (cells[0].Key == WorldStateRow.SlotKey))));
+        var slotEligible = TraitSlotEligible(row);
 
         if (!slotEligible) {
             errors.Add(item: $"{path} ('{row.Name}') declares advance on a keyed row — advance is legitimate only on a scalar (slot) row, authored with 'value' or left empty until the first explicit set.");
         }
     }
-    /// <summary>Validates one cell's own <see cref="WorldStateAdvance"/> — the keyed counterpart of
+    /// <summary>Validates one cell's own <see cref="StateAdvance"/> — the keyed counterpart of
     /// <see cref="ValidateAdvance"/>, stated separately because it governs the opposite shape: a cell inside a
     /// table rather than a row's own slot. The two never overlap by construction (this rejects the slot key
     /// outright), so a cell's advance and its row's advance can never both claim the same cell.</summary>
-    private static void ValidateCellAdvance(WorldStateRow row, WorldStateCell cell, WorldStateAdvance advance, bool numeric, string cellPath, List<string> errors) {
+    private static void ValidateCellAdvance(WorldStateRow row, StateCell cell, StateAdvance advance, bool numeric, string cellPath, List<string> errors) {
         // The slot key's own accumulation is authored at the ROW level (beside 'value'), never here — refusing this
         // combination outright is what keeps "which advance governs the slot cell" from ever being two mechanisms
         // reading the same address.
@@ -64,34 +87,191 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (!numeric) {
-            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a {DescribeKind(kind: row.Kind)} cell — only int/fixed cells accumulate.");
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares advance on a {StateSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells accumulate.");
         }
 
-        if (advance.RateDenominator <= 0) {
-            errors.Add(item: $"{cellPath}.advance.rateDenominator {advance.RateDenominator} must be positive.");
+        ValidateAdvanceFields(advance, cellPath, errors);
+    }
+    /// <summary>Validates a row's authored <see cref="StateCycle"/> rotation trait: the generator, power and step length the
+    /// read side can compute over, an output the row's kind can carry, and the same scalar-row exclusivity the other
+    /// traits hold.</summary>
+    private static void ValidateCycle(WorldStateRow row, bool numeric, string path, List<string> errors) {
+        if (row.Cycle is not { } cycle) {
+            return;
         }
 
-        if (advance.EpochTick < 0) {
-            errors.Add(item: $"{cellPath}.advance.epochTick {advance.EpochTick} must be non-negative.");
+        if (row.Draw is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both draw and cycle — a row is an authored-randomness draw site or a tick-indexed rotation, never both.");
+        }
+
+        if (row.Advance is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both advance and cycle — a row is a linear accumulator or a tick-indexed rotation, never both.");
+        }
+
+        if (row.Dynamics is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both dynamics and cycle — a row is a second-order easing cell or a tick-indexed rotation, never both.");
+        }
+
+        ValidateCycleShape(
+            cycle: cycle,
+            errors: errors,
+            kind: row.Kind,
+            numeric: numeric,
+            path: $"{path}.cycle",
+            subject: $"{path} ('{row.Name}')"
+        );
+
+        var slotEligible = TraitSlotEligible(row);
+
+        if (!slotEligible) {
+            errors.Add(item: $"{path} ('{row.Name}') declares cycle on a keyed row — cycle is legitimate only on a scalar (slot) row, authored with 'value' or left empty; a keyed row's cells each declare their own 'cycle'.");
+        }
+
+        var cells = row.Cells ?? [];
+        if (StateCycle.IsLatticeOutput(output: cycle.Output) && (cells.Count == 1) && (StateCycle.Phase(baseValue: cells[0].Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
+            errors.Add(item: $"{path} ('{row.Name}') value {DescribeValue(kind: row.Kind, raw: cells[0].Value)} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
         }
     }
-    /// <summary>Validates a state row's authored <see cref="WorldDraw"/> site — its own shape rules, then the shared
+    /// <summary>Validates one cell's own <see cref="StateCycle"/> — the keyed counterpart of
+    /// <see cref="ValidateCycle"/>, refusing the slot key so a cell's cycle and its row's cycle can never both claim
+    /// the same cell.</summary>
+    private static void ValidateCellCycle(WorldStateRow row, StateCell cell, StateCycle cycle, bool numeric, string cellPath, List<string> errors) {
+        // A drive gate is resolved once per install and read as of tick zero (WorldGrants.SyncState); a cell that
+        // turns with the tick would gate on a value nothing ever refreshes, so a gate row's cells never cycle.
+        if (row.GatesDrive) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle on a gatesDrive row — a drive gate is resolved once per install, so a cell that turns with the tick would gate on a stale value; drive the gate through an explicit write instead.");
+        }
+
+        if (cell.Key == WorldStateRow.SlotKey) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares its own cycle on the reserved slot key — a scalar row's rotation is authored at the ROW level ('cycle' beside 'value').");
+        }
+
+        ValidateCycleShape(
+            cycle: cycle,
+            errors: errors,
+            kind: row.Kind,
+            numeric: numeric,
+            path: $"{cellPath}.cycle",
+            subject: $"{cellPath} ('{row.Name}'.'{cell.Key}')"
+        );
+
+        if (StateCycle.IsLatticeOutput(output: cycle.Output) && (StateCycle.Phase(baseValue: cell.Value, kind: row.Kind) is < 0 or >= SymmetryLattice.NodeCount)) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') value {DescribeValue(kind: row.Kind, raw: cell.Value)} is not a symmetry-lattice node — a {StateSpelling.CycleOutput(output: cycle.Output)} cycle stores the node its ring walk starts from, 0..{SymmetryLattice.NodeCount - 1}.");
+        }
+    }
+    // The field checks a row-level and a cell-level cycle share: a word that bakes to a moving generator, a power
+    // that is not the identity, step length, epoch, and an output the carrying kind can read (step/node on int, the
+    // fixed outputs on fixed, nothing on bool/text).
+    private static void ValidateCycleShape(StateCycle cycle, CellKind kind, bool numeric, string path, string subject, List<string> errors) {
+        if (!Enum.IsDefined(value: cycle.Output)) {
+            errors.Add(item: $"{path}.output '{cycle.Output}' is not a defined CycleOutput.");
+        }
+
+        if (!numeric) {
+            errors.Add(item: $"{subject} declares cycle on a {StateSpelling.Kind(kind: kind)} row — only int/fixed cells turn.");
+        }
+        else if (StateCycle.IsIntegerOutput(output: cycle.Output) != (kind == CellKind.Int)) {
+            errors.Add(item: $"{path}.output '{StateSpelling.CycleOutput(output: cycle.Output)}' does not suit a {StateSpelling.Kind(kind: kind)} cell — Step, Node and Ring are read by int cells, Turns/Cos/Sin/ProjectionX/ProjectionY by fixed cells.");
+        }
+
+        if (!cycle.TryResolveGenerator(generator: out var generator, reason: out var wordReason)) {
+            errors.Add(item: $"{path}.{wordReason}.");
+        }
+        else if (generator.IsIdentity) {
+            errors.Add(item: $"{path}.word [{string.Join(separator: ',', values: cycle.Word!)}] moves no node — its order is 1, so a cycle carrying it would never turn; author a word whose reflections do not cancel.");
+        }
+        else if ((cycle.Power <= -generator.Order) || (cycle.Power >= generator.Order)) {
+            errors.Add(item: $"{path}.power {cycle.Power} is outside the generator's order {generator.Order} — a power reduces modulo the order, so author one in -{generator.Order - 1}..{generator.Order - 1}.");
+        }
+        else if (cycle.Power == 0) {
+            errors.Add(item: $"{path}.power 0 is the identity — a cycle carrying it would never turn; author a nonzero power.");
+        }
+
+        if (cycle.TicksPerStep <= 0) {
+            errors.Add(item: $"{path}.ticksPerStep {cycle.TicksPerStep} must be positive.");
+        }
+
+        if ((cycle.SubstepTicks < 0) || (cycle.SubstepTicks >= cycle.TicksPerStep)) {
+            errors.Add(item: $"{path}.substepTicks {cycle.SubstepTicks} must be in 0..ticksPerStep-1.");
+        }
+
+        RequireNonNegativeEpoch(
+            value: cycle.EpochTick,
+            name: $"{path}.epochTick",
+            errors: errors
+        );
+    }
+    /// <summary>Validates a row's authored <see cref="StateDynamics"/> easing trait — the closed-form
+    /// counterpart to <see cref="ValidateAdvance"/>, so shares its scalar-row/exclusivity shape.</summary>
+    private static void ValidateDynamicsTrait(WorldStateRow row, bool numeric, ISet<string> dynamicsNames, string path, List<string> errors) {
+        if (row.Dynamics is not { } dynamics) {
+            return;
+        }
+
+        if (row.Draw is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both draw and dynamics — a row is an authored-randomness draw site or a second-order easing cell, never both.");
+        }
+
+        if (row.Advance is not null) {
+            errors.Add(item: $"{path} ('{row.Name}') declares both advance and dynamics — a row is a linear accumulator or a second-order easing cell, never both.");
+        }
+
+        if (!numeric) {
+            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows ease.");
+        }
+
+        ValidateDynamicsFields(dynamics, dynamicsNames, path, errors);
+
+        // Dynamics is a SCALAR (slot) trait, exactly like Advance — the same slot-eligibility test.
+        var slotEligible = TraitSlotEligible(row);
+
+        if (!slotEligible) {
+            errors.Add(item: $"{path} ('{row.Name}') declares dynamics on a keyed row — dynamics is legitimate only on a scalar (slot) row; a keyed row's own cells ease independently.");
+        }
+    }
+    /// <summary>Validates one cell's own <see cref="StateDynamics"/> — the keyed counterpart of
+    /// <see cref="ValidateDynamicsTrait"/>, governing the opposite shape: a cell inside a table rather than a row's
+    /// own slot.</summary>
+    private static void ValidateCellDynamics(WorldStateRow row, StateCell cell, StateDynamics dynamics, bool numeric, ISet<string> dynamicsNames, string cellPath, List<string> errors) {
+        if (cell.Key == WorldStateRow.SlotKey) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares its own dynamics on the reserved slot key — a scalar row's easing trait is authored at the ROW level, never on the cell itself.");
+        }
+
+        if (!numeric) {
+            errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares dynamics on a {StateSpelling.Kind(kind: row.Kind)} cell — only int/fixed cells ease.");
+        }
+
+        ValidateDynamicsFields(dynamics, dynamicsNames, cellPath, errors);
+    }
+    /// <summary>Validates a state row's authored <see cref="Draw"/> site — its own shape rules, then the shared
     /// site rule with the row's own envelope as the admissible domain.</summary>
-    private static void ValidateDraw(WorldStateRow row, IReadOnlyList<WorldGeneratorRow>? generators, string path, List<string> errors) {
+    private static void ValidateDraw(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators, string path, List<string> errors) {
         if (row.Draw is not { } draw) {
-            if (row.DrawCursor != 0L) {
+            // A lattice row painted by a draw fill carries the same cursor/masks bookkeeping for its whole-field
+            // passes (see WorldLatticeFill.Draw), so only a row with neither facet is refused here.
+            var latticeDraws = (WorldLatticeFill.FindDraw(trait: row.Field) is not null);
+
+            if ((row.DrawCursor != 0L) && !latticeDraws) {
                 errors.Add(item: $"{path} ('{row.Name}') declares drawCursor without draw — drawCursor is engine bookkeeping for a draw site alone.");
             }
 
-            if (row.DrawDecks is { Count: > 0 }) {
-                errors.Add(item: $"{path} ('{row.Name}') declares drawDecks without draw — drawDecks is engine bookkeeping for a draw site alone.");
+            if ((row.DrawnMasks is { Count: > 0 }) && !latticeDraws) {
+                errors.Add(item: $"{path} ('{row.Name}') declares drawnMasks without draw — drawnMasks is engine bookkeeping for a draw site alone.");
+            }
+
+            if (latticeDraws && (row.DrawCursor < 0L)) {
+                errors.Add(item: $"{path} ('{row.Name}') drawCursor {row.DrawCursor} is negative.");
             }
 
             return;
         }
 
-        if (row.Capacity is not null) {
-            errors.Add(item: $"{path} ('{row.Name}') declares a draw beside capacity — a draw site is a scalar (slot) row; a keyed row has no ONE cell for a draw to fill.");
+        if (
+            row.IsKeyed &&
+            GeneratorEngine.TryResolveSource(generators: generators, draw: draw, generator: out var keyedSource, reason: out _) &&
+            GeneratorEngine.WritesText(source: keyedSource.Source)
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') is a keyed draw site over a text source — a keyed site fills one numeric sample per cell; a text emission has no per-cell shape.");
         }
 
         if (row.DrawCursor < 0L) {
@@ -100,9 +280,8 @@ public static partial class WorldDefinitionValidator {
 
         var (domainLow, domainHigh) = (row.Kind switch {
             CellKind.Bool => (0L, 1L),
-            // A fixed cell carries RAW FixedQ4816 bits and legitimately spans the whole long (see MaxIntCellValue).
-            CellKind.Fixed => (long.MinValue, long.MaxValue),
-            _ => (WorldStateCapacity.MinIntCellValue, WorldStateCapacity.MaxIntCellValue),
+            // A fixed cell carries RAW FixedQ4816 bits; an int cell is a whole long. Both span the carrier.
+            _ => (long.MinValue, long.MaxValue),
         });
 
         // The site's admissible domain is the row's OWN — the declared envelope and the non-negative floor included,
@@ -138,6 +317,88 @@ public static partial class WorldDefinitionValidator {
             path: $"{path}.draw",
             errors: errors
         );
+
+        if (GeneratorEngine.TryResolveSource(
+            generators: generators,
+            draw: draw,
+            generator: out var drawnSource,
+            reason: out _
+        )) {
+            ValidateDrawnMasks(
+                masks: row.DrawnMasks,
+                errors: errors,
+                generator: drawnSource,
+                path: $"{path}.drawnMasks"
+            );
+        }
+    }
+    /// <summary>Refuses persisted drawn masks that do not fit the site's source — a mask left behind by an earlier
+    /// source shape would otherwise be read as units already drawn, silently skipping outcomes or declaring a set
+    /// drawn out early. Stated once, for a draw site and for a lattice row's draw fill alike.</summary>
+    internal static void ValidateDrawnMasks(StateGenerator generator, IReadOnlyList<ClosedBitset256>? masks, string path, List<string> errors) {
+        if (masks is not { Count: > 0 }) {
+            return;
+        }
+
+        if (!GeneratorEngine.Exhausts(source: generator.Source) || (generator.Mode == GeneratorMode.WithReplacement)) {
+            errors.Add(item: $"{path} carries {masks.Count} drawn mask(s) but the site's source never exhausts (source={StateSpelling.GeneratorSource(source: generator.Source)}, mode={generator.Mode}) — clear drawnMasks when re-authoring a site to a non-exhausting source.");
+
+            return;
+        }
+
+        if (generator.Source is GeneratorSource.WeightedNumeric or GeneratorSource.SymmetryOrbit) {
+            if (masks.Count != 1) {
+                errors.Add(item: $"{path} carries {masks.Count} drawn masks but a {StateSpelling.GeneratorSource(source: generator.Source)} source exhausts through exactly one — clear drawnMasks when re-authoring a site from a Markov source.");
+
+                return;
+            }
+
+            var units = ((generator.Source == GeneratorSource.WeightedNumeric)
+                ? CountEntries(counts: (generator.Weighted ?? []).Select(selector: static outcome => outcome.Multiplicity))
+                : (GeneratorEngine.TryResolveOrbit(generator: generator, nodes: out var orbitNodes, reason: out _) ? orbitNodes.Length : GeneratorCapacity.MaxEntriesPerSet));
+
+            RefuseMaskPastEntries(
+                entries: units,
+                errors: errors,
+                mask: masks[0],
+                path: $"{path}[0]"
+            );
+
+            return;
+        }
+
+        var contexts = (generator.Contexts ?? []);
+
+        if (masks.Count > contexts.Count) {
+            errors.Add(item: $"{path} carries {masks.Count} drawn masks but the Markov source declares {contexts.Count} context(s) — clear drawnMasks when re-authoring a site's source.");
+
+            return;
+        }
+
+        for (var index = 0; (index < masks.Count); index++) {
+            RefuseMaskPastEntries(
+                entries: CountEntries(counts: (contexts[index]?.Alternatives ?? []).Select(selector: static alternative => alternative.Multiplicity)),
+                errors: errors,
+                mask: masks[index],
+                path: $"{path}[{index}]"
+            );
+        }
+    }
+    private static int CountEntries(IEnumerable<int?> counts) {
+        var units = 0;
+
+        foreach (var count in counts) {
+            units += Math.Max(val1: 1, val2: (count ?? 1));
+        }
+
+        return units;
+    }
+    private static void RefuseMaskPastEntries(ClosedBitset256 mask, int entries, string path, List<string> errors) {
+        var bits = mask;
+
+        if ((entries < GeneratorCapacity.MaxEntriesPerSet) && !bits.Fits(entries)) {
+            errors.Add(item: $"{path} marks an entry past the {entries} the source holds (mask 0x{bits}) — a stale mask from an earlier source shape; clear drawnMasks.");
+        }
     }
     /// <summary>
     /// Applies the one site rule — asked identically by a <c>state</c> draw row and by both boot-only field sites.
@@ -158,17 +419,21 @@ public static partial class WorldDefinitionValidator {
     /// <param name="domainHigh">The highest numeric value the site admits (ignored for a text site).</param>
     /// <param name="path">The document path this site reports under.</param>
     /// <param name="errors">The accumulating error list.</param>
-    private static void ValidateDrawSite(WorldDraw draw, IReadOnlyList<WorldGeneratorRow>? generators, CellKind targetKind, bool bootOnly, long domainLow, long domainHigh, string path, List<string> errors) {
+    private static void ValidateDrawSite(Draw draw, IReadOnlyList<GeneratorRow>? generators, CellKind targetKind, bool bootOnly, long domainLow, long domainHigh, string path, List<string> errors) {
         if (!Enum.IsDefined(value: draw.Timing)) {
-            errors.Add(item: $"{path}.timing '{draw.Timing}' is not a defined WorldDrawTiming.");
+            errors.Add(item: $"{path}.timing '{draw.Timing}' is not a defined DrawTiming.");
         } else if (
             bootOnly &&
-            (draw.Timing != WorldDrawTiming.Boot)
+            (draw.Timing != DrawTiming.Boot)
         ) {
             errors.Add(item: $"{path}.timing={draw.Timing.ToString().ToLowerInvariant()} — this is a BOOT-ONLY document field, read once at composition; nothing could observe a later redraw, so only timing=boot is admissible here.");
         }
 
-        if (!WorldGeneratorEngine.TryResolveSource(
+        if (draw.Skip < 0L) {
+            errors.Add(item: $"{path}.skip {draw.Skip} is negative — an authored seek is a non-negative offset.");
+        }
+
+        if (!GeneratorEngine.TryResolveSource(
             draw: draw,
             generator: out var generator,
             generators: generators,
@@ -190,7 +455,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         // The ONE kind predicate, shared with every firing door.
-        if (!WorldGeneratorEngine.TryCheckTargetKind(
+        if (!GeneratorEngine.TryCheckTargetKind(
             source: generator.Source,
             targetKind: targetKind,
             reason: out var kindReason
@@ -200,16 +465,16 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
-        // A dealing source at a settle-and-clear boot site declares state across draws that this site can never have:
-        // it draws once and its facet is erased, so the deck could not survive to be dealt from again.
+        // An exhausting source at a settle-and-clear boot site declares state across draws that this site can never
+        // have: it draws once and its facet is erased, so the drawn mask could not survive to be drawn from again.
         if (
             bootOnly &&
-            (generator.Mode != WorldGeneratorMode.WithReplacement)
+            (generator.Mode != GeneratorMode.WithReplacement)
         ) {
-            errors.Add(item: $"{path} draws from a source declaring mode={generator.Mode.ToString().ToLowerInvariant()} — a boot-only site draws once and its facet is cleared, so a deck has no second draw to deal into.");
+            errors.Add(item: $"{path} draws from a source declaring mode={generator.Mode.ToString().ToLowerInvariant()} — a boot-only site draws once and its facet is cleared, so a drawn mask has no second draw to accumulate into.");
         }
 
-        if (WorldGeneratorEngine.WritesText(source: generator.Source)) {
+        if (GeneratorEngine.WritesText(source: generator.Source)) {
             return;
         }
 
@@ -218,19 +483,20 @@ public static partial class WorldDefinitionValidator {
             domainLow: domainLow,
             errors: errors,
             generator: generator,
-            path: path
+            path: path,
+            targetKind: targetKind
         );
     }
     /// <summary>Validates the document's <c>generators</c> section — the declared stochastic sources sites reference
     /// by name. A source is a pure shape here; whether any particular site may draw from it (kind, timing) is the
     /// site's question, asked in <see cref="ValidateDrawSite"/>, because the same source is legitimately shared by
     /// sites that answer it differently.</summary>
-    private static void ValidateGenerators(IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
+    private static void ValidateGenerators(IReadOnlyList<GeneratorRow>? generators, List<string> errors) {
         var rows = (generators ?? []);
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        if (rows.Count > WorldGeneratorCapacity.MaxDeclaredSources) {
-            errors.Add(item: $"generators count {rows.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxDeclaredSources}.");
+        if (rows.Count > GeneratorCapacity.MaxDeclaredSources) {
+            errors.Add(item: $"generators count {rows.Count} exceeds the maximum of {GeneratorCapacity.MaxDeclaredSources}.");
         }
 
         for (var index = 0; (index < rows.Count); index++) {
@@ -267,26 +533,22 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void ValidateMarkovSource(WorldGenerator generator, string path, List<string> errors) {
+    private static void ValidateMarkovSource(StateGenerator generator, string path, List<string> errors) {
         if (generator.Contexts is not { Count: > 0 } contexts) {
             errors.Add(item: $"{path}.contexts must declare at least one context for source=markov.");
 
             return;
         }
 
-        if (contexts.Count > WorldGeneratorCapacity.MaxContexts) {
-            errors.Add(item: $"{path}.contexts count {contexts.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxContexts}.");
+        if (contexts.Count > GeneratorCapacity.MaxContexts) {
+            errors.Add(item: $"{path}.contexts count {contexts.Count} exceeds the maximum of {GeneratorCapacity.MaxContexts}.");
         }
 
         if (
             (generator.Bound < 1) ||
-            (generator.Bound > WorldGeneratorCapacity.MaxEmissionBound)
+            (generator.Bound > GeneratorCapacity.MaxEmissionBound)
         ) {
-            errors.Add(item: $"{path}.bound {generator.Bound} must be between 1 and {WorldGeneratorCapacity.MaxEmissionBound}.");
-        }
-
-        if (!Enum.IsDefined(value: generator.Mode)) {
-            errors.Add(item: $"{path}.mode '{generator.Mode}' is not a defined WorldGeneratorMode.");
+            errors.Add(item: $"{path}.bound {generator.Bound} must be between 1 and {GeneratorCapacity.MaxEmissionBound}.");
         }
 
         var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -314,11 +576,12 @@ public static partial class WorldDefinitionValidator {
 
             var alternatives = (context.Alternatives ?? []);
 
-            if (alternatives.Count > WorldGeneratorCapacity.MaxAlternativesPerContext) {
-                errors.Add(item: $"{contextPath}.alternatives count {alternatives.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxAlternativesPerContext} (one deck-mask bit per alternative).");
+            if (alternatives.Count > GeneratorCapacity.MaxAlternativesPerContext) {
+                errors.Add(item: $"{contextPath}.alternatives count {alternatives.Count} exceeds the maximum of {GeneratorCapacity.MaxAlternativesPerContext} (one drawn-mask bit per alternative).");
             }
 
             var anyWeight = false;
+            var units = 0L;
 
             for (var alternative = 0; (alternative < alternatives.Count); alternative++) {
                 var entry = alternatives[alternative];
@@ -332,11 +595,20 @@ public static partial class WorldDefinitionValidator {
 
                 if (string.IsNullOrEmpty(value: entry.Token)) {
                     errors.Add(item: $"{entryPath}.token must be non-empty.");
-                } else if (entry.Token.Length > WorldGeneratorCapacity.MaxTokenLength) {
-                    errors.Add(item: $"{entryPath}.token length {entry.Token.Length} exceeds the maximum of {WorldGeneratorCapacity.MaxTokenLength}.");
+                } else if (entry.Token.Length > GeneratorCapacity.MaxTokenLength) {
+                    errors.Add(item: $"{entryPath}.token length {entry.Token.Length} exceeds the maximum of {GeneratorCapacity.MaxTokenLength}.");
                 }
 
+                if (entry.Multiplicity is { } multiplicity && (multiplicity < 1)) {
+                    errors.Add(item: $"{entryPath}.multiplicity {multiplicity} must be at least 1 — the units one pass holds of this alternative.");
+                }
+
+                units += Math.Max(val1: 1, val2: (entry.Multiplicity ?? 1));
                 anyWeight |= (entry.Weight != 0UL);
+            }
+
+            if (units > GeneratorCapacity.MaxEntriesPerSet) {
+                errors.Add(item: $"{contextPath}.alternatives hold {units} units counting each alternative's multiplicity, exceeding the {GeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold.");
             }
 
             if (
@@ -365,15 +637,23 @@ public static partial class WorldDefinitionValidator {
             }
         }
     }
-    /// <summary>Validates one <see cref="WorldGenerator"/>'s own shape — dispatching on
-    /// <see cref="WorldGenerator.Source"/>, since each source owns a disjoint field set. Shared by a declared source
+    /// <summary>Validates one <see cref="StateGenerator"/>'s own shape — dispatching on
+    /// <see cref="StateGenerator.Source"/>, since each source owns a disjoint field set. Shared by a declared source
     /// row and a site's inline source, so the two spellings are held to the identical rules rather than to two
     /// readings of them.</summary>
-    private static void ValidateSource(WorldGenerator generator, string path, List<string> errors) {
+    private static void ValidateSource(StateGenerator generator, string path, List<string> errors) {
         if (!Enum.IsDefined(value: generator.Source)) {
-            errors.Add(item: $"{path}.source '{generator.Source}' is not a defined WorldGeneratorSource.");
+            errors.Add(item: $"{path}.source '{generator.Source}' is not a defined GeneratorSource.");
 
             return;
+        }
+
+        if (!Enum.IsDefined(value: generator.Mode)) {
+            errors.Add(item: $"{path}.mode '{generator.Mode}' is not a defined GeneratorMode.");
+        }
+
+        if (!GeneratorEngine.TryCheckExtendedShape(generator: generator, reason: out var extendedReason)) {
+            errors.Add(item: $"{path} {extendedReason}.");
         }
 
         // Each source's fields are BOTH-OR-NEITHER against the fields the others own — a foreign field present is
@@ -382,23 +662,32 @@ public static partial class WorldDefinitionValidator {
         var declaresMarkovFields = ((generator.Start is not null) || (generator.Contexts is not null));
         var declaresRangeFields = ((generator.RangeMin is not null) || (generator.RangeMax is not null));
         var declaresWeighted = (generator.Weighted is not null);
+        var declaresOrbitFields = ((generator.Ring is not null) || (generator.Node is not null) || (generator.Word is not null));
 
-        // Bound and Mode are Markov-only too, but they are NON-NULLABLE, so the both-or-neither sweep above cannot
-        // see them and a numeric source carrying either would parse, validate, and then be silently ignored at fire
-        // time. Refused against the DECLARED DEFAULT — the most a non-nullable field can distinguish, and exactly the
-        // set of values that could mislead.
-        if (generator.Source != WorldGeneratorSource.Markov) {
-            if (generator.Bound != WorldGenerator.DefaultBound) {
-                errors.Add(item: $"{path}.source={DescribeGeneratorSource(source: generator.Source)} declares bound {generator.Bound} — a numeric source is always exactly ONE draw, and 'bound' belongs to source=markov.");
+        if (declaresOrbitFields && (generator.Source != GeneratorSource.SymmetryOrbit)) {
+            errors.Add(item: $"{path} declares source={StateSpelling.GeneratorSource(source: generator.Source)} beside ring/node/word, which belong to source=symmetryOrbit.");
+        }
+
+        // Bound is Markov-only and Mode belongs to the exhausting shapes, but both are NON-NULLABLE, so the
+        // both-or-neither sweep above cannot see them and a source carrying one it does not read would parse,
+        // validate, and then be silently ignored at fire time. Refused against the DECLARED DEFAULT — the most a
+        // non-nullable field can distinguish, and exactly the set of values that could mislead.
+        if (
+            !GeneratorEngine.Exhausts(source: generator.Source) &&
+            (generator.Mode != GeneratorMode.WithReplacement)
+        ) {
+            errors.Add(item: $"{path}.source={StateSpelling.GeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — only markov, weightedNumeric and symmetryOrbit exhaust; uniformRange and streamDraw have no entry set to draw from.");
+        }
+
+        if (generator.Source != GeneratorSource.Markov) {
+            if (generator.Bound != StateGenerator.DefaultBound) {
+                errors.Add(item: $"{path}.source={StateSpelling.GeneratorSource(source: generator.Source)} declares bound {generator.Bound} — a numeric source is always exactly ONE draw, and 'bound' belongs to source=markov.");
             }
 
-            if (generator.Mode != WorldGeneratorMode.WithReplacement) {
-                errors.Add(item: $"{path}.source={DescribeGeneratorSource(source: generator.Source)} declares mode={generator.Mode.ToString().ToLowerInvariant()} — a numeric source never deals, and 'mode' belongs to source=markov.");
-            }
         }
 
         switch (generator.Source) {
-            case WorldGeneratorSource.Markov:
+            case GeneratorSource.Markov:
                 if (declaresRangeFields) {
                     errors.Add(item: $"{path} declares source=markov beside rangeMin/rangeMax, which belong to source=uniformRange.");
                 }
@@ -414,7 +703,7 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 return;
-            case WorldGeneratorSource.UniformRange:
+            case GeneratorSource.UniformRange:
                 if (declaresMarkovFields) {
                     errors.Add(item: $"{path} declares source=uniformRange beside start/contexts, which belong to source=markov.");
                 }
@@ -433,17 +722,17 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (
-                    (rangeMin < WorldGeneratorCapacity.MinRangeBound) ||
-                    (rangeMin > WorldGeneratorCapacity.MaxRangeBound)
+                    (rangeMin < GeneratorCapacity.MinRangeBound) ||
+                    (rangeMin > GeneratorCapacity.MaxRangeBound)
                 ) {
-                    errors.Add(item: $"{path}.rangeMin {rangeMin} must be between {WorldGeneratorCapacity.MinRangeBound} and {WorldGeneratorCapacity.MaxRangeBound}.");
+                    errors.Add(item: $"{path}.rangeMin {rangeMin} must be between {GeneratorCapacity.MinRangeBound} and {GeneratorCapacity.MaxRangeBound}.");
                 }
 
                 if (
-                    (rangeMax < WorldGeneratorCapacity.MinRangeBound) ||
-                    (rangeMax > WorldGeneratorCapacity.MaxRangeBound)
+                    (rangeMax < GeneratorCapacity.MinRangeBound) ||
+                    (rangeMax > GeneratorCapacity.MaxRangeBound)
                 ) {
-                    errors.Add(item: $"{path}.rangeMax {rangeMax} must be between {WorldGeneratorCapacity.MinRangeBound} and {WorldGeneratorCapacity.MaxRangeBound}.");
+                    errors.Add(item: $"{path}.rangeMax {rangeMax} must be between {GeneratorCapacity.MinRangeBound} and {GeneratorCapacity.MaxRangeBound}.");
                 }
 
                 if (rangeMin > rangeMax) {
@@ -451,7 +740,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 return;
-            case WorldGeneratorSource.WeightedNumeric:
+            case GeneratorSource.WeightedNumeric:
                 if (declaresMarkovFields) {
                     errors.Add(item: $"{path} declares source=weightedNumeric beside start/contexts, which belong to source=markov.");
                 }
@@ -466,11 +755,12 @@ public static partial class WorldDefinitionValidator {
                     return;
                 }
 
-                if (outcomes.Count > WorldGeneratorCapacity.MaxWeightedOutcomes) {
-                    errors.Add(item: $"{path}.weighted count {outcomes.Count} exceeds the maximum of {WorldGeneratorCapacity.MaxWeightedOutcomes}.");
+                if (outcomes.Count > GeneratorCapacity.MaxWeightedOutcomes) {
+                    errors.Add(item: $"{path}.weighted count {outcomes.Count} exceeds the maximum of {GeneratorCapacity.MaxWeightedOutcomes}.");
                 }
 
                 var anyOutcomeWeight = false;
+                var outcomeUnits = 0L;
 
                 for (var index = 0; (index < outcomes.Count); index++) {
                     if (outcomes[index] is null) {
@@ -479,7 +769,16 @@ public static partial class WorldDefinitionValidator {
                         continue;
                     }
 
+                    if (outcomes[index].Multiplicity is { } outcomeMultiplicity && (outcomeMultiplicity < 1)) {
+                        errors.Add(item: $"{path}.weighted[{index}].multiplicity {outcomeMultiplicity} must be at least 1 — the units one pass holds of this outcome.");
+                    }
+
+                    outcomeUnits += Math.Max(val1: 1, val2: (outcomes[index].Multiplicity ?? 1));
                     anyOutcomeWeight |= (outcomes[index].Weight != 0UL);
+                }
+
+                if (outcomeUnits > GeneratorCapacity.MaxEntriesPerSet) {
+                    errors.Add(item: $"{path}.weighted holds {outcomeUnits} units counting each outcome's multiplicity, exceeding the {GeneratorCapacity.MaxEntriesPerSet} a drawn mask can hold.");
                 }
 
                 if (!anyOutcomeWeight) {
@@ -487,13 +786,31 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 return;
-            case WorldGeneratorSource.StreamDraw:
+            case GeneratorSource.StreamDraw:
                 if (
                     declaresMarkovFields ||
                     declaresRangeFields ||
                     declaresWeighted
                 ) {
                     errors.Add(item: $"{path} declares source=streamDraw beside start/contexts/rangeMin/rangeMax/weighted — a stream draw reads none of them.");
+                }
+
+                return;
+            case GeneratorSource.SymmetryOrbit:
+                if (
+                    declaresMarkovFields ||
+                    declaresRangeFields ||
+                    declaresWeighted
+                ) {
+                    errors.Add(item: $"{path} declares source=symmetryOrbit beside start/contexts/rangeMin/rangeMax/weighted — an orbit source reads only ring, or node with an optional word.");
+                }
+
+                if (!GeneratorEngine.TryResolveOrbit(
+                    generator: generator,
+                    nodes: out _,
+                    reason: out var orbitReason
+                )) {
+                    errors.Add(item: $"{path} {orbitReason}.");
                 }
 
                 return;
@@ -504,9 +821,9 @@ public static partial class WorldDefinitionValidator {
     /// <summary>Narrows a numeric source's own declared band against the site's admissible domain — see
     /// <see cref="ValidateDrawSite"/>'s remarks for why this is an authoring refusal rather than a boot-time
     /// one.</summary>
-    private static void ValidateSourceDomain(WorldGenerator generator, long domainLow, long domainHigh, string path, List<string> errors) {
+    private static void ValidateSourceDomain(StateGenerator generator, CellKind targetKind, long domainLow, long domainHigh, string path, List<string> errors) {
         switch (generator.Source) {
-            case WorldGeneratorSource.UniformRange:
+            case GeneratorSource.UniformRange:
                 if (
                     (generator.RangeMin is { } rangeMin) &&
                     (generator.RangeMax is { } rangeMax) &&
@@ -516,7 +833,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
-            case WorldGeneratorSource.WeightedNumeric:
+            case GeneratorSource.WeightedNumeric:
                 foreach (var outcome in (generator.Weighted ?? [])) {
                     if (
                         (outcome is not null) &&
@@ -527,7 +844,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
-            case WorldGeneratorSource.StreamDraw:
+            case GeneratorSource.StreamDraw:
                 // A raw draw's band is the generator's own and nothing narrows it, so a site that cannot hold the
                 // whole 32-bit band is refused HERE rather than by whatever it happened to roll.
                 if (
@@ -538,16 +855,76 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 break;
+            case GeneratorSource.SymmetryOrbit:
+                if (GeneratorEngine.TryResolveOrbit(
+                    generator: generator,
+                    nodes: out var orbitNodes,
+                    reason: out _
+                )) {
+                    foreach (var node in orbitNodes) {
+                        var encoded = GeneratorEngine.EncodeNode(node: node, targetKind: targetKind);
+
+                        if ((encoded < domainLow) || (encoded > domainHigh)) {
+                            errors.Add(item: $"{path} draws node {node}, which is outside the site's admissible domain {DescribeValue(kind: targetKind, raw: domainLow)}..{DescribeValue(kind: targetKind, raw: domainHigh)} — an orbit site holds node indices 0..{SymmetryLattice.NodeCount - 1} in its own unit.");
+
+                            break;
+                        }
+                    }
+                }
+
+                break;
             default:
                 break;
         }
     }
     // The state section: schema cap (MaxRows), name uniqueness, both-or-neither Min/Max range (applied to every
     // cell's value), text-cell length against MaxTextValueLength, and per-row cell-count ceiling (MaxCellsPerRow,
-    // optionally narrowed by an authored Capacity). WorldCellName already refuses an empty/unsafe/dotted row name at
+    // optionally narrowed by an authored Capacity). CellName already refuses an empty/unsafe/dotted row name at
     // JSON parse, so this pass checks only uniqueness. Returns the declared rows by name so ValidateHud can refuse
     // an unknown state.<row>/state.<row>.<key> binding.
-    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
+    // An owned identity's facts row is read raw at every seat bind, so its shape is held here rather than at the
+    // write door alone: a keyed int row whose capacity is the one number identity.facts.capacity states.
+    private static void ValidateIdentityFacts(WorldIdentityDefinition? identity, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        if (identity is null) {
+            return;
+        }
+
+        var facts = identity.FactsOrDefault;
+
+        if (
+            (facts.Capacity < 1) ||
+            (facts.Capacity > StateCapacity.MaxCellsPerRow)
+        ) {
+            errors.Add(item: $"identity.facts.capacity {facts.Capacity} must be 1..{StateCapacity.MaxCellsPerRow}.");
+        }
+        if (!stateRows.TryGetValue(key: facts.State, value: out var row)) {
+            return;
+        }
+        if (row is not { Kind: CellKind.Int, IsKeyed: true }) {
+            errors.Add(item: $"identity.facts.state '{facts.State}' must name a keyed int state row.");
+        } else if (row.Capacity != facts.Capacity) {
+            errors.Add(item: $"identity.facts.state '{facts.State}' declares capacity {(row.Capacity?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}; identity.facts.capacity is {facts.Capacity} — the two are one number.");
+        }
+    }
+    // The reserved lane a world declares to carry facts: a bounded keyed int row whose every authored cell key is a
+    // (body, fact) pair, since the server keys the cells it loads that way.
+    private static void ValidateIdentityFactLane(IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+        if (!stateRows.TryGetValue(key: WorldIdentityFactLane.RowName, value: out var lane)) {
+            return;
+        }
+        if (lane is not { Kind: CellKind.Int, IsKeyed: true, Capacity: > 0 }) {
+            errors.Add(item: $"state.world row '{WorldIdentityFactLane.RowName}' is the reserved identity fact lane: it must be a keyed int row declaring a capacity.");
+
+            return;
+        }
+
+        foreach (var cell in (lane.Cells ?? [])) {
+            if (!WorldIdentityFactLane.TryParse(key: cell.Key.Value, bodyIndex: out _, fact: out _)) {
+                errors.Add(item: $"state.world row '{WorldIdentityFactLane.RowName}' cell '{cell.Key}' is not a '<bodyIndex>{WorldIdentityFactLane.Separator}<fact>' lane key.");
+            }
+        }
+    }
+    private static Dictionary<string, WorldStateRow> ValidateState(IReadOnlyList<WorldStateRow> rows, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, List<string> errors) {
         var byName = new Dictionary<string, WorldStateRow>(comparer: StringComparer.Ordinal);
 
         if (rows is null) {
@@ -556,8 +933,8 @@ public static partial class WorldDefinitionValidator {
             return byName;
         }
 
-        if (rows.Count > WorldStateCapacity.MaxRows) {
-            errors.Add(item: $"state count {rows.Count} exceeds the maximum of {WorldStateCapacity.MaxRows}.");
+        if (rows.Count > StateCapacity.MaxRows) {
+            errors.Add(item: $"state count {rows.Count} exceeds the maximum of {StateCapacity.MaxRows}.");
         }
 
         for (var index = 0; (index < rows.Count); index++) {
@@ -577,236 +954,323 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
             }
 
-            // The reserved prefix is ENGINE-MINTED ONLY, and the rule lives HERE — in the validator every ingress
-            // passes (boot, live mutation, undo replay), never in one door a hand-authored file walks around.
-            // Nothing mints a state ROW, so the prefix is refused outright on a row name; that is also what keeps a
-            // reserved rule channel ($tick/$population/$region:) from ever being shadowed by a real row.
-            if (row.Name.Value.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: WorldStateRow.ReservedNamePrefix
-            )) {
-                errors.Add(item: $"{path}.name '{row.Name}' starts with the reserved prefix '{WorldStateRow.ReservedNamePrefix}' — reserved for engine-minted names and the rules section's own channels ({WorldRuleFacts.Tick}, {WorldRuleFacts.Population}, {WorldRuleFacts.RegionPrefix}<placementId>).");
-            }
-
-            if (!Enum.IsDefined(value: row.Kind)) {
-                errors.Add(item: $"{path}.kind '{row.Kind}' is not a defined CellKind.");
-
-                continue;
-            }
-
-            var numeric = ((row.Kind == CellKind.Int) || (row.Kind == CellKind.Fixed));
-
-            // Min/Max/NonNegative are envelope traits over a NUMBER — legitimate only for Int/Fixed, the same rule a
-            // scalar row's range always followed, now stated once instead of per case.
-            if (
-                !numeric &&
-                ((row.Min is not null) || (row.Max is not null))
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows carry a range.");
-            } else if ((row.Min is null) != (row.Max is null)) {
-                errors.Add(item: $"{path} declares only one of min/max — a range is authored as a pair or not at all.");
-            } else if (
-                (row.Min is { } lo) &&
-                (row.Max is { } hi) &&
-                (lo >= hi)
-            ) {
-                errors.Add(item: $"{path} min {DescribeValue(
-                    kind: row.Kind,
-                    raw: lo
-                )} must be less than max {DescribeValue(
-                    kind: row.Kind,
-                    raw: hi
-                )}.");
-            }
-
-            if (
-                !numeric &&
-                row.NonNegative
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {DescribeKind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
-            }
-
-            // GatesDrive is the composition-lane's drive-admission gate (WorldGrants.TryGetDriveGate) — a nonzero
-            // per-body cell there refuses that body's drive/action intents regardless of any grant held. It reads a
-            // cell as zero/nonzero, so a text row has no honest reading for it, and it is read per BODY (one cell
-            // per entity index), so only a keyed (table) row — one declaring Capacity — has a body to address; a
-            // slot has exactly one value shared by every body, which is not what a per-body gate means.
-            if (
-                (row.Kind == CellKind.Text) &&
-                row.GatesDrive
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive on a text row — a drive gate reads a cell as zero/nonzero, which a text cell has no honest reading for.");
-            }
-
-            if (
-                row.GatesDrive &&
-                (row.Capacity is null)
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive without a capacity — a drive gate is read per body (one cell keyed by the body's entity index), which only a keyed (table) row can carry; a slot has no ONE body to gate.");
-            }
-
-            // Evicts is the row's own overflow policy: drop-oldest instead of refuse. It reads exactly one bound —
-            // Capacity — so the only shape it can legitimately name is a keyed row that declares one; a slot never
-            // declares Capacity (WorldStateRow.IsSlot), so this one check refuses both "no capacity at all" and "on a
-            // slot row" by the same name, with the remedy spelled out.
-            if (
-                row.Evicts &&
-                (row.Capacity is null)
-            ) {
-                errors.Add(item: $"{path} ('{row.Name}') declares evicts without a capacity — eviction drops the oldest cell once a write would exceed the declared bound, which only a keyed (table) row declaring capacity can carry; a slot has no bound to evict against. Declare a capacity, or drop evicts.");
-            }
-
-            if (
-                (row.Capacity is { } declaredCapacity) &&
-                ((declaredCapacity < 1) || (declaredCapacity > WorldStateCapacity.MaxCellsPerRow))
-            ) {
-                errors.Add(item: $"{path}.capacity {declaredCapacity} must be between 1 and {WorldStateCapacity.MaxCellsPerRow}.");
-            }
-
-            ValidateDraw(
+            ValidateStateRow(
+                dynamicsNames: dynamicsNames,
                 errors: errors,
                 generators: generators,
                 path: path,
                 row: row
             );
-            ValidateAdvance(
-                errors: errors,
-                numeric: numeric,
-                path: path,
-                row: row
-            );
-            var effectiveCapacity = Math.Clamp(
-                value: (row.Capacity ?? WorldStateCapacity.MaxCellsPerRow),
-                min: 1,
-                max: WorldStateCapacity.MaxCellsPerRow
-            );
-            var cells = (row.Cells ?? []);
-
-            if (cells.Count > effectiveCapacity) {
-                errors.Add(item: $"{path} ('{row.Name}') cell count {cells.Count} exceeds its capacity of {effectiveCapacity}.");
-            }
-
-            // The reserved slot key is the `value` sugar's own address — a keyed row (a declared Capacity, or more
-            // than one cell) may never use it as one of its own keys, or the sugar and an authored key could address
-            // the same cell two ways and disagree about which shape they named.
-            var reservesSlotKey = ((row.Capacity is not null) || (cells.Count != 1));
-
-            var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
-            var rangeDeclared = (numeric && (row.Min is { } rangeLo) && (row.Max is { } rangeHi) && (rangeLo < rangeHi));
-
-            for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
-                var cell = cells[cellIndex];
-                var cellPath = $"{path}.cells[{cellIndex}]";
-
-                if (cell is null) {
-                    errors.Add(item: $"{cellPath} is required.");
-
-                    continue;
-                }
-
-                // A cell key can no longer be empty, dotted, or otherwise unsafe — WorldCellName refuses that at JSON
-                // parse, before this method ever sees the cell — so this checks only uniqueness and the reserved key.
-                if (!keys.Add(item: cell.Key)) {
-                    errors.Add(item: $"{path} ('{row.Name}') key '{cell.Key}' is duplicated.");
-                } else if (
-                    reservesSlotKey &&
-                    (cell.Key == WorldStateRow.SlotKey)
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' uses the reserved slot key '{WorldStateRow.SlotKey}' as an authored cell key.");
-                } else if (!WorldStateReservedCells.TryValidateReservedCell(
-                    row: row,
-                    key: cell.Key,
-                    reason: out var reservedReason
-                )) {
-                    // Any other reserved-prefix key is refused unless it is exactly the engine-minted key legitimate
-                    // for this row's shape, carrying a value the engine could have written (a non-negative cursor; a
-                    // deck mask inside its context's alternative count under a deck mode). The rule lives in
-                    // WorldGeneratorCells so UpsertStateCell's compose arm refuses the identical shape from the
-                    // identical code.
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");
-                }
-
-                if (cell.Advance is { } cellAdvance) {
-                    ValidateCellAdvance(
-                        advance: cellAdvance,
-                        cell: cell,
-                        cellPath: cellPath,
-                        errors: errors,
-                        numeric: numeric,
-                        row: row
-                    );
-                }
-
-                if (
-                    (cell.Provenance is { } provenance) &&
-                    (provenance.Length > WorldStateCapacity.MaxProvenanceLength)
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {WorldStateCapacity.MaxProvenanceLength}.");
-                }
-
-                if (row.Kind == CellKind.Text) {
-                    if (cell.Text is null) {
-                        errors.Add(item: $"{cellPath}.text is required.");
-                    } else if (cell.Text.Length > WorldStateCapacity.MaxTextValueLength) {
-                        errors.Add(item: $"{path} ('{row.Name}') text value length {cell.Text.Length} exceeds the maximum of {WorldStateCapacity.MaxTextValueLength}.");
-                    }
-
-                    continue;
-                }
-
-                if (row.Kind == CellKind.Bool) {
-                    if (cell.Value is not (0 or 1)) {
-                        errors.Add(item: $"{cellPath}.value {cell.Value} must be 0 or 1 for a bool row.");
-                    }
-
-                    continue;
-                }
-
-                // Int/Fixed: the row's DECLARED non-negative floor (enforced regardless of any authored Min — this is
-                // what "timer" meant before the kind vocabularies reconciled), then the declared range. This walk is
-                // the floor's authority; the cross-document write-back channel (Server.WorldOwnedWorlds.Decide) reads
-                // the SAME row trait at its own door precisely so it can never admit a value this walk would refuse
-                // at the owned world's next boot.
-                if (
-                    row.NonNegative &&
-                    (cell.Value < 0)
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
-                        kind: row.Kind,
-                        raw: cell.Value
-                    )} is negative — this row's floor is non-negative.");
-                }
-
-                if (
-                    rangeDeclared &&
-                    ((cell.Value < row.Min) || (cell.Value > row.Max))
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
-                        kind: row.Kind,
-                        raw: cell.Value
-                    )} is outside its declared range {DescribeValue(
-                        kind: row.Kind,
-                        raw: row.Min!.Value
-                    )}..{DescribeValue(
-                        kind: row.Kind,
-                        raw: row.Max!.Value
-                    )}.");
-                }
-
-                // An INT cell is read as fixed point wherever the engine reads it at all (a world rule's gate, its
-                // comparand, its live copy operand), and that lift throws outside FixedQ4816's integer band. Refused
-                // HERE so every ingress meets the same door: without it an ordinary authored number kills the process
-                // on the first tick a rule touches the row, with no refusal anywhere. A FIXED cell carries raw bits
-                // and spans the whole long, so it is exempt by construction.
-                if (
-                    (row.Kind == CellKind.Int) &&
-                    ((cell.Value < WorldStateCapacity.MinIntCellValue) || (cell.Value > WorldStateCapacity.MaxIntCellValue))
-                ) {
-                    errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {cell.Value} is outside the representable int range {WorldStateCapacity.MinIntCellValue}..{WorldStateCapacity.MaxIntCellValue} — every engine read of an int cell lifts it to fixed point.");
-                }
-            }
         }
 
         return byName;
+    }
+    // Every check a single state row (and its own cells) can fail on its own terms — the field trait shape, the
+    // reserved-name prefix, the range/nonNegative/gatesDrive/evicts/capacity envelope, the draw/history/advance/
+    // dynamics/cycle traits, and each cell's own key uniqueness, reserved-key rule, per-trait checks, and value. The
+    // whole-document walk (<see cref="ValidateState"/>, one row per authored index) and a state mutation's touched-
+    // row walk (<see cref="TryValidateTouchedStateRows"/>, one row by name) both call this — the same failure
+    // either door reaches, in exactly one place. Cross-row invariants (a keysOf zone's domain, a cellsOf board's
+    // topology, a knowledge board's source/mask, an inverse board's derivation) are NOT here — see
+    // <see cref="ValidateTokenAndPhaseRow"/>, <see cref="ValidateBoardRow"/> and <see cref="ValidateDisclosureRow"/>.
+    private static void ValidateStateRow(WorldStateRow row, IReadOnlyList<GeneratorRow>? generators, ISet<string> dynamicsNames, string path, List<string> errors) {
+        // A field-shaped row is per-cell fixed-point substrate: its cells live in the lattice (checkpointed,
+        // snapshot-delivered), never as authored slot/keyed cells, and every keyed-row trait is refused at this
+        // door so the shape cannot be held by convention.
+        if (row.Field is not null) {
+            if (row.EffectiveDomain is not StateDomain.CellsOf) {
+                errors.Add(item: $"{path} ('{row.Name}') declares a field trait without a cellsOf domain — a field row's domain names the topology it lies over.");
+            }
+            if (row.Kind != CellKind.Fixed) {
+                errors.Add(item: $"{path} ('{row.Name}') declares a field trait with kind '{row.Kind}' — a field row is kind 'fixed'.");
+            }
+            if (row.Cells is { Count: > 0 }) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and cells — a field row's cells are the lattice's.");
+            }
+            if (row.Capacity is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and capacity — the topology sizes a field row.");
+            }
+            if (row.Advance is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and advance.");
+            }
+            if (row.Dynamics is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and dynamics.");
+            }
+            if (row.Cycle is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and cycle.");
+            }
+            if (row.Draw is not null) {
+                errors.Add(item: $"{path} ('{row.Name}') declares both a field trait and a draw facet — a field row draws per cell through a 'draw' entry in its paint, never through the slot-row facet.");
+            }
+        }
+
+        // The reserved prefix is ENGINE-MINTED ONLY, and the rule lives HERE — in the validator every ingress
+        // passes (boot, live mutation, undo replay), never in one door a hand-authored file walks around.
+        // Nothing mints a state ROW, so the prefix is refused outright on a row name; that is also what keeps a
+        // reserved rule channel ($tick/$population/$region:) from ever being shadowed by a real row.
+        if (row.Name.Value.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldStateRow.ReservedNamePrefix
+        )) {
+            errors.Add(item: $"{path}.name '{row.Name}' starts with the reserved prefix '{WorldStateRow.ReservedNamePrefix}' — reserved for engine-minted names and the rules section's own channels ({RuleFacts.Tick}, {WorldRuleFacts.Population}, {WorldRuleFacts.RegionPrefix}<placementId>).");
+        }
+
+        if (!Enum.IsDefined(value: row.Kind)) {
+            errors.Add(item: $"{path}.kind '{row.Kind}' is not a defined CellKind.");
+
+            return;
+        }
+
+        var numeric = ((row.Kind == CellKind.Int) || (row.Kind == CellKind.Fixed));
+
+        // Min/Max/NonNegative are envelope traits over a NUMBER — legitimate only for Int/Fixed, the same rule a
+        // scalar row's range always followed, now stated once instead of per case.
+        if (
+            !numeric &&
+            ((row.Min is not null) || (row.Max is not null))
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares min/max on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a range.");
+        } else if ((row.Min is null) != (row.Max is null)) {
+            errors.Add(item: $"{path} declares only one of min/max — a range is authored as a pair or not at all.");
+        } else if (
+            (row.Min is { } lo) &&
+            (row.Max is { } hi) &&
+            (lo >= hi)
+        ) {
+            errors.Add(item: $"{path} min {DescribeValue(
+                kind: row.Kind,
+                raw: lo
+            )} must be less than max {DescribeValue(
+                kind: row.Kind,
+                raw: hi
+            )}.");
+        }
+
+        if (
+            !numeric &&
+            row.NonNegative
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares nonNegative on a {StateSpelling.Kind(kind: row.Kind)} row — only int/fixed rows carry a floor.");
+        }
+
+        // GatesDrive is the composition-lane's drive-admission gate (WorldGrants.TryGetDriveGate) — a nonzero
+        // per-body cell there refuses that body's drive/action intents regardless of any grant held. It reads a
+        // cell as zero/nonzero, so a text row has no honest reading for it, and it is read per BODY (one cell
+        // per entity index), so only a keyed (table) row — one declaring Capacity — has a body to address; a
+        // slot has exactly one value shared by every body, which is not what a per-body gate means.
+        if (
+            (row.Kind == CellKind.Text) &&
+            row.GatesDrive
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive on a text row — a drive gate reads a cell as zero/nonzero, which a text cell has no honest reading for.");
+        }
+
+        if (
+            row.GatesDrive &&
+            (row.Capacity is null)
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares gatesDrive without a capacity — a drive gate is read per body (one cell keyed by the body's entity index), which only a keyed (table) row can carry; a slot has no ONE body to gate.");
+        }
+
+        // Evicts is the row's own overflow policy: drop-oldest instead of refuse. It reads exactly one bound —
+        // Capacity — so the only shape it can legitimately name is a keyed row that declares one; a slot never
+        // declares Capacity (WorldStateRow.IsSlot), so this one check refuses both "no capacity at all" and "on a
+        // slot row" by the same name, with the remedy spelled out.
+        if (
+            row.Evicts &&
+            (row.Capacity is null)
+        ) {
+            errors.Add(item: $"{path} ('{row.Name}') declares evicts without a capacity — eviction drops the oldest cell once a write would exceed the declared bound, which only a keyed (table) row declaring capacity can carry; a slot has no bound to evict against. Declare a capacity, or drop evicts.");
+        }
+
+        if (
+            (row.Capacity is { } declaredCapacity) &&
+            ((declaredCapacity < 1) || (declaredCapacity > row.CellCeiling))
+        ) {
+            errors.Add(item: $"{path}.capacity {declaredCapacity} must be between 1 and {row.CellCeiling}.");
+        }
+
+        ValidateDraw(
+            errors: errors,
+            generators: generators,
+            path: path,
+            row: row
+        );
+        ValidateHistory(
+            errors: errors,
+            path: path,
+            row: row
+        );
+        ValidateAdvance(
+            errors: errors,
+            numeric: numeric,
+            path: path,
+            row: row
+        );
+        ValidateDynamicsTrait(
+            dynamicsNames: dynamicsNames,
+            errors: errors,
+            numeric: numeric,
+            path: path,
+            row: row
+        );
+        ValidateCycle(
+            errors: errors,
+            numeric: numeric,
+            path: path,
+            row: row
+        );
+        var effectiveCapacity = Math.Clamp(
+            value: (row.Capacity ?? row.CellCeiling),
+            min: 1,
+            max: row.CellCeiling
+        );
+        var cells = (row.Cells ?? []);
+
+        if (cells.Count > effectiveCapacity) {
+            errors.Add(item: $"{path} ('{row.Name}') cell count {cells.Count} exceeds its capacity of {effectiveCapacity}.");
+        }
+
+        // The reserved slot key is the `value` sugar's own address — a keyed row (a declared Capacity, or more
+        // than one cell) may never use it as one of its own keys, or the sugar and an authored key could address
+        // the same cell two ways and disagree about which shape they named.
+        var reservesSlotKey = ((row.Capacity is not null) || (cells.Count != 1));
+
+        var keys = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var rangeDeclared = (numeric && (row.Min is { } rangeLo) && (row.Max is { } rangeHi) && (rangeLo < rangeHi));
+
+        for (var cellIndex = 0; (cellIndex < cells.Count); cellIndex++) {
+            var cell = cells[cellIndex];
+            var cellPath = $"{path}.cells[{cellIndex}]";
+
+            if (cell is null) {
+                errors.Add(item: $"{cellPath} is required.");
+
+                continue;
+            }
+
+            // A cell key can no longer be empty, dotted, or otherwise unsafe — CellName refuses that at JSON
+            // parse, before this method ever sees the cell — so this checks only uniqueness and the reserved key.
+            if (!keys.Add(item: cell.Key)) {
+                errors.Add(item: $"{path} ('{row.Name}') key '{cell.Key}' is duplicated.");
+            } else if (
+                reservesSlotKey &&
+                (cell.Key == WorldStateRow.SlotKey)
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' uses the reserved slot key '{WorldStateRow.SlotKey}' as an authored cell key.");
+            } else if (!StateReservedCells.TryValidateReservedCell(
+                row: row,
+                key: cell.Key,
+                reason: out var reservedReason
+            )) {
+                // Any reserved-prefix key but the slot key itself is refused: draw and generator bookkeeping
+                // (the cursor, the drawn masks) lives in the row's own typed fields, never a cell. The rule lives
+                // in StateReservedCells so UpsertStateCell's compose arm refuses the identical shape from
+                // the identical code.
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' {reservedReason}.");
+            }
+
+            if (
+                (cell.Advance is not null) &&
+                (cell.Dynamics is not null)
+            ) {
+                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares both advance and dynamics — a cell is a linear accumulator or a second-order easing cell, never both.");
+            }
+
+            if ((cell.Cycle is not null) && ((cell.Advance is not null) || (cell.Dynamics is not null))) {
+                errors.Add(item: $"{cellPath} ('{row.Name}'.'{cell.Key}') declares cycle beside advance or dynamics — a cell is a linear accumulator, a second-order easing cell or a tick-indexed rotation, never two of them.");
+            }
+
+            if (cell.Cycle is { } cellCycle) {
+                ValidateCellCycle(
+                    cell: cell,
+                    cellPath: cellPath,
+                    cycle: cellCycle,
+                    errors: errors,
+                    numeric: numeric,
+                    row: row
+                );
+            }
+
+            if (cell.Advance is { } cellAdvance) {
+                ValidateCellAdvance(
+                    advance: cellAdvance,
+                    cell: cell,
+                    cellPath: cellPath,
+                    errors: errors,
+                    numeric: numeric,
+                    row: row
+                );
+            }
+
+            if (cell.Dynamics is { } cellDynamics) {
+                ValidateCellDynamics(
+                    cell: cell,
+                    cellPath: cellPath,
+                    dynamics: cellDynamics,
+                    dynamicsNames: dynamicsNames,
+                    errors: errors,
+                    numeric: numeric,
+                    row: row
+                );
+            }
+
+            if (
+                (cell.Provenance is { } provenance) &&
+                (provenance.Length > StateCapacity.MaxProvenanceLength)
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' provenance length {provenance.Length} exceeds the maximum of {StateCapacity.MaxProvenanceLength}.");
+            }
+
+            if (row.Kind == CellKind.Text) {
+                if (cell.Text is null) {
+                    errors.Add(item: $"{cellPath}.text is required.");
+                } else if (cell.Text.Length > StateCapacity.MaxTextValueLength) {
+                    errors.Add(item: $"{path} ('{row.Name}') text value length {cell.Text.Length} exceeds the maximum of {StateCapacity.MaxTextValueLength}.");
+                }
+
+                continue;
+            }
+
+            if (row.Kind == CellKind.Bool) {
+                if (cell.Value is not (0 or 1)) {
+                    errors.Add(item: $"{cellPath}.value {cell.Value} must be 0 or 1 for a bool row.");
+                }
+
+                continue;
+            }
+
+            // Int/Fixed: the row's DECLARED non-negative floor (enforced regardless of any authored Min — this is
+            // what "timer" meant before the kind vocabularies reconciled), then the declared range. This walk is
+            // the floor's authority; the cross-document write-back channel (Server.WorldOwnedWorlds.Decide) reads
+            // the SAME row trait at its own door precisely so it can never admit a value this walk would refuse
+            // at the owned world's next boot.
+            if (
+                row.NonNegative &&
+                (cell.Value < 0)
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
+                    kind: row.Kind,
+                    raw: cell.Value
+                )} is negative — this row's floor is non-negative.");
+            }
+
+            if (
+                rangeDeclared &&
+                ((cell.Value < row.Min) || (cell.Value > row.Max))
+            ) {
+                errors.Add(item: $"{path} ('{row.Name}') cell '{cell.Key}' value {DescribeValue(
+                    kind: row.Kind,
+                    raw: cell.Value
+                )} is outside its declared range {DescribeValue(
+                    kind: row.Kind,
+                    raw: row.Min!.Value
+                )}..{DescribeValue(
+                    kind: row.Kind,
+                    raw: row.Max!.Value
+                )}.");
+            }
+
+        }
     }
 }

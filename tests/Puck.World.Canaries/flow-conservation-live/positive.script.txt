@@ -1,0 +1,7 @@
+world.status
+world.state
+world.wait 20
+world.state
+world.wait 40
+world.state
+wire.errors

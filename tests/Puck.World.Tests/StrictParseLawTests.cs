@@ -38,11 +38,11 @@ public sealed class StrictParseLawTests {
     }
     [Fact]
     public void MissingSeatLook_ParsesCleanAndResolvesToTheInertDefault() {
-        // A seat's control feel is now optional: absence parses clean and resolves to WorldSeatLook.Default
+        // A seat's control feel is now optional: absence parses clean and resolves to WorldSeatCameraFeel.Default
         // (zero sensitivity, the drag disarmed) rather than refusing.
         var definition = WorldDefinitionSerialization.Deserialize(utf8Json: Fixtures.MissingSeatLookBytes());
 
-        Assert.Equal(expected: WorldSeatLook.Default, actual: definition.PlayerDefaults.SeatLook);
+        Assert.Equal(expected: WorldSeatCameraFeel.Default, actual: definition.PlayerDefaults.SeatLook);
     }
     [Fact]
     public void MissingRequiredConstructorMember_RefusesByName() {
@@ -74,6 +74,75 @@ public sealed class StrictParseLawTests {
         _ = rules[0]!.AsObject().Remove(propertyName: "gate");
 
         _ = WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: node.ToJsonString()));
+    }
+    [Fact]
+    public void DynamicsRow_UnmappedMember_RefusesByName() {
+        var definition = Fixtures.BuildDocument() with {
+            DynamicsRaw = [new DynamicsRow(Damping: 1f, Frequency: 1f, Name: "chase", Response: 0f)],
+        };
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition)))!.AsObject();
+
+        node["dynamics"]!.AsArray()[0]!["rate"] = 6;
+
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
+
+        Assert.IsType<JsonException>(@object: exception.InnerException);
+        Assert.Contains(expectedSubstring: "rate", actualString: exception.InnerException!.Message, comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
+    public void UpTurnRow_UnmappedMember_RefusesByName() {
+        var kits = Fixtures.BuildDocument().Kits.ToList();
+
+        kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { UpTurnRaw = WorldUpTurnRates.Default }) });
+
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: (Fixtures.BuildDocument() with { KitRowsRaw = kits }))))!.AsObject();
+
+        node["kits"]!["rows"]![0]!["motion"]!["upTurn"]!["bogus"] = 1;
+
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
+
+        Assert.IsType<JsonException>(@object: exception.InnerException);
+        Assert.Contains(expectedSubstring: "bogus", actualString: exception.InnerException!.Message, comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
+    public void ObstructionLatch_UnmappedMember_RefusesByName() {
+        var kits = Fixtures.BuildDocument().Kits.ToList();
+
+        kits[0] = (kits[0] with { Motion = (kits[0].Motion! with { ObstructionRaw = WorldObstructionLatch.Default }) });
+
+        var node = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: (Fixtures.BuildDocument() with { KitRowsRaw = kits }))))!.AsObject();
+
+        node["kits"]!["rows"]![0]!["motion"]!["obstruction"]!["bogus"] = 1;
+
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: Encoding.UTF8.GetBytes(s: node.ToJsonString())));
+
+        Assert.IsType<JsonException>(@object: exception.InnerException);
+        Assert.Contains(expectedSubstring: "bogus", actualString: exception.InnerException!.Message, comparisonType: StringComparison.Ordinal);
+    }
+    [Fact]
+    public void StateDynamicsTrait_RoundTripsDecimalByteIdentical() {
+        var y0 = Puck.Maths.FixedQ4816.FromDouble(value: 12.5).Value;
+        var v0 = Puck.Maths.FixedQ4816.FromDouble(value: -3.25).Value;
+        var definition = Fixtures.BuildDocument() with {
+            DynamicsRaw = [.. Fixtures.StandardDynamics, new DynamicsRow(Damping: 1f, Frequency: 1f, Name: "gauge", Response: 0f)],
+            StateRaw = new WorldStateSection(World: [
+                new WorldStateRow(
+                    Name: CellName.Parse(candidate: "hp"),
+                    Kind: CellKind.Fixed,
+                    Cells: [new StateCell(Key: WorldStateRow.SlotKey, Value: 0)],
+                    Dynamics: new StateDynamics(EpochTick: 42, Row: "gauge", V0: v0, Y0: y0)
+                ),
+            ]),
+        };
+
+        var first = WorldDefinitionSerialization.Serialize(definition: definition);
+        var reparsed = WorldDefinitionSerialization.Deserialize(utf8Json: first);
+        var second = WorldDefinitionSerialization.Serialize(definition: reparsed);
+
+        Assert.Equal(actual: second, expected: first);
+        Assert.Equal(expected: y0, actual: reparsed.State[0].Dynamics!.Y0);
+        Assert.Equal(expected: v0, actual: reparsed.State[0].Dynamics!.V0);
+        Assert.Equal(expected: 42, actual: reparsed.State[0].Dynamics!.EpochTick);
     }
     [Fact]
     public void RootReservedPrefixExtension_SurvivesTheStrictDefault() {

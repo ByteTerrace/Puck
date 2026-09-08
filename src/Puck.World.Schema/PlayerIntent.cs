@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Puck.Abstractions.Documents;
 using Puck.Maths;
@@ -134,7 +135,22 @@ public readonly record struct IntentSource {
     });
 }
 /// <summary>Reads the closed intent-source union.</summary>
-public sealed class IntentSourceJsonConverter : JsonConverter<IntentSource> {
+public sealed class IntentSourceJsonConverter : JsonConverter<IntentSource>, IJsonSchemaNodeConverter {
+    /// <inheritdoc/>
+    public JsonObject BuildSchema(Func<Type, JsonNode> exportType) => new() {
+        ["anyOf"] = new JsonArray(
+            new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("Live", "Idle") },
+            new JsonObject {
+                ["type"] = "object",
+                ["properties"] = new JsonObject {
+                    ["$type"] = new JsonObject { ["const"] = "producer" },
+                    ["name"] = new JsonObject { ["type"] = "string" },
+                },
+                ["required"] = new JsonArray("$type", "name"),
+                ["additionalProperties"] = false,
+            }
+        ),
+    };
     /// <inheritdoc/>
     public override IntentSource Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
         if (reader.TokenType == JsonTokenType.String) {

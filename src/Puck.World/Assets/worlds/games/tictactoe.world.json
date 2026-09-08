@@ -1,0 +1,520 @@
+{
+  "exports": {
+    "actions": [
+      "tttMoveCell",
+      "tttMoveRequest"
+    ],
+    "bindings": [
+      "tttActive",
+      "tttMoveCount",
+      "tttWinner"
+    ],
+    "reads": [
+      "tttActive",
+      "tttBoard",
+      "tttCube",
+      "tttMoveApplied",
+      "tttMoveCount",
+      "tttWinner"
+    ]
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "tttActive",
+          "key": "$cell:tttMoveCell:$value",
+          "state": "tttBoard"
+        },
+        {
+          "$type": "addState",
+          "state": "tttMoveCount",
+          "value": 1
+        },
+        {
+          "$type": "addState",
+          "state": "tttBoardVersion",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "fromState": "tttMoveRequest",
+          "state": "tttMoveApplied"
+        },
+        {
+          "$type": "setState",
+          "expression": "3 - tttActive",
+          "state": "tttActive"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "tttMoveApplied",
+            "comparison": "NotEqual",
+            "state": "tttMoveRequest"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "tttWinner",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "tttMoveCell",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "tttMoveCell",
+            "value": 63
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$cell:tttMoveCell:$value",
+            "state": "tttBoard",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "ttt-place-mark"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "tttMoveRequest",
+          "state": "tttMoveApplied"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "tttMoveApplied",
+            "comparison": "NotEqual",
+            "state": "tttMoveRequest"
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "comparison": "Less",
+                "state": "tttMoveCell",
+                "value": 0
+              },
+              {
+                "$type": "compareState",
+                "comparison": "Greater",
+                "state": "tttMoveCell",
+                "value": 63
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "ttt-reject-out-of-range"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "tttMoveRequest",
+          "state": "tttMoveApplied"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "tttMoveApplied",
+            "comparison": "NotEqual",
+            "state": "tttMoveRequest"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "tttMoveCell",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "tttMoveCell",
+            "value": 63
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "comparison": "NotEqual",
+                "state": "tttWinner",
+                "value": 0
+              },
+              {
+                "$type": "compareState",
+                "comparison": "NotEqual",
+                "key": "$cell:tttMoveCell:$value",
+                "state": "tttBoard",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "ttt-reject-illegal"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "tttMaskX",
+          "expression": "$board:mask:tttBoard:1:1"
+        },
+        {
+          "$type": "setState",
+          "state": "tttXWin",
+          "expression": "((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L0), tttCube, L0), tttCube, L0)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L1), tttCube, L1), tttCube, L1)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L2), tttCube, L2), tttCube, L2)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L3), tttCube, L3), tttCube, L3)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttXWin",
+          "expression": "tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttXWin",
+          "expression": "tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttXWin",
+          "expression": "tttXWin | ((tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX & boardShift(tttMaskX, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttMaskO",
+          "expression": "$board:mask:tttBoard:2:2"
+        },
+        {
+          "$type": "setState",
+          "state": "tttOWin",
+          "expression": "((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L0), tttCube, L0), tttCube, L0)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L1), tttCube, L1), tttCube, L1)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L2), tttCube, L2), tttCube, L2)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L3), tttCube, L3), tttCube, L3)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttOWin",
+          "expression": "tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L4), tttCube, L4), tttCube, L4)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L5), tttCube, L5), tttCube, L5)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L6), tttCube, L6), tttCube, L6)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L7), tttCube, L7), tttCube, L7)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttOWin",
+          "expression": "tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L8), tttCube, L8), tttCube, L8)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L9), tttCube, L9), tttCube, L9)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L10), tttCube, L10), tttCube, L10)) != 0) | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L11), tttCube, L11), tttCube, L11)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "state": "tttOWin",
+          "expression": "tttOWin | ((tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO & boardShift(tttMaskO, tttCube, L12), tttCube, L12), tttCube, L12)) != 0)"
+        },
+        {
+          "$type": "setState",
+          "expression": "tttXWin ? 1 : tttOWin ? 2 : tttMoveCount >= 64 ? 3 : 0",
+          "state": "tttWinner"
+        },
+        {
+          "$type": "setState",
+          "fromState": "tttBoardVersion",
+          "state": "tttWinCheckVersion"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparandState": "tttWinCheckVersion",
+        "comparison": "NotEqual",
+        "state": "tttBoardVersion"
+      },
+      "mode": "Edge",
+      "name": "ttt-check-win"
+    }
+  ],
+  "state": {
+    "lattices": [
+      {
+        "$type": "box",
+        "cellSize": 1,
+        "depth": 4,
+        "layerHeight": 1,
+        "layers": 4,
+        "name": "tttCube",
+        "origin": [
+          0,
+          -32,
+          0
+        ],
+        "width": 4,
+        "directions": [
+          {
+            "name": "L0",
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L1",
+            "x": 0,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L2",
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L3",
+            "x": 0,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L4",
+            "x": 1,
+            "y": -1,
+            "z": -1
+          },
+          {
+            "name": "L5",
+            "x": 1,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L6",
+            "x": 1,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L7",
+            "x": 1,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L8",
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "L9",
+            "x": 1,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L10",
+            "x": 1,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L11",
+            "x": 1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L12",
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L0Back",
+            "x": 0,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L1Back",
+            "x": 0,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L2Back",
+            "x": 0,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L3Back",
+            "x": 0,
+            "y": -1,
+            "z": -1
+          },
+          {
+            "name": "L4Back",
+            "x": -1,
+            "y": 1,
+            "z": 1
+          },
+          {
+            "name": "L5Back",
+            "x": -1,
+            "y": 1,
+            "z": 0
+          },
+          {
+            "name": "L6Back",
+            "x": -1,
+            "y": 1,
+            "z": -1
+          },
+          {
+            "name": "L7Back",
+            "x": -1,
+            "y": 0,
+            "z": 1
+          },
+          {
+            "name": "L8Back",
+            "x": -1,
+            "y": 0,
+            "z": 0
+          },
+          {
+            "name": "L9Back",
+            "x": -1,
+            "y": 0,
+            "z": -1
+          },
+          {
+            "name": "L10Back",
+            "x": -1,
+            "y": -1,
+            "z": 1
+          },
+          {
+            "name": "L11Back",
+            "x": -1,
+            "y": -1,
+            "z": 0
+          },
+          {
+            "name": "L12Back",
+            "x": -1,
+            "y": -1,
+            "z": -1
+          }
+        ]
+      }
+    ],
+    "world": [
+      {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "tttCube"
+        },
+        "kind": "Int",
+        "name": "tttBoard"
+      },
+      {
+        "kind": "Int",
+        "max": 2,
+        "min": 1,
+        "name": "tttActive",
+        "value": 1
+      },
+      {
+        "kind": "Int",
+        "max": 63,
+        "min": -1,
+        "name": "tttMoveCell",
+        "value": -1
+      },
+      {
+        "kind": "Int",
+        "name": "tttMoveRequest",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "tttMoveApplied",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "tttBoardVersion",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "tttWinCheckVersion",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 3,
+        "min": 0,
+        "name": "tttWinner",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 64,
+        "min": 0,
+        "name": "tttMoveCount",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "tttXWin",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "tttOWin",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 9223372036854775807,
+        "min": -9223372036854775808,
+        "name": "tttMaskX",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 9223372036854775807,
+        "min": -9223372036854775808,
+        "name": "tttMaskO",
+        "value": 0
+      }
+    ]
+  }
+}

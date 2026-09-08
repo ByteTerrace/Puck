@@ -4,6 +4,7 @@ using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
 using Puck.SdfVm;
+using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -15,12 +16,49 @@ namespace Puck.World;
 /// occlusion, render scale, an FPS target, a quality preset) — all live console verbs, each echoing the current value
 /// when called with no argument. Registered ONLY when presentation is composed (<c>AddWorldPresentation</c>); over
 /// headless stdin every one of these refuses as unknown. The participant/census verbs (<c>world.players</c>,
-/// <c>world.devices</c>, <c>world.population</c>) moved to <see cref="WorldPopulationCommandModule"/> — server-safe,
-/// registered in core either way. Metrics are armed and read over the pipe (<c>world.timing</c> / <c>world.gpu</c>),
-/// not through an environment variable. Every setting rides <see cref="WorldRenderSettings"/> or a live control
+/// <c>world.devices</c>, <c>world.population</c>) and authoritative diagnostics (<c>world.navigation</c>,
+/// <c>world.budget</c>) moved to <see cref="WorldPopulationCommandModule"/> — server-safe, registered in core either
+/// way. The arming verb, <c>world.timing</c>, moved the same way, to <c>WorldTimingCommandModule</c>
+/// (<c>Puck.World.Console</c>) — a headless boot needs it too, to light the world-simulation timing digest.
+/// <c>world.gpu</c> stays here and reads the armed digest over the pipe, not through an environment variable. Every
+/// setting rides <see cref="WorldRenderSettings"/> or a live control
 /// (<see cref="PresentPacingControl"/>, <see cref="GpuTimingControl"/>), read by the frame source each captured frame.
 /// </summary>
-internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, IServerLink link) : ICommandModule {
+internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPacingControl pacing, WorldPopulation population, WorldRenderSettings settings, WorldRenderProbe renderProbe, WorldServer server, WorldScreenBinder screens, IServerLink link, WorldOverlayFacts facts, PlayerRoster roster) : ICommandModule {
+    // A ranked camera's listing: every candidate's anchor kind in rank order, then the candidate currently winning
+    // for each joined seat (a seat-relative list can win differently per seat).
+    private string CameraAnchorCandidates(WorldCamera camera) {
+        var candidates = camera.Anchors!;
+        var builder = new StringBuilder(value: "anchors=[");
+
+        for (var index = 0; (index < candidates.Count); index++) {
+            _ = builder.Append(value: ((index == 0) ? "" : ",")).Append(value: CameraAnchorKind(anchor: candidates[index].Anchor));
+        }
+
+        _ = builder.Append(value: "] winner=");
+
+        var any = false;
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (!roster.IsJoined(slot: slot)) {
+                continue;
+            }
+
+            _ = WorldSeatAnchors.SelectAnchor(
+                camera: camera,
+                candidateIndex: out var winner,
+                evaluator: facts,
+                slot: slot
+            );
+            _ = builder.Append(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"{(any ? "," : "")}seat{PlayerRoster.DisplayNumber(slot: slot)}:{((winner >= 0) ? winner.ToString(provider: CultureInfo.InvariantCulture) : "none")}"
+            );
+            any = true;
+        }
+
+        return (any ? builder.ToString() : builder.Append(value: "none").ToString());
+    }
     // The anchor keyword for a camera's declared ride — kind plus the target it names, the stable token a piped proof
     // asserts against. An unanchored camera's own offset IS its world position, so it reads 'none'.
     private static string CameraAnchorKind(WorldAnchor? anchor) {
@@ -45,24 +83,34 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             ? indices.Count.ToString(provider: CultureInfo.InvariantCulture)
             : "all")}"
         ),
+            WorldAnchor.Seat seat => string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"anchor=seat:{((seat.Number is { } number)
+            ? number.ToString(provider: CultureInfo.InvariantCulture)
+            : "enclosing")}{((seat.PartId is { } seatPart)
+            ? $"/{seatPart}"
+            : "")}"
+        ),
+            WorldAnchor.RecentSpeaker speaker => $"anchor=recentSpeaker{((speaker.PartId is { } speakerPart)
+            ? $"/{speakerPart}"
+            : "")}",
             _ => "anchor=none",
         };
     }
-    // Camera motion and aim are independent closed vocabularies.
-    private static string CameraRigKind(WorldCameraRig rig) {
-        var motion = rig.Motion switch {
-            WorldCameraMotion.Follow => "follow",
-            WorldCameraMotion.Orbit => "orbit",
-            WorldCameraMotion.Static => "static",
-            _ => "track",
-        };
-        var aim = rig.Aim switch {
-            WorldCameraAim.Anchor => "anchor",
-            WorldCameraAim.Forward => "forward",
-            _ => "worldPoint",
-        };
+    // A camera rig is an authored op-list program: the listing names it and its ops in evaluation order, which is the
+    // whole framing — there is no separate motion/aim kind left to report.
+    private static string CameraRigKind(WorldCameraProgram rig) {
+        var operations = rig.Operations;
+        var opcodes = new string[operations.Count];
 
-        return $"motion={motion} aim={aim}";
+        for (var index = 0; (index < operations.Count); index++) {
+            opcodes[index] = operations[index].Opcode;
+        }
+
+        return $"program={rig.Name} ops={string.Join(
+            separator: ',',
+            values: opcodes
+        )}";
     }
     // The world.cameras listing: one segment per declared camera — name, the anchor it rides, the rig it frames with,
     // and its offscreen render dimensions. Reads the LIVE definition (never the boot snapshot), so a camera mutation's
@@ -87,11 +135,66 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 provider: CultureInfo.InvariantCulture,
                 handler: $"{((index == 0)
                 ? " "
-                : " | ")}{camera.Name} {CameraAnchorKind(anchor: camera.Anchor)} {CameraRigKind(rig: camera.Rig)} {camera.RenderWidth}x{camera.RenderHeight}"
+                : " | ")}{camera.Name} {((camera.Anchors is { Count: > 0 })
+                ? CameraAnchorCandidates(camera: camera)
+                : CameraAnchorKind(anchor: camera.Anchor))} {CameraRigKind(rig: camera.Rig)} {camera.RenderWidth}x{camera.RenderHeight}"
             );
         }
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
+    }
+    // The spellings each adaptive lever's exact and fast sides answer to, beside the shared "auto".
+    private static readonly string[] ExactOrQuality = ["exact", "quality"];
+    private static readonly string[] FastOrFleet = ["fast", "fleet"];
+    private static readonly string[] ExactOrGather = ["exact", "gather"];
+    private static readonly string[] CameraTileAliases = ["camera", "camera-tile", "tile"];
+
+    // The one argument grammar every adaptive render-quality lever (world.ao-quality, world.shadow-march,
+    // world.shadow-mask) parses: auto, the exact side, or the fast side — answered as the lever's OWN mode member,
+    // so the value the session lever carries is anchored to the enum declaration, never to a shared ordinal.
+    private static bool TryParseAdaptiveMode<TMode>(in WireArgs args, string[] exact, string[] fast, TMode autoMode, TMode exactMode, TMode fastMode, out TMode mode) where TMode : struct, Enum {
+        if (args.Is(
+            index: 0,
+            value: "auto"
+        )) {
+            mode = autoMode;
+
+            return true;
+        }
+
+        if (MatchesAny(
+            args: in args,
+            spellings: exact
+        )) {
+            mode = exactMode;
+
+            return true;
+        }
+
+        if (MatchesAny(
+            args: in args,
+            spellings: fast
+        )) {
+            mode = fastMode;
+
+            return true;
+        }
+
+        mode = default;
+
+        return false;
+    }
+    private static bool MatchesAny(in WireArgs args, string[] spellings) {
+        foreach (var spelling in spellings) {
+            if (args.Is(
+                index: 0,
+                value: spelling
+            )) {
+                return true;
+            }
+        }
+
+        return false;
     }
     /// <summary>Owns the automatic population threshold and readout shape shared by adaptive render-quality levers.</summary>
     private string DescribeAdaptiveQuality(string verb, (string Configured, bool? Fast) modes, string exact, string fast) {
@@ -320,12 +423,12 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     // Submits one live presentation-knob write through the server's grant check (WorldServer.ApplySessionLever) instead
     // of writing the injected service here. Defaults to the Render section because most of these knobs fold into it;
     // world.target passes Host explicitly.
-    private void SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, double b = 0.0, WorldSection section = WorldSection.Render) {
+    private void SubmitLever(WorldPrincipal principal, string name, double a, double b = 0.0, WorldSection section = WorldSection.Render) {
         link.SubmitSessionLever(
             lever: new WorldSessionLever(
                 A: a,
                 B: b,
-                Kind: kind,
+                Name: name,
                 Section: section
             ),
             principal: principal
@@ -336,11 +439,11 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     // console echo must still read the settings/pacing service ONLY after the lever has actually applied (or been
     // refused). Over loopback DeliverSessionLever runs synchronously inside SubmitSessionLever, so formatEcho is
     // invoked immediately after the submit call returns — never before it, and never from a stale prior read.
-    private CommandResult SubmitLever(WorldPrincipal principal, WorldLeverKind kind, double a, Func<CommandResult> formatEcho, double b = 0.0, WorldSection section = WorldSection.Render) {
+    private CommandResult SubmitLever(WorldPrincipal principal, string name, double a, Func<CommandResult> formatEcho, double b = 0.0, WorldSection section = WorldSection.Render) {
         SubmitLever(
             a: a,
             b: b,
-            kind: kind,
+            name: name,
             principal: principal,
             section: section
         );
@@ -364,11 +467,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out scale,
-            s: token,
-            style: NumberStyles.Float
+        if (!CommandArgs.TryParseFloat(
+            text: token,
+            value: out scale
         )) {
             return false;
         }
@@ -425,11 +526,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out reach,
-            s: token,
-            style: NumberStyles.Float
+        if (!CommandArgs.TryParseFloat(
+            text: token,
+            value: out reach
         )) {
             return false;
         }
@@ -481,11 +580,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             token = token[..^1];
         }
 
-        if (!float.TryParse(
-            provider: CultureInfo.InvariantCulture,
-            result: out sharpness,
-            s: token,
-            style: NumberStyles.Float
+        if (!CommandArgs.TryParseFloat(
+            text: token,
+            value: out sharpness
         )) {
             return false;
         }
@@ -523,6 +620,40 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
+            name: "world.shaders.reload",
+            description: "Reloads compiled SDF kernels on the next produced frame: world.shaders.reload [directory]. Defaults to deployed Assets/Shaders/Sdf; a source checkout can name src/Puck.SdfVm/Assets/Shaders/Sdf after CompileShaders completes. Uses the current backend. Replaces changed pipelines while retaining world state, GPU buffers and textures; failed loads or ISA validation keep the previous set. This queues work: world.shaders.status reports completion. Binding/ABI changes require a host rebuild; child engines and overlay/postprocess shaders are outside this command.",
+            handler: (_, args) => {
+                if (renderProbe.Node is not { } node) {
+                    return CommandResult.Error(output: "[world.shaders.reload: renderer not ready]");
+                }
+                try {
+                    if (!node.RequestShaderReload(directory: args.Count == 0 ? null : args.Tail(start: 0))) {
+                        return CommandResult.Error(output: "[world.shaders.reload: another request is pending — world.shaders.status]");
+                    }
+                    var status = node.ShaderReloadStatus;
+                    return new CommandResult(Output: $"[world.shaders.reload: request={status.RequestId} pending directory={status.Directory}]");
+                } catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException) {
+                    return CommandResult.Error(output: $"[world.shaders.reload: {exception.Message}]");
+                }
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.shaders.status",
+            description: "Reports the most recent compiled SDF shader reload: request number, state (idle/pending/applied/unchanged/failed), generation, changed pipeline count, directory and failure reason. A request is complete only after pending changes to an outcome.",
+            handler: (_, args) => {
+                if (args.Count != 0) {
+                    return CommandResult.Error(output: "[world.shaders.status: no arguments]");
+                }
+                if (renderProbe.Node is not { } node) {
+                    return new CommandResult(Output: "[world.shaders.status: renderer not ready]");
+                }
+                var status = node.ShaderReloadStatus;
+                return new CommandResult(Output: $"[world.shaders.status: request={status.RequestId} state={status.State} generation={status.Generation} pipelines={status.ChangedPipelines} directory={status.Directory ?? "default"}{(status.Error is { } error ? $" error={error}" : "")}]");
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
             name: "world.shadows",
             description: "Sets continuous ENGINE-WIDE soft-shadow reach and CROWD RADIUS, live (no rebuild): world.shadows [off|low|medium|high|0..1|0%..100%] [crowd-radius]. Names alias 0/25/50/100%; numeric input is continuous. The optional 0..100 world-unit crowd radius bounds WHO casts; farther avatars still render but leave the shadow march.",
             handler: (context, args) => {
@@ -541,11 +672,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 if (args.Count >= 2) {
                     if (
-                        !float.TryParse(
-                        args[1],
-                        NumberStyles.Float,
-                        CultureInfo.InvariantCulture,
-                        out var radius
+                        !args.TryFloat(
+                        index: 1,
+                        value: out var radius
                     ) ||
                         (radius < 0f) ||
                         (radius > 100f)
@@ -560,7 +689,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // never a live read taken separately and possibly before that.
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.Shadows,
+                    name: WorldSessionLevers.Shadows,
                     a: reach,
                     b: crowdRadius,
                     formatEcho: () => new CommandResult(Output: ShadowEcho(settings: settings))
@@ -586,7 +715,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.AmbientOcclusion,
+                    name: WorldSessionLevers.AmbientOcclusion,
                     a: (resolved
                     ? 1.0
                     : 0.0),
@@ -635,7 +764,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     )) {
                         SubmitLever(
                             principal: context.ActingPrincipal(),
-                            kind: WorldLeverKind.FarBound,
+                            name: WorldSessionLevers.FarBound,
                             a: (laneState
                             ? 1.0
                             : 0.0)
@@ -643,7 +772,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     } else {
                         SubmitLever(
                             principal: context.ActingPrincipal(),
-                            kind: WorldLeverKind.ShadowFarExit,
+                            name: WorldSessionLevers.ShadowFarExit,
                             a: (laneState
                             ? 1.0
                             : 0.0)
@@ -662,7 +791,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.FarBound,
+                    name: WorldSessionLevers.FarBound,
                     a: (bothState
                     ? 1.0
                     : 0.0)
@@ -670,7 +799,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.ShadowFarExit,
+                    name: WorldSessionLevers.ShadowFarExit,
                     a: (bothState
                     ? 1.0
                     : 0.0),
@@ -699,7 +828,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.ShadowAccumulation,
+                    name: WorldSessionLevers.ShadowAccumulation,
                     a: (state
                     ? 1.0
                     : 0.0),
@@ -710,55 +839,28 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.shadow-mask",
-            description: "Selects the soft-shadow candidate-mask path live: world.shadow-mask [auto|exact|camera-tile]. auto uses exact per-pixel grid gathers below 16 simulated stand-ins and the fast camera-tile approximation at the 16/64/128 fleet tiers; exact and camera-tile force either side for visual/performance A/B.",
+            description: "Selects the soft-shadow candidate-mask path live: world.shadow-mask [auto|exact|camera-tile]. auto uses the exact per-tile grid gather (one shadow candidate mask per 8x8 workgroup, bit-identical to the flat march) below 16 simulated stand-ins and the fast camera-tile approximation at the 16/64/128 fleet tiers; exact and camera-tile force either side for visual/performance A/B.",
             handler: (context, args) => {
                 if (args.Count == 0) {
                     return new CommandResult(Output: DescribeShadowMask());
                 }
 
-                ShadowMaskMode? mode = null;
-
-                if (args.Is(
-                    index: 0,
-                    value: "auto"
+                if (!TryParseAdaptiveMode(
+                    args: in args,
+                    exact: ExactOrGather,
+                    fast: CameraTileAliases,
+                    autoMode: ShadowMaskMode.Auto,
+                    exactMode: ShadowMaskMode.ExactGather,
+                    fastMode: ShadowMaskMode.CameraTile,
+                    mode: out var mode
                 )) {
-                    mode = ShadowMaskMode.Auto;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "exact"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "gather"
-                )
-                ) {
-                    mode = ShadowMaskMode.ExactGather;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "camera"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "camera-tile"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "tile"
-                )
-                ) {
-                    mode = ShadowMaskMode.CameraTile;
-                }
-
-                if (mode is not { } resolved) {
                     return CommandResult.Error(output: $"[world.shadow-mask: unknown mode '{args[0]}' — auto|exact|camera-tile]");
                 }
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.ShadowMask,
-                    a: ((double)resolved),
+                    name: WorldSessionLevers.ShadowMask,
+                    a: ((double)mode),
                     formatEcho: () => new CommandResult(Output: DescribeShadowMask())
                 );
             }
@@ -772,45 +874,22 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: DescribeAmbientOcclusionQuality());
                 }
 
-                AmbientOcclusionMode? mode = null;
-
-                if (args.Is(
-                    index: 0,
-                    value: "auto"
+                if (!TryParseAdaptiveMode(
+                    args: in args,
+                    exact: ExactOrQuality,
+                    fast: FastOrFleet,
+                    autoMode: AmbientOcclusionMode.Auto,
+                    exactMode: AmbientOcclusionMode.Exact,
+                    fastMode: AmbientOcclusionMode.Fast,
+                    mode: out var mode
                 )) {
-                    mode = AmbientOcclusionMode.Auto;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "exact"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "quality"
-                )
-                ) {
-                    mode = AmbientOcclusionMode.Exact;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "fast"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "fleet"
-                )
-                ) {
-                    mode = AmbientOcclusionMode.Fast;
-                }
-
-                if (mode is not { } resolved) {
                     return CommandResult.Error(output: $"[world.ao-quality: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.AmbientOcclusionQuality,
-                    a: ((double)resolved),
+                    name: WorldSessionLevers.AmbientOcclusionQuality,
+                    a: ((double)mode),
                     formatEcho: () => new CommandResult(Output: DescribeAmbientOcclusionQuality())
                 );
             }
@@ -824,45 +903,22 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                     return new CommandResult(Output: DescribeShadowMarch());
                 }
 
-                ShadowMarchMode? mode = null;
-
-                if (args.Is(
-                    index: 0,
-                    value: "auto"
+                if (!TryParseAdaptiveMode(
+                    args: in args,
+                    exact: ExactOrQuality,
+                    fast: FastOrFleet,
+                    autoMode: ShadowMarchMode.Auto,
+                    exactMode: ShadowMarchMode.Exact,
+                    fastMode: ShadowMarchMode.Fast,
+                    mode: out var mode
                 )) {
-                    mode = ShadowMarchMode.Auto;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "exact"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "quality"
-                )
-                ) {
-                    mode = ShadowMarchMode.Exact;
-                } else if (
-                    args.Is(
-                    index: 0,
-                    value: "fast"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "fleet"
-                )
-                ) {
-                    mode = ShadowMarchMode.Fast;
-                }
-
-                if (mode is not { } resolved) {
                     return CommandResult.Error(output: $"[world.shadow-march: unknown mode '{args[0]}' — auto|exact|fast]");
                 }
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.ShadowMarch,
-                    a: ((double)resolved),
+                    name: WorldSessionLevers.ShadowMarch,
+                    a: ((double)mode),
                     formatEcho: () => new CommandResult(Output: DescribeShadowMarch())
                 );
             }
@@ -941,7 +997,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.RenderScale,
+                    name: WorldSessionLevers.RenderScale,
                     a: scale,
                     formatEcho: () => {
                         var liveScale = settings.RenderScale;
@@ -970,7 +1026,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.UpscaleSharpness,
+                    name: WorldSessionLevers.UpscaleSharpness,
                     a: sharpness,
                     formatEcho: () => new CommandResult(Output: $"[world.upscale-sharpness: {UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)}]")
                 );
@@ -997,7 +1053,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 ) {
                     return SubmitLever(
                         principal: context.ActingPrincipal(),
-                        kind: WorldLeverKind.TargetHertz,
+                        name: WorldSessionLevers.TargetHertz,
                         a: 0.0,
                         section: WorldSection.Host,
                         formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]")
@@ -1020,7 +1076,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // The echo formats INSIDE the completion — after the lever has applied (or been refused).
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.TargetHertz,
+                    name: WorldSessionLevers.TargetHertz,
                     a: hz,
                     section: WorldSection.Host,
                     formatEcho: () => new CommandResult(Output: $"[world.target: {DescribeTarget(target: pacing.TargetHertz)}]")
@@ -1045,13 +1101,13 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
 
                 SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.Shadows,
+                    name: WorldSessionLevers.Shadows,
                     a: ShadowTiers.Scale(tier: preset.Shadows),
                     b: settings.ShadowCrowdRadius
                 );
                 SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.AmbientOcclusion,
+                    name: WorldSessionLevers.AmbientOcclusion,
                     a: (preset.AmbientOcclusion
                     ? 1.0
                     : 0.0)
@@ -1061,40 +1117,16 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 // refused) by the time formatEcho runs, since loopback drains each inline before its Submit* returns.
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    kind: WorldLeverKind.RenderScale,
+                    name: WorldSessionLevers.RenderScale,
                     a: WorldRenderScaleTiers.Scale(tier: preset.RenderScale),
                     formatEcho: () => new CommandResult(Output: DescribeQuality())
                 );
             }
         );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.timing",
-            description: "Arms per-pass GPU timing engine-wide, live (no restart, no magic env var): world.timing [on|off] — no argument echoes the armed state. On lights BOTH the GPU per-pass digest (readable with world.gpu) and the launcher's CPU frame-timing hub; performance metrics are a first-class citizen here.",
-            handler: (_, args) => {
-                if (args.Count == 0) {
-                    return new CommandResult(Output: $"[world.timing: {(GpuTimingControl.Shared.Armed
-                        ? "on"
-                        : "off")}]");
-                }
-
-                var on = ParseOnOff(token: args[0]);
-
-                if (on is not { } resolved) {
-                    return CommandResult.Error(output: $"[world.timing: unknown state '{args[0]}' — on|off]");
-                }
-
-                GpuTimingControl.Shared.SetArmed(armed: resolved);
-
-                return new CommandResult(Output: $"[world.timing: {(resolved
-                    ? "on"
-                    : "off")}]");
-            }
-        );
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.gpu",
-            description: "Echoes the previous frame's per-pass GPU milliseconds — the whole-frame total plus each render pass (mask/beam/cull-args/views/composite) — read live off the renderer. Arm it first with world.timing on; the metrics are first-class, no env var needed.",
+            description: "Echoes the previous frame's per-pass GPU milliseconds — the whole-frame total plus each render pass (upload/sky/mask/beam/cull-args/views/composite) — read live off the renderer. Arm it first with world.timing on; the metrics are first-class, no env var needed.",
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: DescribeGpu())
         );

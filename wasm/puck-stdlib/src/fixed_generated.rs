@@ -23,27 +23,41 @@ use crate::fixed::{FRACTION_BITS, ONE, ZERO};
 const FRACTION_MASK: u64 = (1u64 << FRACTION_BITS) - 1;
 const HALF_ULP: u64 = 1u64 << (FRACTION_BITS - 1);
 
-// Atan2 constants (FixedQ4816.Atan2HalfPiQ61 / Atan2PiQ61).
+// Atan2 constants (FixedQ4816.Atan2HalfPiQ61 / PiQ61).
 const ATAN2_HALF_PI_Q61: i64 = 3622009729038561421;
 const ATAN2_PI_Q61: i64 = 7244019458077122842;
 
 // SinCos constants (FixedQ4816.SinCos*).
-const SIN_COS_INV_TWO_PI_Q64: i64 = 2935890503282001226;
+const SIN_COS_INV_TWO_PI_Q96: u128 = 12609553696233175933233255924;
 const SIN_COS_QUARTER_TURN_Q64: i64 = 4611686018427387904;
 const SIN_COS_TWO_PI_Q60: i64 = 7244019458077122842;
 // FixedQ4816.SinCosFractionBitCount (60) minus FRACTION_BITS (16) — the Q60-to-Q16 narrowing shift.
 const SIN_COS_NARROWING_SHIFT: i64 = 44;
 
-// sin Taylor coefficients C0..C6, Q60 (FixedQ4816.SinPolyC*Q60).
-const SIN_POLY_Q60: [i64; 7] = [
-    1152921504606846976, -192153584101141163, 9607679205057058, -228754266787073,
-    3177142594265, -28883114493, 185148170,
+// Quarter-wave sine at i/256 turns, Q60; cosine reverses the index (FixedQ4816.SinCosTableQ60).
+const SIN_COS_TABLE_Q60: [i64; 65] = [
+    0, 28294110113536504, 56571176913125535, 84814167351074653,
+    113006068906017470, 141129899830620387, 169168719380752196, 197105638019954891,
+    224923827593068887, 252606531462884448, 280137074603713366, 307498873645800920,
+    334675446864527722, 361650424108384337, 388407556659738432, 414930727022454700,
+    441203958630471860, 467211425471488651, 492937461619961867, 518366570673674118,
+    543483435088187080, 568272925403557503, 592720109357758155, 616810260881314114,
+    640528868967736374, 663861646414409556, 686794538428668529, 709313731093879966,
+    731405659690429196, 753057016866600074, 774254760654426065, 794986122325684078,
+    815238614083298888, 835000036583525154, 854258486284375919, 873002362615871209,
+    891220374967787610, 908901549490699688, 926035235706216538, 942611112922431727,
+    958619196450722178, 974049843620151246, 988893759585853128, 1003142002927899856,
+    1016785991037278313, 1029817505285732987, 1042228695976360312, 1054012087071972566,
+    1065160580698383124, 1075667461419900464, 1085526400284455520, 1094731458635925751,
+    1103277091691359535, 1111158151880946079, 1118369891948718997, 1124907967812125795,
+    1130768441178740757, 1135947781918545051, 1140442870190345041, 1144250998321047972,
+    1147369872436662991, 1149797613844045067, 1151532760162549490, 1152574266204915294,
+    1152921504606846976,
 ];
 
-// cos Taylor coefficients C0..C7, Q60 (FixedQ4816.CosPolyC*Q60).
-const COS_POLY_Q60: [i64; 8] = [
-    1152921504606846976, -576460752303423488, 48038396025285291, -1601279867509510,
-    28594283348384, -317714259426, 2406926208, -13224869,
+// Small-residual sine/cosine Taylor coefficients, Q60 (degrees five/four).
+const SIN_COS_RESIDUAL_Q60: [i64; 4] = [
+    -192153584101141163, 9607679205057058, -576460752303423488, 48038396025285291,
 ];
 
 // log2 residual coefficients C1..C4, Q61 (FixedQ4816.Log2PolyC*Q61).
@@ -380,68 +394,58 @@ pub fn atan2(y: i64, x: i64) -> i64 {
     }
 }
 
-// Turn-domain reduction shared by sin/cos: `angle * round(2^64 / 2*pi)` as an exact 128-bit signed
-// product, arithmetic-shifted right by FRACTION_BITS and truncated to the low 64 bits — the two's-
-// complement WRAP that is the exact mod-one-turn reduction (FixedQ4816.SinCos's own doc comment).
+// Q96 reciprocal reduction. Wrapping the product loses no bit used by the Q16 input's [48,111] phase slice.
+// The product wrap is exact; the reciprocal approximates the irrational constant. Reduce magnitudes first.
 fn sin_cos_turns(angle: i64) -> i64 {
-    let product = (angle as i128) * (SIN_COS_INV_TWO_PI_Q64 as i128);
-
-    (product >> FRACTION_BITS) as i64
+    let product = (angle.unsigned_abs() as u128).wrapping_mul(SIN_COS_INV_TWO_PI_Q96);
+    let turns = (product >> 48) as u64 as i64;
+    if angle < 0 { turns.wrapping_neg() } else { turns }
 }
 
-// Polynomial core on fractional turns (2^64 raw = one turn) — ported from FixedQ4816.SinCosCore. Returns
-// the un-narrowed Q60 (cos, sin) of the folded residual, plus the fold flag (the true cosine is negated
-// when folded).
-fn sin_cos_core(fractional_turns: i64) -> (i64, i64, bool) {
-    let folded = (fractional_turns > SIN_COS_QUARTER_TURN_Q64) || (fractional_turns < -SIN_COS_QUARTER_TURN_Q64);
-    let fractional_turns = if folded {
-        // sin(pi - theta) = sin theta, cos(pi - theta) = -cos theta: half a turn minus the fraction wraps
-        // into [-1/4, 1/4].
-        0x8000000000000000u64.wrapping_sub(fractional_turns as u64) as i64
-    } else {
-        fractional_turns
-    };
+fn narrow_sin_cos_q60(value: i64) -> i64 {
+    let magnitude = value.unsigned_abs();
+    let bias = (1u64 << (SIN_COS_NARROWING_SHIFT - 1)) - 1;
+    let rounded = ((magnitude + bias + ((magnitude >> SIN_COS_NARROWING_SHIFT) & 1)) >> SIN_COS_NARROWING_SHIFT) as i64;
+    if value < 0 { -rounded } else { rounded }
+}
 
-    // Radians at Q60 (the fold bounds |theta| <= pi/2). The host keeps only the HIGH 64 bits of the signed
-    // product here (`Math.BigMul(..., out _)`), which is exactly `(product >> 64) as i64`.
-    let x = (((fractional_turns as i128) * (SIN_COS_TWO_PI_Q60 as i128)) >> 64) as i64;
+// First-quadrant nearest-node residual, |r| <= pi/256. Returns (quadrant, index, sin(r), cos(r)).
+fn sin_cos_residual(fractional_turns: i64) -> (u64, usize, i64, i64) {
+    let phase = fractional_turns as u64;
+    let quadrant = phase >> 62;
+    let quarter = SIN_COS_QUARTER_TURN_Q64 as u64;
+    let offset = phase & (quarter - 1);
+    let position = if quadrant & 1 != 0 { quarter - offset } else { offset };
+    let index = ((position + (1u64 << 55)) >> 56) as usize;
+    let residual = position as i64 - ((index as i64) << 56);
+    let x = (((residual as i128) * (SIN_COS_TWO_PI_Q60 as i128)) >> 64) as i64;
     let u = big_mul_shift60(x, x);
-
-    let mut sin_acc = SIN_POLY_Q60[6];
-
-    for i in (0..6).rev() {
-        sin_acc = SIN_POLY_Q60[i].wrapping_add(big_mul_shift60(u, sin_acc));
-    }
-
-    let mut cos_acc = COS_POLY_Q60[7];
-
-    for i in (0..7).rev() {
-        cos_acc = COS_POLY_Q60[i].wrapping_add(big_mul_shift60(u, cos_acc));
-    }
-
-    (cos_acc, big_mul_shift60(x, sin_acc), folded)
+    let sin = x + big_mul_shift60(big_mul_shift60(x, u), SIN_COS_RESIDUAL_Q60[0] + big_mul_shift60(u, SIN_COS_RESIDUAL_Q60[1]));
+    let cos = (1i64 << 60) + big_mul_shift60(u, SIN_COS_RESIDUAL_Q60[2] + big_mul_shift60(u, SIN_COS_RESIDUAL_Q60[3]));
+    (quadrant, index, sin, cos)
 }
 
-fn sin_cos(angle: i64) -> (i64, i64) {
-    let (cos_q60, sin_q60, folded) = sin_cos_core(sin_cos_turns(angle));
-    let sin_raw = ((sin_q60.wrapping_add(1i64 << (SIN_COS_NARROWING_SHIFT - 1))) >> SIN_COS_NARROWING_SHIFT)
-        .clamp(-ONE, ONE);
-    let cos_raw = ((cos_q60.wrapping_add(1i64 << (SIN_COS_NARROWING_SHIFT - 1))) >> SIN_COS_NARROWING_SHIFT)
-        .clamp(-ONE, ONE);
-
-    (sin_raw, if folded { cos_raw.wrapping_neg() } else { cos_raw })
+fn sin_cos_component(fractional_turns: i64, cosine: bool) -> i64 {
+    let (quadrant, index, sin, cos) = sin_cos_residual(fractional_turns);
+    let value = if cosine {
+        big_mul_shift60(SIN_COS_TABLE_Q60[64 - index], cos) - big_mul_shift60(SIN_COS_TABLE_Q60[index], sin)
+    } else {
+        big_mul_shift60(SIN_COS_TABLE_Q60[index], cos) + big_mul_shift60(SIN_COS_TABLE_Q60[64 - index], sin)
+    };
+    let raw = narrow_sin_cos_q60(value);
+    if (quadrant + if cosine { 1 } else { 0 }) & 2 != 0 { -raw } else { raw }
 }
 
-/// Sine of `angle` (fixed-point radians) — ported from `FixedQ4816.Sin`/`SinCos`.
+/// Sine of `angle` (fixed-point radians), reconstructing only the requested component.
 #[must_use]
 pub fn sin(angle: i64) -> i64 {
-    sin_cos(angle).0
+    sin_cos_component(sin_cos_turns(angle), false)
 }
 
-/// Cosine of `angle` (fixed-point radians) — ported from `FixedQ4816.Cos`/`SinCos`.
+/// Cosine of `angle` (fixed-point radians), reconstructing only the requested component.
 #[must_use]
 pub fn cos(angle: i64) -> i64 {
-    sin_cos(angle).1
+    sin_cos_component(sin_cos_turns(angle), true)
 }
 
 // Fractional base-2 log of a Q62 mantissa in [1, 2), at Q61 — ported from FixedQ4816.Log2FractionQ61.
@@ -483,9 +487,39 @@ pub fn exp2(value: i64) -> i64 {
     }
 
     let k = value >> FRACTION_BITS;
+    let shift = 46i64.wrapping_sub(k);
+
+    if shift >= 64 {
+        return ZERO;
+    }
+
     let f = value & (FRACTION_MASK as i64);
-    let index = (f >> 9) as usize;
-    let r = (f & 0x1FF) << 46;
+
+    exp2_mantissa((f >> 9) as usize, (f & 0x1FF) << 46, shift)
+}
+
+// `2^exponent` for an exponent carried at Q32 — ported from FixedQ4816.Exp2Q32: the same table and
+// polynomial as `exp2`, fed twenty-five residual bits instead of nine.
+fn exp2_q32(exponent_q32: i64) -> i64 {
+    if exponent_q32 >= (47i64 << 32) {
+        return i64::MAX;
+    }
+
+    let k = exponent_q32 >> 32;
+    let shift = 46i64.wrapping_sub(k);
+
+    if shift >= 64 {
+        return ZERO;
+    }
+
+    let f = exponent_q32 & ((1i64 << 32) - 1);
+
+    exp2_mantissa((f >> 25) as usize, (f & ((1i64 << 25) - 1)) << 30, shift)
+}
+
+// The shared tail of exp2 and exp2_q32 — ported from FixedQ4816.Exp2Mantissa.
+fn exp2_mantissa(index: usize, residual_q62: i64, shift: i64) -> i64 {
+    let r = residual_q62;
     let mut acc = EXP2_POLY_Q62[3];
 
     for i in (0..3).rev() {
@@ -496,17 +530,21 @@ pub fn exp2(value: i64) -> i64 {
         EXP2_TABLE_Q62[index] as i64,
         (1i64 << 62).wrapping_add(big_mul_shift62(r, acc)),
     );
-    let shift = 46i64.wrapping_sub(k);
-
-    if shift >= 64 {
-        return ZERO;
-    }
 
     if shift <= 0 {
         mantissa
     } else {
         ((mantissa as u64).wrapping_add(1u64 << (shift - 1)) >> shift) as i64
     }
+}
+
+// The base-2 logarithm of a positive raw at Q46 — ported from FixedQ4816.Log2Q46.
+fn log2_q46(value: i64) -> i64 {
+    let raw = value as u64;
+    let integer_part = 63 - raw.leading_zeros() as i64;
+    let fraction = log2_fraction_q61(raw << (62 - integer_part));
+
+    ((integer_part - (FRACTION_BITS as i64)) << 46).wrapping_add((fraction.wrapping_add(1i64 << 14)) >> 15)
 }
 
 // One squaring-ladder step — ported from FixedQ4816.TryMultiplyMagnitude. `None` when the rounded
@@ -586,36 +624,37 @@ fn pow_magnitude(x: i64, y: i64, whole: bool, negative_result: bool) -> i64 {
         return if negative_result { (result as i64).wrapping_neg() } else { result as i64 };
     }
 
-    // Full-width y*log2(x), rounded to nearest with ties to even — deliberately NOT `fixed::mul`: `mul`
-    // wraps to i64 before the saturation gates below ever see the result, so an exponent outside the
-    // Q48.16 range could turn into an arbitrary wrapped one instead of triggering saturation.
-    let exponent_product = (y as i128) * (log as i128);
-    let exponent_negative = exponent_product < 0;
-    let exponent_magnitude = (if exponent_negative { -exponent_product } else { exponent_product }) as u128;
-    let mut rounded_exponent_magnitude = exponent_magnitude >> FRACTION_BITS;
-    let exponent_remainder = (exponent_magnitude as u64) & FRACTION_MASK;
+    // Full-width y*log2(x) with the logarithm at Q46 (a Q62 product), the saturation gates applied on that
+    // exact product, then ONE ties-to-even rounding to the Q32 exponent exp2_q32 consumes — deliberately NOT
+    // `fixed::mul`: `mul` wraps to i64 before the gates ever see the result.
+    let exponent_q62 = (y as i128) * (log2_q46(x) as i128);
 
-    if (exponent_remainder > HALF_ULP)
-        || ((exponent_remainder == HALF_ULP) && ((rounded_exponent_magnitude & 1) != 0))
+    if exponent_q62 >= (47i128 << 62) {
+        return if negative_result { i64::MIN } else { i64::MAX };
+    }
+
+    if exponent_q62 <= -(18i128 << 62) {
+        return ZERO;
+    }
+
+    let exponent_negative = exponent_q62 < 0;
+    let exponent_magnitude = (if exponent_negative { -exponent_q62 } else { exponent_q62 }) as u128;
+    let mut rounded_exponent_magnitude = exponent_magnitude >> 30;
+    let exponent_remainder = (exponent_magnitude as u64) & ((1u64 << 30) - 1);
+
+    if (exponent_remainder > (1u64 << 29))
+        || ((exponent_remainder == (1u64 << 29)) && ((rounded_exponent_magnitude & 1) != 0))
     {
         rounded_exponent_magnitude += 1;
     }
 
-    let exponent_raw: i128 = if exponent_negative {
-        -(rounded_exponent_magnitude as i128)
+    let exponent_q32 = if exponent_negative {
+        (rounded_exponent_magnitude as i64).wrapping_neg()
     } else {
-        rounded_exponent_magnitude as i128
+        rounded_exponent_magnitude as i64
     };
 
-    if exponent_raw >= (47i128 << FRACTION_BITS) {
-        return if negative_result { i64::MIN } else { i64::MAX };
-    }
-
-    if exponent_raw <= (-18i128 << FRACTION_BITS) {
-        return ZERO;
-    }
-
-    let scaled = exp2(exponent_raw as i64);
+    let scaled = exp2_q32(exponent_q32);
 
     if negative_result { scaled.wrapping_neg() } else { scaled }
 }

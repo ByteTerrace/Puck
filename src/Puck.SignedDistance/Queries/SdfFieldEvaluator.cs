@@ -14,7 +14,7 @@ namespace Puck.SignedDistance.Queries;
 //
 // THE EXCLUDED-OPS RULE (asserted once at construction, never per query): this evaluator is WARP-FREE — it rejects
 // any program containing an op that needs runtime trigonometry not implemented in fixed point (BendX/BendY/BendZ/
-// TwistY/LogSphere/CellJitter/RepeatPolar/Displace/DomainWarp), the one op needing a per-frame dynamic-transform
+// TwistY/LogSphere/CellJitter/RepeatPolar/Displace/DomainWarp/NoiseDisplace), the one op needing a per-frame dynamic-transform
 // buffer this evaluator's signature has no seam for (TransformDynamic — see the constructor's remarks), and
 // WallpaperFold, whose 17-group parity-keyed cell logic has no fixed-point implementation. It also rejects a
 // NON-UNIFORM Scale: the renderer's min-axis correction is deliberately a safe sphere-tracing lower bound, not
@@ -28,6 +28,18 @@ namespace Puck.SignedDistance.Queries;
 // throws <see cref="ArgumentException"/> naming the FIRST
 // disqualifying instruction's op or shape, rather than silently constructing an evaluator that would answer wrong
 // for part of the program.
+//
+// THE INSTANCE CULL (TryDistance, BuildCullBounds/IsPureUnionInstance/LeavesLocalFrameClean/CanCullInstance): a
+// program instance whose whole compose chain is a plain SdfBlendOp.Union carries a conservative world-space sphere
+// bound (SdfInstanceRange, the same bound the GPU beam prepass tile-culls with); TryDistance skips such an
+// instance's instruction slice whenever that bound proves it cannot beat the running best-so-far distance.
+// Exact-by-construction — the skip changes no returned distance, material, or gradient — because a hard union can
+// only ever lower the accumulator, never raise it. Smooth/chamfer/subtraction/intersection/Xor blends, and any
+// instance containing a PushField/PopField or a bare Onion/Dilate, are never culled: their compose can depend on a
+// candidate farther than the current best, which a bound-only skip cannot reproduce bit-for-bit. Nor is an instance
+// culled unless the instruction right after it (if any) is ResetPoint: skipping an instance also skips its own
+// point-transform chain, so localPosition/distanceScale carry through unchanged from before the instance, and only
+// a following ResetPoint discards that carried-through value before anything reads it.
 public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // SDF_FAR_DISTANCE (sdf-vm.hlsli): the accumulator's seed value — "nothing found yet," farther than any real
     // program's geometry, so the first SHAPE candidate always wins the initial compose.
@@ -51,24 +63,18 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // derived. Consumers authoring much smaller or larger geometry may need a different probe — this is a tuning
     // constant, not a physical law.
     private static readonly FixedQ4816 GradientEpsilon = FixedQ4816.FromDouble(value: 0.01);
-    // The march accept threshold (Raycast/SphereCast/TryGroundHeight/LineOfSight): a sample within this of the
-    // surface counts as a hit rather than one more step. Matches the scale of GradientEpsilon (both are "close
-    // enough" tolerances against the same fixed-point field) — tighten per-consumer by wrapping this provider, not by
-    // editing the shared constant.
-    private static readonly FixedQ4816 HitEpsilon = FixedQ4816.FromDouble(value: 0.001);
-    // The march step floor: since every op this evaluator interprets is an isometry, a distance-preserving field op,
-    // or an isotropic Scale (non-uniform Scale is rejected at construction), the interpreted field is EXACTLY
-    // 1-Lipschitz, so
-    // stepping by the raw field distance can never overstep a real surface — this floor exists only to keep a
-    // pathological near-zero-but-not-accepted clearance from stalling the loop at MaxMarchIterations.
-    private static readonly FixedQ4816 MinMarchStep = FixedQ4816.FromDouble(value: 0.0001);
-    // The skin distance LineOfSight shrinks its probe by, so a target sitting exactly on a surface (the common "is
-    // there a clear line to that wall" query) never reads as self-obstructing.
-    private static readonly FixedQ4816 LineOfSightSkin = FixedQ4816.FromDouble(value: 0.05);
 
-    // A generous ceiling for a well-conditioned field (see MinMarchStep): the loop always terminates and reports "no
-    // hit" rather than spin — the standard non-convergence contract every sphere tracer carries, never a hang.
-    private const int MaxMarchIterations = 512;
+    // The same float-safety padding SdfProgram bakes into every GPU cull bound (its BoundRadiusScale/
+    // BoundRadiusPadding, applied at ClassifyInstances/CompileRigidPlan/PackInstances — KEEP IN SYNC) — widening an
+    // instance's authored bound before converting it to FixedQ4816 absorbs float and fixed-point rounding, so the
+    // bound this evaluator tests against can only be looser (never tighter) than the geometry it must cover.
+    private const float CullBoundRadiusScale = 1.0001f;
+    private const float CullBoundRadiusPadding = 0.001f;
+
+    // The iteration budget at unit step scale. A non-accepted point advance is at least
+    // max(floor(HitEpsilon * stepScale), one Q48.16 tick) — the divisor m_marchIterations rescales by — so this budget
+    // times HitEpsilon is the distance a point march always covers before it may exhaust, at every step scale.
+    private const int BaseMarchIterations = 512;
 
     // TryFieldGradient probes by 6-tap CENTRAL DIFFERENCE — one +/- pair per world axis. Central differences are
     // exact where the field is mirror-symmetric about the probe point ONLY when every op between the probe point and
@@ -77,6 +83,23 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
     // independent (a yaw-90 quaternion quantizes to |q|^2 = 1 + 2.1e-6), leaving a systematic tangential residual of
     // order 1e-3 in the normalized gradient — sub-perceptual at feel scale, and zero on unrotated geometry.
     private readonly CompiledInstruction[] m_instructions;
+    // Whether the compiled stream declares any shape at all. A program with none has nothing to answer against, which
+    // is a DIFFERENT answer from "this point cannot be expressed against the program's frame" — March must be able to
+    // tell the two apart, since only the second is a non-convergence.
+    private readonly bool m_hasShape;
+    // The iteration budget March runs, derived from m_stepScale so that the distance a POINT march always covers
+    // before it may exhaust is the SAME at every step scale: BaseMarchIterations * HitEpsilon.
+    private readonly int m_marchIterations;
+    // SdfProgram.StepScale (1/L, in (0, 1]) in fixed point — the factor that turns the interpreted field's value into
+    // a lower bound on true Euclidean distance. The interpreted op subset is 1-Lipschitz, but the blend tail is not:
+    // a chamfer's bevel arm and an eccentric Ellipsoid both make the field OVERESTIMATE, so a march advancing by the
+    // raw value steps past thin geometry and tunnels.
+    private readonly FixedQ4816 m_stepScale;
+    // One conservative world-space bound per hard-union instance (see BuildCullBounds/IsPureUnionInstance), sorted by
+    // First ascending — the order program.Instances declares them in, since only one instance is open at a time.
+    // Empty when the program declares no cullable instance, so TryDistance's cull check is then a single comparison
+    // that never fires and every existing program's answers are unchanged.
+    private readonly CullBound[] m_cullBounds;
 
     /// <summary>Compiles <paramref name="program"/>'s instruction stream into this evaluator's fixed-point form.</summary>
     /// <param name="program">The program to wrap. Its <see cref="SdfProgram.Instructions"/> are walked ONCE here —
@@ -93,6 +116,34 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         ArgumentNullException.ThrowIfNull(argument: program);
 
         m_instructions = Compile(instructions: program.Instructions);
+        m_stepScale = ConservativeStepScale(value: program.StepScale);
+        m_marchIterations = MarchIterationsFor(stepScale: m_stepScale);
+        m_cullBounds = BuildCullBounds(program: program);
+
+        for (var index = 0; (index < m_instructions.Length); index++) {
+            if (m_instructions[index].Op == SdfOp.ShapeBlend) {
+                m_hasShape = true;
+
+                break;
+            }
+        }
+    }
+
+    // StepScale is a lower-bound multiplier: rounding it upward would make a later advance larger than the program's
+    // Lipschitz proof. Convert with a directed floor, not FixedQ4816.FromDouble's nearest-even policy. A positive
+    // scale below one Q48.16 tick therefore becomes zero, authorizing no scaled advance at all: a radius cast reports
+    // Bounded at its origin, a point cast reports Bounded after March's one-tick reach, and Overlap reports occupied,
+    // rather than inventing a representable scale larger than the proof permits.
+    private static FixedQ4816 ConservativeStepScale(float value) {
+        const double RawOne = (1L << FixedQ4816.FractionBitCount);
+
+        var raw = ((long)Math.Floor(d: (((double)value) * RawOne)));
+
+        return FixedQ4816.FromRawBits(value: Math.Clamp(
+            max: ((long)RawOne),
+            min: 0L,
+            value: raw
+        ));
     }
 
     /// <inheritdoc/>
@@ -108,6 +159,25 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
     /// <inheritdoc/>
     public FieldEvaluatorCapabilities Capabilities => new(WarpFree: true);
+    // Whether the compiled stream declares any shape — the march's "nothing to answer" branch.
+    internal bool HasShape => m_hasShape;
+    // The exact march's sample budget, the budget a banded march spends on its exact samples.
+    internal int MarchIterations => m_marchIterations;
+    // The program's step scale (1/L) in fixed point, floored so it stays a lower-bound multiplier.
+    internal FixedQ4816 StepScale => m_stepScale;
+    // The program's Lipschitz bound L in fixed point, rounded up from the floored step scale so L * StepScale never
+    // reads below one; the largest representable value when the step scale floored to zero.
+    internal FixedQ4816 LipschitzBound {
+        get {
+            if (m_stepScale.Value <= 0L) {
+                return FixedQ4816.MaxValue;
+            }
+
+            const long RawOneSquared = (1L << (2 * FixedQ4816.FractionBitCount));
+
+            return FixedQ4816.FromRawBits(value: ((RawOneSquared + (m_stepScale.Value - 1L)) / m_stepScale.Value));
+        }
+    }
 
     private static FixedVector3 Abs(FixedVector3 value) =>
         new(
@@ -277,6 +347,107 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
 
         return compiled;
     }
+    // Builds this evaluator's exact cull table: one conservative world-space bound per instance whose whole compose
+    // chain is a hard union (IsPureUnionInstance) AND whose skip cannot corrupt what runs after it
+    // (LeavesLocalFrameClean) — the only shape a bound-only skip is provably bit-identical to full evaluation for
+    // (see CanCullInstance's remarks). A program with no such instance yields an empty table.
+    private static CullBound[] BuildCullBounds(SdfProgram program) {
+        var instances = program.Instances;
+        var instructions = program.Instructions;
+        var result = new List<CullBound>(capacity: instances.Count);
+
+        for (var index = 0; (index < instances.Count); index++) {
+            var instance = instances[index];
+
+            // A plane, or any compose the program itself marks as reaching every tile, has no finite bound however
+            // small the instance declared; the program's own test is the one the GPU prepass trusts.
+            if (
+                instance.IsDynamic ||
+                program.HasUnmaskableInfluence(first: instance.First, end: instance.End) ||
+                !IsPureUnionInstance(
+                    instance: instance,
+                    instructions: instructions
+                ) ||
+                !LeavesLocalFrameClean(
+                    instance: instance,
+                    instructions: instructions
+                )
+            ) {
+                continue;
+            }
+
+            result.Add(item: new CullBound(
+                CenterX: FixedQ4816.FromDouble(value: instance.Center.X),
+                CenterY: FixedQ4816.FromDouble(value: instance.Center.Y),
+                CenterZ: FixedQ4816.FromDouble(value: instance.Center.Z),
+                End: instance.End,
+                First: instance.First,
+                Radius: FixedQ4816.FromDouble(value: ((instance.Radius * CullBoundRadiusScale) + CullBoundRadiusPadding))
+            ));
+        }
+
+        return result.ToArray();
+    }
+    // The bound test: the true Euclidean distance from worldPosition to any point the instance's geometry can ever
+    // occupy is at least (distance-to-center - radius), the same sphere-containment guarantee the GPU beam prepass
+    // already relies on for its own tile cull (SdfInstanceRange's remarks). A hard-union candidate can therefore win
+    // only when that lower bound still beats the running best; ">=" (not ">") matches ResolveWinner's own strict "<"
+    // for Union, so a tie never wins and skipping it changes nothing.
+    private static bool CanCullInstance(CullBound bound, FixedQ4816 resultDistance, FixedVector3 worldPosition) {
+        var delta = new FixedVector3(
+            X: (worldPosition.X - bound.CenterX),
+            Y: (worldPosition.Y - bound.CenterY),
+            Z: (worldPosition.Z - bound.CenterZ)
+        );
+
+        return ((delta.Length - bound.Radius) >= resultDistance);
+    }
+    // An instance is cullable only when every instruction it owns is either a rigid point transform that never reads
+    // or writes the running accumulator (ResetPoint/Translate/Rotate/Scale/Repeat/RepeatLimited/SymmetryPlane/
+    // Elongate) or a ShapeBlend composing by plain SdfBlendOp.Union. Under that restriction the instance's own bound
+    // (a world-space sphere containing every shape it can ever place, however its local point transforms) proves
+    // every candidate it can produce is at least the bound's own lower-bound distance from the query point — so a
+    // union fold over any number of such candidates cannot lower resultDistance below what CanCullInstance already
+    // tests. PushField/PopField/Onion/Dilate, or any other blend (Subtraction/Intersection/smooth/chamfer/Xor),
+    // disqualifies the instance: each composes into the shared accumulator in a way a bound-only skip does not
+    // reproduce bit-for-bit.
+    private static bool IsPureUnionInstance(SdfInstanceRange instance, IReadOnlyList<SdfInstruction> instructions) {
+        for (var index = instance.First; (index < instance.End); index++) {
+            switch (instructions[index].Op) {
+                case SdfOp.ResetPoint:
+                case SdfOp.Translate:
+                case SdfOp.Rotate:
+                case SdfOp.Scale:
+                case SdfOp.Repeat:
+                case SdfOp.RepeatLimited:
+                case SdfOp.SymmetryPlane:
+                case SdfOp.Elongate: {
+                        continue;
+                    }
+                case SdfOp.ShapeBlend: {
+                        if (instructions[index].Blend != ((uint)SdfBlendOp.Union)) {
+                            return false;
+                        }
+
+                        continue;
+                    }
+                default: {
+                        return false;
+                    }
+            }
+        }
+
+        return true;
+    }
+    // Skipping an instance's slice skips its own ResetPoint/Translate/Rotate/Scale/Repeat/... chain too, so
+    // localPosition and distanceScale carry through the skip exactly as they stood before the instance, not as the
+    // instance's own transforms would have left them. That is harmless to the instance's own candidates (never the
+    // union's winner, by CanCullInstance's bound), but only safe for whatever runs after the skip when the very next
+    // instruction is SdfOp.ResetPoint: it is the only op that overwrites localPosition/distanceScale outright rather
+    // than folding the carried-through value in, so it is the only op that can absorb an arbitrary skip. An instance
+    // ending at the program's own end has no following instruction to see the wrong local frame.
+    private static bool LeavesLocalFrameClean(SdfInstanceRange instance, IReadOnlyList<SdfInstruction> instructions) =>
+        ((instance.End >= instructions.Count) || (instructions[instance.End].Op == SdfOp.ResetPoint));
     // === The blend accumulator (KEEP IN SYNC with mapCore's shared blend tail + blendShape/blendSmoothUnion) ===========
     // Mirrors the shader's semantics EXACTLY, including op order effects: the material winner is resolved from the
     // PRE-blend (current, candidate) pair using the SAME strict compares a SHAPE or a POP_FIELD candidate gets, then
@@ -418,67 +589,45 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             _ => false,
         };
     }
-    // A single stepped sphere-trace march shared by Raycast (radius == 0) and SphereCast (radius > 0): steps by the
-    // field's own clearance (see MinMarchStep's remarks on why no extra Lipschitz clamp is needed), testing against
-    // HitEpsilon each iteration. Mirrors BakedWorldQuery.March's shape so the two providers read as the same family
-    // of verb despite one walking a baked grid and the other a live field.
-    private bool March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
-        hit = default;
+    // The shared sphere-trace march over this evaluator's own exact samples — see SdfFieldMarch for the accept and
+    // advance rules. Every sample is exact, so the bound budget is never spent.
+    private MarchOutcome March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
+        var sampler = new ExactSampler(evaluator: this);
 
-        var unit = direction.Normalize();
+        return SdfFieldMarch.Run(
+            boundBudget: 0,
+            direction: direction,
+            exactBudget: m_marchIterations,
+            hasShape: m_hasShape,
+            hit: out hit,
+            maxDistance: maxDistance,
+            origin: origin,
+            radius: radius,
+            sampler: ref sampler,
+            stepScale: m_stepScale
+        );
+    }
+    // The iteration budget that keeps a point cast's guaranteed pre-exhaustion reach at BaseMarchIterations *
+    // HitEpsilon however far the step scale clamps the advance. A non-accepting point iteration advances at least
+    // max(floor(HitEpsilon * stepScale), one Q48.16 tick), so the budget is that reach divided by the same floor,
+    // rounded up. The one-tick half bounds the budget on its own: no step scale can push it past 33,792 iterations
+    // (raw HitEpsilon 66 * BaseMarchIterations, over a one-tick divisor), so a pathologically clamped program cannot
+    // spin. Exactly BaseMarchIterations at stepScale 1, so a warp-free program's answers are unchanged to the bit.
+    // A radius cast has no equivalent reach guarantee: it stops as soon as the scaled field cannot clear the unscaled
+    // radius, which the tick floor deliberately does not lift, so it may report a bounded answer having travelled
+    // nothing at all. Across both, an exhausted answer has exactly three causes: that vanished radius clearance, this
+    // budget running out, and a marched point the program's frame cannot express.
+    private static int MarchIterationsFor(FixedQ4816 stepScale) {
+        var reach = (SdfFieldMarch.HitEpsilon * FixedQ4816.FromInteger(value: BaseMarchIterations));
+        var floor = FixedQ4816.Max(
+            x: SdfFieldMarch.ScaleDistanceDown(
+                distance: SdfFieldMarch.HitEpsilon,
+                scale: stepScale
+            ),
+            y: FixedQ4816.Epsilon
+        );
 
-        if (
-            (unit == FixedVector3.Zero) ||
-            (maxDistance <= FixedQ4816.Zero)
-        ) {
-            return false;
-        }
-
-        var position = origin;
-        var traveled = FixedQ4816.Zero;
-
-        for (var iteration = 0; (iteration < MaxMarchIterations); iteration++) {
-            if (!TryDistance(
-                distance: out var fieldDistance,
-                material: out var material,
-                position: position
-            )) {
-                return false;
-            }
-
-            var clearance = (fieldDistance - radius);
-
-            if (clearance <= HitEpsilon) {
-                // Normal is deliberately NOT computed here — see RayHit.Normal's remarks. Call TryFieldGradient at
-                // hit.Point if a future consumer needs it.
-                hit = new RayHit(
-                    Confidence: WorldQueryConfidence.Exact,
-                    Distance: traveled,
-                    Material: material,
-                    Normal: FixedVector3.Zero,
-                    Point: position
-                );
-
-                return true;
-            }
-
-            if (traveled >= maxDistance) {
-                return false;
-            }
-
-            var step = FixedQ4816.Min(
-                x: FixedQ4816.Max(
-                    x: clearance,
-                    y: MinMarchStep
-                ),
-                y: (maxDistance - traveled)
-            );
-
-            traveled += step;
-            position += (unit * step);
-        }
-
-        return false;
+        return ((int)(((reach.Value + floor.Value) - 1L) / floor.Value));
     }
     private static FixedQ4816 MaxComponent(FixedVector3 value) =>
         FixedQ4816.Max(
@@ -768,17 +917,24 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             )),
             Y: (FixedQ4816.Abs(value: p.Y) - halfHeight)
         );
-        var projection = FixedQ4816.Clamp(
+        // k2 is the slanted side; the projection divides by its squared length. SdfProgramBuilder.MinTrapezoidProfileSlant
+        // keeps every admitted profile clear of the rounding window where that length reads zero, so the zero arm is
+        // unreachable through the builder — it is here because an integer divide has no NaN to propagate, and a
+        // total function is the only shape this may take on a query path the authoritative server calls per tick.
+        var slantLengthSquared = FixedVector2.Dot(
+            left: k2,
+            right: k2
+        );
+        var projection = ((slantLengthSquared == FixedQ4816.Zero)
+            ? FixedQ4816.Zero
+            : FixedQ4816.Clamp(
             value: (FixedVector2.Dot(
                 left: (k1 - p),
                 right: k2
-            ) / FixedVector2.Dot(
-                left: k2,
-                right: k2
-            )),
+            ) / slantLengthSquared),
             minimum: FixedQ4816.Zero,
             maximum: FixedQ4816.One
-        );
+        ));
         var cb = ((p - k1) + (k2 * projection));
         var sign = (((cb.X < FixedQ4816.Zero) && (ca.Y < FixedQ4816.Zero))
             ? -FixedQ4816.One
@@ -892,6 +1048,9 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
 
     /// <inheritdoc/>
+    /// <remarks>A probe that cannot converge reports BLOCKED, because it rides
+    /// <see cref="Raycast(FixedPosition, FixedVector3, FixedQ4816, out RayHit)"/>'s conservative non-convergence
+    /// contract: "clear" is the assertion this verb makes, so it is the one an unfinished march may not make.</remarks>
     public bool LineOfSight(FixedPosition from, FixedPosition to) {
         var delta = (to - from);
         var distance = delta.Length;
@@ -900,7 +1059,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             return true;
         }
 
-        var probeDistance = (distance - LineOfSightSkin);
+        var probeDistance = (distance - SdfFieldMarch.LineOfSightSkin);
 
         if (probeDistance <= FixedQ4816.Zero) {
             return true;
@@ -914,45 +1073,110 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         );
     }
     /// <inheritdoc/>
-    public bool Overlap(FixedPosition center, FixedQ4816 radius) =>
-        (TryDistance(
+    /// <remarks>The test is the SCALED field value against the radius, so the sphere is effectively widened by the
+    /// program's Lipschitz factor: occupancy may over-report by that factor and never under-reports, which is the
+    /// direction a placement/spawn consumer can survive being wrong about. If the center cannot be rebased into the
+    /// program's signed-Q48.16 frame, a shape-bearing program reports occupied: inability to evaluate must not become
+    /// a false-clear placement result. A shape-free program still reports clear everywhere.</remarks>
+    public bool Overlap(FixedPosition center, FixedQ4816 radius) {
+        if (!TryDistance(
             distance: out var distance,
             material: out _,
             position: center
-        ) && (distance <= radius));
+        )) {
+            return m_hasShape;
+        }
+
+        return (SdfFieldMarch.ScaleDistanceDown(
+            distance: distance,
+            scale: m_stepScale
+        ) <= FixedQ4816.Max(
+            x: radius,
+            y: FixedQ4816.Zero
+        ));
+    }
     /// <inheritdoc/>
+    /// <remarks>A march that cannot safely complete its hit-or-clear proof reports a HIT at the last marched point,
+    /// carrying <see cref="WorldQueryConfidence.Bounded"/>. This occurs when the scaled field can no longer clear the
+    /// sweep radius (a radius cast only — a point march always advances by at least one fixed-point tick), when the
+    /// iteration budget ends, or when the march reaches a point the program's frame
+    /// cannot express. Reporting the miss instead would let a grazing ray
+    /// that never reached its obstruction claim the line was clear — the one answer a contact, visibility, or sweep
+    /// consumer cannot recover from.</remarks>
     public bool Raycast(FixedPosition origin, FixedVector3 dir, FixedQ4816 maxDist, out RayHit hit) =>
-        March(
+        (March(
             origin: origin,
             direction: dir,
             maxDistance: maxDist,
             radius: FixedQ4816.Zero,
             hit: out hit
-        );
+        ) != MarchOutcome.Miss);
     /// <inheritdoc/>
+    /// <remarks>Non-convergence resolves as a hit, exactly as in
+    /// <see cref="Raycast(FixedPosition, FixedVector3, FixedQ4816, out RayHit)"/>.</remarks>
     public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
-        March(
+        (March(
             direction: dir,
             hit: out hit,
             maxDistance: maxDist,
             origin: origin,
-            radius: radius
-        );
+            radius: FixedQ4816.Max(
+                x: radius,
+                y: FixedQ4816.Zero
+            )
+        ) != MarchOutcome.Miss);
     /// <inheritdoc/>
+    /// <remarks>The evaluated point is the exact world-space displacement from the world origin — <c>position</c>
+    /// REBASED against <see cref="FixedPosition.Zero"/>, not its raw <see cref="FixedPosition.Local"/> offset. The
+    /// wrapped <see cref="SdfProgram"/> bakes its geometry in world space around that origin, so reading <c>.Local</c>
+    /// alone would alias the whole field with the 2^<see cref="FixedPosition.CellSizeLog2"/>-unit cell period and
+    /// answer for the wrong copy; <see cref="FixedPosition.FromLocal"/> creates a nonzero cell on its own past half a
+    /// cell, so no caller has to opt in to reach that. Rebasing is exact integer arithmetic and is the identity for a
+    /// position already in cell <c>(0,0,0)</c>. Returns <see langword="false"/> when the program declares no shape, or
+    /// when the displacement is outside signed Q48.16 (past ~1.4e14 units from the origin), which no authored program
+    /// can hold geometry at.</remarks>
     public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
         distance = FixedQ4816.Zero;
         material = 0;
 
-        var worldPosition = position.Local;
+        if (
+            !m_hasShape ||
+            !position.TryDelta(
+            delta: out var worldPosition,
+            origin: FixedPosition.Zero
+        )
+        ) {
+            return false;
+        }
+
         var localPosition = worldPosition;
         var distanceScale = FixedQ4816.One;
         var resultDistance = FarDistance;
         var resultMaterial = 0;
         var savedFieldDistance = FarDistance;
         var savedFieldMaterial = 0;
-        var sawShape = false;
+        var cullIndex = 0;
 
         for (var index = 0; (index < m_instructions.Length); index++) {
+            if (
+                (cullIndex < m_cullBounds.Length) &&
+                (m_cullBounds[cullIndex].First == index)
+            ) {
+                var bound = m_cullBounds[cullIndex];
+
+                cullIndex++;
+
+                if (CanCullInstance(
+                    bound: bound,
+                    resultDistance: resultDistance,
+                    worldPosition: worldPosition
+                )) {
+                    index = (bound.End - 1);
+
+                    continue;
+                }
+            }
+
             var instruction = m_instructions[index];
 
             switch (instruction.Op) {
@@ -1054,6 +1278,13 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                         var candidateDistance = resultDistance;
                         var candidateMaterial = resultMaterial;
 
+                        // Data1.y is the scope's baked 1/L candidate scale (KEEP IN SYNC with mapCore's pop); zero =
+                        // unpatched, no scale. The directed-floor multiply rounds a positive candidate down —
+                        // conservative for the march, like every scaled advance in this evaluator.
+                        if (instruction.Data1Y > FixedQ4816.Zero) {
+                            candidateDistance *= instruction.Data1Y;
+                        }
+
                         resultDistance = savedFieldDistance;
                         resultMaterial = savedFieldMaterial;
                         (resultDistance, resultMaterial) = Compose(
@@ -1080,17 +1311,12 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
                             blend: instruction.Blend,
                             smooth: instruction.Data1X
                         );
-                        sawShape = true;
                         break;
                     }
                 default: {
                         throw new UnreachableException(message: $"The constructor validated every instruction's op is supported; op {instruction.Op} reached the interpreter unvalidated.");
                     }
             }
-        }
-
-        if (!sawShape) {
-            return false;
         }
 
         distance = resultDistance;
@@ -1169,6 +1395,11 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
         return true;
     }
     /// <inheritdoc/>
+    /// <remarks>Requires a CONVERGED downward march, unlike the cast and visibility verbs. This verb's return value is
+    /// a surface, not an obstruction: it has no confidence channel to mark a stand-in with, and a caller that grounds a
+    /// body onto a fabricated Y is moved to a place the world does not have. A descent that runs out of iterations, or
+    /// reaches a point the program's frame cannot express, proves nothing about what is below, so it answers
+    /// <see langword="false"/> — "no ground within the probe range", the same answer an empty column gives.</remarks>
     public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) {
         groundY = FixedQ4816.Zero;
 
@@ -1184,7 +1415,7 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             Z: FixedQ4816.Zero
         ));
 
-        if (!March(
+        if (March(
             origin: top,
             direction: new FixedVector3(
                 X: FixedQ4816.Zero,
@@ -1194,18 +1425,46 @@ public sealed class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator {
             maxDistance: probeRange,
             radius: FixedQ4816.Zero,
             hit: out var hit
+        ) != MarchOutcome.Hit) {
+            return false;
+        }
+
+        // World Y, rebased against the world origin exactly as TryDistance rebases its query point — never the hit's
+        // raw .Local, which is relative to whichever cell the descending march re-anchored into.
+        if (!hit.Point.TryDelta(
+            delta: out var world,
+            origin: FixedPosition.Zero
         )) {
             return false;
         }
 
-        // Same single-cell assumption BakedWorldQuery documents: the probe stays within the room/arena-scale span a
-        // vertical ground search covers, so the hit's .Local (relative to its own, possibly re-anchored cell) reads
-        // correctly against `position`'s own Y.
-        groundY = hit.Point.Local.Y;
+        groundY = world.Y;
 
         return true;
     }
 
+    // The march sampler over this evaluator's own field: every sample exact, the radius unread.
+    private readonly struct ExactSampler(SdfFieldEvaluator evaluator) : ISdfMarchSampler {
+        public bool TrySample(FixedPosition position, FixedQ4816 radius, out FixedQ4816 distance, out int material, out bool exact) {
+            exact = true;
+
+            return evaluator.TryDistance(
+                distance: out distance,
+                material: out material,
+                position: position
+            );
+        }
+    }
+    // One hard-union instance's conservative world-space bound, converted to FixedQ4816 ONCE at construction (see
+    // BuildCullBounds) — the fixed-point, safety-padded twin of SdfInstanceRange's float Center/Radius.
+    private readonly record struct CullBound(
+        int First,
+        int End,
+        FixedQ4816 CenterX,
+        FixedQ4816 CenterY,
+        FixedQ4816 CenterZ,
+        FixedQ4816 Radius
+    );
     // The compiled, fixed-point form of one SdfInstruction: every Data0/Data1 float lane converted to FixedQ4816
     // ONCE at construction (see Compile). Field names mirror the shader's data0.x/y/z/w and data1.x/y/z/w swizzles
     // directly so a shape/op body reads as a transcription of its mapCore counterpart, not a re-derivation.

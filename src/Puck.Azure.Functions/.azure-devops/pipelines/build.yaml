@@ -1,0 +1,82 @@
+parameters:
+  - name: "dotNetSdkVersion"
+    default: "10.x"
+    displayName: ".NET SDK Version"
+    type: "string"
+  - name: "verbosity"
+    default: "minimal"
+    displayName: "Verbosity"
+    type: "string"
+
+pool:
+  name: "bytrcmdpp000"
+
+schedules:
+  - cron: "0 18 * * *"
+    always: true
+    displayName: "Daily Build"
+    branches:
+      include:
+        - main
+
+trigger: none
+
+steps:
+  - checkout: self
+    clean: true
+    displayName: "checkout repository"
+    enabled: true
+    fetchDepth: 1
+    timeoutInMinutes: 3
+  - task: UseDotNet@2
+    displayName: "use .NET SDK ${{ parameters.dotNetSdkVersion }}"
+    enabled: true
+    inputs:
+      packageType: "sdk"
+      version: ${{ parameters.dotNetSdkVersion }}
+  - task: DotNetCoreCLI@2
+    displayName: "dotnet restore"
+    enabled: true
+    inputs:
+      command: "restore"
+      projects: "$(Pipeline.Workspace)/s/Web.Functions.csproj"
+      verbosityRestore: "${{ parameters.verbosity }}"
+  - task: DotNetCoreCLI@2
+    displayName: "dotnet build"
+    enabled: true
+    inputs:
+      arguments: >-
+        --configuration "Release"
+        --no-restore
+        --verbosity "${{ parameters.verbosity }}"
+      command: "build"
+      projects: "$(Pipeline.Workspace)/s/Web.Functions.csproj"
+  - task: DotNetCoreCLI@2
+    displayName: "dotnet publish"
+    enabled: true
+    inputs:
+      arguments: >-
+        --configuration "Release"
+        --no-build
+        --no-restore
+        --output "$(Build.ArtifactStagingDirectory)/dist"
+        --verbosity "${{ parameters.verbosity }}"
+      command: "publish"
+      modifyOutputPath: false
+      projects: "$(Pipeline.Workspace)/s/Web.Functions.csproj"
+      publishWebProjects: false
+      zipAfterPublish: true
+  - task: CopyFiles@2
+    displayName: "copy config file"
+    enabled: true
+    inputs:
+      contents: "configuration.json"
+      sourceFolder: "$(Pipeline.Workspace)/s"
+      targetFolder: "$(Build.ArtifactStagingDirectory)/dist"
+  - task: PublishPipelineArtifact@1
+    displayName: "publish build artifact"
+    enabled: true
+    inputs:
+      artifact: "drop"
+      publishLocation: "pipeline"
+      targetPath: "$(Build.ArtifactStagingDirectory)/dist"

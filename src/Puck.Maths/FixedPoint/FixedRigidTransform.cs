@@ -283,14 +283,11 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             remainder = ((ulong)(magnitude - (wide * angleRaw)));
         }
 
-        var distanceToNext = (angleRaw - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & UInt128.One) != UInt128.Zero))
-        ) {
-            ++quotient;
-        }
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: ((UInt128)(angleRaw - remainder)),
+            distanceToTruncated: ((UInt128)remainder),
+            truncated: quotient
+        );
 
         return (negative
             ? (-((Int128)quotient))
@@ -326,14 +323,11 @@ public readonly record struct FixedRigidTransform(FixedDual<FixedQuaternion> Val
             remainder = ((ulong)(numerator - (wide * angleRaw)));
         }
 
-        var distanceToNext = (angleRaw - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & 1UL) != 0UL))
-        ) {
-            ++quotient;
-        }
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (angleRaw - remainder),
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
 
         return ((sign == 0L)
             ? ((Int128)quotient)

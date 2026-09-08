@@ -10,8 +10,8 @@ namespace Puck.World;
 /// (<see cref="WorldSimulation"/>, every tick, so a state change flips the derived group and swaps the anchor the
 /// same tick it applied) and the post-build wiring (once at boot, so a pre-first-tick read-back reports the boot
 /// census truthfully instead of the resolvers' cold defaults). Roster is the client roster's own lifecycle tuple
-/// made one value; engagement and the anchor are both reads over the server grant table's single-valued Control
-/// route for the seat's acting principal — the same in-process loopback discipline as <c>CheckEngage</c>, never a
+/// made one value; engagement and the anchor are both reads over the server grant table's control-application set
+/// for the seat's acting principal — the same in-process loopback discipline as <c>CheckEngage</c>, never a
 /// parallel latch, and the anchor rides this same read rather than opening a second one (one source of truth).
 /// State-backed control contexts are published separately by <see cref="WorldSeatBindings.SyncSeat"/> from the
 /// seat's routed definition. <see cref="WorldSeatBindings.SetContextState"/> short-circuits on an unchanged value.
@@ -34,16 +34,39 @@ internal static class WorldSeatContextSync {
         );
     }
 
-    /// <summary>Publishes roster and engagement state, and the resolved perception anchor, for every
+    /// <summary>Publishes roster, engagement, and layout state, and the resolved perception anchor, for every
     /// local seat.</summary>
     /// <param name="seatBindings">The per-seat binding resolver the states publish into.</param>
     /// <param name="roster">The client roster (the roster family's machine, and the seat→acting-principal map).</param>
     /// <param name="grants">The server grant table the engagement family and the anchor read the Control route from.</param>
     /// <param name="anchor">The per-seat perception anchor the resolved possession target publishes into.</param>
-    public static void Publish(WorldSeatBindings seatBindings, PlayerRoster roster, IWorldGrantsView grants, WorldPerceptionAnchor anchor) {
+    /// <param name="activeLayout">The window composer's active layout selection (window-wide, so every seat
+    /// publishes the same value) — an authored layout name, or <see cref="WorldViewComposer"/>'s <c>builtin</c>.</param>
+    public static void Publish(WorldSeatBindings seatBindings, PlayerRoster roster, IWorldGrantsView grants, WorldPerceptionAnchor anchor, string activeLayout) {
         for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
             var principal = roster.PrincipalOf(slot: slot);
-            var route = grants.ControlRoute(principal: principal);
+            var applications = grants.Applications(principal: principal);
+            var own = GrantSubject.Body(index: principal.Index);
+            var holdsOwn = false;
+            var possessed = -1;
+            var composed = false;
+
+            foreach (var application in applications) {
+                if (application.Target == own) {
+                    holdsOwn = true;
+
+                    continue;
+                }
+
+                composed = true;
+
+                if (
+                    (application.Target.Kind == GrantSubjectKind.Body) &&
+                    (possessed < 0)
+                ) {
+                    possessed = application.Target.Value;
+                }
+            }
 
             seatBindings.SetContextState(
                 slot: slot,
@@ -56,21 +79,25 @@ internal static class WorldSeatContextSync {
             seatBindings.SetContextState(
                 family: WorldContextFamilies.Engagement,
                 slot: slot,
-                state: ((route is not null)
+                state: (composed
                 ? WorldContextFamilies.EngagementEngaged
                 : WorldContextFamilies.EngagementNone)
             );
-
-            // Possession means possession: a route targeting a BODY with capture ON swaps the seat's entire
-            // perceived world onto that body, in this one place. A mirror route (capture off) keeps driving a
-            // machine AND walking the seat's own avatar, so it stays perceiving from that avatar; a screen route
-            // (classic engage) never swaps either. Anything else — no route, a screen route, or a mirrored body
-            // route — perceives from the seat's own bound body (the slot index).
-            anchor.Publish(
+            seatBindings.SetContextState(
+                family: WorldContextFamilies.Layout,
                 slot: slot,
-                bodyIndex: (((route is { Kind: GrantSubjectKind.Body } bodyTarget) && grants.RouteCapture(principal: principal))
-                ? bodyTarget.Value
-                : slot)
+                state: activeLayout
+            );
+
+            // Possession means possession: a set naming a BODY while OMITTING its own-body application swaps the
+            // seat's entire perceived world onto that body, in this one place. A set that retains its own-body
+            // application keeps walking the seat's avatar, so it stays perceiving from that avatar; a screen
+            // application never swaps either.
+            anchor.Publish(
+                bodyIndex: ((!holdsOwn && (possessed >= 0))
+                ? possessed
+                : slot),
+                slot: slot
             );
         }
     }

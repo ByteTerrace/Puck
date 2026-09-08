@@ -5,8 +5,8 @@
   ],
   "properties": {
     "seatRig": {
-      "$ref": "./common.schema.json#/$defs/WorldCameraRig",
-      "description": "The chase framing every seat\u0027s view resolves through (the non-editing default)."
+      "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
+      "description": "The chase framing every seat\u0027s view resolves through by default."
     },
     "seatControl": {
       "description": "The structural constraints/reference for live seat camera input.",
@@ -17,7 +17,8 @@
           "enum": [
             "World",
             "Body"
-          ]
+          ],
+          "title": "WorldSeatYawReference"
         },
         "minPitch": {
           "description": "The minimum live pitch offset in radians.",
@@ -48,15 +49,8 @@
             "rate"
           ],
           "additionalProperties": false,
-          "default": null
-        },
-        "swapRate": {
-          "description": "The rate the camera boom closes over a player.look.swap, in the same unit as seatRig.smoothRate: 0 is instant (the boom re-seeds at the turned pose \u2014 a cut), a positive value eases the half-turn at that rate until it lands. Optional; absent leaves the swap to the rig\u0027s own smoothRate.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
+          "default": null,
+          "title": "WorldSeatFollow"
         }
       },
       "required": [
@@ -64,10 +58,80 @@
         "minPitch",
         "maxPitch"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldSeatViewControl"
+    },
+    "cameraRig": {
+      "description": "The program a seat\u0027s view resolves through while its published mode state targets CameraTarget \u2014 null for a world that authors no camera-targeting mode state. Resolved through the ordinary Puck.World.Client.WorldCameraRigCompiler pipeline against whichever body the seat currently perceives from (the possessed camera body \u2014 see Puck.World.Server.WorldEngagement), exactly like SeatRig resolves against the seat\u0027s own avatar; no bespoke per-frame integrator reads this field.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "name": {
+          "description": "The stable name a Blend op selects this program by.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The instruction-set version.",
+          "type": "string"
+        },
+        "operations": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpList",
+          "description": "The selected ops, in authored evaluation order."
+        },
+        "anchorOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpAnchorNullable",
+          "description": "Gets the program\u0027s Anchor op, or null when absent (an absent anchor starts from Reference implicitly)."
+        },
+        "blendOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpBlendNullable",
+          "description": "Gets the program\u0027s Blend op, or null."
+        },
+        "clampPitchOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpClampPitchNullable",
+          "description": "Gets the program\u0027s ClampPitch op, or null."
+        },
+        "fovOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpFovNullable",
+          "description": "Gets the program\u0027s Fov op, or null."
+        },
+        "lookAtOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpLookAtNullable",
+          "description": "Gets the program\u0027s LookAt op, or null."
+        },
+        "offsetOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOffsetNullable",
+          "description": "Gets the program\u0027s Offset op, or null."
+        },
+        "orbitOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpOrbitNullable",
+          "description": "Gets the program\u0027s Orbit op, or null."
+        },
+        "pathOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpPathNullable",
+          "description": "Gets the program\u0027s Path op, or null."
+        },
+        "dynamicsOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpDynamicsNullable",
+          "description": "Gets the program\u0027s Dynamics op, or null."
+        },
+        "selectOp": {
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSelectNullable",
+          "description": "Gets the program\u0027s Select op, or null."
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "operations"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldCameraProgram"
     },
     "layouts": {
-      "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+      "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
       "type": "array",
       "items": {
         "description": "One named window composition \u2014 an ordered list of WorldViewSlots plus a transition envelope, selected for a given session shape by its SeatCount (0 = the catch-all for any joined-seat count). The data-side replacement for a compiled layout switch: an author can see it, change it, and add arrangements.",
@@ -93,7 +157,7 @@
             "type": "number"
           },
           "slots": {
-            "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+            "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
             "type": "array",
             "items": {
               "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera is null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect.",
@@ -123,7 +187,8 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "WorldViewSlot"
             }
           }
         },
@@ -134,7 +199,8 @@
           "transitionRenderScale",
           "slots"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldViewLayout"
       }
     }
   },
@@ -144,5 +210,6 @@
     "layouts"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldViewDefaults"
 }

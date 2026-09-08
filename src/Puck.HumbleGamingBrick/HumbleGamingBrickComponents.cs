@@ -31,6 +31,14 @@ public static class HumbleGamingBrickComponents {
         services.TryAddScoped<ModelState>();
         services.AddScoped<ISnapshotable>(implementationFactory: static provider => provider.GetRequiredService<ModelState>());
 
+        // The DMG-compatibility authority: registered as an IModeSwitchable BEFORE every consumer below (Ppu caches
+        // its own answer, refreshed here on a live swap or restore) so a live-swap/restore fan-out sees this
+        // component's state before anything that reads it. Snapshotted, because a boot ROM's KEY0 write makes the
+        // mode a latch rather than a derivation from the model and the header.
+        services.TryAddScoped<DmgCompatibilityState>();
+        services.AddScoped<IModeSwitchable>(implementationFactory: static provider => provider.GetRequiredService<DmgCompatibilityState>());
+        services.AddScoped<ISnapshotable>(implementationFactory: static provider => provider.GetRequiredService<DmgCompatibilityState>());
+
         services.TryAddScoped<SystemMemory>();
         services.AddScoped<ISnapshotable>(implementationFactory: static provider => provider.GetRequiredService<SystemMemory>());
 
@@ -119,7 +127,7 @@ public static class HumbleGamingBrickComponents {
             // A HuC1/HuC3 cartridge's IR window drives and reads the machine's one shared infrared transceiver — the same
             // physical LED/receiver the Color RP register uses — so its light-out latch and received-light line stay unified
             // with RP instead of the cartridge modelling a private (and always-dark) line. Its presence also widens the
-            // transceiver's hardware self-sensing gate to the Advanced costume (InfraredPort.HasHuCCartridge).
+            // transceiver's hardware self-sensing gate to the Advanced console (InfraredPort.HasHuCCartridge).
             if (cartridge is IInfraredCartridge infraredCart) {
                 var infraredPort = provider.GetRequiredService<InfraredPort>();
 
@@ -146,7 +154,6 @@ public static class HumbleGamingBrickComponents {
 
         // The mode-3 timing knobs default to the shipped values; a sweep harness pre-registers its own instance so this
         // TryAdd is a no-op and the PPU reads the swept parameters (mirrors how the configuration seeds TickResolution).
-        services.TryAddScoped(implementationFactory: static provider => PpuTimingParameters.Default);
 
         services.TryAddScoped<Ppu>();
         services.AddScoped<IPpu>(implementationFactory: static provider => provider.GetRequiredService<Ppu>());

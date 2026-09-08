@@ -49,7 +49,7 @@ internal static class WorldAddonMutationDecoder {
     private static readonly string[] InputHoldMembers = ["ceilingTicks", "lowerAfterTicks", "defaultTicks", "equalizeByDefault", "participants"];
     private static readonly string[] InputHoldParticipantMembers = ["bodyIndex", "ticks", "equalized"];
     // The placement rows — the FULL WorldPlacement wire shape (every facet), plus each facet's own object shape.
-    private static readonly string[] PlacementMembers = ["id", "creationId", "position", "yawDegrees", "scale", "distribution", "mirror", "emission", "solid", "inhabit", "faceSources", "region", "attach"];
+    private static readonly string[] PlacementMembers = ["id", "prototypeId", "position", "yawDegrees", "scale", "distribution", "mirror", "emission", "solid", "inhabit", "faceSources", "region", "attach"];
     private static readonly string[] RemovePlacementMembers = ["id"];
     private static readonly string[] DistributionMembers = ["region", "fill"];
     private static readonly string[] DiscRegionMembers = ["$type", "radius", "sampleCount"];
@@ -508,7 +508,9 @@ internal static class WorldAddonMutationDecoder {
             Width: width
         );
     }
-    // Kit/look name resolution and population-wide bounds stay with the document validator.
+    // Kit/look name resolution and population-wide bounds stay with the document validator. An addon-authored
+    // count is always a literal — the cell-reference shape (Puck.World.WorldPlacementInhabitCount.Row) is not part
+    // of this wire grammar.
     private static WorldPlacementInhabit DecodeInhabit(JsonElement element, string context) {
         if (element.ValueKind != JsonValueKind.Object) {
             throw new AddonMutationDecodeException(message: $"{context}: must be an object");
@@ -584,7 +586,7 @@ internal static class WorldAddonMutationDecoder {
         );
 
         return new WorldPlacementInhabit(
-            Count: count,
+            Count: new WorldPlacementInhabitCount(Literal: count),
             Distribution: distribution,
             Kit: kit,
             Look: look,
@@ -1291,14 +1293,14 @@ internal static class WorldAddonMutationDecoder {
     // A fixed-kind value is DECIMAL TEXT here, exactly as the document and the console verb spell it — the addon
     // wire's raw-bits convention covers the ABI's numeric channel cells (WorldMutation.UpsertStateCell.Value), never
     // this JSON payload, which is the SAME grammar world.row.set state takes and must not fork from it.
-    private static WorldStateCell DecodeStateCell(WorldCellName key, JsonElement element, CellKind kind, string context) {
+    private static StateCell DecodeStateCell(CellName key, JsonElement element, CellKind kind, string context) {
         switch (kind) {
             case CellKind.Text:
                 if (element.ValueKind != JsonValueKind.String) {
                     throw new AddonMutationDecodeException(message: $"{context}: must be a string");
                 }
 
-                return new WorldStateCell(
+                return new StateCell(
                     Key: key,
                     Text: (element.GetString() ?? string.Empty)
                 );
@@ -1307,14 +1309,14 @@ internal static class WorldAddonMutationDecoder {
                     throw new AddonMutationDecodeException(message: $"{context}: must be a boolean");
                 }
 
-                return new WorldStateCell(
+                return new StateCell(
                     Key: key,
                     Value: (element.GetBoolean()
                     ? 1
                     : 0)
                 );
             default:
-                return new WorldStateCell(
+                return new StateCell(
                     Key: key,
                     Value: RequireStateNumber(
                         context: context,
@@ -1324,12 +1326,12 @@ internal static class WorldAddonMutationDecoder {
                 );
         }
     }
-    private static List<WorldStateCell> DecodeStateCells(JsonElement element, CellKind kind, string context) {
+    private static List<StateCell> DecodeStateCells(JsonElement element, CellKind kind, string context) {
         if (element.ValueKind != JsonValueKind.Array) {
             throw new AddonMutationDecodeException(message: $"{context}: must be an array of {{\"key\", \"value\"}} objects");
         }
 
-        var cells = new List<WorldStateCell>();
+        var cells = new List<StateCell>();
         var index = 0;
 
         foreach (var entry in element.EnumerateArray()) {
@@ -1499,10 +1501,10 @@ internal static class WorldAddonMutationDecoder {
             members: members,
             name: "id"
         );
-        var creationId = RequireString(
+        var prototypeId = RequireString(
             context: "UpsertPlacement",
             members: members,
-            name: "creationId"
+            name: "prototypeId"
         );
         var position = RequireVector3(
             context: "UpsertPlacement",
@@ -1618,7 +1620,7 @@ internal static class WorldAddonMutationDecoder {
 
         var placement = new WorldPlacement(
             Attach: attach,
-            CreationId: creationId,
+            PrototypeId: prototypeId,
             Distribution: distribution,
             Emission: emission,
             FaceSources: faceSources,
@@ -1787,11 +1789,11 @@ internal static class WorldAddonMutationDecoder {
 
         return element.GetBoolean();
     }
-    // The one door this decoder validates a candidate row/cell name through — WorldCellName refuses an empty, dotted,
+    // The one door this decoder validates a candidate row/cell name through — CellName refuses an empty, dotted,
     // or otherwise unsafe candidate BY NAME, so an addon-authored state row can never reach the substrate holding a
     // name the document's own JSON parse would have refused.
-    private static WorldCellName RequireCellName(string candidate, string context) =>
-        (WorldCellName.TryParse(
+    private static CellName RequireCellName(string candidate, string context) =>
+        (CellName.TryParse(
             candidate: candidate,
             name: out var name,
             reason: out var reason

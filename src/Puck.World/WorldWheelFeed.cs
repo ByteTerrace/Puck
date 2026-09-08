@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Commands;
+using Puck.Hosting;
 using Puck.Overlays;
 using Puck.World.Client;
 
@@ -62,11 +63,21 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     // silently cancel every commit landing on such a frame. Counted in observed frames, never wall time.
     private const int CommitGraceFrames = 2;
 
+    /// <summary>The label-row cell the hub reads while nothing is hovered — what releasing now does. The ONE reserved
+    /// key in a wheel's label row; every other key is a sector id.</summary>
+    public const string HubLabelKey = "cancel";
+
     private readonly WorldSeatBindings m_bindings;
+    // The engine-tick capture clock the selection-grace window is measured against. The hovered sector it decides
+    // flows through Arm -> BindingWheelCommitResult.Dispatch -> InputRouter.Activate into the seat's deterministic
+    // lane, so the window must be counted on the base every other input timestamp shares — a private Stopwatch read
+    // here would be a second, unsubstitutable time source sitting directly upstream of a simulation command.
+    private readonly IInputClock m_clock;
     private readonly WorldCursorFeed m_cursor;
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
+    private readonly WorldIconTable m_icons;
     private readonly WheelStore m_store;
     private readonly WorldSeatViewports m_viewports;
 
@@ -90,20 +101,37 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         // Input may logically open a gesture before the next presentation tick installs Wheel. Keeping the logical
         // identity separate prevents a one-frame flick or relative delta from being cleared at presentation open.
         public BindingWheelView? GestureWheel;
-        public long GraceSince;
         public long PointerSequence;
         public BindingWheelView? RingCacheSource;
+        // The sector text lives in a state row, so the cache is keyed on the definition delivery too: an applied
+        // mutation bumps the revision and the labels re-resolve on the next frame.
+        public WorldDefinition? RingCacheDefinition;
         public float RingScroll;
         public WorldWheelStatus Status;
         public BindingWheelView? Wheel;
 
-        // The last sector a live selection highlighted, and when it dropped back to the dead zone (Stopwatch ticks).
-        public int GraceSector = -1;
         public int AxisExcursionRing = -1;
         public int SpatialExcursionRing = -1;
         public BindingWheelGestureState Gesture { get; } = new();
+        // The last sector a live selection highlighted and the tick-counted window it survives a dead-centre dwell
+        // for. The decision itself is Puck.Commands' — this feed only supplies the readings and the engine tick.
+        public BindingWheelGrace Grace { get; } = new();
         public OverlayWheelRing[] RingCache = [];
         public string CommitLabel = string.Empty;
+
+        // The outcome flash: the seat as last drawn while open, re-emitted after the wheel closes with the local
+        // dispatch outcome's glow. Dispatched means handed to the input router; a later simulation/server refusal is
+        // deliberately not overclaimed here.
+        public OverlayWheelSeat LastSeat;
+        public bool LastSeatKnown;
+        public OverlayWheelOutcome FlashOutcome;
+
+        public int FlashSector = -1;
+
+        public long FlashSince;
+        public float FlashSeconds;
+        public float FlashEase;
+
         public string CommitReason = "closed";
     }
 
@@ -120,8 +148,13 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
     /// <param name="router">The input router a committed sector's activation enters — lazy, because the command
     /// registry aggregates <see cref="WorldWheelCommandModule"/>, which consumes this feed; a direct dependency
     /// would cycle the container.</param>
+    /// <param name="icons">The world's icon table, resolving a sector's icon name to atlas content.</param>
+    /// <param name="clock">The engine-tick capture clock the selection-grace window is counted on — the process's
+    /// one <see cref="IInputClock"/>, so the window shares the base every input timestamp already uses.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldWheelFeed(WorldPointer pointer, PlayerRoster roster, WorldSeatBindings bindings, WorldCursorFeed cursor, WorldSeatViewports viewports, WheelStore store, Func<InputRouter> router) {
+    public WorldWheelFeed(WorldPointer pointer, PlayerRoster roster, WorldSeatBindings bindings, WorldCursorFeed cursor, WorldSeatViewports viewports, WheelStore store, Func<InputRouter> router, WorldIconTable icons, IInputClock clock) {
+        ArgumentNullException.ThrowIfNull(argument: clock);
+        ArgumentNullException.ThrowIfNull(argument: icons);
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: bindings);
@@ -131,9 +164,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         ArgumentNullException.ThrowIfNull(argument: router);
 
         m_bindings = bindings;
+        m_clock = clock;
         m_cursor = cursor;
         m_pointer = pointer;
         m_roster = roster;
+        m_icons = icons;
         m_router = router;
         m_store = store;
         m_viewports = viewports;
@@ -163,7 +198,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             state.ActiveRing = (((state.ActiveRing - 1) + wheel.Rings.Count) % wheel.Rings.Count);
         }
     }
-    private static void Arm(SeatState state, BindingWheelView wheel, BindingWheelRingView ring, int hoverSector, string hoverReason) {
+    private void Arm(int slot, SeatState state, BindingWheelView wheel, BindingWheelRingView ring, int hoverSector, string hoverReason) {
         if (!state.Gesture.CanArm) {
             state.CommitArmed = false;
             state.CommitWheel = wheel;
@@ -191,9 +226,63 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.CommitRing = state.ActiveRing;
         state.CommitSector = hoverSector;
         state.CommitActivation = hovered?.Activation;
-        state.CommitLabel = (hovered?.Label ?? (hovered?.Command ?? string.Empty));
+        state.CommitLabel = (((hovered is not null) ? SectorCell(
+            rowReference: wheel.LabelRow,
+            slot: slot,
+            sector: hovered
+        ) : null) ?? (hovered?.Command ?? string.Empty));
         state.CommitReason = hoverReason;
         state.ClosedFrames = 0;
+    }
+    // A sector's presentation, read from authored state: the wheel names a row (label row, icon row), the sector's
+    // own id is the cell key, the cell's value is the text or icon name. The rows are ordinary live state, so
+    // renaming or re-iconing a sector on screen is a state write — the binding row itself carries no presentation,
+    // only what it does and which sector it is.
+    private string? SectorCell(int slot, string? rowReference, BindingWheelSectorView sector) {
+        m_bindings.GetRoutedState(
+            definition: out var definition,
+            slot: slot,
+            tick: out var tick
+        );
+
+        return (((sector.Id is { Length: > 0 } sectorId) && WorldStateBindingContext.TryParseRowReference(
+            reference: rowReference,
+            rowName: out var rowName
+        ) && WorldStateReader.TryRead(
+            definition: definition,
+            key: sectorId,
+            rawValue: out _,
+            row: out _,
+            rowName: rowName,
+            text: out var text,
+            tick: tick
+        ))
+            ? text
+            : null
+        );
+    }
+    private string? HubLabel(int slot, BindingWheelView wheel) {
+        m_bindings.GetRoutedState(
+            definition: out var definition,
+            slot: slot,
+            tick: out var tick
+        );
+
+        return ((WorldStateBindingContext.TryParseRowReference(
+            reference: wheel.LabelRow,
+            rowName: out var rowName
+        ) && WorldStateReader.TryRead(
+            definition: definition,
+            key: HubLabelKey,
+            rawValue: out _,
+            row: out _,
+            rowName: rowName,
+            text: out var text,
+            tick: tick
+        ))
+            ? text
+            : null
+        );
     }
     private static void BeginGesture(SeatState state, BindingWheelView wheel) {
         state.GestureWheel = wheel;
@@ -201,8 +290,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.Deflection = Vector2.Zero;
         state.DeflectionKnown = false;
         state.PointerSequence = 0L;
-        state.GraceSector = -1;
-        state.GraceSince = 0L;
+        // Converted once, here, so the authored seconds never turn into ticks inside the per-frame decision.
+        state.Grace.BeginGesture(graceTicks: BindingWheelGeometry.SelectionGraceTicks(
+            seconds: wheel.Style.SelectionGraceSeconds,
+            ticksPerSecond: EngineTicks.PerSecond
+        ));
         state.ActiveRing = wheel.Style.InitialRing;
         state.AxisExcursionRing = -1;
         state.SpatialExcursionRing = -1;
@@ -210,16 +302,45 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         state.BankedNotches = 0f;
         state.CenterKnown = false;
     }
-    private static OverlayWheelSeat BuildSeat(SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
-        if (!ReferenceEquals(
+    private OverlayWheelSeat BuildSeat(int slot, SeatState state, BindingWheelView wheel, in WorldSeatView viewport, int hoverSector, float unit) {
+        m_bindings.GetRoutedState(
+            definition: out var definition,
+            slot: slot,
+            tick: out _
+        );
+
+        if (
+            !ReferenceEquals(
             objA: state.RingCacheSource,
             objB: wheel
-        )) {
+        ) ||
+            !ReferenceEquals(
+                objA: state.RingCacheDefinition,
+                objB: definition
+            )
+        ) {
             var rings = new OverlayWheelRing[wheel.Rings.Count];
 
             for (var ringIndex = 0; (ringIndex < rings.Length); ringIndex++) {
                 var ring = wheel.Rings[ringIndex];
-                var sectors = ring.Sectors.Select(selector: static sector => (sector.Label ?? sector.Command)).ToArray();
+                var sectors = new OverlayWheelSector[ring.Sectors.Count];
+
+                for (var sectorIndex = 0; (sectorIndex < sectors.Length); sectorIndex++) {
+                    var sector = ring.Sectors[sectorIndex];
+
+                    sectors[sectorIndex] = new OverlayWheelSector(
+                        Icon: m_icons.ResolveIcon(name: SectorCell(
+                            rowReference: wheel.IconRow,
+                            slot: slot,
+                            sector: sector
+                        )),
+                        Label: (SectorCell(
+                            rowReference: wheel.LabelRow,
+                            slot: slot,
+                            sector: sector
+                        ) ?? sector.Command)
+                    );
+                }
 
                 rings[ringIndex] = new OverlayWheelRing(
                     Label: (ring.Label ?? ring.PageId),
@@ -228,6 +349,7 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             }
 
             state.RingCache = rings;
+            state.RingCacheDefinition = definition;
             state.RingCacheSource = wheel;
         }
 
@@ -248,9 +370,12 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             RingWidth: (unit * wheel.Style.RingWidthFraction),
             ActiveRing: state.ActiveRing,
             HoveredSector: hoverSector,
-            RotationRadians: (wheel.Style.RotationDegrees * (MathF.PI / 180f)),
-            Clockwise: wheel.Style.Clockwise,
-            Rings: state.RingCache
+            SectorOffset: wheel.Style.SectorOffset,
+            Rings: state.RingCache,
+            HubLabel: (HubLabel(
+                slot: slot,
+                wheel: wheel
+            ) ?? string.Empty)
         );
     }
     private static void Close(int slot, SeatState state) {
@@ -450,9 +575,13 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 state: state,
                 wheel: gestureWheel
             );
-            var cancelAtNeutral = (state.Gesture.AxisNeutral && (gestureWheel.Style.SelectionGraceSeconds <= 0f));
+            // The same "is there a grace window at all" test the presentation path uses: an authored window shorter
+            // than one engine tick is no window, and the two paths must agree on that or a commit could keep a
+            // sector the frame before it refused to draw one.
+            var cancelAtNeutral = (state.Gesture.AxisNeutral && (state.Grace.Ticks == 0UL));
 
             Arm(
+                slot: slot,
                 state: state,
                 wheel: gestureWheel,
                 ring: gestureWheel.Rings[state.ActiveRing],
@@ -490,6 +619,11 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
 
         if (state.CommitActivation is not { } activation) {
             Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} release cancelled ({state.CommitReason})");
+            Flash(
+                outcome: OverlayWheelOutcome.Cancelled,
+                sector: -1,
+                state: state
+            );
 
             return BindingWheelCommitResult.Cancelled(
                 reason: state.CommitReason,
@@ -510,6 +644,14 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
         if (outcome.Status == BindingWheelCommitStatus.Dispatched) {
             Console.Error.WriteLine(value: $"[player.wheel] seat {PlayerRoster.DisplayNumber(slot: slot)} committed ring {(state.CommitRing + 1)} sector {(state.CommitSector + 1)} '{state.CommitLabel}' -> {activation.Command}");
         }
+
+        Flash(
+            outcome: ((outcome.Status == BindingWheelCommitStatus.Dispatched)
+                ? OverlayWheelOutcome.Dispatched
+                : OverlayWheelOutcome.Errored),
+            sector: state.CommitSector,
+            state: state
+        );
 
         return outcome;
     }
@@ -544,8 +686,24 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             );
             state.Gesture.Cancel();
             state.CommitArmed = false;
+            Flash(
+                outcome: OverlayWheelOutcome.Cancelled,
+                sector: -1,
+                state: state
+            );
         }
     }
+
+    // Starts the after-close fade; Tick re-emits the last drawn seat with the verdict glow, fading, until it elapses.
+    private static void Flash(SeatState state, OverlayWheelOutcome outcome, int sector) {
+        state.FlashOutcome = outcome;
+        state.FlashSector = sector;
+        state.FlashSince = ((state.LastSeatKnown && (state.FlashSeconds > 0f))
+            ? System.Diagnostics.Stopwatch.GetTimestamp()
+            : 0L
+        );
+    }
+
     /// <summary>Accepts an authored Axis2D selection binding for a seat. The open wheel's compiled dead zone admits
     /// a deliberate neutral selection. The retained peak is scoped to one excursion, so repeated flicks remain
     /// responsive while the authored switch threshold prevents an opposite return-spring rebound from beginning
@@ -608,6 +766,38 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                     slot: slot,
                     state: state
                 );
+
+                // The fade-out: the last drawn wheel, verdict glow on, opacity 1 - t^ease over the authored
+                // seconds. Presentation time only — a wall clock here decides nothing the simulation sees.
+                if (
+                    (state.FlashSince != 0L) &&
+                    state.LastSeatKnown &&
+                    viewport.Present
+                ) {
+                    var elapsed = ((float)System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: state.FlashSince).TotalSeconds);
+                    var t = ((state.FlashSeconds > 0f)
+                        ? (elapsed / state.FlashSeconds)
+                        : 1f
+                    );
+
+                    if (t >= 1f) {
+                        state.FlashSince = 0L;
+                    } else {
+                        m_visible[visibleCount++] = (state.LastSeat with {
+                            Fade = (1f - MathF.Pow(
+                                x: t,
+                                y: state.FlashEase
+                            )),
+                            // A dispatched piece stays the hub's subject through the fade, so the hub reads what
+                            // was handed off; a cancel reads the hub's own label.
+                            HoveredSector = ((state.FlashOutcome == OverlayWheelOutcome.Dispatched)
+                                ? state.FlashSector
+                                : -1),
+                            Outcome = state.FlashOutcome,
+                            OutcomeSector = state.FlashSector,
+                        });
+                    }
+                }
 
                 continue;
             }
@@ -698,14 +888,9 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 );
 
                 if (state.Gesture.AxisNeutral) {
-                    if (
-                        (state.GraceSector < 0) &&
-                        (state.GraceSince == 0L) &&
-                        (wheel.Style.SelectionGraceSeconds > 0f) &&
-                        (selection.Sector >= 0)
-                    ) {
-                        state.GraceSector = selection.Sector;
-                    }
+                    // A gesture that opened on a flick already back at neutral still resolves a direction; seed the
+                    // window with it so the first frame has a sector to hold.
+                    _ = state.Grace.TrySeed(sector: selection.Sector);
 
                     hoverSector = -1;
                     hoverReason = "dead-center";
@@ -734,40 +919,30 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
             // different sector replaces it only past the switch threshold.
             if (
                 (hoverSector >= 0) &&
-                (state.GraceSector >= 0) &&
-                (hoverSector != state.GraceSector) &&
+                (state.Grace.Sector >= 0) &&
+                (hoverSector != state.Grace.Sector) &&
                 state.Gesture.AxisKnown &&
                 (state.Gesture.Axis.LengthSquared() < (wheel.Style.SwitchFraction * wheel.Style.SwitchFraction))
             ) {
-                hoverSector = state.GraceSector;
+                hoverSector = state.Grace.Sector;
                 hoverReason = "sector";
             }
 
-            if (hoverSector >= 0) {
-                state.GraceSector = hoverSector;
-                state.GraceSince = 0L;
-            } else if (
-                (state.GraceSector >= 0) &&
-                (hoverReason == "dead-center") &&
-                (wheel.Style.SelectionGraceSeconds > 0f)
+            // The window decision itself is BindingWheelGrace's, driven by the engine's monotonic tick base rather
+            // than a wall clock this host cannot substitute. Only a dead-center reading is a dwell; every other
+            // reason for no selection drops the held sector at once.
+            var granted = state.Grace.Observe(
+                deadCentre: (hoverReason == "dead-center"),
+                hoverSector: hoverSector,
+                nowTick: m_clock.NowTicks
+            );
+
+            if (
+                (hoverSector < 0) &&
+                (granted >= 0)
             ) {
-                var now = System.Diagnostics.Stopwatch.GetTimestamp();
-
-                if (state.GraceSince == 0L) {
-                    state.GraceSince = now;
-                }
-
-                if (System.Diagnostics.Stopwatch.GetElapsedTime(
-                    endingTimestamp: now,
-                    startingTimestamp: state.GraceSince
-                ).TotalSeconds <= wheel.Style.SelectionGraceSeconds) {
-                    hoverSector = state.GraceSector;
-                    hoverReason = "sector";
-                } else {
-                    state.GraceSector = -1;
-                }
-            } else {
-                state.GraceSector = -1;
+                hoverSector = granted;
+                hoverReason = "sector";
             }
 
             var ring = wheel.Rings[state.ActiveRing];
@@ -778,16 +953,25 @@ internal sealed class WorldWheelFeed : IWorldWheelConsumer {
                 hoverReason: hoverReason,
                 hoverSector: hoverSector,
                 ring: ring,
+                slot: slot,
                 state: state,
                 wheel: wheel
             );
-            m_visible[visibleCount++] = BuildSeat(
+            var drawn = BuildSeat(
                 hoverSector: hoverSector,
+                slot: slot,
                 state: state,
                 unit: unit,
                 viewport: in viewport,
                 wheel: wheel
             );
+
+            m_visible[visibleCount++] = drawn;
+            state.LastSeat = drawn;
+            state.LastSeatKnown = true;
+            state.FlashSince = 0L;
+            state.FlashSeconds = wheel.Style.FadeOutSeconds;
+            state.FlashEase = wheel.Style.FadeOutEase;
             state.Status = new WorldWheelStatus(
                 Slot: slot,
                 Open: true,

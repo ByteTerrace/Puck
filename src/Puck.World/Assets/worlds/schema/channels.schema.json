@@ -11,7 +11,7 @@
     ],
     "properties": {
       "name": {
-        "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, player.press, kit Actions entry, and the addon wire resolve against.",
+        "description": "The channel\u0027s unique, non-empty name \u2014 the vocabulary key every binding, body.press, kit Actions entry, and the addon wire resolve against.",
         "type": "string"
       },
       "shape": {
@@ -20,12 +20,13 @@
           "Bipolar",
           "Unipolar",
           "Binary"
-        ]
+        ],
+        "title": "ChannelShape"
       },
       "role": {
         "description": "The engine motion role this channel claims, or null for a composition channel.",
         "enum": [
-          "MoveForward",
+          "MoveAdvance",
           "MoveStrafe",
           "Turn",
           "MoveUp",
@@ -34,9 +35,13 @@
           "FaceX",
           "FaceY",
           "FaceZ",
+          "MoveX",
+          "MoveY",
+          "MoveZ",
           null
         ],
-        "default": null
+        "default": null,
+        "title": "ChannelRole"
       },
       "composition": {
         "description": "Whether this channel is a kit-composition trigger. Exactly one of Role or this must be set.",
@@ -52,20 +57,22 @@
         "default": null
       },
       "frame": {
-        "description": "What the MoveForward/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.",
+        "description": "What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see ChannelFrame); the two roles must declare the same frame, and every other channel leaves it at World. Omitted from a saved document at that default.",
         "enum": [
           "World",
           "Camera",
           "Heading"
         ],
-        "default": "World"
+        "default": "World",
+        "title": "ChannelFrame"
       }
     },
     "required": [
       "name",
       "shape"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldChannel"
   },
   "default": null
 }

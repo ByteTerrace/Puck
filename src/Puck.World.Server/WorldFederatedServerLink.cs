@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -11,10 +10,15 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
 
     private void NoteUnavailable(int bodyIndex, string reason) {
         if (m_unavailableBodies.Add(item: bodyIndex)) {
-            Console.Error.WriteLine(value: $"[world.authority unavailable: body:{bodyIndex} input/submission held ({reason})]");
+            if (m_authority.NarrationHub is { HasNarrationSink: true }) {
+                m_authority.NarrationHub?.Narrate(
+                    channel: "world.authority unavailable",
+                    text: $"[world.authority unavailable: body:{bodyIndex} input/submission held ({reason})]"
+                );
+            }
         }
     }
-    private (WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
+    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? Submit(int bodyIndex, WorldSubmissionPayload payload) {
         if (!m_authority.TryCredential(
             bodyIndex: bodyIndex,
             mobility: out var mobility,
@@ -56,22 +60,22 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
                 bodyIndex: bodyIndex,
                 reason: narration
             );
-            return (WorldTcpWireFormat.DownstreamKind.Refusal, System.Text.Encoding.UTF8.GetBytes(s: narration));
+            return (WorldPeerWireFormat.DownstreamKind.Refusal, System.Text.Encoding.UTF8.GetBytes(s: narration));
         }
 
         _ = m_unavailableBodies.Remove(item: bodyIndex);
 
-        using var input = new MemoryStream(
-            response.Body,
-            writable: false
+        // A Completion body is one whole downstream frame, decoded in place over the response's own buffer.
+        return (WorldPeerWireFormat.TryDecodeDownstream(
+            body: out var completionBody,
+            frame: response.Body,
+            kind: out var completionKind
+        )
+            ? (completionKind, completionBody)
+            : null
         );
-
-        return WorldTcpWireFormat.TryReadDownstreamAsync(
-            ct: default,
-            stream: input
-        ).GetAwaiter().GetResult();
     }
-    private (WorldTcpWireFormat.DownstreamKind Kind, byte[] Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(
+    private (WorldPeerWireFormat.DownstreamKind Kind, ReadOnlyMemory<byte> Body)? SubmitAny(WorldSubmissionPayload payload) => Submit(
         bodyIndex: -1,
         payload: payload
     );
@@ -79,13 +83,13 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
     public void Query(WorldQuery query, Action<QueryAnswer> completion) {
         ArgumentNullException.ThrowIfNull(completion);
         var bodyIndex = query switch {
-            WorldQuery.PlayerWhere where => (where.Index - 1),
-            WorldQuery.PlayerChannels channels => (channels.Index - 1),
-            WorldQuery.PlayerState state => (state.Index - 1),
-            WorldQuery.PlayerTargets targets => (targets.Index - 1),
+            WorldQuery.PlayerWhere where => where.Index,
+            WorldQuery.PlayerChannels channels => channels.Index,
+            WorldQuery.PlayerState state => state.Index,
+            WorldQuery.PlayerTargets targets => targets.Index,
             WorldQuery.Contacts contacts => (contacts.Index - 1),
             WorldQuery.MusicState music => (music.Index - 1),
-            WorldQuery.JudgeState judge => (judge.Index - 1),
+            WorldQuery.InstrumentState instrument => (instrument.Index - 1),
             _ => -1,
         };
         var reply = Submit(
@@ -93,51 +97,52 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             payload: new WorldSubmissionPayload.Query(Value: query)
         );
 
-        if (reply?.Kind != WorldTcpWireFormat.DownstreamKind.Query) {
+        if (reply is null) {
             completion(new QueryAnswer(
-                Text: ((reply is null)
-                ? "remote transfer credential is unavailable"
-                : WorldTcpWireFormat.DecodeText(body: reply.Value.Body)),
+                Text: "remote transfer credential is unavailable",
                 Refused: true
             ));
             return;
         }
-
-        var body = reply.Value.Body;
-
-        if (body.Length < (sizeof(byte) + sizeof(ushort))) {
+        if (!WorldPeerWireFormat.TryReadResult(
+            body: reply.Value.Body.Span,
+            kind: reply.Value.Kind,
+            reason: out var reason,
+            result: out var result
+        )) {
             completion(new QueryAnswer(
                 Refused: true,
-                Text: "remote authority returned a truncated query completion"
+                Text: reason
             ));
             return;
         }
 
-        var offset = sizeof(byte);
-        var text = WorldTcpWireFormat.ReadLengthPrefixedString(
-            body: body,
-            offset: ref offset,
-            ok: out var ok
-        );
-
-        completion(new QueryAnswer(
-            Text: (ok
-            ? text
-            : "remote authority returned a truncated query completion"),
-            Refused: (!ok || (body[0] != 0))
-        ));
+        completion(((result as WorldSubmissionResult.Query)?.Answer ?? new QueryAnswer(
+            Refused: true,
+            Text: $"remote authority returned unsupported completion {reply.Value.Kind} for a query"
+        )));
     }
-    public void SubmitAddonLifecycle(WorldAddonLifecycle lifecycle, WorldPrincipal principal) => _ = SubmitAny(payload: new WorldSubmissionPayload.AddonLifecycle(Value: lifecycle));
-    public void SubmitCommand(WorldCommand command) => _ = Submit(
-        bodyIndex: command.EntityIndex,
-        payload: new WorldSubmissionPayload.Command(Value: command)
-    );
-    public void SubmitComposition(WorldComposition composition, WorldPrincipal principal) => _ = SubmitAny(payload: new WorldSubmissionPayload.Composition(Value: composition));
-    public void SubmitDesignation(WorldDesignation designation, WorldPrincipal principal) => _ = Submit(
-        bodyIndex: designation.EntityIndex,
-        payload: new WorldSubmissionPayload.Designation(Value: designation)
-    );
-    public void SubmitGrant(WorldGrant grant, WorldPrincipal actor) => _ = SubmitAny(payload: new WorldSubmissionPayload.Grant(Value: grant));
+    // The one abstract member every fire-and-forget Submit* interface default forwards to. A forwarded submission
+    // routes by BODY, never by principal (the credential IS the authority — see TryCredential); Command/Designation
+    // carry their own entity index, so route on it directly, everything else goes out under the traveler's own
+    // committed body ("any"). principal is unused here — it never rode this transport; the interface parameter
+    // exists for the loopback side, which routes on it for real. Returns 0: the remote authority mints the envelope,
+    // so no local correlation exists for a deferred verdict to address.
+    public long SubmitEnvelope(WorldSubmissionPayload payload, WorldPrincipal principal) {
+        _ = (payload switch {
+            WorldSubmissionPayload.Command command => Submit(
+                bodyIndex: command.Value.EntityIndex,
+                payload: payload
+            ),
+            WorldSubmissionPayload.Designation designation => Submit(
+                bodyIndex: designation.Value.EntityIndex,
+                payload: payload
+            ),
+            _ => SubmitAny(payload: payload),
+        });
+
+        return 0;
+    }
     public void SubmitIntent(in IntentSubmission submission) {
         if (m_authority.TryForwardIntent(
             bodyIndex: submission.EntityIndex,
@@ -152,9 +157,6 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             );
         }
     }
-    public void SubmitRebuild(WorldRebuildRequest request, WorldPrincipal principal) => _ = SubmitAny(payload: new WorldSubmissionPayload.Rebuild(Value: request));
-    public void SubmitRevoke(WorldGrant grant, WorldPrincipal actor) => _ = SubmitAny(payload: new WorldSubmissionPayload.Revoke(Value: grant));
-    public void SubmitScreenOp(WorldScreenOp op, WorldPrincipal principal) => _ = SubmitAny(payload: new WorldSubmissionPayload.ScreenOp(Value: op));
     public void SubmitSession(SessionRequest request, Action<SessionReply> completion) {
         ArgumentNullException.ThrowIfNull(completion);
         var bodyIndex = request switch { SessionRequest.Join join => join.Slot, SessionRequest.Leave leave => leave.Slot, SessionRequest.SetIdentity identity => identity.Slot, _ => -1 };
@@ -163,47 +165,35 @@ internal sealed class WorldFederatedServerLink(WorldRemoteAuthority authority) :
             payload: new WorldSubmissionPayload.Session(Value: request)
         );
 
-        if (reply?.Kind != WorldTcpWireFormat.DownstreamKind.Session) {
-            completion(new SessionReply(
-                false,
-                -1,
-                string.Empty,
-                ((reply is null)
-                ? "remote transfer credential is unavailable"
-                : WorldTcpWireFormat.DecodeText(body: reply.Value.Body))
-            ));
-            return;
-        }
-
-        var body = reply.Value.Body;
-
-        if (body.Length < ((sizeof(byte) + sizeof(int)) + sizeof(ushort))) {
+        if (reply is null) {
             completion(new SessionReply(
                 Accepted: false,
                 AssignedIndex: -1,
-                Reason: "remote authority returned a truncated session completion",
+                Reason: "remote transfer credential is unavailable",
+                RosterEcho: string.Empty
+            ));
+            return;
+        }
+        if (!WorldPeerWireFormat.TryReadResult(
+            body: reply.Value.Body.Span,
+            kind: reply.Value.Kind,
+            reason: out var reason,
+            result: out var result
+        )) {
+            completion(new SessionReply(
+                Accepted: false,
+                AssignedIndex: -1,
+                Reason: reason,
                 RosterEcho: string.Empty
             ));
             return;
         }
 
-        var offset = (sizeof(byte) + sizeof(int));
-        var reason = WorldTcpWireFormat.ReadLengthPrefixedString(
-            body: body,
-            offset: ref offset,
-            ok: out var ok
-        );
-
-        completion(new SessionReply(
-            (ok && (body[0] != 0)),
-            BinaryPrimitives.ReadInt32LittleEndian(source: body.AsSpan(start: sizeof(byte))),
+        completion(((result as WorldSubmissionResult.Session)?.Reply ?? new SessionReply(
+            false,
+            -1,
             string.Empty,
-            (ok
-            ? reason
-            : "remote authority returned a truncated session completion")
-        ));
+            $"remote authority returned unsupported completion {reply.Value.Kind} for a session request"
+        )));
     }
-    public void SubmitSessionLever(WorldSessionLever lever, WorldPrincipal principal) => _ = SubmitAny(payload: new WorldSubmissionPayload.Lever(Value: lever));
-    public void SubmitUndo(int count, WorldPrincipal principal) => _ = SubmitAny(payload: new WorldSubmissionPayload.Undo(Count: count));
-    public void SubmitWorldMutation(WorldMutation mutation) => _ = SubmitAny(payload: new WorldSubmissionPayload.Mutation(Value: mutation));
 }

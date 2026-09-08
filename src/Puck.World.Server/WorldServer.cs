@@ -4,8 +4,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 /// <summary>Defines the memory-peek seam that <c>WorldAddonRuntime</c> reads through, mirroring
-/// <c>Puck.Abstractions.Machines.IMachineMemoryPeek</c>'s contract. <see cref="WorldMachineHost"/>, reached via
-/// <see cref="WorldServer.Machines"/>, is the only implementation; callers should not reach past this interface into
+/// <c>Puck.Abstractions.Machines.IMachineMemoryPeek</c>'s contract. <see cref="IWorldMachineHost"/>, reached via
+/// <see cref="WorldServer.Machines"/>, is the only implementor; callers should not reach past this interface into
 /// the concrete host.</summary>
 public interface IWorldMachineMemoryPeek {
     /// <summary>Reads one byte from a screen's booted machine, or fails when the screen has no machine or the
@@ -29,10 +29,6 @@ public enum WorldEditEchoKind {
     /// document edit.</summary>
     GrantTable,
 
-    /// <summary>A live addon-runtime lifecycle change (<c>world.addon.mount</c>/<c>world.addon.unmount</c>) —
-    /// runtime guest state, not a document edit.</summary>
-    AddonLifecycle,
-
     /// <summary>A whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>) —
     /// stronger than an ordinary <see cref="Mutation"/>: every section may have moved, the journal always clears,
     /// and admitted peer connections re-mint their admission grant.</summary>
@@ -45,18 +41,17 @@ public enum WorldEditEchoKind {
     /// <summary>A target-register designation outcome.</summary>
     Designation,
 
-    /// <summary>A body motion program switch outcome (<c>player.motion</c>).</summary>
+    /// <summary>A body motion program switch outcome (<c>body.motion</c>).</summary>
     BodyMotion,
 }
 /// <summary>One edit-boundary outcome echoed beside the loud stderr line — the payload of
-/// <see cref="WorldServer.EchoTap"/>, so a UI surface (the overlay toast, the editor HUD's act-class tag, the drag
-/// channel's frozen-preview retirement) narrates outcomes without scraping stderr.</summary>
+/// <see cref="WorldServer.EchoTap"/>, so a UI surface (the overlay toast, the edit-echo cue lane) narrates outcomes
+/// without scraping stderr.</summary>
 /// <param name="Message">The human-readable outcome line (no brackets).</param>
 /// <param name="Rejected">Whether the outcome is a rejection/denial.</param>
 /// <param name="Kind">The edit-boundary class the outcome belongs to.</param>
-/// <param name="Mutation">The mutation the outcome answers, when the boundary was a mutation — the correlation key a
-/// released drag preview retires against (<c>WorldEditorDrag.NoteRejected</c>) and the at-site position source the
-/// applied-cue lane derives from; <see langword="null"/> otherwise.</param>
+/// <param name="Mutation">The mutation the outcome answers, when the boundary was a mutation — the at-site position
+/// source the applied-cue lane derives from; <see langword="null"/> otherwise.</param>
 /// <param name="Denied">Whether the rejection was a capability denial (a missing mutate grant, a refused grant
 /// acquisition) rather than a validator/guard rejection — the discriminator the cue lane's <c>grant.denied</c> vs
 /// <c>mutation.rejected</c> tokens ride.</param>
@@ -119,13 +114,13 @@ public sealed partial class WorldServer : IWorldServerHost {
     // because the alternative is a per-tick resize on the hot path to improve a diagnostic. A second submission naming
     // an entity already written this tick by a DIFFERENT principal is a genuine conflict between two distinct Drive
     // grants over one body — Step reports it loudly rather than letting the later one silently overwrite the earlier.
-    private int[] m_tickWrittenEntity = new int[WorldPopulationLimits.LocalSeatCount];
-    private WorldPrincipal[] m_tickWrittenPrincipal = new WorldPrincipal[WorldPopulationLimits.LocalSeatCount];
+    private int[] m_tickWrittenEntity = new int[WorldBodiesLimits.LocalSeatCount];
+    private WorldPrincipal[] m_tickWrittenPrincipal = new WorldPrincipal[WorldBodiesLimits.LocalSeatCount];
     // Whether the matching m_tickWrittenEntity slot saw a SECOND, different-principal write THIS tick — read once the
     // whole drain AND the addon contributions have finished (see Step) to settle m_contended for real, since which
     // submission a queue happens to dequeue first says nothing about whether the body was genuinely contended for the
     // tick as a whole.
-    private bool[] m_tickCollided = new bool[WorldPopulationLimits.LocalSeatCount];
+    private bool[] m_tickCollided = new bool[WorldBodiesLimits.LocalSeatCount];
     // --- The co-driving contribution set (fed to FixedContributionFold below) ---
     // A contribution can only ever land on a HUMAN-OCCUPIED body (WorldPopulation.IsHumanOccupied gates it — an
     // unoccupied body is a bot at full authority, applied directly in ApplyIntentSubmission, and never reaches this
@@ -137,10 +132,10 @@ public sealed partial class WorldServer : IWorldServerHost {
     // indexed `(seat * ChannelLimits.MaxChannels) + ordinal`. There is NO per-tick ceiling accumulator: the pool
     // ceiling is one number per (seat, channel) read straight off the seat's own grant row
     // (WorldGrants.PoolCeilings), never derived from whichever contributors happened to land this tick.
-    private readonly PlayerIntent[] m_ownerBase = new PlayerIntent[WorldPopulationLimits.LocalSeatCount];
-    private readonly PlayerIntent[] m_ownerHeld = new PlayerIntent[WorldPopulationLimits.LocalSeatCount];
-    private readonly bool[] m_hasOwnerBase = new bool[WorldPopulationLimits.LocalSeatCount];
-    private readonly bool[] m_hasContribution = new bool[WorldPopulationLimits.LocalSeatCount];
+    private readonly PlayerIntent[] m_ownerBase = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];
+    private readonly PlayerIntent[] m_ownerHeld = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];
+    private readonly bool[] m_hasOwnerBase = new bool[WorldBodiesLimits.LocalSeatCount];
+    private readonly bool[] m_hasContribution = new bool[WorldBodiesLimits.LocalSeatCount];
     // Every staged delta was already bounded to |d| <= One at the pump. FixedContributionFold records the exact
     // generic Int64 accumulator boundary; World's concrete set is far smaller: untrusted terms are mounted Wasmtime
     // instances (memory exhausts around 2^20), while trusted co-driving seats number at most LocalSeatCount - 1.
@@ -148,8 +143,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     // do not enter either sum today. With One = 2^16 (FixedQ4816) and at most ~2^20 untrusted terms, a completed sum
     // peaks near 2^36, so it stays roughly twenty-seven binary orders below Int64 overflow without a hot-path
     // checked/saturating add.
-    private readonly long[] m_untrustedSum = new long[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly long[] m_trustedSum = new long[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly long[] m_untrustedSum = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly long[] m_trustedSum = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
     // This tick's contributed HELD-device image per (seat, channel) — a non-owner's composition act (see
     // WorldAddonRuntime.Submit's HeldChannels), accumulated by WorldChannelTable.ComposeHeld's shape-aware rule: a
     // unipolar/binary channel maxes across contributors (an overlay of {0, One} bits — old ActionLanes OR, no ceiling
@@ -157,14 +152,14 @@ public sealed partial class WorldServer : IWorldServerHost {
     // RAW and UNCLAMPED here (see StageContribution) — clamping per contributor would make the result depend on
     // arrival order, so the one clamp is deferred to FoldChannelContributions, where this accumulator is finally
     // combined with the owning seat's own held value.
-    private readonly long[] m_contributedHeld = new long[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly long[] m_contributedHeld = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
     // Per (seat, ordinal): whether THIS TICK's contribution set actually reached this channel through the UNTRUSTED
     // (pooled) path — independent of the numeric sum, which a cancelling pair of contributions can net to zero while
-    // the pool was still genuinely exercised. Gates player.channels' ceiling report (FoldChannelContributions): an
+    // the pool was still genuinely exercised. Gates body.channels' ceiling report (FoldChannelContributions): an
     // authored ceiling nobody exercised this tick must read back as "no ceiling in force," never as the number on
     // paper. Reset per seat by ClearContribution once the fold has read it.
-    private readonly ChannelHeldMask[] m_untrustedAcceptedMask = new ChannelHeldMask[WorldPopulationLimits.LocalSeatCount];
-    // --- player.channels read-back (the Puck.Maths fold primitive retains none of this itself;
+    private readonly ChannelHeldMask[] m_untrustedAcceptedMask = new ChannelHeldMask[WorldBodiesLimits.LocalSeatCount];
+    // --- body.channels read-back (the Puck.Maths fold primitive retains none of this itself;
     // without it the verification walk could only infer a contribution's effect from displacement across ticks) ---
     // The fold accumulates and clears m_untrustedSum/m_trustedSum/m_contributedHeld above every tick (the hot path pays
     // nothing extra to KEEP them); everything below is written only at the same two sites that already write a body
@@ -172,19 +167,19 @@ public sealed partial class WorldServer : IWorldServerHost {
     // write), while WorldBody retains the later held-overlay inputs/result directly on NextIntent's existing join path.
     // There is never a new tick-wide scan. NEVER cleared blind at tick start — a seat with no traffic THIS tick still
     // answers with its last settled write, exactly like m_ownerBase's own raw persistence above. Diagnostic only: read
-    // by player.channels alone, off every hashed path, and never fed back into a fold (a read-back must never change
+    // by body.channels alone, off every hashed path, and never fed back into a fold (a read-back must never change
     // what it observes).
-    private readonly PlayerIntent[] m_channelReadBase = new PlayerIntent[WorldPopulationLimits.LocalSeatCount];   // h
-    private readonly PlayerIntent[] m_channelReadFolded = new PlayerIntent[WorldPopulationLimits.LocalSeatCount]; // what SubmitIntent received
+    private readonly PlayerIntent[] m_channelReadBase = new PlayerIntent[WorldBodiesLimits.LocalSeatCount];   // h
+    private readonly PlayerIntent[] m_channelReadFolded = new PlayerIntent[WorldBodiesLimits.LocalSeatCount]; // what SubmitIntent received
     // Per (seat, ordinal): the pool ceiling in force for the last write that touched this channel (0 = no untrusted
     // contributor reached it; a consent row nobody exercised this write is honestly "no ceiling in force," not the
     // ceiling on paper), and whether the untrusted pool step actually bound the value (Evaluate's poolClamped output).
-    private readonly long[] m_channelReadCeiling = new long[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly bool[] m_channelReadClamped = new bool[(WorldPopulationLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
-    private readonly WorldPrincipal[] m_channelReadContributor = new WorldPrincipal[(WorldPopulationLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly bool[] m_channelReadContributorTrusted = new bool[(WorldPopulationLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly ChannelHeldMask[] m_channelReadContributorMask = new ChannelHeldMask[(WorldPopulationLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
-    private readonly int[] m_channelReadContributorCount = new int[WorldPopulationLimits.LocalSeatCount];
+    private readonly long[] m_channelReadCeiling = new long[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly bool[] m_channelReadClamped = new bool[(WorldBodiesLimits.LocalSeatCount * ChannelLimits.MaxChannels)];
+    private readonly WorldPrincipal[] m_channelReadContributor = new WorldPrincipal[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
+    private readonly bool[] m_channelReadContributorTrusted = new bool[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
+    private readonly ChannelHeldMask[] m_channelReadContributorMask = new ChannelHeldMask[(WorldBodiesLimits.LocalSeatCount * MaxReadContributorsPerSeat)];
+    private readonly int[] m_channelReadContributorCount = new int[WorldBodiesLimits.LocalSeatCount];
     // A human-readable description of m_base's origin — world.reset's read-back rule ("the completion echo names
     // what was reset to"). Set at construction (the boot document), replaced by Compact (world.save — "the last
     // world.save") and by ApplyRebuild's Load/Reload arm (a new base replaces the old one, exactly like a swap
@@ -205,11 +200,12 @@ public sealed partial class WorldServer : IWorldServerHost {
     // never to throw. Recomputed unconditionally: rules and state rows are both small-capacity sections, so there is
     // no AffectsRules classification predicate earning its keep here.
     private CompiledWorldRule[] m_rules = [];
+    private CompiledTable[] m_tables = [];
     // The EDGE latch, keyed by rule name and deliberately OUTSIDE m_rules: a rule's own effect installs a new
     // definition, which recompiles m_rules, so a latch living in the compiled record would clear itself every time it
     // fired — which is exactly the 503-entries-in-500-ticks shape edge mode exists to close. Surviving names keep
     // their bit across an install; vanished names are dropped.
-    private readonly Dictionary<string, bool> m_ruleGateHeld = new(comparer: StringComparer.Ordinal);
+    private readonly RuleLatch m_ruleGateHeld = new();
     // The compiled `interactions` section — a SECOND compiled array, evaluated after m_rules (see
     // EvaluateWorldRules), never merged into it: an interaction desugars into a synthesized WorldRule and rides the
     // SAME per-rule evaluation, but interactions occupy their OWN name namespace (WorldInteraction.Name), so a
@@ -217,7 +213,73 @@ public sealed partial class WorldServer : IWorldServerHost {
     private CompiledWorldRule[] m_interactions = [];
     // The interaction family's own EDGE latch — the SAME shape m_ruleGateHeld is, kept separate for the identical
     // aliasing reason m_interactions itself is kept separate from m_rules.
-    private readonly Dictionary<string, bool> m_interactionGateHeld = new(comparer: StringComparer.Ordinal);
+    private readonly RuleLatch m_interactionGateHeld = new();
+    // The state library's evaluator over this server as its host (WorldServer.RuleHost.cs): the loop, the edge
+    // latching, the trace, the refusal ledger, and every state-neutral effect's firing.
+    private readonly RuleEvaluator m_evaluator;
+    // The `search` jobs over a frame of the installed section, rebuilt with the rules on every install.
+    private readonly SearchRuntime m_search;
+    private readonly Func<IReadOnlyList<SearchWrite>, bool> m_searchApply;
+
+    // Translates a landed job's writes into the ordinary mutation vocabulary: a single write installs directly, more
+    // than one folds into a Batch, so a finished job's observable mutation shape is unchanged by the runtime split.
+    private static WorldMutation ComposeSearchMutation(IReadOnlyList<SearchWrite> writes) {
+        if (writes.Count == 1) {
+            return ToSearchMutation(write: writes[0]);
+        }
+
+        var mutations = new WorldMutation[writes.Count];
+
+        for (var index = 0; index < writes.Count; index++) {
+            mutations[index] = ToSearchMutation(write: writes[index]);
+        }
+
+        return new WorldMutation.Batch(Principal: WorldPrincipal.World, Mutations: mutations);
+    }
+    private static WorldMutation ToSearchMutation(SearchWrite write) => write switch {
+        SearchWrite.Cell cell => new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.World, Row: cell.Row, Key: cell.Key, Value: cell.Value, Kind: WorldDocumentWriteKind.Set),
+        SearchWrite.ClearBoard clear => new WorldMutation.TransformState(Principal: WorldPrincipal.World, Transform: new StateTransform.BoardCombine(Row: clear.Row, Operation: BoardCombineOp.Clear)),
+        _ => throw new InvalidOperationException(message: $"unrecognized search write '{write.GetType().Name}'"),
+    };
+    // The installed documents a preflight scope remembers, innermost last (IRuleHost.BeginPreflight/EndPreflight).
+    private readonly Stack<WorldDefinition> m_preflightScopes = new();
+    // The value frame every state effect writes during EvaluateWorldRules (WorldServer.RuleFrame.cs), laid out from
+    // the installed catalog and loaded fresh from the installed rows at the start of every tick's rule evaluation.
+    private FrameLayout? m_ruleFrameLayout;
+    private StateFrame? m_ruleFrame;
+    private StateCatalog? m_ruleFrameCatalog;
+    private RowStore? m_ruleFrameStore;
+    // The rows EnsureRuleFrame last confirmed the frame fits — a cheap reference check that skips re-deriving every
+    // row's layout on a read that runs between two writes, since neither changes m_definition.State's own reference.
+    private IReadOnlyList<StateRow>? m_ruleFrameFitRows;
+    // Whether EvaluateWorldRules currently holds the frame active (set for its own duration) — IRuleReader.Store
+    // answers from the frame only then; every other reader (flock affinity among them) falls back to m_ruleFrameFallbackStore.
+    private bool m_ruleFrameActive;
+    private RowStore? m_ruleFrameFallbackStore;
+    // The document EvaluateWorldRules started this tick from — what the once-per-tick fold replays m_ruleFrameMutations
+    // against, so a mid-tick cross-row flush (TryApplyCrossRowStateMutation) never becomes the fold's own baseline.
+    private WorldDefinition? m_ruleFrameTickBaseline;
+    // Every state and document effect fired this tick, in firing order, spanning every rule/interaction and its
+    // preflight scopes — one flat sequence a scope's rejection truncates and the tick's own end folds as one
+    // mutation. Reassigned (never cleared) once folded, since the fold may hand the SAME list to a WorldMutation.Batch.
+    private List<WorldMutation> m_ruleFrameMutations = [];
+    // Frame journal marks, one per currently open preflight scope (BeginRuleFrameScope/EndRuleFrameScope/CommitRuleFrameScope) —
+    // parallel in depth to m_preflightScopes, though the frame's own scope is a SEPARATE journal.
+    private readonly Stack<int> m_ruleFrameJournalMarks = new();
+    // Where in m_ruleFrameMutations each currently open scope started, so its own rejection truncates only its own tail.
+    private readonly Stack<int> m_ruleFrameMutationMarks = new();
+    // Bumped every time TryApplyCrossRowStateMutation re-derives the frame from a composed candidate — a whole-frame
+    // Load that bypasses the journal, so a scope closing under a stamp different from the one it began under cannot
+    // trust RewindJournalScope and re-derives the frame from m_definition instead (ResyncRuleFrame).
+    private long m_ruleFrameReloadStamp;
+    private readonly Stack<long> m_ruleFrameReloadMarks = new();
+    // Reused carrier/key scratch for rule evaluation: left (and forEach keys) and right, both live during one
+    // distance interaction.
+    private readonly List<int> m_carrierScratchLeft = [];
+    private readonly List<int> m_carrierScratchRight = [];
+    // A distance interaction's nearest-neighbour selection, ascending by distance then index (WorldInteraction.Neighbours).
+    private readonly FixedQ4816[] m_neighbourDistance = new FixedQ4816[WorldInteractionCapacity.MaxNeighbours];
+    private readonly int[] m_neighbourIndex = new int[WorldInteractionCapacity.MaxNeighbours];
     // Reused scratch for the despawn-ownership guard (FireWorldRuleEffect's RemovePlacement arm) — rule-fire cadence
     // only, cleared and refilled on every check rather than allocated per firing.
     private readonly List<int> m_ruleInhabitantScratch = [];
@@ -234,6 +296,9 @@ public sealed partial class WorldServer : IWorldServerHost {
     // distance's neutral-for-absence value must never read as "close", or a within-range gate (compareState against
     // lessOrEqual) would spuriously OPEN for a body reference that resolved to nothing.
     private static readonly FixedQ4816 NoBodyDistance = FixedQ4816.MaxValue;
+
+    // WorldRuleFacts.UprightPrefix's rotated axis: a body's own local +Y before FixedOrientation is applied.
+    private static readonly FixedVector3 s_localUp = new(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero);
 
     // Per-body "the last FULLY-DRAINED tick reported this body contended" latch — the SAME once-per-episode shape as
     // m_driveDenied (checked BEFORE the current tick's outcome overwrites it, so the transition into a contended state
@@ -253,15 +318,6 @@ public sealed partial class WorldServer : IWorldServerHost {
     // the fifth, machine-memory watches, is addon-scoped instead). Collected once per Step, after the population
     // advances; drained by WorldAddonRuntime.ResolveReads the same tick.
     private readonly WorldEventFeed m_events;
-    // The declared judge window sets, compiled once at construction from definition.Judges (boot-only — nothing
-    // mutates this section live yet). Keyed by row id for judge.state's echo.
-    private readonly IReadOnlyList<(string Id, IReadOnlyList<Puck.Audio.Simulation.JudgeWindow> Windows)> m_judgeWindowSets;
-
-    // The last-graded (body, judge) fact table — sim state, folded by Step's drain of WorldPopulation.
-    // JudgeInvocationOutputs immediately after the whole population advance. A null Grade records a miss (no window
-    // admitted the distance, or the world declares judges with no musical clock to grade against) — the tick is
-    // still recorded either way, so judge.state can distinguish "never fired" from "fired and missed."
-    private readonly Dictionary<(int EntityIndex, string JudgeRef), (string? Grade, ulong Tick)> m_judgeGrades = [];
 
     // The tick-denominated musical clock and its event-driven segment director, compiled once at construction from
     // the FIRST declared definition.Music row (a world authoring none carries neither). Stepped in Step, right
@@ -279,8 +335,8 @@ public sealed partial class WorldServer : IWorldServerHost {
     private readonly WorldGrants m_grants;
     private readonly WorldInputHoldRuntime m_inputHold;
     // The authoritative screen-machine host — a PEER singleton
-    // assigned in the constructor, never owned/disposed here (see WorldMachineHost's own remarks).
-    private readonly WorldMachineHost m_machines;
+    // assigned in the constructor, never owned/disposed here (see IWorldMachineHost's own remarks).
+    private readonly IWorldMachineHost m_machines;
     private readonly WorldPopulation m_population;
     private readonly WorldOwnedWorlds m_profiles;
     private readonly EntitySnapshot[] m_snapshotEntries;
@@ -342,7 +398,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     public bool AnyAddonEverPumped => (m_addons?.AnyEverPumped ?? false);
     /// <summary>Gets a value indicating whether any booted screen machine has ever had a step/segment actually submitted — the identical
     /// boot-anchored replay arm predicate <see cref="AnyAddonEverPumped"/> applies to addons: offline replay
-    /// rehydrates a fresh <see cref="WorldMachineHost"/> from the tape's embedded
+    /// rehydrates a fresh <see cref="IWorldMachineHost"/> from the tape's embedded
     /// definition, which can reconstruct a machine's boot image but never its accumulated core state (WRAM, CPU
     /// registers) once real ticks have run it. A world with a boot-declared cartridge means recording must arm
     /// before its first step, same as a world that mounts an addon must arm before its first tick.</summary>
@@ -353,13 +409,13 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// synchronously, between fixed steps, not inside <see cref="Step"/> — so a
     /// <c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/<c>.link</c>/<c>.unlink</c> that lands
     /// before <c>replay.record</c> arms (even with zero steps run since) changes live host state
-    /// (<see cref="WorldMachineHost"/>'s slots/links) that the tape's record-start definition snapshot never
+    /// (<see cref="IWorldMachineHost"/>'s slots/links) that the tape's record-start definition snapshot never
     /// reflects — these ops are not document mutations, so nothing about them exists in
     /// <see cref="WorldDefinition"/> for the snapshot to capture, and they are only ever added to the tape's own
     /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time onward) — never
     /// retroactively. Left ungated, offline replay reconstruction (a fresh
-    /// <see cref="WorldMachineHost"/> booted from that snapshot alone) would simply lack the machine/link/eject
-    /// entirely, a divergence the pose-only hash cannot see. Latched the instant any op applies and never cleared,
+    /// <see cref="IWorldMachineHost"/> booted from that snapshot alone) would simply lack the machine/link/eject
+    /// entirely, a divergence the population hash cannot see. Latched the instant any op applies and never cleared,
     /// mirroring <see cref="AnyMachineEverPumped"/>'s own shape exactly. Only ever added to a recording's own
     /// authority list from the moment <see cref="ScreenOpTap"/> attaches (recording-arm time) onward — never
     /// retroactively for an op that already applied before that.</summary>
@@ -370,7 +426,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     public string AuthorityIdentity { get; }
     /// <summary>Gets the derived-face screen slots this instance's boot document reserved. The presentation binder
     /// registers exactly that band up front and the render provider key set is frozen there, so a live edit may lower
-    /// <see cref="WorldAuthoringDefaults.DerivedFaceScreens"/> but never raise it past this — a raise is refused by
+    /// <see cref="WorldPlacementPolicyDefaults.DerivedFaceScreens"/> but never raise it past this — a raise is refused by
     /// name, in the same family as the boot-allocated population capacity, rather than seating faces at indices no
     /// renderer holds.</summary>
     public int BootDerivedFaceScreens { get; }
@@ -391,15 +447,18 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// composition, screen op), and inside <see cref="Step"/> for the kinds buffered to the tick boundary (mutation,
     /// rebuild, undo, addon lifecycle) and for a fired world-rule effect.</summary>
     public Action<WorldEditEcho>? EchoTap { get; set; }
+    /// <summary>Observes deterministic presentation-neutral cues emitted by world rules. The callback runs
+    /// synchronously on the tick thread; consumers must hand off any presentation work without blocking it.</summary>
+    public Action<WorldGameplayCue>? GameplayCueTap { get; set; }
     /// <summary>Gets the engagement fold (headless design §1.8) — the seat/peer→screen route decision
-    /// (<see cref="WorldCommand.Engage"/>/<see cref="WorldCommand.Disengage"/> apply through it, from
+    /// (<see cref="WorldCommand.ComposeControl"/>/<see cref="WorldCommand.DissolveControl"/> apply through it, from
     /// <see cref="ApplyCommand"/>), its per-tick pad fold (<see cref="Server.WorldEngagement.FoldTick"/>, folded into
     /// every <see cref="WorldSnapshot"/>), and the screen-removal admin cleanup
-    /// (<c>Puck.World.WorldScreenBinder.ReconcileScreens</c> calls <see cref="Server.WorldEngagement.DisengageScreen"/>
+    /// (<c>Puck.World.WorldScreenBinder.ReconcileScreens</c> calls <see cref="Server.WorldEngagement.DissolveScreen"/>
     /// directly — loopback-only, like every other client↔server call that has not yet crossed a wire).</summary>
     public WorldEngagement Engagement => m_engagement;
     /// <summary>Gets this instance's own render-capacity oracle — configured by whatever presentation-side content
-    /// source renders this instance (the boot world's own <c>WorldFrameSource</c>, or an observing destination's
+    /// source renders this instance (the boot world's own <c>WorldFramePresenter</c>, or an observing destination's
     /// session or continuum view), so a document mutation the same instance receives is checked against the same
     /// probed floor a renderer already committed to. Unconfigured (nothing renders this instance yet) reads as
     /// "fits" — <see cref="WorldRenderEnvelope"/>'s own documented default.</summary>
@@ -417,19 +476,19 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// check those two methods do not — a caller that only holds this property can never skip it.</summary>
     public IWorldGrantsView Grants => m_grants;
     /// <summary>Gets this server's own running-instance identity — the draw seed ladder's instance rung (see
-    /// <c>WorldGeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
+    /// <c>GeneratorEngine.ComputeSeedState</c>). A live redraw folds the same value the boot/first-fill resolver
     /// used, so a site's first fill and its later redraws share one deterministic stream per instance.</summary>
     public string InstanceIdentity { get; }
     /// <summary>Gets the journal length — the number of applied mutations over the base (the <c>world.status</c> dirty
-    /// count, and the <c>world.undo</c> budget).</summary>
+    /// count).</summary>
     public int JournalLength => m_journal.Count;
     /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
     public ulong LastStepTicks => m_lastStepTicks;
     /// <summary>Gets the authoritative screen-machine host — owns every booted <c>IScreenMachine</c>, its memory-peek
-    /// surface (<see cref="WorldMachineHost"/> implements <see cref="IWorldMachineMemoryPeek"/> directly), and the
+    /// surface (<see cref="IWorldMachineHost"/> extends <see cref="IWorldMachineMemoryPeek"/> directly), and the
     /// screen-op verb surface's runtime target. Always present (never null): machines are booted and stepped in
     /// every boot shape.</summary>
-    public WorldMachineHost Machines => m_machines;
+    public IWorldMachineHost Machines => m_machines;
     /// <summary>Gets or sets an optional durable-journal tap fired with a mutation's own tick right after it is
     /// applied and folded into the in-memory undo journal — the same call site, so an entry this tap sees is exactly
     /// the entry a restart's journal-tail replay reapplies. Fires synchronously on the tick thread; the
@@ -437,6 +496,30 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// checkpoint upload's own fire-and-forget shape). <see langword="null"/> (the default) journals nothing — a
     /// desktop row has no durable store to append to.</summary>
     public Action<ulong, WorldMutation>? MutationJournalTap { get; set; }
+    /// <summary>Observes every SUBMITTED document mutation as <see cref="ApplyEnvelope"/> dispatches it, carrying the
+    /// mutation and the envelope's own acting principal. The one ingress every submission kind shares — a local
+    /// console/client write over the loopback, an admitted socket peer's, and a traveller's submission forwarded by
+    /// its source authority all reach the tape here, with the true actor the envelope stamped. Deliberately NOT the
+    /// two internal producers that reach <see cref="EnqueueMutation"/> directly (a mounted guest's decoded act, a
+    /// world rule's <c>generate</c> effect): both re-derive during a replay drive, so taping them would apply each
+    /// one twice. A mutation the apply pipeline goes on to refuse is still observed, so the refusal reproduces
+    /// identically. The replay tape attaches only while armed; clients never receive this submission-only
+    /// seam.</summary>
+    public Action<WorldMutation, WorldPrincipal>? MutationTap { get; set; }
+    /// <summary>Observes the accept/refuse OUTCOME of a mutation <see cref="MutationTap"/> already observed at
+    /// submission, invoked once the SAME tick's <see cref="Step"/> has drained and applied it — never for the two
+    /// internal producers <see cref="MutationTap"/> itself excludes (a mounted guest's decoded act, a world rule's
+    /// <c>generate</c> effect), because only <see cref="ApplyEnvelope"/>'s own dispatch threads the completion
+    /// callback that reaches this tap; those two producers call <see cref="EnqueueMutation"/> directly with none.
+    /// This is what lets a recorded mutation's outcome be pinned on tape and a replay's disagreement — accepted live
+    /// but refused on replay, or the reverse — be told apart from an ordinary later-tick pose drift. The replay tape
+    /// attaches only while armed; clients never receive this submission-only seam.</summary>
+    public Action<WorldMutation, bool>? MutationOutcomeTap { get; set; }
+    /// <summary>Observes each authored <c>adjacencies</c> row that received a delivered neighbour refresh this tick,
+    /// by row name, at the pinned point in <see cref="Step"/> where the adjacency source has just frozen the tick's
+    /// projection graph. The one taped link-liveness input — see <see cref="WorldEventFeed"/>'s own remarks. The
+    /// replay tape attaches only while armed.</summary>
+    public Action<string>? LinkDeliveryTap { get; set; }
     /// <summary>Gets or sets the injected neighbour resolver <see cref="WorldDefinitionValidator.Validate"/> reads
     /// for a cross-document adjacency proof
     /// — the same "the server calls out, the composition root supplies the capability" shape as <see cref="EchoTap"/>/
@@ -479,7 +562,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// (<c>WorldPostBuildWiring.Install</c>). <c>WorldReplaySnapshot.Drive</c> — the offline replay-verification
     /// drive — wires its own narration-only tap instead of the live closure, so replay verification stays
     /// side-effect-free: a fired save effect there is suppressed, never reaching disk, and is named on stderr rather
-    /// than left indistinguishable from a rule that never fired. See <c>ActionEffect.Save</c>'s remarks for why this
+    /// than left indistinguishable from a rule that never fired. See <c>WorldEffect.Save</c>'s remarks for why this
     /// effect submits no <see cref="WorldMutation"/> and so needs a seam other than <c>TryApplyMutation</c> at
     /// all.</summary>
     public Action<ulong>? SaveEffectTap { get; set; }
@@ -543,20 +626,27 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <param name="envelope">The render-capacity oracle a scene/screen mutation is checked against at apply time.</param>
     /// <param name="machines">The authoritative screen-machine host (owns every booted <c>IScreenMachine</c>) — a
     /// peer singleton, not a private field this constructor builds, so the composition root disposes it (see
-    /// <see cref="WorldMachineHost"/>'s own remarks on why).</param>
+    /// <see cref="IWorldMachineHost"/>'s own remarks on why).</param>
     /// <param name="instanceIdentity">This server's own running-instance identity — the draw seed ladder's instance
-    /// rung (see <c>WorldGeneratorEngine.ComputeSeedState</c> in <c>Puck.World.Schema</c>). Defaults to the boot
+    /// rung (see <c>GeneratorEngine.ComputeSeedState</c> in <c>Puck.World.Schema</c>). Defaults to the boot
     /// instance's own constant name (<c>Puck.World.WorldInstanceHost.BootInstanceName</c>, not referenced directly —
     /// this project sits below <c>Puck.World</c> in the layering).</param>
+    /// <param name="narrationSink">A sink attached to this server's narration before construction narrates anything
+    /// of its own (the document's authored grants, seeded here) — a composition root that only attaches after
+    /// construction returns would miss every line construction itself writes.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="instanceIdentity"/> is empty.</exception>
-    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, WorldMachineHost machines, string instanceIdentity = "boot") {
+    public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: envelope);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
+
+        if (narrationSink is not null) {
+            _ = m_output.AttachNarrationSink(sink: narrationSink);
+        }
 
         InstanceIdentity = instanceIdentity;
         AuthorityIdentity = ((definition.Host.Authority is { Length: > 0 } authority)
@@ -569,12 +659,21 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_contended = new bool[population.Capacity];
         m_federatedIntents = new FederatedIntentState[population.Capacity];
         m_snapshotEntries = new EntitySnapshot[population.Capacity];
-        m_events = new WorldEventFeed();
+        m_events = new WorldEventFeed(capacity: population.Capacity);
+
+        m_tables = CompileTables(definition: definition);
+        m_evaluator = new RuleEvaluator(host: this);
+        m_search = new SearchRuntime(live: () => m_definition!.State, narrate: (channel, text) => {
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: channel, text: text);
+            }
+        });
+        m_searchApply = writes => TryApplyMutation(mutation: ComposeSearchMutation(writes: writes), tick: m_searchTick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false);
 
         if ((definition.Music is { Count: > 0 } music) && (music[0] is { } row)) {
             // The row's Source/Hash were already proven to load, canonicalize, and pin-verify by
             // WorldDefinitionValidator — this load is expected to succeed by construction.
-            if (!WorldMusicJudgeAssetLoader.TryLoadMusic(
+            if (!WorldAssetRowLoader.TryLoadMusic(
                 document: out var score,
                 error: out var loadError,
                 row: row
@@ -591,20 +690,6 @@ public sealed partial class WorldServer : IWorldServerHost {
             m_musicDirector = new Puck.Audio.Simulation.MusicDirector(graph: MusicDirectorFactory.CompileGraph(document: score));
         }
 
-        m_judgeWindowSets = ((definition.Judges is { Count: > 0 } judges)
-            ? [.. judges.Select(selector: row => {
-                if (!WorldMusicJudgeAssetLoader.TryLoadJudge(
-                    document: out var windowSet,
-                    error: out var loadError,
-                    row: row
-                )) {
-                    throw new InvalidOperationException(message: $"judges[{row.Name}]: {loadError} (a validated document must still resolve at construction)");
-                }
-
-                return (row.Name, MusicDirectorFactory.CompileWindows(document: windowSet!));
-            })]
-            : []
-        );
         m_grants = new WorldGrants(
             seatCount: population.LocalSeatCount,
             population: population.Capacity,
@@ -632,6 +717,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_definition = definition;
         m_base = definition;
         m_population = population;
+        population.NarrationHub = m_output;
         m_inputHold = new WorldInputHoldRuntime(
             settings: definition.CompiledInputHold,
             capacity: population.Capacity
@@ -664,6 +750,13 @@ public sealed partial class WorldServer : IWorldServerHost {
             definition: definition,
             disconnected: disconnectedAtBoot
         );
+        // A cell-driven inhabit count starts from its cell's authored value, not from zero waiting for a write.
+        m_population.ReconcileInhabitCounts(
+            admitted: admittedAtBoot,
+            definition: definition,
+            disconnected: disconnectedAtBoot,
+            tick: NextInputTick
+        );
         ApplyLifecycleEvents(
             admitted: admittedAtBoot,
             disconnected: disconnectedAtBoot,
@@ -687,15 +780,21 @@ public sealed partial class WorldServer : IWorldServerHost {
             );
         }
 
-        // Establish the boot document's OWN declared cable links: Install (which ALSO calls this on every later
-        // mutation/rebuild) never runs at construction, so a links row authored in the boot document itself needs
+        // Establish the boot document's OWN declared cable groups: Install (which ALSO calls this on every later
+        // mutation/rebuild) never runs at construction, so a cable port authored in the boot document itself needs
         // this one extra call here, or it would never establish until the first live edit touched ANY section —
         // headless included, since nothing presentation-side ever called it either.
-        m_machines.ReconcileLinks(links: definition.Links);
+        m_machines.ReconcileLinks(links: definition.MachineCableGroups());
 
         // Same reasoning as the cable links above: a rules row authored in the BOOT document needs its own compile
         // call here, since Install never runs at construction.
-        RecompileRules(definition: definition);
+        definition = RecompileRules(definition: definition);
+        // The lattice exists (the population allocated it) and the instance identity is known only from here on, so
+        // this is the first point a lattice row's draw fill can be seeded through the site ladder and painted.
+        PaintLatticeDraws(definition: definition);
+        // AFTER ReconcileInhabitants above: every boot-declared body (seats and inhabited placements alike) now has
+        // a WorldBody to resync bodies.scaleRow's cells onto.
+        m_population.SyncBodyScale(definition: definition);
     }
 
 }

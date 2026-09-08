@@ -18,17 +18,20 @@ internal sealed class QueuedHostAudioStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyAudio(
             attached: () => new MachineHost(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create(),
                 audioSampleRate: RequestedSampleRate
             ),
             detached: () => new MachineHost(
-                model: ConsoleModel.Dmg,
+                model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),
             requestedRate: RequestedSampleRate

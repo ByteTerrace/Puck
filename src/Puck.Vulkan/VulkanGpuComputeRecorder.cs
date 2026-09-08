@@ -24,8 +24,14 @@ public sealed class VulkanGpuComputeRecorder(IVulkanCommandBufferRecordingApi re
     public void BindComputePipeline(nint deviceHandle, nint commandBufferHandle, nint pipelineHandle) =>
         recordingApi.BindComputePipeline(commandBufferHandle: commandBufferHandle, deviceHandle: deviceHandle, pipelineHandle: pipelineHandle);
     /// <inheritdoc/>
-    public void BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) =>
-        recordingApi.BindComputeDescriptorSets(commandBufferHandle: commandBufferHandle, descriptorSetHandles: [descriptorSetHandle], deviceHandle: deviceHandle, pipelineLayoutHandle: pipelineLayoutHandle);
+    public void BindComputeDescriptorSet(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, nint descriptorSetHandle) {
+        // stackalloc instead of a one-element heap array: this runs up to 8x per SdfWorldEngine.Record, every frame
+        // (a live world uploads a new SdfProgram every frame). The native call (BindComputeDescriptorSets) only reads
+        // the span during the call via `fixed`, so the stack lifetime is sufficient.
+        ReadOnlySpan<nint> descriptorSetHandles = stackalloc nint[] { descriptorSetHandle };
+
+        recordingApi.BindComputeDescriptorSets(commandBufferHandle: commandBufferHandle, descriptorSetHandles: descriptorSetHandles, deviceHandle: deviceHandle, pipelineLayoutHandle: pipelineLayoutHandle);
+    }
     /// <inheritdoc/>
     public void PushConstants(nint deviceHandle, nint commandBufferHandle, nint pipelineLayoutHandle, GpuShaderStage stageFlags, uint offset, ReadOnlySpan<byte> data) {
         GpuPushConstantBinding.ValidateRange(stageFlags: stageFlags, offset: offset, dataLength: data.Length);

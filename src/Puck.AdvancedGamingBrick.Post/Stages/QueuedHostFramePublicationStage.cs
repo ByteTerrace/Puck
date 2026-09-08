@@ -15,6 +15,9 @@ internal sealed class QueuedHostFramePublicationStage : IPostStage<PostContext> 
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -24,7 +27,7 @@ internal sealed class QueuedHostFramePublicationStage : IPostStage<PostContext> 
                 cartridgeRom: SyntheticRom.Create(),
                 biosImage: bios
             ),
-            empty: () => new AdvancedMachineHost()
+            empty: () => new AdvancedMachineHost(biosImage: bios)
         );
 
         return (result.Passed

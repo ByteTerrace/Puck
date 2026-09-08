@@ -8,6 +8,7 @@ namespace Puck.Commands;
 /// and ignores the phase, whereas a discrete handler acts on the edges represented by <see cref="Started"/>
 /// and <see cref="Completed"/>.
 /// </remarks>
+[System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<CommandPhase>))]
 public enum CommandPhase {
     /// <summary>The first frame on which the command became active, such as a digital press or the start of an impulse.</summary>
     Started = 0,

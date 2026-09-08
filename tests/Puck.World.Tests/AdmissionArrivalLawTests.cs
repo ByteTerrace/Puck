@@ -115,7 +115,7 @@ public sealed class AdmissionArrivalLawTests {
         PeerAdmission: true,
         Members: [new WorldTransferReservationMember(
             Principal: WorldPrincipal.Console,
-            PreferredSlot: WorldPopulationLimits.LocalSeatCount,
+            PreferredSlot: WorldBodiesLimits.LocalSeatCount,
             Identity: identity,
             Source: IntentSource.Live,
             BodyColor: default,
@@ -145,7 +145,7 @@ public sealed class AdmissionArrivalLawTests {
 
         return document with {
             PopulationRaw = document.Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 2),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
             Admission = admission,

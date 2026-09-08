@@ -1,0 +1,22 @@
+[
+  {
+    "Id": "deep.combinatorics-poker", "Tier": "Deep",
+    "Members": [{ "Type": "Puck.Maths.Combinatorics", "Name": "CombinationRank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationUnrank" }],
+    "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "Every five-card hand has its exact dense colex identity and decodes to that hand", "Against": "Five nested increasing ordinal loops enumerate all 2,598,960 hands in colex order without binomial arithmetic", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "integer.combinatorics-counts", "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.Combinatorics", "Name": "Binomial" }, { "Type": "Puck.Maths.Combinatorics", "Name": "Factorial" }],
+    "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "Exact ulong combination and permutation counts, including overflow", "Against": "BigInteger factorial quotients on a bounded integer basis", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "integer.combinatorics-order", "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.Combinatorics", "Name": "CombinationRank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationUnrank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationElement" }, { "Type": "Puck.Maths.Combinatorics", "Name": "PermutationRank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "PermutationUnrank" }],
+    "Legs": [{ "Kind": "Classical", "Flavor": "None", "Subject": "Dense colex combination and lexicographic permutation ranks and inverses", "Against": "Enumerated subset bitmasks through n=10 and lexicographic successor enumeration through n=8; factorial-quotient colex and inversion-count Lehmer witnesses at wide boundaries", "Shared": "", "Citation": "", "Absolute": "" }]
+  },
+  {
+    "Id": "integer.combinatorics-refusals", "Tier": "Default",
+    "Members": [{ "Type": "Puck.Maths.Combinatorics", "Name": "Binomial" }, { "Type": "Puck.Maths.Combinatorics", "Name": "Factorial" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationRank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationUnrank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "CombinationElement" }, { "Type": "Puck.Maths.Combinatorics", "Name": "PermutationRank" }, { "Type": "Puck.Maths.Combinatorics", "Name": "PermutationUnrank" }],
+    "Legs": [{ "Kind": "Structural", "Flavor": "None", "Subject": "Invalid sizes, ranks, elements, duplicates and ordering are rejected with documented parameter names; failed unranking leaves destinations unchanged", "Against": "", "Shared": "", "Citation": "", "Absolute": "" }]
+  }
+]

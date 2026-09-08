@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Intrinsics.Arm;
 using System.Runtime.Intrinsics.X86;
 
 namespace Puck.Maths;
@@ -34,28 +35,136 @@ public static class BinaryIntegerFunctions {
     /// with equally sized blocks of zeros (for example <c>0x5555…</c>, <c>0x3333…</c>, and <c>0x0F0F…</c> for inputs
     /// <c>0</c>, <c>1</c>, and <c>2</c>).
     /// </summary>
-    /// <typeparam name="T">The binary integer type the mask is produced in.</typeparam>
-    /// <param name="value">The block exponent; block width is <c>2^<paramref name="value"/></c> bits.</param>
+    /// <typeparam name="T">The fixed-width binary integer type the mask is produced in.</typeparam>
+    /// <param name="value">The block exponent; callers supply a nonnegative value for which two blocks of <c>2^value</c> bits fit in the word.</param>
     /// <returns>The repeating mask for the requested block width.</returns>
     /// <remarks>
-    /// The mask is derived by dividing an all-ones word by the corresponding Fermat number (see
-    /// <see cref="NthFermatNumber{T}(int)"/>); these are the constants that drive the SWAR bit-permutation routines
-    /// such as <see cref="BitwisePair{TInput, TResult}(TInput, TInput)"/> and <see cref="ReverseBits{T}(T)"/>.
+    /// Repeats a block of ones followed by an equally wide block of zeros through <see cref="RepeatBits{T}(T, int)"/>.
+    /// For b-bit blocks in a W-bit word, <c>(2^b - 1) * (2^W - 1) / (2^(2b) - 1)</c> simplifies to
+    /// <c>(2^W - 1) / (2^b + 1)</c>, the Fermat-number construction. These masks drive the SWAR bit-permutation
+    /// routines such as <see cref="BitwisePair{TInput, TResult}(TInput, TInput)"/> and <see cref="ReverseBits{T}(T)"/>.
     /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static T NthFermatMask<T>(this int value) where T : IBinaryInteger<T> {
-        var x = T.AllBitsSet;
-        var y = T.IsNegative(value: x).As<int>();
+        var blockWidth = (1 << value);
 
-        return (((x >>> y) / value.NthFermatNumber<T>()) << y) | T.One;
+        if ((typeof(T) == typeof(UInt128)) || (typeof(T) == typeof(Int128))) {
+            return RepeatWordInto128<T>(blockWidth: (blockWidth << 1), value: (ulong.MaxValue >>> (64 - blockWidth)));
+        }
+
+        // A legal block occupies at most half the word. Up through 128-bit carriers its ones therefore fit in a
+        // ulong; materializing that scalar first avoids spending the caller's inline budget on wide shifts/subtracts.
+        var pattern = ((Unsafe.SizeOf<T>() <= 16)
+            ? T.CreateTruncating(value: (ulong.MaxValue >>> (64 - blockWidth)))
+            : ((T.One << blockWidth) - T.One));
+
+        return pattern.RepeatBits(blockWidth: (blockWidth << 1));
     }
-    /// <summary>Computes the <paramref name="value"/>-th Fermat number, <c>F(n) = 2^(2^n) + 1</c>.</summary>
-    /// <typeparam name="T">The binary integer type the result is produced in.</typeparam>
-    /// <param name="value">The Fermat number index <c>n</c>.</param>
-    /// <returns>The Fermat number <c>2^(2^<paramref name="value"/>) + 1</c>, truncated to the width of <typeparamref name="T"/>.</returns>
+
+    /// <summary>Builds a word with one set bit at the bottom of every block of <paramref name="blockWidth"/> bits.</summary>
+    /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
+    /// <param name="blockWidth">A positive divisor of the bit width of <typeparamref name="T"/>, including the whole word width.</param>
+    /// <returns>The replication mask; for example, <c>8.ReplicationMask&lt;uint&gt;()</c> is <c>0x01010101</c>.</returns>
+    /// <remarks>
+    /// For a W-bit word and b-bit blocks, the geometric series <c>1 + 2^b + 2^(2b) + ...</c> equals
+    /// <c>(2^W - 1) / (2^b - 1)</c>. A signed result carries the same bits as its unsigned counterpart;
+    /// in particular, one-bit blocks return an all-ones word. No shift by the whole word width is performed.
+    /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>, which has no fixed word width.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not a positive divisor of the word width.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static T NthFermatNumber<T>(this int value) where T : IBinaryInteger<T> =>
-        ((T.One << (1 << value)) + T.One);
+    public static T ReplicationMask<T>(this int blockWidth) where T : IBinaryInteger<T> {
+        var bitWidth = ValidateReplicationBlockWidth<T>(blockWidth: blockWidth);
+
+        if (blockWidth == bitWidth) { return T.One; }
+
+        if ((typeof(T) == typeof(UInt128)) || (typeof(T) == typeof(Int128))) {
+            // Every proper divisor of 128 divides 64. Build one machine-word mask and copy it into both halves;
+            // the JIT folds ulong division by constants, whereas Int128/UInt128 division remains a runtime call.
+            var half = blockWidth.ReplicationMask<ulong>();
+
+            return T.CreateTruncating(value: new UInt128(lower: half, upper: half));
+        }
+
+        var allBits = T.AllBitsSet;
+        var signed = T.IsNegative(value: allBits).As<int>();
+        var divisor = ((T.One << blockWidth) - T.One);
+
+        // Both the all-ones numerator and its exact quotient are odd. Halving the positive numerator for signed T
+        // yields (quotient - 1) / 2 after division; doubling and setting bit zero reconstructs the original bits.
+        return (((allBits >>> signed) / divisor) << signed) | T.One;
+    }
+    /// <summary>Repeats the low <paramref name="blockWidth"/> bits of <paramref name="value"/> across a fixed-width word.</summary>
+    /// <typeparam name="T">The fixed-width binary integer type, signed or unsigned.</typeparam>
+    /// <param name="value">The pattern, with no set bits outside its block. A whole-word block accepts every bit pattern, including negative values.</param>
+    /// <param name="blockWidth">A positive divisor of the bit width of <typeparamref name="T"/>, including the whole word width.</param>
+    /// <returns>The repeated pattern; for example, <c>0xABu.RepeatBits(8)</c> is <c>0xABABABAB</c>.</returns>
+    /// <remarks>
+    /// Multiplying the pattern by <see cref="ReplicationMask{T}(int)"/> places one copy in each block without
+    /// overlapping bits. For <see cref="UInt128"/> and <see cref="Int128"/>, proper blocks repeat within a
+    /// <see cref="ulong"/> first and that word is copied into both halves; whole-word blocks return unchanged.
+    /// This avoids wide division and multiplication. The result is a bit pattern, so a signed result may be negative.
+    /// </remarks>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not a positive divisor of the word width, or <paramref name="value"/> has set bits outside the block.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static T RepeatBits<T>(this T value, int blockWidth) where T : IBinaryInteger<T> {
+        var bitWidth = ValidateReplicationBlockWidth<T>(blockWidth: blockWidth);
+
+        if (blockWidth == bitWidth) { return value; }
+
+        if ((typeof(T) == typeof(UInt128)) || (typeof(T) == typeof(Int128))) {
+            if ((value >>> 64) != T.Zero) { ThrowReplicationPattern(); }
+
+            // Every proper block fits in at most 64 bits. Repeat within a ulong and copy the word, avoiding
+            // the wide multiplication that otherwise survives even when both operands are constants.
+            return RepeatWordInto128<T>(value: ulong.CreateTruncating(value: value), blockWidth: blockWidth);
+        }
+
+        var blockMask = (T.AllBitsSet >>> (bitWidth - blockWidth));
+
+        if ((value & ~blockMask) != T.Zero) { ThrowReplicationPattern(); }
+
+        return unchecked((value * blockWidth.ReplicationMask<T>()));
+    }
+
+    // The source pattern fits in a ulong. A whole 128-bit block is an identity; every smaller legal block repeats
+    // identically in each half. Shared by the wide public path and Fermat masks, whose pattern is known to fit.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T RepeatWordInto128<T>(ulong value, int blockWidth) where T : IBinaryInteger<T> {
+        if (blockWidth == 128) { return T.CreateTruncating(value: value); }
+
+        var half = value.RepeatBits(blockWidth: blockWidth);
+
+        return T.CreateTruncating(value: new UInt128(lower: half, upper: half));
+    }
+    /// <summary>Validates the shared block contract and returns the carrier's fixed bit width.</summary>
+    /// <typeparam name="T">The binary integer carrier.</typeparam>
+    /// <param name="blockWidth">The proposed block width.</param>
+    /// <returns>The fixed carrier width in bits.</returns>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockWidth"/> is not a positive divisor of the carrier width.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int ValidateReplicationBlockWidth<T>(int blockWidth) where T : IBinaryInteger<T> {
+        BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReplicationMask));
+
+        var bitWidth = (Unsafe.SizeOf<T>() << 3);
+
+        if ((blockWidth <= 0) || (blockWidth > bitWidth) || ((bitWidth % blockWidth) != 0)) {
+            ThrowReplicationBlockWidth();
+        }
+
+        return bitWidth;
+    }
+    // Keep exception construction out of the arithmetic inline budget. Successful calls eliminate these branches
+    // when the width and pattern are known; invalid calls retain the same exception type, parameter and message.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowReplicationBlockWidth() =>
+        throw new ArgumentOutOfRangeException(message: "The block width must be a positive divisor of the word width.", paramName: "blockWidth");
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowReplicationPattern() =>
+        throw new ArgumentOutOfRangeException(message: "The pattern must fit entirely within one block.", paramName: "value");
+
     /// <summary>Computes two raised to the power <paramref name="value"/> (that is, <c>1 &lt;&lt; <paramref name="value"/></c>).</summary>
     /// <typeparam name="T">The binary integer type the result is produced in.</typeparam>
     /// <param name="value">The exponent.</param>
@@ -657,17 +766,25 @@ public static class BinaryIntegerFunctions {
     /// <param name="value">The value to measure; its sign is ignored.</param>
     /// <returns>The decimal digit count of <paramref name="value"/>. For a non-zero magnitude this equals <c>⌊log₁₀(|value|)⌋ + 1</c>; the magnitude zero yields <c>1</c>.</returns>
     public static T LogarithmBase10<T>(this T value) where T : IBinaryInteger<T> {
-        // Count divisions of the SIGNED value toward zero — the digit count of the magnitude, without the unrepresentable
-        // T.Abs(T.MinValue). Truncating division reaches zero from either sign, so the loop terminates all the same.
-        var quotient = value;
-        var result = T.Zero;
+        if (T.IsZero(value: value)) { return T.One; }
 
-        do {
-            quotient /= BinaryIntegerConstants<T>.Ten;
-            ++result;
-        } while (T.Zero != quotient);
+        // From the bit length: 1233/4096 sits just below log₁₀ 2, so estimate = ⌊(bitLength − 1)·1233/4096⌋ never exceeds
+        // ⌊log₁₀|value|⌋ and falls short of it by at most one. 10^estimate is therefore at most |value| and always
+        // representable; whether |value| also reaches 10^(estimate + 1) is read off the truncating quotient by
+        // 10^estimate, which keeps both the SIGNED value (T.MinValue has no T.Abs) and the carrier's own ceiling
+        // (10^(estimate + 1) may not fit) out of the decision.
+        var bitLength = int.CreateChecked(value: ((value < T.Zero)
+            ? (~value).MostSignificantBit()
+            : value.MostSignificantBit()));
+        var estimate = T.CreateChecked(value: (((bitLength - 1) * 1233) >> 12));
+        // The quotient's magnitude is below one hundred, so negating it is always representable — unlike a negated ten
+        // on an unsigned carrier, which would wrap to the carrier's top and admit every quotient.
+        var quotient = (value / BinaryIntegerConstants<T>.Ten.Exponentiate(exponent: estimate));
+        var magnitude = (T.IsNegative(value: quotient) ? -quotient : quotient);
 
-        return result;
+        return ((magnitude >= BinaryIntegerConstants<T>.Ten)
+            ? (estimate + (T.One + T.One))
+            : (estimate + T.One));
     }
     /// <summary>Returns the one-based position of the highest set bit of <paramref name="value"/>, equivalently its bit length.</summary>
     /// <typeparam name="T">The binary integer type.</typeparam>
@@ -795,6 +912,18 @@ public static class BinaryIntegerFunctions {
     /// <exception cref="NotSupportedException"><typeparamref name="T"/> is <see cref="BigInteger"/>. Bit reversal requires a fixed carrier width to define which bit is "first".</exception>
     public static T ReverseBits<T>(this T value) where T : IBinaryInteger<T> {
         BinaryIntegerConstants<T>.ThrowIfUnbounded(operationName: nameof(ReverseBits));
+
+        // One RBIT instruction on Arm64 for the two machine widths; the reversal is exact, so it returns the same bits
+        // the SWAR butterfly below does.
+        if (ArmBase.Arm64.IsSupported) {
+            if ((typeof(T) == typeof(ulong)) || (typeof(T) == typeof(long))) {
+                return T.CreateTruncating(value: ArmBase.Arm64.ReverseElementBits(value: ulong.CreateTruncating(value: value)));
+            }
+
+            if ((typeof(T) == typeof(uint)) || (typeof(T) == typeof(int))) {
+                return T.CreateTruncating(value: ArmBase.ReverseElementBits(value: uint.CreateTruncating(value: value)));
+            }
+        }
 
         const int LoopOffset = 7;
 

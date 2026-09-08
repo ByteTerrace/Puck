@@ -31,7 +31,8 @@ public interface IAgbApu : IAgbClockedComponent {
     /// <returns><see langword="true"/> if FIFO B needs refilling.</returns>
     bool ConsumeFifoBRefill();
     /// <summary>Enables host audio output at the given sample rate, allocating the resample ring. A rate of zero
-    /// disables output (the default), so headless conformance runs incur no audio work.</summary>
+    /// disables output (the default), so headless conformance runs incur no audio work. Reconfiguration discards
+    /// queued samples; draining while disabled returns zero.</summary>
     /// <param name="sampleRate">The host sample rate in Hz, or 0 to disable.</param>
     void ConfigureOutput(int sampleRate);
 

@@ -1,10 +1,42 @@
 using System.Globalization;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
+    // The action-state portion of WorldRuntimeStateHash's authoritative boundary. Definition order is the compiled
+    // register order, so no sort or temporary collection is needed.
+    internal void AppendActionStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: ((uint)m_actionStateDefinitions.Length));
+
+        for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
+            var definition = m_actionStateDefinitions[slot];
+
+            hash.Add(value: Fnv1aHash.Compute(values: definition.Name.AsSpan()));
+            hash.Add(value: ((byte)definition.Kind));
+            hash.Add(value: ((byte)definition.Lifetime));
+            hash.Add(value: m_actionStateValues[slot].Value);
+            hash.Add(value: m_actionStateTimers[slot]);
+        }
+
+        hash.Add(value: ((uint)m_laneActions.Length));
+
+        for (var lane = 0; (lane < m_laneActions.Length); lane++) {
+            ref var runtime = ref m_laneActions[lane];
+
+            hash.Add(value: runtime.Latch);
+            hash.Add(value: runtime.FactHeld);
+            hash.Add(value: ((uint)(runtime.Recency?.Length ?? 0)));
+
+            if (runtime.Recency is { } recency) {
+                for (var index = 0; (index < recency.Length); index++) {
+                    hash.Add(value: recency[index]);
+                }
+            }
+        }
+    }
     internal void AppendDurableStateDeclarations(List<(string Name, ActionStateKind Kind)> declarations) {
         foreach (var definition in m_actionStateDefinitions) {
             if (definition.Lifetime == ActionStateLifetime.Durable) {
@@ -274,10 +306,12 @@ public sealed partial class WorldBody {
             : $"{reason}; clamped by visited world"
         );
     }
-    // The vehicle boost rides the same held-multiplier ordinal the grounded sprint resolves into (see
-    // FixedWorldKit.SprintChannelOrdinal).
-    private bool BoostHeld(in PlayerIntent intent) =>
-        ((m_sprintChannelOrdinal >= 0) && (intent[m_sprintChannelOrdinal] >= m_channelThresholds[m_sprintChannelOrdinal]));
+    // The kit's own held speed multiplier — a boost/sprint under the shared speed.held name, resolved once at
+    // kit-compile time (FixedSpeed.HeldOrdinal), applied AFTER any envelope clamp on baseSpeed.
+    private FixedQ4816 ApplySpeedHeld(FixedQ4816 baseSpeed, in PlayerIntent intent) => (((m_tuning.Speed.HeldOrdinal >= 0) && (intent[m_tuning.Speed.HeldOrdinal] >= m_channelThresholds[m_tuning.Speed.HeldOrdinal]))
+        ? (baseSpeed * m_tuning.Speed.HeldMultiplier)
+        : baseSpeed
+    );
     private PlayerIntent ClampRole(PlayerIntent intent, ChannelRole role) {
         var ordinal = m_roleOrdinals[role];
 
@@ -302,7 +336,7 @@ public sealed partial class WorldBody {
 
         result = ClampRole(
             intent: result,
-            role: ChannelRole.MoveForward
+            role: ChannelRole.MoveAdvance
         );
         result = ClampRole(
             intent: result,
@@ -435,16 +469,17 @@ public sealed partial class WorldBody {
         )
         : raw.ToString(provider: CultureInfo.InvariantCulture)
     );
-    private bool DriftHeld(in PlayerIntent intent) =>
-        ((m_driftChannelOrdinal >= 0) && (intent[m_driftChannelOrdinal] >= m_channelThresholds[m_driftChannelOrdinal]));
     private bool FactHolds(ActionFact fact) {
         return fact switch {
             ActionFact.Grounded => m_grounded,
             ActionFact.Airborne => !m_grounded,
             ActionFact.Rising => (m_verticalVelocity > FixedQ4816.Zero),
             ActionFact.Falling => (m_verticalVelocity < FixedQ4816.Zero),
-            ActionFact.Submerged => m_submerged,
-            ActionFact.AtSurface => m_atSurface,
+            ActionFact.InMedium => m_inMedium,
+            ActionFact.AtMediumBand => m_atMediumBand,
+            ActionFact.HoldingUnwalkable => HoldsUnwalkableSurface(),
+            ActionFact.Unsupported => HoldsFree(),
+            ActionFact.Resting => m_resting,
             _ => (m_affectingSubject >= 0),
         };
     }
@@ -460,8 +495,43 @@ public sealed partial class WorldBody {
         }
         return -1;
     }
+    // The All/Any reduction both postfix gate evaluators (the action gate and the shaping gate) apply: pops the
+    // group's arity of operands and pushes their conjunction/disjunction — one fold, so the two gates cannot drift.
+    private static void FoldGroup(in CompiledPredicate predicate, Span<bool> stack, ref int top) {
+        var start = (top - predicate.Arity);
+        var holdsGroup = (predicate.Kind == CompiledPredicateKind.All);
+
+        for (var index = start; index < top; index++) {
+            holdsGroup = ((predicate.Kind == CompiledPredicateKind.All)
+                ? (holdsGroup && stack[index])
+                : (holdsGroup || stack[index]));
+        }
+
+        top = start;
+        stack[top++] = holdsGroup;
+    }
     private bool GateOpen(CompiledPredicate[] gate, in LaneActionRuntime state) {
+        if (gate.Length == 0) {
+            return true;
+        }
+
+        Span<bool> stack = stackalloc bool[CompiledPredicateCapacity.MaxTokens];
+        var top = 0;
+
         foreach (var predicate in gate) {
+            if (predicate.Kind == CompiledPredicateKind.Not) {
+                stack[top - 1] = !stack[top - 1];
+                continue;
+            }
+            if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
+                FoldGroup(
+                    predicate: in predicate,
+                    stack: stack,
+                    top: ref top
+                );
+                continue;
+            }
+
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
                 CompiledPredicateKind.Recently => (state.Recency![predicate.RecencySlot] > 0),
@@ -472,12 +542,10 @@ public sealed partial class WorldBody {
                 _ => (m_actionStateTimers[predicate.StateSlot] == 0),
             };
 
-            if (!holds) {
-                return false;
-            }
+            stack[top++] = holds;
         }
 
-        return true;
+        return ((top == 1) && stack[0]);
     }
     private static long InitialRaw(in CompiledActionStateSlot definition) => ((definition.Kind == ActionStateKind.Counter)
         ? definition.InitialValue.Value
@@ -539,22 +607,58 @@ public sealed partial class WorldBody {
             m_laneTimers[ordinal] = holdTicks;
         }
     }
-    // A motion-response gate: a flattened conjunction of BODY-FACT predicates only (Now/Recently — the validator rejects
-    // action-state predicates on a response gate). Every element must hold.
-    private bool MotionGateOpen(CompiledPredicate[] gate) {
+    // A shaping-row gate: a postfix Boolean program of body-fact predicates plus 'held' (a live channel-threshold
+    // read — the validator admits no other action-state predicate on a shaping gate).
+    private bool MotionGateOpen(CompiledPredicate[] gate, in PlayerIntent intent) {
+        if (gate.Length == 0) {
+            return true;
+        }
+
+        Span<bool> stack = stackalloc bool[CompiledPredicateCapacity.MaxTokens];
+        var top = 0;
+
         foreach (var predicate in gate) {
+            if (predicate.Kind == CompiledPredicateKind.Not) {
+                stack[top - 1] = !stack[top - 1];
+                continue;
+            }
+            if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
+                FoldGroup(
+                    predicate: in predicate,
+                    stack: stack,
+                    top: ref top
+                );
+                continue;
+            }
+
             var holds = predicate.Kind switch {
                 CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
                 CompiledPredicateKind.Recently => (m_motionRecency[predicate.RecencySlot] > 0),
+                CompiledPredicateKind.Held => (intent[predicate.ChannelOrdinal] >= m_channelThresholds[predicate.ChannelOrdinal]),
                 _ => false,
             };
 
-            if (!holds) {
-                return false;
+            stack[top++] = holds;
+        }
+
+        return ((top == 1) && stack[0]);
+    }
+    // The first shaping row whose gate opens, or -1 when none does (an unmatched tick, or an empty/absent table).
+    // ExecuteProgram calls this exactly once after refreshing recency clocks and stores the result in its scratch,
+    // so turn, ShapeVelocity, and ApplyMedium share one pre-operation fact/channel snapshot for the whole tick.
+    private int ResolveGoverningShapingRow(in PlayerIntent intent) {
+        var shaping = m_tuning.Shaping;
+
+        for (var index = 0; (index < shaping.Length); index++) {
+            if (MotionGateOpen(
+                gate: shaping[index].When,
+                intent: in intent
+            )) {
+                return index;
             }
         }
 
-        return true;
+        return -1;
     }
     // The per-tick action machinery: for each ordinal carrying a compiled binding, derive its edge (the folded value
     // crossing the channel's threshold against the previous sub-step — never carried), refresh the recency clocks (a

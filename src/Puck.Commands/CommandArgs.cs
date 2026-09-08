@@ -14,10 +14,11 @@ namespace Puck.Commands;
 public static class CommandArgs {
     /// <summary>The exception set a document-LOAD or file-capture verb treats as unreadable/corrupt INPUT — a JSON
     /// parse failure, a schema/shape mismatch, a bad base64/number, or a filesystem fault — so a malformed file or a
-    /// hostile path echoes a friendly error instead of escaping the command pump (which catches only
-    /// <c>DeviceLostException</c>) and tearing the single-session host down. A genuine logic bug (a
+    /// hostile path echoes the verb's OWN friendly error naming what was wrong with the file. A genuine logic bug (a
     /// <see cref="NullReferenceException"/>, an <see cref="InvalidOperationException"/>, …) is deliberately NOT in the
-    /// set, so it still surfaces rather than being masked.</summary>
+    /// set, so it escapes the verb rather than being masked as ordinary bad input; <see cref="CommandRegistry"/>'s
+    /// dispatch boundary then narrates it as a handler fault naming the exception type, counted by
+    /// <c>wire.errors</c>, without letting it skip the rest of the tick's entries.</summary>
     /// <param name="exception">The caught exception.</param>
     /// <returns>Whether it is a malformed-input or I/O fault safe to narrate rather than rethrow.</returns>
     public static bool IsMalformedInput(Exception exception) =>
@@ -57,14 +58,19 @@ public static class CommandArgs {
     /// <param name="args">The full argument array.</param>
     /// <param name="count">How many consecutive floats to parse.</param>
     /// <param name="start">The starting index into <paramref name="args"/>.</param>
-    /// <param name="values">The parsed values (length <paramref name="count"/>), zeroed on failure.</param>
+    /// <param name="values">The parsed values (length <paramref name="count"/>), zeroed from the first token that
+    /// failed to parse; an EMPTY array when <paramref name="args"/> is too short to hold the range at all.</param>
     /// <returns>Whether every token in the range parsed.</returns>
     public static bool TryParseFloats(string[] args, int count, int start, out float[] values) {
-        values = new float[count];
-
+        // Count first, allocate second: the common failure is a verb called with too few arguments, and that answer
+        // costs nothing to give.
         if (args.Length < (start + count)) {
+            values = [];
+
             return false;
         }
+
+        values = new float[count];
 
         for (var index = 0; (index < count); index++) {
             if (!TryParseFloat(
@@ -95,6 +101,69 @@ public static class CommandArgs {
     /// <param name="value">The parsed value, or 0 on failure.</param>
     /// <returns>Whether the token parsed.</returns>
     public static bool TryParseInt(string text, out int value) => TryParseInt(
+        text: text.AsSpan(),
+        value: out value
+    );
+    /// <summary>The single <see cref="long"/>-parse rule for every console argument — invariant-culture, the same
+    /// style <see cref="TryParseInt(ReadOnlySpan{char}, out int)"/> uses.</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseLong(ReadOnlySpan<char> text, out long value) =>
+        long.TryParse(
+            s: text,
+            result: out value,
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.Integer
+        );
+    /// <summary>Parses one invariant-culture <see cref="long"/> argument (see the span overload for the rule).</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseLong(string text, out long value) => TryParseLong(
+        text: text.AsSpan(),
+        value: out value
+    );
+    /// <summary>The single <see cref="ulong"/>-parse rule for every console argument — invariant-culture, the same
+    /// style <see cref="TryParseInt(ReadOnlySpan{char}, out int)"/> uses.</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseULong(ReadOnlySpan<char> text, out ulong value) =>
+        ulong.TryParse(
+            s: text,
+            result: out value,
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.Integer
+        );
+    /// <summary>Parses one invariant-culture <see cref="ulong"/> argument (see the span overload for the rule).</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseULong(string text, out ulong value) => TryParseULong(
+        text: text.AsSpan(),
+        value: out value
+    );
+    /// <summary>The digits-only <see cref="ulong"/>-parse rule for a tick/count console grammar — <see cref="NumberStyles.None"/>:
+    /// a plain run of ASCII digits, no leading sign, no surrounding whitespace, no thousands separators. Distinct
+    /// from <see cref="TryParseULong(ReadOnlySpan{char}, out ulong)"/> (<see cref="NumberStyles.Integer"/>, which also
+    /// admits a leading '+' and surrounding whitespace): a tick/count argument names a literal digit string, not a
+    /// formatted number, so <c>+1</c> and <c> 1 </c> are refused rather than silently accepted.</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseUnsignedDigits(ReadOnlySpan<char> text, out ulong value) =>
+        ulong.TryParse(
+            s: text,
+            result: out value,
+            provider: CultureInfo.InvariantCulture,
+            style: NumberStyles.None
+        );
+    /// <summary>Parses one digits-only <see cref="ulong"/> argument (see the span overload for the rule).</summary>
+    /// <param name="text">The argument token.</param>
+    /// <param name="value">The parsed value, or 0 on failure.</param>
+    /// <returns>Whether the token parsed.</returns>
+    public static bool TryParseUnsignedDigits(string text, out ulong value) => TryParseUnsignedDigits(
         text: text.AsSpan(),
         value: out value
     );

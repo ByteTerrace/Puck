@@ -129,8 +129,8 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
     // own light back (RP bit 1 clear), not dark.
     private static string? VerifyCgbSelfSensesOwnLedViaRp() {
         using var machine = PostMachine.Build(
-            model: ConsoleModel.Cgb,
-            rom: SyntheticRom.Create()
+            model: ConsoleModel.CgbE,
+            rom: SyntheticRom.Create(supportsColor: true)
         );
         var bus = machine.GetRequiredService<ISystemBus>();
 
@@ -150,11 +150,12 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
     private static string? VerifyCgbSelfSensesOwnCartLedViaHuC1Window() {
         var rom = SyntheticRom.Create(
             cartridgeType: 0xFF,
-            ramSize: 0x02
+            ramSize: 0x02,
+            supportsColor: true
         ); // HuC1 + RAM + battery
 
         using var machine = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
 
@@ -180,7 +181,7 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
     private static string? VerifyAgbRpSelfSenseSuppressedWithoutHuC() {
         using var machine = PostMachine.Build(
             model: ConsoleModel.Agb,
-            rom: SyntheticRom.Create()
+            rom: SyntheticRom.Create(supportsColor: true)
         );
         var bus = machine.GetRequiredService<ISystemBus>();
 
@@ -201,7 +202,8 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
     private static string? VerifyCrossViewConsistencyWithHuCCartridge() {
         var rom = SyntheticRom.Create(
             cartridgeType: 0xFF,
-            ramSize: 0x02
+            ramSize: 0x02,
+            supportsColor: true
         ); // HuC1 + RAM + battery
 
         using var machine = PostMachine.Build(
@@ -251,11 +253,11 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
             expectedReceiveCount: firstPattern.Length
         );
         var first = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: firstRom
         );
         var second = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: secondRom
         );
         var probes = new List<int>(capacity: StepCount);
@@ -275,11 +277,11 @@ internal sealed class InfraredExchangeStage : IPostStage<PostContext> {
                         var firstState = first.Machine.Snapshot();
                         var secondState = second.Machine.Snapshot();
                         var freshFirst = PostMachine.Build(
-                            model: ConsoleModel.Cgb,
+                            model: ConsoleModel.CgbE,
                             rom: firstRom
                         );
                         var freshSecond = PostMachine.Build(
-                            model: ConsoleModel.Cgb,
+                            model: ConsoleModel.CgbE,
                             rom: secondRom
                         );
 

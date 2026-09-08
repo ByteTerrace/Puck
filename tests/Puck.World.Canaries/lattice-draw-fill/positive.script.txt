@@ -1,0 +1,12 @@
+# boot, read the drawn field and its pass, redraw twice, read again, confirm the wire stayed clean
+world.status
+world.fields
+world.state tiles
+world.generate tiles
+world.wait 2
+world.fields
+world.state tiles
+world.generate tiles
+world.wait 2
+world.state tiles
+wire.errors

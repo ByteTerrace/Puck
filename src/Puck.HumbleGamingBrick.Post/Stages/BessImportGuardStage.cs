@@ -38,6 +38,9 @@ internal sealed class BessImportGuardStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -46,7 +49,7 @@ internal sealed class BessImportGuardStage : IPostStage<PostContext> {
         // CGB, so the destination-capacity check for the palette regions (capacity 0x40, not 0) is exercised as a real
         // boundary rather than the degenerate "any nonzero size is already too big" DMG case.
         using var source = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
 
@@ -57,11 +60,11 @@ internal sealed class BessImportGuardStage : IPostStage<PostContext> {
 
         var (goodFile, _) = BessExporter.Export(
             instance: source,
-            model: ConsoleModel.Cgb
+            model: ConsoleModel.CgbE
         );
 
         using var probe = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
         var baseline = probe.Machine.Snapshot();
@@ -99,7 +102,7 @@ internal sealed class BessImportGuardStage : IPostStage<PostContext> {
             ++gracefulCaseCount;
 
             using var fillProbe = PostMachine.Build(
-                model: ConsoleModel.Cgb,
+                model: ConsoleModel.CgbE,
                 rom: rom
             );
             var fillBus = fillProbe.GetRequiredService<ISystemBus>();
@@ -150,11 +153,11 @@ internal sealed class BessImportGuardStage : IPostStage<PostContext> {
 
         try {
             using var unextendedProbe = PostMachine.Build(
-                model: ConsoleModel.Cgb,
+                model: ConsoleModel.CgbE,
                 rom: rom
             );
             using var extendedProbe = PostMachine.Build(
-                model: ConsoleModel.Cgb,
+                model: ConsoleModel.CgbE,
                 rom: rom
             );
 

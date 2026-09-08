@@ -1,8 +1,8 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
-// Helpers shared across the per-mode Diagnostics partial-class files: CLI arg parsing, the ROM-load-and-direct-boot
+// Helpers shared across the per-mode Diagnostics partial-class files: the ROM-load-and-direct-boot
 // shortcut most single-ROM inspectors start from, and the cycle-parity co-sim pre-flight gate.
-internal static partial class Diagnostics {
+internal sealed partial class Diagnostics {
     /// <summary>
     /// Pre-flight BIOS gate for the cycle-parity / co-simulation diagnostics. It classifies <see cref="BiosImage"/>
     /// by content hash and, when the image is not the verified retail BIOS, prints a prominent warning — the
@@ -10,7 +10,7 @@ internal static partial class Diagnostics {
     /// <see langword="true"/> (abort the diagnostic) unless <c>--allow-replacement-bios</c>
     /// is passed, which downgrades the refusal to a warning and proceeds.
     /// </summary>
-    private static bool ParityBiosGuard(string mode, string[] args) {
+    private bool ParityBiosGuard(string mode, string[] args) {
         var identity = AgbBiosProfile.Identify(image: BiosImage.Span);
 
         if (identity.IsCycleParityTrustworthy) {
@@ -27,7 +27,7 @@ internal static partial class Diagnostics {
         Console.WriteLine(value: "  ============================================================================");
         Console.WriteLine(value: $"  !! WARNING: {mode} is running on a NON-RETAIL BIOS — {identity.Description}");
         Console.WriteLine(value: "  !! Cycle-parity / co-sim numbers are UNTRUSTWORTHY on this image: the documented");
-        Console.WriteLine(value: "  !! 'phantom cycle drift' trap. Supply the retail BIOS via PUCK_AGB_BIOS.");
+        Console.WriteLine(value: "  !! 'phantom cycle drift' trap. Supply the retail BIOS via --bios <path>.");
         Console.WriteLine(value: "  ============================================================================");
 
         if (!allow) {
@@ -40,9 +40,8 @@ internal static partial class Diagnostics {
 
         return false;
     }
-    // Reads the value following a named flag (e.g. "--frames 600" -> "600"), or null when the flag is absent — the
-    // same lookup Program.cs uses for its own knobs, duplicated here since local functions don't cross class scopes.
-    private static bool TryLoad(string romPath, string name, out AgbMachineInstance instance) {
+    // Loads a ROM with this runner's explicit BIOS and machine options, then direct-boots it.
+    private bool TryLoad(string romPath, string name, out AgbMachineInstance instance) {
         instance = null!;
 
         if (!File.Exists(path: romPath)) {
@@ -52,7 +51,7 @@ internal static partial class Diagnostics {
         }
 
         instance = AgbMachineFactory.Create(configuration: new AgbMachineConfiguration(
-            bios: BiosImage,
+            bios: BiosImage, options: MachineOptions,
             rom: File.ReadAllBytes(path: romPath)
         ));
 

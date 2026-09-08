@@ -26,5 +26,6 @@ public sealed partial class AgbInterruptController : ISnapshotable {
         m_ime0 = reader.ReadBoolean();
         m_ime1 = reader.ReadBoolean();
         m_synchronizer = reader.ReadBoolean();
+        RefreshPipelineQuiescent(); // Derived cache; the snapshot continues to contain only hardware state.
     }
 }

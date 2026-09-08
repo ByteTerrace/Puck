@@ -1,0 +1,100 @@
+parameters:
+  - name: "agentPoolName"
+    default: "bytrcmdpp000"
+    displayName: "Agent Pool Name"
+    type: "string"
+  - name: "containerRegistryEndpoint"
+    default: "bytrccrp000-b7dyfzh2hnc4d5eb.azurecr.io"
+    displayName: "Container Registry Endpoint"
+    type: "string"
+  - name: "serviceConnectionName"
+    default: "byteterrace-mpn | byteterrace"
+    displayName: "Service Connection Name"
+    type: "string"
+
+schedules:
+  - cron: "0 18 * * *"
+    always: true
+    displayName: "Daily Sync"
+    branches:
+      include:
+        - main
+
+trigger: none
+
+jobs:
+  - deployment: "main"
+    displayName: "main"
+    environment: "production"
+    pool:
+      name: "${{ parameters.agentPoolName }}"
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: "self"
+              clean: true
+              displayName: "checkout repository"
+              enabled: true
+              fetchDepth: 1
+              timeoutInMinutes: 3
+            - task: AzureCLI@2
+              displayName: "get token"
+              enabled: true
+              inputs:
+                addSpnToEnvironment: false
+                arguments: >-
+                  -RegistryName '${{ split(split(parameters.containerRegistryEndpoint, '.')[0], '-')[0] }}'
+                azureSubscription: "${{ parameters.serviceConnectionName }}"
+                failOnStandardError: false
+                inlineScript: |
+                  [CmdletBinding()]
+                  param(
+                      [Parameter(Mandatory = $true, Position = 0)]
+                      [string]$RegistryName
+                  )
+                  begin {}
+                  process {
+                      $token = az acr login `
+                          --expose-token `
+                          --name $RegistryName `
+                          --output tsv `
+                          --query 'accessToken';
+
+                      Write-Host "##vso[task.setvariable variable=refreshToken;isOutput=true;issecret=true]$token";
+                  }
+                  end {
+                      if ((Test-Path -LiteralPath 'variable:\LASTEXITCODE')) {
+                          exit $LASTEXITCODE;
+                      }
+                  }
+                powerShellErrorActionPreference: "stop"
+                powerShellIgnoreLASTEXITCODE: false
+                scriptLocation: "inlineScript"
+                scriptType: "pscore"
+                useGlobalConfig: false
+                visibleAzLogin: false
+              name: "acrLogin"
+            - task: PowerShell@2
+              displayName: "docker login"
+              enabled: true
+              env:
+                REFRESH_TOKEN: "$(acrLogin.refreshToken)"
+              inputs:
+                errorActionPreference: "stop"
+                failOnStderr: false
+                ignoreLASTEXITCODE: false
+                pwsh: true
+                script: |
+                  ${Env:REFRESH_TOKEN} | docker login `
+                        --password-stdin `
+                        --username 00000000-0000-0000-0000-000000000000 `
+                        ${{ parameters.containerRegistryEndpoint }};
+                targetType: "inline"
+            - task: DevcontainersCi@0
+              displayName: "push image"
+              enabled: true
+              inputs:
+                imageName: "${{ parameters.containerRegistryEndpoint }}/devcontainers/azure-resources"
+                runCmd: "echo $PWD"
+                sourceBranchFilterForPush: "refs/heads/main"

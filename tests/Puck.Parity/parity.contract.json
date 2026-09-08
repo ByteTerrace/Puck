@@ -1,0 +1,10 @@
+{
+  "schema": "puck.parity.contract.v1",
+  "tileSize": 16,
+  "stations": {
+    "default": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": {} },
+    "materials": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "1": 600 } },
+    "lattice": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "1": 100000 } },
+    "noise": { "tileMeanDelta": 0.25, "tileMaxDelta": 6, "censusFloor": { "0": 7000 } }
+  }
+}

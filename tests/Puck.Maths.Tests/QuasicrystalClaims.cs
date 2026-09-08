@@ -667,7 +667,7 @@ internal static class QuasicrystalClaims {
     /// <summary>Six surds' <see cref="QuadraticInflation"/> invariants (period length, determinant, discriminant)
     /// match a hand-declared table; the determinant is exactly <c>(-1)^period</c>; the geodesic and its axis
     /// classify hyperbolic and the axis is unimodular; the exact surd <c>(trace+sqrt(disc))/2</c> is a root of the
-    /// matrix's characteristic polynomial (checked in exact <see cref="QuadraticSurd"/> field arithmetic, not
+    /// matrix's characteristic polynomial (checked in exact <see cref="RealQuadratic"/> field arithmetic, not
     /// double); <see cref="QuadraticInflation.InflationFactor"/> brackets that same exact root to a handful of raw
     /// Q16 ticks; and the golden/silver discriminants (5 and 8) come out of the lens rather than being fed in. The
     /// general polynomial continued-fraction tail analyzer specializes exactly to the golden affine model and
@@ -698,12 +698,12 @@ internal static class QuasicrystalClaims {
                 return $"the axis is not unimodular at d={testCase.D}";
             }
 
-            // The exact characteristic-root identity lambda^2 - trace*lambda + det == 0, in QuadraticSurd field
+            // The exact characteristic-root identity lambda^2 - trace*lambda + det == 0, in RealQuadratic field
             // arithmetic -- no floating point anywhere, and no restatement of QuadraticInflation's own algorithm.
-            var lambda = QuadraticSurd.Create(rationalNumerator: inflation.Trace, surdNumerator: 1, radicand: inflation.Discriminant, denominator: 2);
-            var characteristic = (((lambda * lambda) - (QuadraticSurd.Rational(value: inflation.Trace) * lambda)) + QuadraticSurd.Rational(value: inflation.Determinant));
+            var lambda = RealQuadratic.Create(rationalNumerator: inflation.Trace, surdNumerator: 1, radicand: inflation.Discriminant, denominator: 2);
+            var characteristic = (((lambda * lambda) - (RealQuadratic.Rational(value: inflation.Trace) * lambda)) + RealQuadratic.Rational(value: inflation.Determinant));
 
-            if (characteristic != QuadraticSurd.Zero) { return $"the exact surd is not a root of the characteristic polynomial at d={testCase.D}"; }
+            if (characteristic != RealQuadratic.Zero) { return $"the exact surd is not a root of the characteristic polynomial at d={testCase.D}"; }
 
             // The one approximate seam: InflationFactor() must bracket that same exact root to a handful of raw ticks.
             if (!WithinBracket(actual: inflation.InflationFactor(), rationalNumerator: inflation.Trace, surdNumerator: 1, radicand: inflation.Discriminant, denominator: 2, toleranceRawTicks: 8L)) {
@@ -719,8 +719,8 @@ internal static class QuasicrystalClaims {
 
         var goldenTail = MetallicPolynomialContinuedFraction.Analyze(metallicIndex: BigInteger.One);
 
-        if ((goldenTail.Slope != QuadraticSurd.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: 1)) ||
-            (goldenTail.Offset != QuadraticSurd.Create(denominator: 10, radicand: 5, rationalNumerator: -5, surdNumerator: -3)) ||
+        if ((goldenTail.Slope != RealQuadratic.Create(denominator: 2, radicand: 5, rationalNumerator: 1, surdNumerator: 1)) ||
+            (goldenTail.Offset != RealQuadratic.Create(denominator: 10, radicand: 5, rationalNumerator: -5, surdNumerator: -3)) ||
             !goldenTail.VerifyIntervalCertificate()) {
             return "the general polynomial tail's golden specialization is wrong";
         }
@@ -819,24 +819,24 @@ internal static class QuasicrystalClaims {
     }
     // ---- banner: "QuadraticQuasicrystal (the general chain: arbitrary CF period, not just metallic [n])" ----
 
-    /// <summary>Square-equivalent <see cref="QuadraticSurd"/> representations compare, hash, set-deduplicate and add
+    /// <summary>Square-equivalent <see cref="RealQuadratic"/> representations compare, hash, set-deduplicate and add
     /// as one value. For seven CF periods, <see cref="QuadraticQuasicrystalIndex"/>'s random access (TileAt,
     /// CountLongTiles) matches the streamed word over 2048 indices, a remote prefix identity holds at
     /// <c>2^512+12345</c>, the word is Sturmian (exactly k+1 distinct length-k factors for k=1..24), and the exact
-    /// tile-length inflation identity <c>lambda*l = A*l + C</c> holds in exact QuadraticSurd field arithmetic. The
+    /// tile-length inflation identity <c>lambda*l = A*l + C</c> holds in exact RealQuadratic field arithmetic. The
     /// general generator reproduces the hand-coded golden word, and the WordComplexity oracle has teeth (a
     /// synthetic period-3 word does not report k+1).</summary>
     public static string? GeneralQuasicrystalIsSturmianAndTileLengthConsistent() {
-        var nonCanonicalSilver = QuadraticSurd.Create(denominator: 2, radicand: 8, rationalNumerator: 2, surdNumerator: 1);
-        var canonicalSilver = QuadraticSurd.Create(denominator: 1, radicand: 2, rationalNumerator: 1, surdNumerator: 1);
-        var equivalentSurds = new HashSet<QuadraticSurd> { nonCanonicalSilver, canonicalSilver };
+        var nonCanonicalSilver = RealQuadratic.Create(denominator: 2, radicand: 8, rationalNumerator: 2, surdNumerator: 1);
+        var canonicalSilver = RealQuadratic.Create(denominator: 1, radicand: 2, rationalNumerator: 1, surdNumerator: 1);
+        var equivalentSurds = new HashSet<RealQuadratic> { nonCanonicalSilver, canonicalSilver };
 
         if ((nonCanonicalSilver != canonicalSilver) ||
             (nonCanonicalSilver.CompareTo(other: canonicalSilver) != 0) ||
             (nonCanonicalSilver.GetHashCode() != canonicalSilver.GetHashCode()) ||
             (equivalentSurds.Count != 1) ||
-            ((nonCanonicalSilver + canonicalSilver) != (QuadraticSurd.Rational(value: 2) * canonicalSilver))) {
-            return "square-equivalent QuadraticSurd representations disagree";
+            ((nonCanonicalSilver + canonicalSilver) != (RealQuadratic.Rational(value: 2) * canonicalSilver))) {
+            return "square-equivalent RealQuadratic representations disagree";
         }
 
         (long P, long Q, long D, long R)[] cases = [
@@ -869,12 +869,12 @@ internal static class QuasicrystalClaims {
                 if (WordComplexity(k: k, word: word) != (k + 1)) { return $"the word is not Sturmian at d={testCase.D} k={k}"; }
             }
 
-            // The tile lengths are the left Perron eigenvector: lambda*l = A*l + C, in exact QuadraticSurd arithmetic.
+            // The tile lengths are the left Perron eigenvector: lambda*l = A*l + C, in exact RealQuadratic arithmetic.
             var trace = (index.A + index.D);
             var determinant = ((index.A * index.D) - (index.B * index.C));
-            var lambda = QuadraticSurd.Create(denominator: 2, radicand: ((trace * trace) - (4 * determinant)), rationalNumerator: trace, surdNumerator: 1);
+            var lambda = RealQuadratic.Create(denominator: 2, radicand: ((trace * trace) - (4 * determinant)), rationalNumerator: trace, surdNumerator: 1);
 
-            if ((lambda * index.ExactLongTileLength) != ((QuadraticSurd.Rational(value: index.A) * index.ExactLongTileLength) + QuadraticSurd.Rational(value: index.C))) {
+            if ((lambda * index.ExactLongTileLength) != ((RealQuadratic.Rational(value: index.A) * index.ExactLongTileLength) + RealQuadratic.Rational(value: index.C))) {
                 return $"the tile-length inflation identity fails at d={testCase.D}";
             }
 

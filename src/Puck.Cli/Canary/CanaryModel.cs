@@ -100,6 +100,16 @@ internal sealed record CanaryFileDifferenceAssertion(
     bool Different,
     string Name
 ) : CanaryAssertion(Name: Name);
+/// <summary>Two captures compared as images against the live-capture noise floor
+/// (<see cref="CanaryFrameNoise"/>) rather than byte-for-byte, since two windowed captures of identical simulation
+/// state are never bit-equal. <c>Agree</c> true requires the changed-pixel count within the noise budget; false
+/// requires it beyond — a real relocation or recolor.</summary>
+internal sealed record CanaryFrameAgreementAssertion(
+    string After,
+    bool Agree,
+    string Before,
+    string Name
+) : CanaryAssertion(Name: Name);
 internal sealed record CanaryResponseSelector(string Verb, int Occurrence, int Count);
 internal sealed record CanaryValueExtraction(string Field, int? Component, string Name);
 internal sealed record CanaryOperand(string? ValueName, string? StringLiteral, double? NumberLiteral);

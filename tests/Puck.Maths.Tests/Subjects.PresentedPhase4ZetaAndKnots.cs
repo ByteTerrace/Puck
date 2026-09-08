@@ -21,7 +21,7 @@ internal static partial class Subjects {
     /// inflation half is a third route again — a continued-fraction period folded as convergent matrices.</remarks>
     public static string? ZetaCharacteristicVsMinors() {
         foreach (var (name, order, entries) in ZetaDigraphs()) {
-            if (ZetaCoefficientsHold<QuadraticSurd, RationalMaterial>(
+            if (ZetaCoefficientsHold<RealQuadratic, RationalMaterial>(
                 convert: ZetaRational,
                 entries: entries,
                 material: default,
@@ -50,7 +50,7 @@ internal static partial class Subjects {
                 q: q,
                 r: r
             );
-            var algebra = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: CodiscreteQuiver<QuadraticSurd, RationalMaterial>(
+            var algebra = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: CodiscreteQuiver<RealQuadratic, RationalMaterial>(
                 material: default,
                 order: 2
             ));
@@ -59,7 +59,7 @@ internal static partial class Subjects {
                 coefficients: [ZetaRational(value: inflation.A), ZetaRational(value: inflation.B), ZetaRational(value: inflation.C), ZetaRational(value: inflation.D)]
             );
 
-            if (!GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            if (!GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: algebra,
                 degreeBound: 5,
                 obstruction: out var obstruction,
@@ -87,14 +87,14 @@ internal static partial class Subjects {
         var counts = new BigInteger[36];
 
         foreach (var (name, order, entries) in ZetaDigraphs()) {
-            var algebra = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: CodiscreteQuiver<QuadraticSurd, RationalMaterial>(
+            var algebra = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: CodiscreteQuiver<RealQuadratic, RationalMaterial>(
                 material: default,
                 order: order
             ));
 
-            if (!GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            if (!GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: algebra,
-                value: ZetaAdjacency<QuadraticSurd, RationalMaterial>(
+                value: ZetaAdjacency<RealQuadratic, RationalMaterial>(
                     algebra: algebra,
                     convert: ZetaRational,
                     entries: entries
@@ -140,11 +140,11 @@ internal static partial class Subjects {
     /// round-trip on top of that determines the zeta uniquely.</remarks>
     public static string? ZetaReciprocalRoundTrip() {
         foreach (var (name, order, entries) in ZetaDigraphs()) {
-            var algebra = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: CodiscreteQuiver<QuadraticSurd, RationalMaterial>(
+            var algebra = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: CodiscreteQuiver<RealQuadratic, RationalMaterial>(
                 material: default,
                 order: order
             ));
-            var adjacency = ZetaAdjacency<QuadraticSurd, RationalMaterial>(
+            var adjacency = ZetaAdjacency<RealQuadratic, RationalMaterial>(
                 algebra: algebra,
                 convert: ZetaRational,
                 entries: entries
@@ -153,7 +153,7 @@ internal static partial class Subjects {
             foreach (var degreeBound in ((int[])[0, (order - 1), order, ((2 * order) + 2)])) {
                 if (degreeBound < 0) { continue; }
 
-                if (!GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+                if (!GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                     algebra: algebra,
                     degreeBound: degreeBound,
                     obstruction: out var obstruction,
@@ -201,7 +201,7 @@ internal static partial class Subjects {
                 for (var degree = 0; (degree <= degreeBound); ++degree) {
                     var expected = ((degree <= order)
                         ? zeta.Coefficient(degree: degree)
-                        : QuadraticSurd.Zero
+                        : RealQuadratic.Zero
                     );
 
                     if (zeta.CharacteristicPolynomial[degree] != expected) {
@@ -209,7 +209,7 @@ internal static partial class Subjects {
                     }
                 }
 
-                if (zeta.DynamicalZeta[0L] != QuadraticSurd.One) { return $"{name} at degree bound {degreeBound}: the zeta's constant term is not one"; }
+                if (zeta.DynamicalZeta[0L] != RealQuadratic.One) { return $"{name} at degree bound {degreeBound}: the zeta's constant term is not one"; }
             }
         }
 
@@ -275,11 +275,11 @@ internal static partial class Subjects {
             blockedIndex: -1
         ) is { } under) { return under; }
 
-        var algebra = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: CodiscreteQuiver<QuadraticSurd, RationalMaterial>(
+        var algebra = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: CodiscreteQuiver<RealQuadratic, RationalMaterial>(
             material: default,
             order: 3
         ));
-        var free = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: Presentations.FreeMonoid<QuadraticSurd, RationalMaterial>(
+        var free = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: Presentations.FreeMonoid<RealQuadratic, RationalMaterial>(
             letterCount: 2,
             material: default
         ));
@@ -288,7 +288,7 @@ internal static partial class Subjects {
         // nothing else — which is what stops the recursion from recovering the coefficients of a polynomial the
         // element does not have.
         foreach (var wrongOrder in ((int[])[1, 2])) {
-            if ("order" != RefusedParameter(action: () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            if ("order" != RefusedParameter(action: () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: algebra,
                 value: algebra.Identity,
                 order: wrongOrder,
@@ -301,7 +301,7 @@ internal static partial class Subjects {
         }
 
         (string Parameter, Action Call)[] refusals = [
-            ("algebra", () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            ("algebra", () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: null!,
                 degreeBound: 6,
                 obstruction: out _,
@@ -309,7 +309,7 @@ internal static partial class Subjects {
                 value: default,
                 zeta: out _
             )),
-            ("algebra", () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            ("algebra", () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: free,
                 value: free.Identity,
                 order: 1,
@@ -317,7 +317,7 @@ internal static partial class Subjects {
                 zeta: out _,
                 obstruction: out _
             )),
-            ("value", () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            ("value", () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: algebra,
                 value: free.Identity,
                 order: 3,
@@ -325,7 +325,7 @@ internal static partial class Subjects {
                 zeta: out _,
                 obstruction: out _
             )),
-            ("order", () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            ("order", () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: algebra,
                 value: algebra.Identity,
                 order: 0,
@@ -333,7 +333,7 @@ internal static partial class Subjects {
                 zeta: out _,
                 obstruction: out _
             )),
-            ("order", () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            ("order", () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: algebra,
                 value: algebra.Identity,
                 order: 10,
@@ -341,7 +341,7 @@ internal static partial class Subjects {
                 zeta: out _,
                 obstruction: out _
             )),
-            ("degreeBound", () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            ("degreeBound", () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: algebra,
                 value: algebra.Identity,
                 order: 3,
@@ -349,7 +349,7 @@ internal static partial class Subjects {
                 zeta: out _,
                 obstruction: out _
             )),
-            ("degreeBound", () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            ("degreeBound", () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: algebra,
                 value: algebra.Identity,
                 order: 3,
@@ -363,7 +363,7 @@ internal static partial class Subjects {
             if (parameter != RefusedParameter(action: call)) { return $"a call this readout cannot answer was admitted, or refused without naming {parameter}"; }
         }
 
-        if (!GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+        if (!GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
             algebra: algebra,
             value: algebra.Identity,
             order: 3,
@@ -536,8 +536,8 @@ internal static partial class Subjects {
         return null;
     }
     // The two carriers the zeta's field lane runs on, as maps from the oracle's exact integers.
-    private static QuadraticSurd ZetaRational(BigInteger value) =>
-        QuadraticSurd.Rational(value: value);
+    private static RealQuadratic ZetaRational(BigInteger value) =>
+        RealQuadratic.Rational(value: value);
     private static ulong ZetaResidue(BigInteger value) =>
         ((ulong)(((value % ZetaModulus) + ZetaModulus) % ZetaModulus));
 
@@ -604,12 +604,12 @@ internal static partial class Subjects {
             material: default,
             windowDegree: 6
         )
-            ?? (ShuffleCellsMatchEnumeration<QuadraticSurd, RationalMaterial>(
+            ?? (ShuffleCellsMatchEnumeration<RealQuadratic, RationalMaterial>(
             letterCount: 2,
             windowDegree: 3,
             letterProduct: [],
             material: default,
-            convert: static count => QuadraticSurd.Rational(value: count)
+            convert: static count => RealQuadratic.Rational(value: count)
         )
             ?? (ShuffleCellsMatchEnumeration<BigInteger, CountingMaterial>(
             convert: static count => count,
@@ -1432,25 +1432,25 @@ internal static partial class Subjects {
 
         // The universal property, stated rather than assumed: the free source refuses nothing, and the obstruction it
         // hands back reads as "nothing blocked" on every field.
-        var free = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: Presentations.FreeMonoid<QuadraticSurd, RationalMaterial>(
+        var free = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: Presentations.FreeMonoid<RealQuadratic, RationalMaterial>(
             letterCount: 6,
             material: default
         ));
         var reference = KnotRationalSum(point: 2);
-        var images = new PresentedAlgebra<QuadraticSurd, RationalMaterial>.Element[6];
+        var images = new PresentedAlgebra<RealQuadratic, RationalMaterial>.Element[6];
 
         for (var strand = 1; (strand < KnotWidth); ++strand) {
-            images[PlatStateSum<QuadraticSurd, RationalMaterial>.Letter(crossing: strand)] = reference.Crossing(
+            images[PlatStateSum<RealQuadratic, RationalMaterial>.Letter(crossing: strand)] = reference.Crossing(
                 crossing: strand,
                 strands: KnotWidth
             );
-            images[PlatStateSum<QuadraticSurd, RationalMaterial>.Letter(crossing: -strand)] = reference.Crossing(
+            images[PlatStateSum<RealQuadratic, RationalMaterial>.Letter(crossing: -strand)] = reference.Crossing(
                 crossing: -strand,
                 strands: KnotWidth
             );
         }
 
-        if (!PresentedFunctor<QuadraticSurd, RationalMaterial>.TryCreate(
+        if (!PresentedFunctor<RealQuadratic, RationalMaterial>.TryCreate(
             source: free,
             target: reference.Algebra,
             images: images,
@@ -1484,11 +1484,11 @@ internal static partial class Subjects {
         }
 
         // The loop charge, load-bearing: the second move holds at the charge it forces and at no other.
-        foreach (var wrong in ((QuadraticSurd[])[QuadraticSurd.One, QuadraticSurd.Zero, QuadraticSurd.Rational(value: -4)])) {
-            var broken = new PlatStateSum<QuadraticSurd, RationalMaterial>(
+        foreach (var wrong in ((RealQuadratic[])[RealQuadratic.One, RealQuadratic.Zero, RealQuadratic.Rational(value: -4)])) {
+            var broken = new PlatStateSum<RealQuadratic, RationalMaterial>(
                 maximumWidth: KnotWidth,
-                crossingCharge: QuadraticSurd.Rational(value: 2),
-                inverseCharge: QuadraticSurd.Rational(
+                crossingCharge: RealQuadratic.Rational(value: 2),
+                inverseCharge: RealQuadratic.Rational(
                     numerator: BigInteger.One,
                     denominator: 2
                 ),
@@ -1521,7 +1521,7 @@ internal static partial class Subjects {
                 sum: KnotRationalSum(point: point),
                 name: $"the rationals at {point}",
                 point: point,
-                scalar: static (numerator, denominator) => QuadraticSurd.Rational(
+                scalar: static (numerator, denominator) => RealQuadratic.Rational(
                     denominator: denominator,
                     numerator: numerator
                 )
@@ -1596,7 +1596,7 @@ internal static partial class Subjects {
                 if (!sum.Evaluate(
                     strands: strands,
                     word: word
-                ).Equals(other: QuadraticSurd.Rational(
+                ).Equals(other: RealQuadratic.Rational(
                     denominator: denominator,
                     numerator: numerator
                 ))) {
@@ -1619,9 +1619,9 @@ internal static partial class Subjects {
     public static string? StateSumMoveInvariant() {
         foreach (var point in ((BigInteger[])[2, 3])) {
             var sum = KnotRationalSum(point: point);
-            var charge = QuadraticSurd.Rational(value: point);
+            var charge = RealQuadratic.Rational(value: point);
             var cube = ((charge * charge) * charge);
-            var kink = -(QuadraticSurd.One / cube);
+            var kink = -(RealQuadratic.One / cube);
             var mirrorKink = -cube;
 
             foreach (var word in KnotMoveWords) {
@@ -1709,16 +1709,16 @@ internal static partial class Subjects {
         // The width cap is the knot construction's own bound: a plat of eight strands is a tangle of width eight.
         if (RefusesDeclaration(
             name: "a plat wider than the diagrams a finite basis holds",
-            build: static () => _ = Presentations.PlanarTangle<QuadraticSurd, RationalMaterial>(
+            build: static () => _ = Presentations.PlanarTangle<RealQuadratic, RationalMaterial>(
                 maximumWidth: 8,
-                loopCharge: QuadraticSurd.One,
+                loopCharge: RealQuadratic.One,
                 material: default
             )
         ) is { } capped) {
             return capped;
         }
 
-        var free = PresentedAlgebra<QuadraticSurd, RationalMaterial>.Create(presentation: Presentations.FreeMonoid<QuadraticSurd, RationalMaterial>(
+        var free = PresentedAlgebra<RealQuadratic, RationalMaterial>.Create(presentation: Presentations.FreeMonoid<RealQuadratic, RationalMaterial>(
             letterCount: 6,
             material: default
         ));
@@ -1735,7 +1735,7 @@ internal static partial class Subjects {
 
         if (RefusesDeclaration(
             name: "a zeta of the free monoid on the crossing letters",
-            build: () => _ = GraphZeta<QuadraticSurd, RationalMaterial>.TryCreate(
+            build: () => _ = GraphZeta<RealQuadratic, RationalMaterial>.TryCreate(
                 algebra: free,
                 value: free.Identity,
                 order: 1,
@@ -2071,9 +2071,9 @@ internal static partial class Subjects {
                 right: inverseCharge
             )
         ));
-    private static PlatStateSum<QuadraticSurd, RationalMaterial> KnotRationalSum(BigInteger point) {
-        var charge = QuadraticSurd.Rational(value: point);
-        var inverse = QuadraticSurd.Rational(
+    private static PlatStateSum<RealQuadratic, RationalMaterial> KnotRationalSum(BigInteger point) {
+        var charge = RealQuadratic.Rational(value: point);
+        var inverse = RealQuadratic.Rational(
             numerator: BigInteger.One,
             denominator: point
         );
@@ -2082,7 +2082,7 @@ internal static partial class Subjects {
             maximumWidth: KnotWidth,
             crossingCharge: charge,
             inverseCharge: inverse,
-            loopCharge: KnotLoopCharge<QuadraticSurd, RationalMaterial>(
+            loopCharge: KnotLoopCharge<RealQuadratic, RationalMaterial>(
                 crossingCharge: charge,
                 inverseCharge: inverse,
                 material: default

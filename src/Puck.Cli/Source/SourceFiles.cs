@@ -50,15 +50,8 @@ internal static class SourceFiles {
     }
     // The nearest ancestor directory (from `start` up) that holds a .csproj — the owning project whose
     // build closure the semantic phase compiles against and whose whitespace phase 0 formats.
-    public static string? FindOwningProjectDirectory(string start) {
-        for (var directory = new DirectoryInfo(path: start); (directory is not null); directory = directory.Parent) {
-            if (directory.EnumerateFiles(searchPattern: "*.csproj").Any()) {
-                return directory.FullName;
-            }
-        }
-
-        return null;
-    }
+    public static string? FindOwningProjectDirectory(string start) =>
+        CliPaths.AscendUntil(start: start, probe: static directory => (directory.EnumerateFiles(searchPattern: "*.csproj").Any() ? directory.FullName : null));
 
     // Directory segments only — the final segment is the file name. FileWalk's artifact set carries the
     // generated and vendored names; beyond it the corpus prunes agent worktrees (.claude/worktrees holds

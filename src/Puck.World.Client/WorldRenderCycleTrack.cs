@@ -48,39 +48,53 @@ public sealed class WorldRenderCycleTrack {
     private string? m_stateRow;
     private WorldRenderLightingState m_statics;
 
+    // The render path is opaque — alpha plays no part in sky/lighting colour, so every bound colour drops it here,
+    // the one seam between BindableColor's Vector4 grammar and this state's Vector3 fields.
+    private static Vector3 Rgb(BindableColor? color, WorldDefinition definition, Vector3 fallback) {
+        if (color is not { } bound) {
+            return fallback;
+        }
+
+        var resolved = bound.Resolve(
+            definition: definition,
+            fallback: new Vector4(fallback, 1f)
+        );
+
+        return new Vector3(resolved.X, resolved.Y, resolved.Z);
+    }
     private static WorldRenderLightingState Statics(WorldDefinition definition) {
         var defaults = definition.Render;
 
         return new WorldRenderLightingState(
             SunDirection: (defaults.Lighting?.Sun?.Direction ?? SdfFrame.DefaultSunDirection),
             SunWeight: (defaults.Lighting?.Sun?.Weight ?? SdfFrame.DefaultSunWeight),
-            SunColor: WorldColor.Resolve(
+            SunColor: Rgb(
+                color: defaults.Lighting?.Sun?.Color,
                 definition: definition,
-                fallback: Vector3.One,
-                value: defaults.Lighting?.Sun?.Color
+                fallback: Vector3.One
             ),
             AmbientBase: (defaults.Lighting?.Ambient?.Base ?? SdfFrame.DefaultAmbientBase),
             AmbientHemisphere: (defaults.Lighting?.Ambient?.Hemisphere ?? SdfFrame.DefaultAmbientHemisphere),
-            AmbientColor: WorldColor.Resolve(
+            AmbientColor: Rgb(
+                color: defaults.Lighting?.Ambient?.Color,
                 definition: definition,
-                fallback: Vector3.One,
-                value: defaults.Lighting?.Ambient?.Color
+                fallback: Vector3.One
             ),
             SkyEnabled: (defaults.Sky is not null),
-            SkyZenithColor: WorldColor.Resolve(
+            SkyZenithColor: Rgb(
+                color: defaults.Sky?.Zenith,
                 definition: definition,
-                fallback: SdfFrame.DefaultSkyZenithColor,
-                value: defaults.Sky?.Zenith
+                fallback: SdfFrame.DefaultSkyZenithColor
             ),
-            SkyHorizonColor: WorldColor.Resolve(
+            SkyHorizonColor: Rgb(
+                color: defaults.Sky?.Horizon,
                 definition: definition,
-                fallback: SdfFrame.DefaultSkyHorizonColor,
-                value: defaults.Sky?.Horizon
+                fallback: SdfFrame.DefaultSkyHorizonColor
             ),
-            SkyGroundColor: WorldColor.Resolve(
+            SkyGroundColor: Rgb(
+                color: defaults.Sky?.Ground,
                 definition: definition,
-                fallback: SdfFrame.DefaultSkyGroundColor,
-                value: defaults.Sky?.Ground
+                fallback: SdfFrame.DefaultSkyGroundColor
             ),
             SkyFogDensity: (defaults.Sky?.FogDensity ?? SdfFrame.DefaultSkyFogDensity),
             SkySunDiscRadians: (defaults.Sky?.Sun?.DiscRadians ?? SdfFrame.DefaultSkySunDiscRadians),
@@ -91,10 +105,10 @@ public sealed class WorldRenderCycleTrack {
             SkyStarTwinkleShare: (defaults.Sky?.Stars?.Twinkle?.Share ?? 0f),
             SkyStarTwinkleDepth: (defaults.Sky?.Stars?.Twinkle?.Depth ?? 0f),
             SkyStarTwinkleRate: (defaults.Sky?.Stars?.Twinkle?.Rate ?? SdfFrame.DefaultSkyStarTwinkleRate),
-            SkyCloudColor: WorldColor.Resolve(
+            SkyCloudColor: Rgb(
+                color: defaults.Sky?.Clouds?.Color,
                 definition: definition,
-                fallback: Vector3.One,
-                value: defaults.Sky?.Clouds?.Color
+                fallback: Vector3.One
             ),
             SkyCloudCoverage: (defaults.Sky?.Clouds?.Coverage ?? 0f),
             SkyCloudSoftness: (defaults.Sky?.Clouds?.Softness ?? SdfFrame.DefaultSkyCloudSoftness),
@@ -117,7 +131,6 @@ public sealed class WorldRenderCycleTrack {
             ? Vector3.Normalize(value: blended)
             : from);
     }
-    private static float Lerp(float a, float b, float t) => (a + ((b - a) * t));
     // Overlays a key's stated fields onto the carried state.
     private static WorldRenderLightingState Apply(WorldDefinition definition, WorldRenderLightingState carried, WorldRenderCycleKey key) {
         var sun = key.Lighting?.Sun;
@@ -127,33 +140,33 @@ public sealed class WorldRenderCycleTrack {
         return carried with {
             SunDirection = (sun?.Direction ?? carried.SunDirection),
             SunWeight = (sun?.Weight ?? carried.SunWeight),
-            SunColor = WorldColor.Resolve(
+            SunColor = Rgb(
+                color: sun?.Color,
                 definition: definition,
-                fallback: carried.SunColor,
-                value: sun?.Color
+                fallback: carried.SunColor
             ),
             AmbientBase = (ambient?.Base ?? carried.AmbientBase),
             AmbientHemisphere = (ambient?.Hemisphere ?? carried.AmbientHemisphere),
-            AmbientColor = WorldColor.Resolve(
+            AmbientColor = Rgb(
+                color: ambient?.Color,
                 definition: definition,
-                fallback: carried.AmbientColor,
-                value: ambient?.Color
+                fallback: carried.AmbientColor
             ),
             SkyEnabled = (carried.SkyEnabled || (sky is not null)),
-            SkyZenithColor = WorldColor.Resolve(
+            SkyZenithColor = Rgb(
+                color: sky?.Zenith,
                 definition: definition,
-                fallback: carried.SkyZenithColor,
-                value: sky?.Zenith
+                fallback: carried.SkyZenithColor
             ),
-            SkyHorizonColor = WorldColor.Resolve(
+            SkyHorizonColor = Rgb(
+                color: sky?.Horizon,
                 definition: definition,
-                fallback: carried.SkyHorizonColor,
-                value: sky?.Horizon
+                fallback: carried.SkyHorizonColor
             ),
-            SkyGroundColor = WorldColor.Resolve(
+            SkyGroundColor = Rgb(
+                color: sky?.Ground,
                 definition: definition,
-                fallback: carried.SkyGroundColor,
-                value: sky?.Ground
+                fallback: carried.SkyGroundColor
             ),
             SkyFogDensity = (sky?.FogDensity ?? carried.SkyFogDensity),
             SkySunDiscRadians = (sky?.Sun?.DiscRadians ?? carried.SkySunDiscRadians),
@@ -164,10 +177,10 @@ public sealed class WorldRenderCycleTrack {
             SkyStarTwinkleShare = (sky?.Stars?.Twinkle?.Share ?? carried.SkyStarTwinkleShare),
             SkyStarTwinkleDepth = (sky?.Stars?.Twinkle?.Depth ?? carried.SkyStarTwinkleDepth),
             SkyStarTwinkleRate = (sky?.Stars?.Twinkle?.Rate ?? carried.SkyStarTwinkleRate),
-            SkyCloudColor = WorldColor.Resolve(
+            SkyCloudColor = Rgb(
+                color: sky?.Clouds?.Color,
                 definition: definition,
-                fallback: carried.SkyCloudColor,
-                value: sky?.Clouds?.Color
+                fallback: carried.SkyCloudColor
             ),
             SkyCloudCoverage = (sky?.Clouds?.Coverage ?? carried.SkyCloudCoverage),
             SkyCloudSoftness = (sky?.Clouds?.Softness ?? carried.SkyCloudSoftness),
@@ -185,32 +198,32 @@ public sealed class WorldRenderCycleTrack {
             t: t,
             to: b.SunDirection
         ),
-        SunWeight: Lerp(a: a.SunWeight, b: b.SunWeight, t: t),
+        SunWeight: float.Lerp(value1: a.SunWeight, value2: b.SunWeight, amount: t),
         SunColor: Vector3.Lerp(amount: t, value1: a.SunColor, value2: b.SunColor),
-        AmbientBase: Lerp(a: a.AmbientBase, b: b.AmbientBase, t: t),
-        AmbientHemisphere: Lerp(a: a.AmbientHemisphere, b: b.AmbientHemisphere, t: t),
+        AmbientBase: float.Lerp(value1: a.AmbientBase, value2: b.AmbientBase, amount: t),
+        AmbientHemisphere: float.Lerp(value1: a.AmbientHemisphere, value2: b.AmbientHemisphere, amount: t),
         AmbientColor: Vector3.Lerp(amount: t, value1: a.AmbientColor, value2: b.AmbientColor),
         SkyEnabled: (a.SkyEnabled || b.SkyEnabled),
         SkyZenithColor: Vector3.Lerp(amount: t, value1: a.SkyZenithColor, value2: b.SkyZenithColor),
         SkyHorizonColor: Vector3.Lerp(amount: t, value1: a.SkyHorizonColor, value2: b.SkyHorizonColor),
         SkyGroundColor: Vector3.Lerp(amount: t, value1: a.SkyGroundColor, value2: b.SkyGroundColor),
-        SkyFogDensity: Lerp(a: a.SkyFogDensity, b: b.SkyFogDensity, t: t),
-        SkySunDiscRadians: Lerp(a: a.SkySunDiscRadians, b: b.SkySunDiscRadians, t: t),
-        SkySunDiscIntensity: Lerp(a: a.SkySunDiscIntensity, b: b.SkySunDiscIntensity, t: t),
-        SkyStarDensity: Lerp(a: a.SkyStarDensity, b: b.SkyStarDensity, t: t),
-        SkyStarBrightness: Lerp(a: a.SkyStarBrightness, b: b.SkyStarBrightness, t: t),
+        SkyFogDensity: float.Lerp(value1: a.SkyFogDensity, value2: b.SkyFogDensity, amount: t),
+        SkySunDiscRadians: float.Lerp(value1: a.SkySunDiscRadians, value2: b.SkySunDiscRadians, amount: t),
+        SkySunDiscIntensity: float.Lerp(value1: a.SkySunDiscIntensity, value2: b.SkySunDiscIntensity, amount: t),
+        SkyStarDensity: float.Lerp(value1: a.SkyStarDensity, value2: b.SkyStarDensity, amount: t),
+        SkyStarBrightness: float.Lerp(value1: a.SkyStarBrightness, value2: b.SkyStarBrightness, amount: t),
         SkyStarSeed: a.SkyStarSeed,
-        SkyStarTwinkleShare: Lerp(a: a.SkyStarTwinkleShare, b: b.SkyStarTwinkleShare, t: t),
-        SkyStarTwinkleDepth: Lerp(a: a.SkyStarTwinkleDepth, b: b.SkyStarTwinkleDepth, t: t),
-        SkyStarTwinkleRate: Lerp(a: a.SkyStarTwinkleRate, b: b.SkyStarTwinkleRate, t: t),
+        SkyStarTwinkleShare: float.Lerp(value1: a.SkyStarTwinkleShare, value2: b.SkyStarTwinkleShare, amount: t),
+        SkyStarTwinkleDepth: float.Lerp(value1: a.SkyStarTwinkleDepth, value2: b.SkyStarTwinkleDepth, amount: t),
+        SkyStarTwinkleRate: float.Lerp(value1: a.SkyStarTwinkleRate, value2: b.SkyStarTwinkleRate, amount: t),
         SkyCloudColor: Vector3.Lerp(amount: t, value1: a.SkyCloudColor, value2: b.SkyCloudColor),
-        SkyCloudCoverage: Lerp(a: a.SkyCloudCoverage, b: b.SkyCloudCoverage, t: t),
-        SkyCloudSoftness: Lerp(a: a.SkyCloudSoftness, b: b.SkyCloudSoftness, t: t),
-        SkyCloudScale: Lerp(a: a.SkyCloudScale, b: b.SkyCloudScale, t: t),
+        SkyCloudCoverage: float.Lerp(value1: a.SkyCloudCoverage, value2: b.SkyCloudCoverage, amount: t),
+        SkyCloudSoftness: float.Lerp(value1: a.SkyCloudSoftness, value2: b.SkyCloudSoftness, amount: t),
+        SkyCloudScale: float.Lerp(value1: a.SkyCloudScale, value2: b.SkyCloudScale, amount: t),
         SkyCloudSeed: a.SkyCloudSeed,
         SkyCloudDrift: Vector2.Lerp(amount: t, value1: a.SkyCloudDrift, value2: b.SkyCloudDrift),
-        SkyCloudSpin: Lerp(a: a.SkyCloudSpin, b: b.SkyCloudSpin, t: t),
-        SkyCloudCurl: Lerp(a: a.SkyCloudCurl, b: b.SkyCloudCurl, t: t),
+        SkyCloudSpin: float.Lerp(value1: a.SkyCloudSpin, value2: b.SkyCloudSpin, amount: t),
+        SkyCloudCurl: float.Lerp(value1: a.SkyCloudCurl, value2: b.SkyCloudCurl, amount: t),
         SkyCloudShear: Vector2.Lerp(amount: t, value1: a.SkyCloudShear, value2: b.SkyCloudShear)
     );
     private void Rebuild(WorldDefinition definition, WorldRenderCycle cycle) {
@@ -308,9 +321,9 @@ public sealed class WorldRenderCycleTrack {
             : ((1f - fromAt) + fraction));
         var t = ((span > 0f)
             ? Math.Clamp(
-                value: (offset / span),
+                max: 1f,
                 min: 0f,
-                max: 1f
+                value: (offset / span)
             )
             : 0f);
 

@@ -1,6 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "puck.world.def.v1",
+  "x-puck": {
+    "schemaVersion": "puck.world.def.v1",
+    "generator": "Puck.World.WorldSchema"
+  },
   "title": "Puck world definition (puck.world.def.v1)",
   "description": "The definition of this world \u2014 the aggregate describing what the world is, distinct from the live session state that plays in it. It gathers named spawn points (SpawnPoints), motion defaults (Motion), and render-lever defaults and quality presets (Render). Every consumer takes it by construction.",
   "type": [
@@ -23,11 +27,11 @@
     "cameras": {
       "$ref": "./schema/cameras.schema.json"
     },
-    "population": {
-      "$ref": "./schema/population.schema.json"
+    "bodies": {
+      "$ref": "./schema/bodies.schema.json"
     },
-    "playerDefaults": {
-      "$ref": "./schema/playerDefaults.schema.json"
+    "seatDefaults": {
+      "$ref": "./schema/seatDefaults.schema.json"
     },
     "channels": {
       "$ref": "./schema/channels.schema.json"
@@ -44,9 +48,6 @@
     "defaultSeatKit": {
       "$ref": "./schema/defaultSeatKit.schema.json"
     },
-    "assignment": {
-      "$ref": "./schema/assignment.schema.json"
-    },
     "addons": {
       "$ref": "./schema/addons.schema.json"
     },
@@ -56,14 +57,11 @@
     "storage": {
       "$ref": "./schema/storage.schema.json"
     },
-    "creations": {
-      "$ref": "./schema/creations.schema.json"
+    "prototypes": {
+      "$ref": "./schema/prototypes.schema.json"
     },
     "placements": {
       "$ref": "./schema/placements.schema.json"
-    },
-    "authoring": {
-      "$ref": "./schema/authoring.schema.json"
     },
     "speakers": {
       "$ref": "./schema/speakers.schema.json"
@@ -80,6 +78,9 @@
     "collision": {
       "$ref": "./schema/collision.schema.json"
     },
+    "gravity": {
+      "$ref": "./schema/gravity.schema.json"
+    },
     "host": {
       "$ref": "./schema/host.schema.json"
     },
@@ -89,11 +90,8 @@
     "looks": {
       "$ref": "./schema/looks.schema.json"
     },
-    "lookAssignment": {
-      "$ref": "./schema/lookAssignment.schema.json"
-    },
-    "links": {
-      "$ref": "./schema/links.schema.json"
+    "dynamics": {
+      "$ref": "./schema/dynamics.schema.json"
     },
     "grants": {
       "$ref": "./schema/grants.schema.json"
@@ -101,11 +99,20 @@
     "hud": {
       "$ref": "./schema/hud.schema.json"
     },
+    "icons": {
+      "$ref": "./schema/icons.schema.json"
+    },
     "state": {
       "$ref": "./schema/state.schema.json"
     },
     "inputHold": {
       "$ref": "./schema/inputHold.schema.json"
+    },
+    "theme": {
+      "$ref": "./schema/theme.schema.json"
+    },
+    "markers": {
+      "$ref": "./schema/markers.schema.json"
     },
     "rules": {
       "$ref": "./schema/rules.schema.json"
@@ -128,9 +135,6 @@
     "generators": {
       "$ref": "./schema/generators.schema.json"
     },
-    "water": {
-      "$ref": "./schema/water.schema.json"
-    },
     "references": {
       "$ref": "./schema/references.schema.json"
     },
@@ -145,9 +149,6 @@
     },
     "admission": {
       "$ref": "./schema/admission.schema.json"
-    },
-    "market": {
-      "$ref": "./schema/market.schema.json"
     },
     "adjacencies": {
       "$ref": "./schema/adjacencies.schema.json"
@@ -164,11 +165,38 @@
     "music": {
       "$ref": "./schema/music.schema.json"
     },
-    "judges": {
-      "$ref": "./schema/judges.schema.json"
+    "seatModes": {
+      "$ref": "./schema/seatModes.schema.json"
+    },
+    "probes": {
+      "$ref": "./schema/probes.schema.json"
+    },
+    "captures": {
+      "$ref": "./schema/captures.schema.json"
+    },
+    "curves": {
+      "$ref": "./schema/curves.schema.json"
+    },
+    "navigation": {
+      "$ref": "./schema/navigation.schema.json"
+    },
+    "patterns": {
+      "$ref": "./schema/patterns.schema.json"
+    },
+    "tables": {
+      "$ref": "./schema/tables.schema.json"
+    },
+    "search": {
+      "$ref": "./schema/search.schema.json"
     },
     "basis": {
       "$ref": "./schema/basis.schema.json"
+    },
+    "imports": {
+      "$ref": "./schema/imports.schema.json"
+    },
+    "exports": {
+      "$ref": "./schema/exports.schema.json"
     },
     "documentId": {
       "$ref": "./schema/documentId.schema.json"

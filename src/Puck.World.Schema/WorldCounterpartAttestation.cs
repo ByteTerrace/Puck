@@ -97,7 +97,7 @@ public sealed record WorldOverlapTerms(
 /// <see langword="null"/> when that destination does not resolve in the counterpart's document. A routing fact only
 /// — evidence about which authority this edge reaches, never proof of that authority's own geometry.</param>
 /// <param name="Boundary">The authored boundary rectangle and its outward orientation.</param>
-public sealed record WorldAttestedEdge(WorldSafeName Name, string Counterpart, string Destination, string? Document, WorldAdjacencyBoundary Boundary);
+public sealed record WorldAttestedEdge(SafeName Name, string Counterpart, string Destination, string? Document, WorldAdjacencyBoundary Boundary);
 /// <summary>
 /// A neighbouring authority's signed statement of what it declares at a shared seam: its edges, and its own overlap
 /// terms. Everything a reciprocity proof needs and nothing else — a validator that consumes one never reads the

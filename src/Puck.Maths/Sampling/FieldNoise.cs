@@ -145,7 +145,7 @@ public static class FieldNoise {
     // sampler stages its corners here, which is what makes the gradient sampler and the value samplers agree bit for
     // bit rather than leaving that agreement to two hand-kept copies.
     private static void ComputeCorners(
-        ulong seed,
+        in FieldNoiseSeed seed,
         ulong xTerm0,
         ulong xTerm1,
         ulong yTerm0,
@@ -155,9 +155,9 @@ public static class FieldNoise {
         Span<long> corners
     ) {
         unchecked {
-            var seedX = Mix(value: (seed + SeedDomainX));
-            var seedY = Mix(value: (seed + SeedDomainY));
-            var seedZ = Mix(value: (seed + SeedDomainZ));
+            var seedX = seed.X;
+            var seedY = seed.Y;
+            var seedZ = seed.Z;
             var xState0 = Mix(value: (seedX + xTerm0));
             var xState1 = Mix(value: (seedX + xTerm1));
             var xy00 = Mix(value: ((xState0 + seedY) + yTerm0));
@@ -212,10 +212,23 @@ public static class FieldNoise {
     }
     private static bool FitsNativeLattice(Int128 value) =>
         ((value >= long.MinValue) && (value < long.MaxValue));
+    // The Q28 blend rounds to nearest (half away from zero on the magnitude) instead of flooring: a floor loses half
+    // a raw unit downward on average per blend, seven blends per sample, a systematic offset a mean-zero field cannot
+    // carry.
     private static long Lerp(long a, long b, long fadeQ28) =>
-        (a + (((b - a) * fadeQ28) >> FadeFractionBitCount));
+        (a + RoundShift(
+            shift: FadeFractionBitCount,
+            value: ((b - a) * fadeQ28)
+        ));
+    private static long RoundShift(long value, int shift) {
+        var sign = (value >> 63);
+        var magnitude = ((value ^ sign) - sign);
+        var rounded = ((magnitude + (1L << (shift - 1))) >> shift);
+
+        return ((rounded ^ sign) - sign);
+    }
     // The gradient sampler's corner load: the terms SampleLattice forms, through the tree every sampler shares.
-    private static void LoadCorners(ulong seed, long x0, long y0, long z0, Span<long> corners) {
+    private static void LoadCorners(in FieldNoiseSeed seed, long x0, long y0, long z0, Span<long> corners) {
         unchecked {
             var xTerm0 = (((ulong)x0) * CombineX);
             var yTerm0 = (((ulong)y0) * CombineY);
@@ -267,7 +280,7 @@ public static class FieldNoise {
             );
         }
     }
-    private static long SampleCore(ulong seed, long xRaw, long yRaw, long zRaw) =>
+    private static long SampleCore(in FieldNoiseSeed seed, long xRaw, long yRaw, long zRaw) =>
         SampleLattice(
             seed: seed,
             x0: (xRaw >> FixedQ4816.FractionBitCount),
@@ -278,7 +291,7 @@ public static class FieldNoise {
             zFraction: zRaw & FractionMask
         );
     // The native lattice sampler stays on long coordinates for the flat hot path.
-    private static long SampleLattice(ulong seed, long x0, long y0, long z0, long xFraction, long yFraction, long zFraction) {
+    private static long SampleLattice(in FieldNoiseSeed seed, long x0, long y0, long z0, long xFraction, long yFraction, long zFraction) {
         unchecked {
             var xTerm0 = (((ulong)x0) * CombineX);
             var yTerm0 = (((ulong)y0) * CombineY);
@@ -300,7 +313,7 @@ public static class FieldNoise {
     }
     // The value sampler, once the lattice coordinates have been reduced to their six hash terms.
     private static long SampleLatticeTerms(
-        ulong seed,
+        in FieldNoiseSeed seed,
         ulong xTerm0,
         ulong xTerm1,
         ulong yTerm0,
@@ -344,19 +357,13 @@ public static class FieldNoise {
     }
     // The hierarchical path retains the full cell-derived lattice coordinate. MixWideAxis's high component is zero
     // for signed-64-bit coordinates, preserving the flat overload's output in their shared range.
-    private static long SampleWideLattice(ulong seed, Int128 x0, Int128 y0, Int128 z0, long xFraction, long yFraction, long zFraction) {
+    private static long SampleWideLattice(in FieldNoiseSeed seed, Int128 x0, Int128 y0, Int128 z0, long xFraction, long yFraction, long zFraction) {
         var fadeX = FadeQ28(t: xFraction);
         var fadeY = FadeQ28(t: yFraction);
         var fadeZ = FadeQ28(t: zFraction);
-        ulong seedX;
-        ulong seedY;
-        ulong seedZ;
-
-        unchecked {
-            seedX = Mix(value: (seed + SeedDomainX));
-            seedY = Mix(value: (seed + SeedDomainY));
-            seedZ = Mix(value: (seed + SeedDomainZ));
-        }
+        var seedX = seed.X;
+        var seedY = seed.Y;
+        var seedZ = seed.Z;
 
         var xState0 = MixWideAxis(
             coordinate: x0,
@@ -470,16 +477,41 @@ public static class FieldNoise {
     /// <param name="y">The lattice Y coordinate.</param>
     /// <param name="z">The lattice Z coordinate.</param>
     /// <returns>A well-mixed 64-bit hash, bit-identical across machines.</returns>
-    public static ulong Hash(ulong seed, long x, long y, long z) {
+    public static ulong Hash(ulong seed, long x, long y, long z) =>
+        Hash(
+            seed: Prepare(seed: seed),
+            x: x,
+            y: y,
+            z: z
+        );
+    /// <summary>Hashes a lattice coordinate under a prepared seed — the same bits as the <see cref="ulong"/> overload
+    /// without re-deriving the three seed-domain states.</summary>
+    /// <param name="seed">The prepared seed.</param>
+    /// <param name="x">The lattice X coordinate.</param>
+    /// <param name="y">The lattice Y coordinate.</param>
+    /// <param name="z">The lattice Z coordinate.</param>
+    /// <returns>A well-mixed 64-bit hash, bit-identical across machines.</returns>
+    public static ulong Hash(in FieldNoiseSeed seed, long x, long y, long z) {
         unchecked {
-            var seedX = Mix(value: (seed + SeedDomainX));
-            var seedY = Mix(value: (seed + SeedDomainY));
-            var seedZ = Mix(value: (seed + SeedDomainZ));
-            var state = Mix(value: (seedX + (((ulong)x) * CombineX)));
+            var state = Mix(value: (seed.X + (((ulong)x) * CombineX)));
 
-            state = Mix(value: ((state + seedY) + (((ulong)y) * CombineY)));
+            state = Mix(value: ((state + seed.Y) + (((ulong)y) * CombineY)));
 
-            return Mix(value: ((state + seedZ) + (((ulong)z) * CombineZ)));
+            return Mix(value: ((state + seed.Z) + (((ulong)z) * CombineZ)));
+        }
+    }
+    /// <summary>Derives a seed's three per-axis domain states once, so a caller sampling one field at many positions
+    /// pays that derivation per field rather than per sample.</summary>
+    /// <param name="seed">The field seed.</param>
+    /// <returns>The prepared seed; every overload taking it returns the same bits as its <see cref="ulong"/> twin.</returns>
+    public static FieldNoiseSeed Prepare(ulong seed) {
+        unchecked {
+            return new(
+                seed: seed,
+                x: Mix(value: (seed + SeedDomainX)),
+                y: Mix(value: (seed + SeedDomainY)),
+                z: Mix(value: (seed + SeedDomainZ))
+            );
         }
     }
     /// <summary>Samples the smooth noise field at a position.</summary>
@@ -487,6 +519,15 @@ public static class FieldNoise {
     /// <param name="position">The position to sample; one noise unit spans one world unit (scale the position for other frequencies).</param>
     /// <returns>A smooth pseudo-random value in <c>[−1, 1]</c>.</returns>
     public static FixedQ4816 Sample(ulong seed, FixedVector3 position) =>
+        Sample(
+            position: position,
+            seed: Prepare(seed: seed)
+        );
+    /// <summary>Samples the smooth noise field at a position under a prepared seed.</summary>
+    /// <param name="seed">The prepared seed.</param>
+    /// <param name="position">The position to sample; one noise unit spans one world unit.</param>
+    /// <returns>A smooth pseudo-random value in <c>[−1, 1]</c>.</returns>
+    public static FixedQ4816 Sample(in FieldNoiseSeed seed, FixedVector3 position) =>
         new(Value: SampleCore(
             seed: seed,
             xRaw: position.X.Value,
@@ -499,7 +540,20 @@ public static class FieldNoise {
     /// <param name="octaves">The layer count, in <c>[1, 16]</c>.</param>
     /// <returns>A smooth pseudo-random value in <c>[−1, 1]</c>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="octaves"/> is outside <c>[1, 16]</c>.</exception>
-    public static FixedQ4816 Sample(ulong seed, FixedVector3 position, int octaves) {
+    public static FixedQ4816 Sample(ulong seed, FixedVector3 position, int octaves) =>
+        Sample(
+            octaves: octaves,
+            position: position,
+            seed: Prepare(seed: seed)
+        );
+    /// <summary>Samples fractal noise at a position under a prepared seed: the first octave reads the prepared
+    /// states, each further octave prepares its own stepped seed.</summary>
+    /// <param name="seed">The prepared seed.</param>
+    /// <param name="position">The position to sample.</param>
+    /// <param name="octaves">The layer count, in <c>[1, 16]</c>.</param>
+    /// <returns>A smooth pseudo-random value in <c>[−1, 1]</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="octaves"/> is outside <c>[1, 16]</c>.</exception>
+    public static FixedQ4816 Sample(in FieldNoiseSeed seed, FixedVector3 position, int octaves) {
         ArgumentOutOfRangeException.ThrowIfLessThan(
             value: octaves,
             other: 1
@@ -510,6 +564,7 @@ public static class FieldNoise {
         );
 
         var accumulated = 0L;
+        var octaveSeedValue = seed.Seed;
         var octaveSeed = seed;
         var xCell = (position.X.Value >> FixedQ4816.FractionBitCount);
         var yCell = (position.Y.Value >> FixedQ4816.FractionBitCount);
@@ -519,16 +574,22 @@ public static class FieldNoise {
         var zFraction = position.Z.Value & FractionMask;
 
         for (var octave = 0; (octave < octaves); ++octave) {
-            accumulated += (SampleLattice(
-                seed: octaveSeed,
-                x0: xCell,
-                xFraction: xFraction,
-                y0: yCell,
-                yFraction: yFraction,
-                z0: zCell,
-                zFraction: zFraction
-            ) >> (octave + 1));
-            octaveSeed = unchecked((octaveSeed + OctaveSeedStep));
+            // Each octave's halving rounds to nearest on the magnitude; a floor would droop the sum by up to half a raw
+            // unit per octave, one-signed, so two octave counts of one field would disagree on its mean.
+            accumulated += RoundShift(
+                shift: (octave + 1),
+                value: SampleLattice(
+                    seed: octaveSeed,
+                    x0: xCell,
+                    xFraction: xFraction,
+                    y0: yCell,
+                    yFraction: yFraction,
+                    z0: zCell,
+                    zFraction: zFraction
+                )
+            );
+            octaveSeedValue = unchecked((octaveSeedValue + OctaveSeedStep));
+            octaveSeed = Prepare(seed: octaveSeedValue);
 
             if ((octave + 1) < octaves) {
                 DoubleFrequency(
@@ -555,7 +616,16 @@ public static class FieldNoise {
     /// <remarks>The cell index and local whole-unit offset form a signed 128-bit lattice coordinate, so no cell bits
     /// are discarded before hashing. Coordinates whose absolute lattice position fits <see cref="long"/> retain the
     /// exact same samples as the flat <see cref="FixedVector3"/> overload.</remarks>
-    public static FixedQ4816 Sample(ulong seed, FixedPosition position) {
+    public static FixedQ4816 Sample(ulong seed, FixedPosition position) =>
+        Sample(
+            position: position,
+            seed: Prepare(seed: seed)
+        );
+    /// <summary>Samples the smooth noise field at a hierarchical world position under a prepared seed.</summary>
+    /// <param name="seed">The prepared seed.</param>
+    /// <param name="position">The position to sample; one noise unit spans one world unit.</param>
+    /// <returns>A smooth pseudo-random value in <c>[−1, 1]</c>.</returns>
+    public static FixedQ4816 Sample(in FieldNoiseSeed seed, FixedPosition position) {
         var x0 = ((((Int128)position.CellX) << FixedPosition.CellSizeLog2) + (position.Local.X.Value >> FixedQ4816.FractionBitCount));
         var y0 = ((((Int128)position.CellY) << FixedPosition.CellSizeLog2) + (position.Local.Y.Value >> FixedQ4816.FractionBitCount));
         var z0 = ((((Int128)position.CellZ) << FixedPosition.CellSizeLog2) + (position.Local.Z.Value >> FixedQ4816.FractionBitCount));
@@ -600,7 +670,18 @@ public static class FieldNoise {
     /// partials, so this is far cheaper than differencing <see cref="Sample(ulong, FixedVector3)"/> and carries no
     /// step-size choice. The gradient is continuous across cell boundaries because the quintic fade's derivative
     /// vanishes at both ends. Each component lies in <c>[−3.75, 3.75]</c>.</remarks>
-    public static FixedQ4816 SampleGradient(ulong seed, FixedVector3 position, out FixedVector3 gradient) {
+    public static FixedQ4816 SampleGradient(ulong seed, FixedVector3 position, out FixedVector3 gradient) =>
+        SampleGradient(
+            gradient: out gradient,
+            position: position,
+            seed: Prepare(seed: seed)
+        );
+    /// <summary>Samples the field and its gradient at a position under a prepared seed.</summary>
+    /// <param name="seed">The prepared seed.</param>
+    /// <param name="position">The position to sample.</param>
+    /// <param name="gradient">Receives the field's gradient at the position.</param>
+    /// <returns>The field value at the position.</returns>
+    public static FixedQ4816 SampleGradient(in FieldNoiseSeed seed, FixedVector3 position, out FixedVector3 gradient) {
         Span<long> corners = stackalloc long[8];
 
         LoadCorners(
@@ -619,4 +700,24 @@ public static class FieldNoise {
             gradient: out gradient
         ));
     }
+}
+/// <summary>
+/// A <see cref="FieldNoise"/> seed with its three per-axis domain states derived once — the state every sample under
+/// one seed would otherwise re-derive. Obtained from <see cref="FieldNoise.Prepare"/>; every <see cref="FieldNoise"/>
+/// overload taking it returns the same bits as its <see cref="ulong"/> twin.
+/// </summary>
+public readonly struct FieldNoiseSeed {
+    internal readonly ulong X;
+    internal readonly ulong Y;
+    internal readonly ulong Z;
+
+    internal FieldNoiseSeed(ulong seed, ulong x, ulong y, ulong z) {
+        Seed = seed;
+        X = x;
+        Y = y;
+        Z = z;
+    }
+
+    /// <summary>Gets the field seed the states were derived from.</summary>
+    public ulong Seed { get; }
 }

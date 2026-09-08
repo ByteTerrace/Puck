@@ -11,11 +11,18 @@ namespace Puck.Commands;
 /// concentric shells rather than selected by chord; each ring's entries are the wheel's SECTORS, and every sector is
 /// an ordinary command binding activated through the originating seat's input-router lane.
 /// </summary>
-/// <remarks>A sector row deliberately narrows the page-entry shape: it carries a <see cref="BindingPageEntryDefinition.Command"/>
-/// destination plus display metadata and NOTHING else — no <c>Sources</c>/<c>Activator</c> (the radial gesture is the
-/// trigger), no <c>Channel</c>/<c>Scale</c> (a radial choice is a one-shot command activation), and no
-/// <c>Mode</c> (it has no held state). Command <c>Value</c> and <c>ActivateOn</c> remain meaningful and compile into
-/// the same activation shape an ordinary binding uses. Ring page ids share the document-wide page-id namespace.</remarks>
+/// <remarks>A sector row deliberately narrows the page-entry shape. It REQUIRES a
+/// <see cref="BindingPageEntryDefinition.Command"/> destination, and every member that would mean nothing on a
+/// radial choice is refused BY NAME rather than ignored — no <c>Sources</c>/<c>Activator</c> (the radial gesture is
+/// the trigger), no <c>Channel</c>/<c>Scale</c> (a radial choice is a one-shot command activation), no <c>Mode</c>
+/// (it has no held state), and no <c>Label</c> (display text resolves from <paramref name="LabelRow"/>, keyed by the
+/// sector's id). What remains is the optional stable id and the command's own shape: <c>Value</c>, <c>ActivateOn</c>,
+/// and <c>Text</c> compile into the same activation an ordinary binding uses — a sector's
+/// commit is a press, so its <see cref="BindingPageEntryDefinition.Text"/> rides the activation as the submitted line
+/// <c>&lt;command&gt; &lt;text&gt;</c> under exactly the page entry's contract — nonblank, single-line, no longer
+/// than <see cref="BindingProfile.MaxTextPayloadLength"/>, targeting a wire-args command, and refused beside an
+/// <c>ActivateOn</c> phase other than <see cref="CommandPhase.Started"/>. Ring page ids share the document-wide
+/// page-id namespace.</remarks>
 /// <param name="Id">The profile-unique radial id. Composition and runtime continuity key on this identity.</param>
 /// <param name="Group">The page group this wheel belongs to — the seat's ACTIVE group decides which wheel presents,
 /// so a group without a wheel simply presents nothing. A containing world may bind the name to a Text state cell
@@ -24,6 +31,14 @@ namespace Puck.Commands;
 /// group. Their ordinary entries author selection, ring navigation, commit, and cancel sources.</param>
 /// <param name="Rings">The concentric ring pages, innermost first — <see cref="MinRings"/>..<see cref="MaxRings"/>
 /// of them, each carrying <see cref="MinSectorsPerRing"/>..<see cref="MaxSectorsPerRing"/> sector rows.</param>
+/// <param name="LabelRow">The state row a sector's DISPLAY TEXT resolves from, spelled <c>state.&lt;row&gt;</c> — the
+/// cell key is the sector row's <see cref="BindingPageEntryDefinition.Id"/> and the cell's value is the text drawn.
+/// Opaque here (this layer never reads world state; the containing world resolves it, the same way it resolves
+/// <paramref name="Group"/>'s state reference), so a sector row carries what it DOES and the world carries how it
+/// reads. <see langword="null"/> falls back to each sector's command name.</param>
+/// <param name="IconRow">The state row a sector's ICON resolves from, spelled <c>state.&lt;row&gt;</c> — the cell key
+/// is the sector row's <see cref="BindingPageEntryDefinition.Id"/> and the cell's value is an <c>icons</c> name.
+/// Opaque here exactly as <paramref name="LabelRow"/> is. <see langword="null"/> draws no sector icons.</param>
 /// <param name="Style">Author-controlled presentation and pointer-selection policy, or the documented defaults.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingWheelDefinition(
@@ -31,7 +46,9 @@ public sealed record BindingWheelDefinition(
     DocumentIdentifier Group,
     IReadOnlyList<string> HoldPages,
     IReadOnlyList<BindingPageDefinition> Rings,
-    BindingWheelStyleDefinition? Style = null
+    BindingWheelStyleDefinition? Style = null,
+    string? LabelRow = null,
+    string? IconRow = null
 ) {
     /// <summary>The fewest rings a wheel may declare.</summary>
     public const int MinRings = 1;
@@ -44,6 +61,7 @@ public sealed record BindingWheelDefinition(
 }
 /// <summary>A spatial input's sector-selection geometry. Pointer input authors this today; a future touch binding
 /// can reuse the same policy without pretending a touch location is an analog stick.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelSpatialSelectionMode>))]
 public enum BindingWheelSpatialSelectionMode {
     /// <summary>The spatial input does not participate in radial selection.</summary>
     Disabled,
@@ -58,6 +76,7 @@ public enum BindingWheelSpatialSelectionMode {
     HitTarget,
 }
 /// <summary>Where the radial hub is anchored for the lifetime of one open gesture.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelPlacement>))]
 public enum BindingWheelPlacement {
     /// <summary>At the pointer's opening position when one is available; otherwise at viewport center.</summary>
     Pointer,
@@ -66,6 +85,7 @@ public enum BindingWheelPlacement {
     ViewportCenter,
 }
 /// <summary>How a wheel chooses among its authored rings.</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<BindingWheelRingSelectionMode>))]
 public enum BindingWheelRingSelectionMode {
     /// <summary>The active ring is selected explicitly by <c>player.wheel.ring</c> bindings or pointer-wheel input.</summary>
     Explicit,
@@ -90,7 +110,9 @@ public sealed record BindingWheelExcursionDefinition(
     float Hysteresis = 0.02f
 );
 /// <summary>Author-controlled radial presentation policy. Fractions are relative to the seat viewport's smaller
-/// extent; rotation is degrees clockwise from twelve o'clock.</summary>
+/// extent. A wheel's shape has exactly two independent authored facts: the ENTRY ORDER (which action sits where —
+/// sector zero is the first entry and sectors advance clockwise) and <see cref="SectorOffset"/> (where the seams
+/// fall). Nothing else here moves a piece, so no two documents draw the same wheel two ways.</summary>
 /// <param name="PointerSelection">How pointer location selects a sector: disabled, angle-only, or direct target.</param>
 /// <param name="Placement">Where the wheel hub is anchored when the radial opens.</param>
 /// <param name="DeadZoneFraction">The visual hub radius and spatial-input dead zone as a fraction of the seat
@@ -98,8 +120,12 @@ public sealed record BindingWheelExcursionDefinition(
 /// <param name="RingWidthFraction">One ring's radial width as a viewport fraction.</param>
 /// <param name="OuterGraceRingFraction">Additional direct-target selecting distance beyond the last visual ring,
 /// in ring widths.</param>
-/// <param name="RotationDegrees">Sector-zero rotation clockwise from twelve o'clock.</param>
-/// <param name="Clockwise">Whether sector indices advance clockwise.</param>
+/// <param name="SectorOffset">Sector zero's clockwise displacement from twelve o'clock, in SECTORS, on
+/// <c>[0, 1)</c>: 0 centers the first entry on north; 0.5 makes north the seam between the last entry and the
+/// first; 0.25 is a quarter sector clockwise. The unit is the sector, so the intent survives adding or removing
+/// entries, and the range stops at one whole sector because a full sector of rotation is an entry REORDER —
+/// move the entry instead. Clockwise is the only advance direction: counter-clockwise is the same list written
+/// in the other order.</param>
 /// <param name="InitialRing">The initially active ring, zero-based.</param>
 /// <param name="RingSelection">Whether bindings select rings explicitly or selector excursion selects them.</param>
 /// <param name="Excursion">The required neutral-relative ranges when <paramref name="RingSelection"/> is
@@ -112,6 +138,12 @@ public sealed record BindingWheelExcursionDefinition(
 /// <param name="SwitchFraction">The normalized selector magnitude a different sector needs to replace a sector held by
 /// <paramref name="SelectionGraceSeconds"/>, so a return swing that clips the far side of the dead zone cannot steal the
 /// selection.</param>
+/// <param name="FadeOutSeconds">How long the wheel stays on screen after a commit or cancel, fading out with the
+/// verdict glow on it — the accepted piece lit positive, the refused piece or the hub lit danger — so the result is
+/// SEEN before the wheel goes. 0 closes instantly with no verdict shown.</param>
+/// <param name="FadeOutEase">The fade's shape: opacity over the fade is <c>1 - t^ease</c>. 1 is linear; above 1
+/// starts slow and ends fast (the wheel holds nearly solid while the verdict registers, then snaps away — a twitch
+/// player sees nothing linger, a new player sees what happened); below 1 drops early and trails off.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record BindingWheelStyleDefinition(
     BindingWheelSpatialSelectionMode PointerSelection = BindingWheelSpatialSelectionMode.Angle,
@@ -119,12 +151,13 @@ public sealed record BindingWheelStyleDefinition(
     float DeadZoneFraction = 0.10f,
     float RingWidthFraction = 0.07f,
     float OuterGraceRingFraction = 0.5f,
-    float RotationDegrees = 0f,
-    bool Clockwise = true,
+    float SectorOffset = 0f,
     int InitialRing = 0,
     BindingWheelRingSelectionMode RingSelection = BindingWheelRingSelectionMode.Explicit,
     BindingWheelExcursionDefinition? Excursion = null,
     float AxisDeadZone = 0.08f,
     float SelectionGraceSeconds = 0.50f,
-    float SwitchFraction = 0.40f
+    float SwitchFraction = 0.40f,
+    float FadeOutSeconds = 0.25f,
+    float FadeOutEase = 2f
 );

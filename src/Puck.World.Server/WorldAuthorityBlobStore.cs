@@ -1,4 +1,5 @@
 using Puck.Storage;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -20,7 +21,7 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
 
     /// <summary>Initializes the store.</summary>
     /// <param name="store">The blob store.</param>
-    /// <param name="target">The storage target — the Azure account in deployment, a directory for local runs and the
+    /// <param name="target">The extension-supplied storage target — persistent storage in deployment, a directory for local runs and the
     /// canary.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
     public WorldAuthorityBlobStore(IObjectBlobStore store, ObjectStorageTarget target) {
@@ -31,6 +32,17 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
         m_target = target;
     }
 
+    // Every store call in this type runs under the SAME bound: a linked token that cancels after OperationTimeout
+    // regardless of what the caller's own token does. Exception handling stays with each call site — some convert a
+    // failure into WorldAuthorityStoreOutcome.Failed with their own wording, others let it propagate — so this only
+    // wraps the timeout, never a try/catch.
+    private static async Task<T> UnderTimeoutAsync<T>(CancellationToken cancellationToken, Func<CancellationToken, ValueTask<T>> op) {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+
+        timeout.CancelAfter(delay: OperationTimeout);
+
+        return await op(timeout.Token);
+    }
     // sha256-64/{hex} is the canonical pin form (WorldDefinitionFileSource.ComputeContentHash); the checkpoint blob
     // NAME carries only the hex half, since '/' cannot live inside one path segment. This is the one place that
     // splits the pin, and CheckpointAddress is the one place that rejoins it.
@@ -46,17 +58,17 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
 
         return hash[Prefix.Length..];
     }
-    private static ObjectBlobAddress CheckpointAddress(Guid containerId, WorldSafeName world, long ordinal, string hash) => WorldOwnedWorldSync.HostedAddressFor(
+    private static ObjectBlobAddress CheckpointAddress(Guid containerId, SafeName world, long ordinal, string hash) => WorldOwnedWorldSync.HostedAddressFor(
         containerId: containerId,
         leaf: $"checkpoints/{ordinal:D12}-{ExtractHex(hash: hash)}.pckp",
         world: world
     );
-    private static ObjectBlobAddress JournalAddress(Guid containerId, WorldSafeName world, long ordinal) => WorldOwnedWorldSync.HostedAddressFor(
+    private static ObjectBlobAddress JournalAddress(Guid containerId, SafeName world, long ordinal) => WorldOwnedWorldSync.HostedAddressFor(
         containerId: containerId,
         leaf: $"journal/{ordinal:D12}.bin",
         world: world
     );
-    private static ObjectBlobAddress LatestPointerAddress(Guid containerId, WorldSafeName world) => WorldOwnedWorldSync.HostedAddressFor(
+    private static ObjectBlobAddress LatestPointerAddress(Guid containerId, SafeName world) => WorldOwnedWorldSync.HostedAddressFor(
         containerId: containerId,
         leaf: "checkpoints/latest",
         world: world
@@ -71,13 +83,13 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
         ObjectBlobContent? pointerContent;
 
         try {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-            timeout.CancelAfter(delay: OperationTimeout);
-            pointerContent = await m_store.ReadAsync(
-                address: pointerAddress,
-                cancellationToken: timeout.Token,
-                target: m_target
+            pointerContent = await UnderTimeoutAsync(
+                cancellationToken: cancellationToken,
+                op: ct => m_store.ReadAsync(
+                    address: pointerAddress,
+                    cancellationToken: ct,
+                    target: m_target
+                )
             );
         } catch (Exception exception) {
             return WorldAuthorityStoreOutcome.Failed(detail: $"reading '{pointerAddress.Key}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -107,13 +119,13 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
             ObjectBlobContent? current;
 
             try {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-                timeout.CancelAfter(delay: OperationTimeout);
-                current = await m_store.ReadAsync(
-                    address: journalAddress,
-                    cancellationToken: timeout.Token,
-                    target: m_target
+                current = await UnderTimeoutAsync(
+                    cancellationToken: cancellationToken,
+                    op: ct => m_store.ReadAsync(
+                        address: journalAddress,
+                        cancellationToken: ct,
+                        target: m_target
+                    )
                 );
             } catch (Exception exception) {
                 return WorldAuthorityStoreOutcome.Failed(detail: $"reading '{journalAddress.Key}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -140,19 +152,19 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
             ObjectBlobWriteResult result;
 
             try {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-                timeout.CancelAfter(delay: OperationTimeout);
-                result = await m_store.WriteAsync(
-                    address: journalAddress,
-                    cancellationToken: timeout.Token,
-                    content: pageBytes,
-                    ifMatchVersion: current?.VersionToken,
-                    mode: ((current is null)
-                        ? ObjectBlobWriteMode.CreateOnly
-                        : ObjectBlobWriteMode.Overwrite
-                    ),
-                    target: m_target
+                result = await UnderTimeoutAsync(
+                    cancellationToken: cancellationToken,
+                    op: ct => m_store.WriteAsync(
+                        address: journalAddress,
+                        cancellationToken: ct,
+                        content: pageBytes,
+                        ifMatchVersion: current?.VersionToken,
+                        mode: ((current is null)
+                            ? ObjectBlobWriteMode.CreateOnly
+                            : ObjectBlobWriteMode.Overwrite
+                        ),
+                        target: m_target
+                    )
                 );
             } catch (Exception exception) {
                 return WorldAuthorityStoreOutcome.Failed(detail: $"writing '{journalAddress.Key}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -205,14 +217,13 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
             world: identity.World
         );
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-        timeout.CancelAfter(delay: OperationTimeout);
-
-        var content = await m_store.ReadAsync(
-            address: address,
-            cancellationToken: timeout.Token,
-            target: m_target
+        var content = await UnderTimeoutAsync(
+            cancellationToken: cancellationToken,
+            op: ct => m_store.ReadAsync(
+                address: address,
+                cancellationToken: ct,
+                target: m_target
+            )
         );
 
         if (content is not { } found) {
@@ -242,14 +253,13 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
             world: identity.World
         );
 
-        using var pointerTimeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-        pointerTimeout.CancelAfter(delay: OperationTimeout);
-
-        var pointerContent = await m_store.ReadAsync(
-            address: pointerAddress,
-            cancellationToken: pointerTimeout.Token,
-            target: m_target
+        var pointerContent = await UnderTimeoutAsync(
+            cancellationToken: cancellationToken,
+            op: ct => m_store.ReadAsync(
+                address: pointerAddress,
+                cancellationToken: ct,
+                target: m_target
+            )
         );
 
         if (pointerContent is not { } pointer) {
@@ -273,14 +283,13 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
             world: identity.World
         );
 
-        using var checkpointTimeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-        checkpointTimeout.CancelAfter(delay: OperationTimeout);
-
-        var checkpointContent = await m_store.ReadAsync(
-            address: checkpointAddress,
-            cancellationToken: checkpointTimeout.Token,
-            target: m_target
+        var checkpointContent = await UnderTimeoutAsync(
+            cancellationToken: cancellationToken,
+            op: ct => m_store.ReadAsync(
+                address: checkpointAddress,
+                cancellationToken: ct,
+                target: m_target
+            )
         );
 
         if (checkpointContent is not { } checkpoint) {
@@ -315,16 +324,15 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
         var bytes = WorldDefinitionSerialization.Serialize(definition: composed);
 
         try {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-            timeout.CancelAfter(delay: OperationTimeout);
-
-            var result = await m_store.WriteAsync(
-                address: address,
-                cancellationToken: timeout.Token,
-                content: bytes,
-                mode: ObjectBlobWriteMode.Overwrite,
-                target: m_target
+            var result = await UnderTimeoutAsync(
+                cancellationToken: cancellationToken,
+                op: ct => m_store.WriteAsync(
+                    address: address,
+                    cancellationToken: ct,
+                    content: bytes,
+                    mode: ObjectBlobWriteMode.Overwrite,
+                    target: m_target
+                )
             );
 
             return (result.Succeeded
@@ -347,13 +355,13 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
             ObjectBlobContent? pointerContent;
 
             try {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-                timeout.CancelAfter(delay: OperationTimeout);
-                pointerContent = await m_store.ReadAsync(
-                    address: pointerAddress,
-                    cancellationToken: timeout.Token,
-                    target: m_target
+                pointerContent = await UnderTimeoutAsync(
+                    cancellationToken: cancellationToken,
+                    op: ct => m_store.ReadAsync(
+                        address: pointerAddress,
+                        cancellationToken: ct,
+                        target: m_target
+                    )
                 );
             } catch (Exception exception) {
                 return WorldAuthorityStoreOutcome.Failed(detail: $"reading '{pointerAddress.Key}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -385,15 +393,15 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
             ObjectBlobWriteResult checkpointResult;
 
             try {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-                timeout.CancelAfter(delay: OperationTimeout);
-                checkpointResult = await m_store.WriteAsync(
-                    address: checkpointAddress,
-                    cancellationToken: timeout.Token,
-                    content: encoded,
-                    mode: ObjectBlobWriteMode.CreateOnly,
-                    target: m_target
+                checkpointResult = await UnderTimeoutAsync(
+                    cancellationToken: cancellationToken,
+                    op: ct => m_store.WriteAsync(
+                        address: checkpointAddress,
+                        cancellationToken: ct,
+                        content: encoded,
+                        mode: ObjectBlobWriteMode.CreateOnly,
+                        target: m_target
+                    )
                 );
             } catch (Exception exception) {
                 return WorldAuthorityStoreOutcome.Failed(detail: $"writing '{checkpointAddress.Key}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -405,13 +413,13 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
                 ObjectBlobContent? existing;
 
                 try {
-                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-                    timeout.CancelAfter(delay: OperationTimeout);
-                    existing = await m_store.ReadAsync(
-                        address: checkpointAddress,
-                        cancellationToken: timeout.Token,
-                        target: m_target
+                    existing = await UnderTimeoutAsync(
+                        cancellationToken: cancellationToken,
+                        op: ct => m_store.ReadAsync(
+                            address: checkpointAddress,
+                            cancellationToken: ct,
+                            target: m_target
+                        )
                     );
                 } catch (Exception exception) {
                     return WorldAuthorityStoreOutcome.Failed(detail: $"'{checkpointAddress.Key}' exists and could not be read to compare — {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -433,19 +441,19 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
             ObjectBlobWriteResult pointerResult;
 
             try {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-                timeout.CancelAfter(delay: OperationTimeout);
-                pointerResult = await m_store.WriteAsync(
-                    address: pointerAddress,
-                    cancellationToken: timeout.Token,
-                    content: pointerBytes,
-                    ifMatchVersion: pointerContent?.VersionToken,
-                    mode: ((pointerContent is null)
-                        ? ObjectBlobWriteMode.CreateOnly
-                        : ObjectBlobWriteMode.Overwrite
-                    ),
-                    target: m_target
+                pointerResult = await UnderTimeoutAsync(
+                    cancellationToken: cancellationToken,
+                    op: ct => m_store.WriteAsync(
+                        address: pointerAddress,
+                        cancellationToken: ct,
+                        content: pointerBytes,
+                        ifMatchVersion: pointerContent?.VersionToken,
+                        mode: ((pointerContent is null)
+                            ? ObjectBlobWriteMode.CreateOnly
+                            : ObjectBlobWriteMode.Overwrite
+                        ),
+                        target: m_target
+                    )
                 );
             } catch (Exception exception) {
                 return WorldAuthorityStoreOutcome.Failed(detail: $"writing '{pointerAddress.Key}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}");

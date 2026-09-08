@@ -1,5 +1,3 @@
-using System.Numerics;
-
 namespace Puck.World;
 
 /// <summary>One slot of a <see cref="WorldViewLayout"/> — a normalized rect (origin top-left, Y down) plus what fills it.
@@ -25,7 +23,7 @@ public sealed record WorldViewLayout(string Name, int SeatCount, IReadOnlyList<W
     private readonly IReadOnlyList<WorldViewSlot> m_slots = (Slots ?? []);
 
     /// <summary>Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldViewSlot> Slots {
         get => m_slots;
         init => m_slots = (value ?? []);
@@ -38,15 +36,11 @@ public sealed record WorldViewLayout(string Name, int SeatCount, IReadOnlyList<W
 /// <param name="YawReference">What the camera yaw is relative to.</param>
 /// <param name="MinPitch">The minimum live pitch offset in radians.</param>
 /// <param name="MaxPitch">The maximum live pitch offset in radians.</param>
-/// <param name="SwapRate">The rate the camera boom closes over a <c>player.look.swap</c>, in the same unit as
-/// <c>seatRig.smoothRate</c>: <c>0</c> is instant (the boom re-seeds at the turned pose — a cut), a positive value
-/// eases the half-turn at that rate until it lands. Optional; absent leaves the swap to the rig's own
-/// <c>smoothRate</c>.</param>
 /// <param name="Follow">The follow camera: with no look input the camera yaw eases in behind the body's heading;
 /// any look input (a deflected look stick, a held orbit/steer) is free-look and the follow yields for as long as
 /// it lasts. Optional; absent is a still camera that goes only where look input sends it. Needs
 /// <see cref="WorldSeatYawReference.World"/> — a body-relative yaw already rides the body.</param>
-public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] float? SwapRate = null);
+public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null);
 /// <summary>The follow camera's shape.</summary>
 /// <param name="Rate">The exponential rate (per second) the camera yaw closes on the heading — about 63% of the
 /// remaining angle per <c>1/rate</c> seconds; larger is a stiffer follow.</param>
@@ -59,49 +53,43 @@ public enum WorldSeatYawReference : byte {
     World,
     Body,
 }
-/// <param name="SeatRig">The chase framing every seat's view resolves through (the non-editing default).</param>
+/// <param name="SeatRig">The chase framing every seat's view resolves through by default.</param>
 /// <param name="SeatControl">The structural constraints/reference for live seat camera input.</param>
 /// <param name="Layouts">The authored named layouts (empty = the built-in ladder).</param>
-public sealed record WorldViewDefaults(WorldCameraRig SeatRig, WorldSeatViewControl SeatControl, IReadOnlyList<WorldViewLayout> Layouts) {
-    /// <summary>The engine's default vertical field of view (55 degrees), mirroring
-    /// <c>Puck.SdfVm.Views.OrbitRig.DefaultFieldOfViewRadians</c> — every concrete <c>ISdfCameraRig</c> shares this one
-    /// value, so it is pinned here rather than read from Puck.SdfVm, which Puck.World.Schema must not reference.</summary>
-    private const float EngineDefaultFieldOfViewRadians = (55f * (float.Pi / 180f));
-
+/// <param name="CameraRig">The program a seat's view resolves through while its published mode state targets
+/// <see cref="WorldSeatModeState.CameraTarget"/> — <see langword="null"/> for a world that authors no
+/// camera-targeting mode state. Resolved through the ordinary <c>Puck.World.Client.WorldCameraRigCompiler</c> pipeline
+/// against whichever body the seat currently perceives from (the possessed camera body — see
+/// <c>Puck.World.Server.WorldEngagement</c>), exactly like <see cref="SeatRig"/> resolves against the seat's own
+/// avatar; no bespoke per-frame integrator reads this field.</param>
+public sealed record WorldViewDefaults(WorldCameraProgram SeatRig, WorldSeatViewControl SeatControl, IReadOnlyList<WorldViewLayout> Layouts,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraProgram? CameraRig = null) {
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
 
-    /// <summary>Gets the built-in defaults: the engine chase framing every seat wakes on — the same orbit numbers and
-    /// rig-level smoothing `play`/`jump` author, and NO authored layouts (an empty list means the built-in seat ladder
-    /// composes the window). Control feel is NOT here: it is per-seat, on
-    /// <see cref="WorldPlayerDefaults.SeatLook"/>.</summary>
-    public static WorldViewDefaults Default { get; } = new(
-        SeatRig: new WorldCameraRig(
-            Motion: new WorldCameraMotion.Orbit(
-                Distance: 5.4626001f,
-                Yaw: 0f,
-                Pitch: 0.4145069f,
-                PivotOffset: Vector3.Zero
-            ),
-            Aim: new WorldCameraAim.Anchor(
-                Offset: new(
-                    x: 0f,
-                    y: 1f,
-                    z: 0f
-                ),
-                WorldAxes: false
-            ),
-            Lens: new WorldCameraLens(FieldOfViewRadians: EngineDefaultFieldOfViewRadians),
-            SmoothRate: 6f
+    /// <summary>Gets the placeholder an UNAUTHORED <c>views</c> section resolves to — an empty program, holding the
+    /// property non-null between parse and validation. The engine carries no camera policy of its own: the standard
+    /// chase framing is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a world inherits it by naming that
+    /// document as its basis. A document whose census implies a body is refused for authoring no <c>views</c>
+    /// (<c>WorldDefinitionValidator</c>), so nothing ever composes a seat view from this. Control feel is not here
+    /// either: it is per-seat, on <see cref="WorldPlayerDefaults.SeatLook"/>.</summary>
+    public static WorldViewDefaults Absent { get; } = new(
+        SeatRig: new WorldCameraProgram(
+            Name: "absent",
+            Version: WorldCameraProgram.CurrentVersion,
+            Operations: [
+                new WorldCameraProgramOp.Orbit(Distance: 0.01f, Yaw: new BindableScalar(literal: 0f), Pitch: new BindableScalar(literal: 0f)),
+                new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0f)),
+            ]
         ),
         SeatControl: new WorldSeatViewControl(
-            MaxPitch: 1.2f,
-            MinPitch: -0.35f,
+            MaxPitch: 0f,
+            MinPitch: 0f,
             YawReference: WorldSeatYawReference.World
         ),
         Layouts: []
     );
     /// <summary>Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldViewLayout> Layouts {
         get => m_layouts;
         init => m_layouts = (value ?? []);

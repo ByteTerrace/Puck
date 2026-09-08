@@ -12,6 +12,51 @@ namespace Puck.World.Tests;
 /// hosted arm, and each one loads and validates its own adjacency claims through
 /// <see cref="WorldHostedOrigin.TryLoad"/> against that same resolver.</summary>
 public sealed class WorldHostedOriginLawTests {
+    [Fact]
+    public async Task NeighbourSeamReadsDoNotRequireUnrelatedHostSettingsToValidate() {
+        using var directory = new TempWorldDirectory();
+        var target = new DirectoryObjectStorageTarget(directory.RootPath);
+        var store = PuckStorageTestComposition.BuildStore();
+        var owner = Guid.NewGuid();
+        var definition = BuildQuilt()["quilt-island"] with { HostRaw = Fixtures.StandardHost with { Width = -1 } };
+
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out _));
+        var address = WorldOwnedWorldSync.HostedAddressFor(owner, SafeName.Parse(candidate: "quilt-island"), "definition.json");
+
+        await store.WriteAsync(target, address, WorldDefinitionSerialization.Serialize(definition: definition), ObjectBlobWriteMode.Overwrite, cancellationToken: TestContext.Current.CancellationToken);
+        var resolver = new WorldStorageNeighbourResolver(containerId: owner, @namespace: WorldStorageNamespace.Hosted, store: store, target: target);
+
+        Assert.Equal(WorldNeighbourResolutionKind.Attested, resolver.Resolve(document: "quilt-island.world.json").Kind);
+        var origin = new WorldHostedOrigin(owner, SafeName.Parse(candidate: "quilt-island"), store, target);
+        var loaded = await origin.LoadAsync("quilt-island", TestContext.Current.CancellationToken);
+
+        Assert.Null(loaded.Definition);
+        Assert.Contains("host.width", loaded.Reason, StringComparison.Ordinal);
+    }
+    [Fact]
+    public async Task AsyncLoaderYieldsWhileNeighbourReadsArePendingAndStillProvesAdjacency() {
+        var quilt = BuildQuilt();
+        var gate = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+        var reads = 0;
+
+        async ValueTask<WorldNeighbourResolution> Resolve(string document, CancellationToken token) {
+            reads++;
+            await gate.Task.WaitAsync(cancellationToken: token);
+            Assert.True(condition: WorldCounterpartAttestation.TryCompose(quilt[document[..^WorldOwnedWorldFileName.Suffix.Length]], document, out var attestation, out var reason), userMessage: reason);
+            return WorldNeighbourResolution.Attested(attestation: attestation!);
+        }
+        var load = WorldDefinitionLoader.LoadAsync(WorldDefinitionSerialization.Serialize(definition: quilt["quilt-nw"]), "quilt-nw", "quilt-nw", Resolve, TestContext.Current.CancellationToken);
+
+        Assert.False(load.IsCompleted);
+        Assert.Equal(actual: reads, expected: 1);
+        gate.SetResult();
+        var result = await load;
+
+        Assert.NotNull(result.Definition);
+        Assert.Empty(result.Reason);
+        Assert.Equal(actual: reads, expected: 3);
+    }
+
     private static WorldAdjacencyBoundary Boundary(float yaw) => new(
         Center: Vector3.Zero,
         Height: 8f,
@@ -24,11 +69,11 @@ public sealed class WorldHostedOriginLawTests {
     // see Fixtures' own remarks).
     private static Dictionary<string, WorldDefinition> BuildQuilt() {
         WorldReference Reference(string name, string document) => new(
-            Name: WorldSafeName.Parse(candidate: name),
+            Name: SafeName.Parse(candidate: name),
             Document: document
         );
         WorldDestination Destination(string name, string referenceName) => new(
-            Name: WorldSafeName.Parse(candidate: name),
+            Name: SafeName.Parse(candidate: name),
             Durability: WorldDestinationDurability.Persisted,
             Reference: referenceName,
             Scope: WorldDestinationScope.Global
@@ -36,9 +81,9 @@ public sealed class WorldHostedOriginLawTests {
 
         var nw = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "nwNeEdge"), "toNe", "neNwEdge", Boundary(yaw: 90f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "nwSwEdge"), "toSw", "swNwEdge", Boundary(yaw: 180f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "nwIslandEdge"), "toIsland", "islandNwEdge", Boundary(yaw: -90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "nwNeEdge"), "toNe", "neNwEdge", Boundary(yaw: 90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "nwSwEdge"), "toSw", "swNwEdge", Boundary(yaw: 180f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "nwIslandEdge"), "toIsland", "islandNwEdge", Boundary(yaw: -90f)),
             ],
             Destinations = [
                 Destination(name: "toNe", referenceName: "toNe"),
@@ -53,8 +98,8 @@ public sealed class WorldHostedOriginLawTests {
         };
         var ne = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "neNwEdge"), "toNw", "nwNeEdge", Boundary(yaw: -90f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "neSeEdge"), "toSe", "seNeEdge", Boundary(yaw: 180f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "neNwEdge"), "toNw", "nwNeEdge", Boundary(yaw: -90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "neSeEdge"), "toSe", "seNeEdge", Boundary(yaw: 180f)),
             ],
             Destinations = [
                 Destination(name: "toNw", referenceName: "toNw"),
@@ -67,8 +112,8 @@ public sealed class WorldHostedOriginLawTests {
         };
         var se = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "seNeEdge"), "toNe", "neSeEdge", Boundary(yaw: 0f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "seSwEdge"), "toSw", "swSeEdge", Boundary(yaw: 180f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "seNeEdge"), "toNe", "neSeEdge", Boundary(yaw: 0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "seSwEdge"), "toSw", "swSeEdge", Boundary(yaw: 180f)),
             ],
             Destinations = [
                 Destination(name: "toNe", referenceName: "toNe"),
@@ -81,8 +126,8 @@ public sealed class WorldHostedOriginLawTests {
         };
         var sw = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "swSeEdge"), "toSe", "seSwEdge", Boundary(yaw: 0f)),
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "swNwEdge"), "toNw", "nwSwEdge", Boundary(yaw: 0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "swSeEdge"), "toSe", "seSwEdge", Boundary(yaw: 0f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "swNwEdge"), "toNw", "nwSwEdge", Boundary(yaw: 0f)),
             ],
             Destinations = [
                 Destination(name: "toSe", referenceName: "toSe"),
@@ -95,7 +140,7 @@ public sealed class WorldHostedOriginLawTests {
         };
         var island = Fixtures.BuildDocument() with {
             Adjacencies = [
-                new WorldAdjacency(WorldSafeName.Parse(candidate: "islandNwEdge"), "toNw", "nwIslandEdge", Boundary(yaw: 90f)),
+                new WorldAdjacency(SafeName.Parse(candidate: "islandNwEdge"), "toNw", "nwIslandEdge", Boundary(yaw: 90f)),
             ],
             Destinations = [
                 Destination(name: "toNw", referenceName: "toNw"),
@@ -134,7 +179,7 @@ public sealed class WorldHostedOriginLawTests {
                 composed: definition,
                 identity: new WorldAuthorityIdentity(
                     Owner: owner,
-                    World: WorldSafeName.Parse(candidate: id)
+                    World: SafeName.Parse(candidate: id)
                 )
             );
 
@@ -173,7 +218,7 @@ public sealed class WorldHostedOriginLawTests {
                 owner: owner,
                 store: store,
                 target: target,
-                world: WorldSafeName.Parse(candidate: id)
+                world: SafeName.Parse(candidate: id)
             );
 
             Assert.True(

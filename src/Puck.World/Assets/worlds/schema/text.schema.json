@@ -82,7 +82,8 @@
           "hash",
           "codePointRanges"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "TextFontDefinition"
       }
     }
   },
@@ -91,5 +92,6 @@
     "fonts"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "TextFontCatalogDefinition"
 }

@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One row of the document\u0027s generators section: a stochastic source declared under a name, so that any number of WorldDraw sites may reference it (Source). Declaring a source once and referencing it is what makes an NPC-bark site and a loot site able to share one authored table while still drawing independent sequences \u2014 the source carries the shape, each site carries its own position.",
+    "description": "One row of the document\u0027s generators section: a stochastic source declared under a name, so that any number of Draw sites may reference it (Source). Declaring a source once and referencing it is what makes an NPC-bark site and a loot site able to share one authored table while still drawing independent sequences \u2014 the source carries the shape, each site carries its own position.",
     "type": [
       "object",
       "null"
@@ -12,6 +12,7 @@
     "properties": {
       "name": {
         "description": "The source\u0027s name, unique within the section, and the spelling a site\u0027s Source resolves against.",
+        "title": "CellName",
         "type": "string"
       },
       "generator": {
@@ -19,13 +20,14 @@
         "type": "object",
         "properties": {
           "source": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorSource",
+            "$ref": "./common.schema.json#/$defs/GeneratorSource",
             "description": "Which draw shape this source fires.",
             "default": "Markov"
           },
           "start": {
             "description": "Markov only: the context every emission begins from. Must name a declared context.",
             "default": null,
+            "title": "CellName",
             "type": [
               "string",
               "null"
@@ -37,13 +39,80 @@
             "default": 1
           },
           "contexts": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorContextList",
             "description": "Markov only: the declared contexts, at least one, uniquely keyed.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One named context of a StateGenerator \u2014 the state the walk may be sitting in and the weighted alternatives it may pick while there. A context declaring NO alternatives is TERMINAL: reaching it ends the emission.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "key": {
+                  "description": "The stable context key, unique within the generator.",
+                  "title": "CellName",
+                  "type": "string"
+                },
+                "alternatives": {
+                  "description": "The weighted alternatives out of this context, or empty for a terminal context.",
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "description": "One weighted alternative of a GeneratorContext: the token it emits, its relative weight, and the context the walk moves into after it is picked. The authored Next is what makes this a real Markov process rather than a bag of independent draws \u2014 the context key is the process state, so an author folds exactly as much history into it as the chain needs.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "token": {
+                        "description": "The opaque game-authored token this alternative emits. The engine never interprets it; it is space-joined with the emission\u0027s other tokens and written into the target text cell. Bounded by MaxTokenLength.",
+                        "type": "string"
+                      },
+                      "weight": {
+                        "description": "The alternative\u0027s positive relative weight. At least one alternative in a context must carry a non-zero weight.",
+                        "type": "integer"
+                      },
+                      "next": {
+                        "description": "The context the walk moves into after this alternative is picked. Must name a declared Key; naming a context that declares NO alternatives ends the emission (a terminal is a context with nothing to say, never a reserved token spelling).",
+                        "title": "CellName",
+                        "type": "string"
+                      },
+                      "multiplicity": {
+                        "description": "How many units of this alternative one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass. A context\u0027s units total at most MaxEntriesPerSet.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "token",
+                      "weight",
+                      "next"
+                    ],
+                    "additionalProperties": false,
+                    "title": "GeneratorAlternative"
+                  },
+                  "default": null
+                }
+              },
+              "required": [
+                "key"
+              ],
+              "additionalProperties": false,
+              "title": "GeneratorContext"
+            },
             "default": null
           },
           "mode": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorMode",
-            "description": "Markov only: how alternatives are consumed (see WorldGeneratorMode).",
+            "$ref": "./common.schema.json#/$defs/GeneratorMode",
+            "description": "Markov, weighted numeric and symmetry orbit: how the entries are consumed (see GeneratorMode).",
             "default": "WithReplacement"
           },
           "rangeMin": {
@@ -63,19 +132,87 @@
             "default": null
           },
           "weighted": {
-            "$ref": "./common.schema.json#/$defs/WorldGeneratorWeightedNumericList",
-            "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight.",
+            "description": "WeightedNumeric only: the weighted numeric outcomes, at least one, at least one carrying a non-zero weight; under an exhausting Mode each outcome contributes Multiplicity units to the pass.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One numeric outcome of a WeightedNumeric source: the raw value it writes and its relative weight \u2014 the numeric twin of GeneratorAlternative, minus Token (nothing to join into text) and Next (a numeric draw is one terminal pick, never a walk).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "value": {
+                  "description": "The raw value this outcome writes on selection (a plain integer for Int, raw FixedQ4816 bits for Fixed).",
+                  "type": "integer"
+                },
+                "weight": {
+                  "description": "The outcome\u0027s relative weight, fed straight to Puck.Maths.WeightedSampler\u0027s exact ulong overload. At least one outcome must carry a non-zero weight.",
+                  "type": "integer"
+                },
+                "multiplicity": {
+                  "description": "How many units of this outcome one pass holds, at least one; null is one. Under WithReplacement a multiplicity only scales the weight; under an exhausting mode each unit is drawn once per pass, so an outcome that should come out twice per pass declares 2 rather than being authored twice. A source\u0027s units total at most MaxEntriesPerSet.",
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "value",
+                "weight"
+              ],
+              "additionalProperties": false,
+              "title": "GeneratorWeightedNumeric"
+            },
+            "default": null
+          },
+          "ring": {
+            "description": "SymmetryOrbit only: the ring, 0..7, whose thirty nodes are the units \u2014 exactly one of Ring and Node.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "node": {
+            "description": "SymmetryOrbit only: the node, 0..239, whose orbit under Word is the units.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "word": {
+            "description": "SymmetryOrbit beside Node only: the word of reflections (one to eight mirror nodes, applied first to last) the orbit is taken under, or null for the lattice\u0027s own cycle \u2014 the same generator vocabulary a StateCycle authors.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer"
+            },
+            "default": null
+          },
+          "extended": {
+            "$ref": "./common.schema.json#/$defs/GeneratorExtended",
+            "description": "The extended-generator facet (see GeneratorExtended), or null for the ordinary Pcg32XshRr generator every other source draws through.",
             "default": null
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "StateGenerator"
       }
     },
     "required": [
       "name",
       "generator"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "GeneratorRow"
   },
   "default": null
 }

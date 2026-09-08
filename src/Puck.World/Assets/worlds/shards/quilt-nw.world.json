@@ -1,0 +1,212 @@
+{
+  "basis": "../puck.world.json",
+  "documentId": "quilt-nw",
+  "gravity": {
+    "areas": []
+  },
+  "navigation": {
+    "domains": [
+      {
+        "name": "granaryYard",
+        "$drop": true
+      }
+    ]
+  },
+  "cameras": [
+    {
+      "name": "studioStage",
+      "$drop": true
+    }
+  ],
+  "references": [
+    {
+      "name": "nw",
+      "$drop": true
+    },
+    {
+      "name": "ne",
+      "document": "quilt-ne.world.json"
+    },
+    {
+      "name": "se",
+      "document": "quilt-se.world.json"
+    },
+    {
+      "name": "sw",
+      "document": "quilt-sw.world.json"
+    },
+    {
+      "name": "island",
+      "document": "../puck.world.json"
+    }
+  ],
+  "destinations": [
+    {
+      "name": "nw",
+      "$drop": true
+    },
+    {
+      "name": "island",
+      "reference": "island",
+      "durability": "persisted",
+      "scope": "global"
+    }
+  ],
+  "adjacencies": [
+    {
+      "$replace": true
+    },
+    {
+      "name": "island",
+      "destination": "island",
+      "counterpart": "north",
+      "boundary": {
+        "center": [
+          0.0,
+          0,
+          -66.0
+        ],
+        "outwardYawDegrees": 0,
+        "outwardPitchDegrees": 0,
+        "width": 132.0,
+        "height": 16.0
+      },
+      "unavailable": "Closed"
+    },
+    {
+      "name": "east",
+      "destination": "ne",
+      "counterpart": "west",
+      "boundary": {
+        "center": [
+          66.0,
+          0,
+          -99.0
+        ],
+        "outwardYawDegrees": 90,
+        "outwardPitchDegrees": 0,
+        "width": 24.0,
+        "height": 16.0
+      },
+      "unavailable": "Closed"
+    },
+    {
+      "name": "south",
+      "destination": "sw",
+      "counterpart": "north",
+      "boundary": {
+        "center": [
+          -99.0,
+          0,
+          -66.0
+        ],
+        "outwardYawDegrees": 0,
+        "outwardPitchDegrees": 0,
+        "width": 24.0,
+        "height": 16.0
+      },
+      "unavailable": "Closed"
+    }
+  ],
+  "spawnPoints": [
+    {
+      "id": "quilt-nw-arrival",
+      "position": [
+        0.0,
+        0,
+        -99.0
+      ],
+      "yawDegrees": 0
+    }
+  ],
+  "bodies": {
+    "seatSpawns": [
+      "quilt-nw-arrival",
+      "quilt-nw-arrival"
+    ]
+  },
+  "prototypes": [
+    {
+      "id": "quiltGround",
+      "document": {
+        "name": "quiltGround",
+        "palette": [
+          {
+            "color": "#3373D9"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "slab",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": "state.transforms.identity",
+            "scale": [
+              99.0,
+              0.5,
+              33.0
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "$replace": true
+      },
+      {
+        "id": "groundPlane",
+        "position": [
+          0,
+          -16,
+          0
+        ],
+        "prototypeId": "groundPlane",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "groundTexture",
+        "position": [
+          0,
+          -16.24,
+          0
+        ],
+        "prototypeId": "groundTexture",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "quiltGround",
+        "position": [
+          -33.0,
+          -1.0,
+          -99.0
+        ],
+        "prototypeId": "quiltGround",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "rules": null,
+  "interactions": null,
+  "captures": null
+}

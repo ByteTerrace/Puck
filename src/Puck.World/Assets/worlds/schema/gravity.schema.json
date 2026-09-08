@@ -1,0 +1,236 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "solver": {
+      "description": "The evaluation strategy.",
+      "enum": [
+        "Pairwise",
+        "FastMonopole",
+        "AdaptiveFmm"
+      ],
+      "title": "WorldGravitySolver"
+    },
+    "gravitationalConstant": {
+      "description": "The non-negative proportionality constant applied to every source mass.",
+      "type": "number"
+    },
+    "softeningLength": {
+      "description": "The positive Plummer softening length that bounds the force at short range.",
+      "type": "number"
+    },
+    "attractors": {
+      "description": "The static sources, or empty for a field summed from bodies alone.",
+      "type": "array",
+      "items": {
+        "description": "One gravitational source the world declares, riding a placement\u0027s authored transform.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "placementId": {
+            "description": "The placements row whose position the source sits at. The row need not be solid or visible; only its transform is read.",
+            "type": "string"
+          },
+          "mass": {
+            "description": "The source\u0027s non-negative gravitational mass.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "placementId",
+          "mass"
+        ],
+        "additionalProperties": false,
+        "title": "WorldGravityAttractor"
+      }
+    },
+    "uniform": {
+      "$ref": "./common.schema.json#/$defs/DocumentVector3",
+      "description": "A constant acceleration added to every solved answer, in world units per second squared. Point masses cannot express a uniform field, so this is how a world keeps a flat floor underfoot while its attractors own the space around them: authored as an acceleration, it is already what a body integrates.",
+      "default": null
+    },
+    "points": {
+      "description": "Ergonomic point/planet presets lowered to static masses through the same Plummer kernel as Attractors. Absent means none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A point-gravity preset riding a placement, authored in the quantities a world designer observes.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "placementId": {
+            "description": "The placements row at the point source\u0027s centre.",
+            "type": "string"
+          },
+          "surfaceGravity": {
+            "description": "The positive acceleration magnitude, in world units per second squared, promised at ReferenceRadius after the world\u0027s authored softening is applied.",
+            "type": "number"
+          },
+          "referenceRadius": {
+            "description": "The positive distance from the source centre at which SurfaceGravity is promised. For a planet this is its surface radius; a source need not carry geometry.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "placementId",
+          "surfaceGravity",
+          "referenceRadius"
+        ],
+        "additionalProperties": false,
+        "title": "WorldGravityPoint"
+      },
+      "default": null
+    },
+    "areas": {
+      "description": "Bounded placement-relative influences evaluated after the global solve. Absent means none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A bounded local gravity influence riding a placement\u0027s resolved transform.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "placementId": {
+            "description": "The placement whose position, yaw, scale, and optional body attachment the area follows.",
+            "type": "string"
+          },
+          "priority": {
+            "description": "The deterministic composition priority. Lower values apply first; authored order breaks ties, so a later equal-priority row applies later.",
+            "type": "integer"
+          },
+          "mode": {
+            "description": "Whether the matching area\u0027s acceleration combines with or replaces the accumulated answer.",
+            "enum": [
+              "Combine",
+              "Replace"
+            ],
+            "title": "WorldGravityAreaMode"
+          },
+          "bounds": {
+            "description": "The placement-relative analytic bound. Boundary points are included.",
+            "type": "object",
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "A sphere centered on the riding placement.",
+                "properties": {
+                  "$type": {
+                    "const": "sphere"
+                  },
+                  "radius": {
+                    "description": "The positive placement-local radius, multiplied by the placement\u0027s scale.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "radius"
+                ],
+                "additionalProperties": false,
+                "title": "WorldGravityAreaBoundsSphereBounds"
+              },
+              {
+                "description": "A yaw-oriented box centered on the riding placement.",
+                "properties": {
+                  "$type": {
+                    "const": "box"
+                  },
+                  "halfExtents": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                    "description": "The positive placement-local half extents, multiplied by the placement\u0027s scale."
+                  }
+                },
+                "required": [
+                  "halfExtents"
+                ],
+                "additionalProperties": false,
+                "title": "WorldGravityAreaBoundsBoxBounds"
+              }
+            ],
+            "title": "WorldGravityAreaBounds"
+          },
+          "acceleration": {
+            "description": "The placement-relative acceleration form.",
+            "type": "object",
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "A placement-local acceleration vector, rotated by the placement\u0027s resolved yaw.",
+                "properties": {
+                  "$type": {
+                    "const": "directional"
+                  },
+                  "value": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                    "description": "The acceleration vector in world units per second squared. Zero is admitted so Replace can author a zero-gravity pocket."
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false,
+                "title": "WorldGravityAreaAccelerationDirectional"
+              },
+              {
+                "description": "A constant-magnitude acceleration directed toward the placement origin.",
+                "properties": {
+                  "$type": {
+                    "const": "radial"
+                  },
+                  "magnitude": {
+                    "description": "The positive acceleration magnitude in world units per second squared.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "magnitude"
+                ],
+                "additionalProperties": false,
+                "title": "WorldGravityAreaAccelerationRadial"
+              }
+            ],
+            "title": "WorldGravityAreaAcceleration"
+          }
+        },
+        "required": [
+          "placementId",
+          "priority",
+          "mode",
+          "bounds",
+          "acceleration"
+        ],
+        "additionalProperties": false,
+        "title": "WorldGravityArea"
+      },
+      "default": null
+    },
+    "isActive": {
+      "description": "Gets a value indicating whether the section declares an active global or bounded local field.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "solver",
+    "gravitationalConstant",
+    "softeningLength",
+    "attractors"
+  ],
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldGravity"
+}

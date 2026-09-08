@@ -13,7 +13,7 @@
       "default": null
     },
     "userId": {
-      "description": "An explicit user-id override (an Entra oid Guid string for a dev box or agent), or null to decline identity (local-only). Fed to the identity resolver\u0027s explicit-override source.",
+      "description": "An explicit user-id override (a UUID string for a dev box or agent), or null to decline identity (local-only). Fed to the identity resolver\u0027s explicit-override source.",
       "type": [
         "string",
         "null"
@@ -21,7 +21,7 @@
       "default": null
     },
     "discoveryEndpoint": {
-      "description": "The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target \u2014 the platform edge cannot serve List at all (see AzureBlobObjectStorageTarget.DirectEndpoint\u0027s remarks), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only \u2014 see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).",
+      "description": "The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target \u2014 the platform edge cannot serve List at all (see the storage extension documentation), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only \u2014 see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).",
       "type": [
         "string",
         "null"
@@ -30,5 +30,6 @@
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldStorageDefaults"
 }

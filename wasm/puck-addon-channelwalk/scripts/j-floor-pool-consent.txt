@@ -4,7 +4,7 @@
 # LOGIC: TRUSTED in the fold, added OUTSIDE the pool, gated by its own declared Reach ONLY -- consent does not
 # apply to world logic. Every comment below this line was written against the PRIOR pooled-under-consent model,
 # where a bare `channels:strafe` Drive row (no seat-authored ceiling) folded nothing at all. Re-run verbatim
-# post-recut (this file's own commands unchanged): ALL FOUR `player.channels` readings below now read IDENTICALLY
+# post-recut (this file's own commands unchanged): ALL FOUR `body.channels` readings below now read IDENTICALLY
 # -- `strafe:bipolar folded=1(65536) ... composed=1(65536) trusted=[addon:channelwalk] untrusted=[] ceiling=none
 # clamped=no` -- regardless of whether `seat1`'s ceiling row exists at all, and regardless of its value (1.0,
 # 0.25, or 0.2500152587890625). The pool-ceiling boundary pair this file used to demonstrate on `strafe` is now
@@ -26,24 +26,24 @@ world.grant addon:channelwalk drive body:0 budget:60 channels:strafe
 world.wait 300
 # Expect strafe folded=1(65536), composed=1(65536), trusted=[addon:channelwalk], untrusted=[] -- the addon's
 # fixed::ONE contribution lands IN FULL with NO consent ever authored (the P6b headline behavior).
-player.channels 1
+body.channels 1
 # A seat ceiling on the SAME channel still grants successfully (Conflicts never refused this shape), but is now a
 # no-op for this addon's own term -- there is no pool left for it to bound.
 world.grant seat1 drive body:0 channels:strafe ceiling:1.0
 world.wait 5
 # Expect: IDENTICAL to the reading above -- the ceiling changed nothing.
-player.channels 1
+body.channels 1
 # A LOW ceiling (well under the addon's fixed::ONE contribution) -- under the prior pooled model this would have
 # clamped the composed value to exactly this ceiling.
 world.grant seat1 drive body:0 channels:strafe ceiling:0.25
 world.wait 5
 # Expect: STILL folded=1(65536), composed=1(65536), clamped=no -- a document-mounted addon's trusted term is never
 # clamped by a seat's pool ceiling, no matter how far below its contribution the ceiling sits.
-player.channels 1
+body.channels 1
 # The old ceiling-boundary pair's second half (c+1 raw) -- kept for continuity; equally inert now.
 world.grant seat1 drive body:0 channels:strafe ceiling:0.2500152587890625
 world.wait 5
 # Expect: STILL folded=1(65536), composed=1(65536), clamped=no.
-player.channels 1
+body.channels 1
 world.grants seat1
 world.grants addon:channelwalk

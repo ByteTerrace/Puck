@@ -19,6 +19,9 @@ internal sealed class AgbCostumeStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -33,7 +36,7 @@ internal sealed class AgbCostumeStage : IPostStage<PostContext> {
             rom: rom
         );
         using var cgb = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rom
         );
 

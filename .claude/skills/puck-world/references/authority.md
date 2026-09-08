@@ -33,9 +33,11 @@ ONE server-side table authorizes every write: `WorldGrants`
   `WorldPrincipalMapping` or the wire codec as a submitter; it exists only as
   a grant TARGET and a membership-row value, expanded fresh on every
   `Allows` check — see "`Allows` returns a verdict" below). Admitted peers occupy indices
-  4–127 and carry a positive generation. The shared console/JSON parser
-  accepts any nonnegative peer index with a positive generation; authored
-  world validation caps it below 128. Tokens: `seat1..seat4` (1-based),
+  the document's authored local-seat count through its population ceiling and
+  carry a positive generation. A zero-seat world can admit peer 0. Shared
+  console/JSON and wire parsers check only the representation bound through
+  `WorldBodiesLimits.IsBodyIndex`; the receiving authority owns census,
+  occupancy, and generation checks. Tokens: `seat1..seat4` (1-based),
   `console`, `addon:<name>`, `peer:<n>:<generation>`; `Describe()` emits the
   same generation-bearing peer token. `Document(id)` (`document:<id>`) is the
   fifth kind: ANOTHER world document asking this document's authority to act,
@@ -78,13 +80,23 @@ ONE server-side table authorizes every write: `WorldGrants`
 - `GrantSubject` (`GrantSubjectKind`): `all`, `body:<n>` (0-based entity
   index), `screen:<n>`, `section:<name>`, `state:<name>` (string-keyed,
   naming a state row — there is no `profile:<id>` kind; `GrantSubjectKind`
-  declares All/Body/Screen/Section/Composition/State/Region/Seat and nothing
-  else), `region:<name>`
+  declares All/Body/Screen/Section/Composition/State/Region/Seat/Creation/
+  Placement/Adjacency and nothing else), `creation:<id>`/`placement:<id>` (one
+  creations/placements row apiece — the ROW-SCOPED `Mutate` subjects, an
+  ALTERNATIVE to the section hold rather than a narrowing beneath it; the id
+  is shape-checked, never bound-checked, because authoring a row that does
+  not exist yet is what the grant confers, and an `Addon` principal is
+  refused one by name since its mutation seam designates a section handle),
+  `region:<name>`
   (a placement's `WorldPlacementRegion` facet, Observe-only), `seat:<n>`
-  (0-based local seat, Observe-only), plus
+  (0-based local seat, Observe-only), `adjacency:<name>` (an authored
+  `adjacencies` row — Region's federation-seam twin, Observe-only, the
+  `linkEstablished`/`linkDropped` event family's gate; like `region:` it is
+  never bound-checked — an unknown name simply never fires), plus
   `Composition` — write-only (echoed by `world.grants`, no parse token; only
   the boot seed constructs it). `section:` must be alphabetic and
-  `Enum.IsDefined` — a numeric `section:5` is refused. `region:`/`seat:` are
+  `Enum.IsDefined` — a numeric `section:5` is refused. `region:`/`seat:`/
+  `adjacency:` are
   legitimate for UNTRUSTED principals only (see references/addons.md's
   "World events" section) — no trusted principal reads the Observation
   cells they gate.
@@ -137,8 +149,15 @@ for a document write. ONE structural exemption runs first — a `World` principa
 is admitted (`WorldMutationAdmissionRule.Structural`) without any lookup; there
 is no bypass parameter and nothing else may exempt. Then four gates, in order:
 
-1. `Allows(Mutate, section:<name>)` — the coarse section hold.
-2. The DECIDING Mutate row's `MutationKindMask`.
+1. `Allows(Mutate, section:<name>)` — the coarse section hold — OR, when
+   the mutation names one concrete creations/placements row and the section
+   check missed, `Allows(Mutate, creation:<id>|placement:<id>)`. A
+   DISJUNCTION, unlike gate 3: a section grant admits every row, a row grant
+   admits only its own. That scoping is also the whole cure for the compose
+   arms' replace-by-key — a row grantee cannot name another row to collide
+   with, so no ownership check belongs on the compose arm.
+2. The DECIDING Mutate row's `MutationKindMask` (the row's own when a row
+   hold decided, the section's when the section did).
 3. For a `State` mutation only: `Allows(Edit, state:<name>)`, then THAT
    deciding row's own kind mask.
 4. For an UNTRUSTED principal: the per-tick dispatch budget, charged through
@@ -157,14 +176,14 @@ unmasked untrusted row is unreachable rather than permissive. `world.why`'s
 `verbs:` diagnosis states exactly this rule and now agrees with every door.
 
 **Two call sites, one rule.** `WorldServer.TryApplyMutation` covers the whole
-ordered domain — loopback, console, and the `WorldTcpHost` peer door all
+ordered domain — loopback, console, and the `WorldPeerHost` peer door all
 converge there, so a peer gets the same masks and metering an addon does, from
 the same code. The addon seam
 (`WorldAddonRuntime.ResolveMutations`) keeps its own EARLIER call site: it
 refuses before decode so a guest cannot probe the decoder for free. It passes
 `rowScopedEditSubject: null` (a row name is only knowable after decode, so gate
 3 runs later at apply) and `meter: true`; the apply path then passes
-`preMetered: true` for that op (`PendingOp.Mutate.SourceAddonIndex`) so one
+`preMetered: true` for that op (`PendingOp.Mutate.SourceAddonInstanceId`) so one
 guest dispatch is never charged twice. Call-site duplication is fine; rule
 reimplementation is the defect class this predicate closed.
 
@@ -207,11 +226,12 @@ future client-hosted addon) stay pooled under `Reach ∧ Consent`, unaffected.
 `IsLegitimateSubject` is a POSITIVE per-capability rule — a new subject
 shape is refused by default: Drive takes `body:<n>` (bounded by the
 population) or `all` (trusted only); Observe takes `body:<n>`, plus
-`screen:<n>`/`region:<name>`/`seat:<n>` for untrusted event consumers, or
+`screen:<n>`/`region:<name>`/`seat:<n>`/`adjacency:<name>` for untrusted event
+consumers, or
 `all` for trusted principals; Control takes `screen:<n>` (any),
-`body:<n>` (any, bounded by the population — a context-routes possession
+`body:<n>` (any, bounded by the population — a control-application possession
 target, [engagement.md](engagement.md)), `composition` (trusted), `all` (trusted
-or Peer); Mutate takes `section:<name>` (the DISPATCH lane) or `state:<name>`
+or Peer); Mutate takes `section:<name>`/`creation:<id>`/`placement:<id>` (the DISPATCH lane) or `state:<name>`
 (the CROSS-DOCUMENT write-back lane) or `all` (trusted); Edit takes
 `state:<name>` or `all` (trusted). The four State mutation kinds
 (`UpsertStateRow`/`RemoveStateRow`, `UpsertStateCell`/`RemoveStateCell`, plus
@@ -227,16 +247,17 @@ meters, so one gated authoring act launders every budget and verb mask the row
 carries, and a verb mask cannot bound what the row does not dispatch; trusted
 principals are unaffected); exclusive-over-`all` refused outright;
 `budget:<n>` is REQUIRED on an untrusted principal's Drive/Observe row and on
-its `Mutate`/`section:<name>` row, and refused everywhere else — including an
+its `Mutate` dispatch row (`section:`/`creation:`/`placement:`), and refused everywhere else — including an
 untrusted `Mutate`/`state:<name>` row, which is the cross-document write-back
 channel and has no dispatch door to meter (`budget:0` refused — omit the token
 instead; a re-grant IS the budget update). `verbs:<name,...>` is likewise
-REQUIRED on an untrusted `Mutate`/`section:<name>` row: the admission
+REQUIRED on an untrusted `Mutate` dispatch row: the admission
 predicate reads an ABSENT mask as FULL REACH (Console's boot seed holds
 maskless Mutate rows, so refuse-all there would deny every trusted mutation),
 so the strictness lives at the grant door and a maskless untrusted row is
 refused before it can exist. `events:<n>` is Observe-only, required for
-untrusted `screen:`/`region:`/`seat:` rows, optional for an untrusted
+untrusted `screen:`/`region:`/`seat:`/`adjacency:` rows, optional for an
+untrusted
 `body:` row, and refused everywhere else; every such untrusted Observe row
 still also requires `budget:<n>`. Co-drive payloads (`Reach`/`Consent`/
 `Ceiling`) are Drive-only — a `Ceiling` must ride the seat's OWN body row,
@@ -252,7 +273,7 @@ clear authored ceilings.
 `WorldServer.TryAdmitVerifiedParticipant` is the only path from an ingress to a
 population body plus grant rows, and it takes a `WorldAdmissionVerdict` — never
 raw `WorldGrant` rows. Only `Protocol.WorldAdmissionDoor` mints a verdict:
-`TryAdmit` (a verified attestation claim at the TCP hello), `TryMatchEntry` (an
+`TryAdmit` (a verified attestation claim at the QUIC hello), `TryMatchEntry` (an
 already-verified identity re-matched against a rebuild candidate), and
 `TryAdmitArrival` (an authenticated federation authority's namespace). No
 verdict means a named refusal, never a default seed.
@@ -300,7 +321,17 @@ domain seed (`Observe/all`, `Control/all`, `Edit/all`,
 plus the table's only `Drive/all`; addons get NOTHING. Peers are not seeded by
 index: each `PeerAdmitted` event mints the admission verdict's own authored
 templates for that exact generation, and disconnect/reactivation revokes
-stale-generation rows before re-minting. A census/inhabitant activation, which
+stale-generation rows before re-minting. **A generation's rows die with its
+connection**, at the `PeerDisconnected` event itself — never at the reconnect
+grace deadline, which governs only the parked BODY. A verified-identity
+reconnect that resumes the parked body re-mints its admission templates
+through the ordinary `PeerAdmitted` event, so only live acquisitions beyond
+the templates fail to survive the gap (see
+[session-lifecycle.md](session-lifecycle.md)); a checkpoint restore releases a
+restored park's rows the same way, at `RestoreCheckpoint` itself. An
+`Exclusive` subject a peer reserved is therefore acquirable by another
+principal immediately after it drops, with no tick in between — and stays
+with whoever took it (the template's re-mint refuses loudly). A census/inhabitant activation, which
 verifies no identity at all, still mints the `Control/all` seed
 (`BuildDefaultPeerControlGrants`) — population housekeeping, not an admission.
 A world document's `grants` section applies in the `WorldServer`
@@ -344,8 +375,8 @@ seat consent needed or consulted; a genuinely untrusted contributor's deltas
 (`Peer` today) are admitted per ordinal only where `reach.Meet(ceilings.Support)`
 contains it — no consent authored means the delta is refused AT STAGING and
 never reaches the fold. Only the THIRD (pooled) branch latches
-`m_untrustedAcceptedMask`, so `player.channels` can prove the pool ran;
-`player.channels`'s `trusted=[...]`/`untrusted=[...]` contributor tags follow
+`m_untrustedAcceptedMask`, so `body.channels` can prove the pool ran;
+`body.channels`'s `trusted=[...]`/`untrusted=[...]` contributor tags follow
 the SAME three-way split (a document-mounted addon now lists under
 `trusted=[...]`).
 
@@ -409,15 +440,12 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   the row), `[world.mutation rejected: …]`, contention
   `[world.grant: body:<n> driven by both … this tick — …]`.
 - `world.refusals [door]` prints the DECLARED refusal catalog
-  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`): 91 declarations across eight
+  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`): 97 declarations across eight
   doors today: `addon.mutate` (11), `grant.authority` (3), `hud.validate`
-  (10), `replay.tape` (6), `sdf.decode` (34), `world.rule.compile` (25),
-  `world.interaction.compile` (1), `world.rule.effect` (1) — the last three
-  landed with the rules/interactions substrate (see
-  [documents.md](documents.md)'s `rules` section) and are not yet reflected
-  anywhere else in this skill's prose; re-run the count (`puck search
-  "\[Refusal\(" src -M 0`) rather than trusting this list once the rules
-  surface moves again. It does NOT cover console-tier text refusals (parse
+  (11), `replay.tape` (9), `sdf.decode` (34), `world.rule.compile` (27),
+  `world.interaction.compile` (1), `world.rule.effect` (1) — re-run the count
+  (`puck search "\[Refusal\(" src -M 0`) rather than trusting this list once
+  the surface moves again. It does NOT cover console-tier text refusals (parse
   errors, `Conflicts` reasons, module refusals) — never claim that
   coverage. Tagging is one-directional: it proves a door cannot refuse with
   an unlisted reason, not that every listed reason has a live call site.
@@ -428,10 +456,16 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
 - Read-backs: `world.grants [principal]` (echoes rows with `(x)` exclusive,
   `budget:`, `channels:0x…`, per-ordinal ceilings), `world.why <principal>
   <capability> <subject>` (allowed/denied + which rule + detail),
-  `player.channels [player]` (per-declared-channel fold breakdown; the
+  `body.channels [player]` (per-declared-channel fold breakdown; the
   ceiling prints only when this tick's contribution set actually reached
   that ordinal through the untrusted path — proof the fold RAN, not that a
   grant exists; honest refusals for inactive or non-occupied bodies).
+- `world.why` answers a row-scoped `mutate creation:<id>`/`placement:<id>`
+  query in the door's OWN order — the owning section first, the row only when
+  that misses — and says which carried it (`via mutate section:…` vs `via the
+  row hold alone`). `world.why document:<id> …` answers `not-in-this-table`
+  with where the capability actually lives, the sibling of the `world`
+  principal's `allowed (structural)` branch.
 - `world.grant` grammar: `<principal> <capability> <subject> [exclusive]
   [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>]
   [verbs:<name,...>]`; trailing tokens may appear in any
@@ -445,9 +479,16 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
 ## Verifying
 
 The acting-principal/administration contract is proved by
-`AuthorityAdministrationLawTests` and the engage/disengage-authority contract by
-`EngageAuthorityLawTests`, both in `tests/Puck.World.Tests` with code-built
+`AuthorityAdministrationLawTests` and the compose/dissolve-authority contract by
+`EngageAuthorityLawTests` and `ControlApplicationLawTests`, both in `tests/Puck.World.Tests` with code-built
 furniture. For ad-hoc work: every denial case
 needs a control (actor holding the grant succeeds), keep actor ≠ target
 (every seat is seeded wide, so self-targeting discriminates nothing), and
 prove a new assertion once by breaking it.
+
+`Observe` also admits a concrete `state:<row>` subject. The
+`StateObservations(row)` query still filters values by the row/cell audience
+using the authenticated envelope principal, and cannot select another recipient.
+`TransformState` needs edit authority over every written row, including its
+random draw site. A row's `phaseOf` requires the matching guard on external
+transforms; capability grants remain necessary alongside phase eligibility.

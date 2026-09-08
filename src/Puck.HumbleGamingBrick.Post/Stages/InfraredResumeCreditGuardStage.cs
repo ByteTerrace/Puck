@@ -16,6 +16,9 @@ internal sealed class InfraredResumeCreditGuardStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -23,11 +26,11 @@ internal sealed class InfraredResumeCreditGuardStage : IPostStage<PostContext> {
         var secondRom = SyntheticRom.Create(cartridgeType: 0x00);
 
         using var first = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: firstRom
         );
         using var second = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: secondRom
         );
         // Larger than any freshly booted machine's cycle count could ever satisfy — the token does not fit either

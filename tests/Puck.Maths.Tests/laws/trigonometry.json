@@ -1,0 +1,144 @@
+[
+  {
+    "Id": "scalar.trigonometry-constants",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Sin"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Cos"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCos"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosTurns"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Every quarter-wave Q60 table entry, reciprocal Q96 and residual coefficients",
+        "Against": "Machin-derived pi interval, independent 30-term sine/cosine interval series, and exact rational factorial coefficients; both interval endpoints round to the same integer",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.trigonometry-seams",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Sin"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "Cos"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCos"
+      },
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosTurns"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Direct turn outputs and Gaussian Q60 core at every node and half-node, adjacent phase ticks, all quadrants; hard Q16 rounding witnesses and signed/unsigned extremes at Q16, Q17, Q32",
+        "Against": "Independent dyadic-radian and turn series enclosures; output error <= 0.50000001 raw Q16 ULP and core absolute error <= 6e-15; finite deterministic basis, not a full-domain correctly-rounded proof",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Exact cardinal directions; odd sine, even cosine, and single/pair projection equality at the named witnesses",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.trigonometry-turns",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosTurns"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SinCosTurns on the shared scalar transcendental domain",
+        "Against": "Oracles.EncloseSinCosTurns with 0.50000001 raw Q16 ULP envelope",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.trigonometry-turns-deep",
+    "Tier": "Deep",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedQ4816",
+        "Name": "SinCosTurns"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "MIRROR of scalar.trigonometry-turns over the Deep domain budget",
+        "Against": "Independent turn interval series with the same fixed error envelope",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "scalar.trigonometry-twiddles",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedFourierTransformPlan",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.FixedCosineTransformPlan",
+        "Name": "Create"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Every FFT and DCT plan twiddle for powers of two from 1 through 1024",
+        "Against": "Oracles.EncloseSinCosTurns of each exact ideal dyadic phase, with 0.50000001 raw Q16 ULP envelope; inverse entries equal exact conjugates",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

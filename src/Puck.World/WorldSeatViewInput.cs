@@ -52,6 +52,6 @@ internal sealed class WorldSeatViewInput : IWorldPointerConsumer {
             views: definition.Views
         );
     }
-    public WorldSeatLook Preference(int slot, WorldDefinition definition) =>
+    public WorldSeatCameraFeel Preference(int slot, WorldDefinition definition) =>
         (m_roster.Seat(slot: slot)?.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
 }

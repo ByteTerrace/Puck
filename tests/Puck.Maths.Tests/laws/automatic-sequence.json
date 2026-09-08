@@ -99,7 +99,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "RadicalShadowTowerAnalyzer, verifier, compiler, and evaluator — the exact-affine family d=2,u=4,v=2,w=0 has t_n=sqrt(2)(n+1), zero correction, and the declared floor at every tested positive index",
-        "Against": "an independent bracketed BigInteger square-root search applied to 2(n+1)^2 for n=1..256; no QuadraticSurd floor or Puck.Maths square-root helper is used. The simplest nonzero-residual family remains Undecided, a square radicand is Invalid, a bit ceiling is ResourceLimit, and a tampered nonzero correction fails exact verification",
+        "Against": "an independent bracketed BigInteger square-root search applied to 2(n+1)^2 for n=1..256; no RealQuadratic floor or Puck.Maths square-root helper is used. The simplest nonzero-residual family remains Undecided, a square radicand is Invalid, a bit ceiling is ResourceLimit, and a tampered nonzero correction fails exact verification",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

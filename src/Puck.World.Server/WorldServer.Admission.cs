@@ -1,4 +1,5 @@
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -80,9 +81,9 @@ public sealed partial class WorldServer {
     }
     /// <summary>Disconnects one remote-human peer connection: revokes every grant that generation held and drops the
     /// body, through the same <see cref="WorldServerEvent.PeerDisconnected"/> ordered-domain path a census shrink
-    /// uses. <c>Server.WorldTcpHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
+    /// uses. <c>Server.WorldPeerHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
     /// <param name="peer">The peer entry <see cref="TryAdmitPeerConnection"/> returned at admission.</param>
-    internal void DisconnectPeerConnection(WorldPeerEventEntry peer) {
+    public void DisconnectPeerConnection(WorldPeerEventEntry peer) {
         ApplyLifecycleEvents(
             admitted: [],
             disconnected: [peer],
@@ -110,9 +111,9 @@ public sealed partial class WorldServer {
     }
     /// <summary>Admits one remote-human peer connection through the population door and dispatches the
     /// <see cref="WorldServerEvent.PeerAdmitted"/> event through the same ordered domain every other lifecycle event
-    /// drains through — <c>Server.WorldTcpHost</c>'s Hello door is the one caller, and it calls this only from the
+    /// drains through. Trusted QUIC and OAuth host adapters call this only from the
     /// tick thread (the population/grant tables carry no lock), only after <see cref="Protocol.WorldAdmissionDoor"/>
-    /// has already verified the connecting peer's identity off the tick thread. Refused by name on whichever
+    /// has already matched the identity verified by the transport. Refused by name on whichever
     /// capacity bound <see cref="WorldPopulation.TryAdmitRemotePeer"/> names.</summary>
     /// <param name="verdict">What <see cref="Protocol.WorldAdmissionDoor"/> decided this identity is authorized —
     /// the only shape this method accepts, so no ingress can hand it grant rows of its own. Empty templates mint
@@ -130,7 +131,7 @@ public sealed partial class WorldServer {
     /// <param name="admitted">The admitted peer entry on success.</param>
     /// <param name="refusal">The named refusal on failure.</param>
     /// <returns><see langword="true"/> on success.</returns>
-    internal bool TryAdmitPeerConnection(WorldAdmissionVerdict? verdict, IReadOnlyList<WorldAdmissionEntry>? expectedAdmissionEntries, out WorldPeerEventEntry admitted, out string refusal) {
+    public bool TryAdmitPeerConnection(WorldAdmissionVerdict? verdict, IReadOnlyList<WorldAdmissionEntry>? expectedAdmissionEntries, out WorldPeerEventEntry admitted, out string refusal) {
         if (!ReferenceEquals(
             objA: m_definition.Admission,
             objB: expectedAdmissionEntries
@@ -174,9 +175,12 @@ public sealed partial class WorldServer {
         // BODY-RESUME (peer range): an ordinary connect (never a transfer commit — that always reserves a specific
         // slot) whose verified identity matches a body still parked from an earlier disconnect resumes that SAME
         // retained body in place, mirroring the local-seat Join resume (WorldPopulation.TryResumeParkedSeat's own
-        // caller). A resumed body mints NOTHING through the ordinary lifecycle door below: the grant table survives
-        // a park untouched (WorldGrants has no checkpoint-excluded half), so re-running BuildAdmissionGrants here
-        // would double-grant a principal whose rows already stand.
+        // caller). The resumed generation's rows died with its previous connection (the PeerDisconnected event
+        // releases them, and a checkpoint restore releases a restored park's the same way), so the fresh
+        // connection's verdict re-mints its admission templates through the SAME PeerAdmitted event a new admission
+        // rides — idempotent over the already-resumed entry, and what unparks and re-mints a replayed resume at the
+        // identical tick. A live acquisition beyond the templates does not survive the gap: an exclusive subject
+        // freed at the disconnect stays with whoever acquired it since (the template's re-mint refuses loudly).
         if (
             (reservedSlot is null) &&
             m_population.TryResumeParkedPeer(
@@ -185,6 +189,16 @@ public sealed partial class WorldServer {
                 admitted: out admitted
             )
         ) {
+            ApplyLifecycleEvents(
+                admitted: [admitted],
+                disconnected: [],
+                ordered: true,
+                mintedGrants: BuildAdmissionGrants(
+                    principal: admitted.Identity,
+                    bodyIndex: admitted.BodyIndex,
+                    templates: decision.Templates
+                )
+            );
             refusal = string.Empty;
 
             return true;
@@ -274,6 +288,11 @@ public sealed partial class WorldServer {
         }
 
         if (admitted.Count > 0) {
+            // Every admitted body's own WorldBody instance postdates the last Install/construction-time resync
+            // (the same reasoning the Join case in ApplySession carries) — catch it up from bodies.scaleRow here,
+            // the one choke point every admission path in this file funnels an admitted list through.
+            m_population.SyncBodyScale(definition: m_definition);
+
             // mintedGrants is supplied only by TryAdmitVerifiedParticipant, built from the door's verdict. Every
             // other admitted-list caller (boot inhabitant reconciliation, world.population's SetSimulatedCount, a
             // definition swap's post-Rebuild reconciliation) activates a locally-simulated body with no connecting
@@ -492,7 +511,7 @@ public sealed partial class WorldServer {
                     // the OS session grants it. The trust boundary this door polices is the process boundary itself;
                     // requiring a signed claim from your own process to talk to your own process would authenticate
                     // nothing real while adding a key-management burden with no attacker on the other side of it. A
-                    // REMOTE connection (Server.WorldTcpHost) crosses a real wire and passes through WorldAdmissionDoor
+                    // REMOTE connection (Server.WorldPeerHost) crosses a real wire and passes through WorldAdmissionDoor
                     // in addition to this check, once this one succeeds.
                     if (!WorldHelloDoor.TryAccept(
                         offeredKey: join.WireProtocolKey,
@@ -559,6 +578,12 @@ public sealed partial class WorldServer {
                             profile: profile
                         );
                     }
+
+                    // The freshly admitted (or resumed) body's own WorldBody instance postdates the last
+                    // Install/construction-time resync, so it starts at the constructed default (Scale == One)
+                    // until this catches it up from bodies.scaleRow — the same reason a reused slot never inherits
+                    // a previous occupant's scale.
+                    m_population.SyncBodyScale(definition: m_definition);
 
                     StageOwnedState(
                         slot: join.Slot,
@@ -766,17 +791,11 @@ public sealed partial class WorldServer {
             capability: WorldCapability.Mutate,
             subject: GrantSubject.Section(section: lever.Section)
         ) is { IsAllowed: false } verdict) {
-            var denial = $"{principal.Describe()} cannot mutate section:{lever.Section.ToString().ToLowerInvariant()} ({verdict.DescribeDenial()}) — {lever.Kind} lever dropped";
-
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: denial,
-                Rejected: true,
-                Kind: WorldEditEchoKind.GrantTable,
-                Denied: true,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
+            DenyGrantTable(
+                denial: $"{principal.Describe()} cannot mutate section:{lever.Section.ToString().ToLowerInvariant()} ({verdict.DescribeDenial()}) — {lever.Name} lever dropped",
+                connectionId: connectionId,
+                correlationId: correlationId
+            );
 
             return;
         }

@@ -167,8 +167,17 @@ both Steam families currently use nominal scales.
 ## ⌨️ Keyboard, mouse commands, text, and pointer browsing
 
 `InputSources` is the single vocabulary for keyboard, mouse, and gamepad control
-names. `WindowInputMapper` converts neutral window events from `Puck.Platform`
-into `InputSignal`s, mirroring the gamepad capture path. Left and right Control,
+names. `InputSourceVocabulary` resolves those names CASE-INSENSITIVELY, in the
+reflection-derived declared tables and in every parametric family alike
+(keyboard letters and digits, function and numpad keys, numbered mouse buttons,
+`probe.<name>`), because `Puck.Commands`' `BindingProfile` compiles a page's
+sources into a case-insensitive table and dispatches through the same one: a
+case-sensitive catalog beside a case-insensitive compiler would refuse working
+rows as unknown controls. A source id's case is authored-document noise, never
+identity, and case-insensitivity widens nothing, since an id no member and no
+family declares stays unknown in every casing. `WindowInputMapper` converts
+neutral window events from `Puck.Platform` into `InputSignal`s, mirroring the
+gamepad capture path. Left and right Control,
 Shift, Alt, and Super remain distinct ordinary controls; number-row and numpad
 digits remain distinct too, including when programmable mouse buttons emit them.
 

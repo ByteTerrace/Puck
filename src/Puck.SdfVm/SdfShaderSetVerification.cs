@@ -48,6 +48,7 @@ public static class SdfShaderSetVerification {
         hash.AppendData(data: kernels.Beam.Span);
         hash.AppendData(data: kernels.Views.Span);
         hash.AppendData(data: kernels.ViewsCore.Span);
+        hash.AppendData(data: kernels.ViewsFolds.Span);
 
         return Convert.ToHexString(inArray: hash.GetHashAndReset());
     }

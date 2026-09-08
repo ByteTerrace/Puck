@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
@@ -102,15 +103,33 @@ public sealed record WorldTransferCommitMember(
     WorldTransferActionContinuity? ActionContinuity = null,
     WorldContinuumTrajectory? Continuum = null
 );
-/// <summary>The transfer escrow table shared by colocated and TCP authority transports. It owns destination capacity
+/// <summary>The transfer escrow table shared by colocated and QUIC authority transports. It owns destination capacity
 /// from reserve until commit, explicit abort, or deterministic deadline expiry; it never queues a full request.</summary>
-public sealed class WorldTransferEscrow {
+public sealed partial class WorldTransferEscrow {
     private sealed record Lease(WorldTransferReservationRequest Request, ulong DeadlineTick, int[] Slots, WorldDefinition DestinationDefinition, WorldAdmissionVerdict? Arrival);
+    // A general-purpose deep copy of the reservation's traveler list — no per-member content beyond an ordinary
+    // value-type array needs cloning, so this is a straight array copy rather than a per-field walk.
+    private static bool TryCopyReservation(WorldTransferReservationRequest request, out WorldTransferReservationRequest owned, out string reason) {
+        owned = request;
+        var count = request.Members?.Count ?? 0;
+        if (count <= 0 || count > WorldBodiesLimits.CapacityCeiling) { reason = "reservation traveler count is invalid"; return false; }
+        owned = request with { Members = [.. request.Members!] };
+        reason = string.Empty;
+        return true;
+    }
+    private static WorldTransferReservationRequest CopyOwnedReservation(WorldTransferReservationRequest request) => request with {
+        Members = [.. request.Members],
+    };
     private readonly record struct MobilityAdmission(ulong Epoch, WorldPrincipal Principal);
     private readonly record struct MobilityLease(WorldTransferKey Transfer, ulong ExpectedEpoch);
 
     private readonly WorldServer m_server;
 
+    // Sorted by DeadlineTick so ReclaimExpired sweeps only what has actually arrived; every m_leases entry has
+    // exactly one live row here, added alongside the lease and removed by ReleaseLease, whether that release is
+    // driven by the sweep itself or by an explicit Abort/Commit ahead of the deadline.
+    private readonly WorldDeadlineTable<WorldTransferKey> m_deadlines = new();
+    private readonly List<int> m_staleBorderSlots = [];
     private readonly Dictionary<WorldTransferKey, Lease> m_leases = new();
     private readonly HashSet<WorldTransferKey> m_committed = new();
     private readonly Dictionary<WorldTransferKey, WorldTransferCommitMember[]> m_committedMembers = new();
@@ -148,7 +167,7 @@ public sealed class WorldTransferEscrow {
         foreach (var (key, lease) in m_leases) {
             leases.Add(item: new WorldTransferLeaseCheckpoint(
                 Key: key,
-                Request: lease.Request,
+                Request: CopyOwnedReservation(lease.Request),
                 DeadlineTick: lease.DeadlineTick,
                 Slots: [.. lease.Slots],
                 DestinationDefinitionJson: WorldDefinitionSerialization.Serialize(definition: lease.DestinationDefinition),
@@ -165,7 +184,7 @@ public sealed class WorldTransferEscrow {
                     key: key,
                     value: out var members
                 )
-                    ? [.. members]
+                    ? members.Select(CopyCommitMember).ToArray()
                     : []
                 ),
                 Principals: (m_committedPrincipals.TryGetValue(
@@ -200,6 +219,7 @@ public sealed class WorldTransferEscrow {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
         m_leases.Clear();
+        m_deadlines.Clear();
         m_committed.Clear();
         m_committedMembers.Clear();
         m_committedPrincipals.Clear();
@@ -227,18 +247,22 @@ public sealed class WorldTransferEscrow {
                 : WorldDefinitionSerialization.Deserialize(utf8Json: lease.DestinationDefinitionJson)
             );
 
+            if (!TryCopyReservation(lease.Request, out var request, out var reason)) {
+                throw new ArgumentException(reason, nameof(checkpoint));
+            }
             m_leases[lease.Key] = new Lease(
-                Request: lease.Request,
+                Request: request,
                 DeadlineTick: lease.DeadlineTick,
-                Slots: lease.Slots,
+                Slots: [.. lease.Slots],
                 DestinationDefinition: destinationDefinition,
                 Arrival: lease.Arrival
             );
+            m_deadlines.Add(dueTick: unchecked((long)lease.DeadlineTick), token: lease.Key);
         }
 
         foreach (var row in checkpoint.Committed) {
             _ = m_committed.Add(item: row.Key);
-            m_committedMembers[row.Key] = row.Members;
+            m_committedMembers[row.Key] = row.Members.Select(CopyCommitMember).ToArray();
             m_committedPrincipals[row.Key] = row.Principals;
             m_committedIncarnations[row.Key] = [.. row.Incarnations];
         }
@@ -314,7 +338,8 @@ public sealed class WorldTransferEscrow {
                 (a.YawRadians != b.YawRadians) ||
                 (a.PlanarVelocity != b.PlanarVelocity) ||
                 (a.VerticalVelocity != b.VerticalVelocity) ||
-                (a.Continuum != b.Continuum)
+                (a.Continuum != b.Continuum) ||
+                !ActionContinuityMatches(a.ActionContinuity, b.ActionContinuity)
             ) {
                 return false;
             }
@@ -322,6 +347,17 @@ public sealed class WorldTransferEscrow {
 
         return true;
     }
+    private static bool ActionContinuityMatches(WorldTransferActionContinuity? left, WorldTransferActionContinuity? right) =>
+        ReferenceEquals(left, right) || (left is not null && right is not null &&
+        left.Channels is not null && right.Channels is not null && left.Registers is not null && right.Registers is not null &&
+        left.Channels.SequenceEqual(right.Channels) && left.Registers.SequenceEqual(right.Registers));
+
+    // IReadOnlyList does not imply immutable storage. Retain a value image of continuity, including at checkpoint
+    // capture/restore, so caller edits cannot rewrite which commit this idempotency receipt accepted.
+    private static WorldTransferCommitMember CopyCommitMember(WorldTransferCommitMember member) => member with {
+        ActionContinuity = member.ActionContinuity is { } continuity
+            ? new WorldTransferActionContinuity([.. continuity.Channels], [.. continuity.Registers]) : null,
+    };
     private static bool IdentityMatches(WorldIdentity? left, WorldIdentity? right) {
         if (ReferenceEquals(
             objA: left,
@@ -370,9 +406,17 @@ public sealed class WorldTransferEscrow {
         return -1;
     }
     private void PruneDepartedAdmissions() {
-        foreach (var slot in m_borderAdmissions.Keys.Where(predicate: slot => !m_server.Population.IsActive(index: slot)).ToArray()) {
+        foreach (var slot in m_borderAdmissions.Keys) {
+            if (!m_server.Population.IsActive(index: slot)) {
+                m_staleBorderSlots.Add(item: slot);
+            }
+        }
+
+        foreach (var slot in m_staleBorderSlots) {
             _ = m_borderAdmissions.Remove(key: slot);
         }
+
+        m_staleBorderSlots.Clear();
     }
     private void ReleaseLease(WorldTransferKey key) {
         if (!m_leases.Remove(
@@ -381,6 +425,7 @@ public sealed class WorldTransferEscrow {
         )) {
             return;
         }
+        _ = m_deadlines.Remove(token: key);
         foreach (var member in lease.Request.Members) {
             var mobility = member.Mobility!.Value;
 
@@ -572,7 +617,12 @@ public sealed class WorldTransferEscrow {
             }
         }
 
-        ReleaseLease(key: key);
+        try { return CommitLease(key, lease, members, out reason); }
+        finally { ReleaseLease(key); }
+    }
+
+    private bool CommitLease(WorldTransferKey key, Lease lease, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+        var transferId = key.TransferId;
 
         if ((m_server.NextInputTick - 1UL) >= lease.DeadlineTick) {
             reason = $"transfer {transferId} reservation expired at destination tick {lease.DeadlineTick}";
@@ -609,6 +659,12 @@ public sealed class WorldTransferEscrow {
 
             return false;
         }
+
+        if (members.Any(static member => member.ActionContinuity is { } continuity && (continuity.Channels is null || continuity.Registers is null))) {
+            reason = $"transfer {transferId} carries invalid action continuity collections";
+            return false;
+        }
+        members = members.Select(CopyCommitMember).ToArray();
 
         for (var index = 0; (index < members.Count); index++) {
             var member = members[index];
@@ -782,8 +838,10 @@ public sealed class WorldTransferEscrow {
     public void ReclaimExpired(ulong tick) {
         PruneDepartedAdmissions();
 
-        foreach (var transferId in m_leases.Where(predicate: pair => (tick >= pair.Value.DeadlineTick)).Select(selector: pair => pair.Key).ToArray()) {
-            ReleaseLease(key: transferId);
+        var signedTick = unchecked((long)tick);
+
+        while (m_deadlines.TryDequeueDue(tick: signedTick, out var key)) {
+            ReleaseLease(key: key);
         }
     }
     public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request) {
@@ -797,6 +855,9 @@ public sealed class WorldTransferEscrow {
             return WorldTransferReservationReply.Refused(reason: $"transfer {request.TransferId} already committed");
         }
 
+        if (!TryCopyReservation(request, out request, out var reservationReason)) {
+            return WorldTransferReservationReply.Refused(reservationReason);
+        }
         if (m_leases.TryGetValue(
             key: key,
             value: out var existing
@@ -812,7 +873,7 @@ public sealed class WorldTransferEscrow {
                 Accepted: true,
                 Reason: string.Empty,
                 DeadlineDestinationTick: existing.DeadlineTick,
-                BodyIndices: existing.Slots,
+                BodyIndices: [.. existing.Slots],
                 DestinationDefinition: existing.DestinationDefinition
             );
         }
@@ -989,6 +1050,7 @@ public sealed class WorldTransferEscrow {
                 Slots: slots
             )
         );
+        m_deadlines.Add(dueTick: unchecked((long)deadline), token: key);
         foreach (var member in request.Members) {
             var mobility = member.Mobility!.Value;
 
@@ -1003,7 +1065,7 @@ public sealed class WorldTransferEscrow {
 
         return new WorldTransferReservationReply(
             Accepted: true,
-            BodyIndices: slots,
+            BodyIndices: [.. slots],
             DeadlineDestinationTick: deadline,
             DestinationDefinition: destinationDefinition,
             Reason: string.Empty

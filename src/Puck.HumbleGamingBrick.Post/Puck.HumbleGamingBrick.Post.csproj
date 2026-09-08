@@ -12,6 +12,8 @@
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.GamingBricks.Post\Puck.GamingBricks.Post.csproj" />
         <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
+        <!-- BootRomBuilder, whose authored boot images the boot-handoff stage and the diagnostics boot through. -->
+        <ProjectReference Include="..\Puck.HumbleGamingBrick.Forge\Puck.HumbleGamingBrick.Forge.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
     </ItemGroup>
     <ItemGroup>

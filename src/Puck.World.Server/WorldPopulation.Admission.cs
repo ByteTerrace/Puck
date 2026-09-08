@@ -8,11 +8,11 @@ public sealed partial class WorldPopulation {
     // Join one inhabited body at a claimed peer slot: mint its body from the resolved kit spawned at the placement's
     // scatter pose, seat its intent source, and tag the peer with the placement back-reference (the entry stays a
     // NetworkPeer — an inhabitant is a peer, not a separate kind).
-    private void ActivateInhabitant(int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal) {
+    private void ActivateInhabitant(WorldDefinition definition, int index, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int ordinal, int desiredCount) {
         var entry = m_entries[index];
         var kit = m_kits[kitIndex];
         var body = new WorldBody(
-            motion: m_kitRows[kitIndex].Motion,
+            tuning: kit.Tuning,
             program: kit.BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: kit.Actions,
@@ -22,22 +22,29 @@ public sealed partial class WorldPopulation {
             roleOrdinals: kit.RoleOrdinals,
             actionState: kit.ActionState,
             collider: kit.Collider,
+            rigid: kit.Rigid,
+            carry: kit.Carry,
+            tether: kit.Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal
+            holds: kit.Holds
         );
 
-        body.SetContactField(field: m_contactField);
-        body.SetWaterline(level: m_waterline);
+        body.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
+        );
+        body.SetGravityField(field: m_gravityField);
 
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
         var spawn = InhabitantSpawn(
-            placement: placement,
+            frame: frame,
             distribution: inhabit.Distribution!,
             ordinal: ordinal,
-            count: inhabit.Count
+            count: desiredCount
         );
-        var altitude = FixedQ4816.FromDouble(value: placement.Position.Y);
-        var yaw = FixedQ4816.FromDouble(value: (placement.YawDegrees * (Math.PI / 180.0)));
+        var altitude = FixedQ4816.FromDouble(value: frame.Position.Y);
+        var yaw = FixedQ4816.FromDouble(value: (frame.YawDegrees * (Math.PI / 180.0)));
 
         body.Pose(
             position: spawn with { Y = altitude },
@@ -45,31 +52,37 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        // An inhabitant's home is the ground its row activated it on — the placement's position plus its own
+        // distribution sample — so its producer roams THERE rather than at the world origin.
+        body.SetHome(home: (spawn with { Y = altitude }));
 
         body.SetIntentSource(source: inhabit.Source);
         entry.Body = body;
         entry.PlacementId = placement.Id;
         entry.KitIndex = kitIndex;
         entry.LookIndex = ResolveInhabitLook(placement: placement);
-        entry.CatalogRig = checked((byte)index);
+        entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(index);
         entry.ProducerState.PreferredAltitude = altitude;
         entry.ProducerState.AcquiredTarget = -1;
+        entry.ProducerState.CurveArcRaw = 0L;
+        entry.AutonomyState.Clear();
+        entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
     }
-    // Activate a simulated entry: re-seed its canonical pose/color/wander from its index, then mint its own body from
+    // Activate a simulated entry: re-seed its canonical pose/color/producer state from its index, then mint its own body from
     // its kit row (tuning + primary-action binding) spawned at that pose with the stored peer-source default. The
     // Warp/Face is a server-authoritative spawn (a one-time write into the sim); from here the pose flows only out.
     private void ActivateSimulated(int index, int? generation = null, IntentSource? source = null) {
-        m_entries[index].CatalogRig = checked((byte)index);
+        m_entries[index].CatalogRig = WorldLookSource.Catalog.DefaultIndex(index);
         SeedSimulated(index: index);
 
         var entry = m_entries[index];
         var kit = m_kits[entry.KitIndex];
         // Profileless — advances on the kit row's tuning with the row's lane bindings.
         var player = new WorldBody(
-            motion: m_kitRows[entry.KitIndex].Motion,
+            tuning: kit.Tuning,
             program: kit.BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: kit.Actions,
@@ -79,13 +92,19 @@ public sealed partial class WorldPopulation {
             roleOrdinals: kit.RoleOrdinals,
             actionState: kit.ActionState,
             collider: kit.Collider,
+            rigid: kit.Rigid,
+            carry: kit.Carry,
+            tether: kit.Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal
+            holds: kit.Holds
         );
 
-        player.SetContactField(field: m_contactField);
-        player.SetWaterline(level: m_waterline);
+        player.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
+        );
+        player.SetGravityField(field: m_gravityField);
 
         player.Pose(
             position: entry.SpawnPosition,
@@ -93,9 +112,11 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        player.SetHome(home: entry.SpawnPosition);
 
         player.SetIntentSource(source: (source ?? m_defaultPeerSource));
         entry.Body = player;
+        entry.AutonomyState.Clear();
         ClearDesignations(entry: entry);
         entry.Generation = (generation ?? checked((entry.Generation + 1)));
     }
@@ -153,6 +174,9 @@ public sealed partial class WorldPopulation {
         entry.PlacementId = null;
         entry.Active = false;
         entry.ProducerState.AcquiredTarget = -1;
+        entry.ProducerState.CurveArcRaw = 0L;
+        entry.AutonomyState.Clear();
+        entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
     }
     private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
@@ -229,7 +253,7 @@ public sealed partial class WorldPopulation {
         // The seat body constructs from the definition's designated seat kit row (its tuning and lane bindings); the
         // seated profile's speeds still override live.
         var body = new WorldBody(
-            motion: m_kitRows[m_seatKit].Motion,
+            tuning: m_kits[m_seatKit].Tuning,
             program: m_kits[m_seatKit].BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: m_kits[m_seatKit].Actions,
@@ -239,15 +263,21 @@ public sealed partial class WorldPopulation {
             roleOrdinals: m_kits[m_seatKit].RoleOrdinals,
             actionState: m_kits[m_seatKit].ActionState,
             collider: m_kits[m_seatKit].Collider,
+            rigid: m_kits[m_seatKit].Rigid,
+            carry: m_kits[m_seatKit].Carry,
+            tether: m_kits[m_seatKit].Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
-            driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal
+            holds: m_kits[m_seatKit].Holds
         ) {
             Profile = profile,
         };
 
-        body.SetContactField(field: m_contactField);
-        body.SetWaterline(level: m_waterline);
+        body.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
+        );
+        body.SetGravityField(field: m_gravityField);
 
         var spawnPoint = m_seatSpawns[slot];
 
@@ -257,13 +287,14 @@ public sealed partial class WorldPopulation {
             pitchRadians: FixedQ4816.Zero,
             rollRadians: FixedQ4816.Zero
         );
+        body.SetHome(home: spawnPoint.Position);
         // Seats default Live and are never touched by population operations; producer state is seeded so a later
-        // player.control producer:<name> uses the same deterministic path as a peer.
+        // body.control producer:<name> uses the same deterministic path as a peer.
         ClearDesignations(entry: entry);
-        SeedSeatWander(slot: slot);
+        SeedSeatSteeringProducer(slot: slot);
         entry.Body = body;
         entry.BodyColor = (profile?.Color ?? Vector3.Zero);
-        entry.CatalogRig = checked((byte)slot);
+        entry.CatalogRig = WorldLookSource.Catalog.DefaultIndex(slot);
         entry.Generation = checked((entry.Generation + 1));
         entry.Active = true;
         m_revision++;
@@ -296,6 +327,20 @@ public sealed partial class WorldPopulation {
             m_simulatedCount = CountActiveCensus();
             m_revision++;
         }
+        // A resumed connection rides the same PeerAdmitted event as a fresh one, and a replay reaches it against an
+        // entry the recorded disconnect left parked — unpark it here so the re-drive lands where the live resume
+        // did. Live, TryResumeParkedPeer already cleared the park (and bumped the revision), so this is idempotent
+        // there; the generation guard keeps a hypothetical different-generation admission at a parked index from
+        // silently unparking a stranger's body.
+        if (
+            entry.Parked &&
+            (entry.Generation == peer.Generation)
+        ) {
+            entry.Parked = false;
+            entry.ParkedUntilTick = null;
+            m_revision++;
+        }
+
         entry.IsAuthorityTransferred = peer.AuthorityTransferred;
         entry.PlacementId = peer.PlacementId;
         entry.CatalogRig = peer.CatalogRig;
@@ -315,12 +360,11 @@ public sealed partial class WorldPopulation {
     /// simulation rate 0 — see <see cref="DeactivateSeat"/>'s own remarks) — the entry marks
     /// <see cref="Entry.Parked"/> instead, and <see cref="IsAdmittedPeer"/> (hence <see cref="IsHumanOccupied"/>)
     /// keeps reading <see langword="true"/> through the grace window since <see cref="Entry.IsRemoteHuman"/> is
-    /// untouched. The grant half of the teardown is deliberately not deferred here — the caller
-    /// (<c>Server.WorldServer.ApplyServerEvent</c>) still revokes the disconnected generation's grants immediately,
-    /// unchanged from the pre-park behavior; deferring that too would mean reshaping
-    /// <c>WorldServerEvent.PeerDisconnected</c>'s ordered-domain/replay-tape contract, which this population-local
-    /// change does not reach into. See the reconnect-primitives change notes for this as a named, deliberate scope
-    /// line, not a silent gap.</summary>
+    /// untouched. Only the BODY half is deferred: the disconnected generation's grant rows are released
+    /// unconditionally by the caller (<c>Server.WorldServer.ApplyServerEvent</c>) — authority follows the
+    /// connection, and a verified-identity reconnect that resumes this body
+    /// (<see cref="TryResumeParkedPeer"/>) re-mints its admission templates through the ordinary
+    /// <c>PeerAdmitted</c> event; see that arm for the argument.</summary>
     /// <param name="peer">The recorded peer entry.</param>
     /// <param name="tick">The current tick — the basis a finite <see cref="Entry.ParkedUntilTick"/> is stamped
     /// from.</param>
@@ -522,91 +566,121 @@ public sealed partial class WorldPopulation {
         index: index,
         generation: m_entries[index].Generation
     );
+    // Mirrors what a full Capacity scan would find, as of the last m_revision it was rebuilt from. Every site that
+    // touches Entry.Parked or Entry.ParkedUntilTick (including Rebuild, on a document reload) bumps m_revision, so
+    // an unmoved revision is a sound proof nothing here needs rescanning.
+    private readonly WorldDeadlineTable<int> m_parkDeadlines = new();
+    private int m_parkDeadlineRevision = -1;
+
     /// <summary>Tears down every entry parked past its grace deadline — the deferred half of
     /// <see cref="DeactivateSeat"/>/<see cref="ApplyPeerDisconnected"/>'s teardown (see <see cref="Entry.Parked"/>'s
     /// own remarks): drops the body, clears <see cref="Entry.Active"/> and (for a peer) <see cref="Entry.IsRemoteHuman"/>,
     /// exactly as an immediate disconnect already did before park-with-grace existed. Covers both local seats and
     /// peers in one pass — the same <c>Active &amp;&amp; Parked</c> gate discriminates a park regardless of
-    /// <see cref="PopulationKind"/>, so there is no separate seat/peer sweep. A disconnected peer generation's grants
-    /// are revoked at disconnect time already (see <see cref="ApplyPeerDisconnected"/>'s own remarks on why that
-    /// revocation is not deferred here); a local seat never held generation-scoped grants to revoke, so nothing
-    /// grant-shaped happens here for either kind. Driven purely by <paramref name="tick"/> — no wall clock, no
+    /// <see cref="PopulationKind"/>, so there is no separate seat/peer sweep. Grant rows are never this sweep's to
+    /// release: a peer generation's rows go at its <c>PeerDisconnected</c> event, and a restored parked generation's
+    /// go at <c>Server.WorldServer.RestoreCheckpoint</c> — by the time a park expires here, its principal holds
+    /// nothing. Driven purely by <paramref name="tick"/> — no wall clock, no
     /// randomness — so it is exactly as replay-deterministic as <c>Server.WorldServer.ReclaimExpiredEscrows</c>,
     /// which this mirrors and is swept beside every tick.
+    /// <para><b>Deadline table.</b> <see cref="m_parkDeadlines"/> holds one entry per finite deadline the last
+    /// rescan found; a tick whose <see cref="m_revision"/> has not moved since then only drains whatever the table
+    /// now shows as due, in place of the rescan below.</para>
     /// <para><b>Revival re-stamp.</b> This method is per-tick and so never runs for a rate-0 world (the step loop
     /// that calls it is itself skipped — see <c>WorldInstanceHost</c>'s stepping gate); a seat that parked with
     /// <see cref="Entry.ParkedUntilTick"/> <see langword="null"/> (a positive reconnect grace compiled against rate
     /// 0 — <see cref="CompiledTickDuration.IsNever"/>) therefore stays exactly as parked, untouched, until the world
     /// steps again. <see cref="Rebuild"/> recompiles <see cref="m_reconnectGraceTicks"/> against whatever rate a
-    /// reload delivers, but it only ever touches the compiled tables — it does not walk live entries — so the first
-    /// sweep after a revival to a positive rate is exactly the moment a null-forever deadline is resolved against
-    /// the now-finite grace: it is dropped and re-derived, never left stranded. A null deadline with a still-never
-    /// compiled grace (the world reloaded but is still rate 0, or reloaded at a positive rate with the grace itself
-    /// re-authored as never — not possible today, since never only arises at rate 0, but the branch reads correctly
-    /// either way) is left null, exactly as before. A freshly-stamped entry is deliberately not evaluated for
-    /// teardown in the same pass — the visitor's window restarts at the revival tick, so it must survive at least
-    /// one full sweep before it can expire.</para></summary>
+    /// reload delivers and bumps <see cref="m_revision"/> itself, so the rescan that triggers is exactly the moment
+    /// a null-forever deadline is resolved against the now-finite grace: it is dropped and re-derived, never left
+    /// stranded. A null deadline with a still-never compiled grace (the world reloaded but is still rate 0, or
+    /// reloaded at a positive rate with the grace itself re-authored as never — not possible today, since never
+    /// only arises at rate 0, but the branch reads correctly either way) is left null, exactly as before. A
+    /// freshly-stamped entry is deliberately not evaluated for teardown in the same rescan — the visitor's window
+    /// restarts at the revival tick, so it must survive at least one full sweep before it can expire.</para></summary>
     /// <param name="tick">The current (just-completed) simulation tick.</param>
     public void ReclaimExpiredParks(ulong tick) {
         var signedTick = unchecked((long)tick);
         var changed = false;
 
-        for (var index = 0; (index < Capacity); index++) {
-            var entry = m_entries[index];
+        if (m_parkDeadlineRevision != m_revision) {
+            m_parkDeadlines.Clear();
 
-            if (!(entry is { Active: true, Parked: true })) {
-                continue;
-            }
+            for (var index = 0; (index < Capacity); index++) {
+                var entry = m_entries[index];
 
-            if (entry.ParkedUntilTick is not { } deadline) {
-                // A NEVER park (see this method's own "Revival re-stamp" remarks). Only re-derivable once the
-                // compiled grace itself is no longer NEVER — a rate-0 world never reaches this method at all, so
-                // reading m_reconnectGraceTicks.IsNever here is exactly "has this world been revived to a positive
-                // rate since the park happened".
-                if (m_reconnectGraceTicks.IsNever) {
+                if (!(entry is { Active: true, Parked: true })) {
                     continue;
                 }
 
-                entry.ParkedUntilTick = (signedTick + m_reconnectGraceTicks.Ticks);
-                changed = true;
+                if (entry.ParkedUntilTick is not { } deadline) {
+                    // A NEVER park (see this method's own "Revival re-stamp" remarks). Only re-derivable once the
+                    // compiled grace itself is no longer NEVER — a rate-0 world never reaches this method at all, so
+                    // reading m_reconnectGraceTicks.IsNever here is exactly "has this world been revived to a positive
+                    // rate since the park happened".
+                    if (m_reconnectGraceTicks.IsNever) {
+                        continue;
+                    }
 
-                continue;
-            }
+                    entry.ParkedUntilTick = (signedTick + m_reconnectGraceTicks.Ticks);
+                    changed = true;
+                    m_parkDeadlines.Add(dueTick: entry.ParkedUntilTick.Value, token: index);
 
-            if (signedTick >= deadline) {
-                entry.Body = null;
-                entry.Active = false;
-                entry.Parked = false;
-                entry.ParkedUntilTick = null;
-                entry.IsAuthorityTransferred = false;
-                entry.PlacementId = null;
-
-                if (entry.IsRemoteHuman) {
-                    entry.IsRemoteHuman = false;
-                    entry.AdmissionInstalledGrantTemplates = [];
-                    entry.AdmissionRevokedKeys.Clear();
-                    entry.IdentityDomain = string.Empty;
-                    entry.IdentitySubject = string.Empty;
+                    continue;
                 }
 
-                changed = true;
+                if (signedTick >= deadline) {
+                    RetireParkedEntry(entry: entry);
+                    changed = true;
+
+                    continue;
+                }
+
+                m_parkDeadlines.Add(dueTick: deadline, token: index);
             }
+        }
+
+        while (m_parkDeadlines.TryDequeueDue(tick: signedTick, out var slot)) {
+            RetireParkedEntry(entry: m_entries[slot]);
+            changed = true;
         }
 
         if (changed) {
             m_simulatedCount = CountActiveCensus();
             m_revision++;
         }
+
+        m_parkDeadlineRevision = m_revision;
+    }
+    // The full-teardown half of an expired park, shared by both the rescan and the plain table drain below it.
+    private static void RetireParkedEntry(Entry entry) {
+        entry.Body = null;
+        entry.Active = false;
+        entry.Parked = false;
+        entry.ParkedUntilTick = null;
+        entry.IsAuthorityTransferred = false;
+        entry.PlacementId = null;
+
+        if (entry.IsRemoteHuman) {
+            entry.IsRemoteHuman = false;
+            entry.AdmissionInstalledGrantTemplates = [];
+            entry.AdmissionRevokedKeys.Clear();
+            entry.IdentityDomain = string.Empty;
+            entry.IdentitySubject = string.Empty;
+        }
     }
     /// <summary>Reconciles the inhabited-body registrations against the delivered definition (called from the server's
     /// Install after <see cref="Rebuild(WorldDefinition, WorldSolidField?)"/>): a placement's inhabit facet joins bodies
     /// into the peer slice over the loopback link — an inhabitant is a <see cref="PopulationKind.NetworkPeer"/> whose entry
     /// carries a placement back-reference, holding a normal <see cref="WorldBody"/> under the resolved kit and driven by
-    /// its kit's attend producer. Bodies claim the highest free slots (127 downward) so an existing inhabitant never
+    /// its kit's sensing steering producer. Bodies claim the highest free slots (capacity minus one downward) so an existing inhabitant never
     /// renumbers; admission is bounded only by the table itself and rejects loudly when it is genuinely full — there is no
     /// census-fit reservation. Diff-by-placement: retire an entry whose row vanished, lost its facet, or changed
     /// creation/kit; keep a matching one (its pose survives an unrelated placement edit); admit new bodies at the highest
-    /// free slots. The census ceiling (<see cref="MaxSimulated"/>) follows all non-census physical occupancy, and the
+    /// free slots — except a facet whose <see cref="WorldPlacementInhabit.Count"/> names a cell
+    /// (<see cref="WorldPlacementInhabitCount.Row"/>), which this pass never grows: it starts at zero and is
+    /// admitted only by <c>WorldPopulation.Step.cs</c>'s <c>ReconcileInhabitCounts</c>, tracking the cell's own
+    /// live value. The census ceiling (<see cref="MaxSimulated"/>) follows all non-census physical occupancy, and the
     /// census is re-clamped without renumbering an inhabitant or transferred entity.</summary>
     /// <param name="definition">The delivered definition (its placements, creations, kits, and look table).</param>
     /// <param name="admitted">Optional sink for the peer generations admitted by the reconciliation.</param>
@@ -646,7 +720,7 @@ public sealed partial class WorldPopulation {
             entry.LookIndex = ResolveInhabitLook(placement: placement);
             entry.Body?.SetIntentSource(source: placement.Inhabit!.Source);
             entry.Body?.RecompileKit(
-                motion: m_kitRows[kitIndex].Motion,
+                tuning: m_kits[kitIndex].Tuning,
                 actions: m_kits[kitIndex].Actions,
                 actionThresholds: m_kits[kitIndex].ActionThresholds,
                 actionShapes: m_kits[kitIndex].ActionShapes,
@@ -656,16 +730,23 @@ public sealed partial class WorldPopulation {
                 program: m_kits[kitIndex].BodyMotionProgram,
                 programs: m_bodyMotionPrograms,
                 collider: m_kits[kitIndex].Collider,
+                rigid: m_kits[kitIndex].Rigid,
+                carry: m_kits[kitIndex].Carry,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
-                sprintChannelOrdinal: m_kits[kitIndex].SprintChannelOrdinal,
-                driftChannelOrdinal: m_kits[kitIndex].DriftChannelOrdinal
+                holds: m_kits[kitIndex].Holds,
+                tether: m_kits[kitIndex].Tether
             );
         }
 
-        // Pass 2 — grow/shrink each inhabited placement to its declared count, at the highest free slots (document order).
+        // Pass 2 — grow/shrink each LITERAL-count inhabited placement to its declared count, at the highest free
+        // slots (document order). A cell-driven count (Count.Row set) is skipped here on purpose: it starts at
+        // zero live bodies through every structural install (boot included) and is grown/shrunk exclusively by the
+        // per-tick WorldPopulation.Step.cs.ReconcileInhabitCounts, gated on the bound cell's own value actually
+        // moving — a structural edit that leaves the cell untouched must not silently re-fan a live census.
         foreach (var placement in definition.Placements) {
             if (
                 (placement.Inhabit is not { } inhabit) ||
+                (inhabit.Count?.Row is not null) ||
                 (ResolveInhabitKit(
                 definition: definition,
                 placement: placement
@@ -676,48 +757,133 @@ public sealed partial class WorldPopulation {
             }
 
             var desired = Math.Clamp(
-                value: inhabit.Count,
+                value: (inhabit.ResolvedCount.Literal ?? 1),
                 min: 0,
                 max: PeerCapacity
             );
-            var live = CountInhabitants(placementId: placement.Id);
 
-            for (var ordinal = live; (ordinal < desired); ordinal++) {
-                var slot = HighestFreeSlot();
-
-                if (slot < 0) {
-                    Console.Error.WriteLine(value: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]");
-
-                    break;
-                }
-
-                ActivateInhabitant(
-                    index: slot,
-                    inhabit: inhabit,
-                    kitIndex: kitIndex,
-                    ordinal: ordinal,
-                    placement: placement
-                );
-                admitted?.Add(item: PeerEventEntry(index: slot));
-            }
-
-            for (var extra = desired; (extra < live); extra++) {
-                var slot = LowestInhabitant(placementId: placement.Id);
-
-                if (slot >= 0) {
-                    disconnected?.Add(item: PeerEventEntry(index: slot));
-                    RetireInhabitant(index: slot);
-                }
-            }
+            ReconcileOneInhabitedCount(
+                admitted: admitted,
+                definition: definition,
+                desired: desired,
+                disconnected: disconnected,
+                inhabit: inhabit,
+                kitIndex: kitIndex,
+                placement: placement
+            );
         }
 
         // Re-clamp the census against every entity-table slot now owned by an inhabitant or transferred authority.
         _ = SetSimulatedCount(count: m_simulatedCount);
+        RebuildPlacementOrdinalTable(definition: definition);
+        // A structural install can reorder or replace placements at a fixed ordinal without changing their count
+        // (WorldPopulation.Step.cs.ReconcileInhabitCounts' own cache resize gate misses that), so every structural
+        // pass invalidates the whole cache — the next per-tick reconcile re-resolves each cell-driven facet fresh
+        // rather than trusting a raw value that may now belong to a different row entirely.
+        InvalidateInhabitCountCache();
         m_revision++;
     }
+    // Grows or shrinks one inhabited placement's live census to `desired`: growth claims the highest free slots in
+    // document order (HighestFreeSlot's own remarks — the first body admitted always lands at the highest index), and
+    // shrink retires the lowest surviving index that is not currently a seat's own claimed body (Entry.IsRemoteHuman)
+    // — since admission always fills the highest slot first, the lowest index is always the first one admitted, and
+    // skipping a human-occupied one here is what keeps a possessed inhabitant standing through a shrink instead of
+    // being torn out from under its player. Shared by the structural (literal-count) pass above and the cell-driven
+    // per-tick reconcile (WorldPopulation.Step.cs.ReconcileInhabitCounts).
+    private void ReconcileOneInhabitedCount(WorldDefinition definition, WorldPlacement placement, WorldPlacementInhabit inhabit, byte kitIndex, int desired, List<WorldPeerEventEntry>? admitted, List<WorldPeerEventEntry>? disconnected) {
+        var live = CountInhabitants(placementId: placement.Id);
+
+        for (var ordinal = live; (ordinal < desired); ordinal++) {
+            var slot = HighestFreeSlot();
+
+            if (slot < 0) {
+                if (NarrationHub is { HasNarrationSink: true }) {
+                    NarrationHub?.Narrate(channel: "world.placement", text: $"[world.placement: inhabited '{placement.Id}' has no free entity slot — the {Capacity}-slot table is full]");
+                }
+
+                return;
+            }
+
+            ActivateInhabitant(
+                definition: definition,
+                desiredCount: desired,
+                index: slot,
+                inhabit: inhabit,
+                kitIndex: kitIndex,
+                ordinal: ordinal,
+                placement: placement
+            );
+            admitted?.Add(item: PeerEventEntry(index: slot));
+        }
+
+        for (var extra = desired; (extra < live); extra++) {
+            var slot = LowestRetirableInhabitant(placementId: placement.Id);
+
+            if (slot < 0) {
+                // Every remaining inhabitant is seat-driven — nothing left this pass can retire.
+                return;
+            }
+
+            disconnected?.Add(item: PeerEventEntry(index: slot));
+            RetireInhabitant(index: slot);
+        }
+    }
+    // The shrink half of ReconcileOneInhabitedCount's own retire loop — lowest-index match that is not a seat's own
+    // claimed body, never LowestInhabitant's plain scan (which would retire a possessed inhabitant out from under
+    // its player).
+    private int LowestRetirableInhabitant(string placementId) {
+        for (var index = LocalSeatCount; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (
+                !entry.IsRemoteHuman &&
+                string.Equals(a: entry.PlacementId, b: placementId, comparisonType: StringComparison.Ordinal)
+            ) {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+    // The placement:<id> body-reference token's ordinal table — see m_placementOrdinalToBody's own remarks. Rebuilt
+    // here rather than incrementally: ReconcileInhabitants already walks every inhabited placement in the SAME
+    // document-order pass a body-index reseat can move, so a second full scan costs nothing an inhabitant admission
+    // pass was not already going to pay.
+    private void RebuildPlacementOrdinalTable(WorldDefinition definition) {
+        var placements = definition.Placements;
+
+        if (m_placementOrdinalToBody.Length != placements.Count) {
+            m_placementOrdinalToBody = new int[placements.Count];
+        }
+
+        Array.Fill(array: m_placementOrdinalToBody, value: -1);
+
+        for (var index = 0; (index < m_entries.Length); index++) {
+            if (m_entries[index].PlacementId is not { } placementId) {
+                continue;
+            }
+
+            for (var ordinal = 0; (ordinal < placements.Count); ordinal++) {
+                if (string.Equals(a: placements[ordinal].Id, b: placementId, comparisonType: StringComparison.Ordinal)) {
+                    m_placementOrdinalToBody[ordinal] = index;
+
+                    break;
+                }
+            }
+        }
+    }
+    /// <summary>Resolves the <c>placement:&lt;id&gt;</c> body-reference token's compiled ordinal (the placement's own
+    /// position in <see cref="WorldDefinition.Placements"/>) to the body index currently inhabiting it, or -1 when
+    /// uninhabited — one array index, no string work, the tick-path contract <c>placement:$each</c>/<c>$distance:</c>/
+    /// <c>$los:</c>/etc. rely on.</summary>
+    /// <param name="ordinal">The compiled placement ordinal.</param>
+    public int BodyForPlacementOrdinal(int ordinal) => (((uint)ordinal < (uint)m_placementOrdinalToBody.Length)
+        ? m_placementOrdinalToBody[ordinal]
+        : -1
+    );
     /// <summary>Restores a just-detached federated peer after an aborted transfer, preserving its generation,
     /// admission facts, pose, dynamic state, and designation registers.</summary>
-    public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<int>? designations = null) {
+    public bool RestoreDetachedPeer(in WorldPeerEventEntry peer, IReadOnlyList<WorldAdmissionGrant> grantTemplates, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {
         ArgumentNullException.ThrowIfNull(argument: grantTemplates);
         if (
             (((uint)(peer.BodyIndex - LocalSeatCount)) >= PeerCapacity) ||
@@ -764,10 +930,10 @@ public sealed partial class WorldPopulation {
     /// <see cref="ActivateSeat"/>'s fresh-spawn path, the body is posed at <paramref name="position"/>/<paramref name="yawRadians"/>
     /// instead of the seat's authored spawn point, so a transfer that must abort after this seat already departed
     /// restores play exactly where it left off rather than teleporting it home. The seat kit every local seat
-    /// constructs today authors no <c>vehicle</c>/<c>swim</c> model, so <see cref="WorldBody.FixedOrientation"/> is
+    /// constructs today authors no <c>drive</c> row, so <see cref="WorldBody.FixedOrientation"/> is
     /// always a pure yaw rotation (pitch = roll = 0) for a seat body — capturing position and yaw alone therefore
     /// reconstructs the departed body's orientation bit-for-bit, the identical construction <see cref="ActivateSeat"/>'s
-    /// own spawn already relies on. A seat kit that someday adopts a genuine free/vehicle attitude for a local seat
+    /// own spawn already relies on. A seat kit that someday adopts a genuine free or driven attitude for a local seat
     /// would need this method (or a sibling) to accept the full orientation instead.
     /// <para><b>Dynamic state.</b>
     /// <paramref name="dynamicState"/> carries the perceivable subset <see cref="WorldBody.CaptureTransferState"/>
@@ -799,7 +965,7 @@ public sealed partial class WorldPopulation {
     /// non-abort restore caller has nothing to pass — every actual caller today is abort-only, so this defaults to
     /// <see langword="null"/> only for a hypothetical future caller, never today's).</param>
     /// <returns><see langword="true"/> when the seat was restored.</returns>
-    public bool RestoreDetachedSeat(int slot, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<int>? designations = null) {
+    public bool RestoreDetachedSeat(int slot, WorldIdentity? profile, FixedVector3 position, FixedQ4816 yawRadians, WorldBody.TransferState dynamicState, IReadOnlyList<WorldTargetDesignation>? designations = null) {
         var entry = m_entries[slot];
 
         if (entry.Active) {
@@ -807,7 +973,7 @@ public sealed partial class WorldPopulation {
         }
 
         var body = new WorldBody(
-            motion: m_kitRows[m_seatKit].Motion,
+            tuning: m_kits[m_seatKit].Tuning,
             program: m_kits[m_seatKit].BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: m_kits[m_seatKit].Actions,
@@ -817,15 +983,21 @@ public sealed partial class WorldPopulation {
             roleOrdinals: m_kits[m_seatKit].RoleOrdinals,
             actionState: m_kits[m_seatKit].ActionState,
             collider: m_kits[m_seatKit].Collider,
+            rigid: m_kits[m_seatKit].Rigid,
+            carry: m_kits[m_seatKit].Carry,
+            tether: m_kits[m_seatKit].Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: m_kits[m_seatKit].SprintChannelOrdinal,
-            driftChannelOrdinal: m_kits[m_seatKit].DriftChannelOrdinal
+            holds: m_kits[m_seatKit].Holds
         ) {
             Profile = profile,
         };
 
-        body.SetContactField(field: m_contactField);
-        body.SetWaterline(level: m_waterline);
+        body.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
+        );
+        body.SetGravityField(field: m_gravityField);
         body.Pose(
             position: position,
             yawRadians: yawRadians,
@@ -852,12 +1024,12 @@ public sealed partial class WorldPopulation {
         }
 
         // resetPhase:false: entry.ProducerState is NEVER cleared by TryDetachSeatForTransfer (it only clears
-        // Body/Active/Parked/Designations — see that method's own remarks), so the pre-detach wander
+        // Body/Active/Parked/Designations — see that method's own remarks), so the pre-detach steering-producer
         // phase/activity/acquired-target are still sitting right here, untouched, the moment this runs — reseeding
         // them would needlessly discard state that was never actually lost, only about to be overwritten.
         // WeaveFrequency/PreferredAltitude are still recomputed either way (a pure function of slot+kit,
-        // safe/idempotent to redo), matching SeedSeatWander's other resetPhase:false caller (the ApplyPeerAdmitted-adjacent path).
-        SeedSeatWander(
+        // safe/idempotent to redo), matching SeedSeatSteeringProducer's other resetPhase:false caller (the ApplyPeerAdmitted-adjacent path).
+        SeedSeatSteeringProducer(
             resetPhase: false,
             slot: slot
         );
@@ -927,13 +1099,13 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Admits one remote-human peer body at the point of effect — the P7 socket door's own primitive,
     /// parallel to <see cref="ReconcileInhabitants"/>'s inhabited-body admission: the body claims the highest free
-    /// slot (127 downward, via <see cref="HighestFreeSlot"/>) so it never renumbers an existing peer and never
+    /// slot (capacity minus one downward, via <see cref="HighestFreeSlot"/>) so it never renumbers an existing peer and never
     /// collides with the census's own upward allocation (<see cref="SetSimulatedCount"/> now skips any slot this
     /// method marks <see cref="Entry.IsRemoteHuman"/>). Refused by name on whichever bound fails: no free slot in the
     /// 128-body table, or the document's <c>networkPlayers</c> admission cap already met (census bots and admitted
     /// remote humans share that one cap — see <see cref="CountActiveCensus"/>).</summary>
     /// <param name="source">The intent source the body starts with (<see cref="IntentSource.Live"/> for a genuine
-    /// remote human — a submitted intent/command fills its gaps, never a wander/attend producer).</param>
+    /// remote human — a submitted intent/command fills its gaps, never a steering producer).</param>
     /// <param name="grantTemplates">The verified admission entry's own grant templates for this connection (see
     /// <see cref="WorldAdmissionDoor"/>) — stored on the activated slot so a later whole-document rebuild can
     /// compare the then-live rows with the policy baseline before re-authorizing
@@ -1179,6 +1351,7 @@ public sealed partial class WorldPopulation {
             entry.Parked = false;
             entry.ParkedUntilTick = null;
             m_revision++;
+            entry.Body?.WakeUp();
             admitted = PeerEventEntry(index: index);
 
             return true;
@@ -1186,10 +1359,10 @@ public sealed partial class WorldPopulation {
 
         return false;
     }
-    /// <summary>Sets the peer intent-source default and sweeps every peer (4..127) to it — last-writer-wins, so a
+    /// <summary>Sets the peer intent-source default and sweeps every peer (indices 4 through capacity minus one) to it — last-writer-wins, so a
     /// per-entity source (a possession, an earlier flip) does not survive the global. Seats are never touched.
     /// Render-inert: it reshapes only the intent producers, so it does not bump the revision. A live
-    /// <c>player.fly</c> tape still drives regardless.</summary>
+    /// <c>body.fly</c> tape still drives regardless.</summary>
     /// <param name="source">The intent source to store and sweep.</param>
     /// <param name="refusal">The named refusal when an assigned kit does not declare the producer.</param>
     /// <returns><see langword="true"/> when every peer kit admits the source.</returns>

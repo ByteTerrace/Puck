@@ -103,8 +103,6 @@ public sealed class VoiceSynth {
     // a shared constant, since the two live on opposite sides of the layering rank the document validator sits above.
     private const long MaxPitchMillihertz = 24_000_000L;
 
-    /// <summary>The mixer rate every frame unit in <c>puck.synth.v1</c> is denominated in.</summary>
-    public const int SampleRate = 48_000;
     /// <summary>The fixed voice count.</summary>
     public const int VoiceCount = 32;
 
@@ -428,7 +426,7 @@ public sealed class VoiceSynth {
             min: 1L,
             value: pitch
         );
-        voice.PhaseIncrement = ((uint)((((ulong)pitch) << 32) / (1000UL * SampleRate)));
+        voice.PhaseIncrement = ((uint)((((ulong)pitch) << 32) / (1000UL * MachineAudioRate.SampleRate)));
 
         if (voice.Patch.Oscillator == SynthOscillator.Sine) {
             var stepAngleRaw = ((long)((((ulong)voice.PhaseIncrement) * ((ulong)TwoPiRawQ16)) >> 32));
@@ -494,7 +492,7 @@ public sealed class VoiceSynth {
         // Start the triangle LFO at its zero crossing (quarter turn) so vibrato onsets at the base pitch.
         voice.VibratoPhase = (1U << 30);
         voice.VibratoIncrement = ((patch.VibratoDepthMillihertz > 0)
-            ? ((uint)((((ulong)patch.VibratoRateMillihertz) << 32) / (1000UL * SampleRate)))
+            ? ((uint)((((ulong)patch.VibratoRateMillihertz) << 32) / (1000UL * MachineAudioRate.SampleRate)))
             : 0U
         );
         voice.Noise = Pcg32XshRr.Create(

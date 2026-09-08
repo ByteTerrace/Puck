@@ -12,6 +12,7 @@ using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Dxgi;
 using Windows.Win32.Graphics.Dxgi.Common;
+using Windows.Win32.Security;
 using Windows.Win32.System.Com;
 using static Puck.DirectX.DirectXConstants;
 
@@ -74,12 +75,26 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     private readonly DXGI_FORMAT m_swapChainFormat;
     private readonly PresentMode m_presentMode;
     private readonly uint m_syncInterval;
+
     private readonly nint[] m_backBuffers = new nint[FrameCount];
+    // One command allocator/list per swap-chain buffer (indexed by IDXGISwapChain3::GetCurrentBackBufferIndex,
+    // queried identically in BeginFrame and Present with no intervening Present call between the two reads, so
+    // both reads return the same index) — the standard D3D12 multi-frame-in-flight pattern. Each slot's
+    // allocator may only be Reset() once the GPU has finished the commands last recorded into it; m_frameFenceValues
+    // tracks that per slot so BeginFrame can wait on exactly the slot about to be reused instead of draining the
+    // whole device every frame.
+    private readonly nint[] m_commandAllocators = new nint[FrameCount];
+    private readonly nint[] m_commandLists = new nint[FrameCount];
+    private readonly ulong[] m_frameFenceValues = new ulong[FrameCount];
 
     private GCHandle m_blitLayoutToken;
-    private nint m_commandAllocator;
-    private nint m_commandList;
+    private DirectXDrawCommand[]? m_blitDrawCommands;
     private DirectXSurfaceUpload? m_cpuUpload;
+    private nint m_frameFence;
+    private HANDLE m_frameFenceEvent;
+
+    private ulong m_nextFrameFenceValue = 1;
+
     private IGpuSurfaceImport? m_surfaceImport;
     private uint m_height;
     private nint m_lastBlitResource;
@@ -181,10 +196,27 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         CreateSrvHeap(device: device);
         CreateBlitPipeline(device: device);
         CreateCommandInfrastructure(device: device);
+
+        // The blit draw command is invariant for the compositor's whole activation lifetime — every field it
+        // reads (m_srvHeap, BlitDescriptorGpuHandle, BlitPipelineLayoutHandle) is set once, above, and never
+        // reassigned. Building it once here (parity with the Vulkan compositor's cached per-set draw-command
+        // arrays) removes a per-present heap allocation from Blit.
+        m_blitDrawCommands = [
+            new DirectXDrawCommand(
+                DrawParameters: new DirectXDrawParameters(
+                    instanceCount: 1,
+                    vertexCount: 3
+                ),
+                DescriptorHeapHandle: m_srvHeap,
+                DescriptorTableGpuHandle: BlitDescriptorGpuHandle,
+                PipelineLayoutHandle: BlitPipelineLayoutHandle
+            ),
+        ];
     }
     /// <summary>
-    /// Waits for the GPU to become idle (draining the previous frame), then resizes the swap chain if the
-    /// window dimensions changed.
+    /// Waits only for the ring slot this frame's <see cref="Present"/> is about to reuse (the pipelined replacement
+    /// for a full-device drain — see <see cref="WaitForFrameSlot"/>), then resizes the swap chain if the window
+    /// dimensions changed.
     /// </summary>
     public void BeginFrame(DirectXDeviceContext deviceContext, uint width, uint height) {
         if (m_swapChain == 0) {
@@ -197,7 +229,12 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // host pacer's deadline wait. A no-op for Vsync/Mailbox (which use GetFrameStatistics after present instead).
         CaptureFrameLatencyTiming();
 
-        deviceContext.WaitIdle();
+        WaitForFrameSlot();
+
+        // The full-drain WaitIdle this replaced also flushed the D3D12 debug-layer message queue every frame
+        // (opt-in via PUCK_D3D12_DEBUG); the per-slot wait above has nothing to do with that queue, so the drain
+        // is called directly to keep the same per-frame cadence.
+        deviceContext.DrainDebugMessages();
 
         if (
             (width == m_width) &&
@@ -205,6 +242,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         ) {
             return;
         }
+
+        // Resizing tears down and recreates every back buffer, so every ring slot must be idle first — the
+        // per-slot wait above only proves the ONE slot this frame would reuse is free.
+        deviceContext.WaitIdle();
 
         ReleaseBackBuffers();
 
@@ -243,15 +284,14 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             sourceFormat = view.Format;
         } else if (surface.IsCpuPixels) {
             m_cpuUpload ??= new DirectXSurfaceUpload(deviceContext: deviceContext);
+            // The upload texture is one resource shared by every ring slot: an in-flight frame may still be
+            // sampling it, so overwriting it must wait for every presented frame, not just this slot's.
+            WaitForAllFrames();
             m_cpuUpload.Upload(
                 pixels: surface.Pixels.Span,
                 width: surface.Width,
                 height: surface.Height,
-                format: surface.Format switch {
-                    SurfaceFormat.B8G8R8A8Unorm => DirectXPixelFormat.B8G8R8A8Unorm,
-                    SurfaceFormat.R8G8B8A8Unorm => DirectXPixelFormat.R8G8B8A8Unorm,
-                    _ => throw new InvalidOperationException(message: "The surface format has no DirectX mapping."),
-                }
+                format: GpuPixelFormats.FromSurfaceFormat(format: surface.Format)
             );
             sourceResource = m_cpuUpload.TextureHandle;
             sourceFormat = m_cpuUpload.TextureFormat;
@@ -260,11 +300,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             var imported = m_surfaceImport.Import(
                 deviceContext: deviceContext,
                 sharedHandle: surface.SharedHandle,
-                format: surface.Format switch {
-                    SurfaceFormat.B8G8R8A8Unorm => GpuPixelFormat.B8G8R8A8Unorm,
-                    SurfaceFormat.R8G8B8A8Unorm => GpuPixelFormat.R8G8B8A8Unorm,
-                    _ => throw new InvalidOperationException(message: "The surface format has no DirectX mapping."),
-                },
+                format: GpuPixelFormats.FromSurfaceFormat(format: surface.Format),
                 width: surface.Width,
                 height: surface.Height
             );
@@ -279,6 +315,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         // Skip rewriting the single SRV descriptor when the source resource is unchanged (parity with the
         // Vulkan compositor's last-written-view cache).
         if (sourceResource != m_lastBlitResource) {
+            // The single SRV descriptor is consumed at command-list execution, so rewriting it while the other
+            // ring slot's frame is still in flight would redirect that frame's read mid-execution.
+            WaitForAllFrames();
             WriteSrv(device: device, format: sourceFormat, resource: ((ID3D12Resource*)sourceResource));
 
             m_lastBlitResource = sourceResource;
@@ -286,17 +325,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         Present(
             deviceContext: deviceContext,
-            drawCommands: [
-                new DirectXDrawCommand(
-                    DrawParameters: new DirectXDrawParameters(
-                        instanceCount: 1,
-                        vertexCount: 3
-                    ),
-                    DescriptorHeapHandle: m_srvHeap,
-                    DescriptorTableGpuHandle: BlitDescriptorGpuHandle,
-                    PipelineLayoutHandle: BlitPipelineLayoutHandle
-                ),
-            ]
+            drawCommands: m_blitDrawCommands!
         );
     }
     /// <summary>
@@ -318,8 +347,9 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         var rtvBase = GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)m_rtvHeap));
         var rtvCpuHandle = ((nint)(rtvBase.ptr + ((nuint)(frameIndex * m_rtvStride))));
 
-        var allocator = ((ID3D12CommandAllocator*)m_commandAllocator);
-        var commandList = ((ID3D12GraphicsCommandList*)m_commandList);
+        var commandListHandle = m_commandLists[frameIndex];
+        var allocator = ((ID3D12CommandAllocator*)m_commandAllocators[frameIndex]);
+        var commandList = ((ID3D12GraphicsCommandList*)commandListHandle);
 
         allocator->Reset();
         commandList->Reset(pAllocator: allocator, pInitialState: null);
@@ -329,7 +359,7 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         DirectXDebugLabel.Begin(commandList: commandList, label: "surface-blit");
         m_commandListRecorder.RecordBackBuffer(
             backBufferHandle: ((nint)backBuffer),
-            commandListHandle: m_commandList,
+            commandListHandle: commandListHandle,
             drawCommands: drawCommands,
             rtvCpuHandle: rtvCpuHandle,
             viewportHeight: m_height,
@@ -339,11 +369,61 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
         commandList->Close();
 
-        var executable = ((ID3D12CommandList*)m_commandList);
+        var executable = ((ID3D12CommandList*)commandListHandle);
+        var commandQueue = ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle);
 
-        ((ID3D12CommandQueue*)deviceContext.CommandQueueHandle)->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
+        commandQueue->ExecuteCommandLists(NumCommandLists: 1, ppCommandLists: &executable);
         swapChain->Present(Flags: ((DXGI_PRESENT)m_presentFlags), SyncInterval: m_syncInterval).ThrowIfFailed(operation: "IDXGISwapChain3::Present");
         CapturePresentTiming(swapChain: swapChain);
+
+        // Arm this slot's fence value AFTER the queue submit so BeginFrame's next WaitForFrameSlot on this same
+        // slot (FrameCount presents from now) proves the GPU is done with the allocator/list just submitted above.
+        var fenceValue = m_nextFrameFenceValue;
+
+        commandQueue->Signal(Value: fenceValue, pFence: ((ID3D12Fence*)m_frameFence));
+        m_frameFenceValues[frameIndex] = fenceValue;
+        m_nextFrameFenceValue = (fenceValue + 1);
+    }
+
+    /// <summary>Blocks until the ring slot <see cref="Present"/> is about to reuse this frame — the slot's
+    /// allocator/list from <see cref="FrameCount"/> presents ago — has fully retired on the GPU. This is the
+    /// pipelined replacement for a full <see cref="DirectXDeviceContext.WaitIdle"/> drain every frame: the host
+    /// can record frame N while the GPU still executes frame N-1 (mirroring the Vulkan compositor's
+    /// <c>WaitForFrameSlot</c>). A no-op for a slot that has never been presented into (its allocator was never
+    /// recorded against, so it needs no wait before its first use).</summary>
+    private void WaitForFrameSlot() {
+        var swapChain = ((IDXGISwapChain3*)m_swapChain);
+        var frameIndex = swapChain->GetCurrentBackBufferIndex();
+        var targetValue = m_frameFenceValues[frameIndex];
+
+        if (0 == targetValue) {
+            return;
+        }
+
+        var fence = ((ID3D12Fence*)m_frameFence);
+
+        if (fence->GetCompletedValue() < targetValue) {
+            fence->SetEventOnCompletion(Value: targetValue, hEvent: m_frameFenceEvent);
+            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_frameFenceEvent);
+        }
+    }
+    /// <summary>Blocks until every presented frame has fully retired on the GPU — the guard for the resources the
+    /// ring does not duplicate per slot: the single CPU-upload texture, the single blit SRV descriptor, and the
+    /// per-slot allocators/lists at teardown. Any write to a cross-slot resource must run behind this, because
+    /// <see cref="WaitForFrameSlot"/> only proves one slot idle while the other may still be sampling.</summary>
+    private void WaitForAllFrames() {
+        var lastSignaled = (m_nextFrameFenceValue - 1);
+
+        if ((m_frameFence == 0) || (lastSignaled == 0)) {
+            return;
+        }
+
+        var fence = ((ID3D12Fence*)m_frameFence);
+
+        if (fence->GetCompletedValue() < lastSignaled) {
+            fence->SetEventOnCompletion(Value: lastSignaled, hEvent: m_frameFenceEvent);
+            _ = PInvoke.WaitForSingleObject(dwMilliseconds: uint.MaxValue, hHandle: m_frameFenceEvent);
+        }
     }
 
     /// <summary>Gets the last display-confirmed present count and its QPC timestamp (Stopwatch ticks); <see langword="false"/> when unavailable.</summary>
@@ -417,13 +497,27 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
 
     /// <inheritdoc/>
     public void Dispose() {
+        // The last present may still be executing against this slot's allocator/list — retire everything before
+        // any release below.
+        WaitForAllFrames();
         m_cpuUpload?.Dispose();
         m_cpuUpload = null;
         m_surfaceImport?.Dispose();
         m_surfaceImport = null;
+        m_blitDrawCommands = null;
         ReleaseBackBuffers();
-        Release(pointer: ref m_commandList);
-        Release(pointer: ref m_commandAllocator);
+
+        for (var i = 0; (i < m_commandLists.Length); i++) {
+            Release(pointer: ref m_commandLists[i]);
+            Release(pointer: ref m_commandAllocators[i]);
+        }
+
+        Release(pointer: ref m_frameFence);
+
+        if (!m_frameFenceEvent.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_frameFenceEvent);
+            m_frameFenceEvent = HANDLE.Null;
+        }
 
         if (m_blitLayoutToken.IsAllocated) {
             var layout = ((DirectXPipelineLayout)m_blitLayoutToken.Target!);
@@ -693,21 +787,11 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
             pDescriptorRanges = &srvRange,
         };
 
-        var staticSampler = new D3D12_STATIC_SAMPLER_DESC {
-            AddressU = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            AddressV = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            AddressW = D3D12_TEXTURE_ADDRESS_MODE.D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
-            BorderColor = D3D12_STATIC_BORDER_COLOR.D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK,
-            ComparisonFunc = D3D12_COMPARISON_FUNC.D3D12_COMPARISON_FUNC_NEVER,
-            Filter = D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR,
-            MaxAnisotropy = 0,
-            MaxLOD = float.MaxValue,
-            MinLOD = 0f,
-            MipLODBias = 0f,
-            RegisterSpace = 0,
-            ShaderRegister = 0,
-            ShaderVisibility = D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL,
-        };
+        var staticSampler = DirectXRootSignatures.ClampStaticSampler(
+            filter: D3D12_FILTER.D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            shaderRegister: 0,
+            shaderVisibility: D3D12_SHADER_VISIBILITY.D3D12_SHADER_VISIBILITY_PIXEL
+        );
         var rootSigDesc = new D3D12_ROOT_SIGNATURE_DESC {
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
             NumParameters = 1,
@@ -790,23 +874,50 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         return ((nint)pso);
     }
     private void CreateCommandInfrastructure(ID3D12Device* device) {
-        device->CreateCommandAllocator(
-            ppCommandAllocator: out var allocator,
-            riid: ID3D12CommandAllocator.IID_Guid,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
-        );
-        m_commandAllocator = ((nint)allocator);
+        for (var i = 0u; (i < FrameCount); i++) {
+            device->CreateCommandAllocator(
+                ppCommandAllocator: out var allocator,
+                riid: ID3D12CommandAllocator.IID_Guid,
+                type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
+            );
+            m_commandAllocators[i] = ((nint)allocator);
 
-        device->CreateCommandList(
-            nodeMask: 0,
-            pCommandAllocator: ((ID3D12CommandAllocator*)allocator),
-            pInitialState: null,
-            ppCommandList: out var commandList,
-            riid: ID3D12GraphicsCommandList.IID_Guid,
-            type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
+            device->CreateCommandList(
+                nodeMask: 0,
+                pCommandAllocator: ((ID3D12CommandAllocator*)allocator),
+                pInitialState: null,
+                ppCommandList: out var commandList,
+                riid: ID3D12GraphicsCommandList.IID_Guid,
+                type: D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT
+            );
+            m_commandLists[i] = ((nint)commandList);
+            ((ID3D12GraphicsCommandList*)commandList)->Close();
+
+            // A fresh allocator has nothing recorded against it yet, so its slot needs no wait before first use.
+            m_frameFenceValues[i] = 0;
+        }
+
+        device->CreateFence(
+            Flags: default,
+            InitialValue: 0,
+            ppFence: out var frameFence,
+            riid: ID3D12Fence.IID_Guid
         );
-        m_commandList = ((nint)commandList);
-        ((ID3D12GraphicsCommandList*)commandList)->Close();
+        m_frameFence = ((nint)frameFence);
+        m_nextFrameFenceValue = 1;
+        m_frameFenceEvent = PInvoke.CreateEvent(
+            bInitialState: false,
+            bManualReset: false,
+            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
+            lpName: default(PCWSTR)
+        );
+
+        if (m_frameFenceEvent.IsNull) {
+            throw new DirectXException(
+                operation: "CreateEventW",
+                result: Marshal.GetHRForLastWin32Error()
+            );
+        }
     }
     private void WriteSrv(ID3D12Device* device, ID3D12Resource* resource, DXGI_FORMAT format) {
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC {

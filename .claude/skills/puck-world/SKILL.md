@@ -5,6 +5,33 @@ description: Guides work on Puck.World across its document and Protocol model, a
 
 # Puck.World: the game of many games
 
+Creation shapes support `type: "Prism"`: an XY profile extruded along Z.
+`scale` gives bottom half-width, half-height and extrusion half-depth; optional
+`taper` gives top/bottom width in [0, 1] (default 0.5). Zero makes a triangle,
+one a rectangle. It uses the existing Trapezoid/Extrude VM path in both static
+and animated emission and the deterministic contact field. Optional `profile`
+selects RoundedRectangle (cornerRadius fraction), Polygon (3–32 sides), or
+Ellipse; null uses Trapezoid. Polygon/Ellipse are renderable but refused by the
+deterministic field; RoundedRectangle is supported there. Other types refuse
+`taper` and `profile`. The stamp budget is 128 shapes, including expanded glyphs; the matched
+CPU/HLSL instance ceiling is 32768. Verify profile admission and surfaces with
+`AuthoredShapeAdmissionLawTests` / `SdfTrapezoidProfileLawTests`, and capacity with
+`WorldRenderEnvelopeLawTests` plus a real rendered world.
+
+Creation-driver transitions: `blendInSeconds`/`blendOutSeconds` are optional,
+finite non-negative exponential time constants (null = 0.15 s; zero = immediate
+on a positive render delta). They control gate weights independently of phase
+cadence and the shared movement-speed filter. `CreationAnimationLawTests` checks
+asymmetric response, frame-rate independence, zero time, and invalid values.
+
+Creation contact tuning: `CreationPlantDocument.SwingWeight` (`plant.swingWeight`,
+nullable float in [0, 1]) controls target influence outside the plant window while
+its driver is active. Zero releases to the authored swing; omission keeps target
+following. Driver rest restores contact influence. A false effector `when` gate
+clears the latch, so reacquisition cannot reuse a pre-flight world target. The
+pack-path controls live in `CreationEffectorLawTests`; Moth opts into zero swing
+influence. These are presentation changes, not collision or simulation changes.
+
 Keep this skill factual and procedural: record settled contracts, their exact
 seams, and how to verify them. Let the user's current instruction outrank this
 file. If the skill contradicts a demanded change, update it in the same change.
@@ -21,14 +48,14 @@ experience — no sibling `--flag` modes; durable configuration is document
 fields, live operation is console verbs, and there is no `PUCK_*`
 configuration surface for this game. **A baked C# constant is the same
 violation as a flag, and the commonest one** (owner ruling, 2026-08-03,
-re-issued 2026-08-07): the discriminator is whether Play, Dive, Kart, and Jump
+re-issued 2026-08-07): the discriminator is whether Nexus, Dive, Kart, and Jump
 would each want the value different — sensitivities, clamps, radii, timings,
 speeds, which button arms a mode. If yes, it is a document field in its FIRST
 commit, never a constant to migrate later. Before writing any feature carrying
 a tunable number, search `src/Puck.World.Schema` for existing vocabulary: the
 2026-08-07 relapse built a bespoke mouse-orbit with hardcoded sensitivity and
-pitch clamps while `WorldCameraMotion.Orbit` and the authored `views.seatRig`
-already existed. Legitimate constants: capacity bounds that size memory or the
+pitch clamps while the camera program's `orbit`/`clampPitch` ops and the
+authored `views.seatRig` already existed. Legitimate constants: capacity bounds that size memory or the
 wire, representation/determinism constants, and math. The console is the
 control plane:
 process stdin drives verbs, stdout/stderr echo results, and the on-screen
@@ -37,37 +64,89 @@ console is only a MIRROR of that pipe — nothing that draws (including a HUD
 away. Verify game behavior by RUNNING the game, never by a build gate
 (`CLAUDE.md` rule 3).
 
-## The seven projects
+## The world project family
 
 | Project | Owns | Key types |
 |---|---|---|
-| `src/Puck.World.Schema` | What a world IS — the document model | `WorldDefinition` + section records, `WorldDefinitionValidator`, `WorldDefinitionSerialization`; authored-to-fixed collider compilation; document-embedded wire vocabulary that keeps the `Puck.World.Protocol` namespace (`PlayerIntent`, `WorldGrant`/`WorldPrincipal`, admission entries) |
+| `src/Puck.State` | The state and rule engine beneath the document, with no world or presentation concept | `IStateSection`/`StateRow`/`StateCell` and the traits (`StateAdvance`/`StateDynamics`/`StateCycle`), `StateDomain`, `StatePhase`/`PhaseGuard`, `StateVisibility`, `StateCatalog`/`StateHandle`, `StateReader`, `StateCellWriter`, `LatticeTopology`/`CompiledTopology`/`TopologyCompilation`, `Draw`/`StateGenerator`/`GeneratorEngine`, `PatternRow`/`CompiledPattern`, `DynamicsRow`, `CompiledTable`, `ValueExpression`/`ValueToken`/`ExpressionSpelling`, `ExpressionOp`/`ExpressionArithmetic`, `TableDocument`/`TableCanonicalizer`/`TableRow`, the `StateTransform` union, `SafeName`/`CellName`, `CellKind`, `RuleFacts`, `ActionStateComparison`/`ActionTriggerMode`, `Search/SearchRuntime` (negamax with a transposition table and UCT over a state frame; the world host lands its writes) — no `World` name; consumers reach them through a project-wide `Using` |
+| `src/Puck.World.Schema` | What a world IS — the document model | `WorldDefinition` + section records (`WorldStateSection`/`WorldStateRow` extend the engine's section and row with the body lanes and the `gatesDrive`/`field` traits; `WorldFieldTopology` is the physical lattice case), `WorldDefinitionValidator`, `WorldDefinitionSerialization` (`WorldJsonContext` over the generated `WorldJsonSourceContext`, `WorldJsonVocabulary` adding the document's arms to the engine's polymorphic bases); authored-to-fixed collider compilation; document-embedded wire vocabulary that keeps the `Puck.World.Protocol` namespace (`PlayerIntent`, `WorldGrant`/`WorldPrincipal`, admission entries) |
 | `src/Puck.World.Protocol` | What a world SAYS — the wire/tape vocabulary | `WorldCommand`, `WorldMutation`, `SubmissionEnvelope`, `SessionRequest`, `WorldSnapshot`, `IServerLink`/`IClientSink`/`IWorldServerHost`, `LoopbackTransport`, `WorldAuthorityEndpoint`/`WorldSessionMirror`, and the `IWorldAdjacencySource` family (`WorldAdjacencyFramePair`/`WorldAdjacencyProjection`/`IWorldAdjacencyNeighbour`) — all four namespaced `Puck.World.Server` still, moved here as files without a rename |
 | `src/Puck.Networking` | The dialect-agnostic wire substrate | `FrameCodec` (the socketless frame grammar), `WireReader`/`WireWriter`, `WireRefusal`/`WireFailure` |
-| `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, World-specific contact orchestration and policy, `WorldEngagement`, `WorldMachineHost`, `IWorldAddonHost`/`WorldAddonReceipt` (the addon seam interface), `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
-| `src/Puck.World.Addons` | The addon guest host | `WorldAddonRuntime`, `WorldAddonMutationDecoder`, `WorldAddonWire`, `AddonMutateRefusal` |
-| `src/Puck.World.Client` | The presentation-facing client seam, physically split out of `Puck.World` | `PlayerRoster`/`WorldClient`/`SeatController`, the editor (`WorldEditorSession`/`WorldEditorTargeting`/`WorldEditorDrag`/`WorldEditorPicker`/`WorldWorkbench`), `WorldFrameSource` (the composed-frame producer)/`WorldSceneEmitter`/`WorldViewComposer`, `WorldSessionSceneEmitter`/`WorldAdjacencySceneEmitter`/`WorldSdfDocumentEmitter`, the stamp/animation pool (`WorldStampPool`/`WorldPlacementStamper`/`WorldScreenStamper`), the SDF document intake (`Sdf/SdfDocumentDecoder`/`SdfDocumentModel`/`SdfRefusal`), `IWorldAudioFrameFeed`/`IWorldAudioCueSink` (the narrow seams the frame/scene producers hold the root's `WorldAudioDirector` through, the `IWorldAudioLever` pattern), and the binding-authoring layer (`WorldSeatBindings`/`WorldEditorBindings`/`WorldDefaultBindings`/`WorldAffordances`/`CommandVocabulary`). References `Puck.World.Protocol` and `Puck.Audio`, never `Puck.World.Server`. |
-| `src/Puck.World` | The sole composition root | `Program.cs`, `WorldClientSeats` (implements the Server seam `IWorldEmbodiedSeats`), `WorldAudioDirector` (stays here — imports `Puck.World.Audio` types directly; implements Client's `IWorldAudioFrameFeed`/`IWorldAudioCueSink`/`IWorldAudioLever` for the frame/scene producers and the session-lever sink), presentation and the screen-output binder, `Audio/` (document intake, tune hosting, the render device — the mixer core and voice synth live in `src/Puck.Audio`), every `*CommandModule` (nine of them forward their command-name constants to `Puck.World.Client.CommandVocabulary`, the single source), and the shipped world/scenario documents under `Assets/` |
+| `src/Puck.World.Server` | The authoritative sim | `WorldServer` (the tick, the journal), `WorldGrants`, `WorldHandleTable`, `WorldPopulation`/`WorldBody`, World-specific contact orchestration and policy, `WorldEngagement`, `IWorldAddonHost`/`WorldAddonReceipt` (the addon seam interface), `IWorldMachineHost` (the screen-machine seam — the concrete host lives in `Puck.World.Addons`), `WorldOwnedWorlds` (the owned-world identity catalog), `WorldReplayTape`, `WorldOutputHub` |
+| `src/Puck.World.Console` | The server-only console command modules, moved out of `Puck.World` | `IWorldConsoleAuthority` (resolves the addressed `WorldInstance`), `WorldGrantCommandModule`, `WorldGroupCommandModule`, `WorldLookCommandModule`, `WorldNetworkCommandModule`, `WorldReplayCommandModule` (the `replay.*` verb surface — the tape and its read-back stay in Server), `WorldRowCommandModule`, `WorldStateCommandModule`, `WorldTimingCommandModule`, `WorldUpdateCommandModule`, `WorldWaitCommandModule` + `WorldConsoleWaitGate`/`IWorldWaitGateResolver` |
+| `src/Puck.World.Addons` | The addon guest host and the screen-machine host | `WorldAddonRuntime`, `WorldAddonMutationDecoder`, `WorldAddonWire`, `AddonMutateRefusal`, `Machines.WorldMachineHost` (the `IWorldMachineHost` implementation), `Machines.WorldScreenMachineEngines` (the shipped emulator/instrument engine list) |
+| `src/Puck.World.Client` | The presentation-facing client seam, physically split out of `Puck.World` | `PlayerRoster`/`WorldClient`/`SeatController`, the camera-program translation (`WorldCameraRigCompiler`, over the document-blind IR in `Puck.SdfVm.Views`), `WorldFramePresenter` (the composed-frame producer)/`WorldSceneEmitter`/`WorldViewComposer`, `WorldSessionSceneEmitter`/`WorldAdjacencySceneEmitter`/`WorldSdfDocumentEmitter`, the stamp/animation pool (`WorldStampPool`/`WorldPlacementStamper`/`WorldScreenStamper`), the SDF document intake (`Sdf/SdfDocumentDecoder`/`SdfDocumentModel`/`SdfRefusal`), `IWorldAudioFrameFeed`/`IWorldAudioCueSink` (the narrow seams the frame/scene producers hold the root's `WorldAudioDirector` through, the `IWorldAudioLever` pattern), and the binding-authoring layer (`WorldSeatBindings`/`WorldAffordances`/`CommandVocabulary`). References `Puck.World.Protocol` and `Puck.Audio`, never `Puck.World.Server`. |
+| `src/Puck.World` | The sole composition root | `Program.cs`, `WorldClientSeats` (implements the Server seam `IWorldEmbodiedSeats`), `WorldAudioDirector` (stays here — imports `Puck.World.Audio` types directly; implements Client's `IWorldAudioFrameFeed`/`IWorldAudioCueSink`/`IWorldAudioLever` for the frame/scene producers and the session-lever sink), presentation and the screen-output binder, `Audio/` (document intake, tune hosting, the render device — the mixer core and voice synth live in `src/Puck.Audio`), the command modules that stayed here (`WorldCommandArguments`, the free-text-tail reconstruction shared with `Puck.World.Console`, lives in `Puck.World.Server` since both need it), and the shipped world/scenario documents under `Assets/` |
 
-`src/Puck.Audio` is an eighth, sibling engine-services project (not one of
-the seven above): the deterministic fixed-point mixer/voice-synth core
+`src/Puck.Physics` owns the generic kernels the server drives: `Navigation/` (the budgeted, checkpointed A* over surface, volume, and medium grids) and `Fields/` (`FieldLattice`, the reaction integrator behind a `state.lattices` row). Server keeps pair selection, authority, and body-state writes. The static solid field bakes a distance grid at `collision.gridCellSize` (0 = none; the shipped world authors 0.5) and answers the exact program inside a contact band derived from the kit colliders, so a query never marches from scratch; `world.collision.status` echoes the grid. `host.journalDepth` bounds the undo journal (0 = unbounded; entries past the horizon fold forward into the base; `world.status` echoes it). Transfer leases, escrow rows, and parked entries expire off one sorted `WorldDeadlineTable`, never a per-tick sweep of a whole collection.
+
+**The one world and its districts.** `puck.world.json` is the island; every district is a module under `Assets/worlds/modules/` imported under an alias (`imports[].as`, names compose as `<alias>_<name>`, `exports` names the only rows a host may read, write, or bind; `world.imports` echoes every layer). The primitives the districts read: a placement `deal` facet deals one child placement per cell of a keyed row (`<template>/<key>`, laid out by the template's `distribution` region; `PlacementDealLawTests`); an observation writes rows of any cell kind and nothing else (`WorldObservationLawTests`); a `respond[].when` is a closed union of a lattice-field condition and a state-cell condition (`PlacementResponseLawTests`); an owned identity carries a keyed Int `facts` row mirrored into the reserved body-scope `identity` row, written by the `setIdentityFact` effect, echoed by `identity.facts` (`IdentityFactsLawTests`); a `machine` screen's content may be a `puck.cartridge.v1` document compiled at bind by the brick's forge (`MachineCartridgeLawTests`); an `inhabit` facet's `count` may name an Int cell instead of an authored literal — the cell-driven placement starts every structural install at zero live bodies and is admitted/retired only by `WorldPopulation.ReconcileInhabitCounts`, called on every state-value mutation apply so a rule-written cell reconciles the same tick, clamped to the tighter of the peer capacity and the distribution's own sample count and never retiring a seat-driven body (`InhabitCountLawTests`). A world authoring no `simulation.rateHz` runs at 30 Hz; a stress fixture authors 240 by name. Three derived limits shape a district: sixteen drive-reach ordinals across channels and target registers, one physical field topology per document, and the two-million work-unit rule budget where a body-pair interaction costs capacity squared; `modules/README.md` records what each decided.
+
+The agent projects are an optional extension family, not members of the base world dependency closure:
+
+| Project | Owns | Key types |
+|---|---|---|
+| `src/Puck.World.AgentBridge` | The provider-neutral autonomous-participant extension | `WorldAgentBridge`, `WorldAgentMailbox`, `IWorldAgentDispatcher`, `WorldAgentObservation`, `WorldAgentAffordances`, `WorldAgentActionReceipt`; explicit opt-in composition through `AddPuckWorldAgentBridge`, bounded worker-to-pump dispatch through `ISnapshotInputCapture`, explicit-principal reads through `IPrincipalServerLink`, typed body actions, no model or Harness dependency |
+| `src/Puck.World.AgentHarness` | The optional Microsoft Agent Framework adapter | `WorldAgentHarness`, `WorldAgentHarnessOptions`; constrained `puck_*` tools over the bridge, Harness approvals on mutations, caller-supplied skills and `IChatClient`, no provider credentials or lifecycle policy |
+
+`Puck.World`, its core tests, Schema, Protocol, Server, Client, Console, and Addons must not reference either agent
+project. An agent-capable composition root opts into them from above. The Operator MCP adapter lives in
+`Puck.Mcp`, referenced by CLI, never base World or the standalone silo. CLI installs `AddPuckMcp` into the public
+`WorldSiloApplication.RunAsync` composition for `puck mcp --silo <silo.json> --http <remote.json>`; the silo
+exposes only Hosting's neutral `IControlSessionHost`. World installs the `Puck.Hosting` local control endpoint only
+when the host Console issues `world.control start`; `stop` and `status` manage its live lifetime. Attach with
+`puck mcp --profile operator --attach <printed-file>` on Windows or Linux x64. The file protects a mutual-authenticated
+loopback capability for the current OS user, including its other processes/elevation levels. Each connection has
+one bounded, dedicated Console session. Exec preserves ordinary result uncertainty; capture uses the same
+session's `InvokeAsync` barrier and the exact render request's completion, with off-pump waiting and temporary
+artifact cleanup. Host deadlines remain enforced even when an injected session ignores cancellation; invalid
+host results are `unknown`. MCP results carry the same schema-backed metadata as JSON text and structured
+content; invalid tool arguments return tool errors. The adapter bounds UTF-8 input and pending replies and
+closes both stdio streams on shutdown; malformed input or stalled output exits with failure.
+Cancellation/EOF close ingress without stopping World or its recordings. Remote MCP is an in-process silo
+extension, never a gateway to a local Console capability. Reuse the existing `user_impersonation` scope.
+The host matches validated issuer/subject to explicit OAuth admission and stamps a generation-bound Peer.
+Replica disclosure authorizes text reads; ordinary World grants authorize state-cell writes. The remote
+command allowlist must remain fail-closed for local admin verbs. Current target/owner binding is fixed;
+distributed placement and portable handles are not implemented. Both transports select MCP 2026-07-28.
+Remote HTTP uses caller-bound application handles, four attachments and four concurrent HTTP requests,
+with two of each per subject and no waiting queue. Discovery uses admitted registry help, hides headless
+capture and discloses only granted observation names. Downstream user-interaction challenges return
+bounded claims in an HTTP 401 bearer challenge; clients obtain fresh authorization before retrying.
+Revocation closes attachments and active requests. Optional Azure services reuse Function self-onboarding
+and observation providers through request-confined OBO with federated managed identity client assertions;
+never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer,
+persistent certificate state outside World mounts, and Azure expiry/readiness alerts. Durable delegated
+cloud writes and richer participant tools remain uninstalled.
+Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Cli.Tests` and the real-host smoke described in
+[`Puck.Mcp`](../../../src/Puck.Mcp/README.md) when changing this attachment seam.
+
+`src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core
 (`Puck.Audio.Mixing` — `AudioMixer`/`VoiceSynth`/
 `AudioSnapshot`/`MachineAudioRate`) plus sim-state music
-(`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/`RhythmJudge`/
+(`Puck.Audio.Simulation` — `MusicClock`/`MusicDirector`/
 `MusicSenseEdge`, stepped from `WorldServer.Step` right after
 `WorldEventFeed.Collect()`), referenced by `Puck.World.Server` (machine audio
-rate; `WorldMusicJudgeAssetLoader` resolves each `WorldMusicRow`/`WorldJudgeRow`
-reference's `puck.music.v1`/`puck.judge.v1` document off disk, and
-`MusicDirectorFactory` compiles the loaded documents into the sim-side shapes
+rate; `WorldAssetRowLoader` resolves each `WorldMusicRow`/
+`WorldTune`/`WorldPatch` reference's document off disk (`puck.music.v1`,
+`puck.audio.v1`, `puck.synth.v1` — the same name/source/hash
+shape every world audio asset row carries), and
+`MusicDirectorFactory` compiles the loaded document into the sim-side shapes
 and projects `WorldEventFeed.Edges` into `MusicSenseEdge`) and `Puck.World`
-(presentation glue). It parses no document. `music.state`/`judge.state` are
-`WorldAudioCommandModule` query verbs routed through seat 1's currently
+(presentation glue). It parses no document. `music.state` is a
+`WorldAudioCommandModule` query verb routed through seat 1's currently
 claimed `WorldSeatAuthorityRouter` route — a transferred seat is followed the
-same way `PlayerCommandModule`'s drive-a-player verbs are.
+same way `PlayerCommandModule`'s drive-a-player verbs are. A rhythm hit
+window is an authored `compareState` range over the world-rule operand
+`$clock:<music>:phaseError` (the signed tick distance from `MusicClock`'s
+current position to the nearest beat), never a dedicated effect or section.
 
 Dependency rules are enforced by the architecture gate (`PUCKARCH`
 diagnostics from `build/Architecture.props`): `Puck.World.Schema` references
-only its declared leaf/authoring closure plus `Puck.Physics`, which owns the fixed collider vocabulary —
+only its declared leaf/authoring closure plus `Puck.Physics`, which owns the fixed collider vocabulary, and
+`Puck.State`, the state and rule engine it consumes and extends (expression syntax and tokens, the opcode enum
+and its arithmetic, tables and their document, state transforms, the validated-identifier family, `CellKind`,
+the reserved fact channels) —
 structurally denied backends, presentation, `Puck.Overlays`, `Puck.Input`,
 `Puck.World.Protocol`, and `Puck.World.Server`. `Puck.World.Protocol` adds
 `Puck.World.Schema` and `Puck.Networking` (the transport-neutral frame/wire
@@ -75,7 +154,9 @@ grammar). `Puck.World.Server`
 adds `Puck.World.Schema`, `Puck.World.Protocol`, `Puck.Physics`, `Puck.Storage`,
 `Puck.Hosting` — and knows nothing about rendering or input; `Puck.World.Addons` carries
 `Puck.Scripting` (the addon guest ABI) and its own `AddonSimulationPump` now, referencing
-`Puck.World.Server` rather than the reverse. Physics owns generic contact geometry; Server owns
+`Puck.World.Server` rather than the reverse. The optional `Puck.World.AgentBridge` adds Commands, Protocol, and Schema
+while remaining independent of model runtimes; `Puck.World.AgentHarness` adds the bridge and Microsoft Agent
+Framework packages. No base world project references either extension. Physics owns generic contact geometry; Server owns
 pair selection, authority, walkability/grounding, obstruction reporting, and body-state writes. The two seams
 that legitimately cross: `BindingVocabularyHook` (a `[ModuleInitializer]`
 injection so Schema validators reach the input vocabulary; the sibling
@@ -88,14 +169,59 @@ mutation-kind catalog), and the overlay capacity the composition root hands
 current developer reference — start there for narrative depth this skill
 deliberately does not duplicate.
 
+## Host provider boundary
+
+Cloud-specific implementations belong in extensions. The silo selects persistence,
+connection authentication, and retirement observers through `WorldExtensionRegistry`, using opaque provider
+settings. `WorldSiloHost` consumes a supplied `ObjectStorageTarget`; its lifecycle
+service consumes `IWorldHostRetirementObserver`. Metadata polling, event types and
+credential handling stay in `Puck.World.Azure`, referenced only by composition.
+The compiled-output architecture gate denies Azure SDK API use in Schema, Protocol, Server, and Client. Neither simulation nor replay executes physical host retirement. The silo README
+owns provider-neutral configuration; the Azure README owns Azure provider keys.
+
+## Production silo verification
+
+Endpoint naming and world/host alias conventions are owned by
+[CI and releases](../../../docs/ci.md); deployment values belong in `main.bicepparam`.
+
+Azure CI packages `Assets/worlds/puck.world.json` and its referenced neighbours
+with `puck world prepare`; hosted references use canonical world file
+names. The storage-neighbour resolver parses and migrates the composed document
+with state-expression binding, then reduces it to seam facts; it does not validate
+the neighbour's unrelated local settings or recursively prove its adjacencies.
+Hosted activation awaits root and neighbour storage reads before validating the
+loaded world. Failed drain saves can be retried; closed ingress stays frozen.
+An activation's federation subject and `WorldInstance.ListenEndpoint` come from
+the published definition, independently of checkpoint network fields. Reload
+checks that activation binding; moving an endpoint requires a fresh activation.
+`build/Azure.cs test-world-container` boots the primary Puck row, verifies a durable
+checkpoint and the expected QUIC key, then replaces the container against the
+same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
+Pinned activation waits for host startup, establishes its initial checkpoint,
+and reconciles changed published content through `WorldSiloHost.ReloadAsync` and
+the ordinary rebuild submission. A release marker advances only after its
+checkpoint; retrying failed persistence must not rebuild twice. Drain waits for
+accepted reloads before freezing the pump. `/healthz` includes persistence health;
+`/livez` checks simulation progress independently. `WorldSiloLifecycleLawTests`
+owns reload and drain failure controls. `WorldSiloDefinitionLawTests` checks
+serialized health defaults. Failure during startup stops the host.
+`--authentication-config-file` selects an installed client provider and server
+key pin; no token belongs in world content or checkpoints. Azure's provider
+validates ByteTerrace API membership, while generic protocol code sees only the
+verified session namespace. Run the real client against the deployed endpoint
+for admission, authoritative interaction, and reconnect evidence; a QUIC key
+probe alone does not prove these. `docs/ci.md` owns Azure deployment policy.
 ## Cross-cutting contracts (every task)
 
 **Preserve determinism.** Use no wall clock, RNG, or float in simulation state;
 use fixed point from `Puck.Maths` and exact engine-tick durations throughout; the
 simulation rate is an authored per-world document field
 (`WorldDefinition.Simulation.RateHz`, MUST divide `FixedTickConversion.TicksPerSecond`
-50400 exactly), defaulting to 240 Hz — the fixed rate every world ran before
-that field existed — for a world that authors none. Every entity is advanced on the server from
+50400 exactly), defaulting to 30 Hz, the shipped game's own rate, for a world
+that authors no `simulation` section; a world that wants the distinct
+resident, non-stepping rate authors `rateHz: 0` by name, and a fixture or law
+that needs a higher stress rate authors its own `rateHz` (240 was the ceiling
+every primitive had to survive, never a default). Every entity is advanced on the server from
 a `PlayerIntent` — poses are never accepted from outside the simulation;
 drivers only produce inputs, poses flow out through the tick snapshot. The
 guarantee pins the MAPPING, not the values: a deliberate correction to math
@@ -103,6 +229,23 @@ or logic is EXPECTED to change replay hashes — make the correction and
 re-record any persisted tape it invalidates in the same change. Client-side
 (`src/Puck.World/Client/`) is presentation: floats are fine there, nothing
 feeds back into the tick.
+
+**Navigation is authored world truth.** `navigation.domains` owns bounded
+`surface`, collision-free `volume`, and live-field-constrained `medium` grids.
+A `BodyTargetSource.Navigated` producer points at one domain and one ordinary
+authority-checked target register. Keep A* fixed-point, budgeted, stable-tied,
+checkpointed, and hashed; bake static solid clearance once (a surface edge's
+sweeps run from `maxStepHeight` above the foot to the head — a sweep skimming
+the floor advances one contact skin per march step and exhausts on a
+diagonal), but recheck a
+medium field before traversing its cached edge — a medium's free surface
+(value × heightScale) is bounded by the shared lattice's body-coupling
+ceiling, not by its topology's own layer count, so a shallow `layers: 1`
+topology under a deep medium still resolves correctly
+(`Puck.Physics.Fields.FieldLattice.IsInsideMedium`/`IsSegmentInsideMedium`). Extend this
+vocabulary for
+engine-integral movement semantics; addons/agent extensions remain the home
+for arbitrary policy and planning, not collision/path correctness.
 
 **Enforce the acting-principal rule.** Make every mutating ingress consult the ACTING
 principal before any mutation. The ingress stamps identity
@@ -113,11 +256,42 @@ Client code never mutates local state before the server's verdict
 (completions, not discarded replies). Details:
 [references/authority.md](references/authority.md).
 
+**Rule writes land on a frame; the document installs once per tick.** During
+`EvaluateWorldRules` every state effect writes the host's `StateFrame`
+(`WorldServer.RuleFrame.cs`) and rules read through it; what the frame
+accumulated folds into one mutation through the ordinary door at the end of the
+tick, so every other reader (bodies, fields, search, the console) sees a rule's
+write only after that fold. Row versions on the frame drive the rule scheduler
+and memoized bindings (`RuleSchedule`, `IRuleReader.TryRowVersion`); a rule
+whose read rows are unchanged keeps its closed verdict. A text cell, a removal,
+a draw, a shuffle, and a random or slice transfer take the cross-row path,
+which composes but still folds once. `puck bench world` measures the tick path
+on the fixture and the shipped world.
+
+**Narrate through the hub, never the console.** Server writes nothing to
+`System.Console`; every line is a `WorldNarration` through
+`WorldOutputHub.Narrate(channel, text)` under `HasNarrationSink` (a lambda that
+captures locals allocates its closure on every call, sink or none), and a
+composition root binds `Puck.World.Console`'s `WorldConsoleNarrationSink` to
+stderr, or stdout for the few lines a script reads as answers — `Puck.World.Server`
+cannot hold that type itself, since `build/Architecture.props`'s
+`PuckArchitectureDeniedApi` denies it a `System.Console` reference and
+`PuckArchitectureDeniedApiGate` fails the build (`PUCKARCH008`) on the compiled
+output if one slips in. A fixture server narrates only if it is handed the
+sink (`Fixtures.FreshServer` does), so a law that captures `Console.Error`
+reads what the game prints.
+A body sleeps after `bodies.sleepAfterTicks` idle engine ticks (0 never sleeps)
+and wakes on intent, pose, transfer, admission, a designation, a dynamic
+contact, or a contact-field version bump (`WorldBody.Sleep.cs`). A value write
+delivers `DeliverState`; a shape change delivers `DeliverDefinition`; the
+install marks which is pending and the step delivers once.
+
 **Add a read-back.** Do not land a new decision surface without a verb that
 echoes it, in the same change — a decision nothing can echo can only be
 asserted through downstream inference. `world.why`, `world.grants`,
-`player.channels`, `world.hud`, `world.status`, `world.addons`,
-`world.refusals`, `world.binding-bar` are the pattern.
+`body.channels`, `world.hud`, `world.status`, `world.addons`,
+`world.refusals`, `world.tables`, `world.rule.trace`, `world.rule.hazards`,
+`world.budget.rules`, `world.binding-bar` are the pattern.
 
 **Keep parsing strict and sweep shipped worlds.** Refuse unmapped JSON members by name on
 every nested row; only the document root's `Extensions` bag round-trips
@@ -142,6 +316,10 @@ beside an existing one:
    its neighbors.
 4. **Sweep every shipped world** in the same change (strict parse, above).
 5. **Add the read-back verb** (above) — the decision must be echoable.
+6. **Echo the derived cost.** A feature whose declaration carries a price (a
+   step clamp, an envelope reservation, a per-step loop) folds that price
+   into the `world.budget` cost sheet in the same change — a derived cost
+   nothing can echo is a silent frame tax.
 
 **Doc hygiene, same commit.** [`docs/campaign.md`](../../../docs/campaign.md) is the one document that says what we are collectively building; correct it in the SAME commit as any landing that changes its truth. NEVER write a status column — a status claim duplicates what the code answers better, so record the DECISION and let the code answer "is it done". Component READMEs are developer references (no doctrine
 prose); if a change stales one, or stales a comment, fix it in the same
@@ -158,9 +336,20 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   full flag surface is parsed in `Program.cs` (`--backend`, `--width`,
   `--height`, `--exit-after-seconds`, `--present-mode`, `--world`,
   `--recording`, `--storage-uri`, `--user-id`, `--state-dir`, `--headless`,
-  `--listen`, `--connect`); host-related flags are nullable deployment
-  overrides. Absent host overrides leave the world document's `host`
-  section in control.
+  `--capture-dir`, `--listen`, `--connect`); host-related flags are nullable
+  deployment overrides. Absent host overrides leave the world document's
+  `host` section in control. `host.presentation` has three values: windowed,
+  `none` (`HeadlessWorldSimulation` — full authority, no GPU), and
+  `offscreen` (full authority + GPU composition to images, no window —
+  what `puck parity` boots). A world may author a `captures` section:
+  tick-scheduled capture rows that arm the `world.screenshot` path at exact
+  sim ticks, refuse when the camera is inside geometry
+  (`map(cameraPos) <= 0`, `cameraInside=true`), stamp a per-station
+  material census and a `world.state.hash`-matching state hash, and write a
+  `puck.parity.manifest.v1` into `captures.directory` (overridable by
+  `--capture-dir`). The camera program's `select` op dispatches to named
+  sub-programs keyed on a live `state.<row>` value — the discrete sibling
+  of `blend`.
 - `--state-dir <dir>` redirects the on-disk state root (profile catalog,
   replays) — use a temp dir for hermetic verification runs; parallel runs
   each need their own.
@@ -171,16 +360,17 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   your scripts.
 - **The drain barrier**: a following `Immediate` verb is held until pending
   `Simulation` traffic applies, so write-then-read pairs need no polling.
-  `world.wait <ticks>` is the explicit fence, clocked by completed
-  simulation ticks (see [references/console.md](references/console.md)).
+  `world.wait <ticks>` holds only its issuing session, clocked by completed
+  host-work ticks (see [references/console.md](references/console.md)).
 - **Encoding, the two traps**: a pwsh spawned from Git Bash reads captured
   output under an OEM codepage and mangles the engine's em-dashes
   (false-FAIL); pin `[Console]::OutputEncoding` and `$OutputEncoding` to
   UTF-8 — but BOM-LESS (`[System.Text.UTF8Encoding]::new($false)`): a
   BOM'd pin writes its preamble into the piped stdin and silently corrupts
   the FIRST command.
-- **Indexing**: `world.grant body:<n>` is a 0-based entity index; `player.*`
-  verbs are 1-based. `body:1` is "player 2".
+- **Indexing**: `body.*` verbs and `world.grant body:<n>` address the 0-based
+  entity index (0..4095 at the engine ceiling); seat-scoped `player.*` verbs (join/leave/assign/mode/
+  bind/…) stay 1-based seat numbers. `body:1` is seat 2's entity.
 - Scenery boulders HAVE collision — zero displacement with no refusal means
   the physical path, not a dead command. A zero-input boot drifts p1
   slightly (~(-0.04, 0, -0.82) over ~300 ticks) — do not assert exact rest
@@ -194,6 +384,17 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   The terminal console starts hidden; if a script opens its seat session
   (`console [on|off] <player>` from stdin), it may cover the frame — close it
   before judging pixels.
+- **Two windowed captures are never byte-identical, even of identical
+  simulation state.** Silhouette shading carries ±1-LSB variance across a
+  boot-time transition, so a byte comparison of two fenced captures reports a
+  difference about one run in three. The unified overlay also composites the OS
+  pointer's cursor (`WorldCursorFeed`) whenever the pointer sits inside the
+  window, and window placement varies per launch. Compare frames by
+  CHANGED-PIXEL COUNT (`CanaryFrameNoise`, the `framesAgree` canary assertion:
+  pixels moving ≥2 LSB, budget 64), never by bytes. Do NOT reach for
+  `ParityEnvelope` here — its whole-frame mean guard is for diffuse
+  cross-backend noise, and a body relocation covering 0.06% of the frame
+  measures ~0.03 LSB mean and slips under it.
 - **Use the repository's content search.** Run `puck search`, never `grep`;
   the published project tool is the repository's supported search surface.
 - **A verification that cannot fail is a lie.** Pair every denial case with
@@ -201,8 +402,8 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   seat is seeded wide, so self-targeting discriminates nothing), and prove
   a new assertion once by breaking it. This repo's recorded dominant
   failure mode is verification scripts that lie silently.
-- `replay.verify` MATCH proves the authoritative pose trajectory only —
-  nothing about document, grant-table, or HUD state
+- `replay.verify` MATCH proves the explicitly hashed authoritative state-system
+  trajectory, not the whole document, grant table, or HUD
   ([references/replay.md](references/replay.md)).
 - Committed proofs: `puck canary` manifests under `tests/Puck.World.Canaries/`
   for every load-bearing seam, including `world.grant`-driven claims (a
@@ -213,9 +414,9 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
   and generated identity, and a `line`/`response`/`sequence` assertion's
   `authority` selector reads a specific one's transcript) — re-run whichever
   proofs your change touches. The
-  acting-principal/administration and engage/disengage-authority contracts
+  acting-principal/administration and control-application authority contracts
   are proved in `tests/Puck.World.Tests` (`AuthorityAdministrationLawTests`,
-  `EngageAuthorityLawTests`); a retired battery leaves no record directory
+  `EngageAuthorityLawTests`, `ControlApplicationLawTests`); a retired battery leaves no record directory
   behind — its history is in git, and its contract is validated by running
   the app until a law or canary owns it. Do NOT create new persisted runner/battery artifacts without asking, and do
   NOT repair a rotted fixture — quarantine it and move on (validation currency
@@ -230,7 +431,7 @@ dotnet run --project src/Puck.World -c Release -- --exit-after-seconds N --state
 A minimal smoke session:
 
 ```
-printf 'world.status\nplayer.where 1\nworld.grants console\n' |
+printf 'world.status\nbody.where 0\nworld.grants console\n' |
   dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 6 --state-dir "$TMP/puck-state"
 ```
 
@@ -257,11 +458,11 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 | `SubmissionEnvelope`, the one queue, completions, echo routing, the intent buffer | [references/ordered-domain.md](references/ordered-domain.md) |
 | HUD schema caps, overlay reservation arithmetic, bands/`replace`, bindings, HUD verbs | [references/hud.md](references/hud.md) |
 | Camera rigs, world-owned `views.seatControl`, portable `playerDefaults.seatLook`, the seat-owned movement/render/read-back state, pointer/cursor stack, radial action menu, layouts, and `world.row.set views.*`/`view.override` verbs | [references/views.md](references/views.md) |
-| Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
-| `player.engage`, context routes (screen or body target, capture policy, channel mask), latch/route repair, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
+| Invisible reciprocal boundaries, derived overlap/corner peers, frame isometries, generation-addressed authority routes, reserve/commit handoff, action continuity, neighbour contact, seam liveness (`livenessGraceSeconds`, the `$link:` reserved rule channel, `world.links`), and the five-authority quilt | [references/adjacency-and-federation.md](references/adjacency-and-federation.md) |
+| `body.engage`, control applications (the (target, kit) set a principal holds; capture as own-body membership), the kit pad map, server-internal merged pads, possession's co-drive path, machines | [references/engagement.md](references/engagement.md) |
 | Join/leave (local seat and peer), park-with-grace, the `$parked:` reserved rule channel, body-resume's identity match rule | [references/session-lifecycle.md](references/session-lifecycle.md) |
-| The replay tape: format/re-key, capture scope, pose hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
-| Addon rows, mounting, pump points, channels, fuel, ABI verdicts, the `world.addon.mount` verb family | [references/addons.md](references/addons.md) |
+| The replay tape: version-1 format, capture scope, population hash, verify semantics, receipts | [references/replay.md](references/replay.md) |
+| Addon rows, the prepare/commit mount transaction, pump points, channels, fuel, ABI verdicts, `world.row.set addons`/`.remove` | [references/addons.md](references/addons.md) |
 | Command modules, routing, the stdin barrier, output contract, verb grammar, screenshots | [references/console.md](references/console.md) |
 
 Adjacent skills: `sdf-world` for the renderer and SDF VM the frame source
@@ -271,14 +472,94 @@ choosing fixed-point primitives on sim value paths.
 
 ## Boundaries worth knowing
 
-- `WorldPopulationLimits.CapacityCeiling` is 128 (the largest authored
+- A kit's `rigid` facet (`Puck.World.Schema.WorldRigid`) is a passive
+  physical entity — mass/restitution/friction/damping derived to
+  mass/inertia from the kit's own sphere/capsule/box collider, never a free
+  density or tensor. `WorldBody.AdvanceRigid` (`WorldBody.Rigid.cs`) hands the
+  whole step to the rigid solver instead of the grounded/free motion
+  program. Every contact anchor — static (ground/obstruction) and pair alike —
+  is the shape's own true witness point (`Puck.Physics.FixedRigidWitness.Anchor`),
+  never a point on the conservative bounding sphere, so an off-centre strike
+  carries a real lever arm into `Puck.Physics.FixedTwoBodyKernel`. A box or
+  capsule resting on a near-horizontal surface additionally resolves over its
+  own support MANIFOLD (`FixedRigidWitness.SupportManifold` — up to four box
+  corners, or two capsule cap points lying on a side) with a few sequential-
+  impulse passes (`collision.bodyContacts.rigidManifoldIterations`), which is
+  what keeps an upright body's centre of mass over its support polygon without
+  artificial damping. Dynamic-vs-dynamic contact rides the existing
+  `ResolveDynamicContacts` broadphase (`WorldPopulation.Rigid.cs`); the first
+  pass's own resolved rigid-pair count derives a count of extra FULL sweeps —
+  fresh broadphase and narrowphase, over the same bodies' now-current
+  positions — over the SAME tick (`collision.bodyContacts.rigidPairIterationCeiling`/
+  `rigidPairIterationBudget`), so an impulse chain (a rack break, a falling
+  domino line) crosses more than one pair-hop within one tick instead of one
+  body per tick; a box-vs-box pair depenetrates by separating-axis test over
+  world X/Y/Z plus each box's own three face axes
+  (`Puck.Physics.FixedColliderBounds.BoxAxes`), not the coarser world-bounds
+  approximation every other volume pair still uses. Once the resting latch
+  closes, `AdvanceRigid` stops integrating that body entirely until something
+  wakes it (an impulse, a dynamic-pair impulse or depenetration, a hard
+  teleport, or a live solid edit replacing the contact field it rested
+  against) — this is what makes `Resting`/`$physics:quiescent` mean the body
+  is not moving. `body.impulse`, `world.rigid`, `world.budget`, and the
+  `$physics:quiescent` rule operand are the console/rule surface; see
+  [references/documents.md](references/documents.md#crowd-scale-policies)
+  for the authored `collision.bodyContacts` rigid fields, and the
+  [server](../../../src/Puck.World.Server/README.md#rigid-dynamics-worldbodyrigidcs-worldpopulationrigidcs)/[schema](../../../src/Puck.World.Schema/README.md#rigid-dynamics-worldrigidcs)
+  references for the mechanics. The shipped garden's `billiardsTray`/
+  `bowlingLane`/`dominoes` placements are the worked example. A DISTINCT kit
+  facet, `carry` (`Puck.World.Schema.WorldCarry`), lets a body pick up another
+  rigid one — `body.carry <carrier> <target>`/`body.release [carrier]`,
+  `WorldBody.Carry.cs`/`WorldPopulation.Carry.cs`; a carried body's own
+  integration is suspended and its pose is derived from the carrier's frame
+  every tick, but TANGIBLY: its own collider sweeps from its previous pose to
+  that frame-derived one against static geometry (`WorldBody.FollowCarrier`)
+  and against every other active solid body (`WorldPopulation.ResolveCarriedBodyPush`),
+  so it pushes and is blocked rather than passing through — whatever
+  correction either sweep applies is handed back to the carrier too, so the
+  carrier itself is stopped, not just the object it holds. `body.release`
+  refuses by name when the carried body's CURRENT pose still overlaps static
+  geometry or another body. The garden's `walker` kit (Wren) carries this
+  facet. A THIRD distinct facet, `tether` (`Puck.World.Schema.WorldTether`),
+  is an aimed distance-cap rope a body throws along its own facing and reels —
+  `body.attach`/`body.detach`/`body.reel`, `WorldBody.Tether.cs`; presence is
+  the switch, the same convention `rigid`/`carry` carry. A body's attach
+  state is `m_tether is not null` — there is no separate mode field. Read
+  back per body with `body.tether`, per kit with `world.kits`. The garden's
+  `walker` kit (Wren) carries this facet too.
+- The tabletop primitive: a placement's `board` facet (`WorldPlacementBoard`)
+  anchors a discrete `Grid` `state.lattices` topology (only `Grid` carries the
+  rectangular X/Z frame `$board:cellOf`/`offset` resolve against; `Ring`/`Hex`
+  refuse the facet) to a physical row/body game (`$board:cellOf`/`offset`,
+  `world.tabletop`). A `Grid` topology's `cellSize` must quantize to a
+  positive Q48.16 value — it is the divisor `$board:cellOf` resolves world
+  positions against, so a zero or negative edge is refused at validation, not
+  left to crash the per-tick rule path. Every
+  top-level `setState`/`addState`/etc. effect preflights and applies on its
+  own; only the `transaction` effect groups effects atomically
+  (`WorldServer.Step`'s `FireWorldRuleTransaction`). A piece resolving to no
+  cell of its own (captured, lifted off) never itself registers as the mover
+  on either side of a settle. Chess's candidate source and destination
+  (`trailingZeroCount` of a mask) clamp an empty mask to `-1` rather
+  than writing the mask's own bit width (64), which the cell's envelope
+  refuses. `$upright:<bodyRef>` (a body's own up
+  axis dotted against gravity-up) is the reserved channel a piece's own
+  occupancy derive gates on, so a knocked-over piece reads as displaced
+  rather than occupying its last resting cell.
+  See [references/documents.md](references/documents.md)'s
+  `state.lattices` section and `Puck.World.Schema/README.md`'s
+  tabletop-primitive section; the garden's `chessBoard` is the worked example.
+- `WorldBodiesLimits.CapacityCeiling` is 4096 (the largest authored
   `population.capacity` the validator admits), and `WorldClient.EntityCapacity`
-  is SINGLE-SOURCED from it (`= WorldPopulationLimits.CapacityCeiling`, the F3
+  is SINGLE-SOURCED from it (`= WorldBodiesLimits.CapacityCeiling`, the F3
   reconciliation 2026-08-06) — so the validator's admitted capacity and the
   client's fixed per-entity view arrays are the SAME number by construction; the
   old gap where a document could author past the client bound, validate, and boot
-  into an out-of-bounds throw is closed. Shipped worlds author 128 with seats 0–3
-  local and 124 simulated.
+  into an out-of-bounds throw is closed. The client reserves detailed rigs for
+  the first `WorldBodiesLimits.DetailedRenderBand` (128, also
+  `WorldPlacementPolicy.MaxStampRegistrations`) indices and emits later active
+  bodies through the coarse crowd representation. Existing shipped worlds may
+  still author 128 with seats 0–3 local and 124 simulated.
 - `SdfProgramBuilder.MaxInstances = 16384` — the per-tile mask width scales
   with DECLARED instances, which is why the frame source emits active
   avatars only and the render envelope is probed at construction
@@ -291,6 +572,8 @@ choosing fixed-point primitives on sim value paths.
   the document-global CPU/instance-grid ceiling. The separately recorded
   GPU-bound measurement is `0`, but it is not the governing admission term.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.
-- The overlay reservation's tightest resource is panels (headroom 2) — a
-  HUD capacity bump fails the `Puck.Overlays` build until the leases move
-  with it ([references/hud.md](references/hud.md)).
+- The overlay reservation's tightest resource is text (14,433/16,384 words;
+  1,951 headroom). The other current totals are clips 24/32, elements
+  1,542/2,048, and panels 10/16. A HUD or binding-surface capacity bump fails
+  the `Puck.Overlays` build until the leases move with it
+  ([references/hud.md](references/hud.md)).

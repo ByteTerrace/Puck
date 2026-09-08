@@ -1,4 +1,6 @@
+using System.Globalization;
 using Puck.Commands;
+using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Server;
@@ -7,13 +9,93 @@ namespace Puck.World;
 
 /// <summary>
 /// The world's participant/census verb surface — SERVER-SAFE (registered in <c>AddWorldAuthoritativeCore</c>, headless
-/// or windowed alike): <c>world.players</c>, <c>world.devices</c>, <c>world.device-profiles</c>, and
-/// <c>world.population</c>. Split out of
+/// or windowed alike): <c>world.players</c>, <c>world.devices</c>, <c>world.device-profiles</c>,
+/// <c>world.population</c>, <c>world.navigation</c>, <c>world.flock</c>, <c>world.decisions</c>, and <c>world.budget</c>. Split out of
 /// <see cref="WorldCommandModule"/> (which stays presentation-only — graphics levers, GPU timing, the diegetic-row
-/// listings), because these three read pure roster/population/document state and never touch a GPU, window, or audio
-/// device.
+/// listings), because these verbs read pure roster/population/document state and never require a GPU, window, or audio
+/// device. <c>world.budget</c> accepts an optional render probe: windowed composition fills its render figures,
+/// while headless composition still reports every authoritative cost and names the absent renderer.
 /// </summary>
-internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link) : ICommandModule {
+internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopulation population, WorldServer server, IServerLink link, WorldRenderProbe? renderProbe = null) : ICommandModule {
+    private static string DescribeFixed(FixedQ4816 value) => ((double)value).ToString(
+        format: "0.#####",
+        provider: CultureInfo.InvariantCulture
+    );
+    private string DescribeGravity() {
+        var authored = server.Definition.Gravity;
+        var compiled = population.CompiledGravity;
+        var statistics = population.GravityStatistics;
+        var areaStatistics = population.GravityAreaStatistics;
+        var uniform = authored.UniformAcceleration;
+        var sources = new List<string>();
+
+        foreach (var attractor in authored.Attractors) {
+            sources.Add(item: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"mass:{attractor.PlacementId}={attractor.Mass:0.#####}"
+            ));
+        }
+
+        // Installed definitions passed the thick validator, so every explicit attractor resolves and occupies the
+        // authored prefix of FixedWorldGravity.Attractors. Point presets follow that prefix in authored order.
+        var compiledIndex = authored.Attractors.Count;
+
+        foreach (var point in (authored.Points ?? [])) {
+            var derivedMass = ((compiledIndex < compiled.Attractors.Length)
+                ? DescribeFixed(value: compiled.Attractors[compiledIndex].Mass)
+                : "uncompiled"
+            );
+
+            sources.Add(item: string.Create(
+                provider: CultureInfo.InvariantCulture,
+                handler: $"point:{point.PlacementId}=g{point.SurfaceGravity:0.#####}@r{point.ReferenceRadius:0.#####}->mass{derivedMass}"
+            ));
+            compiledIndex++;
+        }
+
+        var sourceRows = ((sources.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ",",
+                values: sources
+            )
+        );
+        var targetCount = Math.Max(
+            val1: 0,
+            val2: (statistics.BodyCount - compiled.Attractors.Length)
+        );
+        var areaRows = new List<string>();
+
+        for (var compiledOrder = 0; (compiledOrder < compiled.Areas.Length); compiledOrder++) {
+            var area = compiled.Areas[compiledOrder];
+            var authoredArea = authored.Areas![area.AuthoredIndex];
+            var bounds = authoredArea.Bounds switch {
+                WorldGravityAreaBounds.SphereBounds sphere => $"sphere(r={sphere.Radius:0.#####})",
+                WorldGravityAreaBounds.BoxBounds box => $"box(half=({box.HalfExtents.X:0.#####},{box.HalfExtents.Y:0.#####},{box.HalfExtents.Z:0.#####}))",
+                _ => "unknown",
+            };
+            var acceleration = authoredArea.Acceleration switch {
+                WorldGravityAreaAcceleration.Directional directional => $"directional({directional.Value.X:0.#####},{directional.Value.Y:0.#####},{directional.Value.Z:0.#####})",
+                WorldGravityAreaAcceleration.Radial radial => $"radial({radial.Magnitude:0.#####})",
+                _ => "unknown",
+            };
+            var ride = ((area.Attach is { } attach)
+                ? $"body:{attach.BodyIndex}"
+                : "static"
+            );
+
+            areaRows.Add(item: $"#{area.AuthoredIndex}:{area.PlacementId}/priority={area.Priority}/mode={area.Mode}/{bounds}/{acceleration}/ride={ride}/order={compiledOrder}");
+        }
+        var areaDescription = ((areaRows.Count == 0)
+            ? "none"
+            : string.Join(separator: ",", values: areaRows)
+        );
+
+        return string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"[world.gravity: solver {authored.Solver} uniform=({uniform.X:0.#####},{uniform.Y:0.#####},{uniform.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} | sources {sourceRows} | areas {areaDescription} | compiled={compiled.Attractors.Length} static source(s), {compiled.Areas.Length} area(s) last globalTargets={targetCount} nodes={statistics.TreeNodeCount} exact={statistics.ExactSourceEvaluations} approximate={statistics.ApproximatedNodeEvaluations} represented={statistics.ApproximatedSourceCount} m2m={statistics.MultipoleToMultipoleTranslations} m2l={statistics.MultipoleToLocalTranslations} l2l={statistics.LocalToLocalTranslations} local={statistics.LocalExpansionEvaluations} deferred={statistics.DeferredLocalExpansionEvaluations} areaTargets={areaStatistics.TargetCount} areaActive={areaStatistics.ActiveAreaCount} areaEvaluations={areaStatistics.EvaluationCount} areaMatches={areaStatistics.MatchCount}]"
+        );
+    }
     private static string DescribeAssignment(WorldRowAssignment assignment) =>
         $"{DescribeSequence(sequence: assignment.Sequence)}[{((assignment.Rows.Count == 0)
             ? "all"
@@ -36,7 +118,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
     }
     // The world.parked readout: every entity index currently PARKED (see WorldPopulation.Entry.Parked), its
     // remaining grace and absolute deadline tick, and — when the retained body carries one — its profile name, so a
-    // script can tell WHO a parked seat is waiting for without inferring it from player.where's silence. A body
+    // script can tell WHO a parked seat is waiting for without inferring it from body.where's silence. A body
     // parked with NO deadline (a positive reconnect grace compiled at simulation rate 0 — see
     // CompiledTickDuration.IsNever) reads null from WorldPopulation.ParkedRemainingTicks and renders "never" for
     // both fields — a concrete expiry that will never arrive would be worse than saying nothing. The same null is
@@ -93,9 +175,11 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 ? $"producer:{producer}"
                 : "live"
         ));
-        var workload = WorldAvatarCatalog.ActiveWorkload(
+        var looks = server.Definition.Looks;
+        var workload = WorldRigCatalog.ActiveWorkload(
             isActive: population.IsActive,
-            capacity: population.Capacity
+            capacity: population.Capacity,
+            rigFor: index => WorldRigCatalog.RigFor(WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index)), population.CatalogRig(index))
         );
         // The per-kit census derives its names and counts from the definition rows, in row order.
         var counts = population.ActiveKitCounts();
@@ -107,7 +191,53 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var kitAssignment = DescribeAssignment(assignment: server.Definition.Assignment);
         var lookAssignment = DescribeAssignment(assignment: server.Definition.LookAssignment);
 
-        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | unique deterministic rigs {WorldAvatarCatalog.MinInstructionCount}..{WorldAvatarCatalog.MaxInstructionCount} instructions/avatar; active {workload.Leaves} leaf instances, {workload.Instructions} authored VM instructions]";
+        return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | {WorldRigCatalog.RigCount} catalog looks, {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; catalog workload {workload.Leaves} leaves in {workload.Instances} leaf cull instances, {workload.Instructions} authored VM instructions (creation stamps accounted separately)]";
+    }
+    private string DescribeBudget() {
+        var render = ((renderProbe?.Node is { } node)
+            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), stepScale {node.LiveProgramStepScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (march ~{(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: CultureInfo.InvariantCulture)}x baseline)" : string.Empty)}{((node.LiveProgramStepScaleBinder is { } binder) ? $" bound by instance {binder.InstanceIndex} ({binder.Shape} x{binder.Factor.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} at instruction {binder.InstructionIndex}, unscoped)" : string.Empty)}"
+            : "renderer not built yet"
+        );
+        var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
+        var fogDensity = (server.Definition.Render.Sky?.FogDensity ?? Puck.SdfVm.SdfFrame.DefaultSkyFogDensity);
+        var far = string.Create(
+            provider: CultureInfo.InvariantCulture,
+            handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldEngine.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
+        );
+        var lattice = ((population.Fields is { } fields)
+            ? fields.DescribeCost(activeBodyCount: population.ActiveCount(), bodyCapacity: population.Capacity)
+            : "lattice none"
+        );
+        var gravityCompiled = population.CompiledGravity;
+        var gravityStatistics = population.GravityStatistics;
+        var gravityAreaStatistics = population.GravityAreaStatistics;
+        var gravity = $"gravity {gravityCompiled.Attractors.Length} static source(s), {gravityCompiled.Areas.Length} local area(s) / target declared, last global targets {Math.Max(val1: 0, val2: (gravityStatistics.BodyCount - gravityCompiled.Attractors.Length))}, exact {gravityStatistics.ExactSourceEvaluations}, approximate {gravityStatistics.ApproximatedNodeEvaluations}, m2l {gravityStatistics.MultipoleToLocalTranslations}, area targets {gravityAreaStatistics.TargetCount}, active {gravityAreaStatistics.ActiveAreaCount}, evaluations {gravityAreaStatistics.EvaluationCount}, matches {gravityAreaStatistics.MatchCount}";
+        var placementInstances = WorldPlacementStamper.StaticStampInstances(
+            creations: server.Definition.Creations,
+            placements: server.Definition.Placements,
+            worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
+        );
+        var dealtTemplates = 0;
+        var dealtInstances = 0;
+
+        foreach (var row in server.Definition.Placements) {
+            if (row.Deal is not null) {
+                dealtTemplates++;
+                dealtInstances += WorldPlacementDeal.InstanceCount(
+                    template: row,
+                    worldSeed: (server.Definition.Generation?.WorldSeed ?? 0UL)
+                );
+            }
+        }
+
+        var placements = $"placements {placementInstances} static instance(s) ({server.Definition.Placements.Count} row(s), {dealtInstances} dealt offset(s) over {dealtTemplates} template(s))";
+        var curves = $"curves {population.CountCurveFollowers()} follower(s)";
+        var navigationWork = population.NavigationWork();
+        var navigation = $"navigation {population.NavigationCellCount} compiled cell(s), {population.NavigationWorkspaceBytes} workspace byte(s), declared search {population.NavigationDeclaredSearchWork} expansion(s), live {navigationWork.Followers} follower(s) / last {navigationWork.LastExpanded} expansion(s) / simultaneous-replan ceiling {navigationWork.WorstExpanded} expansion(s)";
+        var ruleBudget = WorldRuleWorkBudget.Measure(definition: server.Definition);
+        var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
+
+        return $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()}]";
     }
     private static string DescribeSequence(WorldSequence sequence) =>
         $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
@@ -116,6 +246,66 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.decisions",
+            description: "Echoes authored choice policies and active bindings: selected option, last score, commitment, reconsideration cadence, and local random draw count.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.decisions") is { } refusal)
+                ? refusal : new CommandResult(Output: server.DescribeDecisions())),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.flock",
+            description: "Echoes each kit's authored local flock steering: space, perception range/cone/cadence, candidate and neighbor budgets, sight requirement, steering weights, and last-step work. Available headless; does not change behavior.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.flock") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: population.DescribeFlocks())),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.navigation",
+            description: "Echoes every authored deterministic navigation domain: surface, free-volume, or medium-constrained; compiled dimensions and clear cells; volume connectivity; medium binding; and hard route search/path limits.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.navigation") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: population.DescribeNavigation())),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.budget",
+            description: "Prints the immediate compose-time cost sheet: rendering, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, and local flock perception work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: DescribeBudget())),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.gravity",
+            description: "Reads the authored and compiled gravity field back (Immediate): solver, uniform acceleration, shared G/softening, explicit mass sources, point/planet surface-gravity presets with their derived masses, and the last deterministic solve's work counters.",
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.gravity") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: DescribeGravity())),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.fields",
+            description: "Reads the field lattice back (Immediate): its shape and cadence, and each field's nonzero cell count and mean.",
+            handler: (context, args) => new CommandResult(Output: server.DescribeFields()),
+            routing: CommandRouting.Immediate
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.responses",
+            description: "Reads every placement carrying a response trait back (Immediate): its current prototype and which authored when-condition (if any) currently holds at its coupled lattice cell.",
+            handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.responses") is { } refusal)
+                ? refusal
+                : new CommandResult(Output: server.DescribeResponses())),
+            routing: CommandRouting.Immediate
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.population",
@@ -185,7 +375,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
                 // INLINE over loopback, so the echo below (built AFTER both Submit calls return) still reads the
                 // applied state — it is just assembled from the completion payloads rather than a live read taken
                 // after a discarded synchronous return. An explicit idle/producer token sets the peer-source DEFAULT and
-                // sweeps ALL peers (4..127) to it — last-writer-wins, so a per-entity player.control does not survive
+                // sweeps ALL peers (4..4095) to it — last-writer-wins, so a per-entity body.control does not survive
                 // the global flip; a count alone leaves existing peers' sources be. A census beyond the live ceiling is
                 // CLAMPED, not refused — the ceiling is the tighter of the authored networkPlayers admission cap and
                 // the inhabitant floor, and shrinking to fit is the right behavior. The echo leads with
@@ -261,7 +451,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         yield return CommandDefinition.Verb(
             bindability: CommandBindability.Unbindable,
             name: "world.devices",
-            description: "Lists every input device seen this session by its stable token (kbd, pad1, pad2, …) in first-seen order and the player it currently drives (p<N> or unassigned). The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
+            description: "Lists every input device seen this session by its stable token (keyboard1, keyboard2, …, mouse1, mouse2, …, gamepad1, gamepad2, …, camera1, camera2, …) in first-seen order, its name when known, and the player it currently drives (p<N> or unassigned; a slot-sharing device's marker * names the seat's resolved device of its own kind). The reassignment verbs — player.assign / player.cycle / player.claim — move a device between players.",
             valueKind: CommandValueKind.Digital,
             handler: _ => new CommandResult(Output: roster.DescribeDevices())
         );

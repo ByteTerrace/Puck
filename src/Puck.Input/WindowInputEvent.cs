@@ -123,18 +123,19 @@ public readonly record struct WindowInputEvent(
             DeviceId: deviceId
         );
     }
-    /// <summary>A neutral absolute pointer position.</summary>
-    public static WindowInputEvent PointerAbsolute(Vector2 position) {
+    /// <summary>A neutral absolute pointer position, attributed to the physical pointer device that produced it.</summary>
+    public static WindowInputEvent PointerAbsolute(Vector2 position, InputDeviceId deviceId = default) {
         return new WindowInputEvent(
             Kind: WindowInputKind.PointerPosition,
             Vector: position,
-            Phase: CommandPhase.Active
+            Phase: CommandPhase.Active,
+            DeviceId: deviceId
         );
     }
     /// <summary>A neutral pointer-button transition (0=left, 1=right, 2=middle, larger values are extra buttons), with the edge in <paramref name="phase"/>
     /// (<see cref="CommandPhase.Started"/> for down, <see cref="CommandPhase.Completed"/> for up — the same convention
     /// as <see cref="KeyDown"/>/<see cref="KeyUp"/>).</summary>
-    public static WindowInputEvent PointerButton(int button, CommandPhase phase) {
+    public static WindowInputEvent PointerButton(int button, CommandPhase phase, InputDeviceId deviceId = default) {
         ArgumentOutOfRangeException.ThrowIfNegative(button);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
             value: button,
@@ -144,30 +145,37 @@ public readonly record struct WindowInputEvent(
         return new WindowInputEvent(
             Kind: WindowInputKind.PointerButton,
             Phase: phase,
+            DeviceId: deviceId,
             ButtonIndex: button
         );
     }
-    /// <summary>A neutral relative pointer delta (the frame's summed motion).</summary>
-    public static WindowInputEvent PointerDelta(Vector2 delta) {
+    /// <summary>A neutral relative pointer delta (the frame's summed motion), attributed to the physical pointer
+    /// device that produced it.</summary>
+    public static WindowInputEvent PointerDelta(Vector2 delta, InputDeviceId deviceId = default) {
         return new WindowInputEvent(
             Kind: WindowInputKind.PointerMove,
             Vector: delta,
-            Phase: CommandPhase.Active
+            Phase: CommandPhase.Active,
+            DeviceId: deviceId
         );
     }
     /// <summary>A neutral pointer wheel rotation, in notches (positive away from the user).</summary>
-    public static WindowInputEvent PointerWheel(float notches) {
-        return PointerWheel(notches: new Vector2(
+    public static WindowInputEvent PointerWheel(float notches, InputDeviceId deviceId = default) {
+        return PointerWheel(
+            notches: new Vector2(
             x: 0f,
             y: notches
-        ));
+        ),
+            deviceId: deviceId
+        );
     }
     /// <summary>A neutral two-axis pointer wheel rotation, in notches (positive X is right; positive Y is away).</summary>
-    public static WindowInputEvent PointerWheel(Vector2 notches) {
+    public static WindowInputEvent PointerWheel(Vector2 notches, InputDeviceId deviceId = default) {
         return new WindowInputEvent(
             Kind: WindowInputKind.PointerWheel,
             Vector: notches,
-            Phase: CommandPhase.Active
+            Phase: CommandPhase.Active,
+            DeviceId: deviceId
         );
     }
     /// <summary>A neutral typed-text event.</summary>

@@ -8,6 +8,14 @@ namespace Puck.Cli.Format;
 // code, the accessibility grouping key, blank-line forcing, the structural indent anchor, and the
 // per-slot separated-list rebuild.
 internal static class RewriteShaping {
+    // The one home for a newline a pass INVENTS. .editorconfig declares `end_of_line = lf` for every file in
+    // the tree and .gitattributes pins the same bytes into the working tree, so an invented line break is a
+    // bare line feed — never Environment.NewLine and never SyntaxFactory.CarriageReturnLineFeed, either of
+    // which leaves an LF file carrying mixed terminators the moment any pass changes anything: invisible in a
+    // diff, and a whole root of files git reports modified with nothing to show. Newlines COPIED from the
+    // source keep whatever the source had (Roslyn preserves that trivia); phase 0 owns normalizing those.
+    public static readonly SyntaxTrivia EndOfLine = SyntaxFactory.LineFeed;
+
     // True when a trivia run carries prose or a preprocessor directive. Every reordering pass is gated
     // on this: trivia is reassigned by SLOT, so moving an element out from under its own comment (or
     // across an #if) silently changes what the annotation documents — and the write guard only counts
@@ -58,7 +66,7 @@ internal static class RewriteShaping {
         var rebuilt = new List<SyntaxTrivia>();
 
         for (var index = 0; (index < desired); index++) {
-            rebuilt.Add(item: SyntaxFactory.CarriageReturnLineFeed);
+            rebuilt.Add(item: EndOfLine);
         }
 
         rebuilt.AddRange(collection: trivia.Skip(count: start));

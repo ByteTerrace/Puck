@@ -22,7 +22,7 @@ namespace Puck.World.Client;
 /// this emitter alone.
 /// <para>
 /// That reservation alone is not enough: the probed envelope is shared with <c>WorldSceneEmitter</c> (one
-/// combined worst-case build — see <c>WorldFrameSource</c>'s constructor), and a live scene
+/// combined worst-case build — see <c>WorldFramePresenter</c>'s constructor), and a live scene
 /// mutation may have already spent capacity this emitter's own reservation covers but the scene's did not need at
 /// the time. So <see cref="Load"/> also runs a composed admission check (<see cref="Configure"/>) — the same joint
 /// measurer <see cref="Puck.World.WorldRenderEnvelope"/> uses for a scene mutation, with the roles swapped: the
@@ -39,7 +39,7 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
     private int m_revision;
 
     /// <summary>The currently loaded document (or <see langword="null"/> when none has loaded successfully yet) —
-    /// read by <c>WorldFrameSource</c>'s composed measurer so a scene mutation is checked
+    /// read by <c>WorldFramePresenter</c>'s composed measurer so a scene mutation is checked
     /// against whatever this emitter is actually holding, never a stale or assumed value.</summary>
     public SdfDocumentProgram? CurrentProgram => m_program;
     /// <summary>The currently loaded document's content hash (FNV-1a over its received UTF-8 bytes, computed before
@@ -81,7 +81,7 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
 
     /// <summary>Records the probed envelope floors and the composed-candidate measurer: given a candidate document,
     /// returns the program-word/instance counts of that document composed alongside the current live world
-    /// definition. Configured once by <c>WorldFrameSource</c>'s constructor, reusing the
+    /// definition. Configured once by <c>WorldFramePresenter</c>'s constructor, reusing the
     /// exact same joint-measurement method <see cref="Puck.World.WorldRenderEnvelope"/> uses for a scene mutation
     /// (roles swapped) — see the type remarks. Unconfigured (a load somehow racing startup, or a probe-only test
     /// double), <see cref="Load"/> skips the composed check — the same "unconfigured reads as fits" posture
@@ -134,16 +134,23 @@ public sealed class WorldSdfDocumentEmitter : ISdfSceneEmitter {
         // silently waiting for the next composition rebuild to discover it. ISOLATED on purpose: this catches a
         // structurally-broken document (a builder-level refusal) regardless of what else is loaded; it says nothing
         // about capacity, which the composed check below owns.
-        var probeBuilder = new SdfProgramBuilder();
-
-        using (probeBuilder.BeginMaterialScope()) {
-            SdfDocumentDecoder.Replay(
-                builder: probeBuilder,
-                program: program
+        try {
+            _ = SdfProgramMeasure.Measure(emit: probeBuilder => {
+                using (probeBuilder.BeginMaterialScope()) {
+                    SdfDocumentDecoder.Replay(
+                        builder: probeBuilder,
+                        program: program
+                    );
+                }
+            });
+        } catch (Exception exception) when ((exception is ArgumentException or InvalidOperationException)) {
+            // A PROGRAM-level pack refusal (no single op owns it - e.g. an uncontainable cellJitter prototype) must
+            // reach world.sdf.load as a document rejection, never an unhandled throw.
+            throw new SdfDocumentException(
+                message: exception.Message,
+                reason: SdfRefusal.BuilderRejectedProgram
             );
         }
-
-        _ = probeBuilder.Build();
 
         // THE COMPOSED-ADMISSION CHECK (the fix for the asymmetric join): a document that validates alone can still,
         // combined with whatever the live world scene is currently spending, exceed the ONE shared envelope the two

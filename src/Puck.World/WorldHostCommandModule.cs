@@ -33,7 +33,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             : "display"
         );
 
-        return (((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX
+        return (((((((string)$"[world.host: document {{{{{DescribeRow(host: document)}}}}} resolved {{{{presentation={PresentationToken(presentation: hostSettings.Presentation)} backend={WorldHostTokens.BackendToken(backend: (hostSettings.HostsOnDirectX
             ? WorldBackendPreference.DirectX
             : WorldBackendPreference.Vulkan))} ") +
             $"width={hostSettings.Width} height={hostSettings.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: hostSettings.SurfaceFormat)} ") +
@@ -45,8 +45,8 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             : "off")}}}]");
     }
     private static string DescribeRow(WorldHostDefaults host) =>
-        ((((string)$"backend={((host.BackendDraw is not null)
-            ? "<draw>"
+        ((((string)$"presentation={PresentationToken(presentation: host.Presentation)} backend={((host.BackendRow is not null)
+            ? $"<row:{host.BackendRow}>"
             : WorldHostTokens.BackendToken(backend: (host.Backend ?? WorldBackendPreference.Auto)))} width={host.Width} height={host.Height} surfaceFormat={WorldHostTokens.SurfaceFormatToken(format: host.SurfaceFormat)} fullscreen={Bool(value: host.Fullscreen)} ") +
         $"presentMode={PresentModeToken(mode: host.PresentMode)} targetHertz={HertzToken(hertz: host.TargetHertz)} ") +
         $"exitAfterSeconds={host.ExitAfterSeconds} rayQuery={Bool(value: host.RayQuery)} timing={Bool(value: host.Timing)} genlock={Genlock(value: host.Genlock)} listen={Endpoint(value: host.Listen)} authority={Endpoint(value: host.Authority)}");
@@ -54,6 +54,7 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
     private static string Genlock(string? value) => (value ?? "(none)");
     private static string HertzToken(double hertz) => hertz.ToString(provider: CultureInfo.InvariantCulture);
     private static string PresentModeToken(PresentMode mode) => mode.ToString().ToLowerInvariant();
+    private static string PresentationToken(WorldHostPresentation presentation) => presentation.ToString().ToLowerInvariant();
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -61,9 +62,9 @@ internal sealed class WorldHostCommandModule(WorldServer server, WorldHostSettin
             bindability: CommandBindability.Unbindable,
             name: "world.host",
             description: "Reads the host section three ways (Immediate): the DOCUMENT row (the authored host defaults, absence coalesced to the built-in default), the RESOLVED boot values (the document overlaid by the CLI window/backend flags), and the LIVE lever values (world.target's present Hz + world.timing's armed state) — so an author sees which fields the CLI overrode and which levers have drifted.",
-            handler: (_, args) => ((args.Count == 0)
-            ? new CommandResult(Output: DescribeHost())
-            : CommandResult.Error(output: $"[world.host: unrecognized '{args[0]}' — expected no arguments]"))
+            handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.host") is { } refusal)
+            ? refusal
+            : new CommandResult(Output: DescribeHost()))
         );
     }
 }

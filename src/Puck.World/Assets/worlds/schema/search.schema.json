@@ -1,0 +1,323 @@
+{
+  "type": [
+    "object",
+    "null"
+  ],
+  "properties": {
+    "jobs": {
+      "description": "The declared jobs.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One search job.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The stable job name.",
+            "type": "string"
+          },
+          "tokens": {
+            "description": "The keyed integer row whose cells are the tokens and whose values are the board cells they stand on; a value that is no cell is a token off the board, which the job leaves alone.",
+            "type": "string"
+          },
+          "board": {
+            "description": "The board row over the topology the token values index; absent for a job over Zones.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "zones": {
+            "description": "For a job over piles: the ordered zones (keysOf rows with ordered, all over the token domain Tokens names) whose ordinals are the job\u0027s cells \u2014 a token\u0027s cell is the zone it stands in, legal masks and best.to name zones, and the one shape is transfer. Exactly one of Board and Zones is authored.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": null
+          },
+          "turn": {
+            "description": "The slot row whose change marks an accepted relocation; absent, the tabletop board binding anchoring Board supplies it.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "verdict": {
+            "description": "The slot row the rules judge a relocation into; absent, the same board binding supplies it.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "shapes": {
+            "description": "The candidate shapes the walk enumerates, in declared order, ahead of token and target/direction; absent or empty, the one default shape (Relocate, displace: true).",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "description": "One authored candidate shape a search job enumerates, ahead of token and target/direction in the walk\u0027s fixed order. Every shape but Drop requires the walked token on the board; Drop requires it off. Absent from Shapes, a job\u0027s default and only shape is Relocate with displace: true \u2014 the one candidate this section always ran.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "required": [
+                "$type"
+              ],
+              "anyOf": [
+                {
+                  "description": "One own token moves onto any other cell of the board. Displace (default true) evicts whatever token already stood on the target \u2014 the section\u0027s original, unconditional behavior; false leaves it standing, so a judge rule that reads two tokens sharing a cell decides the candidate itself.",
+                  "properties": {
+                    "$type": {
+                      "const": "relocate"
+                    },
+                    "displace": {
+                      "description": "Whether the token standing on the target leaves the board.",
+                      "type": "boolean",
+                      "default": true
+                    }
+                  },
+                  "additionalProperties": false,
+                  "title": "WorldSearchShapeRelocate"
+                },
+                {
+                  "description": "A token whose current value is off the board (see Tokens\u0027s remarks) enters any cell no other token stands on.",
+                  "properties": {
+                    "$type": {
+                      "const": "drop"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "title": "WorldSearchShapeDrop"
+                },
+                {
+                  "description": "The walked token steps two cells along one topology direction, over a token standing on the intermediate cell onto an empty destination; a direction with no such occupied intermediate, or whose destination is not empty, is not a candidate. Past MaxHops 1 (the default, this shape\u0027s original single hop, which evicts the token it steps over), one candidate chains 1..MaxHops such hops as a single move, never revisiting a cell of the chain (the token\u0027s own starting cell included) and evicting nothing along the way.",
+                  "properties": {
+                    "$type": {
+                      "const": "jump"
+                    },
+                    "over": {
+                      "description": "The directions tried, in the topology\u0027s own vocabulary (CompiledTopology.Direction). The single-element list [\u0022any\u0022] tries every direction the topology declares.",
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "maxHops": {
+                      "description": "How many hops one candidate may chain.",
+                      "type": "integer",
+                      "default": 1
+                    }
+                  },
+                  "required": [
+                    "over"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldSearchShapeJump"
+                },
+                {
+                  "description": "The walked token relocates to the target cell and a second, fixed token \u2014 named by With, a cell key of Tokens \u2014 relocates by the same lattice translation (CompiledTopology.TryTranslation: the axial step on a grid, ring, hex, or box), provided its own destination is empty. A graph or tiling has no translations and refuses the shape. The minimal two-token primitive a castle\u0027s rook needs, not a general rule for every pair\u0027s own reach (see the schema README\u0027s search section for the reasoning).",
+                  "properties": {
+                    "$type": {
+                      "const": "pair"
+                    },
+                    "with": {
+                      "description": "The companion token\u0027s cell key in Tokens.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "with"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldSearchShapePaired"
+                },
+                {
+                  "description": "The walked token relocates onto any other cell, evicting what stood there, and its own code in Codes becomes one of To \u2014 one candidate per (cell, code). The judge decides where a code may change; the shape only offers the change.",
+                  "properties": {
+                    "$type": {
+                      "const": "promote"
+                    },
+                    "codes": {
+                      "description": "An integer row keyed by the tokens holding each token\u0027s code.",
+                      "type": "string"
+                    },
+                    "to": {
+                      "description": "The codes a token may take, at most MaxPromotions.",
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "required": [
+                    "codes",
+                    "to"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldSearchShapePromote"
+                },
+                {
+                  "description": "The walked token \u2014 standing at the Selector end of one of the job\u0027s Zones \u2014 moves onto any other of them, landing last (the top of the pile) or, with InsertFirst, first: the transfer transform as a candidate, so pile order is what the zones already hold. A token anywhere but the selected end, or a full destination, is not a candidate. The only shape a zone job enumerates, and refused by a board job.",
+                  "properties": {
+                    "$type": {
+                      "const": "transfer"
+                    },
+                    "selector": {
+                      "$ref": "./common.schema.json#/$defs/ZoneSelector",
+                      "description": "Which end of its zone a token must stand at to move: Last (default, the top of the pile) or First.",
+                      "default": "Last"
+                    },
+                    "insertFirst": {
+                      "description": "Whether the token lands first in the destination rather than last.",
+                      "type": "boolean",
+                      "default": false
+                    }
+                  },
+                  "additionalProperties": false,
+                  "title": "WorldSearchShapeTransferred"
+                }
+              ],
+              "title": "WorldSearchShape"
+            },
+            "default": null
+          },
+          "legal": {
+            "description": "An integer row keyed by the tokens receiving, per token, the mask of cells it may relocate to; requires a board of at most 64 cells.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "reach": {
+            "description": "An integer board row over the same topology as Board receiving, at 1, the cells Held\u0027s named token may reach and, at its own empty value, every other cell; unlike Legal, works for a board of any size. Authored together with Held.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "held": {
+            "description": "An integer slot row naming the token whose accepted destinations are painted into Reach \u2014 its own ordinal in Tokens\u0027s cell order. A value out of range paints nothing.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "counts": {
+            "description": "An integer row keyed by the tokens receiving, per token, how many candidates it accepted; unlike Legal, works for a board of any size.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "nodes": {
+            "description": "The relocations judged per tick, at most what the work sheet leaves; absent derives that.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "depth": {
+            "description": "How many plies the job searches ahead; the depth-one walk this section always ran. A depth past one asks what the position is worth after the ply, not merely whether it is legal, and requires Score.",
+            "type": "integer",
+            "default": 1
+          },
+          "score": {
+            "description": "An infix expression, in the rule expression grammar, evaluated over the frame after a ply from the perspective of the side that made it; iterative-deepening negamax with alpha-beta compares it across plies \u2014 the two-sided, zero-sum reading of what a ply is worth. Exactly one of this and Scores is authored when a score is needed; required when Depth exceeds one, or Best is authored, and refused with Tree unauthored alongside it.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "best": {
+            "description": "A keyed integer row receiving the deepest completed depth\u0027s answer: token (the mover\u0027s ordinal in Tokens), to (its destination cell), and score (the negamax value, or, with Scores authored, the root mover\u0027s own seat\u0027s value).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "method": {
+            "description": "How plies are compared by the score: Negamax to the depth cap, or Tree, which reads the score where no candidate is accepted or at the cap.",
+            "enum": [
+              "Negamax",
+              "Tree"
+            ],
+            "default": "Negamax",
+            "title": "SearchMethod"
+          },
+          "iterations": {
+            "description": "How many tree iterations a Tree job runs before it lands.",
+            "type": "integer",
+            "default": 256
+          },
+          "chance": {
+            "description": "The job\u0027s chance node, or null for a job with none.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "row": {
+                "description": "The keyed integer row a chosen outcome writes.",
+                "type": "string"
+              },
+              "atDepth": {
+                "description": "Negamax: the absolute ply (0 = root) whose move choice is replaced, 0..depth-1. Tree: the 1-based playout ply the chance draw replaces.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "row",
+              "atDepth"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldSearchChance"
+          },
+          "scores": {
+            "description": "A keyed integer row, one cell per seat in Turn\u0027s own ordinal order, holding each seat\u0027s own current score \u2014 the n-seat reading of what a ply is worth: a level maximizes the mover seat\u0027s own entry rather than negating the reply, so no seat\u0027s gain is assumed to be another\u0027s loss (max-n). Exactly one of this and Score is authored when a score is needed; refused with Tree, whose outcome backprop alternates sign along the path.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "tokens"
+        ],
+        "additionalProperties": false,
+        "title": "WorldSearchRow"
+      },
+      "default": null
+    }
+  },
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldSearchSection"
+}

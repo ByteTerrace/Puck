@@ -257,13 +257,38 @@ internal static class FixedPointContractClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     private static string? CheckFixedTickConversion(long raw) {
         var seconds = FixedQ4816.FromRawBits(value: raw);
-        var actual = FixedTickConversion.DurationEngineTicks(seconds: seconds);
+        var engine = FixedTickConversion.DurationEngineTicks(seconds: seconds);
+        var general = FixedTickConversion.DurationTicks(
+            ratePerSecond: FixedTickConversion.TicksPerSecond,
+            seconds: seconds
+        );
+
+        if (engine != general) {
+            return $"FixedTickConversion.DurationEngineTicks(raw={raw}) = {engine} but DurationTicks at TicksPerSecond = {general}";
+        }
+
+        if (CheckFixedTickConversion(raw: raw, ratePerSecond: FixedTickConversion.TicksPerSecond, actual: engine) is { } detail) {
+            return detail;
+        }
+
+        foreach (var rate in s_tickRates) {
+            if (CheckFixedTickConversion(raw: raw, ratePerSecond: rate, actual: FixedTickConversion.DurationTicks(ratePerSecond: rate, seconds: seconds)) is { } rateDetail) {
+                return rateDetail;
+            }
+        }
+
+        return null;
+    }
+    // Every simulation rate a shipped world authors or the validator admits at its edges (a divisor of 50400), the
+    // frame-ish rates, rate 0 (every duration is zero ticks), and 1 (ticks are whole seconds).
+    private static readonly ulong[] s_tickRates = [0UL, 1UL, 7UL, 24UL, 30UL, 60UL, 120UL, 240UL, 1000UL, 50400UL];
+    private static string? CheckFixedTickConversion(long raw, ulong ratePerSecond, ulong actual) {
         BigInteger expected;
 
         if (raw <= 0L) {
             expected = BigInteger.Zero;
         } else {
-            var numerator = (((BigInteger)raw) * FixedTickConversion.TicksPerSecond);
+            var numerator = (((BigInteger)raw) * ratePerSecond);
             var denominator = ((BigInteger)65536);
 
             expected = ((numerator + (denominator - 1)) / denominator);
@@ -271,13 +296,15 @@ internal static class FixedPointContractClaims {
 
         return ((((BigInteger)actual) == expected)
             ? null
-            : $"FixedTickConversion.DurationEngineTicks(raw={raw}) = {actual}, expected ceil({raw}*{FixedTickConversion.TicksPerSecond}/65536) = {expected}");
+            : $"FixedTickConversion.DurationTicks(raw={raw}, rate={ratePerSecond}) = {actual}, expected ceil({raw}*{ratePerSecond}/65536) = {expected}");
     }
 
-    /// <summary>Exact-by-construction: <see cref="FixedTickConversion.DurationEngineTicks"/> matches independent
-    /// BigInteger rational ceiling division over a curated edge set (zero, the smallest positive raw, one-second and
-    /// near-one-second boundaries, negative raws) plus a dense sweep across the first five seconds (positive and
-    /// negative), so every residue class the Int128 ceiling-divide path can take near a tick boundary is exercised.</summary>
+    /// <summary>Exact-by-construction: <see cref="FixedTickConversion.DurationTicks"/> at every rate in
+    /// <see cref="s_tickRates"/>, and <see cref="FixedTickConversion.DurationEngineTicks"/> as its
+    /// <see cref="FixedTickConversion.TicksPerSecond"/> case, match independent BigInteger rational ceiling division
+    /// over a curated edge set (zero, the smallest positive raw, one-second and near-one-second boundaries, negative
+    /// raws) plus a dense sweep across the first five seconds (positive and negative), so every residue class the
+    /// Int128 ceiling-divide path can take near a tick boundary is exercised at every rate.</summary>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? FixedTickConversionRoundsUpAgainstRationalArithmetic() {
         long[] edges = [

@@ -1,0 +1,29 @@
+{
+  "schema": "puck.music.v1",
+  "name": "canary-conditional-layers-discriminating",
+  "tempo": {
+    "beatsPerBar": 4,
+    "ticksPerBeat": 2100
+  },
+  "segments": [
+    {
+      "id": "calm",
+      "layers": [
+        {
+          "tuneId": "ambient-tune",
+          "when": null
+        },
+        {
+          "tuneId": "arrival-tune",
+          "when": "region.exit"
+        }
+      ],
+      "embellishments": [
+        {
+          "patchId": "stinger",
+          "when": "region.exit"
+        }
+      ]
+    }
+  ]
+}

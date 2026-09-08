@@ -21,16 +21,15 @@ public sealed class WorldServerMutationJournalTapLawTests {
 
     [Fact]
     public void MutationJournalTap_DoesNotFireForARejectedMutation() {
-        using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument());
         var fired = 0;
 
         fixture.Server.MutationJournalTap = (_, _) => fired++;
 
-        // A nonzero startPrice on a Buyout listing is refused by the compose-time gate before the mutation ever
-        // reaches the journal (MarketBuyoutStartPriceLawTests' own control) — the tap must not fire for it.
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            BuyoutPrice: 50, CurrencyRow: MarketFixtures.GoldRow, DurationSeconds: MarketFixtures.MinDurationSeconds, Format: WorldMarketFormat.Buyout, ItemRow: MarketFixtures.AppleRow,
-            Principal: Seller, Quantity: 1, Seller: Seller, StartPrice: 25
+        // A cell write against an undeclared row is refused by the compose-time gate before the mutation ever
+        // reaches the journal — the tap must not fire for it.
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+            Principal: Seller, Row: "doesNotExist", Key: "0", Value: 1, Kind: WorldDocumentWriteKind.Set
         ));
         fixture.Step();
 
@@ -41,13 +40,15 @@ public sealed class WorldServerMutationJournalTapLawTests {
     }
     [Fact]
     public void MutationJournalTap_FiresOnApply_AndItsReEncodedEntryReplaysToTheSameEffect() {
-        using var fixture = Fixtures.FreshServer(definition: MarketFixtures.BuildDocument());
+        var row = new WorldStateRow(Name: CellName.Parse(candidate: "gauge"), Kind: CellKind.Int, Capacity: 8);
+        var document = Fixtures.BuildDocument().WithWorldState(rows: [row]);
+        using var fixture = Fixtures.FreshServer(definition: document);
         (ulong Tick, byte[] Encoded)? captured = null;
 
         fixture.Server.MutationJournalTap = (tick, mutation) => {
             Assert.Null(@object: captured);
             Assert.True(
-                condition: WorldSubmissionCodec.TryEncodeMutation(
+                condition: WorldSubmissionCodec.TryEncodeCommittedMutation(
                 bytes: out var encoded,
                 failure: out var failure,
                 mutation: mutation
@@ -57,21 +58,20 @@ public sealed class WorldServerMutationJournalTapLawTests {
             captured = (tick, encoded);
         };
 
-        fixture.Server.EnqueueMutation(mutation: new WorldMutation.CreateMarketListing(
-            BuyoutPrice: 50, CurrencyRow: MarketFixtures.GoldRow, DurationSeconds: MarketFixtures.MinDurationSeconds, Format: WorldMarketFormat.Buyout, ItemRow: MarketFixtures.AppleRow,
-            Principal: Seller, Quantity: 1, Seller: Seller, StartPrice: 0
+        fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(
+            Principal: Seller, Row: "gauge", Key: "0", Value: 42, Kind: WorldDocumentWriteKind.Set
         ));
         fixture.Step();
 
         Assert.NotNull(@object: captured);
 
-        var liveListing = MarketFixtures.FindListing(definition: fixture.Server.Definition, id: 1);
+        var liveRow = WorldDefinitionRows.FindStateRow(rows: fixture.Server.Definition.State, name: "gauge");
 
-        Assert.NotNull(@object: liveListing);
+        Assert.NotNull(@object: liveRow);
 
         // A restart replays the tail against a fresh server built from the SAME (uncheckpointed) base document —
         // no checkpoint exists yet, so this is the whole recovered state.
-        var definition = MarketFixtures.BuildDocument();
+        var definition = Fixtures.BuildDocument().WithWorldState(rows: [row]);
         using var restoredMachines = new WorldMachineHost(
             engines: [],
             screens: definition.Screens
@@ -81,11 +81,12 @@ public sealed class WorldServerMutationJournalTapLawTests {
             envelope: new WorldRenderEnvelope(),
             instanceIdentity: "restored",
             machines: restoredMachines,
+            narrationSink: new WorldConsoleNarrationSink(),
             population: new WorldPopulation(definition: definition),
             profiles: FreshProfiles(definition: definition)
         );
 
-        Assert.True(condition: WorldSubmissionCodec.TryDecodeMutation(
+        Assert.True(condition: WorldSubmissionCodec.TryDecodeCommittedMutation(
             bytes: captured!.Value.Encoded,
             failure: out var decodeFailure,
             mutation: out var decoded
@@ -95,16 +96,14 @@ public sealed class WorldServerMutationJournalTapLawTests {
             tick: captured.Value.Tick
         ));
 
-        var restoredListing = MarketFixtures.FindListing(definition: restoredServer.Definition, id: 1);
+        var restoredRow = WorldDefinitionRows.FindStateRow(rows: restoredServer.Definition.State, name: "gauge");
 
-        Assert.NotNull(@object: restoredListing);
+        var writtenKey = CellName.Parse(candidate: "0");
+
+        Assert.NotNull(@object: restoredRow);
         Assert.Equal(
-            expected: liveListing!.StartPrice,
-            actual: restoredListing!.StartPrice
-        );
-        Assert.Equal(
-            expected: liveListing.BuyoutPrice,
-            actual: restoredListing.BuyoutPrice
+            expected: StateRows.FindCell(cells: liveRow!.Cells, key: writtenKey)!.Value,
+            actual: StateRows.FindCell(cells: restoredRow!.Cells, key: writtenKey)!.Value
         );
     }
 }

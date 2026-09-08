@@ -32,9 +32,9 @@ public sealed class ReplayRateZeroLawTests {
         // Before this fix: WorldReplaySnapshot.Drive called EngineTicks.PerRate(ratePerSecond: 0) unconditionally,
         // which throws ArgumentOutOfRangeException — this exact legitimate case (a static world's empty recording)
         // would have thrown instead of reaching a step width at all.
-        var stepWidth = WorldReplaySnapshot.ResolveStepWidth(simulationRate: 0U, recordedTickCount: 0);
+        var stepWidth = WorldReplaySnapshot.ResolveStepWidth(recordedTickCount: 0, simulationRate: 0U);
 
-        Assert.Equal(expected: 0UL, actual: stepWidth);
+        Assert.Equal(actual: stepWidth, expected: 0UL);
     }
     [Fact]
     public void RateZeroWithARecordedTick_RefusesByNameRatherThanThrowingUnnamed() {
@@ -42,7 +42,7 @@ public sealed class ReplayRateZeroLawTests {
         // shape that is genuinely inconsistent (Drive's own step loop would have nothing to derive a width FOR).
         // Before this fix that inconsistency was indistinguishable from the legitimate zero-tick case — both threw
         // the SAME unnamed ArgumentOutOfRangeException. After it, only this shape throws, and it throws NAMED.
-        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldReplaySnapshot.ResolveStepWidth(simulationRate: 0U, recordedTickCount: 3));
+        var exception = Assert.Throws<InvalidDataException>(testCode: () => WorldReplaySnapshot.ResolveStepWidth(recordedTickCount: 3, simulationRate: 0U));
 
         Assert.Contains(expectedSubstring: "RateZeroCarriesTicks", actualString: exception.Message);
     }
@@ -50,8 +50,8 @@ public sealed class ReplayRateZeroLawTests {
     public void NonZeroRate_IsUnaffectedAndStillDerivesTheOrdinaryStepWidth() {
         // The control: an ordinary authored rate must resolve EXACTLY as EngineTicks.PerRate always has, ticks
         // present or not — the rate-0 guard must never shadow the ordinary path.
-        Assert.Equal(expected: EngineTicks.PerRate(ratePerSecond: 240U), actual: WorldReplaySnapshot.ResolveStepWidth(simulationRate: 240U, recordedTickCount: 0));
-        Assert.Equal(expected: EngineTicks.PerRate(ratePerSecond: 240U), actual: WorldReplaySnapshot.ResolveStepWidth(simulationRate: 240U, recordedTickCount: 5));
+        Assert.Equal(expected: EngineTicks.PerRate(ratePerSecond: 240U), actual: WorldReplaySnapshot.ResolveStepWidth(recordedTickCount: 0, simulationRate: 240U));
+        Assert.Equal(expected: EngineTicks.PerRate(ratePerSecond: 240U), actual: WorldReplaySnapshot.ResolveStepWidth(recordedTickCount: 5, simulationRate: 240U));
     }
 }
 /// <summary>
@@ -66,7 +66,7 @@ public sealed class ReplayRateStampLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f8-rate-change-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -86,7 +86,7 @@ public sealed class ReplayRateStampLawTests {
 
         try {
             fixture.Server.EnqueueRebuild(
-                request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, PathHint: path, Force: false, ContentHash: contentHash),
+                request: new WorldRebuildRequest(ContentHash: contentHash, Definition: null, Force: false, Kind: WorldRebuildKind.Load, PathHint: path),
                 principal: WorldPrincipal.Console
             );
 
@@ -122,7 +122,7 @@ public sealed class ReplayRateStampLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f8-rate-same-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -135,7 +135,7 @@ public sealed class ReplayRateStampLawTests {
 
         try {
             fixture.Server.EnqueueRebuild(
-                request: new WorldRebuildRequest(Kind: WorldRebuildKind.Load, Definition: null, PathHint: path, Force: false, ContentHash: contentHash),
+                request: new WorldRebuildRequest(ContentHash: contentHash, Definition: null, Force: false, Kind: WorldRebuildKind.Load, PathHint: path),
                 principal: WorldPrincipal.Console
             );
 
@@ -146,8 +146,8 @@ public sealed class ReplayRateStampLawTests {
 
             var result = tape.StopRecording();
 
-            Assert.Null(result.VerifyFault);
-            Assert.NotNull(result.Verdict);
+            Assert.Null(@object: result.VerifyFault);
+            Assert.NotNull(value: result.Verdict);
 
             using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
 
@@ -162,9 +162,9 @@ public sealed class ReplayRateStampLawTests {
     // tape and its own re-drive both re-read fresh).
     private static (string Path, string ContentHash) WriteTempWorldFile(WorldDefinition definition) {
         var bytes = WorldDefinitionSerialization.Serialize(definition: definition);
-        var path = Path.Combine(Path.GetTempPath(), $"puck-world-tests-rebuild-{Guid.NewGuid():N}.json");
+        var path = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-world-tests-rebuild-{Guid.NewGuid():N}.json");
 
-        File.WriteAllBytes(path: path, bytes: bytes);
+        File.WriteAllBytes(bytes: bytes, path: path);
 
         return (path, WorldDefinitionFileSource.ComputeContentHash(content: bytes));
     }
@@ -187,7 +187,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f9-pause-stop-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -204,8 +204,8 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         var result = tape.StopRecording();
 
-        Assert.Null(result.VerifyFault);
-        Assert.NotNull(result.Verdict);
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(value: result.Verdict);
 
         using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
@@ -223,7 +223,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"f9-no-pause-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -233,8 +233,8 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         var result = tape.StopRecording();
 
-        Assert.Null(result.VerifyFault);
-        Assert.NotNull(result.Verdict);
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(value: result.Verdict);
 
         using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
@@ -253,7 +253,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g5-discard-non-lever-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -273,8 +273,8 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         var result = tape.StopRecording();
 
-        Assert.Null(result.VerifyFault);
-        Assert.NotNull(result.Verdict);
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(value: result.Verdict);
 
         using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
@@ -295,7 +295,7 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g5-zero-tick-lever-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
@@ -305,8 +305,8 @@ public sealed class ReplayPendingLeverFlushLawTests {
 
         var result = tape.StopRecording();
 
-        Assert.Null(result.VerifyFault);
-        Assert.NotNull(result.Verdict);
+        Assert.Null(@object: result.VerifyFault);
+        Assert.NotNull(value: result.Verdict);
 
         using var stream = File.OpenRead(path: WorldReplayTape.PathFor(name: name));
         var persisted = WorldReplaySnapshot.Read(stream: stream);
@@ -342,7 +342,7 @@ public sealed class ReplayStopFailureLawTests {
 
         using var fixture = Fixtures.FreshServer();
         var transport = new LoopbackTransport(server: fixture.Server);
-        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], addonHostFactory: static (_, _) => new NullAddonHost());
+        var tape = new WorldReplayTape(liveServer: fixture.Server, profiles: fixture.Server.Profiles, transport: transport, engines: [], machineHostFactory: Fixtures.MachineHostFactory, addonHostFactory: static (_, _) => new NullAddonHost());
         var name = $"g6-unwritable-{Guid.NewGuid():N}";
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");

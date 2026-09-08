@@ -10,11 +10,11 @@ namespace Puck.Scripting;
 /// One addon's live host state: a single <c>Store</c>+<c>Instance</c> compiled from a cached module, the ring and
 /// channel-table geometry cached at handshake, and the reusable decode buffer. Touched only from the single sim-tick
 /// thread. A trap or protocol violation drives it into a sticky <see cref="AddonState.Faulted"/> state, skipped every
-/// subsequent tick until <see cref="Enable"/> disposes and re-instantiates a fresh <c>Store</c> — a clean,
-/// deterministic reset to the module's defined initial state.
+/// subsequent tick; recovery is a fresh instance prepared from its row (a revision bump or row change through the
+/// consumer's prepare/commit door).
 /// </summary>
 /// <remarks>
-/// <para><b>Mounting is two-phase.</b> Construction (and <see cref="Enable"/>) runs the handshake — export
+/// <para><b>Mounting is two-phase.</b> Construction runs the handshake — export
 /// validation, channel-descriptor decode, channel-name-table decode, and every region bounds/overlap check —
 /// without calling <c>puck_init</c>. The consumer runs its own gates (attenuation, quota, disclosure) against the
 /// decoded declarations and then calls <see cref="Admit"/>, which runs the guest's optional <c>puck_init</c> under the
@@ -42,7 +42,6 @@ public sealed class AddonInstance : IDisposable {
     private int m_channelCount;
     private bool m_disposed;
     private AddonFault m_fault;
-    private int m_generation;
     private int m_inCap;
     private int m_inPtr;
     private Action? m_initAction;
@@ -99,7 +98,7 @@ public sealed class AddonInstance : IDisposable {
     }
 
     /// <summary>Gets whether <see cref="Admit"/> has run for the current store — the gate <see cref="Tick"/>
-    /// requires. Reset by <see cref="Enable"/>'s re-instantiation.</summary>
+    /// requires.</summary>
     public bool Admitted => m_admitted;
     /// <summary>Gets the input channel's resolved channel-name bindings (empty when the guest declares no input
     /// channel), indexed by the guest's own declared ordinal.</summary>
@@ -116,12 +115,6 @@ public sealed class AddonInstance : IDisposable {
     public AddonFault Fault => m_fault;
     /// <summary>Gets the per-tick fuel budget this addon runs under.</summary>
     public long FuelPerTick => m_fuelPerTick;
-    /// <summary>Gets a counter incremented every time <see cref="Instantiate"/> creates a store — at construction and
-    /// at every <see cref="Enable"/> — so a consumer can detect that a fresh store now stands behind this object
-    /// (linear memory wiped, every guest-learned handle gone) regardless of which lifecycle verb caused it. This
-    /// object's own reference identity does not change across <see cref="Enable"/>, which is why that alone cannot
-    /// serve as the signal.</summary>
-    public int Generation => m_generation;
     /// <summary>Gets the content identity of the addon's module.</summary>
     public AssetContentHash Hash => m_hash;
     /// <summary>Gets the guest's declared input-ring capacity in cells — the host-side ceiling on how many cells one
@@ -172,8 +165,6 @@ public sealed class AddonInstance : IDisposable {
         );
     }
     private void Instantiate() {
-        ++m_generation;
-
         DisposeStore();
 
         m_channelBindingCount = 0;
@@ -237,6 +228,10 @@ public sealed class AddonInstance : IDisposable {
                 kind: AddonFaultKind.BadExport,
                 reason: $"BadExport — {error.Message}"
             );
+        } catch {
+            store?.Dispose();
+
+            throw;
         }
     }
     private static bool RangeFits(long length, int start, long memoryLength, string name, out string error) {
@@ -263,7 +258,7 @@ public sealed class AddonInstance : IDisposable {
     }
     private string TrapReason(AddonFaultKind kind, TrapException trap) {
         if (kind == AddonFaultKind.OutOfFuel) {
-            return $"OutOfFuel — disabled; 'world.addon.enable {m_name}' to retry (re-instantiates and re-admits; a genuine spin loop will exhaust fuel again)";
+            return $"OutOfFuel — disabled; re-instantiate {m_name} to retry (a genuine spin loop will exhaust fuel again)";
         }
 
         return $"{kind} ({trap.Type})";
@@ -542,17 +537,6 @@ public sealed class AddonInstance : IDisposable {
         m_lastFuelConsumed = FuelConsumed();
         m_admitted = true;
     }
-    /// <summary>Administratively disables the addon; it is skipped every tick until re-enabled.</summary>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public void Disable() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        m_lastCount = 0;
-        m_state = AddonState.Disabled;
-    }
     /// <summary>Disposes the store and its native resources. The compiled module is owned by the loader cache.</summary>
     public void Dispose() {
         if (m_disposed) {
@@ -563,25 +547,6 @@ public sealed class AddonInstance : IDisposable {
 
         DisposeStore();
         GC.SuppressFinalize(obj: this);
-    }
-    /// <summary>Re-enables the addon by disposing any prior store and instantiating a fresh one from the cached
-    /// module — a clean reset to the module's initial state, back to the unadmitted phase (the consumer re-runs its
-    /// gates and calls <see cref="Admit"/> again). A load-faulted addon (no module) stays faulted.</summary>
-    /// <exception cref="ObjectDisposedException">The instance has been disposed.</exception>
-    public void Enable() {
-        ObjectDisposedException.ThrowIf(
-            condition: m_disposed,
-            instance: this
-        );
-
-        if (
-            (m_engine is null) ||
-            (m_module is null)
-        ) {
-            return;
-        }
-
-        Instantiate();
     }
     /// <summary>Escalates a consumer-layer protocol violation (a verb outside the declared vocabulary, a payload
     /// outside its domain) into the same sticky fault a structural decode error produces — the whole-batch-refused,

@@ -4,45 +4,142 @@ namespace Puck.HumbleGamingBrick;
 /// The SM83 instruction fetch and dispatch, plus the bus access primitives. The regular blocks — register-to-register
 /// loads, accumulator ALU, immediate and increment forms, RST, and the CB-prefixed bit operations — are decoded by
 /// their bit fields; the remaining opcodes are dispatched in four 32-entry range groups.
+/// <para>
+/// The bus primitives carry the access's phase, not just its cost. A machine cycle's four T-cycles hold two bus
+/// instants: the drive instant at its start, where the address and a write's data reach the peripheral, and the latch
+/// instant two T-cycles later, where the CPU samples the data lines. Cycles are ticked lazily against
+/// <c>m_busCycleDebt</c> so a write can settle before its own drive instant, which several I/O registers do; anything
+/// that samples component state outside an access settles the debt first.
+/// </para>
 /// </summary>
 public sealed partial class Sm83 {
     // A memory access spans one machine cycle = four CPU T-cycles, each ticking every component once in domain-aware
-    // lockstep through the component clock. Where inside those four T-cycles the bus actually settles is the access
-    // dot-phase, expressed here as the number of T-cycles ticked BEFORE the bus is touched: a read latches late (the
-    // CPU samples the bus on the access's final T-cycle), a write commits early (the value is driven on the first).
+    // lockstep through the component clock. An M-cycle has two distinct bus instants, not one: the DRIVE instant at the
+    // machine cycle's start, when the address and — for a write — the data are on the pins, and the LATCH instant two
+    // T-cycles later, when the CPU samples the data lines. A write reaches the peripheral on the drive instant; a read
+    // takes the peripheral's value on the latch instant.
     private const int CpuTCyclesPerMachineCycle = 4;
-    // The access dot-phase: how many of an access's four T-cycles tick BEFORE the bus is touched. A read latches at T2
-    // and a write commits on the first T-cycle. Derived by sweeping against the hardware-accurate memory-timing
-    // verdicts in src/Puck.HumbleGamingBrick.Post: read=2 clears the whole call/jp/ret/reti/push-pop/add_sp/
-    // ld_hl_sp/oam_dma timing family while keeping the timer conformance and the CPU-instruction/instruction-timing/memory-timing
-    // suites green.
+    // The read latch's offset from its machine cycle's drive instant. The whole call/jp/ret/reti/push-pop/add_sp/
+    // ld_hl_sp/oam_dma timing family and the timer conformance suite pin it: those cases distinguish which machine
+    // cycle an access lands in, and this is what places the sample inside it.
     private const int LeadingTCyclesBeforeRead = 2;
-    private const int LeadingTCyclesBeforeWrite = 0;
+    // Cycles of the machine cycles already begun that have not been ticked yet — the distance from the clock's current
+    // position to the NEXT access's drive instant. A read leaves two (its own latch already ticked two of its four); a
+    // write leaves the four it did not tick, an internal cycle adds a whole four. Deferring them is what lets a write
+    // commit BEFORE its own drive instant, which the I/O write conflicts need and which a tick-as-you-go accounting
+    // cannot express. It is always zero at an instruction boundary, so no snapshot carries it.
+    private int m_busCycleDebt;
 
     private byte ReadCycle(ushort address) {
-        AdvanceTCycles(count: LeadingTCyclesBeforeRead);
+        // The deferred cycles and the latch lead are one advance: the same cycles in the same order, settled once.
+        var debt = m_busCycleDebt;
+
+        m_busCycleDebt = 0;
+        AdvanceTCycles(count: (debt + LeadingTCyclesBeforeRead));
+
+        if (TouchesTimedState(address: address)) {
+            m_componentClock.Settle();
+        }
 
         var value = m_bus.ReadByte(address: address);
 
-        AdvanceTCycles(count: (CpuTCyclesPerMachineCycle - LeadingTCyclesBeforeRead));
+        m_busCycleDebt = (CpuTCyclesPerMachineCycle - LeadingTCyclesBeforeRead);
 
         return value;
     }
+    // Every write outside the display's own register block commits on the pins' drive instant, and the component
+    // behind it reads the old value for that machine cycle. The display's registers sit on its internal path, so it
+    // commits them on its own phase and answers for the transition itself; the CPU only reports the write and spends
+    // the T-cycles the display names. Whichever phase applies, the NEXT access's drive instant stays four T-cycles
+    // after this one's.
     private void WriteCycle(ushort address, byte value) {
-        AdvanceTCycles(count: LeadingTCyclesBeforeWrite);
+        if (address is (>= MemoryMap.LcdControl and <= MemoryMap.WindowX)) {
+            WriteDisplayRegisterCycle(
+                address: address,
+                value: value
+            );
+
+            return;
+        }
+
+        FlushBusCycles();
+
+        if (TouchesTimedState(address: address)) {
+            m_componentClock.Settle();
+        }
+
         m_bus.WriteByte(
             address: address,
             value: value
         );
-        AdvanceTCycles(count: (CpuTCyclesPerMachineCycle - LeadingTCyclesBeforeWrite));
+
+        if (address >= MemoryMap.IoRegistersStart) {
+            m_componentClock.Invalidate();
+        }
+
+        m_busCycleDebt = CpuTCyclesPerMachineCycle;
+    }
+    private void WriteDisplayRegisterCycle(ushort address, byte value) {
+        m_componentClock.Settle();
+
+        var lead = m_bus.RecordDisplayWrite(
+            address: address,
+            settles: out var settles,
+            value: value
+        );
+        // A write that commits before its own drive instant needs that much of the previous access still unticked.
+        // Every write reached through an instruction has it (a read leaves two, a write four, an internal cycle four
+        // more); a write that does not falls back to the pins' own instant rather than travelling backwards.
+        if ((m_busCycleDebt + lead) < 0) {
+            lead = 0;
+        }
+
+        AdvanceTCycles(count: (m_busCycleDebt + lead));
+        m_componentClock.Settle();
+
+        m_busCycleDebt = 0;
+
+        // A register that settles spends the T-cycle before its commit in transition. The T-cycle is part of the
+        // phase, so it is spent even when the held and arriving values happen to coincide.
+        if (settles) {
+            m_bus.OpenDisplayWriteSettle();
+            m_componentClock.Invalidate();
+            AdvanceTCycles(count: 1);
+
+            ++lead;
+        }
+
+        m_bus.WriteByte(
+            address: address,
+            value: value
+        );
+        m_componentClock.Invalidate();
+
+        m_busCycleDebt = (CpuTCyclesPerMachineCycle - lead);
     }
     private void InternalCycle() =>
+        m_busCycleDebt += CpuTCyclesPerMachineCycle;
+    // A machine cycle the CPU spends without touching the bus at all — the locked-up fetchless spin, the speed-switch
+    // stall, stop and halt, and a DMA stall. Nothing can commit inside it, so it settles the debt as it goes.
+    private void IdleMachineCycle() {
+        FlushBusCycles();
         AdvanceTCycles(count: CpuTCyclesPerMachineCycle);
-    private void AdvanceTCycles(int count) {
-        for (var remaining = count; (remaining != 0); --remaining) {
-            m_componentClock.AdvanceCpuTCycle();
-        }
     }
+    // Ticks the deferred cycles through, bringing the clock to the next access's drive instant. Every read of a
+    // component's state that is not itself a bus access has to settle the debt first, or it samples the past.
+    private void FlushBusCycles() {
+        var debt = m_busCycleDebt;
+
+        m_busCycleDebt = 0;
+
+        AdvanceTCycles(count: debt);
+    }
+    private void AdvanceTCycles(int count) =>
+        m_componentClock.AdvanceCpuTCycles(count: count);
+    // Whether an access at the address reads or writes state a component keeps on its own clock — display memory
+    // behind the picture processor's locks, the object table, the I/O page — as opposed to plain memory or ROM.
+    private static bool TouchesTimedState(ushort address) =>
+        ((address >= MemoryMap.ObjectAttributeMemoryStart) || ((address >= MemoryMap.VideoRamStart) && (address <= MemoryMap.VideoRamEnd)));
     private void ExecuteStop() {
         // STOP is encoded two bytes (assemblers emit 10 00) and consumes the pad byte ONLY when no interrupt is already
         // pending (SameBoy sm83_cpu.c stop(), ~line 397: `interrupt_pending = gb->interrupt_enable & gb->io_registers
@@ -55,21 +152,30 @@ public sealed partial class Sm83 {
         // it one machine cycle per step (see StepInstruction), staying steppable at instruction granularity for the
         // whole re-gear. Without an armed switch (or on a monochrome machine) STOP parks the machine: stop mode on
         // Color, a plain halt-alike on monochrome.
+        FlushBusCycles();
+
         if (m_interrupts.Pending == InterruptKind.None) {
             _ = ReadNextByte();
         }
+
+        // The speed-switch stall and the halt latch are measured from the end of the opcode, not from the pad byte's
+        // own latch, so the pad read's remaining cycles settle before either is armed.
+        FlushBusCycles();
 
         if (
             m_supportsColor &&
             m_key1.IsSwitchArmed
         ) {
             m_key1.BeginSwitch();
+            m_componentClock.Invalidate();
         } else if (m_supportsColor) {
             m_key1.EnterStop();
+            m_componentClock.Invalidate();
         } else {
             m_halted = true;
 
             m_hdma.OnCpuHalted();
+            m_componentClock.Invalidate();
         }
     }
     private byte ReadNextByte() {
@@ -85,26 +191,41 @@ public sealed partial class Sm83 {
 
         return ((ushort)((high << 8) | low));
     }
-    private void PushWord(ushort value) {
+    // The implicit SP move behind PUSH's two-byte write reports to the OAM corruption bug once, against SP's value
+    // before either decrement (see PushWord) — a plain register-bump write-corruption trigger. The two byte writes
+    // that follow are each a direct CPU write in their own right, which the bus arms for the SAME bug independently
+    // (NoteBlockedOamWrite off SystemBus.WriteByte) if SP has landed in OAM range by then.
+    private void PushStackByte(byte value) {
         m_stackPointer = ((ushort)(m_stackPointer - 1));
         WriteCycle(
             address: m_stackPointer,
-            value: ((byte)(value >> 8))
-        );
-        m_stackPointer = ((ushort)(m_stackPointer - 1));
-        WriteCycle(
-            address: m_stackPointer,
-            value: ((byte)value)
+            value: value
         );
     }
+    // The implicit SP move's bus report happens BEFORE the internal delay cycle PUSH/CALL/RST spend ahead of their
+    // first write, not after: on this hardware, that delay cycle IS the register-bump's own machine cycle (the IDU
+    // drives the address bus at its start, the same way a bare INC/DEC's InternalCycle does), so the report has to
+    // land before InternalCycle ticks the clock past it, or it would sample the row the scan reaches only after the
+    // delay has already elapsed.
+    private void PushWord(ushort value) {
+        NoteOamCorruption(preValue: m_stackPointer);
+        InternalCycle();
+        PushStackByte(value: ((byte)(value >> 8)));
+        PushStackByte(value: ((byte)value));
+    }
+    // POP's implicit SP++ carries no register-bump trigger of its own on this hardware — its share of the OAM
+    // corruption bug comes entirely from each byte's own read (NoteBlockedOamRead off SystemBus.ReadByte) landing in
+    // OAM range.
+    private byte PopStackByte() {
+        var value = ReadCycle(address: m_stackPointer);
+
+        m_stackPointer = ((ushort)(m_stackPointer + 1));
+
+        return value;
+    }
     private ushort PopWord() {
-        var low = ReadCycle(address: m_stackPointer);
-
-        m_stackPointer = ((ushort)(m_stackPointer + 1));
-
-        var high = ReadCycle(address: m_stackPointer);
-
-        m_stackPointer = ((ushort)(m_stackPointer + 1));
+        var low = PopStackByte();
+        var high = PopStackByte();
 
         return ((ushort)((high << 8) | low));
     }
@@ -154,19 +275,25 @@ public sealed partial class Sm83 {
             (opcode <= 0x7F)
         ) {
             if (opcode == 0x76) {
-                // HALT with interrupts disabled while a line is already pending does not halt at all — it arms the HALT
-                // bug, making the next opcode fetch fail to advance PC. An EI whose delayed enable is still counting
-                // down escapes the bug: IME lands during the halt and the interrupt is serviced normally.
-                if (
-                    !m_interruptMasterEnable &&
-                    (m_interruptEnableCountdown == 0) &&
-                    (m_interrupts.Pending != InterruptKind.None)
-                ) {
-                    m_haltBug = true;
+                // A line already pending at HALT's own dispatch never enters halt at all. With IME clear that arms the
+                // HALT bug (the next opcode fetch fails to advance PC, so that byte executes twice). With IME already
+                // set — including an EI delay that lands on this very dispatch, since StepInstruction applies it before
+                // reaching here — the CPU does not halt either: PC snaps back onto this opcode so the pending line
+                // dispatches on the very next step with the return address pointing at this HALT, which re-executes
+                // once the handler returns.
+                FlushBusCycles();
+
+                if (m_interrupts.Pending != InterruptKind.None) {
+                    if (m_interruptMasterEnable) {
+                        m_programCounter = ((ushort)(m_programCounter - 1));
+                    } else {
+                        m_haltBug = true;
+                    }
                 } else {
                     m_halted = true;
 
                     m_hdma.OnCpuHalted();
+            m_componentClock.Invalidate();
                 }
 
                 return;
@@ -266,10 +393,10 @@ public sealed partial class Sm83 {
                 ); break;
             case 0x0A: m_a = ReadCycle(address: Bc); break;
             case 0x1A: m_a = ReadCycle(address: De); break;
-            case 0x03: Bc = ((ushort)(Bc + 1)); InternalCycle(); break;
-            case 0x13: De = ((ushort)(De + 1)); InternalCycle(); break;
-            case 0x0B: Bc = ((ushort)(Bc - 1)); InternalCycle(); break;
-            case 0x1B: De = ((ushort)(De - 1)); InternalCycle(); break;
+            case 0x03: NoteOamCorruption(preValue: Bc); Bc = ((ushort)(Bc + 1)); InternalCycle(); break;
+            case 0x13: NoteOamCorruption(preValue: De); De = ((ushort)(De + 1)); InternalCycle(); break;
+            case 0x0B: NoteOamCorruption(preValue: Bc); Bc = ((ushort)(Bc - 1)); InternalCycle(); break;
+            case 0x1B: NoteOamCorruption(preValue: De); De = ((ushort)(De - 1)); InternalCycle(); break;
             case 0x07: RotateAccumulatorLeftCircular(); break;
             case 0x0F: RotateAccumulatorRightCircular(); break;
             case 0x17: RotateAccumulatorLeft(); break;
@@ -296,10 +423,10 @@ public sealed partial class Sm83 {
                 ); Hl = ((ushort)(Hl - 1)); break;
             case 0x2A: m_a = ReadCycle(address: Hl); Hl = ((ushort)(Hl + 1)); break;
             case 0x3A: m_a = ReadCycle(address: Hl); Hl = ((ushort)(Hl - 1)); break;
-            case 0x23: Hl = ((ushort)(Hl + 1)); InternalCycle(); break;
-            case 0x33: m_stackPointer = ((ushort)(m_stackPointer + 1)); InternalCycle(); break;
-            case 0x2B: Hl = ((ushort)(Hl - 1)); InternalCycle(); break;
-            case 0x3B: m_stackPointer = ((ushort)(m_stackPointer - 1)); InternalCycle(); break;
+            case 0x23: NoteOamCorruption(preValue: Hl); Hl = ((ushort)(Hl + 1)); InternalCycle(); break;
+            case 0x33: NoteOamCorruption(preValue: m_stackPointer); m_stackPointer = ((ushort)(m_stackPointer + 1)); InternalCycle(); break;
+            case 0x2B: NoteOamCorruption(preValue: Hl); Hl = ((ushort)(Hl - 1)); InternalCycle(); break;
+            case 0x3B: NoteOamCorruption(preValue: m_stackPointer); m_stackPointer = ((ushort)(m_stackPointer - 1)); InternalCycle(); break;
             case 0x27: DecimalAdjustAccumulator(); break;
             case 0x2F: ComplementAccumulator(); break;
             case 0x37: SetCarryFlag(); break;
@@ -316,8 +443,8 @@ public sealed partial class Sm83 {
             case 0xD9: m_programCounter = PopWord(); m_interruptMasterEnable = true; InternalCycle(); break;
             case 0xC1: Bc = PopWord(); break;
             case 0xD1: De = PopWord(); break;
-            case 0xC5: InternalCycle(); PushWord(value: Bc); break;
-            case 0xD5: InternalCycle(); PushWord(value: De); break;
+            case 0xC5: PushWord(value: Bc); break;
+            case 0xD5: PushWord(value: De); break;
             case 0xC2: case 0xCA: case 0xD2: case 0xDA: JumpAbsolute(taken: ConditionMet(condition: (opcode >> 3) & 3)); break;
             case 0xC3: JumpAbsolute(taken: true); break;
             case 0xC4: case 0xCC: case 0xD4: case 0xDC: CallAbsolute(taken: ConditionMet(condition: (opcode >> 3) & 3)); break;
@@ -335,8 +462,8 @@ public sealed partial class Sm83 {
             case 0xF0: m_a = ReadCycle(address: ((ushort)(0xFF00 + ReadNextByte()))); break;
             case 0xE1: Hl = PopWord(); break;
             case 0xF1: Af = PopWord(); break;
-            case 0xE5: InternalCycle(); PushWord(value: Hl); break;
-            case 0xF5: InternalCycle(); PushWord(value: Af); break;
+            case 0xE5: PushWord(value: Hl); break;
+            case 0xF5: PushWord(value: Af); break;
             case 0xE2:
                 WriteCycle(
                     address: ((ushort)(0xFF00 + m_c)),
@@ -352,7 +479,7 @@ public sealed partial class Sm83 {
             case 0xFA: m_a = ReadCycle(address: ReadNextWord()); break;
             case 0xE8: m_stackPointer = AddStackPointerOffset(offset: ((sbyte)ReadNextByte())); InternalCycle(); InternalCycle(); break;
             case 0xF8: Hl = AddStackPointerOffset(offset: ((sbyte)ReadNextByte())); InternalCycle(); break;
-            case 0xF9: m_stackPointer = Hl; InternalCycle(); break;
+            case 0xF9: NoteOamCorruption(preValue: Hl); m_stackPointer = Hl; InternalCycle(); break;
             // DI clears IME immediately (undelayed, even on Color) and cancels any in-flight EI enable, so EI;DI leaves
             // interrupts disabled. One hardware-derived reference implementation clears IME only and lets a pending
             // enable flip-then-be-overwritten the same step — same net result; clearing the countdown here is the
@@ -371,7 +498,7 @@ public sealed partial class Sm83 {
                     !m_interruptMasterEnable &&
                     (m_interruptEnableCountdown == 0)
                 ) {
-                    m_interruptEnableCountdown = 2;
+                    m_interruptEnableCountdown = 1;
                 }
 
                 break;
@@ -455,7 +582,6 @@ public sealed partial class Sm83 {
         var address = ReadNextWord();
 
         if (taken) {
-            InternalCycle();
             PushWord(value: m_programCounter);
 
             m_programCounter = address;
@@ -471,7 +597,6 @@ public sealed partial class Sm83 {
         }
     }
     private void Restart(ushort vector) {
-        InternalCycle();
         PushWord(value: m_programCounter);
 
         m_programCounter = vector;

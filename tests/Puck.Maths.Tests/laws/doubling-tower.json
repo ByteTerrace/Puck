@@ -1,6 +1,6 @@
 [
   {
-    "Id": "algebra.quadratic-surd-twin-lane",
+    "Id": "algebra.real-quadratic-twin-lane",
     "Tier": "Default",
     "Members": [
       { "Type": "Puck.Maths.QuadraticAlgebra`1[[System.Numerics.BigInteger, System.Runtime.Numerics, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]", "Name": "Create" },
@@ -16,7 +16,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "QuadraticAlgebra<BigInteger>.{Add,Subtract,Multiply,Conjugate,Norm,Trace} at the (k,1) metallic relation for k in {1,2,3,5}, transported by U+V·x → ((2U+V·k)+V·√Δ)/2 into Q(√Δ), Δ=k²+4",
-        "Against": "QuadraticSurd's own +, -, *, and the hand-transported conjugate (SurdNumerator negated) — an exact-rational real-quadratic-field type sharing no code and no rounding substrate with QuadraticAlgebra",
+        "Against": "RealQuadratic's own +, -, *, and the hand-transported conjugate (SurdNumerator negated) — an exact-rational real-quadratic-field type sharing no code and no rounding substrate with QuadraticAlgebra",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -24,7 +24,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the basis-change map is the ONLY connective tissue between the two representations — an error in either QuadraticAlgebra<BigInteger>'s defining relation x²=k·x+1 or in QuadraticSurd's own field arithmetic breaks agreement, so neither side's correctness is assumed going in; this is the (k,1)/BigInteger == QuadraticSurd twin, and no other law in the suite covers it",
+        "Subject": "the basis-change map is the ONLY connective tissue between the two representations — an error in either QuadraticAlgebra<BigInteger>'s defining relation x²=k·x+1 or in RealQuadratic's own field arithmetic breaks agreement, so neither side's correctness is assumed going in; this is the (k,1)/BigInteger == RealQuadratic twin, and no other law in the suite covers it",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -55,7 +55,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "Conjugate(U,V) equals (U,−V) for the (0,−1) relation, where P is the carrier's additive identity — checked against the raw pair directly rather than through a sibling type's own conjugate, so a defect in Conjugate's P-degenerate short-circuit (e.g. wrongly forming U+P·V) is caught. ENVELOPE: Add/Subtract/Negate and this P-additive-identity branch of Conjugate never read P or Q, so testing one relation exercises them for the whole (0,−1)/(0,0)/(0,+1) family; Conjugate's P-nonzero branch is separately pinned by algebra.quadratic-surd-twin-lane's (k,1) relation",
+        "Subject": "Conjugate(U,V) equals (U,−V) for the (0,−1) relation, where P is the carrier's additive identity — checked against the raw pair directly rather than through a sibling type's own conjugate, so a defect in Conjugate's P-degenerate short-circuit (e.g. wrongly forming U+P·V) is caught. ENVELOPE: Add/Subtract/Negate and this P-additive-identity branch of Conjugate never read P or Q, so testing one relation exercises them for the whole (0,−1)/(0,0)/(0,+1) family; Conjugate's P-nonzero branch is separately pinned by algebra.real-quadratic-twin-lane's (k,1) relation",
         "Against": "",
         "Shared": "",
         "Citation": "",

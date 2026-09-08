@@ -1,7 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <Description>The dialect-agnostic wire substrate: the [u32 length][u8 kind][payload] frame grammar in memory and over a stream, a bounded forward-only reader and writer over fixed-point and presentation values that latch the first refusal instead of throwing over untrusted bytes, the shared Hello/identity handshake grammar, an authenticated persistent request lane with a per-request deadline and protocol-ruled re-send, and a symmetric peer substrate over QUIC in which every executable is one P-256 identity that dials and listens, completes a certificate-bound handshake, and exchanges attested messages over the resulting link.</Description>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Networking</PackageId>
+        <PackageTags>attestation;networking;peer;quic;wire</PackageTags>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Shared substrate</PuckLayer>
+        <RootNamespace>Puck.Networking</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />

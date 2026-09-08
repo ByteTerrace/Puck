@@ -33,6 +33,23 @@ public enum WorldHudElementKind : byte {
 
     /// <summary>A fill-bar readout of a bound binding's normalized 0..1 value (0 when unbound).</summary>
     Gauge,
+
+    /// <summary>A sampled frame: the element rect shows the frame a <see cref="WorldFrameSource"/> produces
+    /// (camera/view/probe/capture) — the picture-in-picture element kind (e.g. a face-cam overlay).</summary>
+    Frame,
+}
+/// <summary>How a <see cref="WorldHudElementKind.Frame"/> element maps its sampled frame's aspect ratio onto its own
+/// rect — the same uv-mapping choice a screen material or a UI image element makes.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldHudFrameFit>))]
+public enum WorldHudFrameFit : byte {
+    /// <summary>Scales the frame to fill the rect, cropping whichever axis overflows.</summary>
+    Cover,
+
+    /// <summary>Scales the frame to fit entirely within the rect, letterboxing whichever axis falls short.</summary>
+    Contain,
+
+    /// <summary>Scales each axis independently to fill the rect exactly, distorting the frame's aspect ratio.</summary>
+    Stretch,
 }
 /// <summary>A <see cref="WorldHudPanel"/>'s chrome recipe — the authored twin of <c>Puck.Overlays.OverlayPanelStyle</c>
 /// (Puck.World.Schema must not reference Puck.Overlays; the renderer maps this token to the concrete style).</summary>
@@ -77,6 +94,13 @@ public enum WorldHudStyleToken : byte {
 /// <param name="Height">The rect's height, normalized — must be positive.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public readonly record struct WorldHudRect(float X, float Y, float Width, float Height);
+/// <summary>One ranked source candidate of a <see cref="WorldHudElementKind.Frame"/> element: the frame shown while
+/// <paramref name="When"/> holds. Candidates are walked in authored order every frame and the first holding one wins;
+/// a <see langword="null"/> predicate always holds, so the last row is the default.</summary>
+/// <param name="Source">The sampled frame while this candidate wins.</param>
+/// <param name="When">The condition, evaluated for the panel's seat.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldHudFrameCandidate(WorldFrameSource Source, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? When = null);
 /// <summary>One HUD element row inside a <see cref="WorldHudPanel"/> — a stable id (unique within the owning panel),
 /// its kind, its local rect, its color role, an authored literal string (meaningful for <see cref="WorldHudElementKind.Text"/>),
 /// and an optional binding into the closed <see cref="HudBindingVocabulary"/> (meaningful for
@@ -101,6 +125,26 @@ public readonly record struct WorldHudRect(float X, float Y, float Width, float 
 /// instead of one — never both on the same element. Ignored for <see cref="WorldHudElementKind.Rect"/> and
 /// <see cref="WorldHudElementKind.Gauge"/> (a gauge's fill is one fraction; it has no composed string to show).
 /// Omitted from the wire when null.</param>
+/// <param name="Source">A <see cref="WorldHudElementKind.Frame"/> element's sampled frame — the same
+/// <see cref="WorldFrameSource"/> vocabulary a screen row or probe socket plugs into (camera/view/probe/capture).
+/// Required for <see cref="WorldHudElementKind.Frame"/>; refused on every other kind. Omitted from the wire when
+/// null.</param>
+/// <param name="Fit">A <see cref="WorldHudElementKind.Frame"/> element's aspect-fit policy. Ignored for every other
+/// kind. Omitted from the wire at its default (<see cref="WorldHudFrameFit.Cover"/>).</param>
+/// <param name="Mirror">Whether a <see cref="WorldHudElementKind.Frame"/> element flips its sampled frame
+/// horizontally — a face cam is conventionally mirrored. Ignored for every other kind. Omitted from the wire at its
+/// default (<see langword="false"/>).</param>
+/// <param name="Radius">A <see cref="WorldHudElementKind.Frame"/> element's corner-rounding radius, in pixels. Must
+/// be finite and non-negative. Ignored for every other kind. Omitted from the wire at its default (0).</param>
+/// <param name="Opacity">A <see cref="WorldHudElementKind.Frame"/> element's sampled-frame alpha, in [0, 1]. Ignored
+/// for every other kind.</param>
+/// <param name="Sources">A <see cref="WorldHudElementKind.Frame"/> element's ranked source candidates — a portrait that
+/// shows the speaking character, else the webcam when the player chose it, else the seat's own avatar. Refused beside
+/// <paramref name="Source"/>: a bare <paramref name="Source"/> is exactly a one-entry list with no condition. At most
+/// <see cref="WorldHudCapacity.MaxFrameCandidatesPerElement"/> entries, every one counted toward
+/// <see cref="WorldHudCapacity.MaxFrameSources"/>.</param>
+/// <param name="FadeSeconds">How long a <see cref="WorldHudElementKind.Frame"/> element cross-fades when its winning
+/// candidate changes; 0 cuts. Finite and non-negative.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHudElement(
     string Id,
@@ -109,8 +153,24 @@ public sealed record WorldHudElement(
     WorldHudStyleToken Style,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Text = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Binding = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Template = null
-);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Template = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFrameSource? Source = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldHudFrameFit Fit = WorldHudFrameFit.Cover,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Mirror = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Radius = 0f,
+    float Opacity = 1f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHudFrameCandidate>? Sources = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float FadeSeconds = 0f
+) {
+    /// <summary>Gets the frame candidates in rank order — <see cref="Sources"/>, else the bare <see cref="Source"/>
+    /// as one unconditional entry, else none. The one shape every reader of a frame element's sources takes.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldHudFrameCandidate> FrameCandidates =>
+        (Sources
+            ?? ((Source is { } single)
+                ? [new WorldHudFrameCandidate(Source: single)]
+                : []));
+}
 /// <summary>One HUD panel row — a stable id (unique within the section), a normalized viewport rect in screen space,
 /// which band it draws in, its chrome style, and its child elements. <c>WorldMutation.UpsertHudPanel</c> carries
 /// the whole row (elements included) as one cross-row transaction boundary; <c>WorldMutation.UpsertHudElement</c>/
@@ -127,8 +187,9 @@ public sealed record WorldHudElement(
 public sealed record WorldHudPanel(string Id, WorldHudRect Rect, WorldHudLayer Layer, WorldHudPanelStyle Style, IReadOnlyList<WorldHudElement> Elements, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
     private readonly IReadOnlyList<WorldHudElement> m_elements = (Elements ?? []);
 
-    /// <summary>Gets the panel's child elements. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <summary>Gets the panel's child elements. Absent and empty read identically to every consumer, and the
+    /// coalesce lives in the accessor so no caller grows its own; every other list-valued row member that reads
+    /// absent as empty cites this one.</summary>
     public IReadOnlyList<WorldHudElement> Elements {
         get => m_elements;
         init => m_elements = (value ?? []);
@@ -161,29 +222,18 @@ public enum WorldHudCursorRole : byte {
 /// <param name="SizePx">The drawn cursor's ring radius, pixels.</param>
 /// <param name="Role">The bare cursor's palette role; hover lights the accent tier regardless.</param>
 /// <param name="Visible">The drawn cursor's visibility condition, or <see langword="null"/> for always.</param>
-public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCursorRole Role, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
-    /// <summary>Gets the built-in default an unauthored row falls back to: a plaza-scale hover reach, a small ring,
-    /// the primary text hue.</summary>
-    public static WorldHudCursor Default { get; } = new(
-        HoverRadius: 64f,
-        Role: WorldHudCursorRole.TextPrimary,
-        SizePx: 7f
-    );
-}
+public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldHudCursorRole Role, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null);
 /// <summary>The <c>hud</c> document section's defaults row (the <c>WorldMutation.SetHudDefaults</c> mutation
 /// target).</summary>
 /// <param name="Enabled">Whether the world-scope HUD panels render at all — a world-level kill switch independent of
 /// any individual panel's row (a diegetic reveal gate can flip this without editing every panel).</param>
-/// <param name="Cursor">The drawn pointer cursor's presentation policy, or <see langword="null"/> to fall back to
-/// <see cref="WorldHudCursor.Default"/> (the optional-section null-coalesce convention). Whole-row replace
-/// semantics apply: a <c>SetHudDefaults</c> authored without it clears any earlier authored policy back to the
-/// default.</param>
+/// <param name="Cursor">The drawn pointer cursor's presentation policy, or <see langword="null"/> for no drawn
+/// cursor at all — the engine draws no cursor of its own; the standard policy is AUTHORED, in
+/// <c>Assets/worlds/standard.world.json</c>. Whole-row replace semantics apply: a <c>SetHudDefaults</c> authored
+/// without it clears any earlier authored policy back to hidden.</param>
 /// <param name="Visible">The visibility condition every world-scope panel is gated by, beside its own, or
 /// <see langword="null"/> for always.</param>
-public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null) {
-    /// <summary>Gets the built-in default: enabled, no authored panels (see <see cref="WorldHudSection.Default"/>).</summary>
-    public static WorldHudDefaults Default { get; } = new(Enabled: true);
-}
+public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null);
 /// <summary>The <c>hud</c> document section: the world-scope defaults plus the authored panel rows. A required section
 /// every document carries; an empty panel list draws nothing (the built-in default).</summary>
 /// <param name="Defaults">The section defaults.</param>
@@ -193,13 +243,15 @@ public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = nul
 public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<WorldHudPanel> Panels) {
     private readonly IReadOnlyList<WorldHudPanel> m_panels = (Panels ?? []);
 
-    /// <summary>Gets the built-in default: HUD enabled, no authored panels.</summary>
-    public static WorldHudSection Default { get; } = new(
-        Defaults: WorldHudDefaults.Default,
+    /// <summary>Gets the inert absence: HUD disabled, no cursor, no panels. The engine holds no HUD policy of its
+    /// own — the standard enabled-with-cursor row is AUTHORED, in <c>Assets/worlds/standard.world.json</c>, and a
+    /// world inherits it by naming that document as its basis.</summary>
+    public static WorldHudSection Absent { get; } = new(
+        Defaults: new WorldHudDefaults(Enabled: false),
         Panels: []
     );
     /// <summary>Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldHudPanel> Panels {
         get => m_panels;
         init => m_panels = (value ?? []);
@@ -211,8 +263,14 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
 /// constructor data, never restated); the render cost each authored element expands into is the overlay writer's own
 /// constant.</summary>
 public static class WorldHudCapacity {
+    /// <summary>The number of structurally unique frame sources one HUD section may name. Repeated elements naming
+    /// the same source share one presentation slot. A cross-layer law pins this schema constant to the overlay's
+    /// independently declared fixed shader-slot count.</summary>
+    public const int MaxFrameSources = 8;
     /// <summary>The per-panel element-row ceiling (world scope).</summary>
     public const int MaxElementsPerPanel = 24;
+    /// <summary>The most ranked source candidates one frame element carries.</summary>
+    public const int MaxFrameCandidatesPerElement = 4;
     /// <summary>The per-seat player-scope panel's element-row ceiling — capped smaller than the world scope's
     /// <see cref="MaxElementsPerPanel"/> because it is confined to a single seat's viewport rather than the whole
     /// screen.</summary>
@@ -251,7 +309,8 @@ public enum HudBindingKind : byte {
     /// grammar separator. Whether the row (and, for the cell form, the key) actually resolves to declared document
     /// data is validated separately: <see cref="WorldDefinitionValidator"/> checks world-scope panels against the
     /// document's own <c>state</c> section, while a seat-scope panel, authored independent of any particular world,
-    /// refuses every <c>state.*</c> token instead.</summary>
+    /// refuses every <c>state.*</c> token instead. Either form may carry a trailing <c>.$target</c> facet
+    /// (<see cref="HudBinding.Target"/>) reading the cell's stored truth rather than its live eased value.</summary>
     StateNamed,
 }
 /// <summary>One parsed binding — the kind plus (for a <see cref="HudBindingKind.SeatPositionX"/>/Y/Z kind) the
@@ -263,11 +322,15 @@ public enum HudBindingKind : byte {
 /// <see langword="null"/> for every other kind.</param>
 /// <param name="StateCellKey">The cell key for a <c>state.&lt;row&gt;.&lt;key&gt;</c> token; <see langword="null"/>
 /// for a plain <c>state.&lt;row&gt;</c> token (the row's own slot) and for every other kind.</param>
-public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, string? StateName = null, string? StateCellKey = null);
+/// <param name="Target">For a <see cref="HudBindingKind.StateNamed"/> kind, whether the token carried the trailing
+/// <c>.$target</c> facet — the addressed cell's stored TRUTH rather than its live eased value when it carries a
+/// <see cref="StateDynamics"/> trait. <see langword="false"/> for every other kind.</param>
+public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, string? StateName = null, string? StateCellKey = null, bool Target = false);
 /// <summary>
 /// The closed v1 HUD binding vocabulary: <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>
-/// (1-based seat index, <c>1..</c><see cref="WorldPopulationLimits.LocalSeatCount"/>), <c>population.active</c>,
-/// <c>state.&lt;row&gt;</c>, and <c>state.&lt;row&gt;.&lt;key&gt;</c> (see <see cref="HudBindingKind.StateNamed"/>).
+/// (1-based seat index, <c>1..</c><see cref="WorldBodiesLimits.LocalSeatCount"/>), <c>population.active</c>,
+/// <c>state.&lt;row&gt;</c>, and <c>state.&lt;row&gt;.&lt;key&gt;</c> (see <see cref="HudBindingKind.StateNamed"/>) —
+/// either <c>state.*</c> form may carry a trailing <c>.$target</c> facet (see <see cref="HudBinding.Target"/>).
 /// A token outside this set refuses by name — the same parse both <see cref="WorldDefinitionValidator"/> (load-time)
 /// and the render-side resolver (frame-time) call, so a document can never carry a binding the renderer would
 /// silently treat as unbound.
@@ -279,6 +342,10 @@ public static class HudBindingVocabulary {
     private const string PositionZSuffix = ".position.z";
     private const string SeatPrefix = "seat.";
     private const string StatePrefix = "state.";
+    // The reserved "read truth, not the eased value" facet on a state.* token. A row/cell name can never itself
+    // start with '$' (WorldStateRow.ReservedNamePrefix) outside the one engine-minted slot key, so this suffix can
+    // never collide with an authored row or cell name.
+    private const string TargetFacetSuffix = ".$target";
     private const string WorldFpsToken = "world.fps";
     private const string WorldTickToken = "world.tick";
 
@@ -341,9 +408,10 @@ public static class HudBindingVocabulary {
         }
 
         // state.<row> binds the row's own slot cell; state.<row>.<key> binds one named cell. Neither a row name nor a
-        // cell name can hold a dot (WorldCellName refuses one at document parse), so the FIRST dot after the prefix is
+        // cell name can hold a dot (CellName refuses one at document parse), so the FIRST dot after the prefix is
         // always the grammar separator — a second dot in the remainder names no row/key pair this substrate could
-        // ever hold, so it refuses rather than guessing which half is which.
+        // ever hold, so it refuses rather than guessing which half is which. A trailing .$target facet is stripped
+        // before that split runs, so it never competes with the row/key dot.
         if (
             token.StartsWith(
             comparisonType: StringComparison.Ordinal,
@@ -351,14 +419,30 @@ public static class HudBindingVocabulary {
         ) &&
             (token.Length > StatePrefix.Length)
         ) {
-            var rest = token.AsSpan(start: StatePrefix.Length);
+            var isTarget = token.EndsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: TargetFacetSuffix
+            );
+            var bodyEnd = (isTarget
+                ? (token.Length - TargetFacetSuffix.Length)
+                : token.Length);
+
+            if (bodyEnd <= StatePrefix.Length) {
+                return false;
+            }
+
+            var rest = token.AsSpan(
+                start: StatePrefix.Length,
+                length: (bodyEnd - StatePrefix.Length)
+            );
             var dot = rest.IndexOf(value: '.');
 
             if (dot < 0) {
                 binding = new HudBinding(
                     Kind: HudBindingKind.StateNamed,
                     SeatIndex: 0,
-                    StateName: rest.ToString()
+                    StateName: rest.ToString(),
+                    Target: isTarget
                 );
 
                 return true;
@@ -379,7 +463,8 @@ public static class HudBindingVocabulary {
                 Kind: HudBindingKind.StateNamed,
                 SeatIndex: 0,
                 StateName: row.ToString(),
-                StateCellKey: key.ToString()
+                StateCellKey: key.ToString(),
+                Target: isTarget
             );
 
             return true;
@@ -441,7 +526,7 @@ public static class HudBindingVocabulary {
 
         if (
             (seatIndex < 1) ||
-            (seatIndex > WorldPopulationLimits.LocalSeatCount)
+            (seatIndex > WorldBodiesLimits.LocalSeatCount)
         ) {
             return false;
         }

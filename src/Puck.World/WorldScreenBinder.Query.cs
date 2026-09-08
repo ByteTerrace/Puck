@@ -15,16 +15,18 @@ namespace Puck.World;
 /// <param name="BackpressureEvents">How many queued submissions waited for capacity since the current content was
 /// loaded; zero for synchronous machines.</param>
 /// <param name="Fault">A slot's live fault (a missing content file, no camera device, a window not found), or <see langword="null"/>.</param>
+/// <param name="Cartridge">The cartridge document the machine's content was compiled from, or <see langword="null"/>
+/// for content booted as read.</param>
 internal readonly record struct WorldScreenState(bool Assigned, string? Engine, nint Handle, long FramesStepped,
-    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault);
+    long PendingSteps, int MaximumPendingSteps, long BackpressureEvents, string? Fault, Server.WorldMachineCartridge? Cartridge = null);
 internal sealed partial class WorldScreenBinder {
     /// <summary>Returns the live machine on a screen slot as its audio drain seam, or <see langword="null"/> — a facade over
     /// <see cref="Server.WorldMachineHost.AudioMachine"/>.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     public IAudioMachine? AudioMachine(int index) => m_machines.AudioMachine(index: index);
-    /// <summary>Returns the live cable-link set as document rows — a facade over
+    /// <summary>Returns the live cable-link set as derived groups — a facade over
     /// <see cref="Server.WorldMachineHost.CaptureLinks"/>, the <c>world.save</c> fold source.</summary>
-    public IReadOnlyList<WorldScreenLink> CaptureLinks() => m_machines.CaptureLinks();
+    public IReadOnlyList<WorldMachineCableGroup> CaptureLinks() => m_machines.CaptureLinks();
     /// <summary>Returns the current same-device image-view handle bound to a screen index, or 0 when the index is unbound, not
     /// declared, or nothing has been published yet — the live state <c>world.screens</c> reports.</summary>
     /// <param name="index">The engine screen-surface index.</param>
@@ -45,7 +47,7 @@ internal sealed partial class WorldScreenBinder {
     public bool HasEngine(string engineId) => m_machines.HasEngine(engineId: engineId);
     /// <summary>Returns whether a machine is currently booted on the screen index — a facade over
     /// <see cref="Server.WorldMachineHost.HasMachine"/> (authoritative server state), reachable through the same
-    /// reference every existing caller (<c>PlayerCommandModule</c>'s <c>player.engage</c>) already held.</summary>
+    /// reference every existing caller (<c>PlayerCommandModule</c>'s <c>body.engage</c>) already held.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     public bool HasMachine(int index) => m_machines.HasMachine(index: index);
     /// <summary>Returns the cable link a screen currently belongs to — a facade over <see cref="Server.WorldMachineHost.LinkOf"/>.</summary>
@@ -73,7 +75,8 @@ internal sealed partial class WorldScreenBinder {
                 PendingSteps: machineState.PendingSteps,
                 MaximumPendingSteps: machineState.MaximumPendingSteps,
                 BackpressureEvents: machineState.BackpressureEvents,
-                Fault: machineState.Fault
+                Fault: machineState.Fault,
+                Cartridge: machineState.Cartridge
             );
         }
 

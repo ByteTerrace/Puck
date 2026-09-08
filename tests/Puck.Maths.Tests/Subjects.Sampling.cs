@@ -1114,7 +1114,10 @@ internal static partial class Subjects {
             if (Math.Abs(value: gradient.Y.Value) > 245760L) { return $"the Y slope at draw {index} is {gradient.Y.Value}, past the documented 3.75"; }
             if (Math.Abs(value: gradient.Z.Value) > 245760L) { return $"the Z slope at draw {index} is {gradient.Z.Value}, past the documented 3.75"; }
 
-            // The octave overload at one layer is the lattice sample halved, exactly; every layer count stays bounded.
+            // The octave overload at one layer is the lattice sample halved to nearest on its magnitude (half away
+            // from zero), exactly; every layer count stays bounded.
+            var halved = ((value.Value < 0L) ? -((-value.Value + 1L) >> 1) : ((value.Value + 1L) >> 1));
+
             for (var octaves = 1; (octaves <= 16); ++octaves) {
                 var layered = FieldNoise.Sample(
                     octaves: octaves,
@@ -1125,8 +1128,8 @@ internal static partial class Subjects {
                 if (Math.Abs(value: layered.Value) > NoiseUnit) { return $"the {octaves}-octave sample at draw {index} is {layered.Value}, outside [-1, 1]"; }
                 if (
                     (octaves == 1) &&
-                    (layered.Value != (value.Value >> 1))
-                ) { return $"the one-octave sample at draw {index} is {layered.Value}, not the halved lattice sample {(value.Value >> 1)}"; }
+                    (layered.Value != halved)
+                ) { return $"the one-octave sample at draw {index} is {layered.Value}, not the halved lattice sample {halved}"; }
             }
         }
 
@@ -1282,6 +1285,104 @@ internal static partial class Subjects {
         )) { return "a seventeenth octave was accepted"; }
 
         return null;
+    }
+    /// <summary>Pcg3dLatticeNoise.Pcg3d against a wide-integer reference over edge and drawn operands, ValueNoise01's
+    /// [0, 1] bound, and ValueNoise01's exact collapse onto the public Pcg3d corner at whole-cell boundaries.</summary>
+    public static string? Pcg3dLatticeNoiseReferenceAndCorners() {
+        ReadOnlySpan<uint> edges = [0U, 1U, 0x7FFFFFFFU, 0x80000000U, 0xFFFFFFFEU, uint.MaxValue];
+
+        foreach (var x in edges) {
+            foreach (var y in edges) {
+                foreach (var z in edges) {
+                    if (Pcg3dAgreesWithReference(
+                        x: x,
+                        y: y,
+                        z: z
+                    ) is { } edgeFailure) { return edgeFailure; }
+                }
+            }
+        }
+
+        var generator = Pcg32XshRr.Create(
+            state: 0x9A11B7UL,
+            stream: 11UL
+        );
+
+        for (var draw = 0; (draw < 256); ++draw) {
+            if (Pcg3dAgreesWithReference(
+                x: generator.NextUInt32(),
+                y: generator.NextUInt32(),
+                z: generator.NextUInt32()
+            ) is { } drawFailure) { return drawFailure; }
+        }
+
+        // ValueNoise01 stays inside its documented [0, 1) band over a drawn operand stream — the whole signed cell
+        // domain, negative indices included, at the half-open bound.
+        for (var draw = 0; (draw < 256); ++draw) {
+            var cellX = unchecked((int)generator.NextUInt32());
+            var cellZ = unchecked((int)generator.NextUInt32());
+            var noiseCells = ((int)((generator.NextUInt32() % 63U) + 1U));
+            var seed = generator.NextUInt32();
+            var sample = Pcg3dLatticeNoise.ValueNoise01(
+                cellX: cellX,
+                cellZ: cellZ,
+                noiseCells: noiseCells,
+                seed: seed
+            );
+
+            if (
+                (sample.Value < FixedQ4816.Zero.Value) ||
+                (sample.Value >= FixedQ4816.One.Value)
+            ) { return $"ValueNoise01({cellX}, {cellZ}, {noiseCells}, {seed}) left [0, 1) at raw {sample.Value}"; }
+        }
+
+        // At an exact cell boundary the quintic fade is zero on both axes, so the blend collapses onto the near
+        // corner — a corner ValueNoise01 does not compute privately here, but which its own Pcg3d, called directly,
+        // reaches the identical way.
+        for (var nx = 0; (nx <= 5); ++nx) {
+            for (var nz = 0; (nz <= 5); ++nz) {
+                foreach (var noiseCells in ((ReadOnlySpan<int>)[1, 7, 16])) {
+                    var seed = generator.NextUInt32();
+                    var corner = FixedQ4816.FromRawBits(value: ((long)(Pcg3dLatticeNoise.Pcg3d(
+                        x: ((uint)nx),
+                        y: ((uint)nz),
+                        z: seed
+                    ).X >> 16)));
+                    var sample = Pcg3dLatticeNoise.ValueNoise01(
+                        cellX: (nx * noiseCells),
+                        cellZ: (nz * noiseCells),
+                        noiseCells: noiseCells,
+                        seed: seed
+                    );
+
+                    if (sample != corner) { return $"ValueNoise01 at cell corner ({nx}, {nz}) with a {noiseCells}-cell noise edge is {sample.Value}, not the corner hash {corner.Value}"; }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // Pcg3d against Oracles.Pcg3dReference — the identical Jarzynski & Olano mix, formed independently in
+    // BigInteger with the carrier reduction taken explicitly, where the subject relies on unchecked uint wrap.
+    private static string? Pcg3dAgreesWithReference(uint x, uint y, uint z) {
+        var reference = Oracles.Pcg3dReference(
+            x: x,
+            y: y,
+            z: z
+        );
+        var subject = Pcg3dLatticeNoise.Pcg3d(
+            x: x,
+            y: y,
+            z: z
+        );
+
+        return (((subject.X == reference.X) &&
+                 (subject.Y == reference.Y) &&
+                 (subject.Z == reference.Z))
+            ? null
+            : $"Pcg3d({x}, {y}, {z}) = ({subject.X}, {subject.Y}, {subject.Z}), but the wide-integer reference gives ({reference.X}, {reference.Y}, {reference.Z})"
+        );
     }
 
     // The quantile ladder: probability against the published standard-normal deviate, hand-tabulated outside this

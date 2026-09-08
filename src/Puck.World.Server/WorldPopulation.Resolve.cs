@@ -1,38 +1,62 @@
 using Puck.Maths;
 using Puck.Physics;
+using Puck.Physics.Fields;
+using Puck.Physics.Motion;
+using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    private static readonly Func<WorldKit, string> KitRowName = static kit => kit.Name;
+    private static readonly Func<WorldLook, string> LookRowName = static look => look.Name;
+
     // Compile the definition's sim-affecting sections to the fixed-point tables runtime simulation reads: the profileless
     // motion tuning, kit producer parameters, kit rows and their fixed compilations, and the resolved seat-kit row. Shared by the
     // constructor and Rebuild so a live retune quantizes through exactly the same path.
     private void CompileFixedTables(WorldDefinition definition, WorldSolidField? solids) {
+        var previousNavigation = (m_navigation ?? null);
         LocalSeatCount = definition.Population.LocalSeats;
         var authoredMotion = definition.Motion;
 
-        m_fixedMotion = FixedMotionDefaults.Compile(motion: in authoredMotion);
+        m_fixedMotion = WorldMotionTuningFactory.Compile(motion: in authoredMotion);
         m_playerDefaults = definition.PlayerDefaults;
         m_peerVariation = definition.Population.PeerVariation;
         m_seatVariation = definition.Population.SeatVariation;
         m_peerColors = definition.Population.PeerColors;
         m_reconnectGraceTicks = definition.PopulationReconnectGraceTicks;
+        m_sleepAfterTicks = ((ulong)Math.Max(val1: 0, val2: definition.Population.SleepAfterTicks));
         m_kitRows = definition.Kits;
         var programs = new Dictionary<string, CompiledBodyMotionProgram>(comparer: StringComparer.Ordinal);
+        var programRows = new Dictionary<string, BodyMotionProgram>(comparer: StringComparer.Ordinal);
 
         foreach (var program in definition.BodyMotionPrograms) {
             programs.Add(
                 key: program.Name,
-                value: CompiledBodyMotionProgram.Compile(program: program)
+                value: BodyMotionProgramFactory.Compile(program: program)
+            );
+            programRows.Add(
+                key: program.Name,
+                value: program
             );
         }
         m_bodyMotionPrograms = programs;
         m_channels = WorldChannelTable.Compile(channels: definition.Channels);
+        m_bodyUpPolicy = WorldBodyUpPolicyCompiler.Compile(collision: definition.Collision);
+        m_walkableThreshold = FixedWorldCollision.Compile(collision: definition.Collision).GroundedThreshold;
+        m_bodyContactPolicy = definition.Collision.BodyContacts;
+        m_rigidContactPolicy = RigidContactPolicy.FromAuthored(policy: m_bodyContactPolicy);
+        m_rigidVelocityCeiling = WorldFacePortalPolicy.SpeedCeiling(definition: definition);
         m_targetRows = definition.TargetRegisters;
         m_targets = WorldTargetRegisterTable.Compile(
             registers: definition.TargetRegisters,
             channelCount: m_channels.ChannelCount
         );
+        // The LIVE row list — a curve-follow producer's per-tick Evaluate reads m_curveRows[CurveIndex].Compiled
+        // straight off this reference, so a curve upsert (which reassigns definition.Curves and re-runs Rebuild)
+        // retargets every follower on delivery without a second per-tick indirection.
+        m_curveRows = definition.Curves;
+        m_curves = WorldCurveTable.Compile(curves: definition.Curves);
+        m_navigationTable = WorldNavigationDomainTable.Compile(domains: definition.Navigation.Rows);
         m_kits = new FixedWorldKit[definition.Kits.Count];
 
         for (var kit = 0; (kit < m_kits.Length); kit++) {
@@ -40,17 +64,38 @@ public sealed partial class WorldPopulation {
                 kit: definition.Kits[kit],
                 channels: m_channels,
                 targets: m_targets,
+                curves: m_curves,
+                navigation: m_navigationTable,
                 programs: m_bodyMotionPrograms,
+                programRows: programRows,
                 creations: definition.Creations,
                 bodyState: definition.BodyState,
-                identityState: definition.IdentityState
+                identityState: definition.IdentityState,
+                dynamics: definition.Dynamics,
+                simulationRateHz: definition.SimulationRateHz
             );
         }
+
+
+        CompileFlocks();
 
         // Derive the contact field the definition selects — the ONE derivation both a fresh activation and a live body
         // read. The field provider's program is handed in pre-built at runtime; at boot it is compiled here.
         m_contactCensus = WorldColliderSet.Measure(definition: definition);
+        // The gravitational field the definition authors. Compiled here beside the contact field so one derivation
+        // serves a fresh activation and a live body alike.
+        m_gravityField = new WorldGravityField(
+            capacity: Capacity,
+            compiled: FixedWorldGravity.Compile(
+                gravity: definition.Gravity,
+                placements: definition.Placements
+            )
+        );
         var derivedSolids = solids;
+
+        // Field state exists independently of the selected contact/target provider. A world may use its lattice only
+        // for reactions, exposure rows, snapshots, or rendering and still owes the same authoritative state.
+        InstallFields(definition: definition);
 
         if (
             (derivedSolids is null) &&
@@ -59,6 +104,7 @@ public sealed partial class WorldPopulation {
             if (!WorldSolidField.TryBuild(
                 built: out derivedSolids,
                 definition: definition,
+                lattice: m_fields,
                 reason: out var reason
             )) {
                 throw new InvalidOperationException(message: $"the target/contact field could not compile the world's solids at boot: {reason}");
@@ -70,23 +116,24 @@ public sealed partial class WorldPopulation {
         );
         m_adjacencyDefinition = definition;
         ComposeContactField();
-        // The compiled waterline rides beside the contact field: one optional world fact every body carries, read only
-        // by a swim-model kit's stages.
-        m_waterline = ((definition.Water is { } water)
-            ? FixedQ4816.FromDouble(value: water.Level)
-            : (FixedQ4816?)null
-        );
         m_targetField = (WorldTargetSelection.RequiresLineOfSight(definition: definition)
             ? derivedSolids
             : null
         );
-        m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
-        // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none — so an
-        // empty `looks` section is the pre-arc runtime exactly, with no branch special-casing the absence.
-        m_lookRows = ((definition.Looks.Count > 0)
-            ? definition.Looks
-            : [WorldLook.Implicit]
+        m_navigation = new NavigationRuntime(
+            domains: CompileNavigationDomains(definition: definition),
+            query: derivedSolids?.Query,
+            fields: (m_fields is null ? null : new NavigationMediumFieldAdapter(lattice: m_fields)),
+            capacity: new NavigationCapacity(
+                MaxSurfaceClearanceSweeps: WorldNavigationCapacity.MaxSurfaceClearanceSweeps,
+                MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions,
+                MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling
+            ),
+            previous: previousNavigation
         );
+        m_seatKit = ResolveKit(name: definition.DefaultSeatKit);
+        // The LOOK table: the authored rows, or the implicit single catalog look when the author declared none.
+        m_lookRows = WorldDefinitionRows.ResolveLookRows(looks: definition.Looks);
         // The compiled population distribution — read ONLY by SeedSimulated (never the authored floats). The validator has already
         // resolved every named spawn point, so Compile's lookups always hit.
         m_distribution = FixedWorldDistribution.Compile(
@@ -98,6 +145,168 @@ public sealed partial class WorldPopulation {
         // census count is re-clamped against it by ReconcileInhabitants' trailing SetSimulatedCount.
         m_remoteCap = definition.Population.NetworkPlayers;
     }
+
+    /// <summary>Checks whether the candidate's field runtime can replace the live reaction plan while preserving
+    /// the boot-allocated lattice cells.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="reason">The named incompatibility on refusal; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the candidate can retain the live field allocation.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is null.</exception>
+    public bool CanInstallFields(WorldDefinition definition, out string? reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (!m_fieldsCompiled) {
+            reason = null;
+
+            return true;
+        }
+
+        var document = definition.Fields;
+        var program = definition.FieldProgram;
+
+        if ((document is null) != (program is null)) {
+            reason = "the definition's field composite and compiled program disagree";
+
+            return false;
+        }
+
+        if ((m_fields is null) != (document is null)) {
+            reason = "adding or removing the live field lattice changes its allocation; restart the host to load it";
+
+            return false;
+        }
+
+        if (m_fields is null) {
+            reason = null;
+
+            return true;
+        }
+
+        return m_fields.CanInstallInput(
+            input: CompileFieldLatticeInput(document: document!, program: program!),
+            reason: out reason
+        );
+    }
+    /// <summary>Installs the candidate's compatible field companion/program pair, preserving live cell state.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The candidate changes the live field allocation.</exception>
+    public void InstallFields(WorldDefinition definition) {
+        if (!CanInstallFields(
+            definition: definition,
+            reason: out var reason
+        )) {
+            throw new InvalidOperationException(message: reason);
+        }
+
+        if (!m_fieldsCompiled) {
+            m_fields = ((definition.Fields is { } document)
+                ? new FieldLattice(
+                    input: CompileFieldLatticeInput(
+                        document: document,
+                        program: (definition.FieldProgram ?? throw new InvalidOperationException(message: "The field composite has no compiled program."))
+                    ),
+                    worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
+                )
+                : null
+            );
+            m_fieldsCompiled = true;
+        } else if (m_fields is { } fields) {
+            fields.InstallInput(input: CompileFieldLatticeInput(
+                document: definition.Fields!,
+                program: definition.FieldProgram!
+            ));
+        }
+    }
+    /// <summary>Flattens a compiled field program into the plain input the Physics kernel reads — the same seam
+    /// <c>CompileNavigationDomains</c> crosses for the navigation kernel: the kernel holds no Schema type, so every
+    /// authoring-side handle and enum is mapped by hand here rather than trusted to a numeric cast. Public so a
+    /// caller (a test fixture, a tool) can build a <see cref="FieldLattice"/> directly from a document without a
+    /// live <see cref="WorldPopulation"/>.</summary>
+    /// <param name="document">The lattice composite.</param>
+    /// <param name="program">The document's own compiled reaction program.</param>
+    public static FieldLatticeInput CompileFieldLatticeInput(WorldFieldsSection document, WorldFieldProgram program) {
+        var fields = new FieldDescriptorInput[program.Fields.Count];
+
+        for (var index = 0; (index < fields.Length); index++) {
+            var descriptor = program.Fields[index];
+
+            fields[index] = new FieldDescriptorInput(
+                Name: descriptor.Name,
+                Initial: descriptor.Initial,
+                Minimum: descriptor.Minimum,
+                Maximum: descriptor.Maximum,
+                HeightScale: descriptor.HeightScale,
+                IsMedium: descriptor.IsMedium,
+                Color: document.Fields[index].Color
+            );
+        }
+
+        var fieldsByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < fields.Length); index++) {
+            fieldsByName[fields[index].Name] = index;
+        }
+
+        static FieldScalarInput Scalar(WorldFieldScalarInput input) => new(Literal: input.Literal, State: input.State);
+
+        var reactions = new FieldReactionInput[program.Nodes.Count];
+
+        for (var index = 0; (index < reactions.Length); index++) {
+            reactions[index] = program.Nodes[index] switch {
+                WorldFieldNode.Diffuse diffuse => new FieldReactionInput.Diffuse(diffuse.Field.Ordinal, Scalar(diffuse.Rate)),
+                WorldFieldNode.Decay decay => new FieldReactionInput.Decay(decay.Field.Ordinal, Scalar(decay.Rate)),
+                WorldFieldNode.Transform transform => new FieldReactionInput.Transform(
+                    When: [.. transform.When.Select(selector: condition => new FieldConditionInput(condition.Field.Ordinal, condition.Comparison, Scalar(condition.Value)))],
+                    Then: [.. transform.Then.Select(selector: write => new FieldWriteInput(write.Field.Ordinal, MapWriteOp(op: write.Op), Scalar(write.Value)))]
+                ),
+                WorldFieldNode.Emit emit => new FieldReactionInput.Emit(emit.Tag, emit.Field.Ordinal, Scalar(emit.Amount)),
+                WorldFieldNode.Expose expose => new FieldReactionInput.Expose(expose.Field.Ordinal, expose.Comparison, Scalar(expose.Value), expose.Row),
+                WorldFieldNode.Flow flow => new FieldReactionInput.Flow(flow.Field.Ordinal, Scalar(flow.Rate), [.. flow.Over.Select(selector: static over => over.Ordinal)], flow.SpillRow),
+                _ => throw new InvalidOperationException(message: "fields.reactions carries an unknown reaction kind."),
+            };
+        }
+
+        var paint = new List<FieldFillInput>();
+
+        foreach (var fill in (document.Paint ?? [])) {
+            if (!fieldsByName.TryGetValue(key: fill.Field, value: out var field)) {
+                throw new InvalidOperationException(message: $"fields: '{fill.Field}' is not a declared field.");
+            }
+
+            paint.Add(item: fill switch {
+                WorldLatticeFill.Rect rect => new FieldFillInput.Rect(field, FixedQ4816.FromDouble(value: rect.Value), FixedQ4816.FromDouble(value: rect.MinX), FixedQ4816.FromDouble(value: rect.MinZ), FixedQ4816.FromDouble(value: rect.MaxX), FixedQ4816.FromDouble(value: rect.MaxZ)),
+                WorldLatticeFill.Noise noise => new FieldFillInput.Noise(field, FixedQ4816.FromDouble(value: noise.Value), noise.Frequency, FixedQ4816.FromDouble(value: noise.Threshold), noise.Octaves, noise.Seed),
+                WorldLatticeFill.Scatter scatter => new FieldFillInput.Scatter(field, FixedQ4816.FromDouble(value: scatter.Value), scatter.Spacing, scatter.Radius, scatter.Seed),
+                WorldLatticeFill.Draw => new FieldFillInput.DrawMarker(field),
+                _ => throw new InvalidOperationException(message: "fields.paint carries an unknown fill kind."),
+            });
+        }
+
+        return new FieldLatticeInput(
+            Lattice: new FieldLatticeTopology(
+                Origin: new FixedVector3(
+                    X: FixedQ4816.FromDouble(value: document.Lattice.Origin.X),
+                    Y: FixedQ4816.FromDouble(value: document.Lattice.Origin.Y),
+                    Z: FixedQ4816.FromDouble(value: document.Lattice.Origin.Z)
+                ),
+                CellSize: FixedQ4816.FromDouble(value: document.Lattice.CellSize),
+                Width: document.Lattice.Width,
+                Depth: document.Lattice.Depth,
+                Layers: document.Lattice.Layers,
+                StepEveryTicks: document.Lattice.StepEveryTicks
+            ),
+            Fields: fields,
+            Reactions: reactions,
+            Paint: paint
+        );
+    }
+    private static FieldWriteOp MapWriteOp(WorldFieldWriteOp op) => op switch {
+        WorldFieldWriteOp.Set => FieldWriteOp.Set,
+        WorldFieldWriteOp.Add => FieldWriteOp.Add,
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(op), actualValue: op, message: null),
+    };
+
     private static FixedSpawnPoint[] CompileSeatSpawns(IReadOnlyList<WorldSpawnPoint> spawnPoints, IReadOnlyList<string> seatSpawns) {
         var compiled = new FixedSpawnPoint[seatSpawns.Count];
 
@@ -116,6 +325,8 @@ public sealed partial class WorldPopulation {
     // ONE place any of the three changes. A definition authoring no adjacency, or no injected source, leaves
     // m_contactField pointing at m_baseContactField directly.
     private void ComposeContactField() {
+        m_contactFieldInstallVersion++;
+
         if (
             (m_baseContactField is not { } baseField) ||
             (m_adjacencyDefinition is not { } definition)
@@ -163,7 +374,7 @@ public sealed partial class WorldPopulation {
         foreach (var creation in definition.Creations) {
             if (string.Equals(
                 a: creation.Id,
-                b: placement.CreationId,
+                b: placement.PrototypeId,
                 comparisonType: StringComparison.Ordinal
             )) {
                 return creation.Document.Behavior?.Locomotion;
@@ -173,7 +384,7 @@ public sealed partial class WorldPopulation {
         return null;
     }
     // The look row an inhabited placement's bodies wear: its Inhabit.Look when it names an authored look, else the
-    // implicit index-derived look (the client renders the creation stamp from the placement's own CreationId regardless).
+    // implicit index-derived look (the client renders the creation stamp from the placement's own PrototypeId regardless).
     private byte ResolveInhabitLook(WorldPlacement placement) {
         if (
             (placement.Inhabit?.Look is { Length: > 0 } lookName) &&
@@ -197,17 +408,8 @@ public sealed partial class WorldPopulation {
             return 0;
         }
 
-        for (var kit = 0; (kit < m_kitRows.Count); kit++) {
-            if (string.Equals(
-                a: m_kitRows[kit].Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((byte)kit);
-            }
-        }
-
-        throw new InvalidOperationException(message: $"No kit row named '{name}' in the world definition.");
+        return (ResolveKitOrNull(name: name)
+            ?? throw new InvalidOperationException(message: $"No kit row named '{name}' in the world definition."));
     }
     // The kit row a population index actually runs: a local seat (0..LocalSeatCount) always reads the resolved seat
     // kit (m_seatKit), never its entry's own KitIndex — the seat kit can differ from a seat entry's assigned row on a
@@ -217,33 +419,14 @@ public sealed partial class WorldPopulation {
         ? m_seatKit
         : m_entries[index].KitIndex
     );
-    private byte? ResolveKitOrNull(string name) {
-        for (var kit = 0; (kit < m_kitRows.Count); kit++) {
-            if (string.Equals(
-                a: m_kitRows[kit].Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((byte)kit);
-            }
-        }
-
-        return null;
-    }
+    private byte? ResolveKitOrNull(string name) => ResolveRowIndex(
+        name: name,
+        nameOf: KitRowName,
+        rows: m_kitRows
+    );
     // The look row index a kebab name resolves to. The validator gates unknown names at startup / apply.
-    private byte ResolveLook(string name) {
-        for (var look = 0; (look < m_lookRows.Count); look++) {
-            if (string.Equals(
-                a: m_lookRows[look].Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return ((byte)look);
-            }
-        }
-
-        throw new InvalidOperationException(message: $"No look row named '{name}' in the world definition.");
-    }
+    private byte ResolveLook(string name) => (ResolveLookOrNull(name: name)
+        ?? throw new InvalidOperationException(message: $"No look row named '{name}' in the world definition."));
     // Resolve every entry's LookIndex from the definition's authored sequence and row view.
     private void ResolveLookIndices(WorldDefinition definition) {
         m_lookAssignmentRows = ResolveRows(
@@ -260,14 +443,21 @@ public sealed partial class WorldPopulation {
             );
         }
     }
-    private byte? ResolveLookOrNull(string name) {
-        for (var look = 0; (look < m_lookRows.Count); look++) {
+    private byte? ResolveLookOrNull(string name) => ResolveRowIndex(
+        name: name,
+        nameOf: LookRowName,
+        rows: m_lookRows
+    );
+    // The one ordinal name search every named row table resolves through, so a kit lookup and a look lookup can never
+    // disagree on what "the same name" means. Cached nameOf delegates keep the call allocation-free.
+    private static byte? ResolveRowIndex<TRow>(IReadOnlyList<TRow> rows, string name, Func<TRow, string> nameOf) {
+        for (var row = 0; (row < rows.Count); row++) {
             if (string.Equals(
-                a: m_lookRows[look].Name,
+                a: nameOf(arg: rows[row]),
                 b: name,
                 comparisonType: StringComparison.Ordinal
             )) {
-                return ((byte)look);
+                return ((byte)row);
             }
         }
 
@@ -353,22 +543,38 @@ public sealed partial class WorldPopulation {
         // velocity, intent, and every other body property remain untouched.
         for (var index = 0; (index < Capacity); index++) {
             if (m_entries[index] is { Active: true, Body: { } body }) {
-                body.SetContactField(field: m_contactField);
+                body.SetContactConfiguration(
+                    field: m_contactField,
+                    upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
+                );
+                body.SetGravityField(field: m_gravityField);
             }
         }
     }
     /// <summary>Recompiles the population's derived state after a sim-affecting section mutation (a live kit tune, a
-    /// motion/wander retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
-    /// re-resolves every entry's kit index, re-derives the kit/wander-dependent per-entry statics without resetting the
-    /// running wander phase, and swaps every live body's compiled tuning/actions/program in place — bodies keep their
+    /// motion/producer retune, a seat-kit or assignment change, or a whole-document swap): re-quantizes the fixed tables,
+    /// re-resolves every entry's kit index, re-derives the kit/producer-dependent per-entry statics without resetting the
+    /// running producer phase, and swaps every live body's compiled tuning/actions/program in place — bodies keep their
     /// pose/velocity/tape, only the compiled feel swaps. Bumps <see cref="Revision"/> so the client rebuilds the avatar
     /// program. New activations re-seed fully from these fresh tables.</summary>
     /// <param name="definition">The new live definition.</param>
     /// <param name="solids">The server's pre-built SDF contact field for the field provider (built once at apply time so
     /// a runtime edit never rebuilds it twice), or <see langword="null"/> under the analytic provider.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The candidate changes the boot-allocated field lattice shape,
+    /// topology, cadence, or field envelope.</exception>
     public void Rebuild(WorldDefinition definition, WorldSolidField? solids) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var previousNavigation = m_navigation;
+
+        if (!CanInstallFields(
+            definition: definition,
+            reason: out var fieldReason
+        )) {
+            throw new InvalidOperationException(message: fieldReason);
+        }
 
         m_seatSpawns = CompileSeatSpawns(
             spawnPoints: definition.SpawnPoints,
@@ -383,6 +589,31 @@ public sealed partial class WorldPopulation {
         );
 
         for (var bodyIndex = 0; (bodyIndex < m_entries.Length); bodyIndex++) {
+            var navigation = m_entries[bodyIndex].NavigationState;
+            var routeRetained = false;
+            if ((uint)navigation.DomainIndex < (uint)previousNavigation.Count) {
+                var oldName = previousNavigation[navigation.DomainIndex].Name;
+                if (TryFindRetainedDomain(oldName, out var currentIndex)) {
+                    navigation.DomainIndex = currentIndex;
+                    routeRetained = true;
+                }
+            }
+            // A route stores domain-local node ordinals. Keep it only when the replacement runtime proved the same
+            // complete static bake and rebound its dynamic query provider; all uncertain cases replan from the
+            // retained designation on the next producer tick.
+            if (!routeRetained) {
+                navigation.Clear();
+            }
+            var activeDomain = m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex;
+            if ((uint)activeDomain < (uint)previousNavigation.Count &&
+                TryFindRetainedDomain(previousNavigation[activeDomain].Name, out var reboundDomain)) {
+                m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = reboundDomain;
+            } else if (activeDomain >= 0) {
+                m_entries[bodyIndex].ProducerState.ActiveProducerNavigationDomainIndex = -1;
+            }
+            // Cadence periods and cached steering are compiled-kit products. A live kit/assignment rebuild must not
+            // carry a partial interval or producer image authored under the previous row into the replacement.
+            m_entries[bodyIndex].AutonomyState.Clear();
             var prior = m_entries[bodyIndex].Designations;
             var current = NewDesignations();
 
@@ -396,6 +627,17 @@ public sealed partial class WorldPopulation {
             }
 
             m_entries[bodyIndex].Designations = current;
+        }
+
+        bool TryFindRetainedDomain(string name, out int index) {
+            for (var candidate = 0; candidate < m_navigation.Count; candidate++) {
+                if (m_navigation.WasRetained(candidate) && string.Equals(m_navigation[candidate].Name, name, StringComparison.Ordinal)) {
+                    index = candidate;
+                    return true;
+                }
+            }
+            index = -1;
+            return false;
         }
 
         var assignmentRows = ResolveRows(
@@ -416,7 +658,7 @@ public sealed partial class WorldPopulation {
         // + the client program rebuild the bumped revision triggers). PRESENTATION-ONLY, so it touches no body state.
         ResolveLookIndices(definition: definition);
 
-        // Re-derive the kit/wander-dependent per-entry statics from the fresh tables, but keep the running wander phase
+        // Re-derive the kit/producer-dependent per-entry statics from the fresh tables, but keep the running producer phase
         // (resetPhase: false) so the live crowd's producer stays continuous — no phase jerk on a retune.
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             SeedSimulated(
@@ -427,7 +669,7 @@ public sealed partial class WorldPopulation {
 
         for (var slot = 0; (slot < LocalSeatCount); slot++) {
             if (m_entries[slot].Active) {
-                SeedSeatWander(
+                SeedSeatSteeringProducer(
                     resetPhase: false,
                     slot: slot
                 );
@@ -445,7 +687,7 @@ public sealed partial class WorldPopulation {
             var kit = m_kits[kitIndex];
 
             body.RecompileKit(
-                motion: m_kitRows[kitIndex].Motion,
+                tuning: kit.Tuning,
                 actions: kit.Actions,
                 actionThresholds: kit.ActionThresholds,
                 actionShapes: kit.ActionShapes,
@@ -455,120 +697,258 @@ public sealed partial class WorldPopulation {
                 program: kit.BodyMotionProgram,
                 programs: m_bodyMotionPrograms,
                 collider: kit.Collider,
+                rigid: kit.Rigid,
+                carry: kit.Carry,
+                tether: kit.Tether,
                 maxSmoothError: m_fixedMotion.MaxSmoothError,
-                sprintChannelOrdinal: kit.SprintChannelOrdinal,
-                driftChannelOrdinal: kit.DriftChannelOrdinal
+                holds: kit.Holds
             );
             // Hand the (possibly rebuilt) contact field to every live body, so a live solid-geometry or collision-tuning
             // edit takes effect on the next tick.
-            body.SetContactField(field: m_contactField);
-            body.SetWaterline(level: m_waterline);
+            body.SetContactConfiguration(
+                field: m_contactField,
+                upPolicy: m_bodyUpPolicy,
+                walkableThreshold: m_walkableThreshold
+            );
+            body.SetGravityField(field: m_gravityField);
         }
 
         m_revision++;
     }
+    /// <summary>One reusable sweep row for dynamic-body contact.</summary>
+    private readonly record struct DynamicContactBody(int Index, FixedQ4816 MinimumX, FixedQ4816 MaximumX,
+        FixedQ4816 Radius) : IComparable<DynamicContactBody> {
+        public int CompareTo(DynamicContactBody other) {
+            var minimum = MinimumX.CompareTo(other.MinimumX);
+            return minimum != 0 ? minimum : Index.CompareTo(other.Index);
+        }
+    }
+
     /// <summary>
-    /// Resolves active local body pairs after every body has integrated. Pair order is stable population-index order;
-    /// each body's own authority remains its sole pose writer and an overlap is shared equally between the pair.
+    /// Resolves active local body pairs after every body has integrated. Pair order is deterministic sweep order with
+    /// population index as the complete tie-breaker; each body's own authority remains its sole pose writer and an
+    /// overlap is shared equally between the pair. The FIRST pass's own resolved rigid-pair count derives how many
+    /// EXTRA full sweeps run (<see cref="RigidPairPassesThisTick"/>, <see cref="WorldBodyContactPolicy.RigidPairIterationCeiling"/>):
+    /// every pass re-runs broadphase and narrowphase from scratch, over the SAME bodies' now-current positions and
+    /// velocities, so a pair a strike's own positional correction newly brings into contact (the next ball down a
+    /// rack, the next domino down a falling line) is discovered and resolved in a LATER pass of the same tick,
+    /// rather than only ever replaying the pairs the first pass happened to find — a fixed replay set can never grow
+    /// past what one broadphase saw before any impulse moved anything. An extra pass with zero rigid pairs to
+    /// resolve stops the run early rather than spending the rest of the authored ceiling re-confirming a settled
+    /// population.
     /// </summary>
     public void ResolveDynamicContacts() {
         var two = FixedQ4816.FromInteger(value: 2L);
-        Span<int> indices = stackalloc int[WorldPopulationLimits.CapacityCeiling];
-        Span<FixedQ4816> minimumX = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
-        Span<FixedQ4816> maximumX = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
-        Span<FixedQ4816> radii = stackalloc FixedQ4816[WorldPopulationLimits.CapacityCeiling];
+        var contacts = m_dynamicContactBodies;
         var count = 0;
+        // Hoisted out of every loop below (CA2014): one reused stack buffer per role, its contents fully overwritten
+        // by ScaledColliderVolumes on every call, never read across bodies.
+        Span<FixedBodyColliderVolume> broadphaseScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> leftScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
+        Span<FixedBodyColliderVolume> rightScratch = stackalloc FixedBodyColliderVolume[WorldCollider.MaxVolumes];
 
         for (var index = 0; (index < Capacity); index++) {
             if (
                 !m_entries[index].Active ||
                 (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
-                (m_entries[index].Body is not { Collider: { } collider, OrdinaryAdvanceAdmitted: true } body)
+                (m_entries[index].Body is not { Collider: { } collider, OrdinaryAdvanceAdmitted: true, CarriedBy: null } body)
             ) {
                 continue;
             }
 
-            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: collider.Volumes);
+            var radius = FixedDynamicBodyContacts.BroadphaseRadius(volumes: body.ScaledColliderVolumes(
+                volumes: collider.Volumes,
+                scratch: broadphaseScratch
+            ));
 
-            indices[count] = index;
-            minimumX[count] = (body.FixedPosition.X - radius);
-            maximumX[count] = (body.FixedPosition.X + radius);
-            radii[count] = radius;
-            count++;
-        }
-
-        // Stable insertion sort: the table is tiny (<=128), already nearly ordered between ticks, and this avoids a
-        // per-tick allocation. Population index is the complete tie-breaker, so replay cannot depend on sort quirks.
-        for (var index = 1; (index < count); index++) {
-            var bodyIndex = indices[index];
-            var min = minimumX[index];
-            var max = maximumX[index];
-            var radius = radii[index];
-            var destination = index;
-
-            while (
-                (destination > 0) &&
-                ((minimumX[(destination - 1)] > min) ||
-                ((minimumX[(destination - 1)] == min) && (indices[(destination - 1)] > bodyIndex)))
-            ) {
-                indices[destination] = indices[(destination - 1)];
-                minimumX[destination] = minimumX[(destination - 1)];
-                maximumX[destination] = maximumX[(destination - 1)];
-                radii[destination] = radii[(destination - 1)];
-                destination--;
-            }
-            indices[destination] = bodyIndex;
-            minimumX[destination] = min;
-            maximumX[destination] = max;
-            radii[destination] = radius;
+            contacts[count++] = new DynamicContactBody(
+                Index: index,
+                MinimumX: body.FixedPosition.X - radius,
+                MaximumX: body.FixedPosition.X + radius,
+                Radius: radius
+            );
         }
 
         DynamicContactPotentialPairs = ((count * (count - 1)) / 2);
+        DynamicContactCandidates = 0;
+        DynamicContactLimitedBodies = 0;
         DynamicContactNarrowPairs = 0;
         DynamicContactResolvedPairs = 0;
+        RigidPairResolvedCount = 0;
+        RigidPairPassesThisTick = 0;
 
-        for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
-            var leftIndex = indices[leftOrdinal];
-            var left = m_entries[leftIndex].Body!;
-            var leftCollider = left.Collider!.Value;
+        // One full broadphase-plus-narrowphase sweep over the CURRENT contacts[]/count captured above: reused,
+        // unmodified, for the first pass and every extra pass, since a rigid pair's own positional correction can
+        // move a body into a THIRD one a later pass needs to see. The scratch spans are parameters, not captures —
+        // a local function cannot close over a ref struct. Returns candidate pairs routed to the rigid impulse path
+        // (used only to derive the extra-pass count below) — RigidPairResolvedCount is ResolveRigidPairContact's own
+        // to increment, one call at a time, never assigned here directly.
+        int RunSweep(Span<FixedBodyColliderVolume> leftScratch, Span<FixedBodyColliderVolume> rightScratch) {
+            var rigidResolvedThisPass = 0;
 
-            for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (minimumX[rightOrdinal] <= maximumX[leftOrdinal])); rightOrdinal++) {
-                var rightIndex = indices[rightOrdinal];
-                var right = m_entries[rightIndex].Body!;
-                var rightCollider = right.Collider!.Value;
-                var radius = (radii[leftOrdinal] + radii[rightOrdinal]);
-                var delta = (left.FixedPosition - right.FixedPosition);
+            // Refreshed from each body's CURRENT FixedPosition every pass (radius is collider-derived and does not
+            // change mid-tick): an earlier pass's own positional correction can move a body's X interval enough that
+            // the stale one either misses a pair it should now prune in, or keeps pruning in a pair that has since
+            // moved apart, before the Y/Z prune and narrowphase below (which already read live positions) ever see it.
+            for (var refreshOrdinal = 0; (refreshOrdinal < count); refreshOrdinal++) {
+                var refreshedRadius = contacts[refreshOrdinal].Radius;
+                var refreshedX = m_entries[contacts[refreshOrdinal].Index].Body!.FixedPosition.X;
 
+                contacts[refreshOrdinal] = (contacts[refreshOrdinal] with {
+                    MinimumX = (refreshedX - refreshedRadius),
+                    MaximumX = (refreshedX + refreshedRadius),
+                });
+            }
+
+            // Introspective sort keeps a badly reshuffled few-thousand-body frame O(n log n), while the body index
+            // is a complete tie-breaker that makes its result deterministic.
+            Array.Sort(array: contacts, index: 0, length: count);
+            Array.Clear(array: m_dynamicContactDegrees);
+
+            for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
+                var leftContact = contacts[leftOrdinal];
+                var leftIndex = leftContact.Index;
+                var left = m_entries[leftIndex].Body!;
+                var leftCollider = left.Collider!.Value;
+                if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                    continue;
+                }
+
+                var inspected = 0;
+                for (var rightOrdinal = (leftOrdinal + 1); ((rightOrdinal < count) && (contacts[rightOrdinal].MinimumX <= leftContact.MaximumX)); rightOrdinal++) {
+                    if (inspected >= m_bodyContactPolicy.CandidateBudget) {
+                        DynamicContactLimitedBodies++;
+                        break;
+                    }
+                    inspected++;
+                    DynamicContactCandidates++;
+                    var rightContact = contacts[rightOrdinal];
+                    var rightIndex = rightContact.Index;
+                    if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                        continue;
+                    }
+                    var right = m_entries[rightIndex].Body!;
+                    var rightCollider = right.Collider!.Value;
+                    var radius = (leftContact.Radius + rightContact.Radius);
+                    var delta = (left.FixedPosition - right.FixedPosition);
+
+                    if (
+                        (FixedQ4816.Abs(value: delta.Y) > radius) ||
+                        (FixedQ4816.Abs(value: delta.Z) > radius)
+                    ) {
+                        continue;
+                    }
+
+                    DynamicContactNarrowPairs++;
+
+                    if (FixedDynamicBodyContacts.TryCorrection(
+                        leftPosition: left.FixedPosition,
+                        leftOrientation: left.FixedOrientation,
+                        leftVolumes: left.ScaledColliderVolumes(
+                            volumes: leftCollider.Volumes,
+                            scratch: leftScratch
+                        ),
+                        rightPosition: right.FixedPosition,
+                        rightOrientation: right.FixedOrientation,
+                        rightVolumes: right.ScaledColliderVolumes(
+                            volumes: rightCollider.Volumes,
+                            scratch: rightScratch
+                        ),
+                        tieBreaker: leftIndex ^ rightIndex,
+                        correction: out var correction
+                    )) {
+                        var pairIsRigid = (left.IsRigid || right.IsRigid);
+
+                        if (pairIsRigid) {
+                            ResolveRigidPairContact(
+                                left: left,
+                                right: right,
+                                correction: correction
+                            );
+                            rigidResolvedThisPass++;
+                        } else {
+                            var shared = (correction / two);
+
+                            left.ApplyDynamicContact(correction: shared);
+                            right.ApplyDynamicContact(correction: -shared);
+                        }
+                        m_dynamicContactDegrees[leftIndex]++;
+                        m_dynamicContactDegrees[rightIndex]++;
+                        DynamicContactResolvedPairs++;
+                        if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            return rigidResolvedThisPass;
+        }
+
+        var firstPassRigidResolved = RunSweep(leftScratch, rightScratch);
+
+        RigidPairPassesThisTick = 1;
+
+        // The first pass's own resolved rigid-pair count derives how many EXTRA sweeps run: a lightly loaded tick
+        // (few clustered pairs — a rack break, a falling domino line) gets every authored pass, so the impulse chain
+        // crosses more than one pair-hop within THIS tick instead of propagating one body per tick; a heavily loaded
+        // one is bounded by RigidPairIterationBudget so a crowded tick's total extra-sweep work stays capped.
+        var extraIterations = (Math.Clamp(
+            value: (m_bodyContactPolicy.RigidPairIterationBudget / Math.Max(val1: 1, val2: firstPassRigidResolved)),
+            min: 1,
+            max: Math.Max(val1: 1, val2: m_bodyContactPolicy.RigidPairIterationCeiling)
+        ) - 1);
+
+        for (var extra = 0; ((extra < extraIterations) && (firstPassRigidResolved > 0)); extra++) {
+            RigidPairPassesThisTick++;
+
+            var thisPassRigidResolved = RunSweep(leftScratch, rightScratch);
+
+            if (thisPassRigidResolved <= 0) {
+                break;
+            }
+        }
+    }
+    /// <summary>Resolves every attached tether after every body has integrated and dynamic contacts have resolved —
+    /// the same "late correction over the whole population's current-tick pose" slot <see cref="ResolveDynamicContacts"/>
+    /// occupies, so a body-anchored tether reads its anchor's just-advanced pose rather than one tick stale. One-way by
+    /// construction: <see cref="WorldBody.SolveTether"/> only ever writes the tethered body, never the anchor — an
+    /// anchor body whose own entry is inactive or out of range this tick leaves its tethered body's rope untouched
+    /// rather than snapping it to a stale or garbage point.</summary>
+    public void ResolveTethers() {
+        for (var index = 0; (index < Capacity); index++) {
+            if (m_entries[index] is not { Active: true, Body: { TetherLength: not null } body }) {
+                continue;
+            }
+
+            FixedVector3 anchor;
+
+            if (body.TetherAnchorBodyIndex is { } anchorIndex) {
                 if (
-                    (FixedQ4816.Abs(value: delta.Y) > radius) ||
-                    (FixedQ4816.Abs(value: delta.Z) > radius)
+                    (anchorIndex >= Capacity) ||
+                    (m_entries[anchorIndex] is not { Active: true, Body: { } anchorBody })
                 ) {
                     continue;
                 }
 
-                DynamicContactNarrowPairs++;
+                var anchorOrientation = anchorBody.FixedOrientation;
+                var anchorPosition = anchorBody.FixedPosition;
+                var localOffset = body.TetherAnchorPointOrLocalOffset;
 
-                if (FixedDynamicBodyContacts.TryCorrection(
-                    leftPosition: left.FixedPosition,
-                    leftOrientation: left.FixedOrientation,
-                    leftVolumes: leftCollider.Volumes,
-                    rightPosition: right.FixedPosition,
-                    rightOrientation: right.FixedOrientation,
-                    rightVolumes: rightCollider.Volumes,
-                    tieBreaker: leftIndex ^ rightIndex,
-                    correction: out var correction
-                )) {
-                    var shared = (correction / two);
-
-                    left.ApplyDynamicContact(correction: shared);
-                    right.ApplyDynamicContact(correction: -shared);
-                    DynamicContactResolvedPairs++;
-                }
+                anchor = FixedTetherConstraint.ResolveAnchor(
+                    anchorOrientation: in anchorOrientation,
+                    anchorPosition: in anchorPosition,
+                    localOffset: in localOffset
+                );
+            } else {
+                anchor = body.TetherAnchorPointOrLocalOffset;
             }
+
+            body.SolveTether(anchor: anchor);
         }
     }
     /// <summary>Looks up a declared body motion program by name — the same table every kit's <see cref="WorldBody"/>
-    /// resolves against, exposed so a caller (the <c>player.motion</c> switch door) can validate coherence before
+    /// resolves against, exposed so a caller (the <c>body.motion</c> switch door) can validate coherence before
     /// asking a body to switch.</summary>
     /// <param name="name">The declared program name.</param>
     /// <param name="program">The compiled program, or <see langword="null"/> when <paramref name="name"/> is undeclared.</param>

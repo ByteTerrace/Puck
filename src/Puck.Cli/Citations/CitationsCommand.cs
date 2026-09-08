@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using Puck.Cli.Source;
+
 namespace Puck.Cli.Citations;
 
 // The `puck citations` verb: every verb-shaped token a document CITES, checked against vocabularies swept
@@ -140,9 +142,11 @@ internal static class CitationsCommand {
             enumerationSource = "the live `help` enumeration (booted headless + windowed)";
         }
 
-        var sourceFiles = Directory.EnumerateFiles(path: Path.Combine(path1: root, path2: "src"), searchPattern: "*.cs", searchOption: SearchOption.AllDirectories)
-            .OrderBy(keySelector: static path => path, comparer: StringComparer.Ordinal)
-            .ToArray();
+        var sourceFiles = FileWalk.Enumerate(verb: "citations", roots: [Path.Combine(path1: root, path2: "src")], include: [], exclude: [], extension: ".cs");
+
+        if (sourceFiles is null) {
+            return 2;
+        }
         // Command modules live in the COMPOSITION ROOT and nowhere else — src/Puck.World/ proper, never its
         // .Data or .Server siblings.
         //

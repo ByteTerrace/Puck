@@ -12,6 +12,7 @@
         "type": "string"
       },
       "position": {
+        "$ref": "./common.schema.json#/$defs/DocumentVector3",
         "description": "The seat\u0027s spawn position."
       },
       "yawDegrees": {
@@ -19,7 +20,8 @@
         "type": "number"
       }
     },
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldSpawnPoint"
   },
   "default": null
 }

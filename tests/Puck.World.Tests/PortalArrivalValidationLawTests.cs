@@ -2,7 +2,7 @@ using System.Numerics;
 
 using Xunit;
 
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.SignedDistance;
 
 namespace Puck.World.Tests;
@@ -29,10 +29,10 @@ public sealed class PortalArrivalValidationLawTests {
     // separately, WorldPortalCounterpart's own placement/face resolution) checks a portal-bearing placement against.
     // Mirrors Fixtures.BuildBallCreation's own canonicalize-at-build shape (a real creation, hash COMPILER-derived
     // through the SAME pipeline the validator re-verifies, never hand-pinned). The face names a BOX shape because a
-    // portal facet needs a surface that maps onto a walkable aperture (WorldFaceApertureKind) — the aperture refusal
+    // portal facet needs a surface that opens a walkable aperture (WorldFaceApertures) — the aperture refusal
     // is its own law below, so every other law here must clear it to discriminate on what it is actually testing.
-    private static WorldCreation BuildDoorCreation() => BuildDoorCreation(faceNamesShape: true, faceShapeType: AvatarPrimitive.Box);
-    private static WorldCreation BuildDoorCreation(AvatarPrimitive faceShapeType, bool faceNamesShape) {
+    private static WorldPrototype BuildDoorCreation() => BuildDoorCreation(faceNamesShape: true, faceShapeType: SdfSolidPrimitive.Box);
+    private static WorldPrototype BuildDoorCreation(SdfSolidPrimitive faceShapeType, bool faceNamesShape) {
         var shape = new ShapeDocument(
             Id: 0,
             Name: null,
@@ -55,7 +55,7 @@ public sealed class PortalArrivalValidationLawTests {
         );
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "door");
 
-        return new WorldCreation(Id: "door", Document: canonical.Document, HashRaw: canonical.Hash);
+        return new WorldPrototype(Id: "door", Document: canonical.Document, HashRaw: canonical.Hash);
     }
     // A document declaring ONE valid destination/reference pair and ONE placement whose "door" face carries a
     // portal facet with the candidate arrival/counterpart — everything else is Fixtures.BuildDocument's own minimal
@@ -65,7 +65,7 @@ public sealed class PortalArrivalValidationLawTests {
         var portal = new WorldPlacementPortal(Destination: DestinationName, Travel: null, Arrival: arrival, Counterpart: counterpart);
         var placement = new WorldPlacement(
             Id: DoorPlacementId,
-            CreationId: creation.Id,
+            PrototypeId: creation.Id,
             Position: Vector3.Zero,
             YawDegrees: 0f,
             Scale: 1f,
@@ -74,9 +74,9 @@ public sealed class PortalArrivalValidationLawTests {
 
         return Fixtures.BuildDocument() with {
             CreationsRaw = [creation],
-            PlacementsRaw = [placement],
-            References = [new WorldReference(Name: WorldSafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
-            Destinations = [new WorldDestination(Name: WorldSafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
+            PlacementRowsRaw = [placement],
+            References = [new WorldReference(Name: SafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
+            Destinations = [new WorldDestination(Name: SafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
         };
     }
     private static bool TryValidate(WorldPortalArrival arrival, string? counterpart) {
@@ -127,11 +127,11 @@ public sealed class PortalArrivalValidationLawTests {
             Faces = [.. creation.Document.Behavior!.Faces!, new CreationFaceDocument(DefaultSource: null, Name: "back", ShapeId: null)],
         };
         var canonical = CreationCanonicalizer.Canonicalize(document: (creation.Document with { Behavior = behavior }), source: "door");
-        var twoFaced = new WorldCreation(Id: creation.Id, Document: canonical.Document, HashRaw: canonical.Hash);
+        var twoFaced = new WorldPrototype(Id: creation.Id, Document: canonical.Document, HashRaw: canonical.Hash);
         var portal = new WorldPlacementPortal(Destination: DestinationName, Travel: null, Arrival: WorldPortalArrival.Spawn, Counterpart: null);
         var placement = new WorldPlacement(
             Id: DoorPlacementId,
-            CreationId: twoFaced.Id,
+            PrototypeId: twoFaced.Id,
             Position: Vector3.Zero,
             YawDegrees: 0f,
             Scale: 1f,
@@ -143,9 +143,9 @@ public sealed class PortalArrivalValidationLawTests {
 
         return Fixtures.BuildDocument() with {
             CreationsRaw = [twoFaced],
-            PlacementsRaw = [placement],
-            References = [new WorldReference(Name: WorldSafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
-            Destinations = [new WorldDestination(Name: WorldSafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
+            PlacementRowsRaw = [placement],
+            References = [new WorldReference(Name: SafeName.Parse(candidate: ReferenceName), Document: "worlds/dest.world.json")],
+            Destinations = [new WorldDestination(Name: SafeName.Parse(candidate: DestinationName), Reference: ReferenceName, Durability: WorldDestinationDurability.Ephemeral)],
         };
     }
 
@@ -206,7 +206,7 @@ public sealed class PortalArrivalValidationLawTests {
     [Fact]
     public void TryResolve_MissingPlacement_RefusesNamingIt() {
         var definition = Fixtures.BuildDocument() with {
-            PlacementsRaw = [new WorldPlacement(Id: "real-placement", CreationId: "real-placement", Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, FaceSources: [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())])],
+            PlacementRowsRaw = [new WorldPlacement(Id: "real-placement", PrototypeId: "real-placement", Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, FaceSources: [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())])],
         };
 
         var resolved = WorldPortalCounterpart.TryResolve(counterpart: $"no-such-placement/{DoorFace}", definition: definition, face: out var face, placement: out var placement, reason: out var reason);
@@ -219,7 +219,7 @@ public sealed class PortalArrivalValidationLawTests {
     [Fact]
     public void TryResolve_MissingFace_RefusesNamingIt() {
         var definition = Fixtures.BuildDocument() with {
-            PlacementsRaw = [new WorldPlacement(Id: DoorPlacementId, CreationId: DoorPlacementId, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, FaceSources: [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())])],
+            PlacementRowsRaw = [new WorldPlacement(Id: DoorPlacementId, PrototypeId: DoorPlacementId, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, FaceSources: [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())])],
         };
 
         var resolved = WorldPortalCounterpart.TryResolve(counterpart: $"{DoorPlacementId}/no-such-face", definition: definition, face: out var face, placement: out var placement, reason: out var reason);
@@ -232,7 +232,7 @@ public sealed class PortalArrivalValidationLawTests {
     [Fact]
     public void TryResolve_RealPlacementAndFace_Succeeds_ControlForTheTwoRefusalsAbove() {
         var definition = Fixtures.BuildDocument() with {
-            PlacementsRaw = [new WorldPlacement(Id: DoorPlacementId, CreationId: DoorPlacementId, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, FaceSources: [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())])],
+            PlacementRowsRaw = [new WorldPlacement(Id: DoorPlacementId, PrototypeId: DoorPlacementId, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, FaceSources: [new WorldPlacementFace(Face: DoorFace, Source: new WorldScreenSource.None())])],
         };
 
         var resolved = WorldPortalCounterpart.TryResolve(counterpart: $"{DoorPlacementId}/{DoorFace}", definition: definition, face: out var face, placement: out var placement, reason: out var reason);

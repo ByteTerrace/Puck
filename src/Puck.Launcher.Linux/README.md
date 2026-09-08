@@ -8,7 +8,8 @@ one backend Linux can serve.
 Registers, in order: `Puck.Platform.AddPlatformWindowing` (neutral),
 `Puck.Platform.Linux.AddLinuxPlatformWindowing` (the null clipboard and the
 Wayland/Xcb window backends), `Puck.Memory.AddPuckAllocator`, and
-`AddVulkanPresenter` + its `SurfacePresenterDescriptor`. No
+`Puck.Vulkan.Presentation.AddVulkanHostedPresentation` (presenter, neutral
+`IGpuDeviceContext` alias, and `SurfacePresenterDescriptor`). No
 `hostsOnDirectX` parameter — this project's closure cannot name
 `Puck.DirectX`/`Puck.DirectX.Presentation` by construction, enforced by the
 `Puck.Launcher.Linux` exact-equality lane profile in

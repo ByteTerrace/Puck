@@ -84,7 +84,9 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
         m_cartridge = cartridge;
         m_identity = AgbMachineIdentity.Compute(
             bios: bios.Image.Span,
-            rom: cartridge.Rom
+            rom: cartridge.Rom,
+            prefetchDisabled: bus.PrefetchDisabled,
+            hasRtc: cartridge.HasRtc
         );
         BiosIdentity = AgbBiosProfile.Identify(image: bios.Image.Span);
     }
@@ -101,7 +103,7 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
     public IAgbPpu Ppu => m_ppu;
     /// <summary>Gets the audio-processing unit.</summary>
     public IAgbApu Apu => m_apu;
-    /// <summary>Gets the identity a snapshot of this machine is stamped with (format version + BIOS/ROM fingerprint).</summary>
+    /// <summary>Gets the identity a snapshot of this machine is stamped with (format version, BIOS/ROM fingerprint and effective hardware options).</summary>
     public AgbMachineIdentity Identity => m_identity;
     /// <summary>Gets the current master-clock cycle counter.</summary>
     public long Cycles => m_scheduler.Now;
@@ -117,24 +119,24 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
     public void SetKeyInput(ushort keys) {
         m_concreteBus?.SetKeyInput(keys: keys);
     }
-    /// <summary>Executes one instruction (or a pending exception entry).</summary>
+    /// <summary>Executes one instruction or exception entry, or advances a halted idle cycle and pending DMA.</summary>
     public void Step() {
         m_cpu.Step();
     }
     /// <summary>Runs the machine for one full frame (~280,896 master cycles). Returns the number of
-    /// instructions executed.</summary>
+    /// CPU steps, including halted idle steps.</summary>
     public int RunFrame() {
         return RunCycles(cycles: CyclesPerFrame);
     }
     /// <summary>Advances the machine by an exact master-cycle budget — the seam a host engine drives, handing in the
     /// precise cycle count its frame's tick budget bought so emulated time tracks the deterministic tick accumulator
     /// rather than the produced-frame cadence (the Advanced GamingBrick analogue of HumbleGamingBrick's
-    /// <c>Machine.Run</c>). Steps whole instructions until the master clock has advanced at least
-    /// <paramref name="cycles"/> further; the final instruction's small overshoot is itself deterministic — identical
+    /// <c>Machine.Run</c>). Steps whole instructions or halted idle cycles until the master clock has advanced at least
+    /// <paramref name="cycles"/> further; the final instruction or DMA burst's overshoot is itself deterministic — identical
     /// on every replay of the same budget sequence — so it drifts no state between runs. A non-positive budget, or a
     /// bare test bus with no master clock, steps nothing.</summary>
     /// <param name="cycles">The master-cycle budget to advance this call.</param>
-    /// <returns>The number of instructions executed.</returns>
+    /// <returns>The number of CPU steps, including halted idle steps.</returns>
     public int RunCycles(long cycles) {
         if (
             (m_concreteBus is null) ||
@@ -229,7 +231,7 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
         }
     }
     /// <summary>Replaces this machine's entire state with a snapshot's, repositioning the master clock and every
-    /// component. Rejects a snapshot whose machine identity (format version / BIOS / ROM) does not match this
+    /// component. Rejects a snapshot whose machine identity (format version / BIOS / ROM / hardware options) does not match this
     /// machine, and faults if the restore does not consume the snapshot exactly — either signals a save/load field
     /// drift or a mismatched image rather than silently loading wrong state.</summary>
     /// <param name="snapshot">The snapshot to restore.</param>
@@ -241,7 +243,7 @@ public sealed class AdvancedGamingBrickMachine : ISnapshotableMachine {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
 
         if (snapshot.Identity != m_identity) {
-            throw new InvalidOperationException(message: "Snapshot identity (format version / BIOS / ROM) does not match this machine; refusing to restore a mismatched image.");
+            throw new InvalidOperationException(message: "Snapshot identity (format version / BIOS / ROM / hardware options) does not match this machine; refusing to restore a mismatched image.");
         }
 
         var reader = snapshot.OpenReader();

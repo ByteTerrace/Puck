@@ -41,7 +41,7 @@ internal sealed class LogicalLinesRewriter : CSharpSyntaxRewriter {
         var laidOut = paren
             .WithOpenParenToken(openParenToken: paren.OpenParenToken.WithTrailingTrivia())
             .WithExpression(expression: Layout(binary: binary, innerIndent: (indent + "    ")))
-            .WithCloseParenToken(closeParenToken: paren.CloseParenToken.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(text: indent)));
+            .WithCloseParenToken(closeParenToken: paren.CloseParenToken.WithLeadingTrivia(RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: indent)));
 
         return visited.WithExpression(expression: laidOut);
     }
@@ -64,7 +64,7 @@ internal sealed class LogicalLinesRewriter : CSharpSyntaxRewriter {
         var indent = LineIndentAt(node: original, position: keyword.SpanStart);
         var laidOut = Layout(binary: binary, innerIndent: (indent + "    "));
         var opened = openParen.WithTrailingTrivia();
-        var closed = closeParen.WithLeadingTrivia(SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(text: indent));
+        var closed = closeParen.WithLeadingTrivia(RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: indent));
 
         return visited switch {
             IfStatementSyntax ifStatement => ifStatement.WithOpenParenToken(openParenToken: opened).WithCondition(condition: laidOut).WithCloseParenToken(closeParenToken: closed),
@@ -99,7 +99,7 @@ internal sealed class LogicalLinesRewriter : CSharpSyntaxRewriter {
 
         Flatten(binary: binary, kind: kind, operands: operands, operators: operators);
 
-        var operandLead = new[] { SyntaxFactory.CarriageReturnLineFeed, SyntaxFactory.Whitespace(text: innerIndent) };
+        var operandLead = new[] { RewriteShaping.EndOfLine, SyntaxFactory.Whitespace(text: innerIndent) };
         var result = operands[0].WithLeadingTrivia(trivia: operandLead).WithTrailingTrivia();
 
         for (var index = 0; (index < operators.Count); index++) {

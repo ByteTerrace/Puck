@@ -1,0 +1,890 @@
+{
+  "prototypes": [
+    {
+      "id": "diveDock",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "diveDock",
+        "palette": [
+          {
+            "color": "#8C6A47",
+            "specular": 0.15,
+            "shininess": 6
+          },
+          {
+            "color": "#5A4530",
+            "specular": 0.1,
+            "shininess": 4
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "deckSlab",
+            "type": "Box",
+            "position": [
+              0,
+              -0.075,
+              -0.35
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              3.0,
+              0.15,
+              2.5
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0.0
+          },
+          {
+            "id": 1,
+            "name": "railWest",
+            "type": "Box",
+            "position": [
+              -1.45,
+              0.35,
+              -1.3
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.08,
+              0.7,
+              0.08
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0.0
+          },
+          {
+            "id": 2,
+            "name": "railEast",
+            "type": "Box",
+            "position": [
+              1.45,
+              0.35,
+              -1.3
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.08,
+              0.7,
+              0.08
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "diveBasin",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "diveBasin",
+        "palette": [
+          {
+            "color": "#6E6A63"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "floor",
+            "type": "Box",
+            "position": [
+              0,
+              -0.15,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              7.8999999999999995,
+              0.3,
+              7.8999999999999995
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0.0
+          },
+          {
+            "id": 1,
+            "name": "wallNorth",
+            "type": "Box",
+            "position": [
+              0,
+              1.5,
+              -3.9499999999999997
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              7.8999999999999995,
+              3.0,
+              0.3
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0.0
+          },
+          {
+            "id": 2,
+            "name": "wallSouth",
+            "type": "Box",
+            "position": [
+              0,
+              1.5,
+              3.9499999999999997
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              7.8999999999999995,
+              3.0,
+              0.3
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0.0
+          },
+          {
+            "id": 3,
+            "name": "wallWest",
+            "type": "Box",
+            "position": [
+              -3.9499999999999997,
+              1.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.3,
+              3.0,
+              7.8999999999999995
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0.0
+          },
+          {
+            "id": 4,
+            "name": "wallEast",
+            "type": "Box",
+            "position": [
+              3.9499999999999997,
+              1.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.3,
+              3.0,
+              7.8999999999999995
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "diveMarker",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "diveMarker",
+        "palette": [
+          {
+            "color": "#FFFFFF"
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "probe",
+            "type": "Sphere",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.02,
+              0.02,
+              0.02
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "fish",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "fish",
+        "palette": [
+          {
+            "color": "#4E86B8",
+            "specular": 0.3,
+            "shininess": 40
+          },
+          {
+            "color": "#2C5A7E",
+            "specular": 0.3,
+            "shininess": 40
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "body",
+            "type": "Capsule",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0.7071,
+              0.7071
+            ],
+            "scale": [
+              0.09,
+              0.16,
+              0.09
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "tail",
+            "type": "Cone",
+            "position": [
+              0,
+              0,
+              -0.22
+            ],
+            "rotation": [
+              0.7071,
+              0,
+              0,
+              0.7071
+            ],
+            "scale": [
+              0.1,
+              0.08,
+              0.1
+            ],
+            "material": 1,
+            "blend": "SmoothUnion",
+            "smooth": 0.04
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "diveCourt",
+        "prototypeId": "diveDock",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "diveBasin",
+        "parent": "diveCourt",
+        "prototypeId": "diveBasin",
+        "position": [
+          0.0,
+          -2.85,
+          5.0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        }
+      },
+      {
+        "id": "diveDepth1",
+        "parent": "diveCourt",
+        "prototypeId": "diveMarker",
+        "position": [
+          0.0,
+          -2.85,
+          5.0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "region": {
+          "radius": 0.8
+        }
+      },
+      {
+        "id": "diveDepth2",
+        "parent": "diveCourt",
+        "prototypeId": "diveMarker",
+        "position": [
+          0.0,
+          -2.85,
+          5.0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "region": {
+          "radius": 1.6
+        }
+      },
+      {
+        "id": "diveDepth3",
+        "parent": "diveCourt",
+        "prototypeId": "diveMarker",
+        "position": [
+          0.0,
+          -2.85,
+          5.0
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "region": {
+          "radius": 2.4
+        }
+      },
+      {
+        "id": "diveFish",
+        "prototypeId": "fish",
+        "position": [
+          1.6,
+          -1.35,
+          6.2
+        ],
+        "yawDegrees": 0,
+        "scale": 1,
+        "inhabit": {
+          "count": 4,
+          "kit": "fishKit",
+          "look": "fish",
+          "source": {
+            "$type": "producer",
+            "name": "diveSchool"
+          },
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 1.0
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.001
+            }
+          }
+        },
+        "parent": "diveCourt"
+      }
+    ]
+  },
+  "state": {
+    "lattices": [
+      {
+        "$type": "field",
+        "name": "pool",
+        "origin": [
+          -4.0,
+          -2.85,
+          1.0
+        ],
+        "cellSize": 0.5,
+        "width": 16,
+        "depth": 16,
+        "layers": 1
+      }
+    ],
+    "world": [
+      {
+        "name": "water",
+        "kind": "Fixed",
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "pool"
+        },
+        "field": {
+          "initial": 2.4,
+          "min": 0,
+          "max": 3.0,
+          "heightScale": 1,
+          "color": "#2E76AF",
+          "medium": {},
+          "paint": [
+            {
+              "$type": "rect",
+              "minX": -4.0,
+              "minZ": 1.0,
+              "maxX": 4.0,
+              "maxZ": 9.0,
+              "value": 2.4
+            }
+          ]
+        }
+      },
+      {
+        "name": "depth",
+        "kind": "Fixed",
+        "value": "0",
+        "min": "0",
+        "max": "3"
+      },
+      {
+        "name": "dived",
+        "kind": "Int",
+        "value": 0,
+        "min": 0,
+        "max": 1
+      }
+    ]
+  },
+  "bodyMotionPrograms": [
+    {
+      "name": "diveDiverMotion",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "diveFishMotion",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "diveSchool",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "ProduceFlockIntent"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "diver",
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "diveDiverMotion",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1,
+            0
+          ],
+          "radius": 0.35
+        },
+        "motion": {
+          "facingSnap": false,
+          "speed": {
+            "value": 3.0
+          },
+          "turn": {
+            "rate": 2.2
+          },
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "holds": [
+            {
+              "name": "ground",
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "hold": "Gravity",
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "reach": 1.2
+            },
+            {
+              "name": "water",
+              "bond": "Medium",
+              "hold": "None",
+              "medium": {
+                "idleDrift": -0.4,
+                "equilibriumOffset": 0.6,
+                "settleRate": 1.2
+              },
+              "envelope": {
+                "riseSpeed": 2.5,
+                "sinkSpeed": 2.5
+              },
+              "thrust": 1.0
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "envelope": {
+                "sinkSpeed": 40
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "fishKit",
+        "bodyContact": "Overlap",
+        "bodyMotionProgram": "diveFishMotion",
+        "collider": {
+          "$type": "sphere",
+          "radius": 0.1
+        },
+        "autonomy": {
+          "motionSeconds": 0.1,
+          "steeringSeconds": 0.1
+        },
+        "motion": {
+          "facingSnap": true,
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 1.0
+          },
+          "turn": {
+            "rate": 1.5
+          },
+          "holds": [
+            {
+              "name": "water",
+              "bond": "Medium",
+              "hold": "None",
+              "medium": {
+                "idleDrift": 0.6,
+                "equilibriumOffset": 0.6,
+                "settleRate": 0.8
+              },
+              "envelope": {
+                "riseSpeed": 1.0,
+                "sinkSpeed": 1.0
+              }
+            },
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "gravity": {
+                "fall": 1,
+                "rise": 1
+              },
+              "envelope": {
+                "sinkSpeed": 1
+              }
+            }
+          ]
+        },
+        "producers": {
+          "diveSchool": {
+            "channels": {},
+            "flock": {
+              "alignment": 0.6,
+              "arrivalDistance": 0.2,
+              "candidateBudget": 12,
+              "cohesion": 0.5,
+              "goal": 0,
+              "halfAngleDegrees": 180,
+              "inertia": 0.3,
+              "maxNeighbors": 6,
+              "movementDomain": "pool",
+              "range": 3,
+              "requiresLineOfSight": false,
+              "separation": 1.0,
+              "separationRadius": 0.35,
+              "space": "Volume",
+              "updateSeconds": 0.1
+            },
+            "scalars": {}
+          }
+        }
+      }
+    ]
+  },
+  "looks": {
+    "rows": [
+      {
+        "name": "fish",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "fish"
+        },
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        }
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "dive-depth-deep",
+      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "state": "$region:diveDepth1",
+        "comparison": "GreaterOrEqual",
+        "value": 1
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "depth",
+          "value": 2.4
+        }
+      ]
+    },
+    {
+      "name": "dive-depth-mid",
+      "mode": "Level",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "$region:diveDepth1",
+            "comparison": "Equal",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "$region:diveDepth2",
+            "comparison": "GreaterOrEqual",
+            "value": 1
+          }
+        ]
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "depth",
+          "value": 1.6
+        }
+      ]
+    },
+    {
+      "name": "dive-depth-shallow",
+      "mode": "Level",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "$region:diveDepth2",
+            "comparison": "Equal",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "$region:diveDepth3",
+            "comparison": "GreaterOrEqual",
+            "value": 1
+          }
+        ]
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "depth",
+          "value": 0.8
+        }
+      ]
+    },
+    {
+      "name": "dive-depth-dry",
+      "mode": "Level",
+      "gate": {
+        "$type": "compareState",
+        "state": "$region:diveDepth3",
+        "comparison": "Equal",
+        "value": 0
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "depth",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "dive-dived-latch",
+      "mode": "Edge",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "depth",
+            "comparison": "GreaterOrEqual",
+            "value": 1.6
+          },
+          {
+            "$type": "compareState",
+            "state": "dived",
+            "comparison": "Equal",
+            "value": 0
+          }
+        ]
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "dived",
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "spawnPoints": [
+    {
+      "id": "dive-arrival",
+      "position": [
+        0,
+        0.1,
+        -1.3
+      ],
+      "yawDegrees": 0
+    }
+  ],
+  "navigation": {
+    "domains": [
+      {
+        "name": "pool",
+        "kind": "Medium",
+        "origin": [
+          -4.0,
+          -2.85,
+          1.0
+        ],
+        "cellSize": 0.5,
+        "width": 16,
+        "depth": 16,
+        "layers": 3,
+        "agentRadius": 0.24,
+        "arrivalDistance": 0.4,
+        "maxExpandedNodes": 768,
+        "maxPathNodes": 64,
+        "medium": "water",
+        "shared": {
+          "expandedNodesPerTick": 64,
+          "goalCapacity": 2
+        }
+      }
+    ]
+  },
+  "exports": {
+    "reads": [
+      "depth",
+      "dived"
+    ],
+    "actions": [],
+    "bindings": [
+      "depth"
+    ]
+  }
+}

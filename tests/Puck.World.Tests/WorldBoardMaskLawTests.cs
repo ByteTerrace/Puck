@@ -1,0 +1,131 @@
+using Puck.Assets.Documents;
+using Puck.World.Protocol;
+using Puck.World.Server;
+using Xunit;
+
+namespace Puck.World.Tests;
+
+/// <summary>Pins the one cell-set vocabulary: occupancy read as a 64-bit mask, the topology-aware shift that drops
+/// bits at an edge, bit-algebra composing two masks, the composed set landing back on a board via <c>writeSet</c>,
+/// and the ceilings that refuse.</summary>
+public sealed class WorldBoardMaskLawTests {
+    [Fact]
+    public void OccupancyReadsAsAMaskAndABoardShiftFollowsTheTopologyWithoutWrapping() {
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 2), Cell("2", 2), Cell("3", 1)], Domain: new StateDomain.CellsOf("map"));
+        var definition = Document([board, Slot("mask"), Slot("east"), Slot("north")], [
+            new WorldRule(Name("mask"), [new ActionEffect.SetState(State: "mask", FromState: "$board:mask:board:2:2")]),
+            new WorldRule(Name("east"), [new ActionEffect.SetState(State: "east", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "$board:mask:board:1:1"), new ValueToken.BoardShift(Topology: "map", Direction: "E"),
+            ]))]),
+            new WorldRule(Name("north"), [new ActionEffect.SetState(State: "north", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "$board:mask:board:1:1"), new ValueToken.BoardShift(Topology: "map", Direction: "N"),
+            ]))]),
+        ]);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+
+        var topology = TopologyCompilation.Find(definition.StateRaw, "map")!;
+        var east = topology.Direction("E");
+        var north = topology.Direction("N");
+        Assert.Equal(0b0110L, Value(fixture, "mask"));
+        var expectedEast = Shift(topology, 0b1001L, east);
+        Assert.Equal(expectedEast, Value(fixture, "east"));
+        Assert.NotEqual(0L, expectedEast);
+        // Row 0 is an edge row northward in one of the two orientations, or a shift away from it: either way the
+        // result is the topology's own answer, and nothing wrapped.
+        Assert.Equal(Shift(topology, 0b1001L, north), Value(fixture, "north"));
+    }
+
+    [Fact]
+    public void ASetLandsBackOnTheBoardThroughWriteSetAndBitAlgebraComposesTwoBoardsIntoOne() {
+        var board = new WorldStateRow(Name("board"), CellKind.Int, Cells: [Cell("0", 1), Cell("1", 7), Cell("3", 7)], Domain: new StateDomain.CellsOf("map"));
+        var other = new WorldStateRow(Name("other"), CellKind.Int, Cells: [Cell("0", 1), Cell("5", 1)], Domain: new StateDomain.CellsOf("map"));
+        var target = new WorldStateRow(Name("target"), CellKind.Bool, Domain: new StateDomain.CellsOf("map"));
+        var definition = Document([board, other, target, Slot("mask", 0b1010L), Slot("both"), Slot("either"), Slot("onlyLeft"), Slot("complement")], [
+            new WorldRule(Name("both"), [new ActionEffect.SetState(State: "both", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "$board:mask:board:1:100"), new ValueToken.State(Name: "$board:mask:other:1:100"), new ValueToken.BitAnd(),
+            ]))]),
+            new WorldRule(Name("either"), [new ActionEffect.SetState(State: "either", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "$board:mask:board:1:100"), new ValueToken.State(Name: "$board:mask:other:1:100"), new ValueToken.BitOr(),
+            ]))]),
+            new WorldRule(Name("onlyLeft"), [new ActionEffect.SetState(State: "onlyLeft", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "$board:mask:board:1:100"), new ValueToken.State(Name: "$board:mask:other:1:100"), new ValueToken.BitNot(), new ValueToken.BitAnd(),
+            ]))]),
+            new WorldRule(Name("complement"), [new ActionEffect.SetState(State: "complement", Expression: new ValueExpression(Tokens: [
+                new ValueToken.State(Name: "$board:mask:other:1:100"), new ValueToken.BitNot(),
+            ]))]),
+        ]);
+
+        var painted = Apply(definition, new StateTransform.WriteSet("board", "mask", Value: 7));
+        var cells = Find(painted, "board").Cells!;
+        Assert.Equal(7L, StateRows.FindCell(cells, Name("1"))!.Value);
+        Assert.Equal(7L, StateRows.FindCell(cells, Name("3"))!.Value);
+        Assert.Equal(1L, StateRows.FindCell(cells, Name("0"))!.Value);
+
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        fixture.Step();
+        // Every op the old row-vs-row `combine` transform offered is now composed once from $board:mask reads and
+        // the generic bit operators, then lands back on the target board through the one writeSet transform: no
+        // second vocabulary for the same board algebra.
+        var both = Apply(fixture.Server.Definition, new StateTransform.WriteSet("target", "both", Value: 1));
+        Assert.Equal(new[] { "0" }, Members(both, "target"));
+        Assert.Single(Find(both, "target").Cells!);
+        var either = Apply(fixture.Server.Definition, new StateTransform.WriteSet("target", "either", Value: 1));
+        Assert.Equal(new[] { "0", "1", "3", "5" }, Members(either, "target"));
+        var onlyLeft = Apply(fixture.Server.Definition, new StateTransform.WriteSet("target", "onlyLeft", Value: 1));
+        Assert.Equal(new[] { "1", "3" }, Members(onlyLeft, "target"));
+        // BitNot complements past the topology's own cell count; writeSet clips the write to the board's real cells.
+        var complement = Apply(fixture.Server.Definition, new StateTransform.WriteSet("target", "complement", Value: 1));
+        Assert.Equal(14, Members(complement, "target").Length);
+    }
+
+    [Fact]
+    public void MasksRefuseTopologiesPastSixtyFourCells() {
+        var wide = new WorldStateRow(Name("wide"), CellKind.Int, Domain: new StateDomain.CellsOf("big"));
+        var small = new WorldStateRow(Name("small"), CellKind.Int, Domain: new StateDomain.CellsOf("map"));
+        var definition = Document([wide, small, Slot("mask")], [new WorldRule(Name("mask"), [new ActionEffect.SetState(State: "mask", FromState: "$board:mask:wide:1:1")])], [],
+            lattices: [Grid("map", 4), Grid("big", 9)]);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(definition, out var maskReason));
+        Assert.Contains("at most 64", maskReason);
+
+        var shifted = Document([wide, small, Slot("mask")], [new WorldRule(Name("shift"), [new ActionEffect.SetState(State: "mask", Expression: new ValueExpression(Tokens: [
+            new ValueToken.Constant(Value: 1m), new ValueToken.BoardShift(Topology: "big", Direction: "E"),
+        ]))])], [], lattices: [Grid("map", 4), Grid("big", 9)]);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(shifted, out var shiftReason));
+        Assert.Contains("at most 64", shiftReason);
+
+        var mixed = Document([wide, small, Slot("mask")], [], [], lattices: [Grid("map", 4), Grid("big", 9)]);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(mixed with { Rules = [new WorldRule(Name("bad"), [new ActionEffect.TransformState(new StateTransform.WriteSet("wide", "mask"))])] }, out var setReason));
+        Assert.Contains("at most 64", setReason);
+    }
+
+    private static long Shift(CompiledTopology topology, long mask, int direction) {
+        var result = 0L;
+        for (var cell = 0; cell < topology.CellCount; cell++) {
+            if (((mask >> cell) & 1L) != 0L && topology.Neighbour(cell, direction) is var next && next >= 0) {
+                result |= 1L << next;
+            }
+        }
+        return result;
+    }
+    private static string[] Members(WorldDefinition document, string row) =>
+        (Find(document, row).Cells ?? []).Where(c => c.Value != 0L).Select(c => c.Key.Value).ToArray();
+    private static LatticeTopology.Grid Grid(string name, int side) =>
+        new(name, new DocumentVector3(0, 0, 0), 1, side, side);
+    private static WorldDefinition Document(WorldStateRow[] rows, WorldRule[] rules, PatternRow[]? patterns = null, LatticeTopology[]? lattices = null) => Fixtures.BuildDocument() with {
+        StateRaw = new(World: rows, Lattices: lattices ?? [Grid("map", 4)]),
+        PatternsRaw = patterns ?? [],
+        Rules = rules,
+    };
+    private static WorldDefinition Apply(WorldDefinition definition, StateTransform transform) {
+        Assert.True(WorldStateTransforms.TryApply(definition, transform, WorldPrincipal.World, 1, "test", out var candidate, out var reason), reason);
+        return candidate!;
+    }
+    private static CellName Name(string value) => CellName.Parse(value);
+    private static StateCell Cell(string key, long value = 1) => new(Name(key), value);
+    private static WorldStateRow Slot(string name, long value = 0) => new(Name(name), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, value)]);
+    private static WorldStateRow Find(WorldDefinition document, string row) => WorldDefinitionRows.FindStateRow(document.State, row)!;
+    private static long Value(WorldFixture fixture, string row) =>
+        StateRows.FindCell(WorldDefinitionRows.FindStateRow(fixture.Server.Definition.State, row)!.Cells, WorldStateRow.SlotKey)!.Value;
+}

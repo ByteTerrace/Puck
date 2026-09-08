@@ -407,7 +407,7 @@ internal static class ScalarFieldClaims {
     /// <para>
     /// Both were contract gaps rather than arithmetic ones. NaN survived <c>Round</c> and <c>Clamp</c> and reached an
     /// unchecked floating-to-unsigned conversion, for which the CLI specifies no portable result — x64 happens to give
-    /// zero, and the tests pinned that. And <c>QuadraticSurd.ToString</c> formatted its components with the ambient
+    /// zero, and the tests pinned that. And <c>RealQuadratic.ToString</c> formatted its components with the ambient
     /// provider, so a host culture could inject U+200E, U+061C or U+2212 into text that reaches logs and golden files.
     /// </para>
     /// <para>
@@ -424,7 +424,7 @@ internal static class ScalarFieldClaims {
         if (UnitFraction32.FromDouble(value: -1d) != default) { return "UnitFraction32.FromDouble(-1) did not clamp to zero"; }
         if (UnitFraction16.FromDouble(value: 2d) != UnitFraction16.MaxValue) { return "UnitFraction16.FromDouble(2) did not clamp to the maximum"; }
 
-        var surd = QuadraticSurd.Create(denominator: 3, radicand: 2, rationalNumerator: -1234567890, surdNumerator: 1);
+        var surd = RealQuadratic.Create(denominator: 3, radicand: 2, rationalNumerator: -1234567890, surdNumerator: 1);
         var invariant = surd.ToString();
         var original = CultureInfo.CurrentCulture;
 
@@ -441,7 +441,7 @@ internal static class ScalarFieldClaims {
             var rendered = surd.ToString();
 
             if (rendered != invariant) {
-                return $"QuadraticSurd.ToString read the current culture: a host whose negative sign is U+2212 rendered '{rendered}' where the invariant rendering is '{invariant}'";
+                return $"RealQuadratic.ToString read the current culture: a host whose negative sign is U+2212 rendered '{rendered}' where the invariant rendering is '{invariant}'";
             }
 
             // The probe has teeth only if the ambient provider really would have changed the text, so prove that here

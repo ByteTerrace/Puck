@@ -157,19 +157,19 @@ internal static partial class Subjects {
 
         if (PrimeFieldModulus != new PrimeFieldMaterial(field: PrimeField64.Create(modulus: PrimeFieldModulus)).Field.Modulus) { return "prime-field: the wrapping constructor lost the field"; }
 
-        var rational = MaterialIdentities<QuadraticSurd, RationalMaterial>(
+        var rational = MaterialIdentities<RealQuadratic, RationalMaterial>(
             name: "rational",
             material: default,
             charges: Map(
                 source: charges,
-                selector: static raw => QuadraticSurd.Rational(
+                selector: static raw => RealQuadratic.Rational(
                     denominator: 65536,
                     numerator: raw
                 )
             ),
             values: Map(
                 source: values,
-                selector: static raw => QuadraticSurd.Rational(
+                selector: static raw => RealQuadratic.Rational(
                     denominator: 65536,
                     numerator: raw
                 )
@@ -495,7 +495,7 @@ internal static partial class Subjects {
             !IsExactSemiring<BigInteger, CountingMaterial>(material: default) ||
             !IsExactSemiring<FixedQ4816, TropicalMaterial>(material: default) ||
             !IsExactSemiring<BigInteger, IntegerMaterial>(material: default) ||
-            !IsExactSemiring<QuadraticSurd, RationalMaterial>(material: default) ||
+            !IsExactSemiring<RealQuadratic, RationalMaterial>(material: default) ||
             !IsExactSemiring<ulong, PrimeFieldMaterial>(material: PrimeFieldMaterial.Create(modulus: 5UL)) ||
             !IsExactSemiring<UnitInterval32, FuzzyMaterial>(material: default) ||
             !IsExactSemiring<UnitInterval32, BoundedSumMaterial>(material: default)

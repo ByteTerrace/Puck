@@ -19,12 +19,21 @@ by a person, which four-hundred-character string literals buried among generic c
 Committed artifacts (all deterministic, stable ordering, update-on-change): `frontier.json`, `coverage-manifest.json`,
 `bench-baselines.json`, `RESULTS.md`.
 
+`TestPaths` resolves these files in the running checkout through the shared
+repository locator. CI source-path mapping does not change where declarations
+are read or generated artifacts are written; see [CI and releases](../../docs/ci.md).
+
 Every artifact write is **execution-gated**: the ledger persists an artifact only when the check that owns it actually
 ran this session. The manifest belongs to the ratchet gate, the frontier to the runs that consumed domains, each
 `RESULTS.md` tier block to that tier, the bench block to the bench, and the coverage block to the ratchet. A filtered or
 single-tier run therefore leaves every other record exactly as its own last run left it — and can never quiet a gate it
 never executed. The frontier carries a second gate on top of that one: it is **green-gated** as well, and advances only
 when every law the session ran passed.
+
+Artifact replacement remains atomic when another Windows process briefly holds a
+report open without delete sharing: the writer makes at most seven brief retries, then
+reports a persistent failure. Failed writes remove their sibling staging file;
+they never fall back to rewriting the live report in place.
 
 ## Tiers and how to run them
 

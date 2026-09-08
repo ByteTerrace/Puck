@@ -44,6 +44,39 @@ Prefer the cheapest correct tool:
 4. `dotnet build Puck.slnx -c Release` after a refactor or documentation edit
    that changes `cref` values.
 
+## C# file apps
+
+Standalone C# entry points use the same `.editorconfig`, compiler warnings, and
+Puck formatting conventions as the project-based code. Their file directives
+declare their dependencies; keep package versions pinned. `Directory.Build.props`
+links `build/RepositoryPaths.cs` and `build/AutomationProcess.cs` into these apps so they can locate checkout data
+at runtime without building Puck CLI. Invoke them from within the checkout.
+Compiler source paths can be remapped by CI and are not runtime file locations.
+
+Compile an app without executing its operational code:
+
+```sh
+dotnet build build/Azure.cs -c Release
+```
+
+Run a safe verification entry point separately when one exists:
+
+```sh
+dotnet run -c Release --file build/Azure.cs -- --help
+```
+
+Deployment, publishing, QUIC probes, and WASM refresh commands are operational
+actions, so a formatting check should compile them without running them.
+
+Use `puck format . -Files files.json` with a JSON array of repository-relative
+paths, such as `["build/Azure.cs"]`. The CLI converts each standalone app to a
+disposable SDK project, preserves its references and linked helpers, compiles
+and formats the copy, then copies back only the selected source with its file
+directives restored. `-WhatIf` and `-Verify` leave the original source untouched.
+Ordinary project files still need their owning projects restored and built.
+See [automatic PR formatting](ci.md#automatic-pr-formatting) for the CI bot and
+the fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
+
 ## Verification
 
 ### Engine changes — THERE IS NO ENGINE GATE TODAY
@@ -62,8 +95,8 @@ its own commit what was and was not checked.
 
 The one narrow cross-backend check that exists is `puck parity`: for each
 authored pattern world under `tests/Puck.Parity/` (gradient, edges,
-modifiers, glyphs — each stressing one contract slice) plus the shipped default
-world,
+modifiers, glyphs, film grain — each stressing one contract slice) plus the
+shipped default world,
 it boots the real `Puck.World` windowed on Vulkan and on Direct3D 12,
 screenshots the same fenced simulation moment in each run, and compares the
 backend pair under the relaxed envelope (benign ±1-LSB shader-codegen noise
@@ -74,9 +107,12 @@ envelope on every run. It needs a display and both GPU devices, so run it on
 hardware for any render-path, shader, presenter, or capture change; it covers
 composed-frame agreement and nothing else.
 
-Still in the build and still applicable: the architecture gate (every build),
-the two emulator batteries below, `dotnet build Puck.slnx -c Release`,
-`puck parity`, and running `Puck.World`.
+Still in the build and still applicable: the architecture gate (every build) —
+including `PUCKARCH008`, which fails a denied project's build when its
+compiled output references an assembly `build/Architecture.props`'s
+`PuckArchitectureDeniedApi` denies it (`Puck.World.Server` and
+`System.Console` today) — the two emulator batteries below,
+`dotnet build Puck.slnx -c Release`, `puck parity`, and running `Puck.World`.
 
 For changes under `src/Puck.Maths`, also run the maths law suite. The default
 tier is the everyday gate; `deep` and `exhaustive` are the opt-in volumes:
@@ -94,13 +130,13 @@ Run greenfield composition roots instead of adding engine gates:
 dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2
 ```
 
-`Puck.World` is the only composition root that runs. `Puck.Demo` is a library
-with no entry point, quarantined at `experimental/Puck.Demo` and OUT of the
-solution and root build (owner ruling, 2026-08-01) — every `dotnet run` against
-it, including the former `--validate-overworld` check, is void. Nothing plans
-bringing its capabilities across: the port plan that used to sequence that work
-was deleted with the quarantine. Do not add a `--validate-*` mode or a
-`Puck.Post` stage for game-specific behavior unless explicitly requested.
+`Puck.World` is the only composition root that runs. `Puck.Demo`, the
+composition-root-less library that once sat quarantined at
+`experimental/Puck.Demo`, is deleted — each folder's capability either has a
+live successor in `Puck.World` (see `experimental/README.md`) or is simply
+absent from it, with no plan bringing it over. Do not add a `--validate-*`
+mode or a `Puck.Post` stage for game-specific behavior unless explicitly
+requested.
 
 The console is the scriptable control plane. On-screen input and process stdin
 use the same registry; an ACCEPTED result echoes to stdout and a REFUSED one to
@@ -120,14 +156,24 @@ pending one.
 ### Emulator changes
 
 ```powershell
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release
-dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --fetch-corpora
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
 ```
 
-Self-contained tiers run without external ROMs. Reference-ROM stages skip
-when their licensed corpus is unavailable. The Advanced battery also exposes
-lockstep, trace, I/O-dump, render-hash, and divergence diagnostics; see its
-project README.
+The Humble battery's reference corpora are declared in its `corpora.json`
+(pinned archive, version, SHA-256); `--fetch-corpora` fills the local cache
+once and the stages resolve it without configuration. `--lane gate` measures
+every row recorded as passing and must stay green; `--lane frontier` measures
+the recorded fails and inconclusives; a plain run measures both. Every run
+writes `summary.json`, `results.junit.xml`, and a candidate ledger under
+`artifacts/gb-post`; `--accept` promotes the candidate under the refusal rules
+in the project README. Iterate with `--filter`; never chain runs to record.
+The Advanced battery works the same way: its corpora are pinned in its own
+`corpora.json`, the BIOS and commercial cartridges are command-line flags, and
+it exposes lockstep, trace, I/O-dump, render-hash, and divergence diagnostics;
+see its project README.
 
 ### Performance changes
 
@@ -145,6 +191,48 @@ not written down anywhere.
 numbers as current — they were taken on a machine and a suite nothing in the tree
 can reproduce. If performance work becomes necessary, the honest first step is
 building an instrument in a real project, not reviving a quarantined one.
+
+### Browser engine changes (`Puck.World.Browser`)
+
+`unset C_INCLUDE_PATH` first if the machine has a Cosmocc toolchain installed
+(see "Hardware and toolchain cautions" below) — otherwise every native asset
+compile in the steps below fails with cryptic libc header collisions that have
+nothing to do with the change under test.
+
+```powershell
+dotnet build src/Puck.World.Browser -c Release
+dotnet test tests/Puck.World.Browser.Tests -c Release
+dotnet publish src/Puck.World.Browser -c Release
+```
+
+`tests/Puck.World.Browser.Tests` links `Engine/*.cs` as source and runs under
+the ordinary net10.0 test host — no wasm runtime needed to exercise the pure
+core. The wasm-specific proof is the Node harness, which needs the AppBundle
+the `dotnet publish` line above produces and Node reached through fnm, since
+Node is not on `PATH` on the reference system
+(`FNM_DIR="$APPDATA/fnm" fnm exec --using=26.5.1 -- node ...`):
+
+```powershell
+dotnet publish src/Puck.World.Browser -c Release
+cd src/Puck.Dashboard/src/portal
+$env:FNM_DIR = "$env:APPDATA/fnm"; fnm exec --using=26.5.1 -- node --test tests/engine-wasm.test.cjs
+```
+
+That harness skips itself by name (never silently passes) when the AppBundle
+is absent. To re-record the determinism-canary baseline both the native tests
+and the Node harness compare against:
+
+```powershell
+$env:PUCK_BROWSER_PARITY_RECORD = "1"
+dotnet test tests/Puck.World.Browser.Tests -c Release --filter "FullyQualifiedName~BrowserParityRecordingTests"
+Remove-Item Env:\PUCK_BROWSER_PARITY_RECORD
+```
+
+See `src/Puck.World.Browser/README.md` for the AppBundle's real file layout
+and sizes, the exact `[JSExport]` surface, the trim-warning baseline, and the
+one verified scope boundary (no emulator core, so a document authoring a
+`screens[].source.machine` engine — the shipped island's arcade district among
+them — refuses by name rather than crashing).
 
 ## World documents
 
@@ -170,8 +258,9 @@ behavior; the procedure above is the complete add-a-field procedure.
 configuration belongs in the world document; live operations belong in console
 verbs.
 
-The remaining environment variables are engine, launcher, emulator, or
-content-development diagnostics:
+The remaining environment variables are engine, launcher, or
+content-development diagnostics (both emulator batteries take their inputs on
+the command line; see their READMEs):
 
 | Variable | Purpose |
 |---|---|
@@ -182,11 +271,7 @@ content-development diagnostics:
 | `PUCK_D3D12_DEBUG` | Opt in to the Direct3D 12 debug layer. |
 | `PUCK_CAPTURE_FRAME=<number>` | Delay one-shot capture for a world-document run. |
 | `PUCK_FLAGSHIPS_REGENERATE=1` | Regenerate committed flagship creation documents. |
-| `PUCK_GB_TESTROMS` | GB/GBC reference-ROM corpus. |
-| `PUCK_GB_LINKROM`, `PUCK_GB_TRADEROM` | Commercial link-game verification inputs. |
-| `PUCK_GB_SST` | SingleStepTests/sm83 per-instruction vector corpus (`Sm83SstStage`, skip when absent). |
-| `PUCK_AGB_BIOS`, `PUCK_AGB_TESTROMS`, `PUCK_AGB_ACCURACY_SUITE`, `PUCK_AGB_AGS`, `PUCK_AGB_GAMES` | GBA reference inputs. |
-| `PUCK_AGB_SOLARROM` | Commercial Boktai (solar-sensor) cartridge for `SolarReplayStage` (skip when absent). |
+| `PUCK_AGB_BIOS`, `PUCK_ARES_COSIM`, `PUCK_AGB_FULLBOOT`, `PUCK_AGS_TRACE`, `PUCK_AGB_SUITE_FOCUS` | Read only by the Advanced battery's diagnostic modes (lockstep co-simulation, full-boot renders, AGS tracing, suite focus); the battery itself takes every input on the command line. |
 
 GPU timing has no environment variable. Arm it with the `gpu.timing` feature
 switch, the `world.timing` verb, `host.timing`, `--timing`, or the benchmark
@@ -237,6 +322,15 @@ framed as unverified when no device run exists.
   because the App Control behaviour is a property of the machine and will bite
   the next thing that loads a fresh Debug binary, not because those scripts are
   reachable: they are quarantined under `experimental/` and never run.
+- A machine with a Cosmocc toolchain installed may carry `C_INCLUDE_PATH`
+  pointing at its `include` directory in the ambient shell environment. That
+  path leaks into every `clang`/emscripten invocation a `Puck.World.Browser`
+  `browser-wasm` build or publish shells out to and collides with
+  emscripten's own libc headers (`COSMOPOLITAN_C_START_` redefined, `bool32`
+  unknown type, dozens of "expected function body after function declarator"
+  errors from `libc/calls/calls.h`). `unset C_INCLUDE_PATH` before building or
+  publishing that project; this is host contamination, not a project or
+  workload defect.
 
 Engineering doctrine — the current request outranking artifacts, gates
 asserting observable contracts only, supergreen, determinism pinning the
@@ -340,6 +434,11 @@ all verification work here. Each keeps one compressed instance as evidence.
   unless `FileLengths.json` already records the file, and a recorded file may
   only shrink (LEN002/LEN003). Split, then `puck lengths --write` — the ledger
   never grows.
+- A document field that carries a state, zone, rule, table, pattern, topology,
+  generator, field, or dynamics name is registered in `WorldNameRegistry`
+  (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered
+  name-shaped member or a stale `docs/world-name-registry.md`, and
+  `puck registry` rewrites the table.
 - Derive descriptor counts, pool sizes, strides, and capacities from the data
   that defines them.
 - .NET 10 is the only target. Consult `dotnet10-performance` before preserving

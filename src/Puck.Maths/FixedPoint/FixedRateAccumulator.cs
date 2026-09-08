@@ -62,6 +62,28 @@ public struct FixedRateAccumulator {
         ulong elapsedTicks,
         long ticksPerSecond
     ) {
+        // Narrow lane: when the product and the remainder-adjusted numerator both fit a signed long, one hardware
+        // division answers. long's truncating division and remainder agree with Int128.DivRem bit for bit, and the
+        // long.MinValue / -1 trap is unreachable because ticksPerSecond is positive.
+        if (elapsedTicks <= long.MaxValue) {
+            var high = Math.BigMul(
+                a: rateRaw,
+                b: ((long)elapsedTicks),
+                low: out var low
+            );
+
+            if (high == (low >> 63)) {
+                var narrowNumerator = unchecked((low + remainder));
+
+                if (((low ^ narrowNumerator) & (remainder ^ narrowNumerator)) >= 0L) {
+                    return (
+                        DeltaRaw: (narrowNumerator / ticksPerSecond),
+                        Remainder: (narrowNumerator % ticksPerSecond)
+                    );
+                }
+            }
+        }
+
         var numerator = ((((Int128)rateRaw) * ((Int128)elapsedTicks)) + remainder);
         var denominator = ((Int128)ticksPerSecond);
 

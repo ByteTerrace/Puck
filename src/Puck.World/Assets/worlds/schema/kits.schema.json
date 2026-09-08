@@ -1,568 +1,1075 @@
 {
   "type": [
-    "array",
+    "object",
     "null"
   ],
-  "items": {
-    "description": "One locomotion kit \u2014 a world-definition row naming a way of moving: the body motion program it runs under, the motion model its bodies compile, its producer arguments, and its action-lane bindings. Every game-flavored movement noun is a row of this data, never an engine enum; the census echo prints these names. Name is the kit\u0027s kebab-case name (the census echo token); BodyMotionProgram names the body motion program the kit\u0027s bodies execute; Motion is the locomotion model the kit\u0027s bodies compile (a seat\u0027s profile speeds still override its speed fields) \u2014 see WorldMotionModel.",
-    "type": [
-      "object",
-      "null"
-    ],
-    "properties": {
-      "name": {
-        "type": "string"
-      },
-      "bodyMotionProgram": {
-        "type": "string"
-      },
-      "motion": {
-        "type": "object",
-        "required": [
-          "$type"
+  "properties": {
+    "rows": {
+      "description": "The declared kits, in order.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One locomotion kit \u2014 a world-definition row naming a way of moving: the body motion program it runs under, the motion tuning its bodies compile, its producer arguments, and its action-lane bindings. Every game-flavored movement noun is a row of this data, never an engine enum; the census echo prints these names. Name is the kit\u0027s kebab-case name (the census echo token); BodyMotionProgram names the body motion program the kit\u0027s bodies execute; Motion is the locomotion tuning the kit\u0027s bodies compile (a seat\u0027s profile speeds still override its speed fields) \u2014 see WorldMotion.",
+        "type": [
+          "object",
+          "null"
         ],
-        "anyOf": [
-          {
-            "description": "Contact-solved locomotion: vertical velocity integrates gravity and is resolved against the world contact field, planar velocity is response-shaped toward the commanded target, and sprint/frame/facing read as described below \u2014 the ops family WorldBody\u0027s grounded operations (ResolveYawAttitudeAndPlanarFrame, ComputePlanarTargetVelocity, ShapePlanarVelocity, SnapYawToPlanarIntent, ApplyVerticalGravity) read. The world\u0027s free body motion program (full 6DOF, no ground pin) also authors this arm today: its ops read only MoveSpeed/TurnSpeed/RiseGravity (as a symmetric bleed rate, via ApplyVerticalDecay) \u2014 a strict subset \u2014 so Grounded is a superset every existing op family can be validated against; the fields a program\u0027s ops don\u0027t touch stay authored-but-inert for that kit, same as before this seam existed.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "bodyMotionProgram": {
+            "type": "string"
+          },
+          "motion": {
+            "type": "object",
             "properties": {
-              "$type": {
-                "const": "grounded"
+              "speed": {
+                "description": "The kit\u0027s movement rate (see WorldSpeed).",
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player reads its live profile\u0027s speed instead, so identity.motion stays real-time).",
+                    "type": "number"
+                  },
+                  "envelope": {
+                    "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless Value fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces an unclamped resolve exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "min": {
+                        "description": "The least admitted value (inclusive).",
+                        "type": "number"
+                      },
+                      "max": {
+                        "description": "The greatest admitted value (inclusive) \u2014 WorldDefinitionValidator refuses Max \u003C Min by name. Equal to Min pins the scalar outright regardless of what a profile requests.",
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "MotionScalarEnvelope"
+                  },
+                  "held": {
+                    "description": "The held-multiplier channel (a \u0022boost\u0022/\u0022sprint\u0022), or null for a kit with no held speed multiplier. The multiplier applies AFTER Envelope clamps the resolved value: the envelope pins the base rate, the multiplier rides on top.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "channel": {
+                        "description": "The declared composition channel name read while held.",
+                        "type": "string"
+                      },
+                      "multiplier": {
+                        "description": "The speed multiplier while the channel reads held. Required positive.",
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "channel",
+                      "multiplier"
+                    ],
+                    "additionalProperties": false,
+                    "default": null,
+                    "title": "WorldSpeedHeld"
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false,
+                "title": "WorldSpeed"
               },
-              "moveSpeed": {
-                "description": "Locomotion speed in world units per second \u2014 the profileless fallback a stand-in advances on (a seated player reads its live profile\u0027s speed instead, so identity.motion stays real-time).",
-                "type": "number"
+              "turn": {
+                "description": "The kit\u0027s steering rate (see WorldTurn).",
+                "type": "object",
+                "properties": {
+                  "rate": {
+                    "description": "Turn speed in radians per second at full authority (the profileless fallback counterpart to Value).",
+                    "type": "number"
+                  },
+                  "referenceSpeed": {
+                    "description": "The longitudinal (drive) or local (grounded/free) speed, world units per second, at which steering authority peaks \u2014 authority rises linearly from zero at standstill and falls linearly past it toward Falloff at the kit\u0027s resolved move speed. Omitted (the default): full authority at every speed, the behavior every kit authoring no curve keeps.",
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "falloff": {
+                    "description": "The fraction of full steering authority remaining at the kit\u0027s resolved move speed, in [0, 1]. Unread while ReferenceSpeed is omitted.",
+                    "type": "number",
+                    "default": 1
+                  },
+                  "pitchRate": {
+                    "description": "The pitch rate (rad/s) a drive kit\u0027s Pitch channel commands; 0 (the default) locks the drive frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "maxPitch": {
+                    "description": "The drive pitch clamp (radians): how far the flying variant\u0027s facing may climb or dive before the integrator holds it, so it can never flip past vertical and invert the yaw frame mid-flight. Unread while PitchRate is zero.",
+                    "type": "number",
+                    "default": 1.2
+                  }
+                },
+                "required": [
+                  "rate"
+                ],
+                "additionalProperties": false,
+                "title": "WorldTurn"
               },
-              "turnSpeed": {
-                "description": "Turn speed in radians per second (the profileless fallback counterpart to MoveSpeed).",
-                "type": "number"
-              },
-              "riseGravity": {
-                "description": "The downward acceleration while rising (u/s\u00B2) \u2014 the floaty top of the arc.",
-                "type": "number"
-              },
-              "fallGravity": {
-                "description": "The downward acceleration while falling (u/s\u00B2) \u2014 the snappy descent (heavier than the rise).",
-                "type": "number"
-              },
-              "maxFallSpeed": {
-                "description": "The terminal fall speed the descent is clamped to (u/s).",
-                "type": "number"
-              },
-              "response": {
-                "description": "The velocity-response table (see MotionResponse) \u2014 it affects the simulation. The empty table snaps planar velocity instantly.",
-                "type": "array",
-                "items": {
-                  "$ref": "./common.schema.json#/$defs/MotionResponse"
-                }
-              },
-              "sprintMultiplier": {
-                "description": "The held-sprint speed multiplier, applied while SprintChannel reads held; 1 is a no-op.",
-                "type": "number"
-              },
-              "sprintChannel": {
-                "description": "The declared channel name a body reads while held (not edge-triggered \u2014 a continuous multiplier, unlike the press/release ActionSpec vocabulary) to apply SprintMultiplier, or null (the default) for a kit with no sprint capability. Resolved to an ordinal once, alongside every other kit-channel name, by Compile \u2014 an unresolvable name (validator-refused already) reads as \u0022no sprint\u0022 rather than throwing.",
+              "shaping": {
+                "description": "The ordered velocity-shaping table (see WorldShaping) the ShapeVelocity operation reads \u2014 the first row whose when gate opens governs. Required (non-empty) for a kit whose program selects ShapeVelocity; null for a kit whose program never shapes planar velocity through it (a free-flight kit that owns its whole velocity channel directly).",
                 "type": [
-                  "string",
+                  "array",
                   "null"
                 ],
+                "items": {
+                  "description": "One row of a kit\u0027s ordered shaping table: how velocity converges on the commanded intent while When holds. Rows evaluate in order, first match wins; the table may carry one unconditional (When omitted) row, and when present it must be last. Exactly one of Along or Dynamics is authored per row; Across is legitimate only beside Along. A drift/boost row is authored as an ordinary row gated on a held predicate: the FIRST open row governs, so a drift row belongs ahead of the kit\u0027s ordinary anisotropic row.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "when": {
+                      "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
+                      "description": "The gate that must hold for this row to win, or null for the unconditional row (permitted only as the final row). The gate reuses the action-lane predicate vocabulary, admitting body-fact kinds (now/recently/all/any/not) and held (a composition channel\u0027s own live read) \u2014 never a per-body action-state predicate.",
+                      "default": null
+                    },
+                    "along": {
+                      "description": "The along facet \u2014 see WorldShapingAlong \u2014 or null for a Dynamics row.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "engage": {
+                          "description": "The whole-vector engage rate (u/s\u00B2) while the commanded target exceeds the body\u0027s current magnitude, or \u2014 paired with Across \u2014 the drive\u0027s longitudinal accel rate while throttle commands more speed. null means converge immediately.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "reversalRate": {
+                          "description": "The drive\u0027s sign-reversal rate (u/s\u00B2) while back-throttle opposes forward travel. null means reverse sign immediately. Refused without a paired Across.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "release": {
+                          "description": "The whole-vector release rate (u/s\u00B2) while the target does not exceed the current magnitude, or \u2014 paired with Across \u2014 the drive\u0027s coast rate toward rest with throttle centered, and the decay rate while over the commanded speed. null means converge immediately.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "backwardSpeed": {
+                          "description": "The backward speed (u/s) full back-throttle converges on from rest; absence forbids travelling backward. Refused whenever authored without a paired Across.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldShapingAlong"
+                    },
+                    "across": {
+                      "description": "The across facet \u2014 see WorldShapingAcross \u2014 selecting the drive decomposition, or null for a row that shapes the whole vector. Refused paired with Dynamics or without Along.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "lateral": {
+                          "description": "The lateral convergence rate (u/s\u00B2) toward zero slip while this row governs, or null to remove slip immediately.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldShapingAcross"
+                    },
+                    "dynamics": {
+                      "description": "The dynamics row a second-order follower shapes velocity through instead of Along, or null (the default) for the response/drive law. Exactly one of the two is authored per row.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "turnScale": {
+                      "description": "The steering-authority multiplier while this row governs \u2014 the tightened drift arc\u0027s spelling, and the neutral default for every ordinary row.",
+                      "type": "number",
+                      "default": 1
+                    }
+                  },
+                  "additionalProperties": false,
+                  "title": "WorldShaping"
+                },
                 "default": null
               },
               "moveFrame": {
-                "description": "Which frame MoveForward/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body\u0027s own integrated heading. World (the default) takes the two channels as axes already in world frame \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).",
+                "description": "Which frame MoveAdvance/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body\u0027s own integrated heading. World (the default) takes the two channels as axes already in world frame \u2014 the seat\u0027s client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).",
                 "enum": [
                   "Heading",
                   "World"
                 ],
-                "default": "World"
+                "default": "World",
+                "title": "MotionMoveFrame"
               },
               "facingSnap": {
                 "description": "Under World only: whether the body\u0027s drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) \u2014 the body angles toward its travel, a strafe included \u2014 while its HEADING (the Turn role\u0027s integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.",
                 "type": "boolean",
                 "default": true
               },
-              "moveSpeedEnvelope": {
-                "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
-                "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless MoveSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 a feel-pinned world authors this to keep a seat\u0027s speed inside its own kit\u0027s envelope regardless of what the player\u0027s identity requests. null reproduces today\u0027s unclamped behavior exactly; Min == Max pins the effective speed outright; a narrower-than-wide-open range still admits a bounded profile override. See MotionScalarEnvelope.",
-                "default": null
-              },
-              "declaredSprintChannel": {
-                "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
+              "holds": {
+                "description": "The ordered list of what may hold this body \u2014 see WorldHold \u2014 read by the ResolveHold/ApplyHold operations. A Motion-kind kit authoring none refuses validation by name: the hold list is the only spelling of a vertical channel, so a kit with no vertical law of its own still authors one row of kind None.",
                 "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "declaredMoveFrame": {
-                "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
-                "enum": [
-                  "Heading",
-                  "World"
-                ]
-              },
-              "declaredTurnSpeed": {
-                "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
-                "type": "number"
-              }
-            },
-            "required": [
-              "moveSpeed",
-              "turnSpeed",
-              "riseGravity",
-              "fallGravity",
-              "maxFallSpeed",
-              "response",
-              "sprintMultiplier"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "description": "Anisotropic body-frame locomotion \u2014 the racing-vehicle arm the ResolveVehicleFrame/ ShapeVehicleVelocity operations read. Velocity decomposes into longitudinal/lateral (and residual) body-frame components, each converging at its own authored rate \u2014 what separates a vehicle from Grounded, whose isotropic planar shaping cannot tune grip apart from acceleration. Steering authority scales with longitudinal speed (no spinning in place, looser at top speed) and reverses sign with reversing travel. One row serves the ground, hover, and air variants: a contact-pinned variant pairs this arm with a program keeping ApplyVerticalGravity (grounded-style vertical ownership and ramp ballistics), a flying variant pairs it with ApplyVerticalDecay and a positive PitchRate so climb emerges from the pitched facing.",
-            "properties": {
-              "$type": {
-                "const": "vehicle"
-              },
-              "topSpeed": {
-                "description": "The forward speed (u/s) full throttle converges on.",
-                "type": "number"
-              },
-              "reverseTopSpeed": {
-                "description": "The reverse speed (u/s) full back-throttle converges on from rest; 0 forbids reversing.",
-                "type": "number"
-              },
-              "accel": {
-                "description": "The longitudinal convergence rate (u/s\u00B2) while throttle commands more speed.",
-                "type": "number"
-              },
-              "brake": {
-                "description": "The longitudinal convergence rate (u/s\u00B2) while back-throttle opposes forward travel.",
-                "type": "number"
-              },
-              "coastDrag": {
-                "description": "The longitudinal convergence rate (u/s\u00B2) toward rest with throttle centered, and the decay rate while over the commanded speed (the post-boost bleed).",
-                "type": "number"
-              },
-              "grip": {
-                "description": "The lateral convergence rate (u/s\u00B2) toward zero slip \u2014 traction. Lower is slidier.",
-                "type": "number"
-              },
-              "steerRate": {
-                "description": "The yaw rate (rad/s) at full steering authority.",
-                "type": "number"
-              },
-              "steerReferenceSpeed": {
-                "description": "The longitudinal speed (u/s) at which steering authority peaks; authority rises linearly from zero at standstill.",
-                "type": "number"
-              },
-              "steerFalloff": {
-                "description": "The fraction of full steering authority remaining at TopSpeed, in [0, 1]; authority falls linearly from the reference speed.",
-                "type": "number"
-              },
-              "pitchRate": {
-                "description": "The pitch rate (rad/s) the Pitch channel commands; 0 locks the frame planar (the ground and hover variants). Positive selects the flying variant\u0027s pitched facing, clamped inside the integrator so the frame can never flip past vertical.",
-                "type": "number"
-              },
-              "riseGravity": {
-                "description": "The upward-motion gravity (u/s\u00B2) \u2014 the contact-pinned variant\u0027s arc top, and the flying variant\u0027s vertical-impulse bleed rate (via ApplyVerticalDecay).",
-                "type": "number"
-              },
-              "fallGravity": {
-                "description": "The falling gravity (u/s\u00B2) under ApplyVerticalGravity.",
-                "type": "number"
-              },
-              "maxFallSpeed": {
-                "description": "The terminal fall speed (u/s) under ApplyVerticalGravity.",
-                "type": "number"
-              },
-              "driftGrip": {
-                "description": "The lateral convergence rate (u/s\u00B2) replacing Grip while DriftChannel reads held \u2014 the deliberate low-traction state. Required positive when a drift channel is declared; ignored without one.",
-                "type": "number",
-                "default": 0
-              },
-              "driftSteerScale": {
-                "description": "The steering-authority multiplier while drifting (the tightened drift arc).",
-                "type": "number",
-                "default": 1
-              },
-              "boostMultiplier": {
-                "description": "The TopSpeed multiplier while BoostChannel reads held; 1 is a no-op. The timed item boost is planarImpulse, not this.",
-                "type": "number",
-                "default": 1
-              },
-              "driftChannel": {
-                "description": "The declared channel name read while held to drift, or null for a kit that cannot drift. Resolved to an ordinal once by Compile.",
-                "type": [
-                  "string",
+                  "array",
                   "null"
                 ],
-                "default": null
-              },
-              "boostChannel": {
-                "description": "The declared channel name read while held to boost, or null for a kit with no held boost. Resolved through the same held-channel seam as SprintChannel.",
-                "type": [
-                  "string",
-                  "null"
-                ],
-                "default": null
-              },
-              "topSpeedEnvelope": {
-                "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
-                "description": "The racing-integrity clamp: the inclusive bound the resolved base TopSpeed is pinned to at resolve time \u2014 a live world.row.set kits retune (deliberately admitted even past the bound; WorldDefinitionValidator checks only the envelope\u0027s own shape, never that TopSpeed already sits inside it \u2014 the clamp exists precisely to catch a retune the envelope disagrees with, so requiring conformance up front would refuse the case it exists for), and any future per-seat vehicle stat resolve, both pass through it, or null (the default) for no bound. BoostMultiplier multiplies after this clamp, never before \u2014 the envelope pins the base top speed, boost rides on top, the same sprint-after-clamp precedent MoveSpeedEnvelope established for the grounded arm. The vehicle arm\u0027s resolve deliberately never reads a seated profile\u0027s speed (a kart\u0027s speed is the kit\u0027s), so this is the only seat-time clamp the vehicle arm has \u2014 unlike the grounded arm\u0027s envelope, which bounds a fallback a separate live profile read can diverge from, so grounded\u0027s own baseline is still required to sit inside its own bound. See MotionScalarEnvelope.",
-                "default": null
-              },
-              "declaredSprintChannel": {
-                "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "declaredMoveFrame": {
-                "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
-                "enum": [
-                  "Heading",
-                  "World"
-                ]
-              },
-              "declaredTurnSpeed": {
-                "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
-                "type": "number"
-              }
-            },
-            "required": [
-              "topSpeed",
-              "reverseTopSpeed",
-              "accel",
-              "brake",
-              "coastDrag",
-              "grip",
-              "steerRate",
-              "steerReferenceSpeed",
-              "steerFalloff",
-              "pitchRate",
-              "riseGravity",
-              "fallGravity",
-              "maxFallSpeed"
-            ],
-            "additionalProperties": false
-          },
-          {
-            "description": "Submerged locomotion in the world\u0027s standing-water medium (the water section, which a kit declaring this arm requires): 3D thrust in the body\u0027s yaw frame with an explicit vertical channel, planar velocity converged through the response table (thrust against water drag \u2014 the engage rate is thrust authority, the release rate is the drag coast), and a single vertical channel owned end to end by the surface stage \u2014 the medium\u0027s own drift/settle folded into the commanded thrust target before that same response-row convergence runs, so nothing else writes vertical velocity independently. The ops family: ResolveYawAttitudeAndPlanarFrame, ComputeSwimTargetVelocity, ShapePlanarVelocity, ApplyBuoyancyAndSurface, IntegratePlanarAndVerticalVelocity. The body\u0027s attitude stays a pure yaw rotation. Aim-directed diving is the seat\u0027s composition, and only under World (MoveFrame): the rendered camera\u0027s elevation splits the commanded forward direction into planar and vertical channels client-side (the same determinism seam MoveFrame documents), never a camera pose entering the sim. The explicit MoveUp channel this splits into is orthogonal to that composition and stays live regardless of MoveFrame \u2014 a body dives on raw MoveUp input alone with no aim-composed seat at all.",
-            "properties": {
-              "$type": {
-                "const": "swim"
-              },
-              "thrustSpeed": {
-                "description": "Peak swim speed in world units per second \u2014 the profileless fallback (a seated player reads its live profile\u0027s move speed instead, exactly as MoveSpeed does).",
-                "type": "number"
-              },
-              "turnSpeed": {
-                "description": "Turn speed in radians per second (the profileless fallback counterpart).",
-                "type": "number"
-              },
-              "verticalThrustFraction": {
-                "description": "The fraction of ThrustSpeed the vertical channel commands \u2014 swimmers climb and dive slower than they cruise. 1 is fully isotropic thrust.",
-                "type": "number"
-              },
-              "response": {
-                "description": "The velocity-response table (see MotionResponse) \u2014 it affects the simulation, read for both the planar and the vertical convergence. The empty table snaps instantly (no drag, no coast); a water feel wants at least an always-row.",
-                "type": "array",
                 "items": {
-                  "$ref": "./common.schema.json#/$defs/MotionResponse"
-                }
-              },
-              "buoyancy": {
-                "description": "The medium\u0027s idle vertical drift velocity (u/s, signed) below the bob band: positive drifts the body up toward its float line, negative sinks, zero holds depth. Folded into the commanded thrust target \u2014 see FixedSwimTuning \u2014 never applied as a separate acceleration.",
-                "type": "number"
-              },
-              "maxRiseSpeed": {
-                "description": "The terminal ascent speed (u/s) the vertical channel is clamped to.",
-                "type": "number"
-              },
-              "maxSinkSpeed": {
-                "description": "The terminal descent speed (u/s) the vertical channel is clamped to.",
-                "type": "number"
-              },
-              "surfaceSettleRate": {
-                "description": "The proportional settle gain (1/s) toward the float line, applied inside the bob band and above it (breach recovery): the medium\u0027s target velocity there is the displacement from the line times this gain, so a held ascent parks where thrust and settle balance instead of breaching.",
-                "type": "number"
-              },
-              "floatDepth": {
-                "description": "How far below the waterline (world units) the body origin rests when floating \u2014 and the bob band\u0027s half-width around that rest line (one knob deliberately: the band a body settles in is the depth scale it settles at). The validator only checks this is positive and finite \u2014 it cannot see the document\u0027s contact geometry, so it does not (and cannot) check this against the local water column\u0027s depth. A FloatDepth deeper than the floor below it parks the body on the floor instead of at the float line, with AtSurface never true there \u2014 a geometry fact deliberately outside this validator\u0027s reach.",
-                "type": "number"
-              },
-              "sprintMultiplier": {
-                "description": "The held-burst speed multiplier applied while SprintChannel reads held; 1 is a no-op. Scales the whole thrust vector, vertical included.",
-                "type": "number"
-              },
-              "sprintChannel": {
-                "description": "The declared channel name read while held for the burst, or null (the default) for a kit with no burst \u2014 the same resolution path SprintChannel documents.",
-                "type": [
-                  "string",
-                  "null"
-                ],
+                  "description": "One authored hold row of a kit\u0027s ordered Holds list \u2014 what may hold this body, in preference order. ResolveHold keeps the hold it has while its surface is still there and the same face, and otherwise takes the first row the world offers; ApplyHold applies Hold.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "name": {
+                      "description": "The row\u0027s name, unique within the list \u2014 the body.hold read-back token.",
+                      "type": "string"
+                    },
+                    "bond": {
+                      "description": "Whether this row needs a surface (Surface) or holds the body where it is (Free).",
+                      "enum": [
+                        "Surface",
+                        "Free",
+                        "Medium"
+                      ],
+                      "title": "BodyHoldBond"
+                    },
+                    "hold": {
+                      "description": "What holds the body once the row is taken.",
+                      "enum": [
+                        "None",
+                        "Gravity",
+                        "Pull",
+                        "Lift"
+                      ],
+                      "title": "BodyHoldKind"
+                    },
+                    "cone": {
+                      "$ref": "./common.schema.json#/$defs/DocumentVector2",
+                      "description": "The inclusive angle band, in degrees, between an admitted surface normal and gravity-up: [0, 60] is floors, [60, 120] walls, [0, 180] everything. Required for Surface, refused for Free.",
+                      "default": null
+                    },
+                    "pull": {
+                      "description": "The inward pull, world units per second, under Pull. Applied as a positional standoff, so it closes a gap the surface opens without ever pushing the body through it.",
+                      "type": "number",
+                      "default": 0
+                    },
+                    "lift": {
+                      "description": "The fraction of gravity cancelled under Lift: 1 hovers, 0.5 halves the fall.",
+                      "type": "number",
+                      "default": 0
+                    },
+                    "speed": {
+                      "description": "The travel speed along the hold\u0027s tangent plane, world units per second, or null to ride the kit\u0027s own resolved move speed.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "reach": {
+                      "description": "How far a surface row\u0027s probes search, world units. Required positive for Surface.",
+                      "type": "number",
+                      "default": 0
+                    },
+                    "upLean": {
+                      "description": "How far the body\u0027s up axis blends from gravity-up toward the surface normal, in [0, 1].",
+                      "type": "number",
+                      "default": 0
+                    },
+                    "forward": {
+                      "description": "Where the hold\u0027s frame takes its forward direction when the surface leaves it free.",
+                      "enum": [
+                        "Heading",
+                        "Intent",
+                        "Velocity"
+                      ],
+                      "default": "Heading",
+                      "title": "BodyHoldForward"
+                    },
+                    "onDrive": {
+                      "description": "Whether driving into an admitted face takes this row with no channel press.",
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "driveAlignment": {
+                      "description": "The least alignment, in [0, 1], between the commanded direction and the face\u0027s inward normal before OnDrive takes it. Inert without it.",
+                      "type": "number",
+                      "default": 0
+                    },
+                    "release": {
+                      "description": "The declared channel name whose held read drops this row, or null for a row no channel can drop.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "spend": {
+                      "description": "What the row spends while held, or null for a row that spends nothing.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "state": {
+                          "description": "The declared state.body slot name.",
+                          "type": "string"
+                        },
+                        "ratePerSecond": {
+                          "description": "The positive rate the slot drains at, per second.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "ratePerSecond"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldHoldSpend"
+                    },
+                    "medium": {
+                      "description": "The medium\u0027s own displacement law. Required for Medium and refused on every other bond.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "idleDrift": {
+                          "description": "The idle vertical drift velocity below the equilibrium band, signed (u/s).",
+                          "type": "number"
+                        },
+                        "equilibriumOffset": {
+                          "description": "The equilibrium line\u0027s depth below the medium surface, and the band\u0027s half-width (u).",
+                          "type": "number"
+                        },
+                        "settleRate": {
+                          "description": "The proportional gain (1/s) the equilibrium error scales by to reach a target velocity inside the band or while recovering a breach above the surface.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "idleDrift",
+                        "equilibriumOffset",
+                        "settleRate"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldHoldMedium"
+                    },
+                    "gravity": {
+                      "description": "The vertical arc this row falls under. Required for Gravity and Lift; refused for Pull, None, and every Medium row.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "rise": {
+                          "description": "The downward acceleration while rising (u/s\u00B2) \u2014 the floaty top of the arc.",
+                          "type": "number"
+                        },
+                        "fall": {
+                          "description": "The downward acceleration while falling (u/s\u00B2) \u2014 the snappy descent (heavier than the rise). The world\u0027s own solved gravity field, where one is authored, overrides the MAGNITUDE but keeps this row\u0027s rise-to-fall ratio as the arc\u0027s asymmetry.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "rise",
+                        "fall"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldHoldGravity"
+                    },
+                    "envelope": {
+                      "description": "The vertical-channel envelope Gravity\u0027s terminal fall speed and Medium\u0027s terminal rise/sink speeds share. Required for a Medium bond and for a Gravity/Lift hold short of full lift; refused otherwise.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "riseSpeed": {
+                          "description": "The terminal upward speed (u/s). Required for a Medium bond; refused (the arc never clamps a rise) for Gravity/Lift.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "sinkSpeed": {
+                          "description": "The terminal downward speed (u/s) \u2014 a Gravity/Lift row\u0027s own terminal fall speed, or a Medium row\u0027s terminal sink speed.",
+                          "type": "number",
+                          "default": 0
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldHoldEnvelope"
+                    },
+                    "thrust": {
+                      "description": "The fraction of the kit\u0027s resolved move speed the MoveUp role commands vertically while this row holds, in every bond \u2014 0 (the default) is no vertical thrust at all, 1 is fully isotropic. A non-Medium row commanding thrust takes the vertical channel outright for the tick, clearing the ballistic carry; a medium row folds it into the medium\u0027s own displacement before that law\u0027s convergence runs.",
+                      "type": "number",
+                      "default": 0
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "bond",
+                    "hold"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WorldHold"
+                },
                 "default": null
               },
-              "moveFrame": {
-                "description": "Which frame MoveForward/MoveStrafe resolve in \u2014 the same two-frame choice, and the same client-side camera composition seam, as MoveFrame.",
-                "enum": [
-                  "Heading",
-                  "World"
-                ],
-                "default": "World"
-              },
-              "facingSnap": {
-                "description": "Under World only: snap facing to the commanded planar direction each tick carrying input, as FacingSnap documents.",
-                "type": "boolean",
-                "default": true
-              },
-              "thrustSpeedEnvelope": {
-                "$ref": "./common.schema.json#/$defs/MotionScalarEnvelope",
-                "description": "The inclusive bound a seated player\u0027s live profile speed (and the profileless ThrustSpeed fallback) is clamped to at seat time, or null (the default) for no bound \u2014 the same seam as MoveSpeedEnvelope, for this arm\u0027s own thrust speed. null reproduces unclamped behavior exactly; Min == Max pins the effective thrust speed outright regardless of what a profile requests. See MotionScalarEnvelope.",
-                "default": null
-              },
-              "declaredSprintChannel": {
-                "description": "The declared held-multiplier channel of whichever arm this is \u2014 SprintChannel, SprintChannel, or the vehicle arm\u0027s BoostChannel (the same held-multiplier seam under a different name) \u2014 or null for an arm (or a declaration) without one. The one sprint-resolution read Compile and the seat binding surfaces share, so a new arm extends it here instead of each caller growing its own cast chain.",
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "declaredMoveFrame": {
-                "description": "The declared move frame of whichever arm this is \u2014 Heading for an arm without the choice. The client\u0027s camera composition keys off this, arm-agnostically.",
-                "enum": [
-                  "Heading",
-                  "World"
-                ]
-              },
-              "declaredTurnSpeed": {
-                "description": "The declared Turn-channel rate of whichever arm this is, in radians per second at full deflection \u2014 zero for an arm without one. The client\u0027s steer follow keys off this, arm-agnostically.",
-                "type": "number"
-              }
-            },
-            "required": [
-              "thrustSpeed",
-              "turnSpeed",
-              "verticalThrustFraction",
-              "response",
-              "buoyancy",
-              "maxRiseSpeed",
-              "maxSinkSpeed",
-              "surfaceSettleRate",
-              "floatDepth",
-              "sprintMultiplier"
-            ],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "producers": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "additionalProperties": {
-          "description": "One kit\u0027s named arguments for an authored producer program.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "scalars": {
-              "description": "Fixed-point scalar arguments keyed by instruction-defined name.",
-              "type": "object",
-              "additionalProperties": {
-                "type": "number"
-              }
-            },
-            "channels": {
-              "description": "Authored channel arguments keyed by instruction-defined name.",
-              "type": "object",
-              "additionalProperties": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
-          },
-          "required": [
-            "scalars",
-            "channels"
-          ],
-          "additionalProperties": false
-        },
-        "default": null
-      },
-      "actions": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "additionalProperties": {
-          "description": "A lane\u0027s full binding: the press trigger and the release trigger. What a channel does is this data \u2014 the engine implements only the facts, predicates, and effects.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "onPress": {
-              "$ref": "./common.schema.json#/$defs/ActionTrigger",
-              "description": "The rising-edge trigger, or null.",
-              "default": null
-            },
-            "onRelease": {
-              "$ref": "./common.schema.json#/$defs/ActionTrigger",
-              "description": "The falling-edge trigger (evaluated immediately, never latched), or null.",
-              "default": null
-            },
-            "onFact": {
-              "description": "Engine-fact-triggered effect lists evaluated independently of channel edges.",
-              "type": [
-                "array",
-                "null"
-              ],
-              "items": {
-                "description": "An authored effect list fired by one engine fact pulse \u2014 gated and edged by the same ActionTriggerMode vocabulary a world rule uses.",
+              "upTurn": {
+                "description": "How fast a solved gravity field and a measured contact normal may each turn the body\u0027s up axis \u2014 see WorldUpTurnRates. Omitted (null) reproduces the engine\u0027s own steering rates exactly; read the effective rates from UpTurn.",
                 "type": [
                   "object",
                   "null"
                 ],
                 "properties": {
-                  "fact": {
-                    "$ref": "./common.schema.json#/$defs/ActionFact",
-                    "description": "The fact that fires the rule."
+                  "field": {
+                    "description": "The ceiling on how fast a solved gravity field may turn the up axis. Crossing this rate lets an attractor\u0027s pull replace the world\u0027s own as one continuous roll rather than a single-tick inversion; every ordinary reorientation turns far slower and is untouched.",
+                    "type": "number",
+                    "default": 1.5707964
                   },
-                  "effects": {
-                    "description": "The effects applied in order.",
-                    "type": "array",
-                    "items": {
-                      "$ref": "./common.schema.json#/$defs/ActionEffect"
+                  "contact": {
+                    "description": "The ceiling on how fast a measured ground-contact normal may turn the up axis \u2014 a discontinuity filter, not a smoothing rate: it should sit an order of magnitude above the fastest curvature this kit\u0027s own top speed can walk, so ordinary running adopts the surface exactly and only a collider crease is spread across a few ticks. Both rates must remain positive after Q48.16 compilation.",
+                    "type": "number",
+                    "default": 6.2831855
+                  }
+                },
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldUpTurnRates"
+              },
+              "obstruction": {
+                "description": "The non-walkable contact witness\u0027s latch tuning \u2014 see WorldObstructionLatch. Omitted (null) reproduces the engine\u0027s own latch exactly; read the effective latch from Obstruction.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "displacement": {
+                    "description": "World units a body must move from where the witness last (re)latched before it is considered to have genuinely moved on. Its squared comparison threshold must remain positive after Q48.16 compilation.",
+                    "type": "number",
+                    "default": 2
+                  },
+                  "idleThreshold": {
+                    "description": "The raw MoveAdvance/MoveStrafe role-channel magnitude (each reads in [-1, 1]) below which the body counts as not actively driving.",
+                    "type": "number",
+                    "default": 0.05
+                  },
+                  "graceSeconds": {
+                    "description": "How long, in real time, an un-refreshed latch survives a solver pass reporting no push at all \u2014 absorbs ordinary query noise near a surface (a gradient/quantization boundary, or a body settled into a wall/ground corner under blended contact geometry). Must convert to a positive exact whole engine-tick count.",
+                    "type": "number",
+                    "default": 0.5
+                  }
+                },
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldObstructionLatch"
+              },
+              "groundStick": {
+                "description": "The inward speed (world units/second) a grounded body on a curving surface (the up policy is not world-up) is held against while it is not already moving into it at least that fast \u2014 depenetration removes whatever the surface curves away, so a walker\u0027s own speed cannot carry it clean off a convex surface between ticks. Independent of Speed: scaling this bias with a kit\u0027s own resolved move speed over-corrects a shallow slope, where a larger inward bias converts into downhill drift under depenetration faster than it converts into held contact. The default reproduces the engine\u0027s old hardcoded constant. Must remain positive after Q48.16 compilation.",
+                "type": "number",
+                "default": 2
+              }
+            },
+            "required": [
+              "speed",
+              "turn"
+            ],
+            "additionalProperties": false,
+            "title": "WorldMotion"
+          },
+          "producers": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "description": "One kit\u0027s named arguments for an authored producer program.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "scalars": {
+                  "description": "Fixed-point scalar arguments keyed by instruction-defined name.",
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number"
+                  }
+                },
+                "channels": {
+                  "description": "Authored channel arguments keyed by instruction-defined name.",
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "flock": {
+                  "description": "Bounded perception and steering arguments for ProduceFlockIntent, absent otherwise.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "range": {
+                      "description": "Inclusive sensing radius, in world units.",
+                      "type": "number"
+                    },
+                    "separationRadius": {
+                      "description": "Personal-space radius, no greater than Range.",
+                      "type": "number"
+                    },
+                    "candidateBudget": {
+                      "description": "Maximum inspected candidates, including rejected ones, per sensing update. A sensed target and local neighbors share this one sample, using the larger of their ranges.",
+                      "type": "integer"
+                    },
+                    "maxNeighbors": {
+                      "description": "Maximum nearest sampled neighbors retained, no greater than CandidateBudget.",
+                      "type": "integer"
+                    },
+                    "updateSeconds": {
+                      "description": "Neighbor and sensed-target refresh interval; zero means every simulation step. Sensed targets hold their last observed position between samples. Designations, route goals, and heading blend every step.",
+                      "type": "number"
+                    },
+                    "space": {
+                      "description": "Tangent-plane or three-dimensional motion.",
+                      "enum": [
+                        "Tangent",
+                        "Volume"
+                      ],
+                      "title": "WorldFlockSpace"
+                    },
+                    "separation": {
+                      "description": "Local repulsion weight in [0,1].",
+                      "type": "number"
+                    },
+                    "alignment": {
+                      "description": "Neighbor mean-heading weight in [0,1].",
+                      "type": "number"
+                    },
+                    "cohesion": {
+                      "description": "Neighbor centroid-attraction weight in [0,1].",
+                      "type": "number"
+                    },
+                    "goal": {
+                      "description": "Selected target or route waypoint weight in [0,1].",
+                      "type": "number"
+                    },
+                    "inertia": {
+                      "description": "Current heading persistence weight in [0,1].",
+                      "type": "number"
+                    },
+                    "arrivalDistance": {
+                      "description": "Distance inside which the goal term becomes zero.",
+                      "type": "number"
+                    },
+                    "halfAngleDegrees": {
+                      "description": "Forward sensing half-angle in (0,180]. Coincident neighbors remain perceptible.",
+                      "type": "number"
+                    },
+                    "requiresLineOfSight": {
+                      "description": "Whether every sampled neighbor must pass a deterministic solid-field sight test.",
+                      "type": "boolean"
+                    },
+                    "movementDomain": {
+                      "description": "Optional volume/medium navigation domain constraining the body\u0027s integrated locomotion while this producer runs. Its agentRadius must enclose the kit\u0027s collider about the body root. Invalid steps stop, without teleporting or finding an escape route. Later external impulses, contacts, and authority teleports remain separate.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "cohesionAffinity": {
+                      "$ref": "./common.schema.json#/$defs/ValueExpression",
+                      "description": "Optional Fixed expression weighting each retained neighbor in the centroid. Left is the observer, right the neighbor. State-backed facts only; sampled at UpdateSeconds, clamped to [0,1], arithmetic failure reads zero, absent reads one. This does not filter separation or increase the candidate budget.",
+                      "default": null
+                    },
+                    "alignmentAffinity": {
+                      "$ref": "./common.schema.json#/$defs/ValueExpression",
+                      "description": "Independent Fixed expression weighting each retained neighbor\u0027s heading, under the same contract as CohesionAffinity. Affinities select relative influence; the outer Alignment and Cohesion weights set term strength.",
+                      "default": null
                     }
                   },
-                  "gate": {
-                    "$ref": "./common.schema.json#/$defs/ActionPredicate",
-                    "description": "An additional predicate that must hold beside Fact, or null for none.",
-                    "default": null
-                  },
-                  "mode": {
-                    "description": "Whether the trigger fires every tick the condition holds (Level, the default) or once per crossing (Edge). The condition is Fact and Gate together \u2014 an edge trigger re-arms only when that conjunction stops holding.",
-                    "enum": [
-                      "Level",
-                      "Edge"
+                  "required": [
+                    "range",
+                    "separationRadius",
+                    "candidateBudget",
+                    "maxNeighbors",
+                    "updateSeconds",
+                    "space",
+                    "separation",
+                    "alignment",
+                    "cohesion",
+                    "goal",
+                    "inertia",
+                    "arrivalDistance",
+                    "halfAngleDegrees",
+                    "requiresLineOfSight"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "WorldFlockProfile"
+                }
+              },
+              "required": [
+                "scalars",
+                "channels"
+              ],
+              "additionalProperties": false,
+              "title": "BodyProgramParameters"
+            },
+            "default": null
+          },
+          "actions": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "description": "One authored action: what fires on press, on release, and on a body fact\u0027s edge.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "onPress": {
+                  "$ref": "./common.schema.json#/$defs/ActionTrigger",
+                  "description": "The press trigger.",
+                  "default": null
+                },
+                "onRelease": {
+                  "$ref": "./common.schema.json#/$defs/ActionTrigger",
+                  "description": "The release trigger.",
+                  "default": null
+                },
+                "onFact": {
+                  "description": "The fact-edge triggers.",
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "description": "A trigger that fires on a body fact, level or edge.",
+                    "type": [
+                      "object",
+                      "null"
                     ],
-                    "default": "Level"
+                    "properties": {
+                      "fact": {
+                        "$ref": "./common.schema.json#/$defs/ActionFact",
+                        "description": "The body fact."
+                      },
+                      "effects": {
+                        "description": "The effects applied in order.",
+                        "type": "array",
+                        "items": {
+                          "$ref": "./common.schema.json#/$defs/ActionEffect"
+                        }
+                      },
+                      "gate": {
+                        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
+                        "description": "The predicate that must hold, or null for always.",
+                        "default": null
+                      },
+                      "mode": {
+                        "description": "Level or edge.",
+                        "enum": [
+                          "Level",
+                          "Edge"
+                        ],
+                        "default": "Level",
+                        "title": "ActionTriggerMode"
+                      }
+                    },
+                    "required": [
+                      "fact",
+                      "effects"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ActionFactTrigger"
+                  },
+                  "default": null
+                }
+              },
+              "additionalProperties": false,
+              "title": "ActionSpec"
+            },
+            "default": null
+          },
+          "collider": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "$type"
+            ],
+            "anyOf": [
+              {
+                "description": "A sphere resting on the body root.",
+                "properties": {
+                  "$type": {
+                    "const": "sphere"
+                  },
+                  "radius": {
+                    "description": "The sphere radius.",
+                    "type": "number"
                   }
                 },
                 "required": [
-                  "fact",
-                  "effects"
+                  "radius"
                 ],
-                "additionalProperties": false
+                "additionalProperties": false,
+                "title": "WorldColliderSphere"
               },
-              "default": null
-            }
+              {
+                "description": "A capsule whose lower sphere rests on the body root.",
+                "properties": {
+                  "$type": {
+                    "const": "capsule"
+                  },
+                  "endpoint": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                    "description": "The body-local vector from the lower sphere center to the upper sphere center."
+                  },
+                  "radius": {
+                    "description": "The capsule radius.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "endpoint",
+                  "radius"
+                ],
+                "additionalProperties": false,
+                "title": "WorldColliderCapsule"
+              },
+              {
+                "description": "An oriented box resting on the body root before its local rotation is applied.",
+                "properties": {
+                  "$type": {
+                    "const": "box"
+                  },
+                  "halfExtents": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                    "description": "The positive half-extents."
+                  },
+                  "rotation": {
+                    "description": "The body-local orientation.",
+                    "title": "DocumentQuaternion",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 4,
+                        "maxItems": 4
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "halfExtents",
+                  "rotation"
+                ],
+                "additionalProperties": false,
+                "title": "WorldColliderBox"
+              },
+              {
+                "description": "The finite primitive bounds emitted by a creation, composed into one compound body collider.",
+                "properties": {
+                  "$type": {
+                    "const": "fromCreation"
+                  },
+                  "prototypeId": {
+                    "description": "The referenced Id.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "prototypeId"
+                ],
+                "additionalProperties": false,
+                "title": "WorldColliderFromCreation"
+              }
+            ],
+            "default": null,
+            "title": "WorldCollider"
           },
-          "additionalProperties": false
-        },
-        "default": null
-      },
-      "collider": {
-        "type": [
-          "object",
-          "null"
-        ],
-        "required": [
-          "$type"
-        ],
-        "anyOf": [
-          {
-            "description": "A sphere resting on the body root.",
+          "bodyContact": {
+            "enum": [
+              "Overlap",
+              "Solid"
+            ],
+            "default": "Overlap",
+            "title": "WorldBodyContactMode"
+          },
+          "mass": {
+            "type": "number",
+            "default": 0
+          },
+          "rigid": {
+            "type": [
+              "object",
+              "null"
+            ],
             "properties": {
-              "$type": {
-                "const": "sphere"
-              },
-              "radius": {
-                "description": "The sphere radius.",
+              "mass": {
+                "description": "The body\u0027s mass, in the same units gravity.attractors masses use. Must be strictly positive after fixed-point compilation and yield representable room-scale mass/inertia properties \u2014 a rigid body with no compiled mass is not a rigid body, it is a decoration.",
                 "type": "number"
+              },
+              "restitution": {
+                "description": "The coefficient of restitution against the static world and against another rigid body, in [0, 1]. Zero (the default) is a dead-stop collision; one is a lossless bounce.",
+                "type": "number",
+                "default": 0
+              },
+              "friction": {
+                "description": "The Coulomb friction coefficient at a contact point, against the static world and \u2014 as the pair\u0027s average \u2014 against another rigid body: the tangential (slip) impulse the contact solver applies is clamped to this times the contact\u0027s own normal impulse magnitude, coupled through the body\u0027s own inertia rather than decaying linear and angular velocity independently. Applied only while in contact, so it never slows a free-flying body. Non-negative (a coefficient over 1 is physically ordinary); zero (the default) is frictionless.",
+                "type": "number",
+                "default": 0
+              },
+              "rollingFriction": {
+                "description": "The angular-velocity decay rate, per second, applied while a rigid body is in contact with a surface \u2014 the resistance that lets a rolling ball settle instead of spinning forever. Non-negative; the applied decay is clamped so a wide step never reverses spin.",
+                "type": "number",
+                "default": 0
+              },
+              "linearDamping": {
+                "description": "The linear-velocity decay rate, per second \u2014 applied as (1 - rate\u00B7dt) each tick, so the same authored value decays velocity the same way whatever the world\u0027s simulation rate. Non-negative; zero (the default) applies none.",
+                "type": "number",
+                "default": 0
+              },
+              "angularDamping": {
+                "description": "The angular-velocity decay rate, per second, on the same terms as LinearDamping. Non-negative; zero (the default) applies none.",
+                "type": "number",
+                "default": 0
               }
             },
             "required": [
-              "radius"
+              "mass"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldRigid"
           },
-          {
-            "description": "A capsule whose lower sphere rests on the body root.",
+          "carry": {
+            "type": [
+              "object",
+              "null"
+            ],
             "properties": {
-              "$type": {
-                "const": "capsule"
+              "offset": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                "description": "The full-scale carry point, in the carrier\u0027s own body-local axes: a carried body\u0027s world pose tracks root \u002B orientation\u00B7(Offset \u00D7 Scale) every tick it stays attached."
               },
-              "endpoint": {
-                "description": "The body-local vector from the lower sphere center to the upper sphere center."
-              },
-              "radius": {
-                "description": "The capsule radius.",
+              "massEquivalent": {
+                "description": "The carrier\u0027s own notional mass, in the same units Mass uses. A locomotion kit authors no mass of its own (Mass is gravitational, not inertial), so this stands in for it when deriving MaxCarryFraction\u0027s ceiling. Must be strictly positive.",
                 "type": "number"
+              },
+              "maxCarryFraction": {
+                "description": "The fraction of MassEquivalent \u2014 scaled by the carrier\u0027s own live Scale under the same mass \u221D Scale\u00B3 law WorldRigid derives against \u2014 a candidate body\u0027s own scaled Mass may not exceed. Non-negative; 1 (the default) admits a body up to the carrier\u0027s own mass-equivalent.",
+                "type": "number",
+                "default": 1
+              },
+              "maxReach": {
+                "description": "The greatest distance, in world units, between the carrier\u0027s and the target\u0027s positions body.carry admits. Must be strictly positive.",
+                "type": "number",
+                "default": 1.5
               }
             },
             "required": [
-              "endpoint",
-              "radius"
+              "offset",
+              "massEquivalent"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldCarry"
           },
-          {
-            "description": "An oriented box resting on the body root before its local rotation is applied.",
+          "tether": {
+            "type": [
+              "object",
+              "null"
+            ],
             "properties": {
-              "$type": {
-                "const": "box"
+              "maxAnchorDistance": {
+                "description": "The non-negative, fixed-representable world-unit ceiling an attach aim searches along the body\u0027s facing direction \u2014 also the tether\u0027s rope length at attach (the resolved anchor\u0027s actual distance, always within this ceiling).",
+                "type": "number"
               },
-              "halfExtents": {
-                "description": "The positive half-extents."
+              "aimHalfAngleDegrees": {
+                "description": "The fixed-representable aim-assist cone half-angle, degrees, within [0, 180], an attach candidate\u0027s bearing must fall within around the body\u0027s facing. Honoured only by a collider-list contact provider; a field provider\u0027s own directed march has no candidate list to score bearings over and ignores it (see WorldSolidField.TryNearestSurfaceAlongDirection\u0027s remarks).",
+                "type": "number"
               },
-              "rotation": {
-                "description": "The body-local orientation."
+              "lengthRate": {
+                "description": "The non-negative, fixed-representable world-units-per-second the held ReelChannel reels the rope at \u2014 positive reels out, negative in (the channel\u0027s own sign selects direction; this is a magnitude).",
+                "type": "number"
+              },
+              "minLength": {
+                "description": "The non-negative, fixed-representable rope-length floor a reel-in clamps to.",
+                "type": "number"
+              },
+              "releaseVelocityScale": {
+                "description": "The non-negative, fixed-representable multiplier a detach applies to the body\u0027s velocity at the instant of release \u2014 1 (the default) preserves it exactly, below 1 dampens, above 1 boosts.",
+                "type": "number",
+                "default": 1
+              },
+              "attachChannel": {
+                "description": "The declared channel name (validated) whose rising edge attaches the tether. null leaves attach unreachable from any channel.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "detachChannel": {
+                "description": "The declared channel name (validated) whose rising edge clears an active tether. null leaves detach unreachable from any channel.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "reelChannel": {
+                "description": "The declared channel name (validated) whose held bipolar value drives the rope length every tick. null leaves reel inert.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "modeState": {
+                "description": "The declared state.body/state.identity counter slot name this facet writes 1 while attached and 0 otherwise \u2014 the camera program\u0027s select op keys off it exactly as it keys off any other state.\u003Crow\u003E value. null writes nothing.",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
               }
             },
             "required": [
-              "halfExtents",
-              "rotation"
+              "maxAnchorDistance",
+              "aimHalfAngleDegrees",
+              "lengthRate",
+              "minLength"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldTether"
           },
-          {
-            "description": "The finite primitive bounds emitted by a creation, composed into one compound body collider.",
+          "pad": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "description": "The neutral pad element a Pad entry maps a channel onto. Named after the engine-neutral MachinePadState\u0027s own axis/button vocabulary; a pad entry picks exactly one.",
+              "enum": [
+                "LeftStickX",
+                "LeftStickY",
+                "RightStickX",
+                "RightStickY",
+                "LeftTrigger",
+                "RightTrigger",
+                "South",
+                "East",
+                "West",
+                "North",
+                "DpadUp",
+                "DpadDown",
+                "DpadLeft",
+                "DpadRight",
+                "LeftShoulder",
+                "RightShoulder",
+                "Start",
+                "Back"
+              ],
+              "title": "WorldPadElement"
+            },
+            "default": null
+          },
+          "autonomy": {
+            "type": [
+              "object",
+              "null"
+            ],
             "properties": {
-              "$type": {
-                "const": "fromCreation"
+              "motionSeconds": {
+                "description": "How often the body\u0027s physics/motion program advances.",
+                "type": "number",
+                "default": 0
               },
-              "creationId": {
-                "description": "The referenced Id.",
-                "type": "string"
+              "steeringSeconds": {
+                "description": "How often its selected producer refreshes steering. The most recent image is reused between refreshes.",
+                "type": "number",
+                "default": 0
               }
             },
-            "required": [
-              "creationId"
-            ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldAutonomyCadence"
           }
+        },
+        "required": [
+          "name",
+          "bodyMotionProgram",
+          "motion"
         ],
-        "default": null
+        "additionalProperties": false,
+        "title": "WorldKit"
       },
-      "bodyContact": {
-        "enum": [
-          "Overlap",
-          "Solid"
-        ],
-        "default": "Overlap"
-      }
+      "default": null
     },
-    "required": [
-      "name",
-      "bodyMotionProgram",
-      "motion"
-    ],
-    "additionalProperties": false
+    "assignment": {
+      "$ref": "./common.schema.json#/$defs/WorldRowAssignment",
+      "description": "The kit\u2192entity assignment policy \u2014 ABSENT resolves to Default.",
+      "default": null
+    }
   },
-  "default": null
+  "additionalProperties": false,
+  "default": null,
+  "title": "WorldKitsSection"
 }

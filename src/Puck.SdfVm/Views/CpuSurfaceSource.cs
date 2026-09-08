@@ -7,7 +7,7 @@ namespace Puck.SdfVm.Views;
 /// <summary>
 /// Wraps per-frame CPU pixels as a screen source: it uploads a producer's B8G8R8A8/R8G8B8A8 frame to an
 /// <see cref="IGpuSurfaceUpload"/>-backed image (the upload object recreates the image on a dimension/format change)
-/// and exposes the resulting stable view handle as a <see cref="Func{T}"/> a <see cref="GuestSurfaceView"/> samples.
+/// and exposes the resulting stable view handle as a <see cref="Func{T}"/> its consumer samples.
 /// The input seam takes either a whole <see cref="Surface"/> — the CPU-pixel variant an
 /// <see cref="IFrameCaptureSource"/> produces — or a raw pixel buffer a fill-a-buffer producer hands over, so a
 /// capture session and a procedural pattern connect through the same adapter.
@@ -26,8 +26,8 @@ public sealed class CpuSurfaceSource : IDisposable {
     /// the first successful publish.</summary>
     public nint CurrentHandle => m_handle;
     /// <summary>Gets a stable delegate that returns the <see cref="CurrentHandle"/> on each call — the
-    /// <c>Func&lt;nint&gt;</c> a <see cref="GuestSurfaceView"/> resolves against. The same delegate instance is
-    /// returned every time, so it may be captured once at registration.</summary>
+    /// <c>Func&lt;nint&gt;</c> a screen binding resolves against. The same delegate instance is returned every time,
+    /// so it may be captured once at registration.</summary>
     public Func<nint> AsSource => (m_asSource ??= (() => m_handle));
 
     /// <summary>Publishes a CPU-pixel <see cref="Surface"/> (an <see cref="IFrameCaptureSource"/> capture). A surface

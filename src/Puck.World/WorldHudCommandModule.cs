@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using Puck.Commands;
 using Puck.Overlays;
 using Puck.World.Client;
@@ -22,12 +23,54 @@ namespace Puck.World;
 /// <see cref="HudBindingVocabulary"/> and the live document's own <c>state</c> section, resolved on demand and never
 /// stored — the console-only twin of what a <see cref="WorldHudElement.Template"/> row does when authored.
 /// </summary>
-internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster) : ICommandModule {
+internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResolver bindings, PlayerRoster roster, WorldOverlayFacts facts) : ICommandModule {
     private const string SeatFilterPrefix = "seat:";
 
-    private string DescribeElement(string panelId, WorldHudElement element) {
+    // A frame element's candidates in rank order (source JSON plus its condition, when one is authored) and the
+    // candidate winning now for the scope asked about — the same first-holding rule the feed publishes by. slot -1
+    // is the world scope (any joined seat).
+    private string DescribeFrameCandidates(WorldHudElement element, int slot) {
+        var candidates = element.FrameCandidates;
+        var winner = OverlayRanking.FirstHolding(
+            candidates: candidates,
+            evaluator: facts,
+            slot: slot,
+            when: static candidate => candidate.When
+        );
+        var builder = new System.Text.StringBuilder(value: " candidates=[");
+
+        for (var index = 0; (index < candidates.Count); index++) {
+            var candidate = candidates[index];
+
+            _ = builder.Append(value: ((index == 0) ? "" : " | ")).Append(value: JsonSerializer.Serialize(
+                value: candidate.Source,
+                jsonTypeInfo: WorldJsonContext.Default.WorldFrameSource
+            ));
+
+            if (candidate.When is { } when) {
+                _ = builder.Append(value: " when=").Append(value: when.GetType().Name.ToLowerInvariant());
+            }
+        }
+
+        return builder.Append(
+            provider: System.Globalization.CultureInfo.InvariantCulture,
+            handler: $"] winner={((winner >= 0) ? winner.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "none")} fadeSeconds={element.FadeSeconds:0.###} fit={element.Fit.ToString().ToLowerInvariant()} mirror={(element.Mirror ? "true" : "false")} radius={element.Radius:0.###} opacity={element.Opacity:0.###}"
+        ).ToString();
+    }
+    private string DescribeElement(string panelId, WorldHudElement element, int slot) {
         var bindingToken = (element.Binding ?? "(none)");
+        var frameText = string.Empty;
         var valueText = string.Empty;
+
+        if (
+            (WorldHudElementKind.Frame == element.Kind) &&
+            (element.FrameCandidates.Count > 0)
+        ) {
+            frameText = DescribeFrameCandidates(
+                element: element,
+                slot: slot
+            );
+        }
 
         if (element.Template is { Length: > 0 } template) {
             // A validated document element's placeholders are already proven against the closed vocabulary and the
@@ -51,20 +94,23 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             valueText = $" text='{literal}'";
         }
 
-        return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{valueText}]";
+        return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{frameText}{valueText}]";
     }
     private string DescribeHud() {
         var section = server.Definition.Hud;
-        // The cursor policy echoes RESOLVED (authored row, or the built-in default an unauthored row falls back
-        // to) so this read-back and what the drawn cursor actually uses can never disagree.
-        var cursor = (section.Defaults.Cursor ?? WorldHudCursor.Default);
+        // The cursor policy echoes what the drawn cursor actually uses: the authored row, or 'hidden' for an
+        // unauthored one (the engine draws no cursor of its own), so this read-back and the cursor cannot disagree.
+        var cursorText = ((section.Defaults.Cursor is { } cursor)
+            ? string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"cursorHoverRadius={cursor.HoverRadius:0.##} cursorSizePx={cursor.SizePx:0.##} cursorRole={cursor.Role.ToString().ToLowerInvariant()}"
+            )
+            : "cursor=hidden"
+        );
         var lines = new List<string>(capacity: (1 + section.Panels.Count)) {
-            string.Create(
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"[world.hud: enabled {(section.Defaults.Enabled
+            $"[world.hud: enabled {(section.Defaults.Enabled
             ? "true"
-            : "false")} cursorHoverRadius={cursor.HoverRadius:0.##} cursorSizePx={cursor.SizePx:0.##} cursorRole={cursor.Role.ToString().ToLowerInvariant()} panels {section.Panels.Count}/{WorldHudCapacity.MaxWorldPanels}]"
-        ),
+            : "false")} {cursorText} panels {section.Panels.Count}/{WorldHudCapacity.MaxWorldPanels}]",
         };
 
         foreach (var panel in section.Panels) {
@@ -73,7 +119,8 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
             foreach (var element in panel.Elements) {
                 lines.Add(item: DescribeElement(
                     panelId: panel.Id,
-                    element: element
+                    element: element,
+                    slot: -1
                 ));
             }
         }
@@ -118,7 +165,8 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
         foreach (var element in panel.Elements) {
             lines.Add(item: DescribeElement(
                 panelId: panel.Id,
-                element: element
+                element: element,
+                slot: slot
             ));
         }
 
@@ -235,18 +283,13 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
         }
 
         return (
-            int.TryParse(
-            s: token.AsSpan(start: SeatFilterPrefix.Length),
-            style: System.Globalization.NumberStyles.Integer,
-            provider: System.Globalization.CultureInfo.InvariantCulture,
-            result: out seat
+            CommandArgs.TryParseInt(
+            text: token.AsSpan(start: SeatFilterPrefix.Length),
+            value: out seat
         ) &&
             (seat >= 1) &&
             (seat <= PlayerRoster.MaxSlots)
         );
-    }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
     }
 
     /// <inheritdoc/>
@@ -254,7 +297,7 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.hud",
-            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
+            description: "Reads back the live hud state (Immediate): with no argument, the world-scope defaults row, every panel's id/layer/style/rect/element count against WorldHudCapacity's schema caps, and every element's kind/style/binding. A frame element additionally echoes its ranked source candidates (source JSON plus its condition's kind), the candidate winning now for the scope (world: any joined seat; seat:<n>: that seat), and fadeSeconds/fit/mirror/radius/opacity. With seat:<n> (1..4), that LOCAL seat's PRIVATE player-scope panel instead — authored through identity.hud <panel-json> [player] — or a refusal naming why there is none: world.hud [seat:<n>]. Either form resolves a bound element's LIVE value through the SAME IHudBindingResolver the renderer uses, and a templated element's placeholders through the SAME resolver too, so this read-back and what is on screen can never disagree.",
             handler: (_, args) => DescribeHudHandler(args: args),
             routing: CommandRouting.Immediate
         );
@@ -269,7 +312,7 @@ internal sealed class WorldHudCommandModule(WorldServer server, IHudBindingResol
                 );
 
                 return ((template.Length == 0)
-                    ? Usage(
+                    ? CommandResult.Usage(
                         form: "<template text...>",
                         verb: "world.hud.template"
                     )

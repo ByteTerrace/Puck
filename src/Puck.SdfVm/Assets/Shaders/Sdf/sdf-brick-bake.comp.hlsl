@@ -1,4 +1,4 @@
-// The carve-union brick baker (carve-bake plan §3) — a tiny, standalone compute kernel: ONE thread per voxel. It reads
+// The carve-union brick baker — a tiny, standalone compute kernel: ONE thread per voxel. It reads
 // a bin's settled sphere-carve list from a request buffer and writes the closed-form UNION distance
 // min_i(|v - c_i| - r_i) / lambda into the persistent brick pool at the brick's base word. The values are pre-scaled by
 // 1/lambda (lambda = sqrt(3) folded in at bake), which makes the trilinear interpolant the render kernels sample

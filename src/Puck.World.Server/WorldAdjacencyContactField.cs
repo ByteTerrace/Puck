@@ -41,31 +41,45 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         m_source = source;
     }
 
-    /// <inheritdoc/>
-    public WorldContactCensus Census => m_inner.Census;
+    // The one path walk all four point/vector mappings share. Into the neighbour is the reversed traversal with each
+    // stage's own source as its origin; back into this world is the forward traversal with the pair read the other way.
+    // TStage is a struct type argument so the per-stage primitive stays a direct call, not a delegate.
+    private static FixedVector3 MapAlong<TStage>(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path, bool intoNeighbour)
+        where TStage : IFrameStageMap {
+        if (intoNeighbour) {
+            for (var stageIndex = (path.Count - 1); (stageIndex >= 0); stageIndex--) {
+                var stage = path[stageIndex];
 
-    private static FixedVector3 MapIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        for (var stageIndex = (path.Count - 1); (stageIndex >= 0); stageIndex--) {
-            var stage = path[stageIndex];
+                value = TStage.Map(
+                    value: value,
+                    source: stage.Source,
+                    destination: stage.Neighbour
+                );
+            }
 
-            value = WorldFrameIsometry.MapPoint(
-                point: value,
-                source: stage.Source,
-                destination: stage.Neighbour
-            );
+            return value;
         }
-        return value;
-    }
-    private static FixedVector3 MapIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
+
         foreach (var stage in path) {
-            value = WorldFrameIsometry.MapPoint(
-                point: value,
+            value = TStage.Map(
+                value: value,
                 source: stage.Neighbour,
                 destination: stage.Source
             );
         }
+
         return value;
     }
+    private static FixedVector3 MapIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) => MapAlong<PointStageMap>(
+        intoNeighbour: true,
+        path: path,
+        value: value
+    );
+    private static FixedVector3 MapIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) => MapAlong<PointStageMap>(
+        intoNeighbour: false,
+        path: path,
+        value: value
+    );
     private static FixedQuaternion MapOrientationIntoNeighbour(FixedQuaternion value, IReadOnlyList<WorldAdjacencyFramePair> path) {
         for (var stageIndex = (path.Count - 1); (stageIndex >= 0); stageIndex--) {
             var stage = path[stageIndex];
@@ -77,33 +91,22 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         }
         return value;
     }
-    private static FixedVector3 MapVectorIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        for (var stageIndex = (path.Count - 1); (stageIndex >= 0); stageIndex--) {
-            var stage = path[stageIndex];
-
-            value = WorldFrameIsometry.MapVector(
-                value: value,
-                source: stage.Source,
-                destination: stage.Neighbour
-            );
-        }
-        return value;
-    }
-    private static FixedVector3 MapVectorIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) {
-        foreach (var stage in path) {
-            value = WorldFrameIsometry.MapVector(
-                value: value,
-                source: stage.Neighbour,
-                destination: stage.Source
-            );
-        }
-        return value;
-    }
-    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+    private static FixedVector3 MapVectorIntoNeighbour(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) => MapAlong<VectorStageMap>(
+        intoNeighbour: true,
+        path: path,
+        value: value
+    );
+    private static FixedVector3 MapVectorIntoSource(FixedVector3 value, IReadOnlyList<WorldAdjacencyFramePair> path) => MapAlong<VectorStageMap>(
+        intoNeighbour: false,
+        path: path,
+        value: value
+    );
+    private ContactResolution ResolveCore(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         var resolution = m_inner.ResolveSweep(
             orientation: in orientation,
-            position: ref position,
+                    position: ref position,
             previousPosition: previousPosition,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
@@ -190,10 +193,19 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
             ) &&
                 (neighbourField is not null)
             ) {
+                // The up axis is a DIRECTION in the local frame, so it crosses the seam through the same isometry the
+                // orientation does. Handing the neighbour an unmapped axis makes its walkable test measure against the
+                // wrong vertical and the body loses ground exactly where the seam hands over.
+                var neighbourUp = MapVectorIntoNeighbour(
+                    path: projection.Path,
+                    value: up
+                );
+
                 neighbourResolution = neighbourField.ResolveSweep(
                     orientation: in neighbourOrientation,
                     position: ref neighbourPosition,
                     previousPosition: neighbourPreviousPosition,
+                    up: in neighbourUp,
                     velocity: ref neighbourVelocity,
                     volumes: volumes
                 );
@@ -272,45 +284,49 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
     }
 
     /// <inheritdoc/>
-    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+    public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         return ResolveCore(
             entityIndex: -1,
             orientation: in orientation,
             position: ref position,
             previousPosition: position,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
     }
     /// <inheritdoc/>
-    public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+    public ContactResolution ResolveEntity(int entityIndex, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) {
         return ResolveCore(
             entityIndex: entityIndex,
             orientation: in orientation,
             position: ref position,
             previousPosition: position,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
     }
     /// <inheritdoc/>
     public ContactResolution ResolveEntitySweep(int entityIndex, in FixedVector3 previousPosition, ref FixedVector3 position,
-        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+        ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(
             entityIndex: entityIndex,
             orientation: in orientation,
             position: ref position,
             previousPosition: previousPosition,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
     /// <inheritdoc/>
-    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes) =>
+    public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
         ResolveCore(
             entityIndex: -1,
             orientation: in orientation,
             position: ref position,
             previousPosition: previousPosition,
+            up: in up,
             velocity: ref velocity,
             volumes: volumes
         );
@@ -320,4 +336,21 @@ internal sealed class WorldAdjacencyContactField : IEntityContactField {
         up: out up
     );
 
+    private interface IFrameStageMap {
+        static abstract FixedVector3 Map(FixedVector3 value, in WorldFaceFrame source, in WorldFaceFrame destination);
+    }
+    private readonly struct PointStageMap : IFrameStageMap {
+        public static FixedVector3 Map(FixedVector3 value, in WorldFaceFrame source, in WorldFaceFrame destination) => WorldFrameIsometry.MapPoint(
+            destination: in destination,
+            point: value,
+            source: in source
+        );
+    }
+    private readonly struct VectorStageMap : IFrameStageMap {
+        public static FixedVector3 Map(FixedVector3 value, in WorldFaceFrame source, in WorldFaceFrame destination) => WorldFrameIsometry.MapVector(
+            destination: in destination,
+            source: in source,
+            value: value
+        );
+    }
 }

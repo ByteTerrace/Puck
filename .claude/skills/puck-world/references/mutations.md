@@ -6,6 +6,23 @@ sealed records — one coarse record per `WorldDefinition` section, addressed by
 stable id, whole-row upsert, never a field poke. A genre world arrives as
 different DATA through these same messages, never a new message shape.
 
+`Batch` can carry a full `expectedDefinition` fingerprint, named placement/state `expectedInputs`, bounded
+three-dimensional `expectedSpatialReads`, and numeric `expectedCells` comparisons evaluated at commit time.
+Spatial reads include referenced state values and catch new or moved blockers entering the region.
+Each cell can also require an exact post-composition `change` and `kind`; failure discards the whole candidate.
+Observation grants cover guarded rows. Members must carry the enclosing principal, checked at codec and server
+admission. Reflow uses this ordinary batch and ordered submission path; Immediate preview starts bounded background work,
+status reviews detached positions and price, and Simulation commit submits the resulting payload. A preview is
+not a simulation write. Do not replace that submission with direct server enqueue in the console: the link is
+what records the accepted payload for replay.
+Successful base rebuilds clear deal sweep memos so a reset or live replay materializes children even when
+the replacement inventory equals the prior session's. Ordinary edits and undo retain their reconciliation semantics.
+
+Rule-driven state, placement, and HUD mutations share one firing-order queue. Document effects validate a
+speculative candidate including earlier queued writes; scope rollback discards its entire tail. The end-of-rule
+fold installs through the ordinary mutation door once. Keep this boundary intact when adding an effect; see
+the [rule frame contract](../../../../src/Puck.World.Server/README.md#rule-effects-land-on-a-frame-worldserverrulehostcs-worldserverruleframecs).
+
 ## Contents
 
 - The tick (`WorldServer.Step`)
@@ -22,8 +39,10 @@ The exact per-tick order, transcribed from `Step`:
    validates, applies nothing (a guest's effect never depends on where in the
    tick it was pumped).
 2. `DrainPendingOps` — drain the buffered live edits FIFO (mutations,
-   whole-document swaps, undo, addon lifecycle), each applying at this tick boundary; deliver
-   the new definition to the client sink ONCE if at least one applied.
+   whole-document swaps, undo), each applying at this tick boundary; deliver
+   the new definition to the client sink ONCE if at least one applied. An
+   `UpsertAddon`/`RemoveAddon` mutation carries its own addon-prepare gate —
+   the LAST fallible step before install — see [addons.md](addons.md).
 3. Drain the tick's buffered intents (`m_intents` → `ApplyIntentSubmission`,
    under the per-tick Drive check).
 4. `WorldAddonRuntime.ApplyContributions` — the guests' staged contributions
@@ -51,13 +70,15 @@ The exact per-tick order, transcribed from `Step`:
 14. `EmitSnapshot`: deliver the tick's `WorldSnapshot`.
 
 The shared shell is `src/Puck.World.Server/WorldServerStepShell.cs`: drain pending
-TCP work → `WorldServer.Step` → `WorldConsoleWaitGate.PublishTick` (the
-`world.wait` clock counts completed simulation ticks) → replay `NoteTick`
-when armed. `WorldSimulation` wraps it with seat-intent submission before the
-shell and seat-context sync plus analog/editor latching after it. The launcher
-owns time, pacing off `IFixedStepSimulation.RatePerSecond` (240 Hz by
-default — `WorldSimulationDefaults.DefaultRateHz` — but authored per world via
-the document's `simulation.rateHz` field; see
+QUIC work → replay `InjectDriveTick` (a no-op unless a live drive is in
+progress — see [replay.md](replay.md)) → `WorldServer.Step` →
+`WorldConsoleWaitGate.PublishTick` (the `world.wait` clock counts completed
+simulation ticks) → replay `NoteTick` when armed, looping for a
+fast-forwarding drive's burst. `WorldSimulation` wraps it with seat-intent submission before the
+shell and seat-context sync plus the per-tick analog clear after it. The launcher
+owns time, pacing off `IFixedStepSimulation.RatePerSecond` (authored per world
+via the document's `simulation.rateHz` field — the shipped worlds author 30 Hz
+themselves, and a world authoring no section is rate-0 resident; see
 [documents.md](documents.md)). A `.puckreplay` tape carries its OWN
 `SimulationRate`, stamped at record time from the live world's own rate, and
 `Drive` refuses a disagreement with the embedded definition's own
@@ -197,7 +218,6 @@ nested records, which are the authority:
 | Host | SetHostDefaults 30 |
 | Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33 |
 | Looks | UpsertLook 34, RemoveLook 35, SetLookAssignment 36 |
-| Links | UpsertScreenLink 37, RemoveScreenLink 38 |
 | Grants | UpsertGrant 39, RemoveGrant 40 |
 | Hud | UpsertHudPanel 41, RemoveHudPanel 42, UpsertHudElement 43, RemoveHudElement 44, SetHudDefaults 45 |
 | State | UpsertStateRow 46, RemoveStateRow 47 (whole row), UpsertStateCell 49, RemoveStateCell 50 (one cell), Generate 51 (one draw at a draw SITE) |
@@ -206,12 +226,21 @@ nested records, which are the authority:
 | Interactions | UpsertInteraction 54, RemoveInteraction 55 |
 | Groups | UpsertGroupKind 56, RemoveGroupKind 57, FormGroup 58, JoinGroup 59, LeaveGroup 60, KickMember 61, OfferOwnership 62, SettleOwnership 63 |
 | PlayerDefaults | SetPlayerDefaults 64 |
-| Market | CreateMarketListing 65, PlaceMarketBid 66, BuyoutMarketListing 67, CancelMarketListing 68, SettleMarketListing 69, PruneMarketListings 70 |
+| Dynamics | UpsertDynamics 71, RemoveDynamics 72 |
+| Curves | UpsertCurve 73, RemoveCurve 74 |
+
+Ordinals 37/38 (the retired screen-link pair) are unassigned and never reused:
+machine cable linking is authored on the `Machine` source itself
+(`WorldMachineCable`), so cable edits ride `UpsertScreen`. Ordinals 65-70 (the
+retired market kinds) are unassigned and never reused: the local auction house
+dissolved into an escrowed conditional transfer over ordinary keyed rows,
+authored as rules — see [documents.md](documents.md)'s `state` section.
 
 Rules the catalog encodes:
 
-- **Asset hash pinning.** `UpsertCreation`/`UpsertTune`/`UpsertPatch`
-  re-canonicalize the embedded document at the compose boundary and REJECT a
+- **Asset hash pinning.** `UpsertCreation` re-canonicalizes its embedded
+  document at the compose boundary; `UpsertTune`/`UpsertPatch` load their
+  referenced document off disk and canonicalize it there. Both REJECT a
   carried hash the pipeline did not itself compute.
 - **No cascades.** `RemoveCreation`/`RemoveTune`/`RemovePatch` refuse while
   dependents reference them, naming the dependents — remove or retarget the
@@ -245,17 +274,17 @@ Rules the catalog encodes:
 
 - **A draw site's own bookkeeping.** `Generate` names ONE row — the SITE — and
   writes its drawn slot cell together with the site's own `drawCursor` (plus
-  `drawDecks` under a deck mode) in one candidate. The row is the authority
+  `drawnMasks` under an exhausting mode) in one candidate. The row is the authority
   subject; the cursor advance is engine bookkeeping intrinsic to drawing, while
   re-authoring the site's facet, or the `generators` row it references, is an
   `UpsertStateRow` against that row, gated there. Sampling itself lives in
-  `Puck.World.Schema/WorldGeneratorEngine.cs` because the BOOT resolver — which
+  `Puck.State/GeneratorEngine.cs` because the BOOT resolver — which
   runs before any server exists — must reach the identical code.
 
 ## Adding a mutation kind, end to end
 
-**FIRST — the catalog declares 71 kinds (ordinals 0–70) on a 128-bit lane.**
-Ordinals 71–127 are free; a colliding ordinal is still a boot failure, not an
+**FIRST — the catalog declares 68 kinds on a 128-bit lane (0–75 with 37/38 and
+65-70 retired).** Ordinals 76–127 are free; a colliding ordinal is still a boot failure, not an
 option. A genuinely new kind is
 a SUBSTRATE decision, not a lane's, and must SURVIVE CONSOLIDATION REVIEW first:
 is this an existing kind's payload? Most proposals are — a new section reuses
@@ -300,7 +329,7 @@ past the consolidation gate do the steps below apply.
 A kind's CONSOLE reachability (steps above) is independent of its ADDON
 reachability: a guest submits a mutation through a Mutate handle's own
 hand-walked JSON door, `Addons.WorldAddonMutationDecoder`, which wires only a
-NAMED SUBSET of the 64 declared kinds today (10, as of this writing — the 5 HUD
+NAMED SUBSET of the 73 declared kinds today (10, as of this writing — the 5 HUD
 kinds plus the 2 placement kinds, the 2 state kinds, and `SetInputHold`; the
 Properties/Interactions/Groups kinds are console-only, not addon-reachable; see
 [addons.md](addons.md#requests-queries-verdicts) for the exact list and the

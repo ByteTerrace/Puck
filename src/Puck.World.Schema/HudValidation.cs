@@ -1,11 +1,10 @@
 namespace Puck.World;
 
-/// <summary>The <c>hud.validate</c> door's whole refusal vocabulary — every reason <see cref="HudValidationException"/>
-/// can be constructed with. <see cref="WorldDefinitionValidator"/>'s HUD checks each name exactly one of these; there
-/// is no other way to construct an <see cref="HudValidationException"/>, so <c>world.refusals</c>' catalog (which
-/// reads this enum's <see cref="RefusalAttribute"/> tags) is exhaustive over what this door can refuse with, by
-/// construction rather than by convention — the same discipline <c>Client.Sdf.SdfRefusal</c> uses for
-/// <c>sdf.decode</c>.</summary>
+/// <summary>The <c>hud.validate</c> door's whole refusal vocabulary — every reason <see cref="HudRowValidation.Refuse"/>
+/// can be called with. <see cref="WorldDefinitionValidator"/>'s HUD checks name exactly one of these per collected
+/// line, so <c>world.refusals</c>' catalog (which reads this enum's <see cref="RefusalAttribute"/> tags) is
+/// exhaustive over what this door can refuse with, by construction rather than by convention — the same discipline
+/// <c>Client.Sdf.SdfRefusal</c> uses for <c>sdf.decode</c>.</summary>
 internal enum HudRefusal {
     /// <summary>The section's panel count exceeds its scope's ceiling — <see cref="WorldHudCapacity.MaxWorldPanels"/>
     /// for a world document, <see cref="WorldHudCapacity.MaxSeatPanels"/> for an identity-owned one.</summary>
@@ -19,6 +18,11 @@ internal enum HudRefusal {
     /// <summary>A panel's element count exceeds <see cref="WorldHudCapacity.MaxElementsPerPanel"/>.</summary>
     [Refusal(door: "hud.validate", condition: "a panel's element count exceeds WorldHudCapacity.MaxElementsPerPanel", kind: RefusalKind.Verdict)]
     TooManyElements,
+
+    /// <summary>A HUD section names more than <see cref="WorldHudCapacity.MaxFrameSources"/> structurally unique
+    /// frame sources.</summary>
+    [Refusal(door: "hud.validate", condition: "a HUD section names more than WorldHudCapacity.MaxFrameSources structurally unique frame sources", kind: RefusalKind.Verdict)]
+    TooManyFrameSources,
 
     /// <summary>Two element rows within the same panel share the same id.</summary>
     [Refusal(door: "hud.validate", condition: "two element rows within the same panel share the same id", kind: RefusalKind.Verdict)]
@@ -60,29 +64,70 @@ internal enum HudRefusal {
     /// role.</summary>
     [Refusal(door: "hud.validate", condition: "the defaults row's cursor policy carries a non-finite or out-of-band hover radius, ring size, or an undefined palette role", kind: RefusalKind.Verdict)]
     CursorInvalid,
+
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element's <see cref="WorldHudElement.Source"/> is missing
+    /// or fails the shared frame-source gate (an undeclared view camera, an unrecognized camera sensor, an
+    /// undeclared probe, or a malformed capture selector/profile).</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element's source is missing or fails the shared frame-source gate", kind: RefusalKind.Verdict)]
+    FrameSourceInvalid,
+
+    /// <summary>A non-<see cref="WorldHudElementKind.Frame"/> element carries a <see cref="WorldHudElement.Source"/>.</summary>
+    [Refusal(door: "hud.validate", condition: "a non-frame element carries a source", kind: RefusalKind.Verdict)]
+    FrameSourceNotAllowed,
+
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element's <see cref="WorldHudElement.Radius"/> is
+    /// non-finite or negative.</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element's radius is non-finite or negative", kind: RefusalKind.Verdict)]
+    InvalidFrameRadius,
+
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element's <see cref="WorldHudElement.Opacity"/> is
+    /// non-finite or outside [0, 1].</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element's opacity is non-finite or outside [0, 1]", kind: RefusalKind.Verdict)]
+    InvalidFrameOpacity,
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element authors both <see cref="WorldHudElement.Source"/>
+    /// and <see cref="WorldHudElement.Sources"/>, or an empty or over-long candidate list.</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element authors both source and sources, or sources is empty or exceeds WorldHudCapacity.MaxFrameCandidatesPerElement", kind: RefusalKind.Verdict)]
+    FrameCandidatesInvalid,
+    /// <summary>A frame candidate's <c>when</c> predicate is malformed.</summary>
+    [Refusal(door: "hud.validate", condition: "a frame candidate's when predicate is malformed", kind: RefusalKind.Verdict)]
+    FramePredicateInvalid,
+    /// <summary>A <see cref="WorldHudElementKind.Frame"/> element's <see cref="WorldHudElement.FadeSeconds"/> is
+    /// non-finite or negative.</summary>
+    [Refusal(door: "hud.validate", condition: "a frame element's fadeSeconds is non-finite or negative", kind: RefusalKind.Verdict)]
+    InvalidFrameFade,
+    /// <summary>A panel, defaults, or cursor <c>visible</c> predicate is malformed.</summary>
+    [Refusal(door: "hud.validate", condition: "a visible predicate is malformed", kind: RefusalKind.Verdict)]
+    VisiblePredicateInvalid,
 }
 /// <summary>
 /// Row-level HUD validation shared by <see cref="WorldDefinitionValidator"/> (world-scope panels, capped by
 /// <see cref="WorldHudCapacity.MaxElementsPerPanel"/>) and the identity-owned world validator (the one
 /// seat-scope panel a profile authors, capped by <see cref="WorldHudCapacity.MaxElementsPerSeatPanel"/>) — the same
 /// rect-sanity, element-id-uniqueness, and closed-binding-vocabulary checks apply at both scopes, so this is the one
-/// place they can never drift apart. Every check throws an enum-reasoned <see cref="HudValidationException"/> at its
-/// first violation (the <c>sdf.decode</c>/<c>SdfRefusal</c> discipline).
+/// place they can never drift apart. Every check APPENDS an enum-reasoned line to the caller's <c>errors</c> list
+/// rather than throwing — a violation on one row never short-circuits validating the rest of the section.
 /// </summary>
 internal static class HudRowValidation {
+    /// <summary>Appends one enum-reasoned HUD refusal line — <c>hud.&lt;reason&gt;: &lt;message&gt;</c>, the same
+    /// spelling <see cref="WorldDefinitionValidator.Validate"/> folds every other section's errors under.</summary>
+    internal static void Refuse(List<string> errors, HudRefusal reason, string message) => errors.Add(item: $"hud.{reason}: {message}");
+
     // Shared by a plain Binding and every Template placeholder: parse against the closed HudBindingVocabulary, then
     // — for a state.* token — resolve its existence against the document's OWN declared state rows (world scope only
     // carries a real map; seat scope passes null, refusing every state.* token, same as ValidateElement's remarks).
     // 'refusal' lets the two callers report under their own HudRefusal reason while sharing every other line.
-    private static void ValidateBindingToken(string token, string path, IReadOnlyDictionary<string, WorldStateRow>? stateRows, HudRefusal refusal) {
+    private static void ValidateBindingToken(string token, string path, IReadOnlyDictionary<string, WorldStateRow>? stateRows, HudRefusal refusal, List<string> errors) {
         if (!HudBindingVocabulary.TryParse(
             binding: out var parsed,
             token: token
         )) {
-            throw new HudValidationException(
+            Refuse(
+                errors: errors,
                 message: $"{path} '{token}' is not in the closed HudBindingVocabulary.",
                 reason: refusal
             );
+
+            return;
         }
 
         if (parsed.Kind == HudBindingKind.StateNamed) {
@@ -93,21 +138,140 @@ internal static class HudRowValidation {
                 value: out var row
             )
             ) {
-                throw new HudValidationException(
+                Refuse(
+                    errors: errors,
                     message: $"{path} '{token}' names no declared state row.",
                     reason: refusal
                 );
+
+                return;
             }
 
             if (
                 (parsed.StateCellKey is { } cellKey) &&
                 !row.HasCell(key: cellKey)
             ) {
-                throw new HudValidationException(
+                Refuse(
+                    errors: errors,
                     reason: refusal,
                     message: $"{path} '{token}' names no declared cell '{cellKey}' on state row '{parsed.StateName}'."
                 );
             }
+        }
+    }
+    // Bridges ValidateFrameSource's collect-many-errors style (a List<string>, shared with every other screen/probe
+    // frame-source site) into this door's own collected style: run the shared gate into a scratch list, then fold
+    // it into ONE hud.frameSourceInvalid line naming every collected sub-message, rather than forking a second copy
+    // of the gate.
+    private static void ValidateFrameElementSource(WorldHudElement element, string path, WorldDefinition? definition, HashSet<string>? cameras, List<string> errors, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null) {
+        var isFrame = (element.Kind == WorldHudElementKind.Frame);
+
+        if (!isFrame) {
+            if ((element.Source is not null) || (element.Sources is not null)) {
+                Refuse(
+                    errors: errors,
+                    message: $"{path}.source is only legal on a 'frame' kind element (got '{element.Kind}').",
+                    reason: HudRefusal.FrameSourceNotAllowed
+                );
+            }
+
+            return;
+        }
+
+        if ((element.Source is not null) && (element.Sources is not null)) {
+            Refuse(
+                errors: errors,
+                message: $"{path} authors both source and sources — a single unconditional source is 'source', a ranked list is 'sources'.",
+                reason: HudRefusal.FrameCandidatesInvalid
+            );
+
+            return;
+        }
+
+        var candidates = element.FrameCandidates;
+
+        if ((candidates.Count == 0) || (candidates.Count > WorldHudCapacity.MaxFrameCandidatesPerElement)) {
+            Refuse(
+                errors: errors,
+                message: $"{path} needs 1..{WorldHudCapacity.MaxFrameCandidatesPerElement} frame source candidates (got {candidates.Count}).",
+                reason: HudRefusal.FrameCandidatesInvalid
+            );
+
+            return;
+        }
+
+        for (var index = 0; (index < candidates.Count); index++) {
+            var candidate = candidates[index];
+            var candidatePath = ((element.Sources is null)
+                ? $"{path}.source"
+                : $"{path}.sources[{index}]"
+            );
+            var frameErrors = new List<string>();
+
+            WorldDefinitionValidator.ValidateFrameSource(
+                cameras: (cameras ?? []),
+                definition: definition!,
+                errors: frameErrors,
+                path: ((element.Sources is null) ? candidatePath : $"{candidatePath}.source"),
+                source: candidate?.Source
+            );
+
+            if (frameErrors.Count > 0) {
+                Refuse(
+                    errors: errors,
+                    message: string.Join(separator: " ", values: frameErrors),
+                    reason: HudRefusal.FrameSourceInvalid
+                );
+            }
+
+            var predicateErrors = new List<string>();
+
+            WorldDefinitionValidator.ValidateOverlayPredicate(
+                definition: definition,
+                errors: predicateErrors,
+                path: $"{candidatePath}.when",
+                predicate: candidate?.When,
+                stateRows: stateRows
+            );
+
+            if (predicateErrors.Count > 0) {
+                Refuse(
+                    errors: errors,
+                    message: string.Join(separator: " ", values: predicateErrors),
+                    reason: HudRefusal.FramePredicateInvalid
+                );
+            }
+        }
+
+        if (!float.IsFinite(f: element.FadeSeconds) || (element.FadeSeconds < 0f)) {
+            Refuse(
+                errors: errors,
+                message: $"{path}.fadeSeconds must be finite and non-negative (got {element.FadeSeconds}).",
+                reason: HudRefusal.InvalidFrameFade
+            );
+        }
+
+        if (
+            !float.IsFinite(f: element.Radius) ||
+            (element.Radius < 0f)
+        ) {
+            Refuse(
+                errors: errors,
+                reason: HudRefusal.InvalidFrameRadius,
+                message: $"{path}.radius must be finite and non-negative (got {element.Radius})."
+            );
+        }
+
+        if (
+            !float.IsFinite(f: element.Opacity) ||
+            (element.Opacity < 0f) ||
+            (element.Opacity > 1f)
+        ) {
+            Refuse(
+                errors: errors,
+                reason: HudRefusal.InvalidFrameOpacity,
+                message: $"{path}.opacity must be finite and within [0, 1] (got {element.Opacity})."
+            );
         }
     }
 
@@ -118,31 +282,49 @@ internal static class HudRowValidation {
     /// refuses there — a player-profile document is authored independent of any particular world and can never know
     /// which state rows one will declare); for a <c>state.&lt;row&gt;.&lt;key&gt;</c> token, additionally that the
     /// key resolves against that row's own authored cells — a binding naming a row that exists but no such cell
-    /// refuses exactly like one naming no row at all, never a silently blank panel.</summary>
+    /// refuses exactly like one naming no row at all, never a silently blank panel. A <see cref="WorldHudElementKind.Frame"/>
+    /// element additionally requires a valid <see cref="WorldHudElement.Source"/> (the shared <c>ValidateFrameSource</c>
+    /// gate); every other kind refuses one. <paramref name="definition"/>/<paramref name="cameras"/> are required only
+    /// for that check — <see langword="null"/> is legal on a caller that never authors a Frame element.</summary>
     /// <param name="element">The element to validate.</param>
     /// <param name="path">The dotted path to name in a thrown message.</param>
     /// <param name="elementIds">The owning panel's id set so far (mutated: the element's id is added on success).</param>
     /// <param name="stateRows">The world's declared <c>state</c> rows by name, or <see langword="null"/> when no such
-    /// context exists (seat scope).</param>
-    /// <exception cref="HudValidationException">The element is invalid.</exception>
-    public static void ValidateElement(WorldHudElement element, string path, HashSet<string> elementIds, IReadOnlyDictionary<string, WorldStateRow>? stateRows) {
+    /// context exists (seat scope). A <c>state.*</c> token's trailing <c>.$target</c> facet (<see cref="HudBinding.Target"/>)
+    /// resolves against this SAME map — existence, never live value, is what validation checks.</param>
+    /// <param name="definition">The owning document, for a Frame element's declared-probe lookup, or
+    /// <see langword="null"/> when the caller carries no Frame element.</param>
+    /// <param name="cameras">The document's declared <c>cameras[]</c> names, for a Frame element's <c>view</c> arm, or
+    /// <see langword="null"/> when the caller carries no Frame element.</param>
+    /// <param name="errors">The whole-document error list this element's violations, if any, append to.</param>
+    public static void ValidateElement(WorldHudElement element, string path, HashSet<string> elementIds, IReadOnlyDictionary<string, WorldStateRow>? stateRows, List<string> errors, WorldDefinition? definition = null, HashSet<string>? cameras = null) {
         if (string.IsNullOrWhiteSpace(value: element.Id)) {
-            throw new HudValidationException(
+            Refuse(
+                errors: errors,
                 message: $"{path}.id is required.",
                 reason: HudRefusal.DuplicateElementId
             );
-        }
-
-        if (!elementIds.Add(item: element.Id)) {
-            throw new HudValidationException(
+        } else if (!elementIds.Add(item: element.Id)) {
+            Refuse(
+                errors: errors,
                 reason: HudRefusal.DuplicateElementId,
                 message: $"{path}.id '{element.Id}' is duplicated within its owning panel."
             );
         }
 
         ValidateRect(
-            rect: element.Rect,
-            path: $"{path}.rect"
+            errors: errors,
+            path: $"{path}.rect",
+            rect: element.Rect
+        );
+
+        ValidateFrameElementSource(
+            cameras: cameras,
+            definition: definition,
+            element: element,
+            errors: errors,
+            path: path,
+            stateRows: stateRows
         );
 
         var hasBinding = (element.Binding is { Length: > 0 });
@@ -152,14 +334,18 @@ internal static class HudRowValidation {
             hasBinding &&
             hasTemplate
         ) {
-            throw new HudValidationException(
+            Refuse(
+                errors: errors,
                 message: $"{path} carries both 'binding' and 'template' — a template is a richer binding source that composes many facts into one string, never both on the same element.",
                 reason: HudRefusal.TemplateBindingConflict
             );
+
+            return;
         }
 
         if (hasBinding) {
             ValidateBindingToken(
+                errors: errors,
                 token: element.Binding!,
                 path: $"{path}.binding",
                 stateRows: stateRows,
@@ -173,14 +359,18 @@ internal static class HudRowValidation {
                 placeholders: out var placeholders,
                 error: out var templateError
             )) {
-                throw new HudValidationException(
+                Refuse(
+                    errors: errors,
                     message: $"{path}.template {templateError}.",
                     reason: HudRefusal.MalformedTemplate
                 );
+
+                return;
             }
 
             foreach (var placeholder in placeholders) {
                 ValidateBindingToken(
+                    errors: errors,
                     path: $"{path}.template placeholder",
                     refusal: HudRefusal.UnknownTemplatePlaceholder,
                     stateRows: stateRows,
@@ -198,10 +388,16 @@ internal static class HudRowValidation {
     /// <param name="maxElements">The element-count ceiling for this scope.</param>
     /// <param name="stateRows">The world's declared <c>state</c> rows by name, or <see langword="null"/> when no such
     /// context exists (seat scope) — see <see cref="ValidateElement"/>.</param>
-    /// <exception cref="HudValidationException">The element list is invalid.</exception>
-    public static void ValidateElements(IReadOnlyList<WorldHudElement> elements, string panelPath, int maxElements, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null) {
+    /// <param name="errors">The whole-document error list; this panel's own violations append here, and validation
+    /// continues past the count cap so every element still gets checked.</param>
+    /// <param name="definition">The owning document, threaded to <see cref="ValidateElement"/> for a Frame element's
+    /// source gate, or <see langword="null"/> for a caller that never authors one.</param>
+    /// <param name="cameras">The document's declared <c>cameras[]</c> names, threaded to <see cref="ValidateElement"/>
+    /// for a Frame element's <c>view</c> arm, or <see langword="null"/> for a caller that never authors one.</param>
+    public static void ValidateElements(IReadOnlyList<WorldHudElement> elements, string panelPath, int maxElements, List<string> errors, IReadOnlyDictionary<string, WorldStateRow>? stateRows = null, WorldDefinition? definition = null, HashSet<string>? cameras = null) {
         if (elements.Count > maxElements) {
-            throw new HudValidationException(
+            Refuse(
+                errors: errors,
                 reason: HudRefusal.TooManyElements,
                 message: $"{panelPath} elements count {elements.Count} exceeds the maximum of {maxElements}."
             );
@@ -211,7 +407,10 @@ internal static class HudRowValidation {
 
         for (var index = 0; (index < elements.Count); index++) {
             ValidateElement(
+                cameras: cameras,
+                definition: definition,
                 element: elements[index],
+                errors: errors,
                 path: $"{panelPath}.elements[{index}]",
                 elementIds: elementIds,
                 stateRows: stateRows
@@ -220,39 +419,33 @@ internal static class HudRowValidation {
     }
     /// <summary>Validates a normalized rect: every component finite, width/height strictly positive.</summary>
     /// <param name="rect">The rect to validate.</param>
-    /// <param name="path">The dotted path to name in a thrown message.</param>
-    /// <exception cref="HudValidationException">The rect is invalid.</exception>
-    public static void ValidateRect(WorldHudRect rect, string path) {
+    /// <param name="path">The dotted path to name in an appended message.</param>
+    /// <param name="errors">The whole-document error list this rect's violation, if any, appends to.</param>
+    public static void ValidateRect(WorldHudRect rect, string path, List<string> errors) {
         if (
             !float.IsFinite(f: rect.X) ||
             !float.IsFinite(f: rect.Y) ||
             !float.IsFinite(f: rect.Width) ||
             !float.IsFinite(f: rect.Height)
         ) {
-            throw new HudValidationException(
+            Refuse(
+                errors: errors,
                 message: $"{path} carries a non-finite component.",
                 reason: HudRefusal.InvalidRect
             );
+
+            return;
         }
 
         if (
             (rect.Width <= 0f) ||
             (rect.Height <= 0f)
         ) {
-            throw new HudValidationException(
+            Refuse(
+                errors: errors,
                 reason: HudRefusal.InvalidRect,
                 message: $"{path} width/height must be strictly positive (got {rect.Width}x{rect.Height})."
             );
         }
     }
-}
-/// <summary>Thrown by <see cref="WorldDefinitionValidator"/>'s HUD checks, naming exactly one <see cref="HudRefusal"/>
-/// reason. <see cref="WorldDefinitionValidator.Validate"/> catches this and folds <see cref="Exception.Message"/> into
-/// the whole-document error list — the enum-reasoned throw and the aggregate error list are not in tension: the throw
-/// is how the section decides, the catch is how it reports alongside every other section's findings.</summary>
-/// <param name="reason">Which of this door's finite refusal reasons fired.</param>
-/// <param name="message">The human-readable, refusal-named message.</param>
-internal sealed class HudValidationException(HudRefusal reason, string message) : Exception(message) {
-    /// <summary>Gets which of this door's finite refusal reasons fired.</summary>
-    public HudRefusal Reason { get; } = reason;
 }

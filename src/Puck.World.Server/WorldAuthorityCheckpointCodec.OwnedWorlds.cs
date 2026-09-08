@@ -57,7 +57,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         WriteArray(
             writer: writer,
             items: member.Designations,
-            writeItem: static (w, v) => w.WriteInt32(value: v)
+            writeItem: WriteTargetDesignation
         );
         WriteOptional(
             writer: writer,
@@ -74,10 +74,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: member.SourceGrants,
             writeItem: WriteWorldGrant
         );
-        WriteMobility(
+        WorldWireLeaves.WriteMobility(
             writer: writer,
             mobility: member.Mobility
         );
+        writer.WriteByte(member.FollowedSeatMask);
     }
     private static WorldLandedMemberCheckpoint ReadLandedMember(ref WireReader reader) {
         var sourceSlot = reader.ReadInt32();
@@ -89,7 +90,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var designations = ReadArray(
             reader: ref reader,
             field: "landed member designations",
-            readItem: static (ref WireReader r) => r.ReadInt32()
+            readItem: static (ref WireReader r) => ReadTargetDesignation(reader: ref r)
         );
         var peer = ReadOptional(
             reader: ref reader,
@@ -105,7 +106,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "landed member source grants",
             readItem: static (ref WireReader r) => ReadWorldGrant(reader: ref r)
         );
-        var mobility = ReadMobility(reader: ref reader);
+        var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        var followedSeatMask = reader.ReadByte();
 
         return new WorldLandedMemberCheckpoint(
             AdmissionGrants: admissionGrants,
@@ -113,6 +115,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Designations: designations,
             DynamicState: dynamicState,
             Mobility: mobility,
+            FollowedSeatMask: followedSeatMask,
             Peer: peer,
             Position: position,
             SourceGrants: sourceGrants,
@@ -130,6 +133,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteBoolean(value: row.Spawned);
         writer.WriteUInt64(value: row.SourceDeadlineTick);
         writer.WriteInt32(value: row.MemberCount);
+        writer.WriteBoolean(value: row.RollbackOnly);
+        writer.WriteBoolean(value: row.CommitConfirmed);
+        WriteOptionalClass(writer, row.Continuation, WriteTransferContinuation);
+        WriteOptionalClass(writer, row.TargetDefinitionJson, static (w, bytes) => w.WriteBlock(bytes));
         WriteArray(
             writer: writer,
             items: row.CommitMembers,
@@ -162,6 +169,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         var spawned = reader.ReadBoolean();
         var sourceDeadlineTick = reader.ReadUInt64();
         var memberCount = reader.ReadInt32();
+        var rollbackOnly = reader.ReadBoolean();
+        var commitConfirmed = reader.ReadBoolean();
+        var continuation = ReadOptionalClass(ref reader, ReadTransferContinuation);
+        var targetDefinition = ReadOptionalClass(ref reader, static (ref WireReader r) => r.ReadBlock("recovery destination definition", MaxSectionBytes));
         var commitMembers = ReadArray(
             reader: ref reader,
             field: "in-doubt transfer commit members",
@@ -186,35 +197,48 @@ public static partial class WorldAuthorityCheckpointCodec {
             TargetAuthority: targetAuthority,
             TargetEndpoint: targetEndpoint,
             TargetName: targetName,
-            TransferId: transferId
+            TransferId: transferId,
+            RollbackOnly: rollbackOnly,
+            CommitConfirmed: commitConfirmed,
+            Continuation: continuation,
+            TargetDefinitionJson: targetDefinition
         );
     }
     private static void WriteForwardedBody(WireWriter writer, WorldForwardedBodyCheckpoint row) {
-        WriteEntityAddress(
+        WorldWireLeaves.WriteEntityAddress(
             writer: writer,
             address: row.SourceIncarnation
         );
-        WriteEntityAddress(
+        WorldWireLeaves.WriteEntityAddress(
             writer: writer,
             address: row.DestinationAddress
         );
         writer.WriteInt32(value: row.DestinationBodyIndex);
-        WriteMobility(
+        WorldWireLeaves.WriteMobility(
             writer: writer,
             mobility: row.Mobility
         );
+        writer.WriteString(row.SourceAuthority);
+        writer.WriteNullableString(row.DestinationEndpoint);
+        WriteOptionalClass(writer, row.DestinationDefinitionJson, static (w, bytes) => w.WriteBlock(bytes));
     }
     private static WorldForwardedBodyCheckpoint ReadForwardedBody(ref WireReader reader) {
-        var sourceIncarnation = ReadEntityAddress(reader: ref reader);
-        var destinationAddress = ReadEntityAddress(reader: ref reader);
+        var sourceIncarnation = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
+        var destinationAddress = WorldWireLeaves.ReadEntityAddress(reader: ref reader);
         var destinationBodyIndex = reader.ReadInt32();
-        var mobility = ReadMobility(reader: ref reader);
+        var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        var sourceAuthority = reader.ReadString("forwarding source authority", MaxStringBytes);
+        var endpoint = reader.ReadNullableString("forwarding destination endpoint", MaxStringBytes);
+        var definition = ReadOptionalClass(ref reader, static (ref WireReader r) => r.ReadBlock("forwarding destination definition", MaxSectionBytes));
 
         return new WorldForwardedBodyCheckpoint(
             DestinationAddress: destinationAddress,
             DestinationBodyIndex: destinationBodyIndex,
             Mobility: mobility,
-            SourceIncarnation: sourceIncarnation
+            SourceIncarnation: sourceIncarnation,
+            SourceAuthority: sourceAuthority,
+            DestinationEndpoint: endpoint,
+            DestinationDefinitionJson: definition
         );
     }
 }

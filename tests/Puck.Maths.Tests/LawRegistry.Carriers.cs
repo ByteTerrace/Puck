@@ -381,6 +381,13 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "core.big-integer-to-double-vs-exact-neighbours",
+            run: () => Laws.Claim(
+                claim: CoreSurfaceClaims.BigIntegerToDoubleSurface,
+                lawId: "core.big-integer-to-double-vs-exact-neighbours"
+            )
+        ),
+        Case(
             id: "core.big-integer-modular-inverse-vs-hensel",
             run: () => Laws.Claim(
                 claim: CoreSurfaceClaims.BigIntegerModularInverseSurface,
@@ -422,10 +429,17 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
-            id: "core.quadratic-surd-field-and-conversion",
+            id: "core.real-quadratic-field-descriptor",
             run: () => Laws.Claim(
-                claim: CoreSurfaceClaims.QuadraticSurdSurface,
-                lawId: "core.quadratic-surd-field-and-conversion"
+                claim: CoreSurfaceClaims.RealQuadraticFieldSurface,
+                lawId: "core.real-quadratic-field-descriptor"
+            )
+        ),
+        Case(
+            id: "core.real-quadratic-field-and-conversion",
+            run: () => Laws.Claim(
+                claim: CoreSurfaceClaims.RealQuadraticSurface,
+                lawId: "core.real-quadratic-field-and-conversion"
             )
         ),
         Case(
@@ -669,6 +683,11 @@ internal static partial class LawRegistry {
                 width: 1
             )
         ),
+        Case(id: "scalar.trigonometry-twiddles", run: () => Laws.Claim(lawId: "scalar.trigonometry-twiddles", claim: Subjects.TrigonometryTwiddles)),
+        Case(id: "scalar.trigonometry-constants", run: () => Laws.Claim(lawId: "scalar.trigonometry-constants", claim: Subjects.TrigonometryConstants)),
+        Case(id: "scalar.trigonometry-seams", run: () => Laws.Claim(lawId: "scalar.trigonometry-seams", claim: Subjects.TrigonometrySeams)),
+        Case(id: "scalar.trigonometry-turns", run: () => Laws.SweptClaim(lawId: "scalar.trigonometry-turns", claim: Subjects.TrigonometryTurns, domain: ScalarTranscendental, tier: Tier.Default, width: 1)),
+        Case(id: "scalar.trigonometry-turns-deep", run: () => Laws.SweptClaim(lawId: "scalar.trigonometry-turns-deep", claim: Subjects.TrigonometryTurns, domain: ScalarTranscendental, tier: Tier.Deep, width: 1)),
         Case(
             id: "scalar.sincos-vs-series",
             run: () => Laws.SweptClaim(
@@ -874,6 +893,13 @@ internal static partial class LawRegistry {
             run: () => Laws.Claim(
                 claim: Subjects.Q1648DecimalConversionModes,
                 lawId: "q1648.decimal-conversion-modes"
+            )
+        ),
+        Case(
+            id: "core.scale-decimal-wide-reaches-canonical-core",
+            run: () => Laws.Claim(
+                claim: Subjects.ScaleDecimalWideReachesCanonicalCore,
+                lawId: "core.scale-decimal-wide-reaches-canonical-core"
             )
         ),
         Case(

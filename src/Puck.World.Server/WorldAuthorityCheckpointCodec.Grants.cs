@@ -4,21 +4,59 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public static partial class WorldAuthorityCheckpointCodec {
-    private static void WriteCapability(WireWriter writer, WorldCapability capability) => writer.WriteByte(value: ((byte)capability));
+    private static void WriteCapability(WireWriter writer, WorldCapability capability) {
+        if (!WorldWireTags.TryToWire(
+            value: capability,
+            wire: out var wire
+        )) {
+            throw new InvalidOperationException(message: $"{nameof(WorldCapability)}.{capability} has no wire value");
+        }
+        writer.WriteByte(value: wire);
+    }
     private static WorldCapability ReadCapability(ref WireReader reader) {
-        var capability = ((WorldCapability)reader.ReadByte());
+        var wire = reader.ReadByte();
+        var valid = WorldWireTags.TryFromWire(
+            value: out WorldCapability capability,
+            wire: wire
+        );
 
         if (
             !reader.Failed &&
-            !Enum.IsDefined(value: capability)
+            !valid
         ) {
             reader.Fail(
-                detail: $"{nameof(WorldCapability)} wire value {((byte)capability)} is not declared",
+                detail: (WorldWireTags.IsRetiredCapabilityWire(wire: wire)
+                    ? $"{nameof(WorldCapability)} wire value {wire} is retired"
+                    : $"{nameof(WorldCapability)} wire value {wire} is not declared"
+                ),
                 refusal: WireRefusal.EnumValueUnknown
             );
         }
 
         return capability;
+    }
+    // The (principal, capability, subject) triple every per-grant row is keyed by — budgets, ceilings, masks, reach,
+    // seeded sections — written and read through one pair so no row can spell the key in a different order.
+    private static void WriteGrantKey(WireWriter writer, WorldPrincipal principal, WorldCapability capability, GrantSubject subject) {
+        WritePrincipal(
+            principal: principal,
+            writer: writer
+        );
+        WriteCapability(
+            capability: capability,
+            writer: writer
+        );
+        WriteSubject(
+            subject: subject,
+            writer: writer
+        );
+    }
+    private static (WorldPrincipal Principal, WorldCapability Capability, GrantSubject Subject) ReadGrantKey(ref WireReader reader) {
+        var principal = ReadPrincipal(reader: ref reader);
+        var capability = ReadCapability(reader: ref reader);
+        var subject = ReadSubject(reader: ref reader);
+
+        return (principal, capability, subject);
     }
     private static void WriteGrantsPrincipal(WireWriter writer, WorldGrants.WorldGrantsPrincipalCheckpoint row) {
         WritePrincipal(
@@ -50,8 +88,35 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: row.Edit,
             writeItem: WriteSubject
         );
-        writer.WriteBoolean(value: row.RouteCapture);
-        writer.WriteUInt64(value: row.RouteChannelMaskBits);
+        WriteArray(
+            writer: writer,
+            items: row.Applications,
+            writeItem: WriteControlApplication
+        );
+    }
+    private static void WriteControlApplication(WireWriter writer, ControlApplication application) {
+        WriteSubject(
+            writer: writer,
+            subject: application.Target
+        );
+        writer.WriteString(value: (application.Kit ?? string.Empty));
+        writer.WriteUInt64(value: application.Reach.Bits);
+    }
+    private static ControlApplication ReadControlApplication(ref WireReader reader) {
+        var target = ReadSubject(reader: ref reader);
+        var kit = reader.ReadString(
+            field: "control application kit",
+            maxBytes: MaxStringBytes
+        );
+        var reach = reader.ReadUInt64();
+
+        return new ControlApplication(
+            Kit: ((kit.Length == 0)
+            ? null
+            : kit),
+            Reach: new ChannelReachMask(Bits: reach),
+            Target: target
+        );
     }
     private static WorldGrants.WorldGrantsPrincipalCheckpoint ReadGrantsPrincipal(ref WireReader reader) {
         var principal = ReadPrincipal(reader: ref reader);
@@ -80,18 +145,20 @@ public static partial class WorldAuthorityCheckpointCodec {
             field: "grants edit subjects",
             readItem: static (ref WireReader r) => ReadSubject(reader: ref r)
         );
-        var routeCapture = reader.ReadBoolean();
-        var routeChannelMaskBits = reader.ReadUInt64();
+        var applications = ReadArray(
+            reader: ref reader,
+            field: "grants control applications",
+            readItem: static (ref WireReader r) => ReadControlApplication(reader: ref r)
+        );
 
         return new WorldGrants.WorldGrantsPrincipalCheckpoint(
+            Applications: applications,
             Control: control,
             Drive: drive,
             Edit: edit,
             Mutate: mutate,
             Observe: observe,
-            Principal: principal,
-            RouteCapture: routeCapture,
-            RouteChannelMaskBits: routeChannelMaskBits
+            Principal: principal
         );
     }
     private static byte[] EncodeGrants(WorldGrants.WorldGrantsCheckpoint section) {
@@ -124,17 +191,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.Budgets,
             writeItem: static (w, row) => {
-                WritePrincipal(
+                WriteGrantKey(
+                    writer: w,
                     principal: row.Principal,
-                    writer: w
-                );
-                WriteCapability(
                     capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
+                    subject: row.Subject
                 );
                 w.WriteInt32(value: row.Budget);
             }
@@ -143,17 +204,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.EventBudgets,
             writeItem: static (w, row) => {
-                WritePrincipal(
+                WriteGrantKey(
+                    writer: w,
                     principal: row.Principal,
-                    writer: w
-                );
-                WriteCapability(
                     capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
+                    subject: row.Subject
                 );
                 w.WriteInt32(value: row.Budget);
             }
@@ -162,17 +217,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.HoldCeilings,
             writeItem: static (w, row) => {
-                WritePrincipal(
+                WriteGrantKey(
+                    writer: w,
                     principal: row.Principal,
-                    writer: w
-                );
-                WriteCapability(
                     capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
+                    subject: row.Subject
                 );
                 w.WriteInt64(value: row.Ceiling);
             }
@@ -181,17 +230,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.ChannelReach,
             writeItem: static (w, row) => {
-                WritePrincipal(
+                WriteGrantKey(
+                    writer: w,
                     principal: row.Principal,
-                    writer: w
-                );
-                WriteCapability(
                     capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
+                    subject: row.Subject
                 );
                 w.WriteUInt64(value: row.Bits);
             }
@@ -200,17 +243,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.PoolCeilings,
             writeItem: static (w, row) => {
-                WritePrincipal(
+                WriteGrantKey(
+                    writer: w,
                     principal: row.Principal,
-                    writer: w
-                );
-                WriteCapability(
                     capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
+                    subject: row.Subject
                 );
                 WriteArray(
                     writer: w,
@@ -226,17 +263,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.KindMasks,
             writeItem: static (w, row) => {
-                WritePrincipal(
+                WriteGrantKey(
+                    writer: w,
                     principal: row.Principal,
-                    writer: w
-                );
-                WriteCapability(
                     capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
+                    subject: row.Subject
                 );
                 WriteUInt128(
                     value: row.Bits,
@@ -248,17 +279,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.WriteMasks,
             writeItem: static (w, row) => {
-                WritePrincipal(
+                WriteGrantKey(
+                    writer: w,
                     principal: row.Principal,
-                    writer: w
-                );
-                WriteCapability(
                     capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
+                    subject: row.Subject
                 );
                 w.WriteUInt64(value: row.Bits);
             }
@@ -267,17 +292,11 @@ public static partial class WorldAuthorityCheckpointCodec {
             writer: writer,
             items: section.SeededSections,
             writeItem: static (w, row) => {
-                WritePrincipal(
+                WriteGrantKey(
+                    writer: w,
                     principal: row.Principal,
-                    writer: w
-                );
-                WriteCapability(
                     capability: row.Capability,
-                    writer: w
-                );
-                WriteSubject(
-                    subject: row.Subject,
-                    writer: w
+                    subject: row.Subject
                 );
             }
         );
@@ -355,9 +374,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "grants budgets",
             readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
                 var budget = ((ushort)r.ReadInt32());
 
                 return (principal, capability, subject, budget);
@@ -367,9 +384,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "grants event budgets",
             readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
                 var budget = ((ushort)r.ReadInt32());
 
                 return (principal, capability, subject, budget);
@@ -379,9 +394,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "grants hold ceilings",
             readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
                 var ceiling = r.ReadInt64();
 
                 return (principal, capability, subject, ceiling);
@@ -391,9 +404,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "grants channel reach",
             readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
                 var bits = r.ReadUInt64();
 
                 return (principal, capability, subject, bits);
@@ -403,9 +414,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "grants pool ceilings",
             readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
                 var ceilings = ReadArray(
                     reader: ref r,
                     field: "grants pool ceiling cells",
@@ -424,9 +433,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "grants kind masks",
             readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
                 var bits = ReadUInt128(reader: ref r);
 
                 return (principal, capability, subject, bits);
@@ -436,9 +443,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "grants write masks",
             readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
                 var bits = r.ReadUInt64();
 
                 return (principal, capability, subject, bits);
@@ -448,9 +453,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             reader: ref reader,
             field: "grants seeded sections",
             readItem: static (ref WireReader r) => {
-                var principal = ReadPrincipal(reader: ref r);
-                var capability = ReadCapability(reader: ref r);
-                var subject = ReadSubject(reader: ref r);
+                var (principal, capability, subject) = ReadGrantKey(reader: ref r);
 
                 return (principal, capability, subject);
             }

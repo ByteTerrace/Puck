@@ -1,13 +1,8 @@
 using System.Numerics;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Protocol;
 
-/// <summary>A durable entity address: authority identity, population slot, and that slot's activation generation.
-/// Slot reuse therefore never aliases an entity that has already left or died.</summary>
-public readonly record struct WorldEntityAddress(string Authority, int Index, int Generation) {
-    /// <inheritdoc/>
-    public override string ToString() => $"{Authority}/{Index}:{Generation}";
-}
 /// <summary>How an entity's pose changed across the tick a <see cref="WorldSnapshot"/> reports — the presentation hint
 /// the client reads to interpolate, snap, or ease the on-screen pose toward the new authoritative one.</summary>
 public enum EntityContinuityKind : byte {
@@ -45,7 +40,7 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// <summary>One entity's authoritative render state for a tick — the server's outbound currency for a single body. The
 /// client draws from a run of these, interpolating (or snapping/easing per <see cref="Continuity"/>) between consecutive
 /// snapshots. Poses flow OUT only: this is the sole channel a body's pose leaves the server on.</summary>
-/// <param name="Index">The 0-based entity index (0..3 local seats, 4..127 peers).</param>
+/// <param name="Index">The 0-based entity index (0..3 local seats, 4..4095 peers at the engine ceiling).</param>
 /// <param name="Position">The authoritative world-space position.</param>
 /// <param name="Orientation">The authoritative full 6DOF attitude.</param>
 /// <param name="BodyColor">The avatar's material albedo (a pending seat's is already gray-lerped).</param>
@@ -66,6 +61,9 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// way "forward" is — as distinct from <paramref name="Orientation"/>, the attitude it is drawn in (under a World-frame
 /// kit with facing snap the attitude turns to face the commanded travel while the heading holds). A seat moving in a
 /// heading-framed channel pair composes against this, never against the drawn attitude.</param>
+/// <param name="Facts">The body's authoritative per-tick fact mask — the same predicates the simulation's action
+/// gates read, published so a client can key animation (a walk, a climb reach, a swim stroke) on the authority's own
+/// answer. Derived, never authored.</param>
 public readonly record struct EntitySnapshot(
     int Index,
     Vector3 Position,
@@ -78,7 +76,8 @@ public readonly record struct EntitySnapshot(
     EntityContinuity Continuity,
     int Generation = 0,
     string? PlacementId = null,
-    float Heading = 0f
+    float Heading = 0f,
+    BodyFacts Facts = BodyFacts.None
 );
 /// <summary>The server's outbound tick image — the whole entity table's authoritative render state plus a revision the
 /// client watches to rebuild its avatar program (as the population/roster revisions drive it today). The client
@@ -88,6 +87,10 @@ public readonly record struct EntitySnapshot(
 /// <param name="StepTicks">The engine ticks the reported step advanced by — the client's easer-decay delta.</param>
 /// <param name="Entries">The active entries this tick (one <see cref="EntitySnapshot"/> per drawn body).</param>
 /// <param name="Authority">The authority identity every entry belongs to.</param>
+/// <param name="FieldCells">The field-lattice cells written since the previous snapshot — or every cell when
+/// <paramref name="FieldsFull"/> is set. Empty for a world without a <c>fields</c> section.</param>
+/// <param name="FieldsFull"><see langword="true"/> when <paramref name="FieldCells"/> carries every cell (a primer or a
+/// resync), so a mirror replaces rather than patches.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -96,8 +99,15 @@ public readonly record struct WorldSnapshot(
     int Revision,
     ulong StepTicks,
     ReadOnlyMemory<EntitySnapshot> Entries,
-    string Authority = ""
+    string Authority = "",
+    ReadOnlyMemory<FieldCellDelta> FieldCells = default,
+    bool FieldsFull = false
 );
+/// <summary>One field-lattice cell write carried on a snapshot.</summary>
+/// <param name="Cell">The cell index (row-major: z, then layer, then x).</param>
+/// <param name="Field">The field's index in the declared <c>fields.fields</c> list.</param>
+/// <param name="Raw">The cell's value, raw Q48.16 bits.</param>
+public readonly record struct FieldCellDelta(int Cell, byte Field, long Raw);
 /// <summary>One entity's submitted intent for a tick — the client's inbound movement currency for a body it drives (a
 /// connection carries up to four per tick, one per local seat). The server resolves the intent against the body's live
 /// tape and server-side producer in <c>NextIntent</c> precedence; <paramref name="HeldChannels"/> is the always-overlay

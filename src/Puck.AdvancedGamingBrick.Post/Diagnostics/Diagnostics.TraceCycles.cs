@@ -1,8 +1,8 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --trace-cycles <rom> <steps>: per-instruction cycle trace, to diff against the cosim oracle.
-internal static partial class Diagnostics {
-    public static void TraceCycles(string romPath, long steps) {
+internal sealed partial class Diagnostics {
+    public void TraceCycles(string romPath, long steps) {
         if (!TryLoad(
             romPath: romPath,
             name: Path.GetFileName(path: romPath),

@@ -28,40 +28,24 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldTextCatalog textCatalog) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, WorldScreenBinder screenBinder, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldTextCatalog textCatalog) : ICommandModule {
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
-    private CommandResult Submit(WorldMutation mutation) {
-        link.SubmitWorldMutation(mutation: mutation);
-
-        return CommandResult.None;
-    }
-    // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST
-    // whitespace-separated token (a path itself never needs quoting today — see RawArgument's own remarks on why
-    // this module does not tokenize paths). Empty/whitespace-only input (after stripping a trailing "force") fails.
-    private static bool TryParseLoadArgs(string raw, out string path, out bool force) {
-        var trimmed = raw.Trim();
-        var lastSpace = trimmed.LastIndexOfAny(anyOf: [' ', '\t']);
-
-        if (
-            (lastSpace >= 0) &&
-            string.Equals(
-            a: trimmed[(lastSpace + 1)..],
-            b: "force",
-            comparisonType: StringComparison.OrdinalIgnoreCase
-        )
-        ) {
-            force = true;
-            path = trimmed[..lastSpace].TrimEnd();
-        } else {
-            force = false;
-            path = trimmed;
-        }
+    // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
+    // Delegated to WorldCommandArguments so BOTH ends of the reconstruction split the line the way the registry's own
+    // tokenizer split it: the hand-rolled `anyOf: [' ', '\t']` scan that used to sit here found no separator in
+    // `world.load <path>\vforce`, so the flag the tokenizer had already separated was absorbed into the path and the
+    // load refused a file name nobody wrote. Empty/whitespace-only input (after stripping a trailing "force") fails.
+    private static bool TryParseLoadArgs(CommandContext context, in WireArgs args, out string path, out bool force) {
+        path = WorldCommandArguments.RawBeforeKeyword(
+            args: in args,
+            context: context,
+            keyword: "force",
+            leadingTokens: 1,
+            present: out force
+        );
 
         return !string.IsNullOrWhiteSpace(value: path);
-    }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
     }
 
     /// <inheritdoc/>
@@ -71,13 +55,13 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             description: "Sets the default seat kit (by name): world.kit.default <name>. Rejected if the name matches no kit row.",
             handler: (context, args) => {
                 if (args.Count != 1) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<name>",
                         verb: "world.kit.default"
                     );
                 }
 
-                return Submit(mutation: new WorldMutation.SetDefaultSeatKit(
+                return link.Submit(mutation: new WorldMutation.SetDefaultSeatKit(
                     Principal: context.ActingPrincipal(),
                     Name: args[0].ToString()
                 ));
@@ -89,20 +73,16 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             handler: (context, args) => {
                 if (
                     (args.Count != 2) ||
-                    !int.TryParse(
-                    args[0],
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out var local
+                    !args.TryInt(
+                    index: 0,
+                    value: out var local
                 ) ||
-                    !int.TryParse(
-                    args[1],
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out var network
+                    !args.TryInt(
+                    index: 1,
+                    value: out var network
                 )
                 ) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<local> <network>",
                         verb: "world.population.defaults"
                     );
@@ -110,12 +90,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
 
                 if (
                     (local < 1) ||
-                    (local > WorldPopulationLimits.LocalSeatCount)
+                    (local > WorldBodiesLimits.LocalSeatCount)
                 ) {
-                    return CommandResult.Error(output: $"[world.population.defaults: local must be 1..{WorldPopulationLimits.LocalSeatCount}]");
+                    return CommandResult.Error(output: $"[world.population.defaults: local must be 1..{WorldBodiesLimits.LocalSeatCount}]");
                 }
 
-                var seatActivation = new SeatActivationPolicy[WorldPopulationLimits.LocalSeatCount];
+                var seatActivation = new SeatActivationPolicy[WorldBodiesLimits.LocalSeatCount];
 
                 for (var slot = 0; (slot < seatActivation.Length); slot++) {
                     seatActivation[slot] = ((slot < local)
@@ -124,11 +104,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     );
                 }
 
-                // Preserve the document's live peer-source default (the world.population source verb owns it) and the
-                // spawn policy (world.population.spawn owns it) — this verb only sets the local/network census figures.
-                return Submit(mutation: new WorldMutation.SetPopulationDefaults(
+                // This verb owns the census figures alone; the spawn policy is world.population.spawn's, and each composes
+                // against the population row at application time, so the two never revert each other.
+                return link.Submit(mutation: new WorldMutation.SetPopulationCensus(
                     Principal: context.ActingPrincipal(),
-                    Population: (server.Definition.Population with { SeatActivationRaw = seatActivation, NetworkPlayers = network })
+                    SeatActivation: seatActivation,
+                    NetworkPlayers: network
                 ));
             }
         );
@@ -138,7 +119,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             description: "Reads one live placement row as its exact WorldPlacement JSON shape: world.placement.get <id>.",
             handler: (_, args) => {
                 if (args.Count != 1) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<id>",
                         verb: "world.placement.get"
                     );
@@ -180,7 +161,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return error;
                 }
 
-                return Submit(mutation: new WorldMutation.UpsertGrant(
+                return link.Submit(mutation: new WorldMutation.UpsertGrant(
                     Principal: context.ActingPrincipal(),
                     Row: grant
                 ));
@@ -200,7 +181,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return error;
                 }
 
-                return Submit(mutation: new WorldMutation.RemoveGrant(
+                return link.Submit(mutation: new WorldMutation.RemoveGrant(
                     Principal: context.ActingPrincipal(),
                     Target: grant
                 ));
@@ -228,14 +209,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             description: "Loads a DIFFERENT world file and rebuilds from it — the loaded document becomes the new base (fully validated off disk, then re-validated at the apply boundary → swap → derived rebuild → journal RESET): world.load <path> [force]. Refused (naming world.save/world.reset/force as the outs) while the journal is DIRTY unless force is passed — a load discards unsaved work, and doing that silently is dishonest. A missing/invalid file, or the every-section Mutate hold world.load/world.undo have always needed, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the new origin.",
             handler: (context, args) => {
                 if (!TryParseLoadArgs(
-                    raw: WorldCommandArguments.Raw(
-                        args: args,
-                        context: context
-                    ),
+                    args: in args,
+                    context: context,
                     path: out var path,
                     force: out var force
                 )) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "<path> [force]",
                         verb: "world.load"
                     );
@@ -278,7 +257,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 return CommandResult.None;
             }
         );
-        yield return Simulation(
+        // BINDABLE, unlike the rest of this module: it is a gesture, not a verb naming a document target (no path, no
+        // row, no principal) — the artist's "re-read what is on disk" press. Binding it changes nothing about who may
+        // do it: the Mutate hold is checked at dispatch under the pressing seat's principal, exactly as from stdin.
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Bindable,
+            routing: CommandRouting.Simulation,
             name: "world.reload",
             description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the re-read origin.",
             handler: (context, _) => {
@@ -319,17 +303,15 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         );
         yield return Simulation(
             name: "world.undo",
-            description: "Undoes the last n applied mutations (default 1) by replaying the journal minus its tail through the same apply path: world.undo [n]. The journal IS the edit history; replay IS the undo engine.",
+            description: "Undoes the last n applied mutations (default 1) by replaying the journal minus its tail through the same apply path: world.undo [n]. The journal IS the edit history; replay IS the undo engine. Refused by name, naming host.journalDepth, when n reaches past what a bounded journal has kept — entries beyond that horizon already compacted into the base and cannot be replayed.",
             handler: (context, args) => {
                 var count = 1;
 
                 if (
                     (args.Count >= 1) &&
-                    (!int.TryParse(
-                    args[0],
-                    NumberStyles.Integer,
-                    CultureInfo.InvariantCulture,
-                    out count
+                    (!args.TryInt(
+                    index: 0,
+                    value: out count
                 ) || (count < 1))
                 ) {
                     return CommandResult.Error(output: $"[world.undo: bad count '{args[0].ToString()}' — a positive integer]");
@@ -378,20 +360,22 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         population: server.Population,
                         binder: screenBinder,
                         audio: audioDirector,
+                        bindingBar: bindingBarVisibility,
                         pacing: pacing,
                         tick: (server.NextInputTick - 1UL)
                     );
                     var bytes = WorldDefinitionSerialization.SavePreservingBasis(
                         basisPath: out var basisPath,
                         definition: snapshot,
+                        imports: out var preservedImports,
                         note: out var note,
                         path: target
                     );
 
                     server.Compact();
 
-                    var derivation = ((basisPath is { })
-                        ? $", basis: {basisPath}"
+                    var derivation = (((basisPath is { }) || (preservedImports.Count > 0))
+                        ? $", basis: {(basisPath is { } ? basisPath : "none")}, imports: {(preservedImports.Count > 0 ? preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture) : "0")}"
                         : ((note.Length > 0)
                             ? $", {note}"
                             : ""
@@ -409,7 +393,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             description: "Reads the world text catalog: its default font and every named font's relative source, content pin, Unicode ranges, pixel size, distance range, padding, and preferred columns; world.text [font].",
             handler: (_, args) => {
                 if (args.Count > 1) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "[font]",
                         verb: "world.text"
                     );
@@ -462,10 +446,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.status",
-            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/wander/audio policy (including the mixer's half-radius curve sample), the waterline (or none), a cheap session-drift hint, and dirty = journal length. Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
+            description: "Reports the live world definition and journal state (Immediate; the stdin barrier makes it read the settled state after any pending mutation): source path, the source file's basis (its composition template, or none — peeked from the file, the one truth for derivation), schema, row counts, the simulation rate, correction/producer/audio policy (including the mixer's half-radius curve sample), the declared medium field names (or none), a cheap session-drift hint, dirty = journal length, and journal-depth = host.journalDepth (unbounded when 0, the default). Session drift is separate from dirty: a saved-bytes-only world.save leaves the in-memory definition unchanged, so session drift honestly persists past a save.",
             handler: (_, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: $"[world.status: unrecognized '{args[0]}' — expected no arguments]");
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.status") is { } refusal) {
+                    return refusal;
                 }
 
                 var definition = server.Definition;
@@ -477,6 +461,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     population: server.Population,
                     binder: screenBinder,
                     audio: audioDirector,
+                    bindingBar: bindingBarVisibility,
                     pacing: pacing
                 );
                 var audioCurve = (string.Equals(
@@ -489,11 +474,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 );
                 var halfRadiusGain = (((double)AudioMixer.HalfRadiusAttenuationQ16(curve: audioCurve)) / 65536.0);
 
-                var water = ((definition.Water is { } medium)
-                    ? medium.Level.ToString(
-                        format: "0.###",
-                        provider: CultureInfo.InvariantCulture
-                    )
+                var mediumFieldNames = (definition.Fields?.Fields ?? [])
+                    .Where(predicate: static field => field.Medium)
+                    .Select(selector: static field => field.Name)
+                    .ToArray();
+                var medium = ((mediumFieldNames.Length > 0)
+                    ? string.Join(separator: ",", values: mediumFieldNames)
                     : "none"
                 );
                 var basis = ((WorldDefinitionFileSource.TryPeekBasis(
@@ -504,11 +490,49 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     ? basisPath
                     : "none"
                 );
+                // The process's document accounting sits beside `source` and `basis` because it is a fact about the
+                // documents this process merged, not about the world one of them describes: `shared` counts the
+                // reaches answered from a document already composed here, which is what a shard's four neighbours
+                // and its own basis all naming one island turns into.
+                var documents = string.Create(
+                    provider: CultureInfo.InvariantCulture,
+                    handler: $"composed {WorldDefinitionFileSource.DocumentsComposed} shared {WorldDefinitionFileSource.DocumentCompositionsShared} held {WorldDefinitionFileSource.ComposedDocumentsHeld} ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)"
+                );
+                var journalDepth = definition.Host.JournalDepth;
+                var journalDepthText = ((journalDepth > 0)
+                    ? journalDepth.ToString(provider: CultureInfo.InvariantCulture)
+                    : "unbounded"
+                );
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
-                    handler: $"[world.status: source {source} basis {basis} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} water {water} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} session-drift {drift} dirty {dirty} undoable {dirty}]"
+                    handler: $"[world.status: source {source} basis {basis} documents {documents} schema {definition.Schema} rate {definition.SimulationRateHz}Hz kits {definition.Kits.Count} body-programs {definition.BodyMotionPrograms.Count} screens {definition.Screens.Count} cameras {definition.Cameras.Count} creations {definition.Creations.Count} placements {definition.Placements.Count} maxSmoothError {definition.Motion.MaxSmoothError:0.###} medium {medium} audio-curve {definition.Audio.DefaultCurve} half-radius-gain {halfRadiusGain:0.#####} sleeping {server.Population.SleepingCount} session-drift {drift} dirty {dirty} journal-depth {journalDepthText}]"
                 ));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.imports",
+            description: "Reads the loaded world's whole basis-and-imports composition graph back: every file that contributed to it, in MERGE order (the deepest basis ancestor through every import to the file's own body last — a later entry's same key overrides an earlier one's), each paired with the top-level keys ITS OWN JSON declares and, for a module that authors one, its exports record as written. A flat file (no basis, no imports) reports just itself.",
+            handler: (_, args) => {
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.imports") is { } refusal) {
+                    return refusal;
+                }
+
+                if (!WorldDefinitionFileSource.TryDescribeComposition(
+                    layers: out var layers,
+                    path: definitionSource.SourcePath,
+                    reason: out var describeReason
+                )) {
+                    return CommandResult.Error(output: $"[world.imports: {describeReason}]");
+                }
+
+                var formatted = string.Join(
+                    separator: " | ",
+                    values: layers.Select(selector: layer => $"{layer.Path}{((layer.Alias is null) ? "" : $" as {layer.Alias}")} [{string.Join(separator: ",", values: layer.Keys)}]{((layer.Exports is null) ? "" : $" exports[{layer.Exports.Describe()}]")}")
+                );
+
+                return new CommandResult(Output: $"[world.imports: {formatted}]");
             }
         );
         yield return CommandDefinition.WithWireArgs(
@@ -516,8 +540,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.references",
             description: "Reads the references section back: each row's name -> document, or 'none' when the section is absent or declares zero rows. Authored data only — a row asserts nothing about the named document's existence or shape; resolving it is a future consumer's job, not this verb's.",
             handler: (_, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: $"[world.references: unrecognized '{args[0]}' — expected no arguments]");
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.references") is { } refusal) {
+                    return refusal;
                 }
 
                 var rows = server.Definition.References;
@@ -539,8 +563,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.metadata",
             description: "Reads the metadata section back: title, description, authors, tags, and the custom bag's key/byte counts, or 'none' when the section is absent. Authored data only, boot-authored, nothing here is read by the engine.",
             handler: (_, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: $"[world.metadata: unrecognized '{args[0]}' — expected no arguments]");
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.metadata") is { } refusal) {
+                    return refusal;
                 }
 
                 var metadata = server.Definition.Metadata;
@@ -583,8 +607,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             name: "world.admission",
             description: "Reads the admission section back: each row's domain/subject/mode/algorithm and its grant template count, or 'none' when the section is absent or declares zero rows (deny by default — no remote peer can verify and no traveller can arrive). The document half of the admission decision — world.peers echoes the runtime half (which bodies were admitted under which identity).",
             handler: (_, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: $"[world.admission: unrecognized '{args[0]}' — expected no arguments]");
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.admission") is { } refusal) {
+                    return refusal;
                 }
 
                 var rows = server.Definition.Admission;

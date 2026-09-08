@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <!-- WorldSchema's own node-converter/vocabulary lookups (TryGetNodeConverter/TryGetStringVocabulary/
+             TryGetTypeVocabulary), WorldNameRegistry's reflected-row walk, and WorldStateDocumentValues' property
+             walk all call reflection-based JsonSerializer/Type APIs carrying RequiresUnreferencedCode; so does every
+             JsonNode/JsonArray-based document diff/merge in WorldDocumentBasis and the composed-tree loaders in
+             WorldDefinitionFileSource/WorldAssetRowLoader/WorldJsonPayload. -->
         <IsAotCompatible>false</IsAotCompatible>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
@@ -11,7 +16,12 @@
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.Physics\Puck.Physics.csproj" />
+        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
         <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
-        <ProjectReference Include="..\Puck.World.Forge\Puck.World.Forge.csproj" />
+        <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\Puck.World.Authoring\Puck.World.Authoring.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
     </ItemGroup>
 </Project>

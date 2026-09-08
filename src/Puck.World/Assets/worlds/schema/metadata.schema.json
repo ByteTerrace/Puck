@@ -38,7 +38,7 @@
             "type": "string"
           },
           "oid": {
-            "description": "The author\u0027s Entra object id, when the author chooses to attach one \u2014 see WorldEntraObjectId. Authored, not authenticated: nothing here proves the name behind the id.",
+            "description": "The author\u0027s object id, when the author chooses to attach one \u2014 see WorldObjectId. Authored, not authenticated: nothing here proves the name behind the id.",
             "type": [
               "string",
               "null"
@@ -49,7 +49,8 @@
         "required": [
           "name"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldMetadataAuthor"
       },
       "default": null
     },
@@ -73,9 +74,13 @@
         "object",
         "null"
       ],
-      "default": null
+      "default": null,
+      "additionalProperties": {
+        "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+      }
     }
   },
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldMetadataSection"
 }

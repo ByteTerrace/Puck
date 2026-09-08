@@ -35,7 +35,7 @@ public abstract record SessionRequest(WorldPrincipal Principal) {
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Count">The requested active simulated count.</param>
     public sealed record SetPopulation(WorldPrincipal Principal, int Count) : SessionRequest(Principal);
-    /// <summary>Sets the peer intent-source default AND sweeps every peer (4..127) to it — last-writer-wins; a
+    /// <summary>Sets the peer intent-source default AND sweeps every peer (indices 4 through capacity minus one) to it — last-writer-wins; a
     /// per-entity source does not survive the global flip.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="Source">The intent source to store and sweep.</param>
@@ -57,35 +57,45 @@ public abstract record SessionRequest(WorldPrincipal Principal) {
 /// <param name="RosterEcho">The roster read-back string, printed verbatim (may be empty).</param>
 /// <param name="Reason">The rejection reason, or the empty string when <paramref name="Accepted"/> is <see langword="true"/>.</param>
 public readonly record struct SessionReply(bool Accepted, int AssignedIndex, string RosterEcho, string Reason);
-/// <summary>A read-back request a client sends the server (<c>player.where</c>, <c>world.players</c>, the pose portion of
+/// <summary>A read-back request a client sends the server (<c>body.where</c>, <c>world.players</c>, the pose portion of
 /// <c>screen.state</c>): the server composes the answer string authoritatively so the client prints a byte-identical
 /// echo.</summary>
 public abstract record WorldQuery {
+    /// <summary>Starts bounded detached placement planning for the submitting principal. No simulation state changes.</summary>
+    public sealed record ReflowPreview(WorldPlacementReflowRequest Request) : WorldQuery;
+    /// <summary>Reviews the submitting principal's completed plan. Payload carries a detached
+    /// <see cref="Puck.World.Server.WorldPlacementProposal"/> whose batch is submitted through ordinary mutation admission.</summary>
+    public sealed record ReflowStatus : WorldQuery;
+    /// <summary>Discards the submitting principal's cached plan without payment or simulation changes.</summary>
+    public sealed record ReflowCancel : WorldQuery;
+    /// <summary>Returns only the state observations admitted for the submission stamp; no caller-selected recipient.</summary>
+    public sealed record StateObservations(string? Row = null) : WorldQuery;
     /// <summary>Returns the capability subject a submitted query must hold <see cref="WorldCapability.Observe"/>
     /// over. Body/screen read-backs narrow to their concrete target; world-wide read-backs require <c>all</c>. Kept
     /// with the closed query union so a transport/server does not need access to its intentionally internal leaves.</summary>
     /// <returns>The query's observation subject.</returns>
     public GrantSubject ObservationSubject() => this switch {
-        PlayerWhere where => GrantSubject.Body(index: (where.Index - 1)),
-        PlayerChannels channels => GrantSubject.Body(index: (channels.Index - 1)),
-        PlayerState state => GrantSubject.Body(index: (state.Index - 1)),
-        PlayerTargets targets => GrantSubject.Body(index: (targets.Index - 1)),
+        StateObservations { Row: { } row } => GrantSubject.State(row),
+        PlayerWhere where => GrantSubject.Body(index: where.Index),
+        PlayerChannels channels => GrantSubject.Body(index: channels.Index),
+        PlayerState state => GrantSubject.Body(index: state.Index),
+        PlayerTargets targets => GrantSubject.Body(index: targets.Index),
         Contacts contacts => GrantSubject.Body(index: (contacts.Index - 1)),
         ScreenState screen => GrantSubject.Screen(index: screen.ScreenIndex),
         Properties { BodyIndex: int bodyIndex } => GrantSubject.Body(index: bodyIndex),
         GrantAllows allows => allows.Subject,
         MusicState state => GrantSubject.Body(index: (state.Index - 1)),
-        JudgeState state => GrantSubject.Body(index: (state.Index - 1)),
+        InstrumentState state => GrantSubject.Body(index: (state.Index - 1)),
         _ => GrantSubject.All,
     };
 
-    /// <summary>The full 6DOF pose read-back for one entity (<c>player.where</c>).</summary>
-    /// <param name="Index">The 1-based player display index.</param>
+    /// <summary>The full 6DOF pose read-back for one entity (<c>body.where</c>).</summary>
+    /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerWhere(int Index) : WorldQuery;
-    /// <summary>The channel decision read-back for one entity (<c>player.channels</c>) — per declared channel, the
+    /// <summary>The channel decision read-back for one entity (<c>body.channels</c>) — per declared channel, the
     /// folded value, the owning seat's base, the later held overlay and composed result, every contributor tagged by
     /// principal, and the pool ceiling/clamp state (see <c>Server.WorldServer.Answer</c>).</summary>
-    /// <param name="Index">The 1-based player display index.</param>
+    /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerChannels(int Index) : WorldQuery;
 
     /// <summary>The roster glance across every local seat (<c>world.players</c>).</summary>
@@ -98,12 +108,12 @@ public abstract record WorldQuery {
     /// equalized maximum.</summary>
     public sealed record InputHolds : WorldQuery;
     /// <summary>The named action-state register file for one entity.</summary>
-    /// <param name="Index">The 1-based player display index.</param>
+    /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerState(int Index) : WorldQuery;
     /// <summary>Every authored world rule: its mode, its gate's own predicates, and its effects.</summary>
     public sealed record Rules : WorldQuery;
     /// <summary>Every authored target register and the latest designation refusal for one entity.</summary>
-    /// <param name="Index">The 1-based player display index.</param>
+    /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerTargets(int Index) : WorldQuery;
     /// <summary>The grounded/contact witnesses for one generation-routed entity.</summary>
     /// <param name="Index">The authority-local, 1-based entity display index.</param>
@@ -163,11 +173,12 @@ public abstract record WorldQuery {
     /// <see cref="ObservationSubject"/> checks Observe against.</summary>
     /// <param name="Index">The 1-based observing player display index.</param>
     public sealed record MusicState(int Index) : WorldQuery;
-    /// <summary>The declared judge window sets (<c>judge.state</c>) — a structural echo of every
-    /// <c>puck.judge.v1</c> row's name and windows. World-wide, not per-entity; <see cref="Index"/> names only the
-    /// observing seat, the same subject its own <see cref="ObservationSubject"/> checks Observe against.</summary>
+    /// <summary>Which diegetic instrument screen (if any) the observing seat is engaged with, whether the booted
+    /// machine there carries the instrument-clock capability, and its authored tempo (<c>instrument.state</c>).
+    /// World-wide, not per-entity; <see cref="Index"/> names only the observing seat, the same subject its own
+    /// <see cref="ObservationSubject"/> checks Observe against.</summary>
     /// <param name="Index">The 1-based observing player display index.</param>
-    public sealed record JudgeState(int Index) : WorldQuery;
+    public sealed record InstrumentState(int Index) : WorldQuery;
 }
 /// <summary>The server's composed answer to a <see cref="WorldQuery"/> — the read-back string the client prints verbatim
 /// (a byte-identical echo of the authoritative pose/roster state), plus the verdict that says whether the answer is a

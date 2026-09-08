@@ -85,7 +85,7 @@ public sealed class ViewTransition {
                 : new ViewBinding(View: m_from.Bindings[index].View, Region: CenterOf(rect: m_from.Bindings[index].Region)));
 
             m_scratch[index] = new ViewBinding(
-                Region: Lerp(a: fromBinding.Region, b: toBinding.Region, t: eased),
+                Region: NormalizedRect.Lerp(from: fromBinding.Region, to: toBinding.Region, t: eased),
                 View: (cutToDestination ? toBinding.View : fromBinding.View)
             );
         }
@@ -95,11 +95,4 @@ public sealed class ViewTransition {
 
     private static NormalizedRect CenterOf(NormalizedRect rect) =>
         new(X: (rect.X + (0.5f * rect.Width)), Y: (rect.Y + (0.5f * rect.Height)), Width: 0f, Height: 0f);
-    private static NormalizedRect Lerp(NormalizedRect a, NormalizedRect b, float t) =>
-        new(
-            Height: (a.Height + ((b.Height - a.Height) * t)),
-            Width: (a.Width + ((b.Width - a.Width) * t)),
-            X: (a.X + ((b.X - a.X) * t)),
-            Y: (a.Y + ((b.Y - a.Y) * t))
-        );
 }

@@ -15,14 +15,15 @@ namespace Puck.World;
 /// changes route <see cref="CommandRouting.Simulation"/> (they gate sim behavior) and apply synchronously at submit
 /// (like a command), so a following <c>world.grants</c> read behind the stdin barrier sees the settled table; the
 /// server prints the loud accept/reject line. This is a separate module from the mutation surface to keep both under
-/// their analyzer ceilings.
+/// their probe ceilings.
 /// </summary>
 /// <remarks>Principal tokens: <c>seat1</c>..<c>seat4</c> | <c>console</c> | <c>addon:&lt;name&gt;</c> |
 /// <c>peer:&lt;n&gt;:&lt;generation&gt;</c> (a population entity index and its current admission generation). Capability
 /// tokens: <c>drive</c> | <c>observe</c> | <c>control</c> |
-/// <c>mutate</c> | <c>edit</c>. Subject tokens: <c>body:&lt;n&gt;</c> (0..127, the population ceiling) |
+/// <c>mutate</c> | <c>edit</c>. Subject tokens: <c>body:&lt;n&gt;</c> (0..4095, the population ceiling) |
 /// <c>screen:&lt;n&gt;</c> | <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c> | <c>region:&lt;name&gt;</c>
-/// (a placement's volume facet) | <c>seat:&lt;n&gt;</c> (0..3, local seats) | <c>all</c>. Trailing
+/// (a placement's volume facet) | <c>seat:&lt;n&gt;</c> (0..3, local seats) | <c>creation:&lt;id&gt;</c> |
+/// <c>placement:&lt;id&gt;</c> (one creations/placements row apiece) | <c>all</c>. Trailing
 /// tokens, any order, each at most once: <c>exclusive</c> on <c>world.grant</c> requests an exclusive hold
 /// (rejected if a live holder owns it, in either order — the seeded permissive wildcard is exempt in both
 /// directions, so it can always be narrowed and re-widened regardless of what exclusive holds exist elsewhere),
@@ -34,7 +35,8 @@ namespace Puck.World;
 /// <c>screen:</c>/<c>region:</c>/<c>seat:</c> subjects (they carry no other meaning), optional on <c>body:</c>. Two
 /// mask tokens ride here too, deliberately spelled apart because they are two vocabularies over one bit-lane shape:
 /// <c>verbs:&lt;name,...&gt;</c> names <see cref="Puck.World.Protocol.WorldMutation"/> kinds (on
-/// <c>mutate section:&lt;name&gt;</c> or <c>edit state:&lt;name&gt;</c>), and <c>writes:&lt;name,...&gt;</c> names
+/// <c>mutate section:&lt;name&gt;</c>/<c>mutate creation:&lt;id&gt;</c>/<c>mutate placement:&lt;id&gt;</c>, or
+/// <c>edit state:&lt;name&gt;</c>), and <c>writes:&lt;name,...&gt;</c> names
 /// <see cref="Puck.World.Protocol.WorldDocumentWriteKind"/> operations (on <c>mutate state:&lt;name&gt;</c>, the
 /// cross-document durable-state write-back channel). Every
 /// capability rejects any subject shape it does not
@@ -43,7 +45,9 @@ namespace Puck.World;
 /// must carry <c>budget:&lt;n&gt;</c>) or <c>all</c> (console/seat only — an <c>addon:</c> principal is restricted to
 /// <c>body:&lt;n&gt;</c> alone); <c>control</c>
 /// accepts <c>screen:&lt;n&gt;</c> (any principal) or <c>all</c> (console/seat/peer); <c>mutate</c> accepts
-/// <c>section:&lt;name&gt;</c> (any principal; an addon/peer must carry <c>budget:&lt;n&gt;</c>) or <c>all</c>
+/// <c>section:&lt;name&gt;</c> (any principal; an addon/peer must carry <c>budget:&lt;n&gt;</c>),
+/// <c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c> (the row-scoped slot — any principal but <c>addon:</c>,
+/// whose mutation seam designates a section handle and could never dispatch one), or <c>all</c>
 /// (console/seat); <c>edit</c> accepts
 /// <c>state:&lt;name&gt;</c> (any principal, whether the row is a scalar slot or a keyed table — a slot is a table
 /// with one key; a concrete row may additionally carry <c>verbs:&lt;name,...&gt;</c>, the mutation-kind mask that
@@ -51,10 +55,7 @@ namespace Puck.World;
 /// additionally accepts <c>body:&lt;n&gt;</c> naming a body that exists for any principal (an addon/peer must carry
 /// <c>budget:&lt;n&gt;</c>) or <c>all</c> (console/seat).</remarks>
 public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
-    // public (not internal): Puck.World's WorldAddonCommandModule.Mount reuses this exact token grammar for its
-    // trailing <capability> <subject> manifest pairs, so "drive body:0" means the identical thing on both verbs —
-    // widened to the minimum needed rather than duplicating the parse.
-    public static bool TryParseCapability(ReadOnlySpan<char> token, out WorldCapability capability) {
+    private static bool TryParseCapability(ReadOnlySpan<char> token, out WorldCapability capability) {
         if (token.Equals(
             comparisonType: StringComparison.OrdinalIgnoreCase,
             other: "drive"
@@ -104,6 +105,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
 
         return false;
     }
+
     /// <summary>Parses the same <c>&lt;principal&gt; &lt;capability&gt; &lt;subject&gt; [exclusive] [budget:&lt;n&gt;]</c>
     /// grammar <c>world.grant</c>/<c>world.revoke</c> use, shared with the mutation surface's
     /// <c>world.grant.set</c>/<c>world.grant.remove</c> — one grammar for a grant token sequence regardless of
@@ -152,7 +154,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
                     : "<principal> <capability> <subject>"
             ));
 
-            error = Usage(
+            error = CommandResult.Usage(
                 form: form,
                 verb: verb
             );
@@ -164,7 +166,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
             token: args[0],
             principal: out var principal
         )) {
-            error = CommandResult.Error(output: $"[{verb}: unknown principal '{args[0].ToString()}' — seat1..seat4|console|addon:<name>|peer:<n>:<generation>|document:<id>|group:<id>]");
+            error = CommandResult.Error(output: $"[{verb}: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
 
             return false;
         }
@@ -182,7 +184,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
             token: args[2],
             subject: out var subject
         )) {
-            error = CommandResult.Error(output: $"[{verb}: unknown subject '{args[2].ToString()}' — body:<n>|screen:<n>|section:<name>|state:<name>|region:<name>|seat:<n>|all]");
+            error = CommandResult.Error(output: $"[{verb}: unknown subject '{args[2].ToString()}' — body:<n>|screen:<n>|section:<name>|state:<name>|region:<name>|seat:<n>|creation:<id>|placement:<id>|adjacency:<name>|all]");
 
             return false;
         }
@@ -568,8 +570,8 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
 
         return true;
     }
-    /// <summary>Parses a principal token (<c>seat1</c>..<c>seat4</c> | <c>console</c> | <c>addon:&lt;name&gt;</c> |
-    /// <c>peer:&lt;n&gt;</c>) — shared with <see cref="Puck.World.WorldPrincipalJsonConverter"/>, so a document-sourced
+    /// <summary>Parses a principal token (<see cref="WorldPrincipal.TokenGrammar"/>) — shared with
+    /// <see cref="Puck.World.WorldPrincipalJsonConverter"/>, so a document-sourced
     /// principal (a <see cref="WorldGrant.Principal"/> row, an addon manifest's implicit self-reference) always
     /// canonicalizes through the identical grammar a console token does. There is no other way to construct a
     /// non-canonical <see cref="WorldPrincipal"/> from either surface.</summary>
@@ -582,21 +584,19 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
             token: token
         );
     }
+
     /// <summary>Parses a subject token (<c>all</c> | <c>body:&lt;n&gt;</c> | <c>screen:&lt;n&gt;</c> |
-    /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c>) — shared with
-    /// <see cref="Puck.World.GrantSubjectJsonConverter"/>, so a document-sourced subject (a
-    /// <see cref="WorldCapabilityRequest.Subject"/>, a <see cref="WorldGrant.Subject"/> row) always canonicalizes
-    /// through the identical grammar a console token does; there is no other way to construct a denormalized
-    /// <see cref="GrantSubject"/> (a stray non-zero <c>Value</c>/<c>Id</c> the wildcard or section kinds do not use)
-    /// from either surface, which is what keeps a document subject and a live grant table entry comparable by value.</summary>
+    /// <c>section:&lt;name&gt;</c> | <c>state:&lt;name&gt;</c>) through <see cref="GrantSubject.TryParse"/> — the
+    /// identical grammar a document-sourced subject canonicalizes through (a <see cref="WorldCapabilityRequest.Subject"/>,
+    /// a <see cref="WorldGrant.Subject"/> row), which is what keeps a document subject and a live grant table entry
+    /// comparable by value.</summary>
     /// <param name="token">The token to parse.</param>
     /// <param name="subject">The parsed subject, on success.</param>
     /// <returns><see langword="true"/> when the token parsed.</returns>
-    public static bool TryParseSubject(ReadOnlySpan<char> token, out GrantSubject subject) => GrantSubject.TryParse(
+    private static bool TryParseSubject(ReadOnlySpan<char> token, out GrantSubject subject) => GrantSubject.TryParse(
         subject: out subject,
         token: token
     );
-
     // The DOCUMENT-AUTHORED half of the read-back — the `document:<id>` rows in WorldDefinition.Grants, which are
     // deliberately NOT replayed into the live table (Server.WorldServer.IsDocumentChannelRow, and the grant door
     // refuses one by name): the cross-document durable-state write-back channel resolves them by reading the OWNER'S
@@ -700,16 +700,13 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
 
         return false;
     }
-    private static CommandResult Usage(string verb, string form) {
-        return CommandResult.Error(output: $"[{verb}: expected {form}]");
-    }
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.grant",
-            description: "Grants a capability to a principal: world.grant <principal> <capability> <subject> [exclusive] [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>] [hold:<seconds>] [verbs:<name,...>] [writes:<name,...>]. principal = seat1..seat4|console|addon:<name>|peer:<n>:<generation>; capability = drive|observe|control|mutate|edit; subject = body:<n>|screen:<n>|section:<name>|state:<name>|region:<name>|seat:<n>|all (state:<name> narrows edit over ONE named state row, slot-shaped or keyed alike — a slot is a table with one key — reaching BOTH its whole-row world.row.set state/world.row.remove state and its per-cell world.state.cell.set/.remove writes). Applies at submit; an exclusive grant a live holder owns is rejected loudly, in either order (the seeded permissive wildcard never blocks one, and an exclusive hold never permanently blocks the wildcard's later re-grant either). budget:<n> (1..65535) sets the row's per-tick dispatch allowance: REQUIRED on an observe, drive, or mutate section:<name> grant to an untrusted addon:/peer: principal (a defaulted budget would silently decide a denial-of-service ceiling), REFUSED on every other row (trusted reads/drives/mutations are unmetered, and a mutate state:<name> row is the cross-document write-back channel, which has no dispatch door to meter — it is gated by writes:<name,...> instead), and budget:0 is refused at parse time (0 is not a spelling for 'no budget' — omit the token instead). events:<n> (1..65535) is the WORLD-EVENTS sibling budget: an observe grant may carry it independently of budget:<n> (dispatch and events meter different costs — they are two SEPARATE meters, not one renamed); it is REQUIRED on observe screen:<n>/region:<name>/seat:<n> (those subjects carry no other meaning under observe) and OPTIONAL on observe body:<n> (a bare observe body:<n> keeps its existing pose-query meaning; adding events:<n> additionally admits that body into collision/route event delivery). The PRE-EXISTING budget:<n> requirement on every untrusted observe row is UNCHANGED and stacks with this — an observe screen:<n>/region:<name>/seat:<n> row therefore needs BOTH budget:<n> AND events:<n> (the untrusted-Observe dispatch meter does not know a subject carries no query verb; only events:<n> is genuinely new vocabulary). events:0 is refused at parse time the same way budget:0 is. hold:<seconds> is the Drive row's timed-press ceiling, defaults to 2 seconds when omitted, may narrow or widen within the 60-second engine backstop, and never limits a live key/button hold. channels:<name,...> and ceiling:<f> are the CO-DRIVING pair, legal only on a drive grant and naming declared channels by their world/kit vocabulary. channels:<...> ALONE on an untrusted addon:/peer: row is that contributor's REACH — which channels it may touch. channels:<...> WITH ceiling:<f> (0..1) is only legal on the occupying seat's OWN row (seatN drive body:N) and authors the pool bound for exactly the channels it names, leaving other channels' ceilings as they were; issue it twice to give two channels different ceilings, and revoke the seat's own drive row to clear them. A reach with no seat-authored ceiling folds nothing. ceiling:0 is refused (pool-but-never-reach is accepted-and-inert; grant nothing instead), a bare ceiling with no channels is refused (it is one number per (seat, channel), not a scalar), and a ceiling on a contributor's row is refused (the ceiling is never derived from contributor rows). verbs:<name,...> is the MUTATION-KIND mask — legal on a mutate grant naming a CONCRETE section:<name> subject (the addon mutation seam's dispatch door) and on an edit grant naming a CONCRETE state:<name> subject (never 'all' on either): it names WorldMutation kind types by their own record name (e.g. UpsertKit), and is refused if any names a kind outside that target's own declared kind set (an inert bit is a grant that lies) or if the resulting mask admits nothing at all (grant nothing instead). It is REQUIRED on an UNTRUSTED addon:/peer: mutate section:<name> row and refused without it: an absent mask means FULL REACH at the admission door (a trusted principal's maskless row is the seeded default), so a maskless untrusted row would silently admit every kind the section declares. On an EDIT row it is what separates bumping a state row from redefining it — 'verbs:UpsertStateCell,RemoveStateCell' admits the per-cell writes while denying the whole-row UpsertStateRow/RemoveStateRow that would re-author the row's envelope; an UNMASKED edit row keeps full reach, so a mask is opt-in narrowing beneath an already deny-by-default capability, never a new gate. writes:<name,...> is its SIBLING over a DIFFERENT vocabulary — WorldDocumentWriteKind's Set|Add, the cross-document durable-state write-back channel — legal ONLY on a mutate grant naming a CONCRETE state:<name> subject. The two are separate tokens because they are separate bit vocabularies: verbs: bit 0 is UpsertKit, writes: bit 0 is Set, and one field carrying both was a lane whose meaning depended on the row's subject kind. A RE-GRANT of the same row that OMITS either token CLEARS a previously-recorded mask of that kind — unlike budget/channels, which only ever write when carried. world.grants echoes a live mask by NAME (verbs:UpsertStateCell,RemoveStateCell / writes:Set,Add), never as a hex lane. Every capability rejects a subject shape it does not legitimately admit: drive wants body:<n> naming a body that exists (any principal; addon/peer must carry budget:<n>) or all (console/seat; addon must name body:<n>); control wants screen:<n> (any principal) or all (console/seat/peer); mutate wants section:<name> (any principal; an untrusted addon:/peer: row must carry BOTH budget:<n> and verbs:<name,...>) or state:<name> (any principal, the cross-document write-back channel; no budget) or all (console/seat); edit wants state:<name> (any principal) or all (console/seat); observe wants body:<n> naming a body that exists (any principal; addon/peer must carry budget:<n>) or all (console/seat), and ADDITIONALLY (untrusted addon:/peer: principals only) screen:<n>, region:<name>, or seat:<n> — the world-events subjects, each requiring events:<n>.",
+            description: "Grants a capability to a principal: world.grant <principal> <capability> <subject> [exclusive] [budget:<n>] [events:<n>] [channels:<name,...>] [ceiling:<f>] [hold:<seconds>] [verbs:<name,...>] [writes:<name,...>]. principal = seat1..seat4|console|addon:<name>|peer:<n>:<generation>; capability = drive|observe|control|mutate|edit; subject = body:<n>|screen:<n>|section:<name>|state:<name>|region:<name>|seat:<n>|creation:<id>|placement:<id>|adjacency:<name>|all (state:<name> narrows edit over ONE named state row, slot-shaped or keyed alike — a slot is a table with one key — reaching BOTH its whole-row world.row.set state/world.row.remove state and its per-cell world.state.cell.set/.remove writes). Applies at submit; an exclusive grant a live holder owns is rejected loudly, in either order (the seeded permissive wildcard never blocks one, and an exclusive hold never permanently blocks the wildcard's later re-grant either). budget:<n> (1..65535) sets the row's per-tick dispatch allowance: REQUIRED on an observe, drive, or mutate section:<name> grant to an untrusted addon:/peer: principal (a defaulted budget would silently decide a denial-of-service ceiling), REFUSED on every other row (trusted reads/drives/mutations are unmetered, and a mutate state:<name> row is the cross-document write-back channel, which has no dispatch door to meter — it is gated by writes:<name,...> instead), and budget:0 is refused at parse time (0 is not a spelling for 'no budget' — omit the token instead). events:<n> (1..65535) is the WORLD-EVENTS sibling budget: an observe grant may carry it independently of budget:<n> (dispatch and events meter different costs — they are two SEPARATE meters, not one renamed); it is REQUIRED on observe screen:<n>/region:<name>/seat:<n> (those subjects carry no other meaning under observe) and OPTIONAL on observe body:<n> (a bare observe body:<n> keeps its existing pose-query meaning; adding events:<n> additionally admits that body into collision/route event delivery). The PRE-EXISTING budget:<n> requirement on every untrusted observe row is UNCHANGED and stacks with this — an observe screen:<n>/region:<name>/seat:<n> row therefore needs BOTH budget:<n> AND events:<n> (the untrusted-Observe dispatch meter does not know a subject carries no query verb; only events:<n> is genuinely new vocabulary). events:0 is refused at parse time the same way budget:0 is. hold:<seconds> is the Drive row's timed-press ceiling, defaults to 2 seconds when omitted, may narrow or widen within the 60-second engine backstop, and never limits a live key/button hold. channels:<name,...> and ceiling:<f> are the CO-DRIVING pair, legal only on a drive grant and naming declared channels by their world/kit vocabulary. channels:<...> ALONE on an untrusted addon:/peer: row is that contributor's REACH — which channels it may touch. channels:<...> WITH ceiling:<f> (0..1) is only legal on the occupying seat's OWN row (seatN drive body:N) and authors the pool bound for exactly the channels it names, leaving other channels' ceilings as they were; issue it twice to give two channels different ceilings, and revoke the seat's own drive row to clear them. A reach with no seat-authored ceiling folds nothing. ceiling:0 is refused (pool-but-never-reach is accepted-and-inert; grant nothing instead), a bare ceiling with no channels is refused (it is one number per (seat, channel), not a scalar), and a ceiling on a contributor's row is refused (the ceiling is never derived from contributor rows). verbs:<name,...> is the MUTATION-KIND mask — legal on a mutate grant naming a CONCRETE section:<name>, creation:<id>, or placement:<id> subject (the dispatch door) and on an edit grant naming a CONCRETE state:<name> subject (never 'all' on either): it names WorldMutation kind types by their own record name (e.g. UpsertKit), and is refused if any names a kind outside that target's own declared kind set (an inert bit is a grant that lies) or if the resulting mask admits nothing at all (grant nothing instead). It is REQUIRED on an UNTRUSTED addon:/peer: mutate section:<name> row and refused without it: an absent mask means FULL REACH at the admission door (a trusted principal's maskless row is the seeded default), so a maskless untrusted row would silently admit every kind the section declares. On an EDIT row it is what separates bumping a state row from redefining it — 'verbs:UpsertStateCell,RemoveStateCell' admits the per-cell writes while denying the whole-row UpsertStateRow/RemoveStateRow that would re-author the row's envelope; an UNMASKED edit row keeps full reach, so a mask is opt-in narrowing beneath an already deny-by-default capability, never a new gate. writes:<name,...> is its SIBLING over a DIFFERENT vocabulary — WorldDocumentWriteKind's Set|Add, the cross-document durable-state write-back channel — legal ONLY on a mutate grant naming a CONCRETE state:<name> subject. The two are separate tokens because they are separate bit vocabularies: verbs: bit 0 is UpsertKit, writes: bit 0 is Set, and one field carrying both was a lane whose meaning depended on the row's subject kind. A RE-GRANT of the same row that OMITS either token CLEARS a previously-recorded mask of that kind — unlike budget/channels, which only ever write when carried. world.grants echoes a live mask by NAME (verbs:UpsertStateCell,RemoveStateCell / writes:Set,Add), never as a hex lane. Every capability rejects a subject shape it does not legitimately admit: drive wants body:<n> naming a body that exists (any principal; addon/peer must carry budget:<n>) or all (console/seat; addon must name body:<n>); control wants screen:<n> (any principal) or all (console/seat/peer); mutate wants section:<name> (any principal; an untrusted addon:/peer: row must carry BOTH budget:<n> and verbs:<name,...>) or creation:<id>/placement:<id> (the ROW-SCOPED slot, admitting that one creations/placements row and no other; same budget:/verbs: requirements for an untrusted principal, and refused outright for an addon: principal, whose mutation seam designates a section handle and could never dispatch it) or state:<name> (any principal, the cross-document write-back channel; no budget) or all (console/seat); edit wants state:<name> (any principal) or all (console/seat); observe wants body:<n> naming a body that exists (any principal; addon/peer must carry budget:<n>) or all (console/seat), and ADDITIONALLY (untrusted addon:/peer: principals only) screen:<n>, region:<name>, or seat:<n> — the world-events subjects, each requiring events:<n>.",
             handler: (context, args) => {
                 if (!authority.TryResolveServer(
                     context: context,
@@ -769,7 +766,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
                 }
 
                 if (args.Count > 1) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "[principal]",
                         verb: "world.grants"
                     );
@@ -784,7 +781,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
                     )) {
                         filter = principal;
                     } else {
-                        return CommandResult.Error(output: $"[world.grants: unknown principal '{args[0].ToString()}' — seat1..seat4|console|addon:<name>|peer:<n>:<generation>|document:<id>|group:<id>]");
+                        return CommandResult.Error(output: $"[world.grants: unknown principal '{args[0].ToString()}' — {WorldPrincipal.TokenGrammar}]");
                     }
                 }
 
@@ -829,6 +826,13 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
                     return new CommandResult(Output: $"[world.why: world {query.Capability.ToString().ToLowerInvariant()} {query.Subject.Describe()} = allowed (structural) — the world's own authored program (a rule's effects, a kit's generate effect) is the document acting on itself, not an actor submitting: the grant table is never consulted for it and holds no rows for it. Every other gate still runs: compose, whole-document validate, envelope, solids. To change what it does, change the document — authoring a rule takes mutate section:rules, authoring a kit takes mutate section:kits.]");
                 }
 
+                // The DOCUMENT principal's sibling honesty branch: it holds no LIVE row either (the grant door
+                // refuses one as inert), so the table's NoHold verdict would be a true statement about the table and
+                // a useless one about where the capability actually lives.
+                if (query.Principal.Kind == PrincipalKind.Document) {
+                    return new CommandResult(Output: $"[world.why: {query.Principal.Describe()} {query.Capability.ToString().ToLowerInvariant()} {query.Subject.Describe()} = not-in-this-table — a document holds no live grant rows: the cross-document durable-state write-back channel reads its rows off the OWNER identity's OWN document grants section (Server.WorldOwnedWorlds.Decide), never off this world's live table, and the grant door refuses a live row for it as accepted-and-inert. world.grants {query.Principal.Describe()} echoes the authored rows where they actually live; world.grant.set/world.grant.remove (and chat.allow/chat.block) author them.]");
+                }
+
                 // CC/DEATH GATING (composition-core, Seam A) is checked FIRST, ahead of the ordinary Allows() call —
                 // the SAME order WorldServer.ApplyIntentSubmission checks in — so this read-back can never disagree
                 // with the door: a Drive/body query against a gated body is answered by the state fact, not by
@@ -847,6 +851,29 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
                         subject: query.Subject
                     )
                 );
+                // A row-scoped mutate query is answered in the SAME order WorldServer.TryAdmitMutation decides it —
+                // the owning section's hold FIRST, the concrete row only when that misses — so a principal holding
+                // the section reads 'allowed' here instead of a table-true, door-false 'no-hold' over the row.
+                var answeredSubject = query.Subject;
+                var rowScopedSection = (((query.Capability == WorldCapability.Mutate) && (query.Subject.Kind is GrantSubjectKind.Creation or GrantSubjectKind.Placement))
+                    ? GrantSubject.Section(section: ((query.Subject.Kind == GrantSubjectKind.Creation)
+                    ? WorldSection.Creations
+                    : WorldSection.Placements))
+                    : ((GrantSubject?)null)
+                );
+
+                if (rowScopedSection is { } owningSection) {
+                    var sectionVerdict = server.Grants.Allows(
+                        principal: query.Principal,
+                        capability: WorldCapability.Mutate,
+                        subject: owningSection
+                    );
+
+                    if (sectionVerdict.IsAllowed) {
+                        verdict = sectionVerdict;
+                        answeredSubject = owningSection;
+                    }
+                }
                 var detail = verdict.Rule switch {
                     GrantRule.ReserverMatch => "the principal holds the exclusive reservation over this subject; every other principal is denied there",
                     GrantRule.BeatenByReserver => $"exclusively reserved by {(verdict.Reserver?.Describe() ?? "?")} — the reservation overrides every grant, including a row the principal may genuinely hold (world.grants {args[0].ToString()} lists its rows)",
@@ -866,9 +893,20 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
                     GrantRule.NoHold => "no row of the principal's set for this capability names the subject, and no wildcard covers it",
                     _ => "?",
                 };
+                // Which subject the answer actually rests on: for a row-scoped mutate query that is the owning
+                // section when its coarse hold carried the check, and the row itself otherwise. The two are the same
+                // subject for every other query, and the fragment stays empty there.
+                var via = ((rowScopedSection is { } named)
+                    ? (!verdict.IsAllowed
+                    ? $" — neither mutate {named.Describe()} nor this row is held"
+                    : ((answeredSubject == named)
+                    ? $" via mutate {named.Describe()}, the section hold, which admits every row it carries"
+                    : $" via the row hold alone — mutate {named.Describe()} is not held, so no other row of that section is reachable"))
+                    : string.Empty
+                );
                 var output = $"[world.why: {query.Principal.Describe()} {query.Capability.ToString().ToLowerInvariant()} {query.Subject.Describe()} = {(verdict.IsAllowed
                     ? "allowed"
-                    : "denied")} ({verdict.Describe()}) — {detail}]";
+                    : "denied")} ({verdict.Describe()}){via} — {detail}]";
 
                 if (
                     verdict.IsAllowed &&
@@ -888,10 +926,11 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority, IS
 
                 // The DECIDING row's mask governs, exactly as the live dispatch and Edit doors decide it: a
                 // ConcreteHold verdict reads the concrete row's mask, a WildcardHold verdict reads the wildcard
-                // row's — never a union of both, and never the queried row when a different one decided.
+                // row's, and a row-scoped mutate query reads whichever of the section/row rows actually carried the
+                // check — never a union, and never the queried row when a different one decided.
                 var decidingSubject = ((verdict.Rule == GrantRule.WildcardHold)
                     ? GrantSubject.All
-                    : query.Subject
+                    : answeredSubject
                 );
 
                 if (query.KindMask is { } queriedKinds) {

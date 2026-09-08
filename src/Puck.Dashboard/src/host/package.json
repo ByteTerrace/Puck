@@ -1,0 +1,32 @@
+{
+  "dependencies": {
+    "@azure/identity": "^4",
+    "@azure/msal-browser": "^5",
+    "@azure/msal-react": "^5",
+    "@reduxjs/toolkit": "^2",
+    "@uidotdev/usehooks": "^2",
+    "react-dom": "^19",
+    "react-redux": "^9",
+    "react": "^19",
+    "rxjs": "^7"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "^1",
+    "@types/react-dom": "^19",
+    "@types/react": "^19",
+    "@vitejs/plugin-react": "^6",
+    "typescript": "^6",
+    "vite": "^8"
+  },
+  "name": "byteterrace-host",
+  "overrides": {
+    "axios": "^1.14.1"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}

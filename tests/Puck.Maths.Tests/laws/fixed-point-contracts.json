@@ -130,7 +130,7 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "ENVELOPE: before this case, LayerSequence's only pinned members were Count and LayerSize, and only as one half of presented.antidifference-vs-layer-sequence's PresentedTwin leg comparing Count against a presented-algebra prefix sum — a statement about the summation operator, which says nothing about LayerOf, Locate, Project, Capacity, MaxLayer, the Linear/Create factories or the bounded-horizon refusal ladder. This case is the first and only law that reaches the closed-form inverse and the saturation channels directly, which is the whole of this member's job",
+        "Subject": "ENVELOPE: before this case, LayerSequence's only pinned members were Count and LayerSize, and only as one half of presented.antidifference-vs-layer-sequence's PresentedTwin leg comparing Count against a presented-algebra prefix sum — a statement about the summation operator, which says nothing about LayerOf, Locate, Project, Capacity, MaxLayer, the Linear/Create factories or the bounded-horizon refusal ladder. This case reaches the closed-form inverse and the saturation channels directly; integer.layer-sequence-full-range separately brackets large-index boundaries with BigInteger.",
         "Against": "",
         "Shared": "",
         "Citation": "",
@@ -286,6 +286,10 @@
       },
       {
         "Type": "Puck.Maths.FixedTickConversion",
+        "Name": "DurationTicks"
+      },
+      {
+        "Type": "Puck.Maths.FixedTickConversion",
         "Name": "TicksPerSecond"
       }
     ],
@@ -293,8 +297,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "FixedTickConversion.DurationEngineTicks at a curated edge set (zero, the smallest positive raw, long.MinValue/MaxValue, the one-second boundary 65536 and its two neighbours, the five-second boundary and its two neighbours, and small negative raws) plus a dense sweep of every 97th raw across the first five positive seconds and every 251st raw across the first negative second",
-        "Against": "an independent BigInteger recomputation of the round-up rule transcribed from the definition — ceil(raw * TicksPerSecond / 65536) via exact rational ceiling division on BigInteger, sharing no line with BinaryIntegerFunctions.CeilingDivide<T> or the subject's own Int128 arithmetic; non-positive raws are pinned to zero by the same independent check",
+        "Subject": "FixedTickConversion.DurationTicks at rates 0, 1, 7, 24, 30, 60, 120, 240, 1000, and 50400 (TicksPerSecond) — and DurationEngineTicks held equal to the 50400 case — at a curated edge set (zero, the smallest positive raw, long.MinValue/MaxValue, the one-second boundary 65536 and its two neighbours, the five-second boundary and its two neighbours, and small negative raws) plus a dense sweep of every 97th raw across the first five positive seconds and every 251st raw across the first negative second",
+        "Against": "an independent BigInteger recomputation of the round-up rule transcribed from the definition — ceil(raw * ratePerSecond / 65536) via exact rational ceiling division on BigInteger, sharing no line with BinaryIntegerFunctions.CeilingDivide<T> or the subject's own Int128 arithmetic; non-positive raws are pinned to zero by the same independent check",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -355,6 +359,40 @@
         "Flavor": "None",
         "Subject": "FixedPointRounding.TryRoundRational (public) — the SCALE SHIFT, the ties-to-even decision, the sign, and every refusal, over a cross product of numerators, denominators and fraction bit counts in [0, 63], plus the signed-64-bit boundary, negative and zero refusals, and an int.MaxValue shift that must refuse an obviously overflowing nonzero value without attempting an enormous allocation while still accepting exact zero. The scaling branch is reached only from here: mass-properties.volumes-vs-oracle calls the helper exclusively at a zero fraction bit count, and Physics's nonzero-shift caller has no law of its own.",
         "Against": "Oracles.RoundedRational — the same rational taken independently, scaling by a BigInteger.Pow multiply rather than a shift and deciding the tie by doubling the remainder against the divisor rather than comparing it with the distance to the next multiple",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.fixed-saturate-clamps-to-the-extremes",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.FixedSaturate",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.FixedSaturate",
+        "Name": "ToInt64"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "FixedSaturate.Add over swept raw pairs at width 4, and FixedSaturate.ToInt64 over an Int128 accumulator built from each pair (the left raw shifted one bit past the long range plus the right raw), so every pair exercises an in-range and a far-out narrowing",
+        "Against": "Exact BigInteger addition clamped to [long.MinValue, long.MaxValue] in the claim: no Int128 comparison is shared with the subject, which decides on Int128 against the long extremes",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "The seams the clamp decides on: Int128.MinValue and MaxValue, each long extreme and its two neighbours, zero, and Add at FixedQ4816.MaxValue + Epsilon and MinValue - one raw unit",
+        "Against": "The literal expected narrowings: a wrap at either seam, or a clamp one unit early, fails by name",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

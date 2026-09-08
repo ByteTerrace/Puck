@@ -124,7 +124,7 @@ flag.
 > everything described below, but **nothing composes it**: no project references
 > the library, nothing implements `IBenchSceneController` to register a scene,
 > and no host registers `BenchCommandModule`, so the verbs are unreachable. Its
-> composition root was the `Puck.Demo` launcher, which is quarantined. Re-hosting
+> composition root was the `Puck.Demo` launcher, since deleted. Re-hosting
 > it in `Puck.World` is small, well-shaped work that **nobody has done and
 > nothing plans.** Until then every number in this chapter is a historical
 > reading that cannot be re-taken, and a performance regression has no

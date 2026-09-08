@@ -43,9 +43,6 @@ internal readonly record struct CommandInjection(
     string? Text = null,
     string? Source = null
 ) {
-    /// <summary>Gets a value indicating whether applying this local live injection releases <see cref="TextCommandSource"/>'s deferred-mutation
-    /// drain barrier. This is process-local coordination, not deterministic snapshot identity.</summary>
-    internal bool CompletesTextSubmission { get; init; }
     internal bool DispatchWhenMapInactive { get; init; }
     internal TextSubmissionBarrier? SubmissionBarrier { get; init; }
 }

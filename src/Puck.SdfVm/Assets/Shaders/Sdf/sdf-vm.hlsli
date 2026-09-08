@@ -39,9 +39,9 @@
 [[vk::binding(1, 0)]] StructuredBuffer<uint4> sdfWords : register(t0);
 
 // The instance CEILING — the most instances one program may declare. The per-tile mask is a DERIVED
-// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 512
+// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 1024
 // words. KEEP IN SYNC with SdfProgramBuilder.MaxInstances.
-#define SDF_MAX_INSTANCES 16384u
+#define SDF_MAX_INSTANCES 32768u
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
 // view, the ray-query debug kernel, the beam prepass's own cone march) passes this, so an instanced program still
@@ -74,19 +74,32 @@
 #endif
 
 // === Shadow-ray instance cull (the world LIT path only) ==============================================================
-// A per-lit-pixel LOCAL instance mask over the shadow ray's grid neighborhood, built by sdf-world.hlsli's
-// sdfShadowGather (the grid slab walk along the sun ray) and consumed by mapMasked EXACTLY like the device per-tile
+// A shadow-ray instance mask over the light ray's grid neighborhood, built by sdf-world.hlsli's
+// sdfShadowGatherGroup (the grid slab walk along the sun ray) and consumed by mapMasked EXACTLY like the device per-tile
 // mask — so a culled soft-shadow march is BIT-IDENTICAL to the flat all-instances march by the same exact-cull contract
 // (an omitted instance's bound excludes every on-axis shadow sample, so its compose returns the accumulator to the
-// bit). Capped at SDF_SHADOW_MASK_WORDS words = the most instances the local mask can address; a larger program gathers
-// nothing and the caller marches the flat field instead. sdfShadowMaskActive gates sdfInstanceMaskWord onto this static
-// array for the duration of ONE areaShadowVisibility call and is false everywhere else, so every OTHER map()/mapMasked consumer
-// (the primary march, normals, AO, coverage) is unchanged. Guarded on SDF_SCREEN_SOURCES: only the world-views kernel
-// shades, so only it pays the static array's per-invocation footprint (the beam/cull/rt kernels never see it).
+// bit). The Stage 1 shared mask addresses the complete instance ceiling, including reserved/parked slots: total
+// capacity must never silently select the camera-tile approximation for an exact shadow request.
+// sdfShadowMaskActive gates sdfInstanceMaskWord onto this
+// array for ONE areaShadowVisibility call. Exact AO independently selects the complete live-instance mask below;
+// the primary march, normals, and coverage keep their camera masks. Guarded on SDF_SCREEN_SOURCES: only the world-views kernel
+// shades (the beam/cull/rt kernels never see it).
 #ifdef SDF_SCREEN_SOURCES
-#define SDF_SHADOW_MASK_WORDS 32u  // <= 1024 addressable instances (room 284, town, carve ladders fit; larger => flat fallback)
+// GROUPSHARED under SDF_GROUP_SHADOW_GATHER (the Stage 1 kernels): the per-tile gather (sdf-world.hlsli's
+// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The full 512-word mask costs 2 KiB per group, not per lane.
+// Other kernels retain the small inactive per-thread array; nothing in them builds a mask.
+#ifdef SDF_GROUP_SHADOW_GATHER
+#define SDF_SHADOW_MASK_WORDS ((SDF_MAX_INSTANCES + 31u) / 32u)
+#define SDF_GROUP_SHADOW_LANES 64u // the Stage 1 workgroup: [numthreads(8, 8, 1)]
+groupshared uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
+groupshared uint sdfAmbientMaskWords[SDF_SHADOW_MASK_WORDS];
+#else
+#define SDF_SHADOW_MASK_WORDS 32u
 static uint sdfShadowMaskWords[SDF_SHADOW_MASK_WORDS];
+static uint sdfAmbientMaskWords[SDF_SHADOW_MASK_WORDS];
+#endif
 static bool sdfShadowMaskActive = false;
+static bool sdfAmbientMaskActive = false;
 #endif
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
@@ -116,10 +129,11 @@ uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCou
     uint word = 0xFFFFFFFFu;
 
 #ifdef SDF_SCREEN_SOURCES
-    // The active shadow-ray mask OVERRIDES the device per-tile mask for one culled areaShadowVisibility march (false everywhere
-    // else). A word past the cap reads 0, but the gather only ran because the program fit the cap, so a real instance
-    // word is never past it. The `else` avoids a wasted device-buffer read while the shadow mask is live.
-    if (sdfShadowMaskActive) {
+    // Secondary-lighting masks override the device camera mask for their own field walks. Stage 1 addresses the
+    // complete instance ceiling; the guard also keeps inactive arrays safe in other kernel configurations.
+    if (sdfAmbientMaskActive) {
+        word = ((wordIndex < SDF_SHADOW_MASK_WORDS) ? sdfAmbientMaskWords[wordIndex] : 0u);
+    } else if (sdfShadowMaskActive) {
         word = ((wordIndex < SDF_SHADOW_MASK_WORDS) ? sdfShadowMaskWords[wordIndex] : 0u);
     } else
 #endif
@@ -137,14 +151,14 @@ uint sdfInstanceMaskWord(uint instanceMaskBase, uint wordIndex, uint instanceCou
 }
 
 // A real camera-tile mask stores one summary bit per primary word after its primary run. The all-visible sentinel and
-// the temporary per-pixel shadow mask have no device summary and retain the short linear walk.
+// the workgroup lighting masks have no device summary and retain the short linear walk.
 bool sdfInstanceMaskHasSummary(uint instanceMaskBase) {
     bool hasSummary = false;
 
 #ifdef SDF_INSTANCE_MASKS
     hasSummary = (instanceMaskBase != SDF_INSTANCE_MASK_ALL);
 #ifdef SDF_SCREEN_SOURCES
-    hasSummary = (hasSummary && !sdfShadowMaskActive);
+    hasSummary = (hasSummary && !sdfShadowMaskActive && !sdfAmbientMaskActive);
 #endif
 #endif
 
@@ -370,6 +384,7 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // semantics HERE, not just bumping this #define. KEEP IN SYNC with SdfProgramBuilder.MaxFieldScopeDepth.
 #define SDF_OP_PUSH_FIELD      27u
 #define SDF_OP_POP_FIELD       28u
+#define SDF_OP_NOISE_DISPLACE  29u
 #define SDF_MAX_FIELD_SCOPE_DEPTH 1u
 // SDF_CORE_OPS — the CORE-OPS compiled variant of the tape interpreters (defined by sdf-world-views-core.comp.hlsl,
 // the second compiled flavor of the Stage 1 views kernel; every other kernel compiles the FULL ISA). Compiles out every
@@ -383,6 +398,18 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // stripped op/shape), so a stripped case is provably unreachable whenever this variant runs. KEEP the strip set IN SYNC
 // with SdfViewsKernelVariants.Select (Puck.SdfVm/SdfViewsKernelVariant.cs) — a case guarded here must make Select
 // answer Full, or the core variant silently no-ops the op.
+// The two-tier strip ladder: SDF_CORE_OPS strips EVERYTHING exotic (folds, scopes, warps, exotic shapes);
+// SDF_FOLD_OPS (sdf-world-views-folds.comp) keeps the fold/scope/simple-exotic tier and strips only the HEAVY
+// warp/noise family — the register-hungry cases whose live state holds the full interpreter at low occupancy.
+// KEEP both strip sets IN SYNC with SdfViewsKernelVariants.Select: a case stripped under a macro must send
+// Select to a fuller variant.
+#ifdef SDF_CORE_OPS
+#define SDF_STRIP_ALL_EXOTIC
+#define SDF_STRIP_HEAVY
+#endif
+#ifdef SDF_FOLD_OPS
+#define SDF_STRIP_HEAVY
+#endif
 // SDF_OP_CELL_JITTER Blend-lane (instructionHeader.z) noise flavor: how the per-cell POSITION offset is distributed
 // (KEEP IN SYNC with Puck.SignedDistance.SdfNoiseFlavor). Reshapes ONLY r0 — tumble and material variant are unaffected.
 #define SDF_NOISE_WHITE          0u
@@ -425,8 +452,9 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_INV_2POW32 (1.0 / 4294967296.0)
 
 // The "nothing nearer yet" sentinel every accumulator and every unknown shape id starts at. It is deliberately far
-// beyond MaxDistance (60) so it always loses a min() against real geometry, yet small enough that `a + (b - a)`
-// still resolves; see blendSmoothUnion, which must NOT be handed this value through a saturating lerp.
+// beyond any authored far distance (render.farDistance is capped at 8192 world units by the world validator) so it
+// always loses a min() against real geometry, yet small enough that `a + (b - a)` still resolves; see
+// blendSmoothUnion, which must NOT be handed this value through a saturating lerp.
 #define SDF_FAR_DISTANCE 1.0e9
 
 // Degenerate-input floors. The Scale / Repeat / RepeatLimited floors are HOST-BAKED (SdfProgramBuilder) — these
@@ -523,8 +551,12 @@ static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8
 // Chamfered (45° beveled) seams — the mechanical/CAD counterpart to the smooth (round) blends; bevel size = Data1.x.
 // For unit outward gradients meeting at angle φ, |∇((a + b - r)·√½)| = √2·cos(φ/2): the bevel plane's gradient reaches
 // √2 at a FLAT / near-parallel seam (two tangent surfaces, φ → 0), is exactly 1 at a perpendicular seam, and falls to 0
-// at an acute knife edge. The √2 ceiling is real and attained, so a chamfer blend carries a conservative √2 step clamp
-// via SdfProgram.AnalyzeLipschitz — the one blend family that is not 1-Lipschitz (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp).
+// at an acute knife edge. The √2 ceiling is real and attained. Generally, for operands bounded by La and Lb the bevel
+// arm's gradient is (∇a ± ∇b)/√2, so the composed bound is max(La, Lb, (La + Lb)/√2) — the one blend family that is not
+// 1-Lipschitz, and the only arm that can exceed BOTH operands, so SdfProgram.AnalyzeLipschitz folds it once per
+// COMPOSITION in this switch's own order rather than once per program. The recurrence's fixed point is 1 + √2, and the
+// accumulator starts at the SDF_FAR_DISTANCE constant, which is what makes the first chamfer composition the identity.
+// (KEEP IN SYNC with Puck.SignedDistance.SdfBlendOp.)
 #define SDF_BLEND_CHAMFER_UNION        7u
 #define SDF_BLEND_CHAMFER_INTERSECTION 8u
 #define SDF_BLEND_CHAMFER_SUBTRACTION  9u
@@ -892,6 +924,66 @@ float sdfR2Dither(uint2 pixel) {
     return ((float)h * SDF_INV_2POW32);
 }
 
+// 3D value noise on the integer lattice (KEEP IN SYNC with Puck.SignedDistance.SdfOp.NoiseDisplace and
+// SdfProgram.NoiseDisplaceLipschitz): one integer-only sdfPcg3d per corner keyed on the two's-complement lattice cell
+// xored with the seed streams (bit-identical across both DXC targets), quintic-smoothed trilinear blend (float
+// mul/add, +-1 LSB), output in [-1, 1]. The quintic slope bound ((15/8) on the corner span of 2, axes combined
+// Euclidean) is what the host bakes into the step clamp.
+float sdfNoiseCorner3(int3 cell, uint3 seed) {
+    return ((float)sdfPcg3d(asuint(cell) ^ seed).x * SDF_INV_2POW32);
+}
+float sdfValueNoise3(float3 q, uint3 seed) {
+    float3 cellFloor = floor(q);
+    int3 cell = int3(cellFloor);
+    float3 f = (q - cellFloor);
+    float3 u = (((f * f) * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
+    float c000 = sdfNoiseCorner3(cell, seed);
+    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seed);
+    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seed);
+    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seed);
+    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seed);
+    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seed);
+    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seed);
+    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seed);
+    float x00 = lerp(c000, c100, u.x);
+    float x10 = lerp(c010, c110, u.x);
+    float x01 = lerp(c001, c101, u.x);
+    float x11 = lerp(c011, c111, u.x);
+    float y0 = lerp(x00, x10, u.y);
+    float y1 = lerp(x01, x11, u.y);
+    return ((lerp(y0, y1, u.z) * 2.0) - 1.0);
+}
+// The gradient twin (KEEP IN SYNC with sdfValueNoise3 and mapGradCore's SDF_OP_NOISE_DISPLACE case): the same eight
+// corners plus the analytic partials of the quintic-blended trilinear (du = 30*f^2*(f-1)^2), in NOISE-CELL units —
+// the caller scales by the octave's world frequency.
+float sdfValueNoise3Grad(float3 q, uint3 seed, out float3 gradient) {
+    float3 cellFloor = floor(q);
+    int3 cell = int3(cellFloor);
+    float3 f = (q - cellFloor);
+    float3 u = (((f * f) * f) * ((f * ((f * 6.0) - 15.0)) + 10.0));
+    float3 fm = (f - 1.0);
+    float3 du = (((30.0 * f) * f) * (fm * fm));
+    float c000 = sdfNoiseCorner3(cell, seed);
+    float c100 = sdfNoiseCorner3((cell + int3(1, 0, 0)), seed);
+    float c010 = sdfNoiseCorner3((cell + int3(0, 1, 0)), seed);
+    float c110 = sdfNoiseCorner3((cell + int3(1, 1, 0)), seed);
+    float c001 = sdfNoiseCorner3((cell + int3(0, 0, 1)), seed);
+    float c101 = sdfNoiseCorner3((cell + int3(1, 0, 1)), seed);
+    float c011 = sdfNoiseCorner3((cell + int3(0, 1, 1)), seed);
+    float c111 = sdfNoiseCorner3((cell + int3(1, 1, 1)), seed);
+    float x00 = lerp(c000, c100, u.x);
+    float x10 = lerp(c010, c110, u.x);
+    float x01 = lerp(c001, c101, u.x);
+    float x11 = lerp(c011, c111, u.x);
+    float y0 = lerp(x00, x10, u.y);
+    float y1 = lerp(x01, x11, u.y);
+    float dvdux = lerp(lerp((c100 - c000), (c110 - c010), u.y), lerp((c101 - c001), (c111 - c011), u.y), u.z);
+    float dvduy = lerp((x10 - x00), (x11 - x01), u.z);
+    float dvduz = (y1 - y0);
+    gradient = (2.0 * (du * float3(dvdux, dvduy, dvduz)));
+    return ((lerp(y0, y1, u.z) * 2.0) - 1.0);
+}
+
 // === 3D primitives ===================================================================================================
 // Exact signed-distance fields unless a comment says otherwise. Derived per-shape constants (a reciprocal, a sqrt, a
 // normalization) are HOST-BAKED into the spare Data0/Data1 lanes by SdfProgramBuilder: shapes evaluate millions of
@@ -1206,7 +1298,7 @@ float sdfGlyph(float3 p, float4 data0, float4 data1) {
 // ordinary Subtraction-blend instance so the marches stop paying O(carve-count). data0 = (boxMin.xyz, cellSize); data1 =
 // (smooth, packedDims, brickWordOffset, boundaryFloor). Stored values are pre-scaled c/lambda (lambda = sqrt(3) folded in
 // at BAKE time), which makes the trilinear interpolant 1-Lipschitz and march-safe with NO stepScale change and an
-// unchanged zero set (carve-bake plan section 1). Determinism: manual trilinear (8 explicit loads + a precise lerp chain,
+// unchanged zero set. Determinism: manual trilinear (8 explicit loads + a precise lerp chain,
 // fp-contraction pinned OFF) is bit-stable across SPIR-V/DXIL by the same argument as the point evaluator; the baked
 // VALUES carry the familiar +-1-LSB WorldLsbExact class. KEEP IN SYNC with SdfProgramBuilder.SampledRegion.
 #ifdef SDF_SAMPLED_REGIONS
@@ -1223,7 +1315,7 @@ float sdfBrickVoxel(uint baseWord, uint3 dims, int3 coord) {
 float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 #ifdef SDF_SAMPLED_REGIONS
     // A POOL-LESS engine (SdfWorldEngineOptions.BrickPoolVoxelCapacity 0 — every offscreen filming view: SdfCameraView,
-    // NestedWorldView) binds a single-float FILLER for sdfBrickPool so the always-present binding stays valid, yet it
+    // WorldSessionView) binds a single-float FILLER for sdfBrickPool so the always-present binding stays valid, yet it
     // never bakes a brick. Sampling that filler would read 0 (its lone/OOB word), and a stored 0 is distance 0 = the box
     // interior sitting entirely on the carve surface, so the Subtraction compose would carve a box-shaped HOLE across the
     // whole region (the same defect an allocated-but-unbaked pool has). Detect the filler by element count and return the
@@ -1247,7 +1339,7 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
     float3 local = ((p - boxMin) / cellSize);
 
     // OUTSIDE the box: dist(p, box) + boundaryFloor is a valid (scaled) lower bound on distance to any interior zero
-    // (carve-bake plan section 1) — positive, so a Subtraction compose stays saturated and the accumulator is exact.
+    // — positive, so a Subtraction compose stays saturated and the accumulator is exact.
     // Discontinuous at the box face, but legal under Boolean composition and the surface is strictly interior (margin),
     // so no rendered seam can exist.
     if (any(local < 0.0) || any(local > float3(dims))) {
@@ -1307,13 +1399,13 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         // A ScreenSlab IS a box; only its material sentinel distinguishes it (see SDF_SCREEN_MATERIAL).
         case SDF_SHAPE_BOX:
         case SDF_SHAPE_SCREEN_SLAB: result = sdfBox(p, data0.xyz, data0.w); break;
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_TORUS:       result = sdfTorus(p, data0.x, data0.y); break;
 #endif
         // The plane normal is normalized HOST-SIDE (SdfProgramBuilder.Plane) — the biggest per-eval saving of all:
         // the plane is in nearly every scene, and a per-sample normalize would run for EVERY map() sample.
         case SDF_SHAPE_PLANE:       result = sdfPlane(p, data0.xyz, data0.w); break;
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_ROUND_CONE:  result = sdfRoundCone(p, data0.x, data0.y, data0.z, data0.w, data1.y); break;
         case SDF_SHAPE_ELLIPSOID:   result = sdfEllipsoid(p, data1.yzw); break;
         case SDF_SHAPE_VESICA:      result = sdfVesica(p, data0.x, data0.y, data0.z); break;
@@ -1326,7 +1418,7 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         // A regular polygon is sdfStar2D's m = 2 case, so it shares the star's body verbatim. RoundedRectangle is a
         // CORE shape (the room's cabinetry is built from it); the rest of the family is exotic.
         case SDF_SHAPE_ROUNDED_RECT:    result = sdfRoundedRect(p, data0, data1); break;
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_HEAVY
         case SDF_SHAPE_REGULAR_POLYGON:
         case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
         case SDF_SHAPE_TRAPEZOID:       result = sdfTrapezoidSolid(p, data0, data1); break;
@@ -1388,7 +1480,8 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
         // Chamfered (45-degree bevel) seams (hg_sdf fOp*Chamfer): the bevel plane is (a +- r + b) * sqrt(1/2). Union
         // bevels the near corner, intersection/subtraction the far one; SUBTRACTION is the intersection of `current`
         // with -candidate. The bevel plane's gradient reaches sqrt(2) at a FLAT/near-parallel seam (1 at a perpendicular
-        // one, 0 at an acute one), hence the chamfer step clamp in SdfProgram.AnalyzeLipschitz.
+        // one, 0 at an acute one), hence the per-composition chamfer step clamp in SdfProgram.AnalyzeLipschitz — see the
+        // SDF_BLEND_CHAMFER_* banner for the max(La, Lb, (La + Lb)/sqrt(2)) recurrence it folds.
         case SDF_BLEND_CHAMFER_UNION:        result = min(min(current, candidate), ((current + candidate - chamfer) * SDF_SQRT_HALF)); break;
         case SDF_BLEND_CHAMFER_INTERSECTION: result = max(max(current, candidate), ((current + candidate + chamfer) * SDF_SQRT_HALF)); break;
         case SDF_BLEND_CHAMFER_SUBTRACTION:  result = max(max(current, -candidate), ((current - candidate + chamfer) * SDF_SQRT_HALF)); break;
@@ -1549,7 +1642,7 @@ float3 evaluateShapeGradient(uint shapeType, float3 p, float4 data0, float4 data
         case SDF_SHAPE_PLANE:       return data0.xyz;
         case SDF_SHAPE_BOX:
         case SDF_SHAPE_SCREEN_SLAB: return sdfBoxGradient(p, data0.xyz, data0.w);
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
         case SDF_SHAPE_TORUS:       return sdfTorusGradient(p, data0.x, data0.y);
 #endif
         case SDF_SHAPE_CAPSULE:     return sdfCapsuleGradient(p, data0.xyz, data1.y);
@@ -1931,6 +2024,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // its codegen and render stay byte-identical.
     float savedFieldDistance = SDF_FAR_DISTANCE;
     int savedFieldMaterial = 0;
+    float savedFieldBlendWeight = 0.0;
+    int savedFieldBlendOther = 0;
 
     // The OUTER loop walks chain segments (the stream split at ResetPoints), the inner loop interprets a segment's
     // instructions exactly as before — the zero-instance linear walk visits every segment in directory order, and
@@ -2117,7 +2212,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     distanceScale *= data0.w;
                     break;
                 }
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_HEAVY
                 // Log-spherical DOMAIN WARP: data0.x = w (= ln shellRatio, HOST-BAKED), data0.y = twist (radians/shell),
                 // data0.z = 1/w (HOST-BAKED). Fold the RADIAL log-coordinate to the NEAREST shell (round, exactly like
                 // SDF_OP_REPEAT): a translation along log(radius) becomes a uniform Cartesian SCALING, tiling space into
@@ -2177,7 +2272,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     break;
                 }
 #endif
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT: {
                     // data0 arrives pre-clamped and data1 = 1/spacing, both HOST-BAKED by SdfProgramBuilder.Repeat.
                     SDF_VM_LOAD_DATA0;
@@ -2185,6 +2280,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     localPosition -= (data0.xyz * round(localPosition * data1.xyz));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT_LIMITED: {
                     // data0.xyz = spacing, pre-clamped away from 0 exactly as SDF_OP_REPEAT's is (HOST-BAKED by
                     // SdfProgramBuilder.RepeatLimited); data1.xyz = the per-axis cell limit. Unlike Repeat there is no
@@ -2204,6 +2301,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // on the two's-complement cell index xored with the seed), so cell decisions are bit-identical across
                 // both DXC targets. Displacement and tumble are BOTH isometries — distanceScale is untouched, and the
                 // only Lipschitz contribution is the jitter half-amplitude (SdfProgram.AnalyzeLipschitz).
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_CELL_JITTER: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
@@ -2281,6 +2380,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // SDF_OP_REPEAT the prototype must stay clear of the sector walls). atan2/floor are floats, so a
                 // sector-seam pixel carries the usual +-1 LSB warp noise (geometry only; the per-sector material can flip
                 // at a seam exactly as SDF_OP_WALLPAPER_FOLD's can). At the axis (r == 0) atan2(0,0) = 0 keeps it a no-op.
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT_POLAR: {
                     SDF_VM_LOAD_DATA0;
                     uint polarAxis = instructionHeader.y;
@@ -2318,6 +2419,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // norm <= amp*max|freq_i| (J - I is a scaled cyclic permutation, so its norm is its largest entry), so the metric
                 // stretches by up to (1 + amp*max|freq_i|); SdfProgram.AnalyzeLipschitz bakes
                 // that step clamp and folds the point's max travel (amp*sqrt(3)) into a downstream twist/bend's reach.
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DOMAIN_WARP: {
                     SDF_VM_LOAD_DATA0;
                     localPosition += (data0.w * float3(
@@ -2331,6 +2434,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // points on the negative side (dot(p,n)+offset < 0) mirror onto the positive side. For n = (1,0,0),
                 // offset 0 this is abs(localPosition.x) to the bit. A reflection is an isometry, so distanceScale is
                 // untouched and the field stays 1-Lipschitz.
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_SYMMETRY_PLANE: {
                     SDF_VM_LOAD_DATA0;
                     float spT = (dot(localPosition, data0.xyz) + data0.w);
@@ -2347,6 +2452,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 //   BEND_Y: angle keyed on y, rotates the XY plane
                 //   BEND_Z: angle keyed on y, rotates the YZ plane
                 // TWIST_Y keys on y and rotates XZ (the axis-orthogonal plane) — the only one that twists about its axis.
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_TWIST_Y: {
                     SDF_VM_LOAD_DATA0;
                     float twistCos = cos(data0.x * localPosition.y);
@@ -2357,6 +2464,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         ((-twistSin * localPosition.x) + (twistCos * localPosition.z)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_X: {
                     SDF_VM_LOAD_DATA0;
                     float bendCos = cos(data0.x * localPosition.x);
@@ -2367,6 +2476,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         ((-bendSin * localPosition.x) + (bendCos * localPosition.y)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_Y: {
                     SDF_VM_LOAD_DATA0;
                     float bendCos = cos(data0.x * localPosition.y);
@@ -2377,6 +2488,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         ((-bendSin * localPosition.x) + (bendCos * localPosition.y)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_Z: {
                     SDF_VM_LOAD_DATA0;
                     float bendCos = cos(data0.x * localPosition.y);
@@ -2387,6 +2500,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         ((-bendSin * localPosition.y) + (bendCos * localPosition.z)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ELONGATE: {
                     SDF_VM_LOAD_DATA0;
                     localPosition -= clamp(localPosition, -data0.xyz, data0.xyz);
@@ -2395,11 +2510,15 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // The FIELD ops act on the running result, not the point: Onion shells everything accumulated so far
                 // into a hollow skin; Dilate inflates it. Both operate in world units (candidates were distance-scaled
                 // before blending).
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ONION: {
                     SDF_VM_LOAD_DATA0;
                     result.distance = (abs(result.distance) - data0.x);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_DILATE: {
                     SDF_VM_LOAD_DATA0;
                     result.distance -= data0.x;
@@ -2413,12 +2532,56 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // squared sines, so it maximizes at a cube vertex and reaches exactly amp*max|freq_i| (the infinity norm,
                 // not the Euclidean length): the field can overestimate by (1 + amp*max|freq_i|), which
                 // SdfProgram.AnalyzeLipschitz bakes as the step clamp.
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DISPLACE: {
                     SDF_VM_LOAD_DATA0;
+                    // FAR-BAND fast path: the relief is bounded by |amplitude|, so beyond a few amplitudes of the
+                    // accumulated field `f - |amplitude|` is already a valid conservative lower bound — the march
+                    // needs nothing tighter there, and the trig runs only near the band that can matter.
+                    float displaceReach = abs(data0.w);
+                    if (result.distance > (4.0 * displaceReach)) {
+                        result.distance -= displaceReach;
+                        break;
+                    }
                     float3 df = (data0.xyz * localPosition);
                     result.distance += (data0.w * ((sin(df.x) * sin(df.y)) * sin(df.z)));
                     break;
                 }
+                // fBm hash-lattice value-noise relief (KEEP IN SYNC with Puck.SignedDistance.SdfOp.NoiseDisplace /
+                // SdfProgramBuilder.NoiseDisplace / SdfProgram.NoiseDisplaceLipschitz). data0 = (frequency, amplitude,
+                // gain, lacunarity), data1.x = HOST-BAKED 1/sum(gain^k) normalization, header.y = seed, header.z =
+                // octave count. The corner hash is INTEGER-ONLY (sdfValueNoise3), so cell decisions are bit-identical
+                // across both DXC targets; the blend is float mul/add (+-1 LSB). AnalyzeLipschitz bakes the gradient
+                // bound as the step clamp; the normalized sum stays in [-1, 1], so the surface reach is bounded by
+                // |amplitude| (the scoped-reach / cull-margin channels read that).
+#endif
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_NOISE_DISPLACE: {
+                    SDF_VM_LOAD_DATA0;
+                    SDF_VM_LOAD_DATA1;
+                    // FAR-BAND fast path (see SDF_OP_DISPLACE): the normalized octave sum stays in [-1, 1], so the
+                    // relief is bounded by |amplitude| and the far field subtracts it instead of hashing.
+                    float noiseReach = abs(data0.y);
+                    if (result.distance > (4.0 * noiseReach)) {
+                        result.distance -= noiseReach;
+                        break;
+                    }
+                    float3 q = (localPosition * data0.x);
+                    float octaveAmplitude = 1.0;
+                    float noiseSum = 0.0;
+                    uint octaveCount = instructionHeader.z;
+                    for (uint octave = 0u; (octave < octaveCount); octave++) {
+                        uint octaveSeed = (instructionHeader.y + octave);
+                        noiseSum += (octaveAmplitude * sdfValueNoise3(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B))));
+                        q *= data0.w;
+                        octaveAmplitude *= data0.z;
+                    }
+                    result.distance += ((data0.y * data1.x) * noiseSum);
+                    break;
+                }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_WALLPAPER_FOLD: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
@@ -2499,7 +2662,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     }
                     break;
                 }
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
                 // Scoped field accumulator (KEEP IN SYNC with Puck.SignedDistance.SdfOp.PushField/PopField). A scope touches ONLY
                 // the FIELD — never localPosition / distanceScale / parityMaterialDelta — so the point chain is untouched
                 // and ResetPoint semantics are unchanged.
@@ -2509,6 +2672,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     savedFieldDistance = result.distance;
                     if (trackMaterial) {
                         savedFieldMaterial = result.material;
+                        savedFieldBlendWeight = sdfMaterialBlendWeight;
+                        savedFieldBlendOther = sdfMaterialBlendOther;
+                        sdfMaterialBlendWeight = 0.0;
+                        sdfMaterialBlendOther = 0;
                     }
                     result.distance = SDF_FAR_DISTANCE;
                     if (trackMaterial) {
@@ -2523,17 +2690,36 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // parityMaterialDelta must NOT touch it (the fusion trap). Restore the parent accumulator as the
                     // blend LHS, then fall into the SAME material-winner + blendShape tail a SHAPE uses. The compose blend
                     // + smooth ride the POP instruction (header.z / data1.x, baked by SdfProgramBuilder.PushField).
+                    // data1.y is the scope's baked 1/L candidate scale (SdfProgram.AnalyzeLipschitz): a positively
+                    // scaled distance keeps its zero set and the scaled candidate is exactly 1-Lipschitz, so a scoped
+                    // warp/relief pays its march tax only through this candidate, never the global stepScale. Zero
+                    // (unpatched, every factor-1 scope) means no scale.
                     composeCandidate = result.distance;
+                    if (data1.y > 0.0) {
+                        composeCandidate *= data1.y;
+                    }
                     if (trackMaterial) {
                         composeMaterial = result.material;
                     }
                     composeBlend = instructionHeader.z;
                     composeSmooth = data1.x;
+                    float scopeBlendWeight = sdfMaterialBlendWeight;
+                    int scopeBlendOther = sdfMaterialBlendOther;
                     result.distance = savedFieldDistance;
                     if (trackMaterial) {
                         result.material = savedFieldMaterial;
+                        sdfMaterialBlendWeight = savedFieldBlendWeight;
+                        sdfMaterialBlendOther = savedFieldBlendOther;
                     }
-                    composePending = true;
+                    // A losing scope cannot tint its parent. A winning hard union carries its own internal seam;
+                    // a smooth outer composition instead creates a new two-material seam in the shared helper.
+                    bool scopeWinsUnion = (composeBlend == SDF_BLEND_UNION) && (composeCandidate < result.distance);
+                    sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeSmooth, trackMaterial);
+                    if (trackMaterial && scopeWinsUnion) {
+                        sdfMaterialBlendWeight = scopeBlendWeight;
+                        sdfMaterialBlendOther = scopeBlendOther;
+                    }
+                    composePending = false;
                     break;
                 }
 #endif
@@ -2876,7 +3062,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     distanceScale *= data0.w;
                     break;
                 }
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_LOG_SPHERE: {
                     // KEEP-IN-SYNC with mapCore's case, EXCEPT the fold-safe step bound: this dual twin is HIT-ONLY
                     // (normals at an accepted sample), so it neither steps nor publishes sdfMapStepBound.
@@ -2914,15 +3100,19 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     break;
                 }
 #endif
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT: {
                     localPosition -= (data0.xyz * round(localPosition * data1.xyz));   // A = I (round is locally constant)
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT_LIMITED: {
                     localPosition -= (data0.xyz * clamp(round(localPosition / data0.xyz), -data1.xyz, data1.xyz));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_CELL_JITTER: {
                     float3 cell = round(localPosition * data1.xyz);
                     uint3 seed = uint3(instructionHeader.y, (instructionHeader.y * SDF_HASH_STREAM_A), (instructionHeader.y * SDF_HASH_STREAM_B));
@@ -2968,6 +3158,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_REPEAT_POLAR: {
                     uint polarAxis = instructionHeader.y;
                     float2 pv;
@@ -2999,6 +3191,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DOMAIN_WARP: {
                     // A = I + amp * M, M a scaled cyclic permutation (each axis driven by the next); rows below.
                     float cx = cos(data0.x * localPosition.y);
@@ -3015,6 +3209,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         sin(data0.z * localPosition.x)));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_SYMMETRY_PLANE: {
                     float spT = (dot(localPosition, data0.xyz) + data0.w);
                     // Reflection A = I - 2 n n^T, applied only on the negative side (spT < 0) — the same half-space fold.
@@ -3025,6 +3221,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition -= ((2.0 * min(spT, 0.0)) * data0.xyz);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_TWIST_Y: {
                     float twistCos = cos(data0.x * localPosition.y);
                     float twistSin = sin(data0.x * localPosition.y);
@@ -3038,6 +3236,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition.xz = float2(nx, nz);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_X: {
                     float bendCos = cos(data0.x * localPosition.x);
                     float bendSin = sin(data0.x * localPosition.x);
@@ -3051,6 +3251,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition.xy = float2(nx, ny);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_Y: {
                     float bendCos = cos(data0.x * localPosition.y);
                     float bendSin = sin(data0.x * localPosition.y);
@@ -3064,6 +3266,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition.xy = float2(nx, ny);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_BEND_Z: {
                     float bendCos = cos(data0.x * localPosition.y);
                     float bendSin = sin(data0.x * localPosition.y);
@@ -3077,6 +3281,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition.yz = float2(ny, nz);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ELONGATE: {
                     // A = diag(indicator(|p_i| > h_i)): the interior of the swept region collapses onto the core (zero
                     // derivative there), the outside translates rigidly (unit derivative).
@@ -3087,18 +3293,31 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     localPosition -= clamp(localPosition, -data0.xyz, data0.xyz);
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ONION: {
                     float onionSign = ((result.distance < 0.0) ? -1.0 : 1.0);   // d -> |d| - t flips the gradient by sign(d)
                     result.distance = (abs(result.distance) - data0.x);
                     resultGradient *= onionSign;
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_DILATE: {
                     result.distance -= data0.x;   // gradient unchanged (a uniform outward offset)
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
                 case SDF_OP_DISPLACE: {
                     // gradient += amp * grad(sin*sin*sin) — analytic and exact (the FD-cancellation win), mapped to world.
+                    // FAR-BAND fast path (KEEP IN SYNC with mapCore's case): the skipped band contributes a constant
+                    // to the bound field, so the gradient is untouched there.
+                    float displaceReach = abs(data0.w);
+                    if (result.distance > (4.0 * displaceReach)) {
+                        result.distance -= displaceReach;
+                        break;
+                    }
                     float3 df = (data0.xyz * localPosition);
                     float sx = sin(df.x);
                     float sy = sin(df.y);
@@ -3111,6 +3330,40 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
                     break;
                 }
+#endif
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_NOISE_DISPLACE: {
+                    // distance += amp*invNorm*fbm; gradient += the analytic octave-summed lattice gradient, mapped to
+                    // world through the chain Jacobian columns (KEEP IN SYNC with mapCore's case above).
+                    // FAR-BAND fast path (KEEP IN SYNC with mapCore's case): constant contribution, gradient untouched.
+                    float noiseReach = abs(data0.y);
+                    if (result.distance > (4.0 * noiseReach)) {
+                        result.distance -= noiseReach;
+                        break;
+                    }
+                    float3 q = (localPosition * data0.x);
+                    float octaveAmplitude = 1.0;
+                    float octaveFrequency = data0.x;
+                    float noiseSum = 0.0;
+                    float3 noiseGradSum = float3(0.0, 0.0, 0.0);
+                    uint octaveCount = instructionHeader.z;
+                    for (uint octave = 0u; (octave < octaveCount); octave++) {
+                        uint octaveSeed = (instructionHeader.y + octave);
+                        float3 octaveGrad;
+                        noiseSum += (octaveAmplitude * sdfValueNoise3Grad(q, uint3(octaveSeed, (octaveSeed * SDF_HASH_STREAM_A), (octaveSeed * SDF_HASH_STREAM_B)), octaveGrad));
+                        noiseGradSum += ((octaveAmplitude * octaveFrequency) * octaveGrad);
+                        q *= data0.w;
+                        octaveFrequency *= data0.w;
+                        octaveAmplitude *= data0.z;
+                    }
+                    float noiseScale = (data0.y * data1.x);
+                    result.distance += (noiseScale * noiseSum);
+                    float3 localGradProduct = (noiseScale * noiseGradSum);
+                    resultGradient += float3(dot(localGradProduct, jx), dot(localGradProduct, jy), dot(localGradProduct, jz));
+                    break;
+                }
+#endif
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_WALLPAPER_FOLD: {
                     uint group = instructionHeader.y;
                     uint plane = instructionHeader.z;
@@ -3179,7 +3432,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     composePending = true;
                     break;
                 }
-#ifndef SDF_CORE_OPS
+#ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_PUSH_FIELD: {
                     saved.distance = result.distance;
                     saved.material = result.material;
@@ -3190,8 +3443,15 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     break;
                 }
                 case SDF_OP_POP_FIELD: {
+                    // data1.y = the scope's baked 1/L candidate scale (see mapCore's pop). The gradient scales WITH the
+                    // distance so the soft-blend h weights stay consistent with the scaled candidate; the consumer's
+                    // final normalize cancels the uniform factor.
                     composeCandidate = result.distance;
                     composeGradient = resultGradient;
+                    if (data1.y > 0.0) {
+                        composeCandidate *= data1.y;
+                        composeGradient *= data1.y;
+                    }
                     composeMaterial = result.material;
                     composeBlend = instructionHeader.z;
                     composeSmooth = data1.x;

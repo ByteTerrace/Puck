@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Text;
+using System.Text.Unicode;
 using Puck.Maths;
 
 namespace Puck.Networking;
@@ -41,12 +43,13 @@ public enum WireRefusal : byte {
     /// <summary>The peer closed the connection where a frame was required.</summary>
     ConnectionClosed,
 
-    /// <summary>The peer refused the handshake, or answered it with the wrong frame.</summary>
-    HandshakeRefused,
-
     /// <summary>The persistent lane to this peer is not carrying traffic; the request was not sent or its answer was
     /// lost with the connection.</summary>
     LaneUnavailable,
+
+    /// <summary>The lane's per-request deadline expired once the request write began — no response arrived, or the
+    /// write itself never completed; the detail says which.</summary>
+    RequestTimedOut,
 }
 /// <summary>One named transport refusal plus narration suitable for a console or error frame.</summary>
 /// <param name="Refusal">The stable refusal name.</param>
@@ -66,11 +69,6 @@ public readonly record struct WireFailure(WireRefusal Refusal, string Detail) {
 /// remaining span; the first underflow latches a refusal and every later read is inert, so a leaf decoder reads its
 /// whole shape and asks once — at <see cref="TryFinish"/> — whether the bytes were honest.</summary>
 public ref struct WireReader {
-    private static readonly UTF8Encoding s_strictUtf8 = new(
-        encoderShouldEmitUTF8Identifier: false,
-        throwOnInvalidBytes: true
-    );
-
     private readonly ReadOnlySpan<byte> m_bytes;
 
     private int m_offset;
@@ -212,6 +210,36 @@ public ref struct WireReader {
 
         return value;
     }
+    /// <summary>Reads one presentation quaternion, refusing a non-finite lane. The exact mirror of
+    /// <see cref="ReadFiniteVector"/> for the four-lane shape <see cref="WireWriter.WriteQuaternion"/> writes.</summary>
+    /// <param name="field">The field name used in the refusal narration.</param>
+    /// <returns>The value.</returns>
+    public Quaternion ReadFiniteQuaternion(string field) {
+        var x = ReadSingle();
+        var y = ReadSingle();
+        var z = ReadSingle();
+        var w = ReadSingle();
+        var value = new Quaternion(
+            w: w,
+            x: x,
+            y: y,
+            z: z
+        );
+
+        if (
+            !float.IsFinite(f: value.X) ||
+            !float.IsFinite(f: value.Y) ||
+            !float.IsFinite(f: value.Z) ||
+            !float.IsFinite(f: value.W)
+        ) {
+            Fail(
+                detail: $"{field} is not finite",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
+
+        return value;
+    }
     /// <summary>Reads one presentation vector, refusing a non-finite lane.</summary>
     /// <param name="field">The field name used in the refusal narration.</param>
     /// <returns>The value.</returns>
@@ -238,6 +266,13 @@ public ref struct WireReader {
     /// <summary>Reads one fixed-point scalar.</summary>
     /// <returns>The value.</returns>
     public FixedQ4816 ReadFixed() => new(Value: ReadInt64());
+    /// <summary>Reads a nullable fixed-point scalar behind its presence bit.</summary>
+    /// <returns>The value, or <see langword="null"/>.</returns>
+    public FixedQ4816? ReadNullableFixed() =>
+        (ReadBoolean()
+            ? ReadFixed()
+            : null
+        );
     /// <summary>Reads one fixed-point quaternion.</summary>
     /// <returns>The value.</returns>
     public FixedQuaternion ReadFixedQuaternion() => new(
@@ -285,14 +320,6 @@ public ref struct WireReader {
             )
             : null
         );
-    /// <summary>Reads one presentation quaternion.</summary>
-    /// <returns>The value.</returns>
-    public Quaternion ReadQuaternion() => new(
-        ReadSingle(),
-        ReadSingle(),
-        ReadSingle(),
-        ReadSingle()
-    );
     /// <summary>Reads a required non-blank UTF-8 string.</summary>
     /// <param name="field">The field name used in the refusal narration.</param>
     /// <param name="maxBytes">The hard cap on the encoded byte count.</param>
@@ -343,7 +370,9 @@ public ref struct WireReader {
             : BinaryPrimitives.ReadSingleLittleEndian(source: slice)
         );
     }
-    /// <summary>Reads one UTF-8 string carried behind a 16-bit byte-length prefix.</summary>
+    /// <summary>Reads one UTF-8 string carried behind a 16-bit byte-length prefix. The bytes are validated as UTF-8
+    /// before they are decoded, so a malformed sequence is a <see cref="WireRefusal.PayloadMalformed"/> refusal and
+    /// never an exception.</summary>
     /// <param name="field">The field name used in the refusal narration.</param>
     /// <param name="maxBytes">The hard cap on the encoded byte count.</param>
     /// <returns>The string, or empty once a refusal has latched.</returns>
@@ -371,9 +400,7 @@ public ref struct WireReader {
             return string.Empty;
         }
 
-        try {
-            return s_strictUtf8.GetString(bytes: slice);
-        } catch (DecoderFallbackException) {
+        if (!Utf8.IsValid(value: slice)) {
             Fail(
                 detail: $"{field} carries bytes that do not decode as UTF-8",
                 refusal: WireRefusal.PayloadMalformed
@@ -381,6 +408,8 @@ public ref struct WireReader {
 
             return string.Empty;
         }
+
+        return Encoding.UTF8.GetString(bytes: slice);
     }
     /// <summary>Reads one little-endian unsigned 32-bit integer.</summary>
     /// <returns>The value.</returns>
@@ -430,14 +459,17 @@ public static class WireLimits {
     public const int MaxStringBytes = (16 * 1024);
 }
 /// <summary>A growable little-endian writer producing one canonical leaf. It is the exact mirror of
-/// <see cref="WireReader"/>; an encoder and its decoder are read side by side.</summary>
+/// <see cref="WireReader"/>; an encoder and its decoder are read side by side. The written bytes are reachable two
+/// ways: <see cref="ToArray"/> copies them out for anything stored or queued, and <see cref="WrittenMemory"/> /
+/// <see cref="WrittenSpan"/> alias the writer's own buffer for immediate consumption.</summary>
 public sealed class WireWriter {
     private byte[] m_buffer;
     private int m_length;
 
     /// <summary>Initializes a writer.</summary>
-    /// <param name="capacity">The initial buffer size.</param>
-    public WireWriter(int capacity = 256) {
+    /// <param name="capacity">The initial buffer size. The default holds a typical signed peer message without a
+    /// resize.</param>
+    public WireWriter(int capacity = 512) {
         m_buffer = new byte[Math.Max(
             val1: capacity,
             val2: 16
@@ -447,6 +479,20 @@ public sealed class WireWriter {
 
     /// <summary>Gets the bytes written so far.</summary>
     public int Length => m_length;
+    /// <summary>Gets the written bytes as memory aliasing the writer's own buffer — no copy. The memory is
+    /// invalidated by the next write (a resize moves the buffer), so it is for immediate consumption, such as
+    /// handing to <see cref="WireFrame.WriteAsync"/>; anything stored or queued takes <see cref="ToArray"/>.</summary>
+    public ReadOnlyMemory<byte> WrittenMemory => m_buffer.AsMemory(
+        length: m_length,
+        start: 0
+    );
+    /// <summary>Gets the written bytes as a span aliasing the writer's own buffer — no copy. The span is invalidated
+    /// by the next write (a resize moves the buffer), so it is for immediate consumption; anything stored or queued
+    /// takes <see cref="ToArray"/>.</summary>
+    public ReadOnlySpan<byte> WrittenSpan => m_buffer.AsSpan(
+        length: m_length,
+        start: 0
+    );
 
     private Span<byte> Reserve(int count) {
         if (checked((m_length + count)) > m_buffer.Length) {
@@ -469,12 +515,10 @@ public sealed class WireWriter {
         return span;
     }
 
-    /// <summary>Copies the written bytes into a new array.</summary>
+    /// <summary>Copies the written bytes into a new array — the form to keep when the leaf is stored or queued
+    /// beyond the writer's next write; <see cref="WrittenMemory"/> serves an immediate consumer without the copy.</summary>
     /// <returns>The canonical leaf.</returns>
-    public byte[] ToArray() => m_buffer.AsSpan(
-        length: m_length,
-        start: 0
-    ).ToArray();
+    public byte[] ToArray() => WrittenSpan.ToArray();
     /// <summary>Writes a length-prefixed byte block.</summary>
     /// <param name="value">The block.</param>
     public void WriteBlock(ReadOnlySpan<byte> value) {
@@ -495,6 +539,15 @@ public sealed class WireWriter {
     /// <summary>Writes one fixed-point scalar.</summary>
     /// <param name="value">The value.</param>
     public void WriteFixed(FixedQ4816 value) => WriteInt64(value: value.Value);
+    /// <summary>Writes a nullable fixed-point scalar behind its presence bit.</summary>
+    /// <param name="value">The value.</param>
+    public void WriteNullableFixed(FixedQ4816? value) {
+        WriteBoolean(value: value.HasValue);
+
+        if (value is { } present) {
+            WriteFixed(value: present);
+        }
+    }
     /// <summary>Writes one fixed-point quaternion.</summary>
     /// <param name="value">The value.</param>
     public void WriteFixedQuaternion(FixedQuaternion value) {
@@ -545,24 +598,32 @@ public sealed class WireWriter {
         destination: Reserve(count: sizeof(float)),
         value: value
     );
-    /// <summary>Writes one UTF-8 string behind a 16-bit byte-length prefix.</summary>
+    /// <summary>Writes one UTF-8 string behind a 16-bit byte-length prefix, encoding straight into the buffer with
+    /// no temporary array. The cap is a caller bug, not a peer refusal — every wire string in this repository is a
+    /// name, an authority spelling, or a refusal sentence — so it throws rather than latching.</summary>
     /// <param name="value">The value; <see langword="null"/> writes an empty string.</param>
     /// <exception cref="ArgumentException">The encoded string exceeds <see cref="WireLimits.MaxStringBytes"/>.</exception>
     public void WriteString(string? value) {
-        var bytes = Encoding.UTF8.GetBytes(s: (value ?? string.Empty));
+        var text = (value ?? string.Empty);
+        var byteCount = Encoding.UTF8.GetByteCount(s: text);
 
-        if (bytes.Length > WireLimits.MaxStringBytes) {
+        if (byteCount > WireLimits.MaxStringBytes) {
             throw new ArgumentException(
-                message: $"a wire string of {bytes.Length} bytes exceeds the {WireLimits.MaxStringBytes}-byte field cap",
+                message: $"a wire string of {byteCount} bytes exceeds the {WireLimits.MaxStringBytes}-byte field cap",
                 paramName: nameof(value)
             );
         }
 
+        // The prefix is reserved before the payload span is taken: Reserve may resize, and a span taken across a
+        // resize would point at the buffer that was just abandoned.
         BinaryPrimitives.WriteUInt16LittleEndian(
             destination: Reserve(count: sizeof(ushort)),
-            value: ((ushort)bytes.Length)
+            value: ((ushort)byteCount)
         );
-        WriteBytes(value: bytes);
+        _ = Encoding.UTF8.GetBytes(
+            bytes: Reserve(count: byteCount),
+            chars: text
+        );
     }
     /// <summary>Writes one little-endian unsigned 32-bit integer.</summary>
     /// <param name="value">The value.</param>
@@ -586,9 +647,11 @@ public sealed class WireWriter {
 }
 /// <summary>One frame read off a stream: the kind and body, or the named reason there is none.</summary>
 /// <param name="Kind">The frame's kind byte.</param>
-/// <param name="Body">The frame body, excluding the prefix and kind byte.</param>
+/// <param name="Body">The frame body, excluding the prefix and kind byte. It is a slice over the frame's own read
+/// buffer, not a copy; that buffer is allocated fresh per frame and never reused, so the slice is safe to keep for as
+/// long as the caller likes. Empty when <see cref="Ok"/> is <see langword="false"/>.</param>
 /// <param name="Failure">The named refusal when <see cref="Ok"/> is <see langword="false"/>.</param>
-public readonly record struct WireFrameRead(byte Kind, byte[] Body, WireFailure Failure) {
+public readonly record struct WireFrameRead(byte Kind, ReadOnlyMemory<byte> Body, WireFailure Failure) {
     /// <summary>Gets a value indicating whether a frame was read.</summary>
     public bool Ok => !Failure.IsRefusal;
 
@@ -599,7 +662,7 @@ public readonly record struct WireFrameRead(byte Kind, byte[] Body, WireFailure 
     public static WireFrameRead Refused(WireRefusal refusal, string detail) =>
         new(
             Kind: 0,
-            Body: [],
+            Body: ReadOnlyMemory<byte>.Empty,
             Failure: new WireFailure(
                 Detail: detail,
                 Refusal: refusal
@@ -614,7 +677,91 @@ public static class WireFrame {
     /// <summary>The fixed prefix size (length prefix plus kind byte).</summary>
     public const int PrefixBytes = FrameCodec.PrefixBytes;
 
-    /// <summary>Reads exactly one frame.</summary>
+    /// <summary><see cref="TryReadPrefixedBodyAsync"/>'s outcome — which head step the read stopped at, so each
+    /// caller can spell out its own refusal wording (or, for <see cref="PrefixEof"/>, a silent close) from a stable
+    /// discriminant rather than re-deriving it from <c>Following</c>/body-length arithmetic.</summary>
+    internal enum PrefixedBodyOutcome {
+        /// <summary>The prefix and following bytes both arrived; <c>Following</c>/<c>Body</c> are populated.</summary>
+        Ok,
+        /// <summary>The peer disconnected before the 4-byte length prefix completed — a clean close, never a
+        /// mid-frame truncation.</summary>
+        PrefixEof,
+        /// <summary>The declared length exceeds the caller's cap; <c>Following</c> carries the declared value.</summary>
+        OverCap,
+        /// <summary>The peer disconnected after declaring a length but before the following bytes completed.</summary>
+        BodyEof,
+    }
+
+    /// <summary>Reads the <c>[u32 following-length][following bytes]</c> head shared by every stream reader on this
+    /// grammar: an exact little-endian length prefix, an over-cap refusal, then exactly <c>Following</c> more bytes
+    /// (skipped when it is zero). What counts as an EOF-before-any-frame vs. a truncated frame, what the cap itself
+    /// is, and what a zero length or an over-cap length means to the caller are read-head-adjacent but
+    /// caller-specific policy — this reads only the length and the bytes it declares.</summary>
+    /// <remarks>
+    /// The over-cap check runs BEFORE the body buffer is allocated, and that ordering is an invariant: the consumers
+    /// of this head admit caps of 16 MiB and 32 MiB, so an attacker-declared length may cost at most the cap, never
+    /// the four-byte prefix's full range. The prefix itself is read into a pooled scratch array, sliced to exactly
+    /// <c>sizeof(uint)</c> because <see cref="HandshakeWireFormat.TryReadExactAsync"/> fills the whole memory it is
+    /// given and a rented array is at least 16 bytes. Exactly one buffer of <paramref name="leadingBytes"/> plus
+    /// <c>Following</c> bytes is allocated per frame and never reused, which is what lets a caller hand slices of it
+    /// out (<see cref="WireFrameRead.Body"/>) without a copy.
+    /// </remarks>
+    /// <param name="stream">The connection stream.</param>
+    /// <param name="cap">The hard cap on the declared length, already reduced for any prefix bytes the caller does
+    /// not count against it.</param>
+    /// <param name="leadingBytes">The count of bytes left unwritten at the front of the returned buffer for the caller
+    /// to back-patch (four for a caller that keeps the length prefix in its buffer; zero otherwise). The body is read
+    /// into the buffer from this offset.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>The outcome, the declared length (valid whenever the outcome is not <see cref="PrefixedBodyOutcome.PrefixEof"/>),
+    /// and the buffer (populated only on <see cref="PrefixedBodyOutcome.Ok"/>): <paramref name="leadingBytes"/>
+    /// untouched bytes, then the following bytes.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="leadingBytes"/> is negative.</exception>
+    internal static async Task<(PrefixedBodyOutcome Outcome, uint Following, byte[] Body)> TryReadPrefixedBodyAsync(Stream stream, uint cap, int leadingBytes, CancellationToken ct) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: leadingBytes);
+
+        uint following;
+        var scratch = ArrayPool<byte>.Shared.Rent(minimumLength: sizeof(uint));
+
+        try {
+            if (!await HandshakeWireFormat.TryReadExactAsync(
+                buffer: scratch.AsMemory(
+                    length: sizeof(uint),
+                    start: 0
+                ),
+                ct: ct,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false)) {
+                return (PrefixedBodyOutcome.PrefixEof, 0, []);
+            }
+
+            following = BinaryPrimitives.ReadUInt32LittleEndian(source: scratch);
+        } finally {
+            ArrayPool<byte>.Shared.Return(array: scratch);
+        }
+
+        if (following > cap) {
+            return (PrefixedBodyOutcome.OverCap, following, []);
+        }
+
+        var buffer = new byte[checked((leadingBytes + ((int)following)))];
+
+        if (
+            (following > 0) &&
+            !await HandshakeWireFormat.TryReadExactAsync(
+            buffer: buffer.AsMemory(start: leadingBytes),
+            ct: ct,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false)
+        ) {
+            return (PrefixedBodyOutcome.BodyEof, following, []);
+        }
+
+        return (PrefixedBodyOutcome.Ok, following, buffer);
+    }
+
+    /// <summary>Reads exactly one frame. The returned <see cref="WireFrameRead.Body"/> is a slice over the frame's
+    /// own freshly allocated buffer, never a copy; an over-cap length is refused by name before that buffer exists.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="maxFrameBytes">The hard cap on prefix plus body bytes.</param>
     /// <param name="ct">Cancellation.</param>
@@ -623,55 +770,52 @@ public static class WireFrame {
     public static async Task<WireFrameRead> ReadAsync(Stream stream, int maxFrameBytes, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(argument: stream);
 
-        var prefix = new byte[sizeof(uint)];
-
-        if (!await HandshakeWireFormat.TryReadExactAsync(
-            buffer: prefix,
-            ct: ct,
-            stream: stream
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
-            return WireFrameRead.Refused(
-                detail: "the peer closed before a frame prefix arrived",
-                refusal: WireRefusal.ConnectionClosed
-            );
-        }
-
-        var following = BinaryPrimitives.ReadUInt32LittleEndian(source: prefix);
         var cap = ((uint)Math.Max(
             val1: 0,
             val2: (maxFrameBytes - sizeof(uint))
         ));
 
-        if (
-            (following < sizeof(byte)) ||
-            (following > cap)
-        ) {
+        var (outcome, following, frame) = await TryReadPrefixedBodyAsync(
+            cap: cap,
+            ct: ct,
+            leadingBytes: 0,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        switch (outcome) {
+            case PrefixedBodyOutcome.PrefixEof:
+                return WireFrameRead.Refused(
+                    detail: "the peer closed before a frame prefix arrived",
+                    refusal: WireRefusal.ConnectionClosed
+                );
+            case PrefixedBodyOutcome.OverCap:
+                return WireFrameRead.Refused(
+                    detail: $"prefix declares {following} following bytes; the admitted range is 1..{cap}",
+                    refusal: WireRefusal.FrameLengthInvalid
+                );
+            case PrefixedBodyOutcome.BodyEof:
+                return WireFrameRead.Refused(
+                    detail: $"the peer closed inside a {following}-byte frame",
+                    refusal: WireRefusal.ConnectionClosed
+                );
+        }
+
+        if (following < sizeof(byte)) {
             return WireFrameRead.Refused(
                 detail: $"prefix declares {following} following bytes; the admitted range is 1..{cap}",
                 refusal: WireRefusal.FrameLengthInvalid
             );
         }
 
-        var frame = new byte[following];
-
-        if (!await HandshakeWireFormat.TryReadExactAsync(
-            buffer: frame,
-            ct: ct,
-            stream: stream
-        ).ConfigureAwait(continueOnCapturedContext: false)) {
-            return WireFrameRead.Refused(
-                detail: $"the peer closed inside a {following}-byte frame",
-                refusal: WireRefusal.ConnectionClosed
-            );
-        }
-
         return new WireFrameRead(
             Kind: frame[0],
-            Body: frame[1..],
+            Body: frame.AsMemory(start: 1),
             Failure: default
         );
     }
-    /// <summary>Writes one framed kind/body pair and flushes it.</summary>
+    /// <summary>Writes one framed kind/body pair and flushes it: one joined buffer (<see cref="FrameCodec.Join"/>),
+    /// one write, one flush. The body is consumed before this returns, so a <see cref="WireWriter.WrittenMemory"/>
+    /// may be passed directly without copying it out first.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="kind">The frame kind.</param>
     /// <param name="body">The frame body.</param>
@@ -681,14 +825,10 @@ public static class WireFrame {
     public static async Task WriteAsync(Stream stream, byte kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
         ArgumentNullException.ThrowIfNull(argument: stream);
 
-        var frame = new byte[checked((PrefixBytes + body.Length))];
-
-        BinaryPrimitives.WriteUInt32LittleEndian(
-            destination: frame,
-            value: checked((uint)(body.Length + sizeof(byte)))
+        var frame = FrameCodec.Join(
+            kind: kind,
+            payload: body.Span
         );
-        frame[sizeof(uint)] = kind;
-        body.Span.CopyTo(destination: frame.AsSpan(start: PrefixBytes));
 
         await stream.WriteAsync(
             buffer: frame,

@@ -4,7 +4,7 @@
     "null"
   ],
   "items": {
-    "description": "One per-world binding overlay \u2014 a whole BindingProfileDocument layered over the engine default beneath every seat\u0027s profile bindings, so a world can contextualize the controls (a kart world remapping a lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result (default \u2295 every overlay) is what the validator compiles.",
+    "description": "One per-world binding overlay \u2014 a whole BindingProfileDocument layered over the engine default beneath every seat\u0027s profile bindings, so a world can contextualize the controls (a kart world remapping a lane, an RTS world adding a chorded command page) as data, never a client fork. Merged in order; the composed result (default \u2295 every overlay whose When currently holds) is what the validator compiles.",
     "type": [
       "object",
       "null"
@@ -68,7 +68,8 @@
                 "id",
                 "sources"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BindingModifierDefinition"
             }
           },
           "chords": {
@@ -80,6 +81,7 @@
               ],
               "properties": {
                 "group": {
+                  "title": "DocumentIdentifier",
                   "type": "string"
                 },
                 "chord": {
@@ -113,7 +115,8 @@
                       "default": null
                     },
                     "channel": {
-                      "default": null
+                      "default": null,
+                      "title": "ChannelRef"
                     },
                     "scale": {
                       "type": [
@@ -141,18 +144,28 @@
                       "default": null
                     },
                     "value": {
-                      "default": null
+                      "default": null,
+                      "title": "CommandValue"
                     },
                     "mode": {
                       "enum": [
                         "Hold",
                         "Toggle"
                       ],
-                      "default": "Hold"
+                      "default": "Hold",
+                      "title": "BindingEntryMode"
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
                     }
                   },
                   "additionalProperties": false,
-                  "default": null
+                  "default": null,
+                  "title": "BindingCommandDefinition"
                 },
                 "held": {
                   "type": [
@@ -166,27 +179,13 @@
                     ]
                   },
                   "default": null
-                },
-                "isResting": {
-                  "type": "boolean"
-                },
-                "members": {
-                  "type": [
-                    "array",
-                    "null"
-                  ],
-                  "items": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
                 }
               },
               "required": [
                 "group"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BindingChordDefinition"
             }
           },
           "contexts": {
@@ -207,6 +206,7 @@
                   "type": "string"
                 },
                 "group": {
+                  "title": "DocumentIdentifier",
                   "type": "string"
                 }
               },
@@ -215,7 +215,8 @@
                 "state",
                 "group"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BindingContextDefinition"
             },
             "default": null
           },
@@ -234,6 +235,7 @@
                   "type": "string"
                 },
                 "group": {
+                  "title": "DocumentIdentifier",
                   "type": "string"
                 },
                 "holdPages": {
@@ -263,14 +265,16 @@
                         "Angle",
                         "HitTarget"
                       ],
-                      "default": "Angle"
+                      "default": "Angle",
+                      "title": "BindingWheelSpatialSelectionMode"
                     },
                     "placement": {
                       "enum": [
                         "Pointer",
                         "ViewportCenter"
                       ],
-                      "default": "Pointer"
+                      "default": "Pointer",
+                      "title": "BindingWheelPlacement"
                     },
                     "deadZoneFraction": {
                       "type": "number",
@@ -284,13 +288,9 @@
                       "type": "number",
                       "default": 0.5
                     },
-                    "rotationDegrees": {
+                    "sectorOffset": {
                       "type": "number",
                       "default": 0
-                    },
-                    "clockwise": {
-                      "type": "boolean",
-                      "default": true
                     },
                     "initialRing": {
                       "type": "integer",
@@ -301,7 +301,8 @@
                         "Explicit",
                         "Excursion"
                       ],
-                      "default": "Explicit"
+                      "default": "Explicit",
+                      "title": "BindingWheelRingSelectionMode"
                     },
                     "excursion": {
                       "type": [
@@ -332,7 +333,8 @@
                         "thresholds"
                       ],
                       "additionalProperties": false,
-                      "default": null
+                      "default": null,
+                      "title": "BindingWheelExcursionDefinition"
                     },
                     "axisDeadZone": {
                       "type": "number",
@@ -345,9 +347,32 @@
                     "switchFraction": {
                       "type": "number",
                       "default": 0.4
+                    },
+                    "fadeOutSeconds": {
+                      "type": "number",
+                      "default": 0.25
+                    },
+                    "fadeOutEase": {
+                      "type": "number",
+                      "default": 2
                     }
                   },
                   "additionalProperties": false,
+                  "default": null,
+                  "title": "BindingWheelStyleDefinition"
+                },
+                "labelRow": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "iconRow": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
                   "default": null
                 }
               },
@@ -357,9 +382,49 @@
                 "holdPages",
                 "rings"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "title": "BindingWheelDefinition"
             },
             "default": null
+          },
+          "bindingBar": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "hideUnbound": {
+                "type": [
+                  "boolean",
+                  "null"
+                ],
+                "default": null
+              },
+              "scale": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "contrastBoost": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "uiScale": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "additionalProperties": false,
+            "default": null,
+            "title": "BindingBarPreferences"
           }
         },
         "required": [
@@ -367,61 +432,373 @@
           "modifiers",
           "chords"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "BindingProfileDocument"
       },
       "bindingBar": {
-        "description": "The on-screen bar policy carried with this binding layer; null preserves the always-visible reference layout.",
+        "description": "The on-screen bar policy carried with this binding layer; null carries no policy on this layer, so bar resolution falls through to the world-authored policy, and to Absent (no bar drawn) when neither an identity nor the world authors one.",
         "type": [
           "object",
           "null"
         ],
         "properties": {
+          "slotSet": {
+            "description": "The physical controls this bar shows, by input source id (gamepad.buttonSouth, mouse.button1, \u2026) \u2014 the same vocabulary a binding entry\u0027s sources speak, every id validated against the engine\u0027s input-source catalog, unique, at most MaxSlots. A layout\u0027s bank places these; one it does not place is not shown on that bank.",
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "banks": {
+            "description": "The stacked banks \u2014 at least one, at most MaxBanks, unique ids, each naming a page the composed binding profile actually declares. List order is draw order.",
+            "type": "array",
+            "items": {
+              "description": "One stacked binding-bar bank: what it is \u2014 the page it renders and its opacities. Several banks of the same slot set render simultaneously, each showing what that bank\u0027s OWN page binds. Where a bank sits, and which plates it shows, is each layout\u0027s banks table\u0027s to say; draw order is this list\u0027s order (later draws on top).",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "id": {
+                  "description": "The bank\u0027s stable id \u2014 its mutation address and its key in every layout\u0027s bank table.",
+                  "type": "string"
+                },
+                "pageId": {
+                  "description": "The BindingPageDefinition.Id this bank renders \u2014 validated to exist somewhere in the composed binding profile.",
+                  "type": "string"
+                },
+                "alpha": {
+                  "description": "This bank\u0027s opacity when it is NOT the seat\u0027s currently active page.",
+                  "type": "number"
+                },
+                "activeAlpha": {
+                  "description": "This bank\u0027s opacity when it IS the seat\u0027s currently active page; null draws fully opaque (1.0) while active.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "id",
+                "pageId",
+                "alpha"
+              ],
+              "additionalProperties": false,
+              "title": "WorldBindingBarBank"
+            }
+          },
           "enabled": {
             "description": "Whether the bar is shown when no live override hides it.",
             "type": "boolean",
             "default": true
           },
-          "layout": {
-            "description": "The bar layout; null uses Default.",
+          "text": {
+            "description": "Whether the bar draws the atlas text it composes \u2014 a badge whose icon row carries a Label (LB/RB, LT/RT, LS/RS, the menu trio, the exotics), the active page\u0027s name under the modifier indicators, and the chord-hint lines above them. false drops every label-content badge outright and leaves a purely pictographic bar: every plate, the glyph-content badges (the d-pad arrows and the face-position marks), the bound actions\u0027 icons, and the modifier indicators all still draw.",
+            "type": "boolean",
+            "default": true
+          },
+          "modifiers": {
+            "description": "Whether the bar draws the modifier indicator row on its anchor line \u2014 one plate per modifier the composed profile carries (declared rows plus every chord/held token the compiler synthesizes), lit while held. false drops the row and leaves the slot clusters alone; the chord hints and page label are Text\u0027s, not this one\u0027s.",
+            "type": "boolean",
+            "default": true
+          },
+          "hideUnbound": {
+            "description": "Whether a slot with no bound act on its bank\u0027s page should not render at all, rather than drawing the disabled tier-0 plate. A player\u0027s own BindingBarPreferences.HideUnbound overrides this.",
+            "type": "boolean",
+            "default": false
+          },
+          "multiSeatAlpha": {
+            "description": "The opacity every joined seat\u0027s bar renders at while two or more seats are joined \u2014 the split-screen quieting lever, multiplied into each bank\u0027s own alpha; 1 keeps multi-seat bars fully opaque.",
+            "type": "number",
+            "default": 1
+          },
+          "iconRow": {
+            "description": "The state row a slot\u0027s icon resolves through, spelled state.\u003Crow\u003E \u2014 the row\u0027s CELL KEY is the bound row\u0027s id when it authors one, else its action (command or channel; a dotted command name therefore needs an id, since a cell key holds no dot), and its value is an icons name. The engine holds no action-to-icon vocabulary of its own: the association is ordinary authored state, so it is written, read, and MUTATED like any other state (world.state.cell.set) \u2014 a spell minted at runtime gets its icon by writing a cell, never by reshaping the document. null resolves no slot icons at all; a key the row does not carry simply draws no icon.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "layouts": {
+            "description": "The bar\u0027s layouts by name \u2014 a crossbar, a strip, whatever an author adds next \u2014 each a whole WorldBindingBarLayout.",
             "type": [
               "object",
               "null"
             ],
-            "properties": {
-              "buttonSize": {
-                "description": "The unscaled slot-plate size.",
-                "type": "number"
+            "additionalProperties": {
+              "description": "The authored layout of one on-screen binding bar: its tables, its banks, and its size tuning. Every tuning field is an optional override of the engine\u0027s resolved default (the Default* constants below): lengths are fractions of the seat viewport\u0027s height, every *Ratio is a multiple of the button size, and every *MinPx is a device-pixel floor.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "tables": {
+                  "description": "The plate tables by name \u2014 a cross, a strip, a column \u2014 each authored once and placed by the banks\u0027 pieces as many times as the layout needs.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "description": "One physical control\u0027s plate on a bank, in button pitches from the bank\u0027s anchor \u2014 x right, y UP.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "source": {
+                          "description": "The physical control\u0027s input source id (a slotSet member).",
+                          "type": "string"
+                        },
+                        "x": {
+                          "description": "Pitches right of the anchor (negative = left).",
+                          "type": "number"
+                        },
+                        "y": {
+                          "description": "Pitches above the anchor (negative = below).",
+                          "type": "number"
+                        },
+                        "badge": {
+                          "description": "Where the plate\u0027s physical-button badge sits, [x, y] as signed multiples of the layout\u0027s glyph offset: \u002B1 right / up, \u22121 left / down, 0 centered. A plate in a cluster points its badge outward \u2014 a d-pad\u0027s up button badges up, its left button left \u2014 so the badge never lands on a neighbour. null is the up-right corner, [1, 1].",
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": "number"
+                          },
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "source",
+                        "x",
+                        "y"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WorldBindingBarSlotPlacement"
+                    }
+                  },
+                  "default": null
+                },
+                "banks": {
+                  "description": "Where each bank sits and what it shows, by bank id. A bank with no row here is not drawn in this layout.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": {
+                    "description": "One bank\u0027s place on a layout \u2014 a bank is a bar: where it hangs and the pieces it is made of. A control in the slot set that no piece places is not shown on this bank; a source placed by two pieces takes the later one.",
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "pieces": {
+                        "description": "The placed tables, in order.",
+                        "type": "array",
+                        "items": {
+                          "description": "One placed table: a named table of the layout, moved by At.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "table": {
+                              "description": "The key of a table in the layout\u0027s tables.",
+                              "type": "string"
+                            },
+                            "at": {
+                              "description": "The displacement, [x, y] in button pitches (x right, y up); null is none.",
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "number"
+                              },
+                              "default": null
+                            },
+                            "badge": {
+                              "description": "A badge direction for every plate of this piece, overriding the table rows\u0027; see Badge. null keeps each row\u0027s own.",
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": "number"
+                              },
+                              "default": null
+                            }
+                          },
+                          "required": [
+                            "table"
+                          ],
+                          "additionalProperties": false,
+                          "title": "WorldBindingBarPiece"
+                        }
+                      },
+                      "anchor": {
+                        "$ref": "./common.schema.json#/$defs/WorldBindingBarAnchor",
+                        "description": "Where this bank hangs, or null to share the layout\u0027s anchor (and so its frame: the pieces then nest against the other banks there).",
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "pieces"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldBindingBarBankPlacement"
+                  },
+                  "default": null
+                },
+                "anchor": {
+                  "$ref": "./common.schema.json#/$defs/WorldBindingBarAnchor",
+                  "description": "Where the bar\u0027s own anchor (the modifier row, page label, chord hints) hangs, and the anchor every bank without its own shares.",
+                  "default": null
+                },
+                "buttonSize": {
+                  "description": "The slot-plate size at most: the writer shrinks it so every anchor group fits its seat region, and a seat\u0027s stored bar scale multiplies it.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "glyphOffsetRatio": {
+                  "description": "The badge\u0027s offset as a fraction of ButtonSize \u2014 each plate\u0027s badge takes its own signed multiples of it (Badge).",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "glyphSizeRatio": {
+                  "description": "The badge\u0027s size as a fraction of ButtonSize.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "modifierHalfRatio": {
+                  "description": "The modifier indicator\u0027s plate half-extent, in button sizes.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "modifierSpacingRatio": {
+                  "description": "The modifier indicators\u0027 pitch, in button sizes.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "modifierGlyphRatio": {
+                  "description": "The modifier badge\u0027s half-extent, as a fraction of the modifier plate half.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "labelCellRatio": {
+                  "description": "The page label\u0027s glyph-cell height, as a fraction of the modifier plate half.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "labelCellMinPx": {
+                  "description": "The page label\u0027s glyph-cell floor, px.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "labelGapRatio": {
+                  "description": "The page label\u0027s drop below the anchor, as a fraction of the modifier plate half.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "hintCellRatio": {
+                  "description": "A chord-hint line\u0027s glyph-cell height, as a fraction of the modifier plate half.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "hintCellMinPx": {
+                  "description": "A chord-hint line\u0027s glyph-cell floor, px.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "hintLineStepRatio": {
+                  "description": "The chord-hint line pitch, as a fraction of the hint cell height.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "hintBaseGapRatio": {
+                  "description": "The hint stack\u0027s lift above the anchor, as a fraction of the modifier plate half.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                }
               },
-              "centerGap": {
-                "description": "The unscaled extra half-gap between the mirrored clusters.",
-                "type": "number"
-              },
-              "anchorOffsetY": {
-                "description": "The anchor\u0027s lift above the viewport\u0027s bottom edge.",
-                "type": "number"
-              },
-              "glyphOffsetRatio": {
-                "description": "The gamepad glyph\u0027s corner offset as a fraction of ButtonSize.",
-                "type": "number"
-              },
-              "glyphSizeRatio": {
-                "description": "The gamepad glyph\u0027s size as a fraction of ButtonSize.",
-                "type": "number"
-              },
-              "scale": {
-                "description": "The uniform cluster scale.",
-                "type": "number"
-              }
+              "additionalProperties": false,
+              "title": "WorldBindingBarLayout"
             },
-            "required": [
-              "buttonSize",
-              "centerGap",
-              "anchorOffsetY",
-              "glyphOffsetRatio",
-              "glyphSizeRatio",
-              "scale"
+            "default": null
+          },
+          "layout": {
+            "description": "The name of the layout drawn when LayoutCell is absent or names none.",
+            "type": [
+              "string",
+              "null"
             ],
-            "additionalProperties": false,
+            "default": null
+          },
+          "layoutCell": {
+            "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value names the live entry of Layouts; a value naming none falls back to Layout. Ordinary state: a chord, a wheel sector, or the console switches the bar\u0027s whole shape by writing the cell.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "modelCell": {
+            "description": "A text state cell, state.\u003Crow\u003E.\u003Ckey\u003E, whose value picks the bar\u0027s model: single draws one bar \u2014 the active page\u0027s bank, in the first authored bank\u0027s place, swapping in place as a chord is held or released; any other value (or no cell) draws every bank the live layout places, the active one at full alpha and the rest as wings. Ordinary state, flipped the same way LayoutCell is.",
+            "type": [
+              "string",
+              "null"
+            ],
             "default": null
           },
           "visible": {
@@ -430,15 +807,77 @@
             "default": null
           }
         },
+        "required": [
+          "slotSet",
+          "banks"
+        ],
         "additionalProperties": false,
-        "default": null
+        "default": null,
+        "title": "WorldBindingBarAuthoring"
+      },
+      "when": {
+        "description": "The condition this layer composes under; null always composes it (today\u0027s behavior). Reuses StateCondition\u0027s field convention rather than a second reading of \u0022compare a state cell\u0022 \u2014 the same state/key/comparison/value shape a placement\u0027s own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "state": {
+            "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
+            "type": "string"
+          },
+          "comparison": {
+            "$ref": "./common.schema.json#/$defs/ActionStateComparison",
+            "description": "The comparison."
+          },
+          "value": {
+            "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          },
+          "key": {
+            "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "comparandState": {
+            "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "comparandKey": {
+            "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "state",
+          "comparison"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldPlacementResponseConditionStateConditionBare"
       }
     },
     "required": [
       "id",
       "document"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldBindingOverlay"
   },
   "default": null
 }

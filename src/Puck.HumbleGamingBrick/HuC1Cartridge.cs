@@ -113,9 +113,11 @@ public sealed class HuC1Cartridge : CartridgeBase, IInfraredCartridge {
 
     /// <inheritdoc/>
     protected override int MapRomOffset(ushort address) =>
-        ((address <= MemoryMap.RomBank0End)
-        ? address
-        : ((m_romBank * RomBankSize) + (address - MemoryMap.RomBankNStart)));
+        MapStandardRomOffset(
+            address: address,
+            bankSize: RomBankSize,
+            romBank: m_romBank
+        );
     /// <inheritdoc/>
     protected override int MapRamOffset(ushort address) =>
         (((m_ramBank & m_ramBankWrapMask) * RamBankSize) + (address - MemoryMap.ExternalRamStart));

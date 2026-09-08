@@ -1,6 +1,6 @@
 using System.Numerics;
 
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.SignedDistance;
@@ -32,7 +32,7 @@ public sealed class HighSpeedGroundContactLawTests {
             Y: FixedQ4816.FromDouble(value: verticalVelocity),
             Z: FixedQ4816.Zero);
 
-        var resolution = field!.Resolve(position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, volumes: collider.Volumes);
+        var resolution = field!.Resolve(position: ref position, velocity: ref velocity, orientation: FixedQuaternion.Identity, up: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero), volumes: collider.Volumes);
 
         Assert.True((position.Y > FixedQ4816.Zero), userMessage: $"edge penetration extracted below the floor: {((double)position.Y):0.###}");
         Assert.True(resolution.Grounded, userMessage: "edge penetration did not settle as an approached top contact");
@@ -56,7 +56,7 @@ public sealed class HighSpeedGroundContactLawTests {
 
         Assert.True(condition: field!.Probe(distance: out var distance, gradient: out _, material: out _, position: in position));
         var resolution = field.Resolve(position: ref position, velocity: ref velocity,
-            orientation: FixedQuaternion.Identity, volumes: collider.Volumes);
+            orientation: FixedQuaternion.Identity, up: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.One, Z: FixedQ4816.Zero), volumes: collider.Volumes);
 
         Assert.True((distance > FixedQ4816.FromDouble(value: 10.5)),
             userMessage: $"the floor's contact metric still reports a distant point as nearby; distance={((double)distance):0.###}");
@@ -69,7 +69,7 @@ public sealed class HighSpeedGroundContactLawTests {
     public void DynamicDepenetrationCannotPushAStandingBodyThroughTheFloor() {
         var source = ThinFloorDocument();
         var definition = source with {
-            KitsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = WorldBodyContactMode.Solid }).ToArray(),
+            KitRowsRaw = source.Kits.Select(selector: kit => kit with { BodyContact = WorldBodyContactMode.Solid }).ToArray(),
         };
         using var fixture = Fixtures.FreshServer(definition: definition);
 
@@ -175,7 +175,7 @@ public sealed class HighSpeedGroundContactLawTests {
         var shape = new ShapeDocument(
             Id: 0,
             Name: "floor",
-            Type: AvatarPrimitive.Box,
+            Type: SdfSolidPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: (new Vector3(x: 24f, y: 0.1f, z: 24f) * BoxUnitRatio),
@@ -190,17 +190,21 @@ public sealed class HighSpeedGroundContactLawTests {
             Shapes: [shape],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "thin-floor");
-        var creation = new WorldCreation(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "floor", Document: canonical.Document, HashRaw: canonical.Hash);
 
         return source with {
             CollisionRaw = source.Collision with {
                 Requirements = (requireField ? [WorldContactRequirement.SmoothUnionContact] : []),
             },
-            KitsRaw = source.Kits.Select(selector: kit => kit with {
-                Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MaxFallSpeed = 40f },
+            KitRowsRaw = source.Kits.Select(selector: kit => kit with {
+                Motion = kit.Motion with {
+                    Holds = [
+                        kit.Motion.Holds![0] with { Envelope = new WorldHoldEnvelope(SinkSpeed: 40f) },
+                    ],
+                },
             }).ToArray(),
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "floor", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "floor", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
     }
 }

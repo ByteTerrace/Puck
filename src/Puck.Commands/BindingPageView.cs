@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace Puck.Commands;
 
 /// <summary>
@@ -11,7 +13,14 @@ namespace Puck.Commands;
 /// <param name="Label">The page's display label, if any; opaque to the engine.</param>
 /// <param name="Icon">The page's display icon id, if any; opaque to the engine.</param>
 /// <param name="Buttons">The page's bindings, in profile order.</param>
-/// <param name="Modifiers">Every modifier the profile declares, flagged with whether this page's chord requires it.</param>
+/// <param name="ButtonsBySource">Each source id the page binds mapped to the <paramref name="Buttons"/> entry that
+/// source triggers (<c>OrdinalIgnoreCase</c>; first entry in profile order wins a source two entries both name).
+/// This is the lookup a presentation layer joining physical controls against the page should read — a bar with a
+/// socket per placed control asks once per socket per bank per seat per frame, and answering that by scanning
+/// <paramref name="Buttons"/> walks every row's own <see cref="BindingPageButtonView.Sources"/> list in turn for an
+/// answer the compiler can table once. Entries triggered by an activator name no source and so appear only in
+/// <paramref name="Buttons"/>.</param>
+/// <param name="Modifiers">Every modifier the profile declares, flagged with whether this page's row requires it.</param>
 /// <param name="CommandChords">The command-meaning chord rows of this page's group, in profile order — the hints a
 /// binding bar renders so a player can discover a chord-fired act (a group that binds one; a group whose chords are
 /// all pages carries none).</param>
@@ -21,26 +30,47 @@ public sealed record BindingPageView(
     string? Label,
     string? Icon,
     IReadOnlyList<BindingPageButtonView> Buttons,
+    FrozenDictionary<string, BindingPageButtonView> ButtonsBySource,
     IReadOnlyList<BindingModifierView> Modifiers,
     IReadOnlyList<BindingChordCommandView> CommandChords
 );
 /// <summary>One bound source as the UI presents it.</summary>
-/// <param name="Source">The row's trigger label — its source ids comma-joined, or an activator label.</param>
-/// <param name="Command">The name of the command the source activates on this page.</param>
+/// <param name="Source">The row's trigger label — its source ids comma-joined, or an activator label. A DISPLAY
+/// string: it names the whole row, so it never identifies one physical control. Ask
+/// <see cref="BindingPageView.ButtonsBySource"/> to answer "is this control bound here".</param>
+/// <param name="Sources">The row's input source ids, individually — the keys this row is reachable under in
+/// <see cref="BindingPageView.ButtonsBySource"/>. Empty for an activator row, whose trigger is a sequence rather
+/// than a set of sources.</param>
+/// <param name="Command">The ROUTED command name the source activates on this page — for a channel row this is the
+/// routing ordinal (<c>channel.ordinal.N</c>), an engine-internal name no author writes.</param>
+/// <param name="Action">The AUTHORED action name this row names — its <c>command</c>, else its <c>channel</c>.</param>
+/// <param name="Id">The row's authored identity, if any (<see cref="BindingPageEntryDefinition.Id"/>).</param>
+/// <param name="Toggle">Whether the row latches (<see cref="BindingEntryMode.Toggle"/>): its command stays held
+/// after the press, so its held state is a fact about the seat, not about which page is live.</param>
+/// <remarks>A presentation surface keys a row by <see cref="Id"/> when it has one, else by <see cref="Action"/> — the
+/// same rule a wheel sector follows — so the row carries no presentation, and two rows sharing a command stay
+/// distinguishable. <see cref="Key"/> is that rule, written once.</remarks>
 /// <param name="Label">The binding's display label, if any; opaque to the engine.</param>
-/// <param name="Icon">The binding's display icon id, if any; opaque to the engine.</param>
 public sealed record BindingPageButtonView(
     string Source,
+    IReadOnlyList<string> Sources,
     string Command,
+    string? Action,
+    string? Id,
     string? Label,
-    string? Icon
-);
+    bool Toggle = false
+) {
+    /// <summary>Gets the key a presentation surface looks this row up by: <see cref="Id"/>, else <see cref="Action"/>.</summary>
+    public string? Key => (Id ?? Action);
+}
 /// <summary>One declared modifier as the UI presents it.</summary>
 /// <param name="Id">The modifier's profile-unique identifier.</param>
 /// <param name="Sources">The provider-neutral input source ids that drive the modifier.</param>
 /// <param name="Label">The modifier's display label, if any; opaque to the engine.</param>
 /// <param name="Icon">The modifier's display icon id, if any; opaque to the engine.</param>
-/// <param name="Required">Whether the page's chord requires this modifier to be held.</param>
+/// <param name="Required">Whether the page's own row requires this modifier to be held — either as an unordered
+/// <c>held</c> member or as a member of its ordered <c>chord</c>. Both lists must be down for the page to be the
+/// selected one, so both mark their modifiers required.</param>
 public sealed record BindingModifierView(
     string Id,
     IReadOnlyList<string> Sources,

@@ -14,6 +14,7 @@ namespace Puck.World.Tests;
 /// already runs for <c>Generation</c>. Every control here is discriminating: reverting the production change it
 /// targets turns the assertion red (verified by hand while landing each one; see the report for the transcript).
 /// </summary>
+[Collection(name: ConsoleRedirectionCollection.Name)]
 public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     private static WorldAuthorityHostRowCheckpoint EmptyHostRow() => new(
         AnnouncedCrossingHolds: [],
@@ -86,17 +87,17 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     // the captured latch table rather than leaving every gate open by default.
     [Fact]
     public void Control_ForgedRuleGateHeld_ReadsRed() {
-        var ruleName = WorldCellName.Parse(candidate: "never-holds");
+        var ruleName = CellName.Parse(candidate: "never-holds");
         // A reserved channel (never a custom State row): WorldOwnedWorlds seeds each authored identity from a
         // TRIMMED copy of the template document that drops State, so a rule gated on a custom state row refuses at
         // load for the identity catalog even though the live server accepts it fine — $population needs no row at
-        // all and can never exceed float.MaxValue, so this gate is provably always false.
+        // all and can never exceed the signed integer carrier's maximum, so this gate is provably always false.
         var definition = Fixtures.BuildDocument() with {
             Rules = [
                 new WorldRule(
                     Name: ruleName,
-                    Gate: new ActionPredicate.CompareState(State: "$population", Comparison: ActionStateComparison.Greater, Value: float.MaxValue),
-                    Effects: [new ActionEffect.Save()]),
+                    Gate: new ActionPredicate.CompareState(State: "$population", Comparison: ActionStateComparison.Greater, Value: long.MaxValue),
+                    Effects: [new WorldEffect.Save()]),
             ],
         };
 
@@ -175,12 +176,12 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     public void Control_UnparkedRemoteHumanPeerEntry_ReadsRed() {
         var document = Fixtures.BuildDocument() with {
             PopulationRaw = Fixtures.BuildDocument().Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 1),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 1),
                 NetworkPlayers = 1,
             },
             Admission = [Fixtures.AnyAuthorityArrivals()],
         };
-        const int peerSlot = WorldPopulationLimits.LocalSeatCount;
+        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
 
         using var fixture = Fixtures.FreshServer(definition: document);
 
@@ -233,11 +234,11 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
     public void ReconnectingPeer_ResumesTheSameBody_ControlAFreshAdmissionMintsADuplicate() {
         var document = Fixtures.BuildDocument() with {
             PopulationRaw = Fixtures.BuildDocument().Population with {
-                CapacityRaw = (WorldPopulationLimits.LocalSeatCount + 2),
+                CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2),
                 NetworkPlayers = 2,
             },
         };
-        const int peerSlot = WorldPopulationLimits.LocalSeatCount;
+        const int peerSlot = WorldBodiesLimits.LocalSeatCount;
 
         using var fixture = Fixtures.FreshServer(definition: document);
         var admitted = default(WorldPeerEventEntry);
@@ -319,6 +320,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         var originalError = Console.Error;
         using var captured = new StringWriter();
+        using var narrationLease = restoredHost.AttachNarrationSink(sink: new WorldConsoleNarrationSink());
 
         Console.SetError(newError: captured);
 
@@ -373,13 +375,10 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             expected: WorldTransferStatus.Reserved
         );
     }
-    // Control 7 — restore with CommitMembers emptied: RestoreRow's own member-count check (WorldInstanceHost's own
-    // remarks — a retried Commit's member-count mismatch would otherwise release the destination's lease as a side
-    // effect of refusing, silently rolling the whole transfer back) refuses to re-materialize the entry, by name, on
-    // the source row's own state channel, before any live call.
+    // A malformed retry payload must refuse the host restore before any installed state or live peer call changes.
     [Fact]
     public void Control_EmptiedCommitMembers_RestoreRefusesByName() {
-        var (host, rowA, rowB, machineId, _) = HostRoundtripFixture.BuildInDoubtScenario();
+        var (host, rowA, rowB, _, _) = HostRoundtripFixture.BuildInDoubtScenario();
         using var disposeA = rowA;
         using var disposeB = rowB;
 
@@ -395,39 +394,10 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             },
         };
         var decodedA = HostRoundtripFixture.EncodeDecode(checkpoint: emptiedA);
-        var decodedB = HostRoundtripFixture.EncodeDecode(checkpoint: checkpointB);
-
-        var originalError = Console.Error;
-        using var captured = new StringWriter();
-
-        Console.SetError(newError: captured);
-
-        WorldInstanceHost restoredHost;
-        HostRow restoredA;
-        HostRow restoredB;
-
-        try {
-            (restoredHost, restoredA, restoredB) = HostRoundtripFixture.RestoreBoth(checkpointA: decodedA, checkpointB: decodedB, machineId: machineId);
-        } finally {
-            Console.SetError(newError: originalError);
-        }
-
-        using var disposeRestoredA = restoredA;
-        using var disposeRestoredB = restoredB;
-
-        Assert.Contains(
-            actualString: captured.ToString(),
-            comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "commit member count"
-        );
-        // The refused entry never entered m_inDoubtTransfers, so a full tail never resolves it — the destination's
-        // reservation is left exactly as Control_DroppedInDoubtEntry_LeaksTheReservationAndLosesTheBody's own.
-        for (var tick = 0; (tick < 50); tick++) {
-            restoredHost.DrainPendingTransfers();
-            restoredHost.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
-        }
-
-        Assert.False(condition: restoredA.Server.Population.IsActive(index: 0));
-        Assert.False(condition: restoredB.Server.Population.IsActive(index: 0));
+        var error = Assert.Throws<ArgumentException>(() => host.RestoreRow(rowA.Instance, decodedA.HostRow));
+        Assert.Contains("commit member count", error.Message, StringComparison.Ordinal);
+        var (afterA, afterB) = HostRoundtripFixture.CaptureBoth(host, rowA, rowB);
+        Assert.Equal(WorldAuthorityCheckpointCodec.Encode(checkpointA), WorldAuthorityCheckpointCodec.Encode(afterA));
+        Assert.Equal(WorldAuthorityCheckpointCodec.Encode(checkpointB), WorldAuthorityCheckpointCodec.Encode(afterB));
     }
 }

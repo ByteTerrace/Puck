@@ -7,7 +7,10 @@ using Puck.Maths;
 
 namespace Puck.World.Protocol;
 
-/// <summary>The declared wire discriminants for the twelve submission payload leaves.</summary>
+/// <summary>The declared wire discriminants for the twelve submission payload leaves. Ordinal 11 (the retired
+/// addon-lifecycle leaf — mount/unmount now travel as document rows, <c>UpsertAddon</c>/<c>RemoveAddon</c>, through
+/// the ordinary <see cref="WorldSubmissionKind.Mutation"/> leaf) is unassigned and never reused, matching
+/// <c>WorldMutationKindCatalog</c>'s own retired-ordinal precedent.</summary>
 public enum WorldSubmissionKind : byte {
     /// <summary>An authority command.</summary>
     Command = 1,
@@ -29,8 +32,6 @@ public enum WorldSubmissionKind : byte {
     Lever = 9,
     /// <summary>A read-back query.</summary>
     Query = 10,
-    /// <summary>A live addon-runtime lifecycle change (mount/unmount).</summary>
-    AddonLifecycle = 11,
     /// <summary>A live screen-machine lifecycle change (insert/eject/select/options/link/unlink).</summary>
     ScreenOp = 12,
     /// <summary>A subject-bearing target-register write.</summary>
@@ -77,32 +78,35 @@ public readonly record struct WorldCodecFailure(WorldCodecRefusal Refusal, strin
 public static class WorldSubmissionCodec {
     private static readonly JsonSerializerOptions Json = CreateJsonOptions();
 
-    private static WorldCapability CapabilityFromWire(byte value) => value switch {
-        0 => WorldCapability.Drive,
-        1 => WorldCapability.Observe,
-        2 => throw new LeafCodecException(failure: Fail(
-        WorldCodecRefusal.EnumValueUnknown,
-        $"{nameof(WorldCapability)} wire value 2 is retired"
-    )),
-        3 => WorldCapability.Control,
-        4 => WorldCapability.Mutate,
-        5 => WorldCapability.Edit,
-        _ => throw new LeafCodecException(failure: Fail(
-        WorldCodecRefusal.EnumValueUnknown,
-        $"{nameof(WorldCapability)} wire value {value} is not declared"
-    )),
-    };
-    private static byte CapabilityToWire(WorldCapability value) => value switch {
-        WorldCapability.Drive => 0,
-        WorldCapability.Observe => 1,
-        WorldCapability.Control => 3,
-        WorldCapability.Mutate => 4,
-        WorldCapability.Edit => 5,
-        _ => throw new LeafCodecException(failure: Fail(
-        WorldCodecRefusal.EnumValueUnknown,
-        $"{nameof(WorldCapability)}.{value} has no wire value"
-    )),
-    };
+    // The pinned mapping itself lives in WorldWireTags (Puck.World.Schema, beside the enums) — this wrapper keeps this
+    // codec's own exception-based refusal shape (WorldCodecFailure) and its distinct "retired" wording.
+    private static WorldCapability CapabilityFromWire(byte value) {
+        if (WorldWireTags.TryFromWire(
+            value: out WorldCapability capability,
+            wire: value
+        )) {
+            return capability;
+        }
+        throw new LeafCodecException(failure: Fail(
+            WorldCodecRefusal.EnumValueUnknown,
+            (WorldWireTags.IsRetiredCapabilityWire(wire: value)
+                ? $"{nameof(WorldCapability)} wire value {value} is retired"
+                : $"{nameof(WorldCapability)} wire value {value} is not declared"
+            )
+        ));
+    }
+    private static byte CapabilityToWire(WorldCapability value) {
+        if (WorldWireTags.TryToWire(
+            value: value,
+            wire: out var wire
+        )) {
+            return wire;
+        }
+        throw new LeafCodecException(failure: Fail(
+            WorldCodecRefusal.EnumValueUnknown,
+            $"{nameof(WorldCapability)}.{value} has no wire value"
+        ));
+    }
     private static byte CompositionKind(WorldComposition value) => value switch {
         WorldComposition.SetActiveLayout => 0,
         WorldComposition.SelectCamera => 1,
@@ -129,36 +133,21 @@ public static class WorldSubmissionCodec {
         Detail: detail,
         Refusal: refusal
     );
-    private static WorldLeverKind LeverFromWire(byte value) => value switch {
-        0 => WorldLeverKind.MasterVolume,
-        1 => WorldLeverKind.Shadows,
-        2 => WorldLeverKind.AmbientOcclusion,
-        3 => WorldLeverKind.AmbientOcclusionQuality,
-        4 => WorldLeverKind.FarBound,
-        5 => WorldLeverKind.ShadowFarExit,
-        6 => WorldLeverKind.ShadowAccumulation,
-        7 => WorldLeverKind.ShadowMask,
-        8 => WorldLeverKind.ShadowMarch,
-        9 => WorldLeverKind.RenderScale,
-        10 => WorldLeverKind.UpscaleSharpness,
-        11 => WorldLeverKind.TargetHertz,
-        _ => throw UnknownWire<WorldLeverKind>(value: value),
-    };
-    private static byte LeverToWire(WorldLeverKind value) => value switch {
-        WorldLeverKind.MasterVolume => 0,
-        WorldLeverKind.Shadows => 1,
-        WorldLeverKind.AmbientOcclusion => 2,
-        WorldLeverKind.AmbientOcclusionQuality => 3,
-        WorldLeverKind.FarBound => 4,
-        WorldLeverKind.ShadowFarExit => 5,
-        WorldLeverKind.ShadowAccumulation => 6,
-        WorldLeverKind.ShadowMask => 7,
-        WorldLeverKind.ShadowMarch => 8,
-        WorldLeverKind.RenderScale => 9,
-        WorldLeverKind.UpscaleSharpness => 10,
-        WorldLeverKind.TargetHertz => 11,
-        _ => throw UnknownEnum(value: value),
-    };
+    // The lever leaf is keyed by the knob's registered NAME, not an ordinal: the vocabulary is a composition-time
+    // registration (Client.WorldSessionLevers), so the wire carries the token and the applier owns which tokens
+    // resolve. An empty name can address no registration, so it is refused here rather than travelling.
+    private static string ReadLeverName(BinaryReader reader) {
+        var value = reader.ReadString();
+
+        if (value.Length == 0) {
+            throw new LeafCodecException(failure: Fail(
+                detail: "session lever name is empty",
+                refusal: WorldCodecRefusal.PayloadMalformed
+            ));
+        }
+
+        return value;
+    }
     private static Type? MutationType(byte kind) {
         try {
             foreach (var entry in WorldMutationKindCatalog.All()) {
@@ -191,7 +180,11 @@ public static class WorldSubmissionCodec {
         WorldQuery.FindProfile => 17,
         WorldQuery.PreferredControllerProfile => 18,
         WorldQuery.MusicState => 19,
-        WorldQuery.JudgeState => 20,
+        WorldQuery.InstrumentState => 21,
+        WorldQuery.StateObservations => 22,
+        WorldQuery.ReflowPreview => 23,
+        WorldQuery.ReflowStatus => 24,
+        WorldQuery.ReflowCancel => 25,
         _ => throw UnknownLeaf(value: value),
     };
     private static Type? QueryType(byte kind) => kind switch {
@@ -214,69 +207,13 @@ public static class WorldSubmissionCodec {
         17 => typeof(WorldQuery.FindProfile),
         18 => typeof(WorldQuery.PreferredControllerProfile),
         19 => typeof(WorldQuery.MusicState),
-        20 => typeof(WorldQuery.JudgeState),
+        21 => typeof(WorldQuery.InstrumentState),
+        22 => typeof(WorldQuery.StateObservations),
+        23 => typeof(WorldQuery.ReflowPreview),
+        24 => typeof(WorldQuery.ReflowStatus),
+        25 => typeof(WorldQuery.ReflowCancel),
         _ => null,
     };
-    private static WorldAddonLifecycle ReadAddonLifecycle(BinaryReader reader) {
-        return reader.ReadByte() switch {
-            0 => ReadAddonLifecycleMount(reader: reader),
-            1 => new WorldAddonLifecycle.Unmount(Name: ReadRequiredString(
-            field: "Unmount.Name",
-            reader: reader
-        )),
-            var wire => throw new LeafCodecException(failure: Fail(
-            detail: $"addon lifecycle discriminant {wire} is not declared",
-            refusal: WorldCodecRefusal.LeafKindUnknown
-        )),
-        };
-    }
-    private static WorldAddonLifecycle.Mount ReadAddonLifecycleMount(BinaryReader reader) {
-        var name = ReadRequiredString(
-            field: "Mount.Name",
-            reader: reader
-        );
-        var modulePath = ReadRequiredString(
-            field: "Mount.ModulePath",
-            reader: reader
-        );
-        var hash = ReadRequiredString(
-            field: "Mount.Hash",
-            reader: reader
-        );
-        var fuel = reader.ReadUInt64();
-        var count = reader.ReadInt32();
-
-        if (count < 0) {
-            throw new LeafCodecException(failure: Fail(
-                detail: $"addon lifecycle mount request count {count} is negative",
-                refusal: WorldCodecRefusal.PayloadMalformed
-            ));
-        }
-
-        List<WorldCapabilityRequest>? requests = null;
-
-        if (count > 0) {
-            requests = new List<WorldCapabilityRequest>(capacity: count);
-
-            for (var index = 0; (index < count); index++) {
-                var capability = CapabilityFromWire(value: reader.ReadByte());
-                var subject = ReadSubject(reader: reader);
-
-                requests.Add(item: new WorldCapabilityRequest(
-                    Capability: capability,
-                    Subject: subject
-                ));
-            }
-        }
-
-        return new WorldAddonLifecycle.Mount(
-            Fuel: fuel,
-            Hash: hash,
-            ModulePath: modulePath,
-            Name: name,
-            Requests: requests
-        );
-    }
     private static WorldCommand ReadCommand(BinaryReader reader) {
         var principal = ReadPrincipal(reader: reader);
         var entity = reader.ReadInt32();
@@ -290,7 +227,7 @@ public static class WorldSubmissionCodec {
             1 => new WorldCommand.EnqueueSegment(
             Principal: principal,
             EntityIndex: entity,
-            Intent: ReadIntent(reader: reader),
+            Intent: WorldWireCodec.ReadIntent(reader: reader),
             Seconds: reader.ReadSingle()
         ),
             2 => new WorldCommand.PressChannel(
@@ -325,14 +262,14 @@ public static class WorldSubmissionCodec {
             EntityIndex: entity,
             Principal: principal
         ),
-            7 => new WorldCommand.Engage(
+            7 => new WorldCommand.ComposeControl(
             Principal: principal,
             EntityIndex: entity,
             Target: ReadSubject(reader: reader),
-            Capture: reader.ReadBoolean(),
+            Exclusive: reader.ReadBoolean(),
             TargetPrincipal: ReadPrincipal(reader: reader)
         ),
-            8 => new WorldCommand.Disengage(
+            8 => new WorldCommand.DissolveControl(
             Principal: principal,
             EntityIndex: entity,
             TargetPrincipal: ReadPrincipal(reader: reader)
@@ -341,6 +278,24 @@ public static class WorldSubmissionCodec {
             entity: entity,
             principal: principal,
             reader: reader
+        ),
+            10 => new WorldCommand.RigidImpulse(
+            Principal: principal,
+            EntityIndex: entity,
+            Impulse: new Vector3(
+                x: reader.ReadSingle(),
+                y: reader.ReadSingle(),
+                z: reader.ReadSingle()
+            )
+        ),
+            11 => new WorldCommand.CarryBody(
+            Principal: principal,
+            EntityIndex: entity,
+            TargetIndex: reader.ReadInt32()
+        ),
+            12 => new WorldCommand.ReleaseCarry(
+            Principal: principal,
+            EntityIndex: entity
         ),
             var wire => throw new LeafCodecException(failure: Fail(
             detail: $"command discriminant {wire} is not declared",
@@ -420,57 +375,40 @@ public static class WorldSubmissionCodec {
             static r => new DocumentWriteMask(Bits: r.ReadUInt64())
         )
     );
-    private static PlayerIntent ReadIntent(BinaryReader reader) {
-        var intent = default(PlayerIntent);
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            intent = intent.WithChannel(
-                ordinal: ordinal,
-                value: new FixedQ4816(Value: reader.ReadInt64())
-            );
+    private static IntentSource ReadIntentSource(BinaryReader reader) {
+        if (!WorldWireCodec.TryReadIntentSource(
+            reader: reader,
+            source: out var source,
+            wire: out var value
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(IntentSource)} wire value {value} is not declared"
+            ));
         }
-        return intent;
+
+        return source;
     }
-    private static IntentSource ReadIntentSource(BinaryReader reader) => reader.ReadByte() switch {
-        0 => IntentSource.Live,
-        1 => IntentSource.Idle,
-        2 => IntentSource.Producer(name: reader.ReadString()),
-        var value => throw new LeafCodecException(failure: Fail(
-        WorldCodecRefusal.EnumValueUnknown,
-        $"{nameof(IntentSource)} wire value {value} is not declared"
-    )),
-    };
     private static UInt128 ReadKindMaskBits(BinaryReader reader) {
         var low = reader.ReadUInt64();
 
         return (((UInt128)reader.ReadUInt64()) << 64) | low;
     }
-    private static string? ReadNullableString(BinaryReader reader) => (reader.ReadBoolean()
-        ? reader.ReadString()
-        : null
-    );
     private static T? ReadOptional<T>(BinaryReader reader, Func<BinaryReader, T> read) where T : struct => (reader.ReadBoolean()
         ? read(reader)
         : null
     );
     private static WorldPrincipal ReadPrincipal(BinaryReader reader) {
-        var kind = reader.ReadByte() switch {
-            0 => PrincipalKind.Seat,
-            1 => PrincipalKind.Console,
-            2 => PrincipalKind.Addon,
-            3 => PrincipalKind.Peer,
-            4 => PrincipalKind.Group,
-            var wire => throw new LeafCodecException(failure: Fail(
-            WorldCodecRefusal.EnumValueUnknown,
-            $"{nameof(PrincipalKind)} wire value {wire} is not declared"
-        )),
-        };
-        var principal = new WorldPrincipal(
-            Kind: kind,
-            Index: reader.ReadInt32(),
-            Generation: reader.ReadInt32(),
-            Name: ReadNullableString(reader: reader)
-        );
+        if (!WorldWireCodec.TryReadPrincipal(
+            kindWire: out var wireKind,
+            principal: out var principal,
+            reader: reader
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(PrincipalKind)} wire value {wireKind} is not declared"
+            ));
+        }
         // Reuse the write-side shape ruling without exposing an exception to the caller.
         using var sink = new MemoryStream();
         using var writer = new BinaryWriter(output: sink);
@@ -484,8 +422,8 @@ public static class WorldSubmissionCodec {
     private static WorldRebuildRequest ReadRebuild(BinaryReader reader) {
         var kind = RebuildKindFromWire(value: reader.ReadByte());
         var force = reader.ReadBoolean();
-        var pathHint = ReadNullableString(reader: reader);
-        var contentHash = ReadNullableString(reader: reader);
+        var pathHint = WorldWireCodec.ReadNullableString(reader: reader);
+        var contentHash = WorldWireCodec.ReadNullableString(reader: reader);
         var hasDefinition = reader.ReadBoolean();
         WorldDefinition? definition = null;
 
@@ -564,8 +502,8 @@ public static class WorldSubmissionCodec {
                 field: "Insert.ContentPath",
                 reader: reader
             ),
-            EngineId: ReadNullableString(reader: reader),
-            Options: ReadNullableString(reader: reader)
+            EngineId: WorldWireCodec.ReadNullableString(reader: reader),
+            Options: WorldWireCodec.ReadNullableString(reader: reader)
         ),
             1 => new WorldScreenOp.Eject(Index: reader.ReadInt32()),
             2 => new WorldScreenOp.Select(
@@ -574,7 +512,7 @@ public static class WorldSubmissionCodec {
         ),
             3 => new WorldScreenOp.SetOptions(
             Index: reader.ReadInt32(),
-            Options: ReadNullableString(reader: reader)
+            Options: WorldWireCodec.ReadNullableString(reader: reader)
         ),
             4 => ReadScreenOpLink(reader: reader),
             5 => new WorldScreenOp.Unlink(Name: ReadRequiredString(
@@ -613,12 +551,15 @@ public static class WorldSubmissionCodec {
         );
     }
     private static WorldSection ReadSection(BinaryReader reader) {
-        var value = ((WorldSection)reader.ReadByte());
+        var wire = reader.ReadByte();
 
-        if (!Enum.IsDefined(value: value)) {
+        if (!WorldWireTags.TryFromWire(
+            value: out WorldSection value,
+            wire: wire
+        )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,
-                $"{nameof(WorldSection)} wire value {((byte)value)} is not declared"
+                $"{nameof(WorldSection)} wire value {wire} is not declared"
             ));
         }
         return value;
@@ -636,20 +577,17 @@ public static class WorldSubmissionCodec {
         var mode => throw UnknownEnum(value: mode),
     };
     private static GrantSubject ReadSubject(BinaryReader reader) {
-        var kind = reader.ReadByte() switch {
-            0 => GrantSubjectKind.All,
-            1 => GrantSubjectKind.Body,
-            2 => GrantSubjectKind.Screen,
-            3 => GrantSubjectKind.Section,
-            4 => GrantSubjectKind.Composition,
-            5 => GrantSubjectKind.State,
-            6 => GrantSubjectKind.Region,
-            7 => GrantSubjectKind.Seat,
-            var wire => throw new LeafCodecException(failure: Fail(
-            WorldCodecRefusal.EnumValueUnknown,
-            $"{nameof(GrantSubjectKind)} wire value {wire} is not declared"
-        )),
-        };
+        var wireKind = reader.ReadByte();
+
+        if (!WorldWireTags.TryFromWire(
+            value: out GrantSubjectKind kind,
+            wire: wireKind
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(GrantSubjectKind)} wire value {wireKind} is not declared"
+            ));
+        }
         var value = ((kind == GrantSubjectKind.Section)
             ? (int)ReadSection(reader: reader)
             : reader.ReadInt32()
@@ -658,7 +596,7 @@ public static class WorldSubmissionCodec {
         return new GrantSubject(
             Kind: kind,
             Value: value,
-            Id: ReadNullableString(reader: reader)
+            Id: WorldWireCodec.ReadNullableString(reader: reader)
         );
     }
     private static Vector3 ReadVector(BinaryReader reader) => new(
@@ -881,13 +819,21 @@ public static class WorldSubmissionCodec {
     // is acted upon). The NESTED row of an UpsertGrant/RemoveGrant is the opposite case: that row is DOCUMENT DATA
     // this mutation writes into the Grants section, and a document principal is exactly the shape the cross-document
     // write-back channel reads back out of it — so the row admits one where the actor never does. Same shape rule,
-    // two different admissible kind sets, spelled by the caller rather than guessed at inside the rule. A market
-    // mutation's trade party (Seller/Bidder/Buyer/Canceler) is a third case, shaped like the acting principal
-    // (documentAllowed stays false — a document can no more trade than it can act) but never itself the acting
-    // principal: Server.WorldServer's own TryAuthorizeMarketParty is what checks a party against the actor
-    // submitting it, a live-runtime question this wire-shape check cannot answer and does not attempt to.
-    private static bool TryValidateMutationPrincipals(WorldMutation mutation, out WorldCodecFailure failure) {
-        if (!TryValidatePrincipal(
+    // spelled by the caller rather than guessed at inside the rule.
+    private static bool TryValidateMutationPrincipals(WorldMutation mutation, out WorldCodecFailure failure, bool committed = false) {
+        failure = default;
+        if (mutation is WorldMutation.Batch batch) {
+            if (!batch.TryValidateShape(out var reason)) {
+                failure = new WorldCodecFailure(WorldCodecRefusal.PayloadMalformed, reason);
+                return false;
+            }
+            for (var index = 0; index < batch.Mutations.Count; index++) {
+                if (!TryValidateMutationPrincipals(batch.Mutations[index], out failure, committed)) { return false; }
+            }
+        }
+        // Only the committed-journal codec admits the canonical structural actor. A nested grant row still passes
+        // the normal validation below; no live submission decoder calls this with committed=true.
+        if (!(committed && mutation.Principal == WorldPrincipal.World) && !TryValidatePrincipal(
             mutation.Principal,
             out failure
         )) {
@@ -899,29 +845,12 @@ public static class WorldSubmissionCodec {
             _ => ((WorldPrincipal?)null),
         };
 
-        if (
-            (nested is { } principal) &&
-            !TryValidatePrincipal(
+        return (
+            (nested is not { } principal) ||
+            TryValidatePrincipal(
             principal,
             out failure,
             documentAllowed: true
-        )
-        ) {
-            return false;
-        }
-        var party = mutation switch {
-            WorldMutation.CreateMarketListing value => value.Seller,
-            WorldMutation.PlaceMarketBid value => value.Bidder,
-            WorldMutation.BuyoutMarketListing value => value.Buyer,
-            WorldMutation.CancelMarketListing value => value.Canceler,
-            _ => ((WorldPrincipal?)null),
-        };
-
-        return (
-            (party is not { } tradeParty) ||
-            TryValidatePrincipal(
-            tradeParty,
-            out failure
         )
         );
     }
@@ -930,7 +859,7 @@ public static class WorldSubmissionCodec {
             PrincipalKind.Seat => ((principal.Index >= 0) && (principal.Name is null) && (principal.Generation == 0)),
             PrincipalKind.Console => ((principal.Index == 0) && (principal.Name is null) && (principal.Generation == 0)),
             PrincipalKind.Addon => ((principal.Index == 0) && !string.IsNullOrEmpty(value: principal.Name) && (principal.Generation == 0)),
-            PrincipalKind.Peer => (WorldPopulationLimits.IsPeerIndex(index: principal.Index) && (principal.Name is null) && (principal.Generation > 0)),
+            PrincipalKind.Peer => (WorldBodiesLimits.IsBodyIndex(index: principal.Index) && (principal.Name is null) && (principal.Generation > 0)),
             PrincipalKind.Document => (documentAllowed && (principal.Index == 0) && !string.IsNullOrEmpty(value: principal.Name) && (principal.Generation == 0)),
             // Group's shape mirrors Addon's (Index 0, a non-empty Name carrying the id, Generation 0) but is valid
             // UNCONDITIONALLY — never gated behind documentAllowed — because unlike Document a group IS a real live
@@ -944,7 +873,7 @@ public static class WorldSubmissionCodec {
             : Fail(
                 WorldCodecRefusal.PrincipalShapeInvalid,
                 (principal.Kind, documentAllowed) switch {
-                    (PrincipalKind.Peer, _) when !WorldPopulationLimits.IsPeerIndex(index: principal.Index) => $"Peer principal index {principal.Index} is outside {WorldPopulationLimits.LocalSeatCount}..{(WorldPopulationLimits.CapacityCeiling - 1)}",
+                    (PrincipalKind.Peer, _) when !WorldBodiesLimits.IsBodyIndex(index: principal.Index) => $"Peer principal index {principal.Index} is outside 0..{(WorldBodiesLimits.CapacityCeiling - 1)}",
                     (PrincipalKind.Document, false) => $"{principal.Describe()} cannot ACT — a document is written to, never a submitter; its capability is authored as a grant ROW with world.grant.set, which the cross-document write-back channel reads off the owner's document",
                     // The World principal is refused on BOTH sides of this rule, for two DIFFERENT reasons — one message
                     // each, because the shared one told a console-typed `world.grant.set world …` that it was an
@@ -1001,59 +930,6 @@ public static class WorldSubmissionCodec {
         WorldRebuildKind.Load or WorldRebuildKind.Reload => ((request.Definition is not null) && (request.PathHint is not null) && (request.ContentHash is not null)),
         _ => false,
     };
-    // The addon-lifecycle leaf's own tagged union: one discriminant byte, then Mount's descriptor/hash/fuel/manifest
-    // or Unmount's bare name. A binary leaf (like the command/grant leaves), not a JSON union — the shape is small
-    // and fixed, so it needs no reflection-serialization debt.
-    private static void WriteAddonLifecycle(BinaryWriter writer, WorldAddonLifecycle lifecycle) {
-        if (lifecycle is null) {
-            throw new LeafCodecException(failure: Fail(
-                detail: "addon lifecycle is null",
-                refusal: WorldCodecRefusal.PayloadMissing
-            ));
-        }
-        switch (lifecycle) {
-            case WorldAddonLifecycle.Mount value:
-                writer.Write(value: ((byte)0));
-                WriteRequiredString(
-                    writer,
-                    value.Name,
-                    "Mount.Name"
-                );
-                WriteRequiredString(
-                    writer,
-                    value.ModulePath,
-                    "Mount.ModulePath"
-                );
-                WriteRequiredString(
-                    writer,
-                    value.Hash,
-                    "Mount.Hash"
-                );
-                writer.Write(value: value.Fuel);
-                var requests = value.Requests;
-                writer.Write(value: (requests?.Count ?? 0));
-                if (requests is not null) {
-                    foreach (var request in requests) {
-                        writer.Write(value: CapabilityToWire(value: request.Capability));
-                        WriteSubject(
-                            writer,
-                            request.Subject
-                        );
-                    }
-                }
-                break;
-            case WorldAddonLifecycle.Unmount value:
-                writer.Write(value: ((byte)1));
-                WriteRequiredString(
-                    writer,
-                    value.Name,
-                    "Unmount.Name"
-                );
-                break;
-            default:
-                throw UnknownLeaf(value: lifecycle);
-        }
-    }
     private static void WriteCommand(BinaryWriter writer, WorldCommand command) {
         if (command is null) {
             throw new LeafCodecException(failure: Fail(
@@ -1073,9 +949,9 @@ public static class WorldSubmissionCodec {
                     writer: writer
                 ); break;
             case WorldCommand.EnqueueSegment value:
-                writer.Write(value: ((byte)1)); WriteIntent(
-                    writer,
-                    value.Intent
+                writer.Write(value: ((byte)1)); WorldWireCodec.WriteIntent(
+                    intent: value.Intent,
+                    writer: writer
                 ); writer.Write(value: value.Seconds); break;
             case WorldCommand.PressChannel value:
                 writer.Write(value: ((byte)2)); writer.Write(value: value.ChannelOrdinal); writer.Write(value: value.Value.Value); WriteOptional(
@@ -1094,15 +970,15 @@ public static class WorldSubmissionCodec {
                 writer.Write(value: ((byte)5)); writer.Write(value: value.X); writer.Write(value: value.Z); writer.Write(value: value.YawRadians); writer.Write(value: value.Seconds); break;
             case WorldCommand.Stop:
                 writer.Write(value: ((byte)6)); break;
-            case WorldCommand.Engage value:
+            case WorldCommand.ComposeControl value:
                 writer.Write(value: ((byte)7)); WriteSubject(
                     writer,
                     value.Target
-                ); writer.Write(value: value.Capture); WritePrincipal(
+                ); writer.Write(value: value.Exclusive); WritePrincipal(
                     writer,
                     value.TargetPrincipal
                 ); break;
-            case WorldCommand.Disengage value:
+            case WorldCommand.DissolveControl value:
                 writer.Write(value: ((byte)8)); WritePrincipal(
                     writer,
                     value.TargetPrincipal
@@ -1121,6 +997,12 @@ public static class WorldSubmissionCodec {
                     writer.Write(value: state.TimerTicks);
                 }
                 break;
+            case WorldCommand.RigidImpulse value:
+                writer.Write(value: ((byte)10)); writer.Write(value: value.Impulse.X); writer.Write(value: value.Impulse.Y); writer.Write(value: value.Impulse.Z); break;
+            case WorldCommand.CarryBody value:
+                writer.Write(value: ((byte)11)); writer.Write(value: value.TargetIndex); break;
+            case WorldCommand.ReleaseCarry:
+                writer.Write(value: ((byte)12)); break;
             default:
                 throw UnknownLeaf(value: command);
         }
@@ -1180,20 +1062,11 @@ public static class WorldSubmissionCodec {
             static (w, value) => w.Write(value: value.Bits)
         );
     }
-    private static void WriteIntent(BinaryWriter writer, PlayerIntent intent) {
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            writer.Write(value: intent[ordinal].Value);
-        }
-    }
     private static void WriteIntentSource(BinaryWriter writer, IntentSource value) {
-        if (value.IsLive) {
-            writer.Write(value: ((byte)0));
-        } else if (value.IsIdle) {
-            writer.Write(value: ((byte)1));
-        } else if (value.ProducerName is { } name) {
-            writer.Write(value: ((byte)2));
-            writer.Write(value: name);
-        } else {
+        if (!WorldWireCodec.TryWriteIntentSource(
+            source: value,
+            writer: writer
+        )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,
                 $"{nameof(IntentSource)} '{value}' is not declared"
@@ -1209,12 +1082,6 @@ public static class WorldSubmissionCodec {
     private static void WriteKindMaskBits(BinaryWriter writer, UInt128 bits) {
         writer.Write(value: ((ulong)bits));
         writer.Write(value: ((ulong)(bits >> 64)));
-    }
-    private static void WriteNullableString(BinaryWriter writer, string? value) {
-        writer.Write(value: (value is not null));
-        if (value is not null) {
-            writer.Write(value: value);
-        }
     }
     private static void WriteOptional<T>(BinaryWriter writer, T? value, Action<BinaryWriter, T> write) where T : struct {
         writer.Write(value: value.HasValue);
@@ -1232,34 +1099,25 @@ public static class WorldSubmissionCodec {
         )) {
             throw new LeafCodecException(failure: failure);
         }
-        writer.Write(value: principal.Kind switch {
-            PrincipalKind.Seat => ((byte)0),
-            PrincipalKind.Console => ((byte)1),
-            PrincipalKind.Addon => ((byte)2),
-            PrincipalKind.Peer => ((byte)3),
-            // Group DOES carry a live wire value (4) — unlike Document/World below, a group IS a legitimate grant
-            // TARGET on the runtime leaf: world.grant group:<id> ... round-trips through this identical loopback
-            // codec path even for a local submission (there is no separate loopback shortcut). A group never
-            // ACTS, so this value is only ever reached as WorldGrant.Principal, never as an envelope's own actor.
-            PrincipalKind.Group => ((byte)4),
-            // PrincipalKind.Document has no wire value HERE, deliberately: this writer serves the LIVE runtime leaves
-            // (an envelope's acting principal, a world.grant/world.revoke row), and a document principal means nothing
-            // in the live grant table — the cross-document write-back channel reads its grants off the owner's
-            // DOCUMENT (Server.WorldOwnedWorlds.Decide), never off the runtime table, so a live row for one would be
-            // accepted-and-inert. The capability it names is authored with world.grant.set, which edits the document's
-            // own Grants section through the ordered domain and the journal; that path is JSON-encoded and admits a
-            // document principal on the row it authors.
-            _ => throw new LeafCodecException(failure: Fail(
-            WorldCodecRefusal.EnumValueUnknown,
-            $"{nameof(PrincipalKind)}.{principal.Kind} has no LIVE wire value — a {principal.Describe()} row is authored with world.grant.set (the document's Grants section, read by the cross-document write-back channel), never granted into the runtime table where nothing would read it"
-        )),
-        });
-        writer.Write(value: principal.Index);
-        writer.Write(value: principal.Generation);
-        WriteNullableString(
-            writer,
-            principal.Name
-        );
+        // PrincipalKind.Document has no wire value HERE, deliberately: this writer serves the LIVE runtime leaves
+        // (an envelope's acting principal, a world.grant/world.revoke row), and a document principal means nothing
+        // in the live grant table — the cross-document write-back channel reads its grants off the owner's
+        // DOCUMENT (Server.WorldOwnedWorlds.Decide), never off the runtime table, so a live row for one would be
+        // accepted-and-inert. The capability it names is authored with world.grant.set, which edits the document's
+        // own Grants section through the ordered domain and the journal; that path is JSON-encoded and admits a
+        // document principal on the row it authors. Group DOES carry a live wire value — unlike Document/World, a
+        // group IS a legitimate grant TARGET on the runtime leaf: world.grant group:<id> ... round-trips through
+        // this identical loopback codec path even for a local submission. A group never ACTS, so this value is
+        // only ever reached as WorldGrant.Principal, never as an envelope's own actor.
+        if (!WorldWireCodec.TryWritePrincipal(
+            principal: principal,
+            writer: writer
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(PrincipalKind)}.{principal.Kind} has no LIVE wire value — a {principal.Describe()} row is authored with world.grant.set (the document's Grants section, read by the cross-document write-back channel), never granted into the runtime table where nothing would read it"
+            ));
+        }
     }
     // The rebuild leaf's own tagged union: one discriminant byte for WorldRebuildKind, the force flag, an optional
     // path hint, an optional content-hash pin, then — Load/Reload only — the embedded document through the document's
@@ -1282,13 +1140,13 @@ public static class WorldSubmissionCodec {
         }
         writer.Write(value: RebuildKindToWire(value: request.Kind));
         writer.Write(value: request.Force);
-        WriteNullableString(
-            writer,
-            request.PathHint
+        WorldWireCodec.WriteNullableString(
+            value: request.PathHint,
+            writer: writer
         );
-        WriteNullableString(
-            writer,
-            request.ContentHash
+        WorldWireCodec.WriteNullableString(
+            value: request.ContentHash,
+            writer: writer
         );
         var hasDefinition = (request.Definition is not null);
 
@@ -1349,13 +1207,13 @@ public static class WorldSubmissionCodec {
                     value.ContentPath,
                     "Insert.ContentPath"
                 );
-                WriteNullableString(
-                    writer,
-                    value.EngineId
+                WorldWireCodec.WriteNullableString(
+                    value: value.EngineId,
+                    writer: writer
                 );
-                WriteNullableString(
-                    writer,
-                    value.Options
+                WorldWireCodec.WriteNullableString(
+                    value: value.Options,
+                    writer: writer
                 );
                 break;
             case WorldScreenOp.Eject value:
@@ -1370,9 +1228,9 @@ public static class WorldSubmissionCodec {
             case WorldScreenOp.SetOptions value:
                 writer.Write(value: ((byte)3));
                 writer.Write(value: value.Index);
-                WriteNullableString(
-                    writer,
-                    value.Options
+                WorldWireCodec.WriteNullableString(
+                    value: value.Options,
+                    writer: writer
                 );
                 break;
             case WorldScreenOp.Link value:
@@ -1400,13 +1258,16 @@ public static class WorldSubmissionCodec {
         }
     }
     private static void WriteSection(BinaryWriter writer, WorldSection value) {
-        if (!Enum.IsDefined(value: value)) {
+        if (!WorldWireTags.TryToWire(
+            value: value,
+            wire: out var wire
+        )) {
             throw new LeafCodecException(failure: Fail(
                 WorldCodecRefusal.EnumValueUnknown,
                 $"{nameof(WorldSection)} value {((int)value)} is not declared"
             ));
         }
-        writer.Write(value: ((byte)value));
+        writer.Write(value: wire);
     }
     private static void WriteSnapPose(BinaryWriter writer, WorldCommand.SnapPose value) {
         writer.Write(value: SnapPoseModeToWire(value: value.Mode));
@@ -1422,20 +1283,16 @@ public static class WorldSubmissionCodec {
     }
     // Wire value 8 (formerly GrantSubjectKind.Table) is retired per the convention above — never reassign it.
     private static void WriteSubject(BinaryWriter writer, GrantSubject subject) {
-        writer.Write(value: subject.Kind switch {
-            GrantSubjectKind.All => ((byte)0),
-            GrantSubjectKind.Body => ((byte)1),
-            GrantSubjectKind.Screen => ((byte)2),
-            GrantSubjectKind.Section => ((byte)3),
-            GrantSubjectKind.Composition => ((byte)4),
-            GrantSubjectKind.State => ((byte)5),
-            GrantSubjectKind.Region => ((byte)6),
-            GrantSubjectKind.Seat => ((byte)7),
-            _ => throw new LeafCodecException(failure: Fail(
-            WorldCodecRefusal.EnumValueUnknown,
-            $"{nameof(GrantSubjectKind)}.{subject.Kind} has no wire value"
-        )),
-        });
+        if (!WorldWireTags.TryToWire(
+            value: subject.Kind,
+            wire: out var kindWire
+        )) {
+            throw new LeafCodecException(failure: Fail(
+                WorldCodecRefusal.EnumValueUnknown,
+                $"{nameof(GrantSubjectKind)}.{subject.Kind} has no wire value"
+            ));
+        }
+        writer.Write(value: kindWire);
         if (subject.Kind == GrantSubjectKind.Section) {
             WriteSection(
                 value: ((WorldSection)subject.Value),
@@ -1444,9 +1301,9 @@ public static class WorldSubmissionCodec {
         } else {
             writer.Write(value: subject.Value);
         }
-        WriteNullableString(
-            writer,
-            subject.Id
+        WorldWireCodec.WriteNullableString(
+            value: subject.Id,
+            writer: writer
         );
     }
     private static void WriteVector(BinaryWriter writer, Vector3 value) { writer.Write(value: value.X); writer.Write(value: value.Y); writer.Write(value: value.Z); }
@@ -1556,16 +1413,6 @@ public static class WorldSubmissionCodec {
                     return true;
                 }
                 return false;
-            case WorldSubmissionKind.AddonLifecycle:
-                if (TryDecodeAddonLifecycle(
-                    bytes: bytes,
-                    failure: out failure,
-                    lifecycle: out var lifecycle
-                )) {
-                    payload = new WorldSubmissionPayload.AddonLifecycle(Value: lifecycle!);
-                    return true;
-                }
-                return false;
             case WorldSubmissionKind.ScreenOp:
                 if (TryDecodeScreenOp(
                     bytes: bytes,
@@ -1594,14 +1441,6 @@ public static class WorldSubmissionCodec {
                 return false;
         }
     }
-    /// <summary>Decodes the addon-lifecycle leaf.</summary>
-    public static bool TryDecodeAddonLifecycle(ReadOnlySpan<byte> bytes, out WorldAddonLifecycle? lifecycle, out WorldCodecFailure failure) =>
-        TryRead(
-            bytes: bytes,
-            failure: out failure,
-            read: ReadAddonLifecycle,
-            value: out lifecycle
-        );
     /// <summary>Decodes the command leaf.</summary>
     public static bool TryDecodeCommand(ReadOnlySpan<byte> bytes, out WorldCommand? command, out WorldCodecFailure failure) =>
         TryRead(
@@ -1625,7 +1464,14 @@ public static class WorldSubmissionCodec {
             reader => new WorldDesignation(
                 EntityIndex: reader.ReadInt32(),
                 Register: reader.ReadString(),
-                Subject: ReadSubject(reader: reader)
+                Subject: ReadSubject(reader: reader),
+                Point: (reader.ReadBoolean()
+                    ? new FixedVector3(
+                        X: FixedQ4816.FromRawBits(value: reader.ReadInt64()),
+                        Y: FixedQ4816.FromRawBits(value: reader.ReadInt64()),
+                        Z: FixedQ4816.FromRawBits(value: reader.ReadInt64())
+                    )
+                    : null)
             ),
             out designation,
             out failure
@@ -1644,15 +1490,28 @@ public static class WorldSubmissionCodec {
             bytes,
             reader => new WorldSessionLever(
                 Section: ReadSection(reader: reader),
-                Kind: LeverFromWire(value: reader.ReadByte()),
+                Name: ReadLeverName(reader: reader),
                 A: reader.ReadDouble(),
-                B: reader.ReadDouble()
+                B: reader.ReadDouble(),
+                Seat: reader.ReadInt32()
             ),
             out lever,
             out failure
         );
     /// <summary>Decodes the mutation leaf under its stable catalog ordinal.</summary>
-    public static bool TryDecodeMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) {
+    public static bool TryDecodeMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) =>
+        TryDecodeMutationCore(bytes, out mutation, out failure, committed: false);
+
+    /// <summary>Decodes a mutation already committed by a trusted authority, including its world-authored actor.
+    /// This is a persistence leaf, never an external-submission decoder.</summary>
+    /// <param name="bytes">The bounded catalog-tagged mutation bytes from trusted authority storage.</param>
+    /// <param name="mutation">The decoded mutation, or null on refusal.</param>
+    /// <param name="failure">The shape refusal, or default on success.</param>
+    /// <returns>Whether the mutation and all principal shapes are admissible for a committed journal.</returns>
+    public static bool TryDecodeCommittedMutation(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure) =>
+        TryDecodeMutationCore(bytes, out mutation, out failure, committed: true);
+
+    private static bool TryDecodeMutationCore(ReadOnlySpan<byte> bytes, out WorldMutation? mutation, out WorldCodecFailure failure, bool committed) {
         if (
             !TryDecodeJsonUnion(
             bytes: bytes,
@@ -1666,7 +1525,8 @@ public static class WorldSubmissionCodec {
         }
         if (!TryValidateMutationPrincipals(
             failure: out failure,
-            mutation: mutation
+            mutation: mutation,
+            committed: committed
         )) {
             mutation = null;
             return false;
@@ -1827,13 +1687,6 @@ public static class WorldSubmissionCodec {
                     out bytes,
                     out failure
                 );
-            case WorldSubmissionPayload.AddonLifecycle lifecycle:
-                kind = WorldSubmissionKind.AddonLifecycle;
-                return TryEncodeAddonLifecycle(
-                    lifecycle.Value,
-                    out bytes,
-                    out failure
-                );
             case WorldSubmissionPayload.ScreenOp screenOp:
                 kind = WorldSubmissionKind.ScreenOp;
                 return TryEncodeScreenOp(
@@ -1859,16 +1712,6 @@ public static class WorldSubmissionCodec {
                 return false;
         }
     }
-    /// <summary>Encodes the addon-lifecycle leaf.</summary>
-    public static bool TryEncodeAddonLifecycle(WorldAddonLifecycle lifecycle, out byte[] bytes, out WorldCodecFailure failure) =>
-        TryWrite(
-            writer => WriteAddonLifecycle(
-                lifecycle: lifecycle,
-                writer: writer
-            ),
-            out bytes,
-            out failure
-        );
     /// <summary>Encodes the command leaf.</summary>
     public static bool TryEncodeCommand(WorldCommand command, out byte[] bytes, out WorldCodecFailure failure) =>
         TryWrite(
@@ -1897,6 +1740,12 @@ public static class WorldSubmissionCodec {
                     writer: writer,
                     subject: designation.Subject
                 );
+                writer.Write(value: designation.Point.HasValue);
+                if (designation.Point is { } point) {
+                    writer.Write(value: point.X.Value);
+                    writer.Write(value: point.Y.Value);
+                    writer.Write(value: point.Z.Value);
+                }
             },
             out bytes,
             out failure
@@ -1919,15 +1768,28 @@ public static class WorldSubmissionCodec {
                     writer,
                     lever.Section
                 );
-                writer.Write(value: LeverToWire(value: lever.Kind));
+                writer.Write(value: (lever.Name ?? string.Empty));
                 writer.Write(value: lever.A);
                 writer.Write(value: lever.B);
+                writer.Write(value: lever.Seat);
             },
             out bytes,
             out failure
         );
     /// <summary>Encodes the mutation leaf under its stable catalog ordinal.</summary>
-    public static bool TryEncodeMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) {
+    public static bool TryEncodeMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) =>
+        TryEncodeMutationCore(mutation, out bytes, out failure, committed: false);
+
+    /// <summary>Encodes a mutation already committed by a trusted authority. Unlike live ingress, this permits
+    /// the canonical world-authored actor; it does not grant authority or admit a new submission.</summary>
+    /// <param name="mutation">The committed journal entry.</param>
+    /// <param name="bytes">Its catalog-tagged bytes, or an empty array on refusal.</param>
+    /// <param name="failure">The shape refusal, or default on success.</param>
+    /// <returns>Whether the mutation is encodable with valid committed-journal principal shapes.</returns>
+    public static bool TryEncodeCommittedMutation(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure) =>
+        TryEncodeMutationCore(mutation, out bytes, out failure, committed: true);
+
+    private static bool TryEncodeMutationCore(WorldMutation mutation, out byte[] bytes, out WorldCodecFailure failure, bool committed) {
         if (mutation is null) {
             bytes = [];
             failure = Fail(
@@ -1939,7 +1801,8 @@ public static class WorldSubmissionCodec {
         }
         if (!TryValidateMutationPrincipals(
             failure: out failure,
-            mutation: mutation
+            mutation: mutation,
+            committed: committed
         )) {
             bytes = [];
             return false;

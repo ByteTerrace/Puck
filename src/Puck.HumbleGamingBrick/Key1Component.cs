@@ -60,6 +60,10 @@ public sealed class Key1Component : IKey1, IClockedComponent, ISnapshotable {
     /// <inheritdoc/>
     public ClockDomain Domain =>
         ClockDomain.Cpu;
+    /// <summary>Gets a value indicating whether a tick would change nothing: the machine is not stopped and no
+    /// speed-switch, DMA-block, interrupt-block, or timer-block countdown is running.</summary>
+    public bool IsIdle =>
+        (!IsStopped && ((m_switchEnterCountdown | m_switchStallCountdown | m_hdmaToggleCountdown | m_interruptBlockCountdown | m_timerBlockCountdown) == 0));
     /// <inheritdoc/>
     public bool IsSwitchArmed =>
         m_armed;

@@ -1,5 +1,7 @@
+using System.Runtime.InteropServices;
 using Puck.Assets;
 using Puck.HumbleGamingBrick.Interfaces;
+using Puck.Maths;
 
 namespace Puck.HumbleGamingBrick.Post;
 
@@ -286,9 +288,9 @@ internal static class ScriptedTradeExplore {
             args: args,
             name: "--model"
         )?.ToLowerInvariant()) switch {
-            "dmg" => ConsoleModel.Dmg,
+            "dmg" => ConsoleModel.DmgC,
             "agb" => ConsoleModel.Agb,
-            _ => ConsoleModel.Cgb,
+            _ => ConsoleModel.CgbE,
         };
 
         var scriptA = LoadScript(path: CommandLineArguments.Value(
@@ -972,19 +974,10 @@ internal static class ScriptedTradeExplore {
             machine: machine
         );
 
-        Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} fb=0x{HashPixels(pixels: pixels):X16} status=0x{status:X2} SC=0x{control:X2} lead=0x{lead:X2} map={group:X2}/{map:X2} yx={yCoord:X2},{xCoord:X2} LCDC={lcdc:X2} LY={ly:X2} KEY1={key1:X2} IF={iflag:X2} IE={ienable:X2}");
-    }
-    private static ulong HashPixels(ReadOnlySpan<uint> pixels) {
-        var hash = 14_695_981_039_346_656_037ul;
-
-        foreach (var pixel in pixels) {
-            hash = ((hash ^ pixel) * 1_099_511_628_211ul);
-        }
-
-        return hash;
+        Console.WriteLine(value: $"    [{frame:D5}] {tag} -> {Path.GetFileName(path: path)} fb=0x{Fnv1aHash.Compute(values: MemoryMarshal.AsBytes(span: pixels)):X16} status=0x{status:X2} SC=0x{control:X2} lead=0x{lead:X2} map={group:X2}/{map:X2} yx={yCoord:X2},{xCoord:X2} LCDC={lcdc:X2} LY={ly:X2} KEY1={key1:X2} IF={iflag:X2} IE={ienable:X2}");
     }
 
-    internal static ConsoleModel s_model = ConsoleModel.Cgb;
+    internal static ConsoleModel s_model = ConsoleModel.CgbE;
 
     // Builds side A, honoring a debug --spawn group:map:y:x override (decimal) and --model when present.
     private static MachineInstance BuildSideA(byte[] rom) {

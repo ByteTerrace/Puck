@@ -42,8 +42,8 @@ agent's.
 | Grids and index spaces — hex cells, tile/chunk order, rings and shells, an exact 2×2 integer transform | [Geometry](../../../../src/Puck.Maths/Geometry/README.md) | `HexagonalCoordinate`, `HilbertCurve`, `LayerSequence`, `ModularTransform` | "At a glance" |
 | The subject is a graph, a lattice, a language or a finite structure rather than a number — reachability, convolution and inversion, pattern matching, homology, group orbits | [Oracle](../../../../src/Puck.Maths/Oracle/README.md) | One presented-algebra product over swappable materials: `Presentations`, `PresentedAlgebra`, `DivisibilityAlgebra`, `TokenPattern`/`PatternMatcher`, `ExteriorCalculus`/`IntegerHomology`, `ReflectionSystem`/`PresentedGroup` | "Choosing an entry point", then "Contracts every consumer inherits" |
 | An exploratory or open-problem question — continued-fraction tails, Sturmian and quasicrystal words, Fibonacci and metallic means, real-quadratic orders | [Research](../../../../src/Puck.Maths/Research/README.md) | Exact, certificate-bearing, off the hot path; a budget-exhausted search (`SearchLimitReached`) is never conflated with a proof or a counterexample | "At a glance" — and the namespace split stated above it |
-| A frequency-domain transform, or an exact cyclic convolution | [Transforms](../../../../src/Puck.Maths/Transforms/README.md) | `NumberTheoreticTransform`/`NttPlan` (exact, over `PrimeField64`), `FixedFourierTransform`/`FixedFourierPlan` (fixed-point, over `FixedComplex`) | "At a glance" |
-| A per-tick state hash, an exact allocation over intervals, bucket routing, an exact real-quadratic value, a bit trick or a GCD | root level (owns no wing) | `Fnv1aHash`, `DiscreteMeasure`/`CompiledDiscreteMeasure64`, `MonotonicPartitioner`, `QuadraticSurd`, `ContinuedFraction`, `CyclicRotation`, `SymmetryLattice`, `NumberTheoryFunctions`, and the integer kit (`BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions`) | [the root README](../../../../src/Puck.Maths/README.md) — "The root-level catalogue", then "Integer routines" |
+| A frequency- or sequency-domain transform, or a cyclic convolution | [Transforms](../../../../src/Puck.Maths/Transforms/README.md) | Exact: `NumberTheoreticTransform`/`NumberTheoreticTransformPlan` (over `PrimeField64`), `WalshHadamardTransform` (any binary integer, no plan). Fixed-point, measured bounds: `FixedFourierTransform`/`FixedFourierTransformPlan` (over `FixedComplex`), `FixedCosineTransform`/`FixedCosineTransformPlan` (over `FixedQ4816`). All in place; `Convolve` on both spectral transforms | "At a glance", then the transform's own section |
+| A per-tick state hash, an exact allocation over intervals, bucket routing, an exact real-quadratic value, a bit trick or a GCD | root level (owns no wing) | `Fnv1aHash`, `DiscreteMeasure`/`CompiledDiscreteMeasure64`, `MonotonicPartitioner`, `RealQuadratic`, `ContinuedFraction`, `CyclicRotation`, `SymmetryLattice`, `NumberTheoryFunctions`, and the integer kit (`BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions`) | [the root README](../../../../src/Puck.Maths/README.md) — "The root-level catalogue", then "Integer routines" |
 
 **Depth lives in the wing READMEs**, and this skill never restates their
 contract tables or re-argues a rule they own. When one disagrees with this file,
@@ -100,6 +100,7 @@ carries it back whenever it is still below one.
 | A forward-mode sensitivity | `FixedDual<FixedQ4816>` (`FixedDual.Variable` seeds it) |
 | Rate → quantity over ticks, with no drift | `FixedRateAccumulator` / `FixedVector3RateAccumulator` — the sub-unit division remainder carries across calls, and **is authoritative snapshot state** |
 | To interpolate or clamp | `FixedQ4816.Lerp` / `.Clamp`, `FixedVector2.Lerp` / `FixedVector3.Lerp`, `FixedQuaternion.Slerp`, `FixedRigidTransform.ScLerp`. Never a hand-rolled `a + (b − a)·t` |
+| A pole-matched second-order response (a target that eases, overshoots, or anticipates rather than snapping) | `SecondOrderDynamics` (`FixedPoint/SecondOrderDynamics.cs`) — `Create(f, ζ, r)` derives the coefficients once, `Compile(stepTicks, ticksPerSecond)` gives a `SecondOrderStep` for a per-tick/per-frame `Step`, `Evaluate(y0, v0, target, elapsedTicks, ticksPerSecond)` is the closed form for a lazily-read state cell. A float twin (`Puck.SdfVm.Views.SecondOrderFollower.cs`) exists for presentation-only followers (camera booms, stamped parts); never feed it back into simulation state |
 
 Products in this family are **fused**: the whole expression accumulates exactly
 and the result rounds once per returned component. Do not decompose one into
@@ -140,7 +141,8 @@ for each is at
 | Rings, shells, shards — index → layer in constant time | `LayerSequence` | [Geometry](../../../../src/Puck.Maths/Geometry/README.md#layersequence) |
 | A per-tick state hash for a determinism or replay probe | `Fnv1aHash` — allocation-free, endianness-independent | root level |
 | An exact integer allocation over intervals (jobs/frame, samples/frame) | `DiscreteMeasure` → `CompiledDiscreteMeasure64` for the hot path | root level |
-| An exact real-quadratic value | `QuadraticSurd` | root level |
+| An exact rational, reduced on construction, for authoring and compile-time derivations that round once at the end | `Rational` | root level |
+| An exact real-quadratic value — `RealQuadraticField` names the field `ℚ(√d)`, `RealQuadratic` carries the value with conjugate, norm and trace | `RealQuadratic` | root level |
 | Bit tricks, GCD, integer roots, pairing, factorization | `BinaryIntegerFunctions`, `UnsignedNumberFunctions`, `PrimeExtensions` | root level |
 | One relation over several carriers, or a proof two carriers agree | `QuadraticAlgebra<TScalar>` and the structure tier | [Algebra](../../../../src/Puck.Maths/Algebra/README.md) |
 
@@ -296,8 +298,8 @@ in a change loop.
 | Exhaustive | `--settings tests/Puck.Maths.Tests/exhaustive.runsettings` | long | on demand or nightly; full-width sweeps over an entire carrier |
 | Bench | `--settings tests/Puck.Maths.Tests/bench.runsettings` | timing | on demand; breach-tolerant, gates no value |
 
-**Do not run the `Exhaustive` tier or `Puck.Post` reflexively.** They are
-minutes-to-many-minutes each and neither supports running a subset. Run one only
+**Do not run the `Exhaustive` tier reflexively.** It is minutes-to-many-minutes
+and does not support running a subset. Run it only
 when the member you touched names it as its gate of record, which
 `coverage-manifest.json` and `Coverage.cs`'s waiver reasons will tell you by
 name. When in doubt, check the waiver rather than running the tier.

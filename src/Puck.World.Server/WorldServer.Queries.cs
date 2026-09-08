@@ -1,4 +1,3 @@
-using System.Globalization;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -109,8 +108,12 @@ public sealed partial class WorldServer {
         );
     }
     // The public Answer surface remains the trusted in-process read-back composer. An envelope, however, may have
-    // arrived over WorldTcpHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
+    // arrived over WorldPeerHost, so it crosses Observe before reaching that composer. Loopback queries are stamped as
     // Console and pass through the same check using the permissive local seed rather than a separate bypass.
+    private QueryAnswer AnswerStateObservations(WorldPrincipal? principal, string? row = null) {
+        var rows = (WorldStateDisclosure.Compose(m_definition, principal) ?? []).Where(r => row is null || r.Name == row).ToArray();
+        return new QueryAnswer(System.Text.Json.JsonSerializer.Serialize(rows, WorldJsonContext.Default.WorldObservedRowArray), Payload: rows);
+    }
     private QueryAnswer AnswerSubmittedQuery(WorldQuery query, WorldPrincipal principal) {
         var subject = query.ObservationSubject();
         var verdict = m_grants.Allows(
@@ -121,64 +124,48 @@ public sealed partial class WorldServer {
 
         if (!verdict.IsAllowed) {
             return new QueryAnswer(
-                Text: $"[query refused: {principal.Describe()} cannot observe {subject.Describe()} ({verdict.DescribeDenial()})]",
+                Text: $"[query refused: {verdict.DescribeRefusal(
+                    actor: principal,
+                    subject: subject.Describe(),
+                    verb: "observe"
+                )}]",
                 Refused: true
             );
         }
 
+        if (query is WorldQuery.StateObservations observation) { return AnswerStateObservations(principal, observation.Row); }
+        if (query is WorldQuery.ReflowPreview or WorldQuery.ReflowStatus or WorldQuery.ReflowCancel) {
+            return AnswerReflowQuery(query, principal);
+        }
         return Answer(query: query);
     }
-    // The inverse of the compiler's own literal-to-raw conversion (WorldRuleCompiler.ResolveWrite), applied to a LIVE
-    // FixedQ4816 read instead of an authored constant. Compile-time kind-matching (EffectSourceKindMismatch) already
-    // proved 'kind' equals the source operand's own resolved kind, so an Int/Bool source is always an EXACT integer
-    // in fixed-point form (ReadWorldFact only ever reaches FromInteger for those two) — recovered by an exact shift,
-    // never a float round-trip; a Fixed source's raw bits are copied verbatim, bit-identical to the source cell.
-    private static long ConvertWorldFactToRaw(FixedQ4816 value, CellKind kind) => kind switch {
-        CellKind.Fixed => value.Value,
-        CellKind.Bool => ((value.Value != 0L)
-        ? 1L
-        : 0L),
-        _ => (value.Value >> FixedQ4816.FractionBitCount), // Int.
-    };
-    // The KEYED counterpart of a slot cell's row-level rebase target: looks up an already-installed cell's own
-    // advance trait so a scalar-value UpsertStateCell write preserves it (see the UpsertStateCell compose arm above)
-    // rather than a fresh WorldStateCell record silently dropping it.
-    private static WorldStateAdvance? FindCellAdvance(IReadOnlyList<WorldStateCell> cells, WorldCellName key) {
-        foreach (var cell in cells) {
-            if (cell.Key == key) {
-                return cell.Advance;
-            }
-        }
-
-        return null;
-    }
-    private static WorldFact Finite(FixedQ4816 value) => new(
-        IsForever: false,
-        Value: value
-    );
     // $distance: — the straight-line distance between two named bodies, read through WorldServer.Body(int)'s own
     // bounds check (null for an out-of-range index or an inactive slot). Either side missing reads as
     // s_noBodyDistance rather than zero (see its own remarks).
-    private FixedQ4816 ReadBodyDistance(CompiledBodyRef bodyA, CompiledBodyRef bodyB, ulong tick) {
-        var a = Body(index: ResolveBodyRef(
-            bodyRef: bodyA,
-            tick: tick
-        ));
-        var b = Body(index: ResolveBodyRef(
-            bodyRef: bodyB,
-            tick: tick
-        ));
-
-        if (
-            (a is null) ||
-            (b is null)
-        ) {
-            return NoBodyDistance;
-        }
-
-        return (b.FixedPosition - a.FixedPosition).Length;
-    }
-    // $los: — the SAME WorldPopulation.HasLineOfSightBetween a sensed target's own RequiresLineOfSight check rides,
+    private FixedQ4816 ReadBodyDistance(CompiledBodyRef bodyA, CompiledBodyRef bodyB, ulong tick) =>
+        ReadBodyDistance(
+            bodyA: ResolveBodyRef(
+                bodyRef: bodyA,
+                tick: tick
+            ),
+            bodyB: ResolveBodyRef(
+                bodyRef: bodyB,
+                tick: tick
+            )
+        );
+    private FixedQ4816 ReadBodyDistance(int bodyA, int bodyB) => (
+        ((Body(index: bodyA) is { } a) && (Body(index: bodyB) is { } b))
+            ? (b.FixedPosition - a.FixedPosition).Length
+            : NoBodyDistance
+    );
+    // The squared sibling for a range test that never needs the root; the same NoBodyDistance sentinel for a
+    // missing side, which a caller must test for before comparing against an unbounded range.
+    private FixedQ4816 ReadBodyDistanceSquared(int bodyA, int bodyB) => (
+        ((Body(index: bodyA) is { } a) && (Body(index: bodyB) is { } b))
+            ? (b.FixedPosition - a.FixedPosition).LengthSquared
+            : NoBodyDistance
+    );
+    // $los: — the same WorldPopulation.HasLineOfSightBetween a sensed target's own RequiresLineOfSight check rides,
     // called against two RESOLVED body references. Either side resolving to no body (a negative index) reads as
     // false — no sight line to nothing, the ordinary "absent reads as the falsy value" convention.
     private bool ReadBodyLineOfSight(CompiledBodyRef bodyA, CompiledBodyRef bodyB, ulong tick) {
@@ -200,7 +187,24 @@ public sealed partial class WorldServer {
         )
         );
     }
-    // $parked: — the remaining reconnect-grace ticks for ONE named body, resolved through the SAME ResolveBodyRef
+    // $upright: — a body's local +Y rotated by its live orientation, dotted against the up axis its gravity
+    // opposes. Absent bodies read Puck.Maths.FixedQ4816.One (perfectly upright) — never "knocked over" for a body
+    // that does not exist.
+    private FixedQ4816 ReadBodyUpright(CompiledBodyRef bodyRef, ulong tick) {
+        var index = ResolveBodyRef(
+            bodyRef: bodyRef,
+            tick: tick
+        );
+
+        return ((Body(index: index) is { } body)
+            ? FixedVector3.Dot(
+                left: body.FixedOrientation.Rotate(vector: s_localUp),
+                right: body.FixedUp
+            )
+            : FixedQ4816.One
+        );
+    }
+    // $parked: — the remaining reconnect-grace ticks for ONE named body, resolved through the same ResolveBodyRef
     // walk $distance:/$los: use for each of their two body references. THREE REGIMES, deliberately distinct:
     // ABSENT (a reference resolving to no live body, or an unparked one) reads as 0 through
     // WorldPopulation.ParkedRemainingTicks' own guards — the ordinary "absent reads as the neutral falsy value"
@@ -217,20 +221,22 @@ public sealed partial class WorldServer {
             ),
             tick: tick
         );
-    // The $reduce: aggregate — a thin delegation to WorldStateReader.Reduce, the ONE (row, key) read seam's sibling
-    // for a whole-row aggregate: it resolves EACH cell's value through TryRead's own per-key path (not the row's
-    // declared cell list raw), so a future per-cell advance widening flows through here for free. Count is always
-    // integer regardless of the row's declared kind (a count is never fixed-point); Max/Min/Sum preserve the row's
-    // kind, matching the compiler's own ValueKind (WorldRuleCompiler.ResolveOperand's reduce branch). An empty row
-    // reads as zero for every op — the SAME "absent reads as zero" precedent ReadStateCell itself follows for a
-    // vanished cell.
-    private FixedQ4816 ReadReduction(string row, WorldStateReduceOp op, ulong tick) =>
-        WorldStateReader.Reduce(
-            definition: m_definition,
-            op: op,
-            rowName: row,
-            tick: tick
-        );
+    // $channel: — the 1-based local seat's channel value as its body integrates it that tick: the drained
+    // CommandSnapshot's direct read folded with co-driving contributions and the admitted held overlay (a probe axis
+    // or any other held sample reaches a channel only through that overlay), in the channel's own FixedQ4816 domain.
+    // Compile time already bounded seat to 0..LocalSeatCount-1 and channelOrdinal to a declared channel; an
+    // out-of-range seat, or one no local seat currently occupies, reads Zero — the convention $parked:/$machine:/
+    // $region: already set.
+    private FixedQ4816 ReadChannelValue(int seat, int ordinal) {
+        if (
+            (((uint)seat) >= ((uint)m_population.LocalSeatCount)) ||
+            !m_population.IsHumanOccupied(bodyIndex: seat)
+        ) {
+            return FixedQ4816.Zero;
+        }
+
+        return (Body(index: seat)?.ChannelReadComposed[ordinal] ?? FixedQ4816.Zero);
+    }
     // Reads a declared cell as fixed point off the LIVE definition (Install swaps it on every apply, so this is
     // always this tick's settled document), through the ONE shared (row, key) resolver — which computes an advancing
     // row's LIVE value rather than its stored base, so a rule composes with the trait instead of duplicating it. A
@@ -255,78 +261,56 @@ public sealed partial class WorldServer {
 
         return ((declared.Kind == CellKind.Fixed)
             ? FixedQ4816.FromRawBits(value: raw)
-            : FixedQ4816.FromInteger(value: raw)
+            : StateReader.LiftSaturating(raw: raw)
         );
     }
-    // Shared by both sides of a compareState conjunct — the primary operand and, when present, the comparand — so
-    // the two reads can never diverge in how a reserved channel or a declared row resolves to a live fact.
-    private WorldFact ReadWorldFact(CompiledWorldOperand operand, ulong tick) => operand.Kind switch {
-        WorldRuleFactKind.Tick => Finite(value: FixedQ4816.FromInteger(value: unchecked((long)tick))),
-        WorldRuleFactKind.Population => Finite(value: FixedQ4816.FromInteger(value: m_population.ActiveCount())),
-        WorldRuleFactKind.RegionOccupancy => Finite(value: FixedQ4816.FromInteger(value: m_events.OccupantCount(placementId: operand.Row!))),
-        // The SAME IWorldMachineMemoryPeek.TryPeek primitive WorldAddonRuntime's memory-watch family already rides,
-        // called directly instead of accumulated as a change event. No machine booted (or no peek capability) reads
-        // as 0 — never a hard refusal, since the machine can boot on a later tick.
-        WorldRuleFactKind.MachineMemory => Finite(value: FixedQ4816.FromInteger(value: (Machines.TryPeek(
-        screen: operand.Screen,
-        address: operand.Address,
-        out var raw
-    )
-        ? raw
-        : (byte)0))),
-        WorldRuleFactKind.Reduction => Finite(value: ReadReduction(
-        row: operand.Row!,
-        op: operand.Reduce,
-        tick: tick
-    )),
-        WorldRuleFactKind.ArgBody => Finite(value: FixedQ4816.FromInteger(value: ResolveArgBody(
-        row: operand.Row!,
-        op: operand.Reduce,
-        tick: tick
-    ))),
-        WorldRuleFactKind.BodyDistance => Finite(value: ReadBodyDistance(
-        bodyA: operand.BodyA!.Value,
-        bodyB: operand.BodyB!.Value,
-        tick: tick
-    )),
-        WorldRuleFactKind.LineOfSight => Finite(value: FixedQ4816.FromInteger(value: (ReadBodyLineOfSight(
-        bodyA: operand.BodyA!.Value,
-        bodyB: operand.BodyB!.Value,
-        tick: tick
-    )
-        ? 1
-        : 0))),
-        // Preserve the reserved channel's authored contract: $parked reports the population deadline's own
-        // SIMULATION-tick unit. Engine-tick countdown rows use countdownState instead; changing this unrelated
-        // channel's unit would silently retune every existing raw compareState threshold and fromState copy.
-        WorldRuleFactKind.Parked => ((ReadParkedRemaining(
-        bodyRef: operand.BodyA!.Value,
-        tick: tick
-    ) is { } remaining)
-        ? Finite(value: FixedQ4816.FromInteger(value: remaining))
-        : new WorldFact(
-            Value: FixedQ4816.Zero,
-            IsForever: true
-        )),
-        _ => Finite(value: ReadStateCell(
-        row: operand.Row!,
-        key: operand.Key!,
-        tick: tick
-    )),
-    };
-    // The $argmax:/$argmin: extremum — a thin delegation to WorldStateReader.ArgExtremum, the SAME per-key read seam
+    // The compiled-handle sibling of ReadStateCell — every per-tick reader that already carries a StateHandle
+    // (StateHandle on a CompiledWorldOperand, or Handle on a CompiledCellRef/CompiledBodyRef) reads through here
+    // instead of a row-name scan. Never called with an invalid handle: see WorldStateReader.TryReadHandle's remarks.
+    private FixedQ4816 ReadStateCellByHandle(StateHandle handle, string key, ulong tick) {
+        if (
+            !WorldStateReader.TryReadHandle(
+            definition: m_definition,
+            catalog: RuleReadCatalog,
+            handle: handle,
+            key: key,
+            tick: tick,
+            row: out var declared,
+            rawValue: out var rawValue,
+            text: out _
+        ) ||
+            (rawValue is not { } raw)
+        ) {
+            return FixedQ4816.Zero;
+        }
+
+        return ((declared.Kind == CellKind.Fixed)
+            ? FixedQ4816.FromRawBits(value: raw)
+            : StateReader.LiftSaturating(raw: raw)
+        );
+    }
+    // The $argmax:/$argmin: extremum — a thin delegation to WorldStateReader.ArgExtremum, the same per-key read seam
     // ReadReduction's sibling resolves each candidate cell through, filtered here to the body indices the LIVE
     // population actually holds (a cell whose key does not parse as a non-negative index is excluded inside the
     // reader itself; the row can gain a non-numeric-keyed cell after compile via an ordinary world.state.cell.set,
     // and compile-time already proved the row is keyed, not that every future key will parse). Ties resolve to the
     // LOWEST eligible index, deterministically. Returns -1 ("no body") when no cell is eligible.
-    private int ResolveArgBody(string row, WorldStateReduceOp op, ulong tick) {
+    private int ResolveArgBody(StateHandle handle, StateReduceOp op, ulong tick, StateHandle filterHandle = default, bool hasFilter = false) {
         var winner = WorldStateReader.ArgExtremum(
+            catalog: RuleReadCatalog,
             definition: m_definition,
-            rowName: row,
+            handle: handle,
             op: op,
             tick: tick,
-            isCandidateIndex: (index => (index < m_population.Capacity))
+            state: (Server: this, Capacity: m_population.Capacity, HasFilter: hasFilter, FilterHandle: filterHandle, Tick: tick),
+            isCandidateIndex: static (index, state) =>
+                (index < state.Capacity) &&
+                (state.Server.Body(index: index) is not null) &&
+                (!state.HasFilter || (state.Server.ReadStateCellByHandle(
+                    handle: state.FilterHandle,
+                    key: IndexKeyCache.Get(index: index),
+                    tick: state.Tick
+                ) != FixedQ4816.Zero))
         );
 
         return ((winner is null)
@@ -340,50 +324,130 @@ public sealed partial class WorldServer {
     }
     // Resolves ONE body reference to a live 0-based index (or -1 for "no body") — a literal index passes through
     // unchanged (compile time already bounded it against the document's declared capacity), an argmax/argmin
-    // resolves through the SAME ResolveArgBody walk the standalone $argmax:/$argmin: channel uses.
+    // resolves through the same ResolveArgBody walk the standalone $argmax:/$argmin: channel uses.
+    // A '$cell:' key indirection: the cell's integer value spelled as a key; an absent cell reads 0 like any other.
+    // The integer part of a Q48.16 value — the key or index a cell's value names.
+    private static long IntegerOf(FixedQ4816 value) => (value.Value >> 16);
+
+    // The static tables the definition references, in tables-row order; a validated document's rows are proven to
+    // load, so a failure here is an invariant violation, never a reachable case.
+    private static CompiledTable[] CompileTables(WorldDefinition definition) {
+        var rows = (definition.Tables ?? []);
+        var compiled = new CompiledTable[rows.Count];
+        for (var index = 0; index < compiled.Length; index++) {
+            if (!WorldTables.TryCompile(row: rows[index], table: out var table, error: out var error)) {
+                throw new InvalidOperationException(message: $"tables[{rows[index].Name}]: {error} (a validated document must still resolve at construction)");
+            }
+            compiled[index] = table!;
+        }
+        return compiled;
+    }
+    // A literal key was proven present at compile; a dynamic key reads the indirection cell's integer (or the bound
+    // $each key) and a key the table does not carry reads as a forever fact.
+    // Set by a table read whose dynamic key is absent; the enclosing gate evaluation or expression clears it and
+    // fails, so a missing entry is a reported refusal rather than a value.
+    private bool m_tableKeyMissing;
+    /// <summary>Describes every static table the definition references: name, kind, entry count.</summary>
+    public string DescribeTables() {
+        if (m_tables.Length == 0) {
+            return "[world.tables: none]";
+        }
+        return $"[world.tables: {string.Join(separator: " | ", values: m_tables.Select(selector: static table => $"{table.Name} kind={StateSpelling.Kind(kind: table.Kind)} entries={table.Count}{((table.ColumnNames.Count > 0) ? $" columns=[{string.Join(separator: ",", values: table.ColumnNames)}]" : string.Empty)}"))}]";
+    }
+    // Canonical "a_b" pair keys (underscore, not colon: CellName reserves ':'), cached per distinct DIRECTED
+    // pair once minted so a steady-state rule scan allocates nothing: (a, b) and (b, a) name different cells (an
+    // observer's impression of a subject is not the reverse), and the domain (population capacity squared) is too
+    // large to precompute the way IndexKeyCache's single-index table is, so this grows lazily instead — the
+    // first read of a never-before-seen pair mints its key once, and every later read of that same directed pair is
+    // a dictionary hit.
+    private readonly Dictionary<long, string> m_pairKeyCache = [];
+    private string ResolvePairKey(int a, int b) {
+        var packed = ((((long)a) << 32) | (uint)b);
+
+        if (!m_pairKeyCache.TryGetValue(key: packed, value: out var pairKey)) {
+            pairKey = $"{a}_{b}";
+            m_pairKeyCache[packed] = pairKey;
+        }
+
+        return pairKey;
+    }
+    // The nearest active body to 'from' (itself excluded) whose cell in the keyed tag row reads nonzero, or -1.
+    private int ResolveNearestBody(CompiledBodyRef from, StateHandle tagRowHandle, ulong tick) {
+        var origin = Body(index: ResolveBodyRef(
+            bodyRef: from,
+            tick: tick
+        ));
+
+        if (origin is null) {
+            return -1;
+        }
+
+        var originIndex = ResolveBodyRef(
+            bodyRef: from,
+            tick: tick
+        );
+        var best = -1;
+        var bestDistance = FixedQ4816.Zero;
+
+        for (var index = 0; (index < m_population.Capacity); index++) {
+            if (
+                (index == originIndex) ||
+                (Body(index: index) is not { } candidate) ||
+                (ReadStateCellByHandle(
+                handle: tagRowHandle,
+                key: IndexKeyCache.Get(index: index),
+                tick: tick
+            ) == FixedQ4816.Zero)
+            ) {
+                continue;
+            }
+
+            var distance = (candidate.FixedPosition - origin.FixedPosition).Length;
+
+            if (
+                (best < 0) ||
+                (distance < bestDistance)
+            ) {
+                best = index;
+                bestDistance = distance;
+            }
+        }
+
+        return best;
+    }
     private int ResolveBodyRef(CompiledBodyRef bodyRef, ulong tick) => (bodyRef.Kind switch {
         CompiledBodyRefKind.Literal => bodyRef.Index,
+        CompiledBodyRefKind.Binding => m_evaluator.BoundIndex(key: ((BoundKey)bodyRef.Index)),
+        CompiledBodyRefKind.Cell => (((IntegerOf(value: ReadStateCellByHandle(
+        handle: bodyRef.Handle,
+        key: bodyRef.Key!,
+        tick: tick
+    )) is var cellIndex) && (cellIndex >= 0) && (cellIndex < m_population.Capacity))
+        ? ((int)cellIndex)
+        : -1),
+        CompiledBodyRefKind.Placement => ((bodyRef.PlacementOrdinals is { } ordinals)
+        // 'placement:$each' — position-indexed, never the string key: an out-of-range position (outside a
+        // forEach evaluation, or a stale compile against a shorter row) resolves no body rather than reading
+        // ordinal 0 by accident.
+        ? (((uint)m_evaluator.BoundEachPosition < (uint)ordinals.Count)
+            ? m_population.BodyForPlacementOrdinal(ordinal: ordinals[m_evaluator.BoundEachPosition])
+            : -1)
+        // 'placement:<id>' — a fixed ordinal, resolved once at compile time.
+        : m_population.BodyForPlacementOrdinal(ordinal: bodyRef.Index)),
         _ => ResolveArgBody(
-        row: bodyRef.Row!,
+        handle: bodyRef.Handle,
         op: ((bodyRef.Kind == CompiledBodyRefKind.ArgMax)
-        ? WorldStateReduceOp.Max
-        : WorldStateReduceOp.Min),
+        ? StateReduceOp.Max
+        : StateReduceOp.Min),
         tick: tick
     ),
     });
-    // The item/currency fact vocabulary's cell key for a market participant. A seat's index is its own stable
-    // identity (generation is always 0), so its key is the plain 0-based entity index — the same addressing
-    // WorldRuleFacts.ArgMaxPrefix/ArgMinPrefix already read off an unkeyed row. A peer's index is not stable on its
-    // own: WorldPopulationLimits recycles a vacated population slot for a later, unrelated connection, and
-    // WorldGrants/the ownership escrow substrate both key a peer's real authority on the full (index, generation)
-    // pair (WorldPrincipal's own equality) — so a market cell keys the same pair, or a later occupant of the same
-    // slot would silently inherit the departed peer's balance/items/listing proceeds. The compound key never
-    // collides with a seat's plain-integer key (it always carries a reserved '_' the kernel would otherwise refuse
-    // in an authored key) and reads as a non-candidate to ArgExtremum's int.TryParse scan, exactly like any other
-    // non-numeric key already does. Only a real player (seat or peer) may hold a market fact; console/world/addon/
-    // document/group principals refuse here rather than minting a cell no player could ever read back.
-    private static bool TryPlayerCellKey(WorldPrincipal principal, out string key) {
-        switch (principal.Kind) {
-            case PrincipalKind.Seat:
-                key = principal.Index.ToString(provider: CultureInfo.InvariantCulture);
-
-                return true;
-            case PrincipalKind.Peer:
-                key = $"{principal.Index.ToString(provider: CultureInfo.InvariantCulture)}_{principal.Generation.ToString(provider: CultureInfo.InvariantCulture)}";
-
-                return true;
-            default:
-                key = string.Empty;
-
-                return false;
-        }
-    }
     // The (row, key) PAIR rule at the mutation boundary: a null key means the row's SLOT cell, and a row that is
     // positively keyed (WorldStateRow.IsKeyed) has no single cell for a null key to mean — refused by name rather
     // than silently writing cells[0].
-    private static bool TryResolveTargetKey(WorldStateRow row, string? key, out WorldCellName resolved, out string reason) {
+    private static bool TryResolveTargetKey(WorldStateRow row, string? key, out CellName resolved, out string reason) {
         if (key is not null) {
-            if (!WorldCellName.TryParse(
+            if (!CellName.TryParse(
                 candidate: key,
                 name: out resolved,
                 reason: out var keyReason
@@ -411,9 +475,9 @@ public sealed partial class WorldServer {
         return true;
     }
 
-    // ContainsKey/ApplyEviction moved to Puck.World.Schema's WorldStateCellWriter (public, cross-project)
+    // ContainsKey/ApplyEviction moved to Puck.World.Schema's StateCellWriter (public, cross-project)
     // so an owned-identity document write — which has no ordered mutation domain of its own — runs the IDENTICAL
-    // pure composition rather than a second reading of it. See WorldStateCellWriter's own remarks.
+    // pure composition rather than a second reading of it. See StateCellWriter's own remarks.
 
     /// <summary>Composes the authoritative answer to a read-back query.</summary>
     /// <param name="query">The read-back query.</param>
@@ -422,33 +486,33 @@ public sealed partial class WorldServer {
         ArgumentNullException.ThrowIfNull(argument: query);
 
         return query switch {
-            WorldQuery.PlayerWhere where when (Body(index: (where.Index - 1)) is { } body) => new QueryAnswer(
+            WorldQuery.PlayerWhere where when (Body(index: where.Index) is { } body) => new QueryAnswer(
             Text: body.DescribeWhere(index: where.Index),
             Payload: (Source: body.Source, Pose: body.DescribePose())
         ),
             WorldQuery.PlayerWhere where => new QueryAnswer(
-            Text: $"[player.where: player {where.Index} is not an active population entry — see world.population]",
+            Text: $"[body.where: body:{where.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
-            WorldQuery.PlayerChannels channels when (Body(index: (channels.Index - 1)) is { } body) => new QueryAnswer(Text: DescribeChannels(
-            index: channels.Index,
-            bodyIndex: (channels.Index - 1),
+            WorldQuery.PlayerChannels channels when (Body(index: channels.Index) is { } body) => new QueryAnswer(Text: DescribeChannels(
+            bodyIndex: channels.Index,
             body: body
         )),
             WorldQuery.PlayerChannels channels => new QueryAnswer(
-            Text: $"[player.channels: player {channels.Index} is not an active population entry — see world.population]",
+            Text: $"[body.channels: body:{channels.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
-            WorldQuery.PlayerState state when (Body(index: (state.Index - 1)) is { } body) => new QueryAnswer(Text: $"[player.state: p{state.Index} identity={(body.Profile?.Id ?? "none")} {body.DescribeActionState()} outputs={DescribeDurableOutputs(entityIndex: (state.Index - 1))} writeback={DescribeDocumentReceipt(ownerId: body.Profile?.Id)}]"),
+            WorldQuery.PlayerState state when (Body(index: state.Index) is { } body) => new QueryAnswer(Text: $"[body.state: body:{state.Index} identity={(body.Profile?.Id ?? "none")} {body.DescribeActionState()} outputs={DescribeDurableOutputs(entityIndex: state.Index)} writeback={DescribeDocumentReceipt(ownerId: body.Profile?.Id)}]"),
             WorldQuery.PlayerState state => new QueryAnswer(
-            Text: $"[player.state: player {state.Index} is not an active population entry — see world.population]",
+            Text: $"[body.state: body:{state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
+            WorldQuery.StateObservations observation => AnswerStateObservations(null, observation.Row),
             WorldQuery.InputHolds => new QueryAnswer(Text: m_inputHold.Describe()),
             WorldQuery.Rules => new QueryAnswer(Text: DescribeRules()),
-            WorldQuery.PlayerTargets targets when (Body(index: (targets.Index - 1)) is not null) => new QueryAnswer(Text: m_population.DescribeTargets(bodyIndex: (targets.Index - 1))),
+            WorldQuery.PlayerTargets targets when (Body(index: targets.Index) is not null) => new QueryAnswer(Text: m_population.DescribeTargets(bodyIndex: targets.Index)),
             WorldQuery.PlayerTargets targets => new QueryAnswer(
-            Text: $"[player.targets: player {targets.Index} is not an active population entry — see world.population]",
+            Text: $"[body.targets: body:{targets.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
             WorldQuery.Contacts contacts when (Body(index: (contacts.Index - 1)) is { } body) => new QueryAnswer(Text: DescribeContacts(
@@ -476,17 +540,13 @@ public sealed partial class WorldServer {
             Text: $"[music.state: player {state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
-            WorldQuery.JudgeState state when (Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: DescribeJudgeState()),
-            WorldQuery.JudgeState state => new QueryAnswer(
-            Text: $"[judge.state: player {state.Index} is not an active population entry — see world.population]",
+            WorldQuery.InstrumentState state when (Body(index: (state.Index - 1)) is not null) => new QueryAnswer(Text: DescribeInstrumentState(seatSlot: (state.Index - 1))),
+            WorldQuery.InstrumentState state => new QueryAnswer(
+            Text: $"[instrument.state: player {state.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
             _ => new QueryAnswer(Text: string.Empty),
         };
     }
 
-    // One live fact off a rule operand: a fixed-point value, or POSITIVE INFINITY (IsForever) for the one channel
-    // whose magnitude can exceed every number — $parked: on a forever-parked body. Infinity participates in
-    // comparisons through the ActionStateComparisons overload and is never encoded as a numeric stand-in.
-    private readonly record struct WorldFact(FixedQ4816 Value, bool IsForever);
 }

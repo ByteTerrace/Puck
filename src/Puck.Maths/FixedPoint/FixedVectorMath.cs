@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.Intrinsics.X86;
 using System.Numerics;
 
 namespace Puck.Maths;
@@ -20,20 +21,49 @@ internal static class FixedVectorMath {
     // still fit UInt128 (at most 2^126) while preserving roughly 46 bits of source direction.
     internal static int DirectionShift(ulong rawMagnitude) =>
         (DirectionLeadingBit - (63 - BitOperations.LeadingZeroCount(value: rawMagnitude)));
-    internal static long DivideBySquaredSum(long value, UInt128 squaredSum) {
+    internal static long DivideBySquaredSum(long value, UInt128 squaredSum) =>
+        DivideRounded(
+            denominator: squaredSum,
+            shift: (FixedQ4816.FractionBitCount * 2),
+            value: value
+        );
+    /// <summary>Returns <c>round(value · 2^shift / denominator)</c>, ties to even, on the magnitude with the sign
+    /// reapplied. The 128-by-64 hardware lane serves whenever the denominator fits a machine word and the shifted
+    /// magnitude's high word sits below it; every other case takes <see cref="UInt128"/>'s own division to the same
+    /// quotient and remainder.</summary>
+    internal static long DivideRounded(long value, UInt128 denominator, int shift) {
         var negative = (value < 0L);
         var magnitude = RawMagnitude(value: value);
-        var numerator = (((UInt128)magnitude) << (FixedQ4816.FractionBitCount * 2));
-        var quotient = (numerator / squaredSum);
-        var remainder = (numerator - (quotient * squaredSum));
-        var distanceToNext = (squaredSum - remainder);
+        UInt128 quotient;
+        UInt128 remainder;
 
         if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & UInt128.One) != UInt128.Zero))
+            X86Base.X64.IsSupported &&
+            (denominator <= ulong.MaxValue) &&
+            (shift < 64) &&
+            ((magnitude >> (64 - shift)) < ((ulong)denominator))
         ) {
-            ++quotient;
+#pragma warning disable SYSLIB5004
+            var (narrowQuotient, narrowRemainder) = X86Base.X64.DivRem(
+                divisor: ((ulong)denominator),
+                lower: (magnitude << shift),
+                upper: (magnitude >> (64 - shift))
+            );
+#pragma warning restore SYSLIB5004
+            quotient = narrowQuotient;
+            remainder = narrowRemainder;
+        } else {
+            var numerator = (((UInt128)magnitude) << shift);
+
+            quotient = (numerator / denominator);
+            remainder = (numerator - (quotient * denominator));
         }
+
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (denominator - remainder),
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
 
         var raw = unchecked((long)((ulong)quotient));
 
@@ -176,6 +206,37 @@ internal static class FixedVectorMath {
     }
     internal static ulong RawMagnitude(long value) =>
         FusedArithmetic.RawMagnitude(value: value);
+    /// <summary>The exact separation between two raw carrier readings, independent of ordinary signed subtraction: the
+    /// true difference between two <see cref="long"/> values always fits the unsigned 64-bit carrier (its magnitude is
+    /// at most <c>2⁶⁴ − 1</c>, reached exactly at the opposing carrier extremes), so this never wraps regardless of how
+    /// far apart the two readings are — unlike <c>target − current</c> in the signed carrier, which does.</summary>
+    /// <param name="currentRaw">The current raw.</param>
+    /// <param name="targetRaw">The target raw.</param>
+    /// <returns>The non-negative separation, and whether <paramref name="targetRaw"/> is the greater of the two.</returns>
+    internal static (ulong Separation, bool TargetIsGreater) RawSeparation(long currentRaw, long targetRaw) {
+        var targetIsGreater = (targetRaw > currentRaw);
+
+        return (
+            Separation: (targetIsGreater
+                ? unchecked((((ulong)targetRaw) - ((ulong)currentRaw)))
+                : unchecked((((ulong)currentRaw) - ((ulong)targetRaw)))),
+            TargetIsGreater: targetIsGreater
+        );
+    }
+    /// <summary>Reconstructs a signed raw from a non-negative magnitude and a sign — the same two's-complement
+    /// identity <see cref="ScaleRaw"/> and its siblings use: a magnitude of exactly <c>2⁶³</c> negated reproduces
+    /// <see cref="long.MinValue"/> unchanged, so the full magnitude range <c>[0, 2⁶³]</c> round-trips.</summary>
+    /// <param name="magnitude">The non-negative magnitude, at most <c>2⁶³</c>.</param>
+    /// <param name="negative">Whether the result is negative.</param>
+    /// <returns>The signed raw.</returns>
+    internal static long SignedFromMagnitude(ulong magnitude, bool negative) {
+        var raw = unchecked((long)magnitude);
+
+        return (negative
+            ? unchecked(-raw)
+            : raw
+        );
+    }
     /// <summary>Returns the nearest raw Q16 square root of an exact raw Q32 sum; no integral halfway case exists, so no tie rule is needed.</summary>
     internal static FixedQ4816 RootOfSquaredSum(ulong squaredSum) {
         var root = squaredSum.SquareRoot();
@@ -441,27 +502,12 @@ internal static class FixedVectorMath {
 
         return ((ulong)root);
     }
-    private static long NormalizeByMagnitude(long value, ulong rawMagnitude) {
-        var negative = (value < 0L);
-        var numerator = (((UInt128)RawMagnitude(value: value)) << FixedQ4816.FractionBitCount);
-        var quotient = (numerator / rawMagnitude);
-        var remainder = ((ulong)(numerator - (quotient * rawMagnitude)));
-        var distanceToNext = (rawMagnitude - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & UInt128.One) != UInt128.Zero))
-        ) {
-            ++quotient;
-        }
-
-        var raw = ((long)((ulong)quotient));
-
-        return (negative
-            ? -raw
-            : raw
+    private static long NormalizeByMagnitude(long value, ulong rawMagnitude) =>
+        DivideRounded(
+            denominator: ((UInt128)rawMagnitude),
+            shift: FixedQ4816.FractionBitCount,
+            value: value
         );
-    }
     // The normalization denominator is a ulong; the computation is otherwise the squared-sum division exactly.
     private static long NormalizeComponent(long value, ulong denominator) =>
         DivideBySquaredSum(
@@ -507,14 +553,11 @@ internal static class FixedVectorMath {
             remainder = ((ulong)(partial - (((UInt128)quotient) * denominator)));
         }
 
-        var distanceToNext = (denominator - remainder);
-
-        if (
-            (remainder > distanceToNext) ||
-            ((remainder == distanceToNext) && ((quotient & 1UL) != 0UL))
-        ) {
-            ++quotient;
-        }
+        quotient = FixedPointRounding.RoundToNearestTiesToEven(
+            distanceToNext: (denominator - remainder),
+            distanceToTruncated: remainder,
+            truncated: quotient
+        );
 
         var raw = unchecked((long)quotient);
 

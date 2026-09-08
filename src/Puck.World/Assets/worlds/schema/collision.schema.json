@@ -12,7 +12,8 @@
         "enum": [
           "SmoothUnionContact",
           "GradientDerivedUp"
-        ]
+        ],
+        "title": "WorldContactRequirement"
       }
     },
     "contactSkin": {
@@ -30,6 +31,115 @@
     "gradientProbe": {
       "description": "The finite-difference step field contact samples the surface normal with, in world units; 0 takes the evaluator\u0027s own default. Meaningful only when a requirement selects field contact.",
       "type": "number"
+    },
+    "defaultHold": {
+      "description": "Whether a body\u0027s surface hold may take any solid surface by default. A placement\u0027s own WorldPlacementGrip overrides this for the colliders it compiles; the field lattice\u0027s own terrain, which no placement row owns, has only this. false (the default) holds nothing.",
+      "type": "boolean",
+      "default": false
+    },
+    "events": {
+      "description": "The bounded body-overlap event policy. ABSENT takes Default; author maxPairsPerBody: 0 to disable body-pair events while retaining ordinary world contact.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "candidateBudget": {
+          "description": "The most sweep-and-prune candidates inspected for one body while discovering new overlaps. Must be at least MaxPairsPerBody.",
+          "type": "integer",
+          "default": 32
+        },
+        "maxPairsPerBody": {
+          "description": "The maximum retained overlap-event degree of one body; zero disables collision begin/end sensing.",
+          "type": "integer",
+          "default": 8
+        },
+        "beginBudget": {
+          "description": "The maximum collision-begin relationships admitted in one authority tick. Existing relationships and their ends are not delayed.",
+          "type": "integer",
+          "default": 1024
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldCollisionEvents"
+    },
+    "bodyContacts": {
+      "description": "The bounded dynamic-body depenetration policy. ABSENT takes Default. This is independent of overlap events.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "candidateBudget": {
+          "description": "The most sweep candidates inspected for one solid body. Must be at least MaxPairsPerBody.",
+          "type": "integer",
+          "default": 16
+        },
+        "maxPairsPerBody": {
+          "description": "The most physical pair corrections incident to one body in a tick.",
+          "type": "integer",
+          "default": 8
+        },
+        "rigidSubstepCeiling": {
+          "description": "The most substeps one rigid body\u0027s static-contact integration may take in a tick \u2014 the derived-count\u0027s own ceiling: the actual count is derived per body per tick from its speed and collider size (a fast ball takes more, a resting one takes one), never authored directly, but the ceiling bounds the worst-case per-tick cost and is echoed in world.budget.",
+          "type": "integer",
+          "default": 8
+        },
+        "rigidRestLinearSpeed": {
+          "description": "Below this linear speed (world units/second) a grounded rigid body counts toward the resting hold window (RigidRestHoldSeconds). Non-negative; the default reproduces the engine\u0027s original hard-coded threshold.",
+          "type": "number",
+          "default": 0.05
+        },
+        "rigidRestAngularSpeed": {
+          "description": "Below this angular speed (radians/second) a grounded rigid body counts toward the resting hold window, on the same terms as RigidRestLinearSpeed. Non-negative.",
+          "type": "number",
+          "default": 0.1
+        },
+        "rigidRestHoldSeconds": {
+          "description": "How long a rigid body must stay under both rest thresholds while grounded before the resting latch actually closes \u2014 long enough that crossing a contact skin\u0027s noise band for one tick never freezes a body mid-roll. Non-negative.",
+          "type": "number",
+          "default": 0.25
+        },
+        "rigidSubstepTravelFraction": {
+          "description": "The fraction of a rigid body\u0027s own bounding radius one continuous- collision substep may travel \u2014 the derived substep COUNT stays derived (never authored directly), but how conservative that derivation is IS a document field: a smaller fraction takes more, cheaper substeps for the same speed; a larger one risks a fast body tunneling through a thin wall before RigidSubstepCeiling forces it to stop deriving more. Strictly positive.",
+          "type": "number",
+          "default": 0.5
+        },
+        "rigidSubstepMinimumTravel": {
+          "description": "The floor under one continuous-collision substep\u0027s travel bound (world units), independent of RigidSubstepTravelFraction \u2014 guards a body whose collider is small enough that the fraction alone would derive a near-zero bound. Strictly positive.",
+          "type": "number",
+          "default": 0.001
+        },
+        "rigidPairRestitutionSpeed": {
+          "description": "Below this closing speed (world units/second), a rigid-vs-rigid contact restitutes at zero rather than the authored coefficient \u2014 a pure momentum-conserving separation. A rigid pair carries no rising-edge latch (unlike a body-vs-static-world contact), so without this floor two touching bodies at rest would restitute a hair apart every tick they are found overlapping, separating, and falling back together \u2014 a stable micro-bounce that never reaches either rest threshold. Non-negative; small enough that a real strike is unaffected.",
+          "type": "number",
+          "default": 0.05
+        },
+        "rigidManifoldIterations": {
+          "description": "The sequential-impulse pass count a box or capsule rigid body\u0027s own ground support manifold (SupportManifold \u2014 up to four box corners or two capsule cap points) resolves over each substep, distributing the normal impulse across every manifold point rather than one. Strictly positive.",
+          "type": "integer",
+          "default": 4
+        },
+        "rigidPairIterationCeiling": {
+          "description": "The most EXTRA full sweeps WorldPopulation.ResolveDynamicContacts runs past the first \u2014 fresh broadphase and narrowphase, over the same bodies\u0027 now-current positions \u2014 so an impulse crosses more than one pair-hop within the same tick (a rack break, a falling domino line). The count actually run is derived DOWN from this ceiling by RigidPairIterationBudget divided by the first pass\u0027s own resolved-pair count, so a lightly loaded tick gets every authored pass and a crowded one stays bounded. Strictly positive.",
+          "type": "integer",
+          "default": 4
+        },
+        "rigidPairIterationBudget": {
+          "description": "The total pair-pass work one tick\u0027s extra rigid-pair sweeps may spend, before RigidPairIterationCeiling caps it \u2014 see that field. Strictly positive.",
+          "type": "integer",
+          "default": 64
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldBodyContactPolicy"
+    },
+    "gridCellSize": {
+      "description": "The world-space cell edge of the distance grid the solid field bakes its program into, so a query far from every surface reads a corner bound instead of marching the program; 0 (the default) bakes no grid and every query reads the exact program. A smaller cell tightens the bound and enlarges the grid. Meaningful only when a requirement selects field contact.",
+      "type": "number",
+      "default": 0
     }
   },
   "required": [
@@ -40,5 +150,6 @@
     "gradientProbe"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldCollision"
 }

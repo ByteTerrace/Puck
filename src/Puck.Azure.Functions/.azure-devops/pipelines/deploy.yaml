@@ -1,0 +1,85 @@
+parameters:
+  - name: "agentPoolName"
+    default: "bytrcmdpp000"
+    displayName: "Agent Pool Name"
+    type: "string"
+  - name: "appConfigurationEndpoint"
+    default: "https://bytrcappcsp000.azconfig.io"
+    displayName: "Application Configuration Endpoint"
+    type: "string"
+  - name: "functionAppName"
+    default: "bytrcfuncp000"
+    displayName: "Function App Name"
+    type: "string"
+  - name: "serviceConnectionName"
+    default: "byteterrace-mpn | byteterrace"
+    displayName: "Service Connection Name"
+    type: "string"
+
+resources:
+  pipelines:
+    - pipeline: "buildArtifact"
+      source: "Build Functions"
+      project: "Koholint"
+      trigger: true
+
+trigger: none
+
+jobs:
+  - deployment: "main"
+    displayName: "main"
+    environment: "production"
+    pool:
+      name: ${{ parameters.agentPoolName }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            # Addresses the Version item by KEY. The previous FileTransform substitution named it by array position
+            # (items.18.value), which silently retargeted the moment a key was inserted above it -- stamping the build
+            # number onto PublicStorage:DefaultUploadOptions:Tags:CanRead and never stamping Version at all. A missing
+            # Version now fails the deployment instead of corrupting whichever item happens to sit at that index.
+            - task: PowerShell@2
+              displayName: "stamp version"
+              enabled: true
+              inputs:
+                pwsh: true
+                script: |
+                  $ErrorActionPreference = "Stop"
+
+                  $path = "$(Pipeline.Workspace)/buildArtifact/drop/configuration.json"
+                  $document = (Get-Content -Path $path -Raw | ConvertFrom-Json)
+                  $version = ($document.items | Where-Object { $_.key -eq "Version" })
+
+                  if ($null -eq $version) {
+                      throw "configuration.json declares no 'Version' item to stamp."
+                  }
+                  if ($version -is [array]) {
+                      throw "configuration.json declares $($version.Count) 'Version' items; expected exactly one."
+                  }
+
+                  $version.value = "$(Build.BuildNumber)"
+
+                  ($document | ConvertTo-Json -Depth 16) | Set-Content -Path $path -Encoding utf8NoBOM
+                targetType: "inline"
+            - task: AzureAppConfigurationImport@10
+              displayName: "deploy config"
+              enabled: true
+              inputs:
+                appConfigurationEndpoint: ${{ parameters.appConfigurationEndpoint }}
+                azureSubscription: ${{ parameters.serviceConnectionName }}
+                configurationFile: "$(Pipeline.Workspace)/buildArtifact/drop/configuration.json"
+                fileContentProfile: "appconfig/kvset"
+                fileFormat: "properties"
+                importMode: "All"
+                strict: true
+                useFilePathExtension: true
+            - task: AzureFunctionApp@2
+              displayName: "deploy API"
+              enabled: true
+              inputs:
+                appName: ${{ parameters.functionAppName }}
+                appType: "functionAppLinux"
+                azureSubscription: ${{ parameters.serviceConnectionName }}
+                isFlexConsumption: true
+                package: "$(Pipeline.Workspace)/buildArtifact/drop/dist.zip"

@@ -85,7 +85,9 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     // A state.<row> or state.<row>.<key> binding's live value, resolved through WorldStateReader — the ONE (row, key)
     // read the rule gates, the rule effects and world.state's own read-back all share, so none of them can disagree
     // about which cell a pair names. cellKey null means the plain state.<row> form (the row's own SLOT cell); cellKey
-    // non-null means the state.<row>.<key> form (any named cell in ANY row shape).
+    // non-null means the state.<row>.<key> form (any named cell in ANY row shape). `target` selects TryRead (the
+    // stored truth — a plain `.$target` token) over TryReadEased (the live second-order-eased value — the ordinary,
+    // no-suffix token) — the same distinction HudBindingVocabulary parses (HudBinding.Target).
     //
     // The TICK passed is m_client.Tick — the LAST DELIVERED SNAPSHOT's tick, which is snapshot time, not the server's
     // completed tick. It is what this side honestly knows: the client never runs the simulation, and a value the HUD
@@ -100,20 +102,33 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
     // carrying no declared range draws an EMPTY gauge (fraction 0) — the same "an unbound gauge draws empty"
     // precedent every other gauge follows; a bool/text row carries no range at all, so its gauge fraction is always
     // 0.
-    private void ResolveState(string name, string? cellKey, out float fraction, out string text) {
+    private void ResolveState(string name, string? cellKey, bool target, out float fraction, out string text) {
         fraction = 0f;
         text = string.Empty;
 
+        var resolved = (target
+            ? WorldStateReader.TryRead(
+                definition: m_client.Definition,
+                key: cellKey,
+                rawValue: out var rawValue,
+                row: out var row,
+                rowName: name,
+                text: out var cellText,
+                tick: m_client.Tick
+            )
+            : WorldStateReader.TryReadEased(
+                definition: m_client.Definition,
+                key: cellKey,
+                rawValue: out rawValue,
+                row: out row,
+                rowName: name,
+                text: out cellText,
+                tick: m_client.Tick
+            ));
+
         if (
-            !WorldStateReader.TryRead(
-            definition: m_client.Definition,
-            rowName: name,
-            key: cellKey,
-            tick: m_client.Tick,
-            row: out var row,
-            rawValue: out var rawValue,
-            text: out var cellText
-        ) ||
+            !resolved ||
+            (row is null) ||
             (rawValue is not { } raw)
         ) {
             return;
@@ -221,6 +236,7 @@ internal sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonit
                 ResolveState(
                     name: parsed.StateName!,
                     cellKey: parsed.StateCellKey,
+                    target: parsed.Target,
                     fraction: out fraction,
                     text: out text
                 );

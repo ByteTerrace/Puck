@@ -213,7 +213,7 @@ public sealed class WorldSessionResolver {
         } else {
             // scopeKey is always exactly "user:<id>" or "group:<id>" here (TryResolveScopeKey's other two cases) —
             // decomposed rather than embedded whole because its own ':' is a character no instance name may ever
-            // carry (WorldSafeName's reserved set); the id half is WorldSafeName-sourced, so it is always
+            // carry (SafeName's reserved set); the id half is SafeName-sourced, so it is always
             // colon-free, which is what makes finding the one separating colon unambiguous.
             var colon = scopeKey.IndexOf(value: ':');
             var scopeKind = ((colon < 0)
@@ -237,8 +237,8 @@ public sealed class WorldSessionResolver {
     // single '~' (never ambiguous with the length digits themselves — a digit and '~' can never be confused), then
     // exactly that many characters verbatim. No character this composes from is ever escaped or folded, which is
     // what makes the WHOLE composed name injective in the segment SEQUENCE regardless of what any one segment
-    // contains — the classic netstring argument. Every value this wraps (a WorldSafeName's own Value, the fixed
-    // "user"/"group" literal, or decimal generation digits) is already free of every character WorldSafeName's own
+    // contains — the classic netstring argument. Every value this wraps (a SafeName's own Value, the fixed
+    // "user"/"group" literal, or decimal generation digits) is already free of every character SafeName's own
     // reserved set forbids, so wrapping never introduces one either.
     private static string ScopedSegment(string value) => $"{value.Length}~{value}";
     // Group scope: `named` binds every member to ONE authored group id; `tagged` resolves each member's own UNIQUE
@@ -521,7 +521,7 @@ public sealed class WorldSessionResolver {
             return true;
         }
 
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: instanceName,
             name: out _,
             reason: out var nameReason
@@ -690,11 +690,11 @@ public sealed class WorldSessionResolver {
             durability: destination.Durability
         );
 
-        // Defensive, not load-bearing: every component MintInstanceName composed from is ALREADY WorldSafeName-typed
+        // Defensive, not load-bearing: every component MintInstanceName composed from is ALREADY SafeName-typed
         // or a fixed literal (see that method's own remarks), so this can never actually fire. Refused by name on the
         // impossible case rather than proving it can't happen — the same discipline WorldDestination's own defensive
         // re-check follows for an assumption the validator is supposed to have already enforced.
-        if (!WorldSafeName.TryParse(
+        if (!SafeName.TryParse(
             candidate: instanceName,
             name: out _,
             reason: out var nameReason

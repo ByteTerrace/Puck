@@ -19,5 +19,6 @@
     "names"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldPropertyRegistrySection"
 }

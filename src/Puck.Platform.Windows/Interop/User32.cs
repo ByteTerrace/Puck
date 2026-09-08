@@ -125,12 +125,29 @@ internal static partial class User32 {
     public static partial bool IsWindowVisible(nint windowHandle);
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static partial bool RegisterRawInputDevices(in RawInputDevice rawInputDevices, uint deviceCount, uint size);
+    public static partial bool RegisterRawInputDevices(RawInputDevice[] rawInputDevices, uint deviceCount, uint size);
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial uint GetRawInputData(nint rawInput, uint command, out RawInput data, ref uint size, uint headerSize);
+    // RIDI_DEVICENAME (see Win32NativeWindow's RidiDeviceName) reports the device interface path in CHARACTERS, not
+    // bytes — the two-call size-then-fetch pattern below is the documented usage. `data` is a raw buffer pointer
+    // (Marshal-allocated), never a managed array: the size is discovered at runtime, so no fixed-size marshaled
+    // array shape fits both calls.
+    [LibraryImport("user32.dll", EntryPoint = "GetRawInputDeviceInfoW", SetLastError = true)]
+    public static partial uint GetRawInputDeviceInfo(nint deviceHandle, uint command, nint data, ref uint size);
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial nint SetCapture(nint windowHandle);
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool ReleaseCapture();
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial nint GetKeyboardLayout(uint threadId);
+    // The output buffer is sized generously (see Win32NativeWindow's per-device text derivation) so a combining
+    // dead-key result or a surrogate pair never overflows it.
+    [LibraryImport("user32.dll", EntryPoint = "ToUnicodeEx", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    public static partial int ToUnicodeEx(uint virtualKey, uint scanCode, byte[] keyState, [Out] char[] buffer, int bufferCount, uint flags, nint keyboardLayout);
+    [LibraryImport("user32.dll")]
+    public static partial int GetSystemMetrics(int index);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ClientToScreen(nint windowHandle, ref Point point);
 }

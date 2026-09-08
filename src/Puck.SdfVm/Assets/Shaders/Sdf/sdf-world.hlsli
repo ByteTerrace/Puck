@@ -17,11 +17,21 @@ struct ViewportData {
     // x = the RENDER-SCALE numerator q (1..255; 255 = native): the view renders at worldRenderDims(rectDims, q) and
     // Stage 2 upsamples back into the full region (bilinear; q == 255 takes the exact-copy path). yz = the off-axis
     // (asymmetric) frustum's tangent-space center offset (SdfAsymmetricFrustum) — (0,0) for an ordinary symmetric
-    // camera, consumed by cameraRayDirection below. w spare.
+    // camera, consumed by cameraRayDirection below. w = the frame's FAR DISTANCE (SdfFrame.FarDistance, read through
+    // worldFarDistance below).
     // KEEP IN SYNC with SdfWorldEngine.PackViewports (the 96-byte row) and BuildCompositePush's scaleQPacked.
     float4 renderScale;
 };
 [[vk::binding(2, 0)]] StructuredBuffer<ViewportData> viewports : register(t1);
+
+// The frame's FAR DISTANCE — the depth at which every camera march ends: the fine march's far exit (renderView), the
+// beam's cone proofs (entry, the gap search, the F1 far bound) and the "nothing proven" sentinel every tile plane
+// carries, and the depth/overshoot debug ramps. It is WORLD DATA (render.farDistance → SdfFrame.FarDistance, packed
+// per view row by SdfWorldEngine.PackViewports — the one buffer every kernel that marches already binds), never a
+// shader constant: the host refuses a non-finite or non-positive value before packing, so no kernel guards it.
+float worldFarDistance(ViewportData view) {
+    return view.renderScale.w;
+}
 
 // The per-view REDUCED render extent, derived from the view's OUTPUT extent and the quantized scale numerator q by
 // INTEGER arithmetic — max(1, (outDim * q + 127) / 255) — so Stage 1 (render), the beam/instance-cull tile coverage,
@@ -67,8 +77,8 @@ uint worldInstanceMaskBase(uint tileIndex) {
 // march-start lower bound (the classic beam output; sdf-cull-args + the compositor read ONLY this plane, so their
 // worldTileIndex stride is unchanged). Planes 1/2 = the proven-empty gap [firstExit, secondEntry] a tile's cone
 // cleared between two occupied bands: sdf-beam writes them, sdf-world-views teleports across them. Plane 3 = the F1
-// FAR BOUND: the depth beyond which the tile's cone provably cannot produce ANY footprint-accepted hit through
-// MaxDistance (sdf-beam writes it, sdf-world-views exits the fine march at traveled >= farBound). Each plane is one
+// FAR BOUND: the depth beyond which the tile's cone provably cannot produce ANY footprint-accepted hit through the far
+// distance (sdf-beam writes it, sdf-world-views exits the fine march at traveled >= farBound). Each plane is one
 // entry per (viewport, tile) THIS frame — the same span worldTileIndex covers — so plane k of tile T sits at
 // (k * stride + tileIndex). KEEP IN SYNC with SdfWorldEngine.TilePlaneCount.
 static const uint WorldTilePlaneCount = 4u;
@@ -103,6 +113,9 @@ struct ScreenSurfaceData {
     float4 origin;  // xyz = world-space front-face center, w = unused (pad)
 };
 [[vk::binding(10, 0)]] StructuredBuffer<ScreenSurfaceData> screenSurfaces : register(t4);
+// The screenSurfaces[] / sdfDecalCells[] / screenSourceN entry count — the width every screen index is bounded
+// against before it indexes one. KEEP IN SYNC with SdfProgramBuilder.MaxScreenSurfaces.
+static const uint SdfScreenSurfaceCount = 32u;
 // The screen source images (nearest-filtered, so emulator/child pixels stay crisp) — one per screen index (0..31),
 // THIRTY-TWO separate combined-image-sampler bindings (12..43; DXC's vk::combinedImageSampler does not support an ARRAY
 // texture, only a scalar one, so a true single Vulkan combined-image-sampler array isn't expressible in this HLSL — see
@@ -188,7 +201,7 @@ struct ScreenSurfaceData {
 // (position/orientation/extent) is the SAME screenSurfaces[i] entry above — a screen is an area emitter, so it needs
 // only its color here. KEEP IN SYNC with SdfWorldEngine's screen-light buffer packing.
 [[vk::binding(11, 0)]] StructuredBuffer<float4> sdfScreenLights : register(t38);
-static const uint SdfScreenLightEnv = 32u;
+static const uint SdfScreenLightEnv = SdfScreenSurfaceCount;
 
 // Grid-lock overlay rows (grid-locking §4a): FOUR float4 rows AFTER the env entry (env stays at 32 — load-bearing as
 // the screen-count loop bound above). KEEP IN SYNC with SdfWorldEngine.PackScreenLights + SdfFrame's Grid* fields.
@@ -207,8 +220,8 @@ static const uint SdfBenchParams = 37u;
 // reserved. A SEPARATE row from SdfBenchParams (whose four lanes are full). KEEP IN SYNC with
 // SdfWorldEngine.PackScreenLights + SdfFrame's EnableShadowProxy/UseCameraTileShadowMask/UseFastSoftShadowMarch fields.
 static const uint SdfShadowProxyParams = 38u;
-// The F1 FAR-FIELD lever row (perf plan Phase 5.1): x = disable the beam-published per-tile far bound (1 = the A/B
-// "off" side — the fine march ignores plane 3 and runs to MaxDistance exactly as pre-F1; 0 = the DEFAULT shipped
+// The F1 FAR-FIELD lever row: x = disable the beam-published per-tile far bound (1 = the A/B
+// "off" side — the fine march ignores plane 3 and runs to the far distance exactly as pre-F1; 0 = the DEFAULT shipped
 // behavior with the far bound ACTIVE, so an unset frame uploads 0 and the feature is ON); y = disable the F2 shadow
 // light-side exit (RESERVED for F2, not yet consumed); zw reserved. A SEPARATE row from SdfShadowProxyParams (whose
 // lanes carry the shadow proxy). KEEP IN SYNC with SdfWorldEngine.PackScreenLights + SdfFrame's DisableFarBound field.
@@ -435,6 +448,16 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     }
 
     uint screenIndex = (uint)(material - SDF_SCREEN_MATERIAL - 1);
+
+    // The sibling of sdf-world-rt-debug's hitMaterial guard: an out-of-bounds structured-buffer read is zeroed on
+    // Direct3D 12 by spec but only defined under robustBufferAccess on Vulkan, so the bound makes both backends agree
+    // by construction rather than by driver luck. Falling back to the material-shaded path is the same answer a zeroed
+    // entry would produce here (no decal, no bound source), and the host refuses such an id, so no valid program
+    // reaches this branch and no composed pixel moves.
+    if (screenIndex >= SdfScreenSurfaceCount) {
+        return false;
+    }
+
     ScreenSurfaceData surface = screenSurfaces[screenIndex];
     float3 local = (hitPoint - surface.origin.xyz);
     float2 uv = float2(
@@ -486,8 +509,8 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     float luminance = dot(sampled, CrtLumaWeights);
     sampled += ((CrtBloomGain * smoothstep(CrtBloomThreshold, 1.0, luminance)) * sampled);
 
-    // Fresnel glass glint when CrtGlint is non-zero: a faint rim brighten at glancing view angles. The normalize is
-    // load-bearing — the surface's right/up pair is unit but NOT guaranteed orthogonal (see SdfScreenSurface).
+    // Fresnel glass glint when CrtGlint is non-zero: a faint rim brighten at glancing view angles. The pair is
+    // orthonormal by contract (SdfScreenSurface), so the normalize only absorbs the uploaded table's float drift.
     float3 screenNormal = normalize(cross(surface.right.xyz, surface.up.xyz));
     float glint = pow((1.0 - saturate(dot(-rayDirection, screenNormal))), CrtGlintPower);
 
@@ -537,18 +560,20 @@ float worldSkyCloudSpinAngle() { return 0.0; }
 float worldSkyCloudCurl() { return 0.0; }
 #endif
 
-static const int MaxSteps = 160;
-static const float MaxDistance = 60.0;
+// The primary march's step budget. KEEP IN SYNC with SdfWorldEngine.PrimaryMarchSteps (the world.budget cost sheet
+// quotes it against the authored far distance). There is deliberately NO far-distance constant beside it any more:
+// the far plane is world data (render.farDistance), read per view through worldFarDistance.
+static const int MaxSteps = 128;
 static const float SurfaceEpsilon = 0.001;
 static const float SphereTraceOmega = 1.2; // Keinert over-relaxation factor (1 = plain sphere tracing; [1, 2))
-static const int ConeMarchSteps = 96;
+static const int ConeMarchSteps = 56;
 static const float ConeNear = 0.02;
 static const float ConeEpsilon = 0.002;
 // Four-bound teleport (Larsson "The Gunk"): after the beam cone finds the tile's ENTRY (the classic marchStart), it
 // keeps marching a bounded budget to detect ONE proven-empty gap between two occupied bands — [firstExit,
 // secondEntry] — that sdf-world-views teleports the fine ray across. TileGapSteps caps the extra beam cost;
 // TileGapMinStep floors the through-band advance so a near-zero cone clearance can't stall the search.
-static const int TileGapSteps = 24;
+static const int TileGapSteps = 16;
 static const float TileGapMinStep = 0.15;
 // Early-abandon for the through-band phase: a ground/wall tile whose cone never re-clears would otherwise burn all
 // TileGapSteps descending monotonically deeper into the half-space. After this many CONSECUTIVE in-band steps whose
@@ -556,14 +581,14 @@ static const float TileGapMinStep = 0.15;
 // gap — a real gap re-clears within a few magnitude-stepped steps, so it resets the streak first. Missing a gap is
 // SAFE: the teleport just does not arm, and the fine march is pixel-identical whether or not it teleports (the jump
 // lands at secondEntry <= the true re-entry). Four stalled steps keep gap-less tile cost bounded.
-static const int TileGapStallLimit = 4;
-// F1 FAR BOUND (perf plan Phase 5.1): after the gap search resolves, a bounded TAIL phase cone-marches from the
+static const int TileGapStallLimit = 3;
+// F1 FAR BOUND: after the gap search resolves, a bounded TAIL phase cone-marches from the
 // resolved t to prove the far bound — the depth past which the tile's cone cannot produce any footprint-accepted hit
-// through MaxDistance. TileFarSteps caps that extra beam cost (the tail is a latency-rich single-thread march, per the
-// beam kernel's design). Sixteen steps is enough to walk a live tile's near band + one gap + a second band into a
-// clear-to-far span; if the span is not proven within the budget the tile publishes farBound = MaxDistance (no early
-// exit — a total function).
-static const int TileFarSteps = 16;
+// through the far distance. TileFarSteps caps that extra beam cost (the tail is a latency-rich single-thread march,
+// per the beam kernel's design). Sixteen steps is enough to walk a live tile's near band + one gap + a second band
+// into a clear-to-far span; if the span is not proven within the budget the tile publishes farBound = the far distance
+// (no early exit — a total function).
+static const int TileFarSteps = 10;
 // Bán & Valasek 2023 auto-relaxed sphere tracing (EG short paper). The fine march tracks the field's along-ray slope
 // with an EMA `m` and over-relaxes adaptively — `omega = max(1, 2/(1 - m))`, so a planar (m -> 1) approach takes a big
 // step and a concave (m -> -1) one degenerates to a plain step. SlopeBeta is the paper's default;
@@ -600,7 +625,7 @@ static const float ScreenLightMinDistanceSquared = 1.0e-4;
 // The 8-bit dither quantum: +-0.5 LSB of R2 noise before the store (see sdfR2Dither).
 static const float DitherQuantum = (1.0 / 255.0);
 // debug.view.evals calibration: the ramp saturates at this many tallied field evaluations. Worst case for a single
-// lit pixel is bounded by MaxSteps (160, primary march) + ShadowSamplesPerPixel * ShadowSteps (2 * 32 = 64, the
+// lit pixel is bounded by MaxSteps (128, primary march) + ShadowSamplesPerPixel * ShadowSteps (1 * 22 = 22, the
 // area-light shadow estimator) + 3 (calcAO) + 4 (the 4-tap
 // normal fallback, worse than the 1-eval analytic default) + 1 (the coverage-AA probe) ~= 216, so 256 leaves margin
 // before saturating solid red — chosen so a typical unshadowed ambient-only hit (~30-40 evals: a short march plus
@@ -612,8 +637,8 @@ static const float EvalHeatmapCeiling = 256.0;
 // from the sample DISTRIBUTION over the sun disc, not from a per-step ratio. 48 -> 32 and 16 -> 12 because a binary
 // test terminates at the first hit and takes the exactly-sound escape exit on the light side, where the old parabola
 // had to keep marching to refine a running minimum.
-static const int ShadowSteps = 32;
-static const int FastShadowSteps = 12;
+static const int ShadowSteps = 22;
+static const int FastShadowSteps = 9;
 // The sun's ANGULAR RADIUS in radians — the half-aperture of the cone the estimator samples. tan(0.11) = 0.11045
 // reproduces the retired parabola's 1/ShadowSharpness = 1/9 = 0.1111 penumbra half-slope to within 0.7%, so the
 // change reads as "the same shadows, sampled correctly" rather than as a jolt in penumbra width. The host bakes
@@ -622,7 +647,7 @@ static const int FastShadowSteps = 12;
 static const float SunAngularRadius = 0.11;
 // Sun-disc samples per pixel per frame. Each costs a full binary shadow trace, so this multiplies the shadow march's
 // worst-case field evaluations directly; 2 is the shipped point on the curve.
-static const uint ShadowSamplesPerPixel = 2u;
+static const uint ShadowSamplesPerPixel = 1u;
 // Bits of each net coordinate the disc table consumes (SphericalCapSampleTable.TableIndexBitCount): 4096 azimuth
 // cells and 4096 radius cells. The digital-net gate proves the (0,m,2)-net property survives this quantization, which
 // is the property the estimator actually relies on — the full 32-bit coordinate is never needed.
@@ -653,24 +678,25 @@ static const uint ShadowAccumulationOne = 255u;    // full visibility in the eig
 // Half the RT path's 24-unit reach: this compute march has no TLAS to fast-forward to the occluder, so every unit of
 // reach is marched per lit pixel. Contact/self shadows (the visual win) are near; 12 covers every realistic case while
 // halving the worst-case empty-space step count on dense scenes.
-static const float ShadowMaxDistance = 12.0;
+static const float ShadowMaxDistance = 9.0;
 static const float ShadowBias = 0.02;
 static const float ShadowStepMin = 0.02;  // an occluder thinner than this can be stepped through
-static const float ShadowStepMax = 0.6;   // the NEAR-field ceiling; far-field it grows with distance (ShadowStepFarSlope)
-// Distance-proportional far-field step ceiling: past ~4 units of reach the ceiling relaxes to traveled*this, so an
-// unoccluded ray marching open space toward the sun clears the far field in fewer, bigger steps (~20 -> ~12 tape evals
-// on a spread scene) while the near field — where contact/self shadows live and every step matters — is untouched
-// (traveled*0.15 < ShadowStepMax until traveled > 4). Sound because the advance still takes min(clearance, boundBound)
-// FIRST: the ceiling only bites in genuinely open space where the true clearance is already large, and a far occluder's
-// tiny angular penumbra tolerates the coarser sampling.
-static const float ShadowStepFarSlope = 0.15;
+// The EXACT march has NO step ceiling (2026-09-03; it carried a 0.6-unit near-field ceiling relaxing to 0.15*t far out).
+// The ceiling was the retired closest-approach parabola's need — that estimator refined a running minimum and had to
+// sample densely — but the estimator is BINARY now: sphere tracing never advances past the field's own clearance, so a
+// ray that meets an occluder converges onto it whatever the earlier steps were, and a ray that does not takes the
+// exactly-sound escape exit. Capping the advance below the clearance therefore bought nothing but samples: on the
+// shipped world's open ground every lit pixel marched ~15 ceiling-sized steps toward the sun where the clearance alone
+// clears the reach in four or five. The one observable change is on the good side — a grazing ray no longer spends its
+// budget in the open and reaches the surface it grazes with steps to spare. The FAST path keeps its own ceiling: its
+// wider stride is a soundness trade (it can step through thin occluders), and the ceiling bounds that trade.
 // Fleet-scale presentation path: sphere tracing still never advances past the conservative field/boundary clearance,
 // but strides harder through open space and gives up sooner. Under a BINARY visibility test the coarser stride is a
 // soundness question only in one direction — it can step THROUGH a thin occluder and report light where there is
 // none — which is the same trade the near-field ShadowStepMin floor already makes.
 static const float FastShadowStepMax = 1.8;
 static const float FastShadowStepFarSlope = 0.45;
-static const float FastShadowMaxDistance = 6.0;
+static const float FastShadowMaxDistance = 5.0;
 // The shadow-cull gather's cone chord (see sdfShadowGather): the half-slope of the cone whose occluders the gather
 // must contain for the shadow march to be sound. It is now a bound on the SAMPLED CONE — the estimator's rays leave
 // the surface inside a cone of half-slope tan(SunAngularRadius) = 0.1104, so every occluder any sample can reach sits
@@ -1063,13 +1089,14 @@ TileCone buildTileCone(ViewportData view, float2 localUvMin, float2 localUvMax) 
 
 // The four-bound teleport's per-tile output (Larsson "The Gunk"). `entry` is the classic conservative-cone marchStart
 // (the earliest t at which any ray in the tile could hit — a march-start lower bound shared by every pixel in the tile,
-// or TileEmpty when the cone clears the field out to MaxDistance), so plane 0 — and therefore the cull-args bbox, the
-// compositor's empty-tile test, and the footprint-adaptive termination the ground-notch rides — is the exact classic
-// beam output. `firstExit`/`secondEntry` bound ONE proven-empty gap the cone cleared between two occupied bands; when
-// no gap is proven, firstExit = MaxDistance so the consumer's teleport is a total no-op (a total function, per the
-// determinism pin). secondEntry >= firstExit always. `farBound` (F1, plane 3) is the depth past which the tile's cone
-// cannot produce ANY footprint-accepted hit through MaxDistance (proven against the FOOTPRINT-INFLATED threshold — see
-// coneMarchFarBound); MaxDistance when the tail phase proved no such bound (the consumer's far-exit is then a no-op).
+// or TileEmpty when the cone clears the field out to the far distance), so plane 0 — and therefore the cull-args bbox,
+// the compositor's empty-tile test, and the footprint-adaptive termination the ground-notch rides — is the exact
+// classic beam output. `firstExit`/`secondEntry` bound ONE proven-empty gap the cone cleared between two occupied
+// bands; when no gap is proven, firstExit = the far distance so the consumer's teleport is a total no-op (a total
+// function, per the determinism pin). secondEntry >= firstExit always. `farBound` (F1, plane 3) is the depth past
+// which the tile's cone cannot produce ANY footprint-accepted hit through the far distance (proven against the
+// FOOTPRINT-INFLATED threshold — see coneMarchFarBound); the far distance when the tail phase proved no such bound (the
+// consumer's far-exit is then a no-op). Every "nothing proven" sentinel is the view's worldFarDistance, never a constant.
 struct TileBounds {
     float entry;
     float firstExit;
@@ -1077,32 +1104,34 @@ struct TileBounds {
     float farBound;
 };
 
-// F1 TAIL PHASE (perf plan Phase 5.1). Proves the FAR BOUND: the depth past which the tile's cone cannot produce any
-// hit the fine march would ACCEPT, all the way to MaxDistance. Marches forward from `startT` with a FOOTPRINT-INFLATED
+// F1 TAIL PHASE. Proves the FAR BOUND: the depth past which the tile's cone cannot produce any
+// hit the fine march would ACCEPT, all the way to the far distance. Marches forward from `startT` with a FOOTPRINT-INFLATED
 // clearance threshold — the load-bearing correctness fact. The fine march accepts a hit at fieldDistance <
 // max(SurfaceEpsilon, footprint*t) (sdf-world-views computes footprint = 2*right.w/rectDims.y; the beam computes the
 // identical value from regionSizePx), and footprint*t ~ 0.001*t exceeds ConeEpsilon past t~2 — so a bare ConeEpsilon
 // proof is ANTI-conservative and could bound above a real footprint hit. Inflating the cone's transverse radius by the
 // pixel footprint (spread = chord + footprint) and requiring clearance = min(map(center), sdfMapStepBound) -
 // spread*t > SurfaceEpsilon (stepping by clearance/(1 + spread), the 1-Lipschitz cone guarantee for the inflated cone)
-// guarantees that for every ray and every t' in [farBound, MaxDistance] the hit-accept fieldDistance <
+// guarantees that for every ray and every t' in [farBound, farDistance] the hit-accept fieldDistance <
 // max(SurfaceEpsilon, footprint*t') can NEVER fire — so the ray renders skyColor whether it exits at farBound or marches
 // on, i.e. the far exit is OUTPUT-IDENTICAL on the shipped shading path (only step counts and the termination debug view
-// change). FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapStepBound). Total function: no proven clear-
-// to-far span within the budget => MaxDistance.
+// change). The same rule is what renderView's exhaustion arm accepts a closest-approach candidate against, so the proof
+// covers that arm too. FOLD-SAFE like the gap phases (the bounded clearance rides sdfMapStepBound). Total function: no
+// proven clear-to-far span within the budget => the far distance.
 float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase, float footprint, float startT) {
     float3 origin = view.position.xyz;
+    float farDistance = worldFarDistance(view);
     float spread = (cone.chord + footprint); // the cone half-spread inflated by the pixel footprint
     float t = startT;
-    float clearStart = MaxDistance; // start of the CURRENT footprint-clear span (MaxDistance = not in one)
+    float clearStart = farDistance; // start of the CURRENT footprint-clear span (farDistance = not in one)
     bool clear = false;
 
     [loop]
     for (int i = 0; (i < TileFarSteps); i++) {
-        if (t > MaxDistance) {
-            // Reached the far plane. If we are inside a footprint-clear span, it extends to MaxDistance => the far
-            // bound is that span's start; otherwise no bound was proven.
-            return (clear ? clearStart : MaxDistance);
+        if (t > farDistance) {
+            // Reached the far plane. If we are inside a footprint-clear span, it extends to the far distance => the
+            // far bound is that span's start; otherwise no bound was proven.
+            return (clear ? clearStart : farDistance);
         }
 
         float clearance = (min(mapDistanceMasked(origin + (cone.centerDirection * t), instanceMaskBase), sdfMapStepBound) - (spread * t));
@@ -1120,21 +1149,21 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
             // plane. Advance through the band (magnitude-stepped, floored); overshoot only shrinks/misses a far bound,
             // never invents one (the same one-sided safety the gap search's through-band phase relies on).
             clear = false;
-            clearStart = MaxDistance;
+            clearStart = farDistance;
             t += (max(-clearance, TileGapMinStep) / (1.0 + spread));
         }
     }
 
-    return MaxDistance; // budget exhausted without proving a clear-to-far span => no far bound
+    return farDistance; // budget exhausted without proving a clear-to-far span => no far bound
 }
 
 // Cone march that additionally records the first proven-empty gap past the entry band. The GAP is
 // conservative for the WHOLE tile cone: `firstExit` is a t at which the cone clearance is strictly positive (every
 // ray in the tile is clear there) and the search then steps by <= clearance/(1+chord) — the sphere-trace guarantee —
 // so it cannot skip the cone re-entering geometry; the first re-entry is `secondEntry`. Overstepping the interior of
-// the first band (the through-band phase) can only MISS a gap (reporting firstExit = MaxDistance), never invent one,
-// so a teleport is never unsafe. Reaching MaxDistance while clear yields secondEntry = MaxDistance (an empty tail —
-// the ray teleports to the far plane and ends), the one far-bound benefit taken here.
+// the first band (the through-band phase) can only MISS a gap (reporting firstExit = the far distance), never invent
+// one, so a teleport is never unsafe. Reaching the far distance while clear yields secondEntry = the far distance (an
+// empty tail — the ray teleports to the far plane and ends), the one far-bound benefit taken here.
 //
 // The march evaluates the TILE-MASKED field (mapMasked at `instanceMaskBase` — the mask the instance-cull pass wrote
 // for THIS tile, dispatched immediately before the beam): each sample walks only the instances overlapping the tile's
@@ -1149,17 +1178,18 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
 // world/instance merge). A consumer with no mask passes SDF_INSTANCE_MASK_ALL and gets the unmasked march verbatim.
 TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMaskBase, float footprint) {
     float3 origin = view.position.xyz;
+    float farDistance = worldFarDistance(view);
 
     TileBounds b;
     b.entry = TileEmpty;
-    b.firstExit = MaxDistance;   // no proven gap => teleport disabled (total function)
-    b.secondEntry = MaxDistance;
-    b.farBound = MaxDistance;    // F1: no proven far bound yet => the consumer's far-exit is a no-op (total function)
+    b.firstExit = farDistance;   // no proven gap => teleport disabled (total function)
+    b.secondEntry = farDistance;
+    b.farBound = farDistance;    // F1: no proven far bound yet => the consumer's far-exit is a no-op (total function)
 
     // Phase 1 — ENTRY (the classic conservative cone/beam march). map() is a true distance field, so the cone of
     // half-spread `chord` clears ALL of its rays while map(center) - chord*t > 0, and a 1-Lipschitz-safe step is
     // clearance / (1 + chord). Returns the earliest t at which the cone could hit (the shared per-tile marchStart), or
-    // TileEmpty when the cone clears the field out to MaxDistance.
+    // TileEmpty when the cone clears the field out to the far distance.
     float t = ConeNear;
     bool foundEntry = false;
 
@@ -1180,7 +1210,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 
         t += (clearance / (1.0 + cone.chord));
 
-        if (t > MaxDistance) {
+        if (t > farDistance) {
             return b; // TileEmpty entry, no gap — cull-args drops the tile
         }
     }
@@ -1188,7 +1218,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
     if (!foundEntry) {
         b.entry = t; // step budget exhausted at the entry band — matches coneMarchTile's fallthrough `return t`
         // F1 leak #2: a budget-exhausted grazing tile is marked LIVE (all its pixels fine-march from t). Prove the far
-        // bound from here so sky pixels that clear the near band exit early instead of running to MaxDistance.
+        // bound from here so sky pixels that clear the near band exit early instead of running to the far distance.
         b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
 
         return b;
@@ -1220,10 +1250,10 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
                 stall = ((clearance <= previousClearance) ? (stall + 1) : 0);
 
                 if (stall >= TileGapStallLimit) {
-                    b.firstExit = MaxDistance;
-                    b.secondEntry = MaxDistance;
+                    b.firstExit = farDistance;
+                    b.secondEntry = farDistance;
                     // F1: a descending, gap-less tile (ground/wall). The tail proves the far bound if the cone ever
-                    // clears to the far plane past here (a ground tile never does => farBound stays MaxDistance).
+                    // clears to the far plane past here (a ground tile never does => farBound stays the far distance).
                     b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
 
                     return b;
@@ -1240,7 +1270,7 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
             if (clearance <= ConeEpsilon) {
                 b.secondEntry = t;             // cone re-enters geometry — gap = [firstExit, secondEntry]
                 // F1 leak #4: past the ONE proven gap there was no far information. Prove the far bound from the second
-                // band so a ray that clears it exits early instead of marching the second band's sky to MaxDistance.
+                // band so a ray that clears it exits early instead of marching the second band's sky to the far distance.
                 b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
 
                 return b; // one gap is the 90% win (Larsson clamps to one re-entry)
@@ -1249,12 +1279,12 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
             t += (clearance / (1.0 + cone.chord)); // stay conservative across the clear span
         }
 
-        if (t > MaxDistance) {
+        if (t > farDistance) {
             if (clear) {
-                b.secondEntry = MaxDistance;   // proven clear to the far plane — teleport ends the ray (the far bound)
+                b.secondEntry = farDistance;   // proven clear to the far plane — teleport ends the ray (the far bound)
             }
             else {
-                b.firstExit = MaxDistance;     // never cleanly exited the band — disable the teleport
+                b.firstExit = farDistance;     // never cleanly exited the band — disable the teleport
             }
 
             return b;
@@ -1263,8 +1293,8 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
 
     // Budget exhausted without a clean second entry: we cannot prove the span past firstExit stays empty, so DISABLE
     // the teleport (stay conservative — never teleport past unproven space).
-    b.firstExit = MaxDistance;
-    b.secondEntry = MaxDistance;
+    b.firstExit = farDistance;
+    b.secondEntry = farDistance;
     // F1: the gap budget ran out mid-band; the tail phase gets its own budget to prove a far bound from here.
     b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
 
@@ -1412,9 +1442,9 @@ bool worldScreenLightsDisabled() {
     return false;
 #endif
 }
-// The F1 FAR-BOUND A/B lever (perf plan Phase 5.1). Rides SdfFarFieldParams.x: 0 (the DEFAULT, an unset frame) keeps
+// The F1 FAR-BOUND A/B lever. Rides SdfFarFieldParams.x: 0 (the DEFAULT, an unset frame) keeps
 // the beam-published far bound ACTIVE (the shipped behavior — the fine march exits at traveled >= farBound); 1 pushes
-// the far bound out of reach so the march runs to MaxDistance exactly as pre-F1 (the paired-run "off" side). Decoded
+// the far bound out of reach so the march runs to the far distance exactly as pre-F1 (the paired-run "off" side). Decoded
 // only under SDF_SCREEN_SOURCES (the world-views kernel is the sole SDF-hit shader). KEEP IN SYNC with
 // SdfFrame.DisableFarBound and SdfWorldEngine.PackScreenLights.
 bool worldFarBoundDisabled() {
@@ -1488,31 +1518,88 @@ bool worldShadowCullEnabled() {
     return (sdfScreenLights[SdfGridObjParams].w < 0.5);
 }
 
-// Build the shadow-ray candidate mask into sdfShadowMaskWords for a soft-shadow march from `origin` toward `direction`
-// out to `reach` (ShadowMaxDistance). Returns true when the mask is COMPLETE (the program fits SDF_SHADOW_MASK_WORDS and
-// packs an enabled grid) — areaShadowVisibility then marches it under sdfShadowMaskActive; false => the caller marches the flat
-// all-instances field. SUPERSET-PRESERVING: it sets a bit for every instance whose bound falls within the shadow ray's
-// PENUMBRA CONE (chord ShadowPenumbraChord = 1/ShadowSharpness — see that constant: an occluder softens the shadow out
-// to perpendicular distance boundRadius + traveled/ShadowSharpness, so the exact ray is NOT enough), so mapMasked over
-// this mask equals the flat map() soft shadow TO THE BIT — a wider-than-direct-penumbra cone so the parabola coupling
-// occluder is caught too (see ShadowPenumbraChord); an omitted instance can neither lower a sample's clearance below
-// full light nor perturb a shadowing sample's parabola, so it cannot change the result min. The walk is collectInstanceGridMask's
-// SAME robust-slabs cone rasterization, the cone here being the penumbra cone about the shadow ray, capped at the march
-// reach + footprintPad (samples past `reach` are never taken). KEEP THE WALK IN SYNC with sdf-instance-cull.comp.hlsl's
-// collectInstanceGridMask (the device-buffer twin — a hand-maintained near-clone, like the EmitShape pair): same cell
-// rasterization, same footprintPad contract; only the bit TARGET (this static array), the chord (the penumbra
-// aperture), and the tExit cap (the shadow reach) differ. World segments need no bit — mapCore always evaluates them.
-// Returns the fallback DECISION so the caller marches correctly whether or not the mask was built:
-//   2 = mask BUILT into sdfShadowMaskWords — march it (the cull);
-//   1 = a grid is packed but the program has MORE instances than the local mask can address — march the CAMERA-TILE
-//       mask (the pre-cull shipped fallback, cheap; NOT the ~20x-slower flat all-instances march);
+#ifdef SDF_GROUP_SHADOW_GATHER
+// Build the shadow-ray candidate mask into sdfShadowMaskWords for the soft-shadow marches of ONE 8x8 WORKGROUP — the
+// per-tile gather (2026-09-03) that replaced the per-lit-pixel gather. Every lane publishes its hit hitPoint (or none),
+// lane 0 reduces the group's lit points to a apex and the radius R that encloses them, and the 64 lanes then walk
+// the instance grid COOPERATIVELY along the penumbra cone apexed at the apex, testing every bound INFLATED by R
+// (+ ShadowBias, the march origin's normal offset). SUPERSET-PRESERVING for every pixel in the group: a pixel's own
+// gather cone is the apex cone translated by at most R, so an instance meeting the pixel cone lies within R of
+// the apex cone and the inflated test admits it; and an admitted instance the pixel's ray never reaches composes
+// as the accumulator to the bit (the bound-sizing contract mapMasked already rides), so the masked march of every
+// lane equals the flat map() soft shadow TO THE BIT — the same argument the per-pixel gather made, widened by R. What
+// changed is cost: one grid walk per 64 pixels instead of 64 divergent walks, the walk spread across the lanes, and
+// the 32-word mask living in groupshared memory instead of 32 per-thread registers. The penumbra cone (chord
+// ShadowPenumbraChord — see that constant) is unchanged. The walk is collectInstanceGridMask's SAME robust-slabs cone
+// rasterization, capped at the march reach + R + footprintPad. KEEP THE WALK IN SYNC with
+// sdf-instance-cull.comp.hlsl's collectInstanceGridMask (the device-buffer twin — a hand-maintained near-clone): same
+// cell rasterization, same footprintPad contract; only the bit TARGET (the groupshared mask, InterlockedOr), the
+// chord, the inflation, the lane striding, and the tExit cap differ. World segments need no bit — mapCore always
+// evaluates them.
+//
+// UNIFORM CONTROL FLOW: every lane calls this with the same direction/reach
+// (the lit lanes with their hitPoint, the rest with lit = false) — it carries group barriers, so no caller may skip it
+// or call it under a per-lane branch. Returns the fallback DECISION (uniform across the group) so the caller marches
+// correctly whether or not the mask was built:
+//   2 = mask BUILT into sdfShadowMaskWords — march it (the cull); also the answer when no lane in the group is lit
+//       (an empty mask nothing marches);
 //   0 = NO grid packed (a grid-suppressed or few-instance program) — march the FLAT all-instances field, which for a
 //       few-instance program is cheap AND, for a deliberately grid-suppressed program, MATCHES the grid-present gather
 //       so the grid toggle stays render-invariant (the world-grid-cull grid==flat contract).
-uint sdfShadowGather(float3 origin, float3 direction, float reach) {
-    uint packedInstanceCount = sdfInstanceCount();
-    uint instanceCount = min(packedInstanceCount, SDF_MAX_INSTANCES);
+groupshared float4 sdfShadowGatherPoints[SDF_GROUP_SHADOW_LANES];
+groupshared float4 sdfShadowGatherCone; // xyz = the hit points' apex, w = the enclosing radius + ShadowBias
+groupshared uint sdfShadowGatherLitCount;
 
+uint sdfShadowGatherGroup(bool lit, float3 hitPoint, float3 direction, float reach, uint lane) {
+    // Phase 0 — clear the group mask and publish this lane's hitPoint.
+    for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
+        sdfShadowMaskWords[word] = 0u;
+    }
+
+    sdfShadowGatherPoints[lane] = float4(hitPoint, (lit ? 1.0 : 0.0));
+    GroupMemoryBarrierWithGroupSync();
+
+    // Phase 1 — lane 0 reduces the lit points to the cone apex and its enclosing radius.
+    if (lane == 0u) {
+        float3 sum = float3(0.0, 0.0, 0.0);
+        float count = 0.0;
+
+        [loop]
+        for (uint i = 0u; (i < SDF_GROUP_SHADOW_LANES); i++) {
+            float4 entry = sdfShadowGatherPoints[i];
+
+            if (entry.w > 0.5) {
+                sum += entry.xyz;
+                count += 1.0;
+            }
+        }
+
+        float3 apex = ((count > 0.0) ? (sum / count) : float3(0.0, 0.0, 0.0));
+        float radius = 0.0;
+
+        [loop]
+        for (uint j = 0u; (j < SDF_GROUP_SHADOW_LANES); j++) {
+            float4 entry = sdfShadowGatherPoints[j];
+
+            if (entry.w > 0.5) {
+                radius = max(radius, length(entry.xyz - apex));
+            }
+        }
+
+        sdfShadowGatherCone = float4(apex, (radius + ShadowBias));
+        sdfShadowGatherLitCount = ((uint)count);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+    float4 cone = sdfShadowGatherCone;
+    uint litCount = sdfShadowGatherLitCount;
+    float3 origin = cone.xyz;
+    float inflate = cone.w;
+
+    // The decisions below are uniform (program-level facts and the group's own count), so an early return here leaves
+    // no lane behind at a later barrier.
+    uint packedInstanceCount = sdfInstanceCount();
     uint instanceOffset = sdfInstanceDirectoryOffset();
     SdfInstanceGridHeader grid = sdfLoadInstanceGridHeader(instanceOffset, packedInstanceCount);
 
@@ -1520,45 +1607,45 @@ uint sdfShadowGather(float3 origin, float3 direction, float reach) {
         return 0u; // no grid — flat fallback (cheap for few instances; matches a would-be gather so the grid toggle is invariant)
     }
 
-    uint wordCount = sdfInstanceMaskWordCount(instanceCount);
+    // Stage 1's shared mask covers SDF_MAX_INSTANCES. A large reserved pool is still an exact gather; the caller
+    // selects the camera-tile approximation only when that quality mode was requested.
 
-    if (wordCount > SDF_SHADOW_MASK_WORDS) {
-        return 1u; // grid packed but too many instances to address the local mask — the camera-tile fallback (no flat catastrophe)
-    }
-
-    [loop]
-    for (uint z = 0u; (z < wordCount); z++) {
-        sdfShadowMaskWords[z] = 0u;
+    if (litCount == 0u) {
+        return 2u; // nothing in this group marches a shadow; the cleared mask is complete
     }
 
     float chord = ShadowPenumbraChord; // the soft penumbra cone's half-slope, NOT a bare ray (see ShadowPenumbraChord)
     float inverseAperture = rsqrt(max((1.0 - (chord * chord)), 1.0e-6));
+    float groupReach = (reach + inflate);
 
-    // PATH B — the shadow proxy (sdf.shadow-proxy): when enabled, a SHADOW-TRANSPARENT instance (a host-flagged pure
-    // Subtraction-family carve) is NOT added to the mask, so the soft-shadow march evaluates the pre-carve union hull.
-    // SOUNDNESS: the mask IS the candidate set the march reads, so the gather's skip set and the march's field are the
-    // SAME field by construction (the cull-set/march-agreement rule, the same shape sdf.shadow-distance's shared reach
-    // follows) — a skipped carve is simply never composed, and a Subtraction only ever removes material, so the shadow
-    // is conservatively darker, never light-leaked. Default OFF, so an unset frame gathers the full set as before.
+    // PATH B — the shadow proxy (sdf.shadow-proxy): a SHADOW-TRANSPARENT instance (a host-flagged pure Subtraction-family
+    // carve) is NOT added to the mask, so the soft-shadow march evaluates the pre-carve union hull. SOUNDNESS: the mask
+    // IS the candidate set the march reads, so a skipped carve is simply never composed, and a Subtraction only ever
+    // removes material, so the shadow is conservatively darker, never light-leaked. Default OFF.
     bool shadowProxy = worldShadowProxyEnabled();
 
-    // (1) The ALWAYS-tested list — dynamic + unmaskable instances the frozen grid cannot bin — against the penumbra cone.
+    // Phase 2 — the cooperative walk. (1) The ALWAYS-tested list — dynamic + unmaskable instances the frozen grid cannot
+    // bin — strided across the lanes, each bound inflated by R against the penumbra cone.
     [loop]
-    for (uint a = 0u; (a < grid.alwaysCount); a++) {
+    for (uint a = lane; (a < grid.alwaysCount); a += SDF_GROUP_SHADOW_LANES) {
         uint index = sdfGridWordAt(grid, grid.alwaysWord + a);
         float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+
+        if (bound.w >= 0.0) {
+            bound.w += inflate;
+        }
 
         // Per-instance shadow-participation skip (the cheaper-mask twin of sdfNextVisibleInstanceRange's enumeration
         // skip): a shadow-suppressed dynamic instance never enters the mask, so it costs no mask bit and mode-2's march
         // stays consistent with the enumerate-skip. Gated on the raw condition — the gather is inherently shadow-scoped.
         if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture) && !(shadowProxy && sdfInstanceShadowTransparent(instanceOffset, index)) && !sdfInstanceShadowSuppressed(instanceOffset, index)) {
-            sdfShadowMaskWords[index >> 5u] |= (1u << (index & 31u));
+            InterlockedOr(sdfShadowMaskWords[index >> 5u], (1u << (index & 31u)));
         }
     }
 
-    // (2) The grid cells the penumbra cone sweeps, far bound capped at the shadow reach + the query pad — the same
-    // robust-slabs clip + cell rasterization the beam cull uses (see collectInstanceGridMask), the cone here being the
-    // penumbra cone about the shadow ray.
+    // (2) The grid cells the inflated penumbra cone sweeps, far bound capped at the group reach + the query pad — the
+    // same robust-slabs clip + cell rasterization the beam cull uses (see collectInstanceGridMask). The slab walk is
+    // uniform across the lanes; each slab's cell box is linearized and strided across them.
     float3 gridMin = grid.origin;
     float3 gridMax = (grid.origin + (float3(grid.dims) * grid.cellSize));
     float3 farCorner = float3(
@@ -1567,13 +1654,15 @@ uint sdfShadowGather(float3 origin, float3 direction, float reach) {
         ((direction.z > 0.0) ? gridMax.z : gridMin.z)
     );
     float projection = max(dot((farCorner - origin), direction), 0.0);
-    float tFar = min(((projection + grid.footprintPad) / max((1.0 - chord), 0.01)), (reach + grid.footprintPad));
+    float tFar = min(((projection + grid.footprintPad + inflate) / max((1.0 - chord), 0.01)), (groupReach + grid.footprintPad));
 
-    float inflate = ((chord * tFar) + grid.footprintPad); // the widest query radius any slab uses (chord grows it with t)
-    float3 clipMin = (gridMin - inflate);
-    float3 clipMax = (gridMax + inflate);
+    float pad = (grid.footprintPad + inflate); // the query pad, widened by the group's enclosing radius
+    float inflateBox = ((chord * tFar) + pad);  // the widest query radius any slab uses (chord grows it with t)
+    float3 clipMin = (gridMin - inflateBox);
+    float3 clipMax = (gridMax + inflateBox);
     float tEnter = 0.0;
     float tExit = tFar;
+    bool missesGrid = false;
 
     [unroll]
     for (int axis = 0; (axis < 3); axis++) {
@@ -1588,66 +1677,71 @@ uint sdfShadowGather(float3 origin, float3 direction, float reach) {
             tExit = min(tExit, max(tA, tB));
         }
         else if ((ori < clipMin[axis]) || (ori > clipMax[axis])) {
-            return 2u; // the cone provably misses the grid on this axis — only the always-list bits (set above) matter
+            missesGrid = true; // the cone provably misses the grid on this axis — only the always-list bits matter
         }
     }
 
-    if (tEnter > tExit) {
-        return 2u; // the cone never overlaps the grid — always-list only
-    }
+    if (!missesGrid && (tEnter <= tExit)) {
+        int3 dimensionsMinusOne = (int3(grid.dims) - int3(1, 1, 1));
+        float slabStep = (grid.cellSize * SDF_GRID_SLAB_CELLS);
+        float t0 = tEnter;
 
-    int3 dimensionsMinusOne = (int3(grid.dims) - int3(1, 1, 1));
-    float slabStep = (grid.cellSize * SDF_GRID_SLAB_CELLS);
-    float t0 = tEnter;
+        [loop]
+        for (uint slab = 0u; (slab < SDF_GRID_MAX_SLABS); slab++) {
+            float t1 = (((slab + 1u) < SDF_GRID_MAX_SLABS) ? min((t0 + slabStep), tExit) : tExit);
+            float3 c0 = (origin + (direction * t0));
+            float3 c1 = (origin + (direction * t1));
+            float radius = ((chord * t1) + pad);
+            float3 low = (min(c0, c1) - radius);
+            float3 high = (max(c0, c1) + radius);
 
-    [loop]
-    for (uint slab = 0u; (slab < SDF_GRID_MAX_SLABS); slab++) {
-        float t1 = (((slab + 1u) < SDF_GRID_MAX_SLABS) ? min((t0 + slabStep), tExit) : tExit);
-        float3 c0 = (origin + (direction * t0));
-        float3 c1 = (origin + (direction * t1));
-        float radius = ((chord * t1) + grid.footprintPad);
-        float3 low = (min(c0, c1) - radius);
-        float3 high = (max(c0, c1) + radius);
+            if (all(high >= gridMin) && all(low <= gridMax)) {
+                int3 cellLow = clamp(int3(floor((low - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
+                int3 cellHigh = clamp(int3(floor((high - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
+                uint3 span = uint3(cellHigh - cellLow) + uint3(1u, 1u, 1u);
+                uint cellCount = ((span.x * span.y) * span.z);
 
-        if (all(high >= gridMin) && all(low <= gridMax)) {
-            int3 cellLow = clamp(int3(floor((low - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
-            int3 cellHigh = clamp(int3(floor((high - grid.origin) * grid.invCellSize)), int3(0, 0, 0), dimensionsMinusOne);
-
-            [loop]
-            for (int cz = cellLow.z; (cz <= cellHigh.z); cz++) {
                 [loop]
-                for (int cy = cellLow.y; (cy <= cellHigh.y); cy++) {
+                for (uint c = lane; (c < cellCount); c += SDF_GROUP_SHADOW_LANES) {
+                    uint cx = (c % span.x);
+                    uint rest = (c / span.x);
+                    uint cy = (rest % span.y);
+                    uint cz = (rest / span.y);
+                    uint cell = (((((uint)cellLow.z + cz) * grid.dims.y) + ((uint)cellLow.y + cy)) * grid.dims.x) + ((uint)cellLow.x + cx);
+                    uint entryStart = sdfGridWordAt(grid, grid.cellStartWord + cell);
+                    uint entryEnd = sdfGridWordAt(grid, grid.cellStartWord + cell + 1u);
+
                     [loop]
-                    for (int cx = cellLow.x; (cx <= cellHigh.x); cx++) {
-                        uint cell = ((((uint)cz * grid.dims.y) + (uint)cy) * grid.dims.x) + (uint)cx;
-                        uint entryStart = sdfGridWordAt(grid, grid.cellStartWord + cell);
-                        uint entryEnd = sdfGridWordAt(grid, grid.cellStartWord + cell + 1u);
+                    for (uint k = entryStart; (k < entryEnd); k++) {
+                        uint index = sdfGridWordAt(grid, grid.entryWord + k);
+                        float4 bound = sdfInstanceBoundAt(instanceOffset, index);
 
-                        [loop]
-                        for (uint k = entryStart; (k < entryEnd); k++) {
-                            uint index = sdfGridWordAt(grid, grid.entryWord + k);
-                            float4 bound = sdfInstanceBoundAt(instanceOffset, index);
+                        if (bound.w >= 0.0) {
+                            bound.w += inflate;
+                        }
 
-                            // Per-instance shadow-participation skip — same raw-condition test as the always-list loop
-                            // above: a shadow-suppressed dynamic instance is kept out of the shadow mask.
-                            if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture) && !(shadowProxy && sdfInstanceShadowTransparent(instanceOffset, index)) && !sdfInstanceShadowSuppressed(instanceOffset, index)) {
-                                sdfShadowMaskWords[index >> 5u] |= (1u << (index & 31u));
-                            }
+                        // Per-instance shadow-participation skip — same raw-condition test as the always-list loop above.
+                        if (sdfInstancePassesTileCone(bound, origin, direction, chord, inverseAperture) && !(shadowProxy && sdfInstanceShadowTransparent(instanceOffset, index)) && !sdfInstanceShadowSuppressed(instanceOffset, index)) {
+                            InterlockedOr(sdfShadowMaskWords[index >> 5u], (1u << (index & 31u)));
                         }
                     }
                 }
             }
-        }
 
-        if (t1 >= tExit) {
-            break;
-        }
+            if (t1 >= tExit) {
+                break;
+            }
 
-        t0 = t1;
+            t0 = t1;
+        }
     }
+
+    // Every lane's bits are visible to every lane's march after this.
+    GroupMemoryBarrierWithGroupSync();
 
     return 2u;
 }
+#endif
 #endif
 
 // De-scale a Lipschitz-CLAMPED field sample back to WORLD units — the ONE primitive genuinely shared by the three
@@ -1741,8 +1835,8 @@ float areaShadowVisibility(float3 surfacePoint, float3 surfaceNormal, uint insta
     bool escapeExit = !worldShadowEscapeExitDisabled(); // light-side early exit (default ON; A/B lever = off)
     reach = (fastMarch ? min(reach, FastShadowMaxDistance) : reach);
     int stepBudget = (fastMarch ? FastShadowSteps : ShadowSteps);
-    float stepCeiling = (fastMarch ? FastShadowStepMax : ShadowStepMax);
-    float farSlope = (fastMarch ? FastShadowStepFarSlope : ShadowStepFarSlope);
+    float stepCeiling = FastShadowStepMax;      // fast path only — the exact march advances by the clearance itself
+    float farSlope = FastShadowStepFarSlope;    // fast path only
     // The per-pixel decorrelation. The key packs the lattice site and mixes it with the view index; the packing is
     // injective within sixteen bits and the mix is a bijection, so no two sites in one view share a key — and
     // therefore no two share a digital shift. Both derivations are named bijections with closed-form inverses that
@@ -1762,6 +1856,20 @@ float areaShadowVisibility(float3 surfacePoint, float3 surfaceNormal, uint insta
         float3 origin = (surfacePoint + (surfaceNormal * ShadowBias));
         float traveled = ShadowBias;
         bool occluded = false;
+        // AUTO-RELAXED sphere tracing on the exact path (2026-09-03), the primary march's Bán & Valasek scheme
+        // transplanted: a per-ray slope EMA `slopeM` drives omega = max(1, 2/(1 - m)), so a ray receding from the
+        // surface it starts on (clearances growing linearly — the geometric climb every lit ground/ramp pixel paid
+        // ~12 steps for) over-relaxes up to 10x, and the disjoint-sphere test validates every relaxed step: an advance
+        // longer than the two unbounding spheres it spans is retaken plain from the previous sample. Hit and escape
+        // decisions are taken only on validated samples, and the reach exit is validated the same way the primary
+        // march validates its far exit (a relaxed step that crosses the reach is retaken plain first), so a binary
+        // visibility result never rests on an unproven segment. A step the ShadowStepMin floor lengthened is NEVER
+        // treated as relaxed (the floor deliberately steps through thin occluders; validating it would ping-pong).
+        // The fast path keeps its plain clamped stride.
+        float previousRadius = 0.0;
+        float stepLength = 0.0;
+        float slopeM = -1.0;      // slope EMA, init -1 => the first step is plain (omega = 1)
+        bool relaxedStep = false; // whether the step that reached the current sample was over-relaxed
 
         [loop]
         for (int step = 0; (step < stepBudget); step++) {
@@ -1769,31 +1877,77 @@ float areaShadowVisibility(float3 surfacePoint, float3 surfaceNormal, uint insta
 
             sdfEvalCount += 1.0; // one march sample, regular or fast — both variants share this call site
 
-            // KEPT VERBATIM from the retired march, in CLAMPED units on BOTH sides: the threshold is scaled up rather
-            // than the sample scaled down, so an isometric program (stepScale == 1) compares exactly as before.
-            if (clearance < (SurfaceEpsilon * stepScale)) {
-                occluded = true;
-
-                break;
-            }
-
-            // LIGHT-SIDE ESCAPE EXIT. The field is 1-Lipschitz along the ray, so the TRUE (de-scaled) clearance here
-            // bounds the whole remaining march from below: no point within (reach - traveled) of this sample can be a
-            // surface. For a BINARY test that is EXACTLY SOUND — the remaining march provably cannot find an occluder,
-            // so skipping it changes nothing. (The retired parabola's version of this exit was only MARCH-PATH sound:
-            // its running minimum could still be lowered by an undershoot the exit skipped. Replacing an estimator
-            // that has a continuum of outputs with one that has two upgrades the classification.) This is the ONLY
-            // sdfDeScaleField call in the shadow path, and it is comparing against a world-space DIFFERENCE.
-            if (escapeExit && (sdfDeScaleField(clearance, stepScale) > (reach - traveled))) {
-                break;
-            }
-
-            // KEPT VERBATIM. The floor keeps a near-tangent march from stalling (at the cost of stepping through
-            // occluders thinner than it), the ceiling keeps the march from striding past a grazing silhouette, and it
-            // is DISTANCE-PROPORTIONAL past ~4 units so a far unoccluded ray clears open space in fewer steps.
             // FOLD-SAFE: the advance honors the published boundary gap (min) so a shadow ray cannot stride across a
-            // fold boundary the raw value lies about.
-            traveled += clamp(min(clearance, sdfMapStepBound), ShadowStepMin, max(stepCeiling, (traveled * farSlope)));
+            // fold boundary the raw value lies about; the occlusion test below reads the RAW value.
+            float radius = min(clearance, sdfMapStepBound);
+            precise float sphereReach = (abs(radius) + previousRadius);
+            bool overshoot = (relaxedStep && (stepLength > sphereReach));
+
+            if (overshoot) {
+                traveled -= stepLength; // undo the unsafe step — back to the previous accepted sample
+                radius = previousRadius;
+                slopeM = -1.0;          // next step is plain (omega = 1)
+            } else {
+                // KEPT VERBATIM from the retired march, in CLAMPED units on BOTH sides: the threshold is scaled up rather
+                // than the sample scaled down, so an isometric program (stepScale == 1) compares exactly as before.
+                if (clearance < (SurfaceEpsilon * stepScale)) {
+                    occluded = true;
+
+                    break;
+                }
+
+                // LIGHT-SIDE ESCAPE EXIT. The field is 1-Lipschitz along the ray, so the TRUE (de-scaled) clearance here
+                // bounds the whole remaining march from below: no point within (reach - traveled) of this sample can be a
+                // surface. For a BINARY test that is EXACTLY SOUND — the remaining march provably cannot find an occluder,
+                // so skipping it changes nothing. (The retired parabola's version of this exit was only MARCH-PATH sound:
+                // its running minimum could still be lowered by an undershoot the exit skipped. Replacing an estimator
+                // that has a continuum of outputs with one that has two upgrades the classification.) This is the ONLY
+                // sdfDeScaleField call in the shadow path, and it is comparing against a world-space DIFFERENCE. Taken on
+                // a VALIDATED sample only: the segment behind it is proven clear by the disjoint-sphere test above.
+                if (escapeExit && (sdfDeScaleField(clearance, stepScale) > (reach - traveled))) {
+                    break;
+                }
+
+                if (stepLength > 0.0) {
+                    precise float slope = ((radius - previousRadius) / stepLength);
+                    slopeM = lerp(slopeM, slope, SlopeBeta);
+                }
+            }
+
+            float stepFrom = traveled;
+            float advance;
+
+            if (fastMarch) {
+                // The fast path's plain clamped stride: the floor keeps a near-tangent march from stalling (at the
+                // cost of stepping through occluders thinner than it), the ceiling bounds the wider stride that is
+                // this path's deliberate soundness trade.
+                advance = clamp(radius, ShadowStepMin, max(stepCeiling, (traveled * farSlope)));
+                relaxedStep = false;
+            } else {
+                precise float denominator = (1.0 - min(slopeM, SlopeCap));
+                precise float omega = max(1.0, (2.0 / denominator));
+
+                advance = (radius * omega);
+                relaxedStep = (omega > 1.0);
+
+                if (advance < ShadowStepMin) {
+                    advance = ShadowStepMin;
+                    relaxedStep = false;
+                }
+            }
+
+            previousRadius = radius;
+            stepLength = advance;
+            traveled += advance;
+
+            // The validated reach exit: a RELAXED step that crosses the reach is retaken plain (the segment it vaulted
+            // was never proven clear), and the ray leaves only if the plain step crosses too.
+            if ((traveled > reach) && relaxedStep) {
+                stepLength = max(radius, ShadowStepMin);
+                traveled = (stepFrom + stepLength);
+                relaxedStep = false;
+                slopeM = -1.0;
+            }
 
             if (traveled > reach) {
                 break;
@@ -1868,9 +2022,12 @@ float worldAccumulateShadowVisibility(float sampled) {
 // re-spaced to span the SAME 0.01..0.13 reach at double pitch, the per-rung falloff squared (0.95^2 = 0.9025) to hold
 // the same spatial decay, and the gain re-tuned 3.0 -> 5.07 so the fully-occluded floor matches the 5-tap value to
 // ~0.01 (verified analytically over constant-factor and constant-gap occluder models) — a same-look AO at 60% of the
-// taps, and because calcAO is [unroll]ed the two dropped taps also relieve the views kernel's register pressure. Paid
-// ONLY on lit hits and tile-masked exactly like areaShadowVisibility (a masked-out instance is as absent from a nearby tap as it
-// is from the hit itself). Purely local — no cones, no hemisphere, no history — but reads convincingly as contact
+// taps. The rung loop is a [loop], NOT [unroll] (2026-09-03): every mapDistanceMasked call site inlines a full copy of
+// the tape interpreter, so three unrolled rungs were three interpreter copies in the hottest kernel — measured on the
+// RTX 2060 shipped world as a 60 ms AO term for three evaluations per lit pixel, ten times the primary march's cost per
+// evaluation; one rolled call site is the fix, not fewer taps. Paid
+// ONLY on lit hits. The exact path includes every live instance: a camera cone cannot prove an instance irrelevant
+// to a tap displaced along the normal. Purely local — no hemisphere or history — but reads as contact
 // shadowing in creases and under overhangs.
 //
 // Applied to the AMBIENT/sky fill ONLY, never the sun: soft shadows govern direct light, and multiplying occlusion into
@@ -1880,13 +2037,14 @@ float worldAccumulateShadowVisibility(float sampled) {
 // tracks each program's stepScale bake, not geometry.
 // `stepScale` is renderView's hoisted Lipschitz clamp (see areaShadowVisibility): the (h - d) rung subtract mixes a world-space
 // rung with a mapMasked distance, so d is divided back to world units by it first.
+static const float AmbientOcclusionReach = 0.13;
 float calcAO(float3 surfacePoint, float3 surfaceNormal, uint instanceMaskBase, float stepScale) {
     float occlusion = 0.0;
     float scale = 1.0;
 
-    [unroll]
+    [loop]
     for (int i = 0; (i < 3); i++) {
-        float h = (0.01 + ((0.12 * float(i)) / 2.0));
+        float h = (0.01 + (((AmbientOcclusionReach - 0.01) * float(i)) / 2.0));
         float d = sdfDeScaleField(mapDistanceMasked(surfacePoint + (surfaceNormal * h), instanceMaskBase), stepScale);
 
         sdfEvalCount += 1.0; // one of the three AO rungs
@@ -2005,9 +2163,9 @@ float3 applyObjectGrid(float3 color, float3 surfacePoint, float3 rayDirection, f
 // step can jump PAST a surface before the sample reads a hit (the overshoot). Two full marches per pixel is the
 // documented debug cost — the overshoot case gates the primary march OFF, so a pixel runs this twice and the production
 // marcher zero times.
-float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStart, float firstExit, float secondEntry, uint instanceMaskBase, float pixelFootprint, float stepMultiplier) {
+float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStart, float firstExit, float secondEntry, float farDistance, uint instanceMaskBase, float pixelFootprint, float stepMultiplier) {
     if (marchStart < 0.0) {
-        return MaxDistance; // a beam-culled tile — nothing to march; both marches agree at the far plane
+        return farDistance; // a beam-culled tile — nothing to march; both marches agree at the far plane
     }
 
     float traveled = max(marchStart, 0.0);
@@ -2033,8 +2191,10 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
             traveled = secondEntry;
         }
 
-        if (traveled > MaxDistance) {
-            traveled = MaxDistance;
+        // Plain omega = 1 steps are provably clear by the 1-Lipschitz bound, so crossing the far plane here IS a
+        // validated escape (unlike renderView's over-relaxed step, which must fall back to the plain step first).
+        if (traveled > farDistance) {
+            traveled = farDistance;
             break;
         }
     }
@@ -2042,17 +2202,30 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
     return traveled;
 }
 
-float3 renderView(ViewportData view, float2 localUv, float marchStart, float firstExit, float secondEntry, float farBound, uint instanceMaskBase, float pixelFootprint, uint2 pixel, uint viewIndex) {
+// `lane` is the caller's index within its 8x8 workgroup and `active` whether this lane owns a rendered pixel: an
+// inactive lane (past the render extent) still runs the march-free prologue and the group shadow gather's barriers
+// (UNIFORM control flow — see sdfShadowGatherGroup) and then returns black, which the caller never stores.
+float3 renderView(ViewportData view, float2 localUv, float marchStart, float firstExit, float secondEntry, float farBound, uint instanceMaskBase, float pixelFootprint, uint2 pixel, uint viewIndex, uint lane, bool active) {
     float3 rayOrigin = view.position.xyz;
     float3 rayDirection = cameraRayDirection(view, localUv);
     int viewMode = (int)round(view.forward.w);
     float time = view.position.w;
+    float farDistance = worldFarDistance(view);
 
     sdfEvalCount = 0.0; // fresh tally for this pixel — see debug.view.evals (case 10 below)
 
     float traveled = max(marchStart, 0.0);
     bool hitSurface = false;
     int material = 0;
+    // The running closest approach, in the units of the hit-accept rule: the smallest (fieldDistance - hitThreshold)
+    // any sample of this ray measured, and the depth it was measured at. Negative means that sample satisfied the one
+    // accept rule (fieldDistance < hitThreshold) — the rule the in-loop hit arm applies, the F1 far bound is proven
+    // against, and the exhaustion arm after the loop re-applies. A sample can satisfy it yet not be accepted in-loop
+    // only when the disjoint-sphere test flagged the step that reached it as an overshoot (the sample is skipped and
+    // the march retreats); if the budget ends before the retreat re-finds the surface, that sample is the hit.
+    // Seeded far positive = no candidate.
+    float candidateMargin = SDF_FAR_DISTANCE;
+    float candidateT = 0.0;
     // Material blend at smooth seams (sdf-vm.hlsli's sdfMaterialBlendWeight): captured from the ACCEPT-sample march call
     // alongside `material`, because the normal/AO/shadow map calls after the loop clobber the per-thread channel. Weight 0
     // (no smooth seam within a blend radius of the hit) => the shade below is the exact table lookup, unchanged.
@@ -2113,6 +2286,16 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             float fieldDistance = hit.distance;
             float radius = min(fieldDistance, sdfMapStepBound);
             float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
+            // The closest-approach candidate (see its declaration): every evaluated sample competes, INCLUDING one an
+            // overshoot retreat is about to skip — that skipped sample is exactly the one the exhaustion arm exists
+            // for. Recorded at this sample's own depth, before any retreat moves `traveled`.
+            float margin = (fieldDistance - hitThreshold);
+
+            if (margin < candidateMargin) {
+                candidateMargin = margin;
+                candidateT = traveled;
+            }
+
             bool overshoot;
 
 #ifdef SDF_STRICT_MARCH
@@ -2162,6 +2345,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 break;
             }
 
+            // The depth this step leaves from (after any retreat above) — the plain-step fallback below re-steps from it.
+            float stepFrom = traveled;
+
 #ifdef SDF_STRICT_MARCH
             traveled += stepLength;
 #else
@@ -2180,10 +2366,26 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             stepLength = advance;
             traveled += stepLength;
 #endif
+            // A far exit may only be taken on a VALIDATED step. An over-relaxed step (omega > 1: stepLength > radius)
+            // is not proven clear by the 1-Lipschitz bound — only the next sample's disjoint-sphere test can reject a
+            // step that tunneled past a surface, and the two exits below fire before that sample exists. So a relaxed
+            // step that would cross the far plane / far bound is retaken as the plain step (radius, omega = 1 — the
+            // proven-clear advance; the slope resets as after a retreat), and the ray exits only if the plain step
+            // crosses too. A ray whose relaxed step never crosses an exit is untouched, so silhouettes against a far
+            // background — where omega reaches 2 / (1 - SlopeCap) = 10 while the ray accelerates away from the near
+            // object — resolve the background instead of vaulting it into sky.
+            if (((traveled >= farBound) || (traveled > farDistance)) && (stepLength > radius)) {
+                stepLength = radius;
+                traveled = (stepFrom + radius);
+#ifndef SDF_STRICT_MARCH
+                slopeM = -1.0; // the next step is plain — the same reset an overshoot retreat takes
+#endif
+            }
+
             // Four-bound teleport (Larsson "The Gunk"): once the ray marches past the tile's first occupied band without
             // converging, it is inside the beam-proven-empty gap — jump straight to the second band's start. secondEntry
             // >= firstExit, so this fires at most once (past secondEntry it is a no-op); a tile with no proven gap packs
-            // firstExit = MaxDistance, making the branch dead. The teleport lands at secondEntry <= the ray's true
+            // firstExit = the far distance, making the branch dead. The teleport lands at secondEntry <= the ray's true
             // re-entry, so `traveled` — and the footprint threshold — is never inflated beyond a normal march (it cannot
             // worsen the ground-notch). Reset the relaxation state so a stale step/slope does not carry across the jump.
             if ((traveled >= firstExit) && (traveled < secondEntry)) {
@@ -2203,16 +2405,87 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // F1 FAR-FIELD EXIT: past the tile's beam-proven far bound no ray in the tile can produce a hit the fine
             // march would ACCEPT (coneMarchFarBound proved it against the footprint-inflated threshold), so the ray
             // renders skyColor whether it exits here or marches on — OUTPUT-IDENTICAL, only fewer steps. farBound =
-            // MaxDistance (no bound proven, or the A/B lever pushed it out of reach) makes this a no-op past the far
-            // plane the MaxDistance break already handles.
+            // the far distance (no bound proven, or the A/B lever pushed it out of reach) makes this a no-op past the
+            // far plane the far-distance break already handles. Both exits are reached only on a validated step (the
+            // plain-step fallback above) or a cone-proven teleport landing.
             if (traveled >= farBound) {
                 break;
             }
 
-            if (traveled > MaxDistance) {
+            if (traveled > farDistance) {
                 break;
             }
         }
+
+        // THE EXHAUSTION ARM — the ONE accept rule, re-applied to the closest approach. A ray that ended its budget
+        // (the step cap, or a far exit) without the in-loop arm accepting a sample, but whose closest approach DID
+        // satisfy fieldDistance < max(SurfaceEpsilon, footprint * t) (candidateMargin < 0 — only an overshoot-skipped
+        // sample can be in that state, see the candidate's declaration), is a hit at that sample: re-evaluate the
+        // field there (one extra eval on this rare path, so the loop carries no per-sample material/blend capture) and
+        // shade with its material and normal exactly as the in-loop arm would have. A ray whose closest approach never
+        // satisfied the rule stays a miss — there is no second, looser threshold here. Adjacent pixels along an edge
+        // therefore resolve by the same rule whichever arm ends them.
+        if (!hitSurface && (candidateMargin < 0.0)) {
+            traveled = candidateT;
+
+            SdfHit candidate = mapMasked(rayOrigin + (rayDirection * traveled), instanceMaskBase);
+
+            sdfEvalCount += 1.0;
+            hitSurface = true;
+            material = candidate.material;
+            materialBlendWeight = sdfMaterialBlendWeight;
+            materialBlendOther = sdfMaterialBlendOther;
+            terminalRadius = candidate.distance;
+            terminalHitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
+        }
+    }
+
+    // THE GROUP SHADOW GATHER — at the one seam every lane of the workgroup reaches (the march loops above carry no
+    // barrier; the epilogue below is per-lane divergent): reduce the group's hit points and build ONE shadow candidate
+    // mask for all of them (sdfShadowGatherGroup, uniform control flow). The decisions feeding it are uniform: the
+    // view's mode, the engine levers, the reach. A lane that is not lit still publishes (as unlit) and still walks its
+    // share of the grid — its own epilogue never marches a shadow, so nothing it gathered is wasted on itself.
+#ifdef SDF_SCREEN_SOURCES
+    bool cullOn = worldShadowCullEnabled();
+    uint groupGather = (cullOn ? 1u : 0u); // without the group gather: the camera-tile mask (1) or the flat field (0)
+    uint groupAmbientGather = 0u;
+#ifdef SDF_GROUP_SHADOW_GATHER
+    {
+        bool finalShadingMode = ((viewMode <= 0) || (viewMode >= DebugViewModeCount) || (viewMode == DebugViewModeEvals));
+        bool ambientGatherWanted = (finalShadingMode && !worldAoDisabled() && !worldUseFastAmbientOcclusion());
+        bool groupGatherWanted = (finalShadingMode && cullOn && !worldUseCameraTileShadowMask() && !worldSoftShadowsDisabled());
+
+        if (ambientGatherWanted) {
+            // AO measures the field, including its positive clearances, rather than binary ray visibility.
+            // A camera cone or a finite contact sphere cannot preserve every ladder contribution. Build the
+            // full live-instance mask once per group, excluding only the parked slots that contribute nothing.
+            uint ambientInstanceCount = min(sdfInstanceCount(), SDF_MAX_INSTANCES);
+            uint ambientInstanceOffset = sdfInstanceDirectoryOffset();
+            for (uint word = lane; word < SDF_SHADOW_MASK_WORDS; word += SDF_GROUP_SHADOW_LANES) {
+                uint bits = 0u;
+                uint end = min(((word + 1u) * 32u), ambientInstanceCount);
+                for (uint index = word * 32u; index < end; index++) {
+                    if (sdfInstanceBoundAt(ambientInstanceOffset, index).w >= 0.0) {
+                        bits |= (1u << (index & 31u));
+                    }
+                }
+                sdfAmbientMaskWords[word] = bits;
+            }
+            GroupMemoryBarrierWithGroupSync();
+            groupAmbientGather = 2u;
+        }
+
+        if (groupGatherWanted) {
+            float groupShadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
+
+            groupGather = sdfShadowGatherGroup(hitSurface, (rayOrigin + (rayDirection * traveled)), worldSunDirection(), groupShadowReach, lane);
+        }
+    }
+#endif
+#endif
+
+    if (!active) {
+        return float3(0.0, 0.0, 0.0); // past the render extent: the caller stores nothing (no barrier follows)
     }
 
     float3 normal = float3(0.0, 0.0, 0.0);
@@ -2277,17 +2550,14 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // lever) — they MUST use the same length or the gathered occluder set is unsound for the shadow ray.
                 float shadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
 #ifdef SDF_SCREEN_SOURCES
-                // The shadow GRID CULL (default ON). Gather this lit pixel's shadow-ray grid neighbourhood into the local
-                // mask (sdfShadowMaskWords) and march THAT — bit-identical to the flat all-instances march (proven by the
-                // world-shadow-cull gate) but restricted to the instances the shadow ray can actually reach, so the
-                // shadow walks neither the camera-tile mask (the wrong occluder set for a ray that leaves the camera
-                // cone) NOR every instance. sdfShadowGather returns 2 (mask BUILT — the cull), 1 (a grid is packed but
-                // the program overflows the local mask → the camera-tile fallback, the cheap pre-cull behaviour, NOT the
-                // ~20x-slower all-instances flat), or 0 (NO grid → the flat all-instances fallback, which is cheap for a
-                // few-instance program and keeps the grid toggle render-invariant). The cull OFF marches flat
+                // The shadow GRID CULL (default ON). The group phase above built this workgroup's shadow candidate mask
+                // (sdfShadowMaskWords, groupshared) and decided the fallback for every lane: 2 = mask BUILT — march it
+                // (the cull, bit-identical to the flat all-instances march, restricted to the instances the group's
+                // shadow rays can reach); 1 = the camera-tile lever is set → the camera-tile mask (the cheap pre-cull behaviour, NOT the ~20x-slower
+                // all-instances flat); 0 = NO grid → the flat all-instances fallback, which is cheap for a
+                // few-instance program and keeps the grid toggle render-invariant. The cull OFF marches flat
                 // all-instances — the ground-truth reference the A/B lever and the world-shadow-cull gate use.
-                bool cullOn = worldShadowCullEnabled();
-                uint gather = (cullOn ? (worldUseCameraTileShadowMask() ? 1u : sdfShadowGather((surfacePoint + (normal * ShadowBias)), worldSunDirection(), shadowReach)) : 0u);
+                uint gather = groupGather;
                 bool culled = (gather == 2u);
                 uint shadowFallbackMask = ((cullOn && (gather == 1u)) ? instanceMaskBase : SDF_INSTANCE_MASK_ALL);
 
@@ -2323,11 +2593,21 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // 3-tap normal-ladder AO, into the AMBIENT fill ONLY (the sun stays governed by areaShadowVisibility above).
                 // Computed in the material branch so the emissive screen-card path never pays its five taps. The
                 // engine-bench sdf.ao lever forces occlusion to 1 (skipping the ladder's map() evals — creases brighten).
+                uint ambientMaskBase = instanceMaskBase;
+#ifdef SDF_SCREEN_SOURCES
+                if (!worldUseFastAmbientOcclusion()) {
+                    sdfAmbientMaskActive = (groupAmbientGather == 2u);
+                    ambientMaskBase = SDF_INSTANCE_MASK_ALL; // exact no-grid fallback; an active shared mask overrides it
+                }
+#endif
                 float ambientOcclusion = (worldAoDisabled()
                     ? 1.0
                     : (worldUseFastAmbientOcclusion()
-                        ? calcFastAO(surfacePoint, normal, instanceMaskBase, stepScale)
-                        : calcAO(surfacePoint, normal, instanceMaskBase, stepScale)));
+                        ? calcFastAO(surfacePoint, normal, ambientMaskBase, stepScale)
+                        : calcAO(surfacePoint, normal, ambientMaskBase, stepScale)));
+#ifdef SDF_SCREEN_SOURCES
+                sdfAmbientMaskActive = false;
+#endif
                 // Ambient and sun each carry their own linear color now (a sunset is a warm sun over a cool ambient,
                 // not a second code path). Both default to white, so the pinned-era expression is the same arithmetic.
                 float3 radiance = ((worldAmbientColor() * ((ambient * ambientScale) * ambientOcclusion)) + (worldSunColor() * ((worldSunWeight() * sunDiffuse) * sunScale)));
@@ -2337,7 +2617,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // screen-surface table, its color from the per-frame framebuffer average. The dot(screenNormal, -L) gate
                 // is the "light through the glass" cue — a screen only lights what sits in front of its face.
                 // SdfScreenLightEnv doubles as the screen-slot COUNT (the environment entry sits right after 0..count-1).
-                // The normalize is load-bearing: right/up are unit but not guaranteed orthogonal (see SdfScreenSurface).
+                // right/up are orthonormal by contract (SdfScreenSurface); the normalize absorbs upload float drift.
                 // The engine-bench sdf.screen-lights lever skips the whole additive loop (the CRTs stop spilling glow).
                 if (!worldScreenLightsDisabled()) {
                     for (uint lightIndex = 0u; (lightIndex < screenLightLoopBound()); lightIndex++) {
@@ -2450,7 +2730,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 
     switch (viewMode) {
         case 1: { // depth
-            float depth = saturate(traveled / MaxDistance);
+            float depth = saturate(traveled / farDistance);
             viewColor = float3(depth, depth, depth);
             break;
         }
@@ -2473,8 +2753,11 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         }
         case 6: { // termination cause — WHY the march loop exited, per pixel (reconstructed from post-loop state so
                   // the hot non-debug path's codegen is untouched: no per-step tracking, just a read of the exit facts).
-                  // green = epsilon-dominated hit, cyan = footprint-dominated hit, red = MaxSteps exhausted (the ground-
-                  // notch hypothesis), dark blue = escaped past MaxDistance (or a tile the beam culled empty).
+                  // green = epsilon-dominated hit, cyan = footprint-dominated hit (either arm — a closest-approach
+                  // candidate accepted at exhaustion classifies by the same dominance test, because it satisfied the
+                  // same rule), red = MaxSteps exhausted with no candidate inside the rule (the ground-notch
+                  // hypothesis), dark blue = escaped (a validated step past the far distance or the F1 far bound, or a
+                  // tile the beam culled empty). A break leaves marchStep below MaxSteps; only exhaustion reaches it.
                   //
                   // THE TERMINATION/SLICE SPLIT (deliberate, keep it): this view shows what the REAL pipeline does —
                   // tile cull included (a beam-culled tile reads as escaped/background here, because that is exactly
@@ -2488,7 +2771,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 bool epsilonDominated = (SurfaceEpsilon >= (pixelFootprint * traveled));
                 viewColor = (epsilonDominated ? float3(0.15, 0.90, 0.25) : float3(0.15, 0.80, 0.95));
             }
-            else if ((marchStart < 0.0) || (traveled > MaxDistance)) {
+            else if ((marchStart < 0.0) || (marchStep < MaxSteps)) {
                 viewColor = float3(0.02, 0.05, 0.28); // escaped to the sky (or a beam-culled empty tile) — background
             }
             else {
@@ -2595,11 +2878,11 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                   // thin geometry the clamp holds. Where they agree the clamp was not load-bearing (green); where the
                   // unclamped march tunneled past a surface the terminals diverge (hot) — the liar's-spiral class made
                   // live. This is a DEBUG-ONLY two-marches-per-pixel cost; the primary march was gated OFF above for it.
-            float clampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, instanceMaskBase, pixelFootprint, 1.0);
-            float unclampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, instanceMaskBase, pixelFootprint, (1.0 / stepScale));
+            float clampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, farDistance, instanceMaskBase, pixelFootprint, 1.0);
+            float unclampedDepth = marchOvershootDepth(rayOrigin, rayDirection, marchStart, firstExit, secondEntry, farDistance, instanceMaskBase, pixelFootprint, (1.0 / stepScale));
             float disagreement = abs(clampedDepth - unclampedDepth);
             // Log-scaled against the march reach so a sub-unit tunnel still reads while a full escape saturates.
-            float hot = saturate(log2(1.0 + disagreement) / log2(1.0 + MaxDistance));
+            float hot = saturate(log2(1.0 + disagreement) / log2(1.0 + farDistance));
             // green (agree) -> yellow -> red (the unclamped march tunneled far).
             float3 warmBand = lerp(float3(0.10, 0.70, 0.22), float3(0.98, 0.85, 0.12), saturate(hot * 2.0));
             viewColor = lerp(warmBand, float3(0.96, 0.12, 0.05), saturate((hot - 0.5) * 2.0));

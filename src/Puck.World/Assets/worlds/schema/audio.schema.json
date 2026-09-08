@@ -25,21 +25,25 @@
       "type": "string"
     },
     "cues": {
-      "description": "Gets the cue table. The absence-coalesce lives in the accessor for the same reason Response\u0027s does.",
+      "description": "Gets the cue table. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
       "type": "array",
       "items": {
-        "description": "One world-event \u2192 sound binding \u2014 a row of the Audio section\u0027s cue table: when the named engine event fires, the referenced patch voices through a short-lived transient emitter placed per Placement. Event tokens are a closed, published vocabulary of engine mechanisms (EventTokens): a genre ships different cue rows; new tokens appear only when the engine grows new mechanisms.",
+        "description": "One world-event \u2192 sound binding \u2014 a row of the Audio section\u0027s cue table: when the named engine event fires, the referenced patch voices through a short-lived transient emitter placed per Placement. Event tokens are either a published engine mechanism (EventTokens) or a cue name emitted by one of the same world\u0027s rules. A genre can therefore bind authored rule events without widening the engine vocabulary.",
         "type": [
           "object",
           "null"
         ],
         "properties": {
           "event": {
-            "description": "The event token (must be one of EventTokens).",
+            "description": "The published engine token or rule-emitted cue name.",
             "type": "string"
           },
           "patchId": {
-            "description": "The referenced Id the cue voices (must resolve).",
+            "description": "The referenced Name the cue voices (must resolve).",
+            "type": "string"
+          },
+          "placement": {
+            "description": "Where the cue sounds: PlacementAtSite (spatial, at the event\u0027s world position \u2014 the shimmer\u0027s audio twin; events with no derivable site fall back to the listener), PlacementListener (UI feedback \u2014 rides the listener pose, so distance 0 renders full gain and the mixer\u0027s on-top-of-listener pan hold centers it), or emitter:\u003Cname\u003E (sounds from the named speaker\u0027s resolved pose and support radius).",
             "type": "string"
           },
           "gainThousandths": {
@@ -47,20 +51,17 @@
             "type": [
               "integer",
               "null"
-            ]
-          },
-          "placement": {
-            "description": "Where the cue sounds: PlacementAtSite (spatial, at the event\u0027s world position \u2014 the shimmer\u0027s audio twin; events with no derivable site fall back to the listener), PlacementListener (UI feedback \u2014 rides the listener pose, so distance 0 renders full gain and the mixer\u0027s on-top-of-listener pan hold centers it), or emitter:\u003Cname\u003E (sounds from the named speaker\u0027s resolved pose and support radius).",
-            "type": "string"
+            ],
+            "default": null
           }
         },
         "required": [
           "event",
           "patchId",
-          "gainThousandths",
           "placement"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldAudioCue"
       }
     }
   },
@@ -73,5 +74,6 @@
     "cues"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldAudioDefaults"
 }

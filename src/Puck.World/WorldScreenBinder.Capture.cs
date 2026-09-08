@@ -1,9 +1,7 @@
+using System.Diagnostics;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Gpu;
-using Puck.Abstractions.Presentation;
-using Puck.Hosting;
 using Puck.Platform;
 using Puck.SdfVm.Views;
 
@@ -23,41 +21,70 @@ internal sealed partial class WorldScreenBinder {
     // the D3D12 GPU transport the open is ALWAYS deferred to that pending path (the render adapter LUID the platform
     // capture must open on is not resolvable at construction), so a valid declaration retains a pending feed here.
     private void BootDeclaredCapture(ScreenSlot slot, WorldScreenSource.Capture capture) {
+        var feed = TryCreateCaptureFeed(
+            capture: capture,
+            fault: out var fault
+        );
+
+        if (feed is not null) {
+            slot.Capture = feed;
+        } else {
+            slot.DeclaredFault = fault;
+        }
+    }
+    // The one open ladder behind a Capture source, shared by a declared screen row (BootDeclaredCapture, above) and
+    // the frame-source registry (DeclareFrameSource, WorldScreenBinder.FrameSources.cs — a HUD/overlay capture with
+    // no screen row at all): the D3D12 GPU transport always defers to the pending path (the render adapter LUID is
+    // not resolvable yet); otherwise an immediate CPU/GPU open is tried, then a pending feed on a platform that
+    // supports window capture at all, then nothing (fault only, no feed) on a platform with none. A caller that
+    // gets no feed back never retries on its own — a null return means the platform itself cannot ever open this
+    // source, not a transient miss.
+    private CaptureFeed? TryCreateCaptureFeed(WorldScreenSource.Capture capture, out string? fault) {
         if (capture.MonitorIndex is { } monitorIndex) {
             if (
                 m_hostsOnDirectX &&
                 m_windowCapture.IsSupported &&
                 (monitorIndex >= 0)
             ) {
-                slot.Capture = NewCaptureFeed(
+                fault = null;
+
+                return NewCaptureFeed(
                     title: "",
                     profile: capture.Profile,
                     source: null,
                     monitorIndex: monitorIndex
                 );
-            } else if (TryOpenMonitorCapture(
+            }
+
+            if (TryOpenMonitorCapture(
                 monitorIndex: monitorIndex,
                 profile: capture.Profile,
                 feed: out var monitorFeed,
                 fault: out var monitorFault
             )) {
-                slot.Capture = monitorFeed;
-            } else if (
+                fault = null;
+
+                return monitorFeed;
+            }
+
+            if (
                 m_windowCapture.IsSupported &&
                 (monitorIndex >= 0)
             ) {
-                slot.Capture = NewCaptureFeed(
+                fault = monitorFault;
+
+                return NewCaptureFeed(
                     title: "",
                     profile: capture.Profile,
                     source: null,
                     monitorIndex: monitorIndex,
                     fault: monitorFault
                 );
-            } else {
-                slot.DeclaredFault = monitorFault;
             }
 
-            return;
+            fault = monitorFault;
+
+            return null;
         }
 
         if (
@@ -65,81 +92,43 @@ internal sealed partial class WorldScreenBinder {
             m_windowCapture.IsSupported &&
             !string.IsNullOrWhiteSpace(value: capture.WindowTitle)
         ) {
-            slot.Capture = NewCaptureFeed(
+            fault = null;
+
+            return NewCaptureFeed(
                 title: capture.WindowTitle,
                 profile: capture.Profile,
                 source: null
             );
-        } else if (TryOpenCapture(
+        }
+
+        if (TryOpenCapture(
             title: capture.WindowTitle,
             profile: capture.Profile,
             feed: out var captureFeed,
             fault: out var captureFault
         )) {
-            slot.Capture = captureFeed;
-        } else if (
+            fault = null;
+
+            return captureFeed;
+        }
+
+        if (
             m_windowCapture.IsSupported &&
             !string.IsNullOrWhiteSpace(value: capture.WindowTitle)
         ) {
-            slot.Capture = NewCaptureFeed(
+            fault = captureFault;
+
+            return NewCaptureFeed(
                 title: capture.WindowTitle,
                 profile: capture.Profile,
                 source: null,
                 fault: captureFault
             );
-        } else {
-            slot.DeclaredFault = captureFault;
-        }
-    }
-    // Pulls one frame from the shared webcam session on the capture cadence and publishes it to the shared surface: a
-    // disconnected device drops the feed to unbound + fault, a frame refreshes the handle + room glow, and no frame yet
-    // holds the last state.
-    private void CaptureCamera(ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
-        if (
-            (m_cameraFeed is not { } feed) ||
-            (feed.Session is not { } session)
-        ) {
-            return;
         }
 
-        if (session.IsEnded) {
-            session.Dispose();
-            feed.Session = null;
-            feed.Live = false;
-            feed.Fault = "camera disconnected";
+        fault = captureFault;
 
-            return;
-        }
-
-        var version = session.FrameVersion;
-
-        if (
-            (version == feed.LastFrameVersion) ||
-            !feed.ShouldPull(elapsedTicks: elapsedTicks)
-        ) {
-            return;
-        }
-
-        if (session.TryCapture(surface: out var surface)) {
-            var panelSurface = FitPanelSurface(
-                feed: feed,
-                surface: in surface
-            );
-
-            _ = feed.Surface.Publish(
-                deviceContext: deviceContext,
-                gpu: gpu,
-                surface: in panelSurface
-            );
-            feed.LastFrameVersion = version;
-            feed.Live = true;
-            feed.Fault = null;
-            feed.Light = AverageColor(pixels: panelSurface.Pixels.Span);
-        } else {
-            // The async producer advertised a new version but the grab raced it. Do not spend the declaration's whole
-            // cadence on that miss; retry on the next produced frame while still avoiding more than one attempt here.
-            feed.RetryPull();
-        }
+        return null;
     }
     // Samples only already-completed compositor frames. A miss holds the last frame. An ended compositor session is
     // disposed before the binder resolves a replacement target (a returning window with the same title, or a reconnected
@@ -202,42 +191,6 @@ internal sealed partial class WorldScreenBinder {
             feed.Fault = $"{feed.Label} awaiting a compositor frame";
         }
     }
-    // Opens (once) and returns the ONE shared webcam feed, or null when no device can be opened (m_cameraFault holds the
-    // reason). Every camera screen shares this single session — two sessions on one physical device flicker.
-    private CameraFeed? EnsureCameraFeed(WorldFeedProfile profile) {
-        if (m_cameraFeed is not null) {
-            return m_cameraFeed;
-        }
-
-        if (m_cameraTried) {
-            return null;
-        }
-
-        m_cameraTried = true;
-
-        if (
-            !m_cameraCapture.IsSupported ||
-            !m_cameraCapture.TryOpenDefault(
-            requestedWidth: profile.Width,
-            requestedHeight: profile.Height,
-            session: out var session
-        )
-        ) {
-            m_cameraFault = "no camera device present";
-
-            return null;
-        }
-
-        m_cameraFeed = new CameraFeed(
-            session: session,
-            surface: new CpuSurfaceSource(),
-            cadenceTicks: EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz),
-            outputWidth: checked((uint)profile.Width),
-            outputHeight: checked((uint)profile.Height)
-        );
-
-        return m_cameraFeed;
-    }
     // Ensures the feed's THREE simultaneous-access shared textures exist and are attached to its current source at the
     // source's native extent (the sampler scales, so no GPU-side resize is needed). Reallocates on a resize
     // (GpuTargetsOutdated) or a reacquired source; AttachGpuTargets replaces first, then the superseded images are
@@ -297,56 +250,6 @@ internal sealed partial class WorldScreenBinder {
             }
         }
     }
-    // The Media Foundation session owns its negotiated format and may ignore the preferred extent. A diegetic panel
-    // should not upload a megapixel-scale frame it cannot display, so fit CPU pixels into the declaration's envelope
-    // before the synchronous GPU upload. The buffer is retained by the feed and reused; no steady-state allocation.
-    private static Surface FitPanelSurface(in Surface surface, CameraFeed feed) {
-        if (
-            !surface.IsCpuPixels ||
-            (surface.Width <= feed.OutputWidth) ||
-            (surface.Height <= feed.OutputHeight)
-        ) {
-            return surface;
-        }
-
-        const int BytesPerPixel = 4;
-        var targetWidth = feed.OutputWidth;
-        var targetHeight = feed.OutputHeight;
-        var targetByteLength = checked((int)((targetWidth * targetHeight) * BytesPerPixel));
-
-        if ((surface.Pixels.Length < checked((int)((surface.Width * surface.Height) * BytesPerPixel)))) {
-            return surface;
-        }
-
-        if (
-            (feed.PanelPixels is null) ||
-            (feed.PanelPixels.Length != targetByteLength)
-        ) {
-            feed.PanelPixels = GC.AllocateUninitializedArray<byte>(length: targetByteLength);
-        }
-
-        var source = MemoryMarshal.Cast<byte, uint>(span: surface.Pixels.Span);
-        var target = MemoryMarshal.Cast<byte, uint>(span: feed.PanelPixels.AsSpan());
-
-        for (uint y = 0; (y < targetHeight); y++) {
-            var sourceY = ((y * surface.Height) / targetHeight);
-            var targetRow = (y * targetWidth);
-            var sourceRow = (sourceY * surface.Width);
-
-            for (uint x = 0; (x < targetWidth); x++) {
-                var sourceX = ((x * surface.Width) / targetWidth);
-
-                target[checked((int)(targetRow + x))] = source[checked((int)(sourceRow + sourceX))];
-            }
-        }
-
-        return Surface.CpuPixels(
-            pixels: feed.PanelPixels,
-            width: targetWidth,
-            height: targetHeight,
-            format: surface.Format
-        );
-    }
     // Constructs a capture feed carrying this binder's transport choice (GPU on the D3D12 host, CPU on Vulkan). The one
     // place window/monitor CaptureFeeds are built, so the route flag can never diverge across the open/pending sites.
     private CaptureFeed NewCaptureFeed(string title, WorldFeedProfile profile, INativeImageCaptureFeed? source, int? monitorIndex = null, string? fault = null) =>
@@ -361,39 +264,6 @@ internal sealed partial class WorldScreenBinder {
         ) {
             Fault = fault,
         };
-    // One physical default-camera session is shared to avoid device flicker. When several camera sources declare
-    // different preferences, request the richest combined envelope rather than letting declaration order choose.
-    private static WorldFeedProfile ResolveSharedCameraProfile(IReadOnlyList<WorldScreen> screens) {
-        var profile = WorldFeedProfile.Default;
-        var found = false;
-
-        foreach (var screen in screens) {
-            if (screen.Source is not WorldScreenSource.Camera camera) {
-                continue;
-            }
-
-            profile = (found
-                ? new WorldFeedProfile(
-                    Width: Math.Max(
-                        val1: profile.Width,
-                        val2: camera.Profile.Width
-                    ),
-                    Height: Math.Max(
-                        val1: profile.Height,
-                        val2: camera.Profile.Height
-                    ),
-                    RefreshRateHz: Math.Max(
-                        val1: profile.RefreshRateHz,
-                        val2: camera.Profile.RefreshRateHz
-                    )
-                )
-                : camera.Profile
-            );
-            found = true;
-        }
-
-        return profile;
-    }
     // Resolves a live window by title and opens one compositor-owned, self-pumping feed at the declared budget. On the
     // D3D12 GPU transport the platform capture opens on the render adapter (AdapterLuidForOpen) so its shared textures
     // import cross-API.
@@ -470,33 +340,6 @@ internal sealed partial class WorldScreenBinder {
         return true;
     }
 
-    /// <summary>Binds a declared screen to the shared live webcam feed — the runtime <c>screen.source &lt;index&gt; camera</c> path. Any
-    /// existing producer on the slot is cleared first. Fails loudly for an undeclared screen or when no camera device can
-    /// be opened.</summary>
-    /// <param name="index">The engine screen-surface index (must be a declared screen).</param>
-    /// <returns>Whether the bind succeeded, and a message describing the outcome.</returns>
-    public (bool Ok, string Message) TryCamera(int index) {
-        if (m_disposed) {
-            return (Ok: false, Message: "binder disposed");
-        }
-
-        if (m_slots.TryGetValue(
-            key: index,
-            value: out var slot
-        ) is false) {
-            return (Ok: false, Message: $"no screen {index} declared");
-        }
-
-        if (EnsureCameraFeed(profile: WorldFeedProfile.Default) is not { } feed) {
-            return (Ok: false, Message: m_cameraFault);
-        }
-
-        slot.ClearLive();
-        slot.Camera = feed;
-        slot.DeclaredFault = null;
-
-        return (Ok: true, Message: $"screen {index} showing the webcam");
-    }
     /// <summary>Binds a declared screen to a live desktop-window capture keyed by a title fragment — the runtime
     /// <c>screen.source &lt;index&gt; capture</c> path. Any existing producer on the slot is cleared first. The capture rebinds each grab, so
     /// the target window need not be open yet (it reads no signal until it appears, and rebinds if it disappears and
@@ -566,65 +409,35 @@ internal sealed partial class WorldScreenBinder {
         return (Ok: true, Message: $"screen {index} capturing monitor {monitorIndex}");
     }
 
-    // One feed's PULL CLOCK, stated once so a webcam and a window capture cannot drift into different refresh
-    // policies: the first pull after arming always runs, and every later one waits out the profile's whole period.
-    // Rearming (a device loss, or a pull that produced nothing) makes the next pull immediate again.
-    private sealed class PullCadence(ulong cadenceTicks) {
-        private readonly ulong m_cadenceTicks = cadenceTicks;
+    // One feed's PRESENTATION CLOCK, stated once so a webcam and a window capture cannot drift into different refresh
+    // policies. Camera pixels are nondeterministic presentation input and must not freeze when authoritative simulation
+    // time is paused or absent. The first pull after arming always runs; later pulls wait out the profile's whole period.
+    private sealed class PullCadence(uint rateHz) {
+        private readonly long m_cadenceTicks = Math.Max(
+            val1: 1L,
+            val2: (Stopwatch.Frequency / Math.Max(val1: rateHz, val2: 1u))
+        );
 
-        private ulong m_lastPullTicks;
+        private long m_lastPullTicks;
         private bool m_pulled;
 
         public void Rearm() => m_pulled = false;
-        public bool ShouldPull(ulong elapsedTicks) {
+        public bool ShouldPull() {
+            var now = Stopwatch.GetTimestamp();
+
             if (
                 m_pulled &&
-                ((elapsedTicks - m_lastPullTicks) < m_cadenceTicks)
+                ((now - m_lastPullTicks) < m_cadenceTicks)
             ) {
                 return false;
             }
 
             m_pulled = true;
-            m_lastPullTicks = elapsedTicks;
+            m_lastPullTicks = now;
 
             return true;
         }
     }
-    // The ONE shared webcam feed: its live session (nulled when the device disconnects), the GPU upload adapter every
-    // camera screen samples, and the live/fault/glow state the cadence maintains. A mutable class so the session flips
-    // in place; the handle is 0 (unbound) until the first frame lands and whenever the feed is not live.
-    private sealed class CameraFeed(ICameraCaptureSession session, CpuSurfaceSource surface, ulong cadenceTicks, uint outputWidth, uint outputHeight) : IDisposable {
-        public string? Fault { get; set; }
-        public Vector3 Light { get; set; }
-        public bool Live { get; set; }
-        public byte[]? PanelPixels { get; set; }
-
-        public long LastFrameVersion { get; set; } = -1L;
-        public uint OutputHeight { get; } = outputHeight;
-        public uint OutputWidth { get; } = outputWidth;
-        public ICameraCaptureSession? Session { get; set; } = session;
-        public CpuSurfaceSource Surface { get; } = surface;
-
-        private PullCadence Cadence { get; } = new(cadenceTicks: cadenceTicks);
-
-        public void Dispose() {
-            Session?.Dispose();
-            Session = null;
-            Surface.Dispose();
-        }
-        public nint Handle() => (Live
-            ? Surface.CurrentHandle
-            : 0
-        );
-        public void NotifyDeviceLost() {
-            Surface.NotifyDeviceLost();
-            LastFrameVersion = -1L;
-            Cadence.Rearm();
-        }
-        public void RetryPull() => Cadence.Rearm();
-        public bool ShouldPull(ulong elapsedTicks) => Cadence.ShouldPull(elapsedTicks: elapsedTicks);
-    }
-    // One compositor-capture feed: a producer (a desktop window by title, or a whole monitor by index), its GPU upload
     // adapter, and live/fault/glow state. MonitorIndex null is window mode; non-null is whole-monitor mode.
     private sealed class CaptureFeed(
         string title,
@@ -656,7 +469,7 @@ internal sealed partial class WorldScreenBinder {
         // samples the LatestGpuSlot image), rather than the CPU-pixel Surface. Fixed at construction by the host backend.
         public bool GpuRoute { get; } = gpuRoute;
 
-        private PullCadence Cadence { get; } = new(cadenceTicks: EngineTicks.PerRate(ratePerSecond: profile.RefreshRateHz));
+        private PullCadence Cadence { get; } = new(rateHz: profile.RefreshRateHz);
 
         public void Dispose() {
             ReleaseGpuTargets();
@@ -700,7 +513,7 @@ internal sealed partial class WorldScreenBinder {
                 image.Dispose();
             }
         }
-        public bool ShouldPull(ulong elapsedTicks) => Cadence.ShouldPull(elapsedTicks: elapsedTicks);
+        public bool ShouldPull() => Cadence.ShouldPull();
         public bool TryEnsureSource(long? adapterLuid) {
             if ((Source is { IsEnded: false })) {
                 return true;

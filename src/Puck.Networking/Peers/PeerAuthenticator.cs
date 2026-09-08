@@ -7,25 +7,42 @@ namespace Puck.Networking.Peers;
 /// at the peer; verifying is checking a claim against the exact identity the peer offered at Hello — the
 /// self-certifying <see cref="KeyId"/> its own SPKI fingerprint names, never an out-of-band admission list.
 /// Built fresh per handshake because that offered identity is per-connection, unlike a shared admission-list
-/// authenticator.</summary>
+/// authenticator. Constructing one imports the offered SPKI, so it is also where a key that is not P-256 is
+/// found out.</summary>
 internal sealed class PeerAuthenticator : IAuthenticator {
     private readonly string m_expectedAudience;
     private readonly string m_expectedDomain;
-    private readonly byte[] m_expectedSubjectPublicKeyInfo;
     private readonly Func<DateTimeOffset> m_now;
     private readonly PeerIdentity m_prover;
+    private readonly TrustList m_trust;
 
-    /// <summary>Initializes the authenticator for one handshake.</summary>
+    /// <summary>Initializes the authenticator for one handshake, building the single-entry trust list that pins
+    /// the offered SPKI once.</summary>
     /// <param name="prover">This side's own identity, used to sign a proof.</param>
     /// <param name="expectedSubjectPublicKeyInfo">The peer's SPKI, as offered at Hello.</param>
     /// <param name="expectedAudience">This side's own fingerprint — the audience a verified peer proof must name.</param>
     /// <param name="now">The verification-boundary clock read, overridable for tests.</param>
+    /// <exception cref="ArgumentException"><paramref name="expectedSubjectPublicKeyInfo"/> is not exactly one SPKI
+    /// holding a P-256 key.</exception>
+    /// <exception cref="PlatformNotSupportedException"><paramref name="expectedSubjectPublicKeyInfo"/> carries a key
+    /// this host's elliptic-curve implementation cannot import (explicit curve parameters on a named-curves-only
+    /// host).</exception>
     public PeerAuthenticator(PeerIdentity prover, byte[] expectedSubjectPublicKeyInfo, string expectedAudience, Func<DateTimeOffset>? now = null) {
         m_prover = prover;
-        m_expectedSubjectPublicKeyInfo = expectedSubjectPublicKeyInfo;
         m_expectedDomain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: expectedSubjectPublicKeyInfo);
         m_expectedAudience = expectedAudience;
         m_now = (now ?? (static () => DateTimeOffset.UtcNow));
+        m_trust = PeerWireProtocol.SingleEntryTrust(
+            id: KeyId.ForSubject(
+                algorithm: AttestationAlgorithms.EcdsaP256Sha256,
+                domain: m_expectedDomain,
+                subject: m_expectedDomain,
+                subjectPublicKeyInfo: expectedSubjectPublicKeyInfo
+            ),
+            maximumAge: (PeerWireProtocol.MaximumIdentityClaimAge + PeerWireProtocol.ClockSkewTolerance),
+            reach: "identity",
+            subjectPublicKeyInfo: expectedSubjectPublicKeyInfo
+        );
     }
 
     int IAuthenticator.ChallengeBytes => PeerWireProtocol.ChallengeBytes;
@@ -77,17 +94,6 @@ internal sealed class PeerAuthenticator : IAuthenticator {
             return false;
         }
 
-        var trustList = PeerWireProtocol.SingleEntryTrust(
-            id: KeyId.ForSubject(
-                algorithm: AttestationAlgorithms.EcdsaP256Sha256,
-                domain: m_expectedDomain,
-                subject: m_expectedDomain,
-                subjectPublicKeyInfo: m_expectedSubjectPublicKeyInfo
-            ),
-            maximumAge: PeerWireProtocol.MaximumIdentityClaimAge,
-            reach: "identity",
-            subjectPublicKeyInfo: m_expectedSubjectPublicKeyInfo
-        );
         var result = PeerWireProtocol.Profile.VerifyChain(
             chain: [],
             claim: claim,
@@ -95,7 +101,7 @@ internal sealed class PeerAuthenticator : IAuthenticator {
             expectedAudience: m_expectedAudience,
             expectedPurpose: PeerWireProtocol.IdentityPurpose,
             now: m_now(),
-            trustList: trustList
+            trustList: m_trust
         );
 
         if (

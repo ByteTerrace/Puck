@@ -1,0 +1,3790 @@
+{
+  "motion": {
+    "moveSpeed": 4,
+    "turnSpeed": 2.5,
+    "maxSmoothError": 3
+  },
+  "spawnPoints": [
+    {
+      "id": "seat-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "seat-2",
+      "position": [
+        2,
+        0,
+        0
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "seat-3",
+      "position": [
+        0,
+        0,
+        2
+      ],
+      "yawDegrees": 0
+    },
+    {
+      "id": "seat-4",
+      "position": [
+        2,
+        0,
+        2
+      ],
+      "yawDegrees": 0
+    }
+  ],
+  "screens": [
+    {
+      "index": 0,
+      "origin": [
+        0,
+        1,
+        0
+      ],
+      "right": [
+        1,
+        0,
+        0
+      ],
+      "up": [
+        0,
+        1,
+        0
+      ],
+      "halfWidth": 1,
+      "halfHeight": 1,
+      "halfDepth": 0.1,
+      "round": 0,
+      "source": {
+        "$type": "testPattern",
+        "width": 320,
+        "height": 240
+      },
+      "route": {
+        "engageable": false,
+        "engageRadius": 0,
+        "autoInsert": false
+      }
+    }
+  ],
+  "cameras": [],
+  "bodies": {
+    "seatActivation": [
+      "Eager",
+      "Eager",
+      "Eager",
+      "Eager"
+    ],
+    "networkPlayers": 0,
+    "defaultPeerSource": "Idle",
+    "seatSpawns": [
+      "seat-1",
+      "seat-2",
+      "seat-3",
+      "seat-4"
+    ],
+    "distribution": {
+      "region": {
+        "$type": "disc",
+        "radius": 40,
+        "sampleCount": 124
+      },
+      "fill": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      }
+    },
+    "peerVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": -4,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "seatVariation": {
+      "phase": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.38196602
+      },
+      "weave": {
+        "name": "additive",
+        "offset": 0,
+        "step": 0.618034
+      },
+      "activity": {
+        "name": "r2",
+        "offset": 1,
+        "step": 0
+      }
+    },
+    "peerColors": {
+      "name": "additive",
+      "offset": -4,
+      "step": 0.618034
+    },
+    "capacity": 4,
+    "reconnectGraceSeconds": 3
+  },
+  "seatDefaults": {
+    "identities": [
+      {
+        "id": "amber",
+        "name": "amber",
+        "color": "#ED8530"
+      }
+    ],
+    "neutralColor": "#8C8C8C",
+    "colorSequence": {
+      "name": "additive",
+      "offset": 0,
+      "step": 0.618034
+    },
+    "saturation": 0.65,
+    "value": 0.85,
+    "colorSearchLimit": 64,
+    "noseFactor": 0.35,
+    "pickerThreshold": 0.6,
+    "pickerNeutralColor": "#8C8C8C",
+    "pickerNeutralBlend": 0.5,
+    "seatCameraFeel": {
+      "yawSensitivity": 0.001,
+      "pitchSensitivity": 0.001,
+      "invertYaw": false,
+      "invertPitch": false,
+      "stickLookRate": 2.6
+    }
+  },
+  "channels": [
+    {
+      "name": "forward",
+      "shape": "Bipolar",
+      "role": "MoveAdvance",
+      "composition": false
+    },
+    {
+      "name": "strafe",
+      "shape": "Bipolar",
+      "role": "MoveStrafe",
+      "composition": false
+    },
+    {
+      "name": "turn",
+      "shape": "Bipolar",
+      "role": "Turn",
+      "composition": false
+    }
+  ],
+  "targetRegisters": [],
+  "bodyMotionPrograms": [
+    {
+      "name": "grounded",
+      "version": "puck.body-motion.v1",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "RunActionTriggers",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ]
+    },
+    {
+      "name": "roam",
+      "version": "puck.body-motion.v1",
+      "kind": "Producer",
+      "operations": [
+        "ProduceSteeringIntent"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "name": "traveler",
+        "bodyMotionProgram": "grounded",
+        "motion": {
+          "speed": {
+            "value": 4
+          },
+          "turn": {
+            "rate": 2.5,
+            "falloff": 1,
+            "pitchRate": 0,
+            "maxPitch": 1.2
+          },
+          "shaping": [
+            {
+              "along": {},
+              "turnScale": 1
+            }
+          ],
+          "moveFrame": "World",
+          "facingSnap": true,
+          "holds": [
+            {
+              "name": "air",
+              "bond": "Free",
+              "hold": "Gravity",
+              "pull": 0,
+              "lift": 0,
+              "reach": 0,
+              "upLean": 0,
+              "forward": "Heading",
+              "onDrive": false,
+              "driveAlignment": 0,
+              "gravity": {
+                "rise": 14,
+                "fall": 23
+              },
+              "envelope": {
+                "sinkSpeed": 20
+              },
+              "thrust": 0
+            }
+          ],
+          "groundStick": 2
+        },
+        "producers": {
+          "roam": {
+            "scalars": {
+              "forward": 0.375,
+              "softRadius": 45,
+              "weaveAmplitude": 0.5,
+              "inwardGain": 1.6,
+              "turnScale": 2.5,
+              "weaveFrequencyBase": 0.3,
+              "weaveFrequencyRange": 0.2,
+              "altitudeGain": 0.32,
+              "activityRateBase": 2.2,
+              "activityRateRange": 1.3,
+              "strafeWave": 0,
+              "turnWave": 0,
+              "upWave": 0,
+              "pitchWave": 0,
+              "rollTurn": 0,
+              "pressThreshold": 0,
+              "altitudeBase": 0,
+              "altitudeRange": 0
+            },
+            "channels": {}
+          }
+        },
+        "actions": {},
+        "bodyContact": "Overlap",
+        "mass": 0
+      }
+    ],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 1,
+        "step": 0
+      },
+      "rows": []
+    }
+  },
+  "defaultSeatKit": "traveler",
+  "addons": [
+    {
+      "name": "probe",
+      "modulePath": "probe.wasm",
+      "hash": "sha256-64/0123456789abcdef",
+      "fuel": 1000000,
+      "enabled": false,
+      "revision": 0
+    }
+  ],
+  "bindingOverlays": [],
+  "storage": {
+    "endpoint": null,
+    "userId": null,
+    "discoveryEndpoint": null
+  },
+  "prototypes": [],
+  "placements": {
+    "rows": [],
+    "policy": {
+      "authoringHeadroomScreens": 4,
+      "authoringHeadroomPlacements": 8,
+      "minPlacementScale": 0.2,
+      "maxPlacementScale": 5,
+      "candidateRadius": 32,
+      "candidateCap": 16,
+      "previewDeadlineFrames": 12,
+      "derivedFaceScreens": 4
+    }
+  },
+  "speakers": [],
+  "tunes": [],
+  "patches": [],
+  "collision": {
+    "requirements": [],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "gradientProbe": 0,
+    "defaultHold": false
+  },
+  "host": {
+    "presentation": "Windowed",
+    "width": 1280,
+    "height": 800,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": false,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null,
+    "authority": null,
+    "backend": "auto"
+  },
+  "views": {
+    "seatRig": {
+      "name": "seatChase",
+      "version": "puck.camera.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5.4626,
+          "yaw": 0,
+          "pitch": 0.4145069,
+          "pivotOffset": [
+            0,
+            0,
+            0
+          ],
+          "opcode": "orbit"
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false,
+          "focusDistance": 6,
+          "opcode": "lookAt"
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9599311,
+          "opcode": "fov"
+        },
+        {
+          "$type": "dynamics",
+          "row": "chase",
+          "opcode": "dynamics"
+        }
+      ],
+      "anchorOp": null,
+      "blendOp": null,
+      "clampPitchOp": null,
+      "fovOp": {
+        "fieldOfViewRadians": 0.9599311,
+        "opcode": "fov"
+      },
+      "lookAtOp": {
+        "subject": {
+          "$type": "reference"
+        },
+        "targetOffset": [
+          0,
+          1,
+          0
+        ],
+        "worldAxes": false,
+        "focusDistance": 6,
+        "opcode": "lookAt"
+      },
+      "offsetOp": null,
+      "orbitOp": {
+        "distance": 5.4626,
+        "yaw": 0,
+        "pitch": 0.4145069,
+        "pivotOffset": [
+          0,
+          0,
+          0
+        ],
+        "opcode": "orbit"
+      },
+      "pathOp": null,
+      "dynamicsOp": {
+        "row": "chase",
+        "opcode": "dynamics"
+      },
+      "selectOp": null
+    },
+    "seatControl": {
+      "yawReference": "World",
+      "minPitch": -0.35,
+      "maxPitch": 1.2
+    },
+    "layouts": []
+  },
+  "looks": {
+    "rows": [],
+    "assignment": {
+      "sequence": {
+        "name": "r1",
+        "offset": 129,
+        "step": 0
+      },
+      "rows": []
+    }
+  },
+  "dynamics": [
+    {
+      "name": "chase",
+      "f": 0.9549,
+      "zeta": 1,
+      "r": 1
+    },
+    {
+      "name": "probe",
+      "f": 2,
+      "zeta": 1,
+      "r": 0
+    }
+  ],
+  "grants": [],
+  "hud": {
+    "defaults": {
+      "enabled": true,
+      "cursor": null
+    },
+    "panels": []
+  },
+  "state": {
+    "world": [
+      {
+        "name": "solitaireKlondikeCards",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          },
+          {
+            "key": "13",
+            "value": 13
+          },
+          {
+            "key": "14",
+            "value": 14
+          },
+          {
+            "key": "15",
+            "value": 15
+          },
+          {
+            "key": "16",
+            "value": 16
+          },
+          {
+            "key": "17",
+            "value": 17
+          },
+          {
+            "key": "18",
+            "value": 18
+          },
+          {
+            "key": "19",
+            "value": 19
+          },
+          {
+            "key": "20",
+            "value": 20
+          },
+          {
+            "key": "21",
+            "value": 21
+          },
+          {
+            "key": "22",
+            "value": 22
+          },
+          {
+            "key": "23",
+            "value": 23
+          },
+          {
+            "key": "24",
+            "value": 24
+          },
+          {
+            "key": "25",
+            "value": 25
+          },
+          {
+            "key": "26",
+            "value": 26
+          },
+          {
+            "key": "27",
+            "value": 27
+          },
+          {
+            "key": "28",
+            "value": 28
+          },
+          {
+            "key": "29",
+            "value": 29
+          },
+          {
+            "key": "30",
+            "value": 30
+          },
+          {
+            "key": "31",
+            "value": 31
+          },
+          {
+            "key": "32",
+            "value": 32
+          },
+          {
+            "key": "33",
+            "value": 33
+          },
+          {
+            "key": "34",
+            "value": 34
+          },
+          {
+            "key": "35",
+            "value": 35
+          },
+          {
+            "key": "36",
+            "value": 36
+          },
+          {
+            "key": "37",
+            "value": 37
+          },
+          {
+            "key": "38",
+            "value": 38
+          },
+          {
+            "key": "39",
+            "value": 39
+          },
+          {
+            "key": "40",
+            "value": 40
+          },
+          {
+            "key": "41",
+            "value": 41
+          },
+          {
+            "key": "42",
+            "value": 42
+          },
+          {
+            "key": "43",
+            "value": 43
+          },
+          {
+            "key": "44",
+            "value": 44
+          },
+          {
+            "key": "45",
+            "value": 45
+          },
+          {
+            "key": "46",
+            "value": 46
+          },
+          {
+            "key": "47",
+            "value": 47
+          },
+          {
+            "key": "48",
+            "value": 48
+          },
+          {
+            "key": "49",
+            "value": 49
+          },
+          {
+            "key": "50",
+            "value": 50
+          },
+          {
+            "key": "51",
+            "value": 51
+          }
+        ]
+      },
+      {
+        "name": "solitaireKlondikeRank",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          },
+          {
+            "key": "1",
+            "value": 2
+          },
+          {
+            "key": "2",
+            "value": 3
+          },
+          {
+            "key": "3",
+            "value": 4
+          },
+          {
+            "key": "4",
+            "value": 5
+          },
+          {
+            "key": "5",
+            "value": 6
+          },
+          {
+            "key": "6",
+            "value": 7
+          },
+          {
+            "key": "7",
+            "value": 8
+          },
+          {
+            "key": "8",
+            "value": 9
+          },
+          {
+            "key": "9",
+            "value": 10
+          },
+          {
+            "key": "10",
+            "value": 11
+          },
+          {
+            "key": "11",
+            "value": 12
+          },
+          {
+            "key": "12",
+            "value": 13
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 2
+          },
+          {
+            "key": "15",
+            "value": 3
+          },
+          {
+            "key": "16",
+            "value": 4
+          },
+          {
+            "key": "17",
+            "value": 5
+          },
+          {
+            "key": "18",
+            "value": 6
+          },
+          {
+            "key": "19",
+            "value": 7
+          },
+          {
+            "key": "20",
+            "value": 8
+          },
+          {
+            "key": "21",
+            "value": 9
+          },
+          {
+            "key": "22",
+            "value": 10
+          },
+          {
+            "key": "23",
+            "value": 11
+          },
+          {
+            "key": "24",
+            "value": 12
+          },
+          {
+            "key": "25",
+            "value": 13
+          },
+          {
+            "key": "26",
+            "value": 1
+          },
+          {
+            "key": "27",
+            "value": 2
+          },
+          {
+            "key": "28",
+            "value": 3
+          },
+          {
+            "key": "29",
+            "value": 4
+          },
+          {
+            "key": "30",
+            "value": 5
+          },
+          {
+            "key": "31",
+            "value": 6
+          },
+          {
+            "key": "32",
+            "value": 7
+          },
+          {
+            "key": "33",
+            "value": 8
+          },
+          {
+            "key": "34",
+            "value": 9
+          },
+          {
+            "key": "35",
+            "value": 10
+          },
+          {
+            "key": "36",
+            "value": 11
+          },
+          {
+            "key": "37",
+            "value": 12
+          },
+          {
+            "key": "38",
+            "value": 13
+          },
+          {
+            "key": "39",
+            "value": 1
+          },
+          {
+            "key": "40",
+            "value": 2
+          },
+          {
+            "key": "41",
+            "value": 3
+          },
+          {
+            "key": "42",
+            "value": 4
+          },
+          {
+            "key": "43",
+            "value": 5
+          },
+          {
+            "key": "44",
+            "value": 6
+          },
+          {
+            "key": "45",
+            "value": 7
+          },
+          {
+            "key": "46",
+            "value": 8
+          },
+          {
+            "key": "47",
+            "value": 9
+          },
+          {
+            "key": "48",
+            "value": 10
+          },
+          {
+            "key": "49",
+            "value": 11
+          },
+          {
+            "key": "50",
+            "value": 12
+          },
+          {
+            "key": "51",
+            "value": 13
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "solitaireKlondikeSuit",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 1
+          },
+          {
+            "key": "14",
+            "value": 1
+          },
+          {
+            "key": "15",
+            "value": 1
+          },
+          {
+            "key": "16",
+            "value": 1
+          },
+          {
+            "key": "17",
+            "value": 1
+          },
+          {
+            "key": "18",
+            "value": 1
+          },
+          {
+            "key": "19",
+            "value": 1
+          },
+          {
+            "key": "20",
+            "value": 1
+          },
+          {
+            "key": "21",
+            "value": 1
+          },
+          {
+            "key": "22",
+            "value": 1
+          },
+          {
+            "key": "23",
+            "value": 1
+          },
+          {
+            "key": "24",
+            "value": 1
+          },
+          {
+            "key": "25",
+            "value": 1
+          },
+          {
+            "key": "26",
+            "value": 2
+          },
+          {
+            "key": "27",
+            "value": 2
+          },
+          {
+            "key": "28",
+            "value": 2
+          },
+          {
+            "key": "29",
+            "value": 2
+          },
+          {
+            "key": "30",
+            "value": 2
+          },
+          {
+            "key": "31",
+            "value": 2
+          },
+          {
+            "key": "32",
+            "value": 2
+          },
+          {
+            "key": "33",
+            "value": 2
+          },
+          {
+            "key": "34",
+            "value": 2
+          },
+          {
+            "key": "35",
+            "value": 2
+          },
+          {
+            "key": "36",
+            "value": 2
+          },
+          {
+            "key": "37",
+            "value": 2
+          },
+          {
+            "key": "38",
+            "value": 2
+          },
+          {
+            "key": "39",
+            "value": 3
+          },
+          {
+            "key": "40",
+            "value": 3
+          },
+          {
+            "key": "41",
+            "value": 3
+          },
+          {
+            "key": "42",
+            "value": 3
+          },
+          {
+            "key": "43",
+            "value": 3
+          },
+          {
+            "key": "44",
+            "value": 3
+          },
+          {
+            "key": "45",
+            "value": 3
+          },
+          {
+            "key": "46",
+            "value": 3
+          },
+          {
+            "key": "47",
+            "value": 3
+          },
+          {
+            "key": "48",
+            "value": 3
+          },
+          {
+            "key": "49",
+            "value": 3
+          },
+          {
+            "key": "50",
+            "value": 3
+          },
+          {
+            "key": "51",
+            "value": 3
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "solitaireKlondikeFace",
+        "kind": "Int",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          },
+          {
+            "key": "3",
+            "value": 0
+          },
+          {
+            "key": "4",
+            "value": 0
+          },
+          {
+            "key": "5",
+            "value": 0
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 0
+          },
+          {
+            "key": "8",
+            "value": 0
+          },
+          {
+            "key": "9",
+            "value": 0
+          },
+          {
+            "key": "10",
+            "value": 0
+          },
+          {
+            "key": "11",
+            "value": 0
+          },
+          {
+            "key": "12",
+            "value": 0
+          },
+          {
+            "key": "13",
+            "value": 0
+          },
+          {
+            "key": "14",
+            "value": 0
+          },
+          {
+            "key": "15",
+            "value": 0
+          },
+          {
+            "key": "16",
+            "value": 0
+          },
+          {
+            "key": "17",
+            "value": 0
+          },
+          {
+            "key": "18",
+            "value": 0
+          },
+          {
+            "key": "19",
+            "value": 0
+          },
+          {
+            "key": "20",
+            "value": 0
+          },
+          {
+            "key": "21",
+            "value": 0
+          },
+          {
+            "key": "22",
+            "value": 0
+          },
+          {
+            "key": "23",
+            "value": 0
+          },
+          {
+            "key": "24",
+            "value": 0
+          },
+          {
+            "key": "25",
+            "value": 0
+          },
+          {
+            "key": "26",
+            "value": 0
+          },
+          {
+            "key": "27",
+            "value": 0
+          },
+          {
+            "key": "28",
+            "value": 0
+          },
+          {
+            "key": "29",
+            "value": 0
+          },
+          {
+            "key": "30",
+            "value": 0
+          },
+          {
+            "key": "31",
+            "value": 0
+          },
+          {
+            "key": "32",
+            "value": 0
+          },
+          {
+            "key": "33",
+            "value": 0
+          },
+          {
+            "key": "34",
+            "value": 0
+          },
+          {
+            "key": "35",
+            "value": 0
+          },
+          {
+            "key": "36",
+            "value": 0
+          },
+          {
+            "key": "37",
+            "value": 0
+          },
+          {
+            "key": "38",
+            "value": 0
+          },
+          {
+            "key": "39",
+            "value": 0
+          },
+          {
+            "key": "40",
+            "value": 0
+          },
+          {
+            "key": "41",
+            "value": 0
+          },
+          {
+            "key": "42",
+            "value": 0
+          },
+          {
+            "key": "43",
+            "value": 0
+          },
+          {
+            "key": "44",
+            "value": 0
+          },
+          {
+            "key": "45",
+            "value": 0
+          },
+          {
+            "key": "46",
+            "value": 0
+          },
+          {
+            "key": "47",
+            "value": 0
+          },
+          {
+            "key": "48",
+            "value": 0
+          },
+          {
+            "key": "49",
+            "value": 0
+          },
+          {
+            "key": "50",
+            "value": 0
+          },
+          {
+            "key": "51",
+            "value": 0
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": false
+        }
+      },
+      {
+        "name": "solitaireKlondikePile0",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [
+          {
+            "key": "0",
+            "value": true
+          },
+          {
+            "key": "1",
+            "value": true
+          },
+          {
+            "key": "2",
+            "value": true
+          },
+          {
+            "key": "3",
+            "value": true
+          },
+          {
+            "key": "4",
+            "value": true
+          },
+          {
+            "key": "5",
+            "value": true
+          },
+          {
+            "key": "6",
+            "value": true
+          },
+          {
+            "key": "7",
+            "value": true
+          },
+          {
+            "key": "8",
+            "value": true
+          },
+          {
+            "key": "9",
+            "value": true
+          },
+          {
+            "key": "10",
+            "value": true
+          },
+          {
+            "key": "11",
+            "value": true
+          },
+          {
+            "key": "12",
+            "value": true
+          },
+          {
+            "key": "13",
+            "value": true
+          },
+          {
+            "key": "14",
+            "value": true
+          },
+          {
+            "key": "15",
+            "value": true
+          },
+          {
+            "key": "16",
+            "value": true
+          },
+          {
+            "key": "17",
+            "value": true
+          },
+          {
+            "key": "18",
+            "value": true
+          },
+          {
+            "key": "19",
+            "value": true
+          },
+          {
+            "key": "20",
+            "value": true
+          },
+          {
+            "key": "21",
+            "value": true
+          },
+          {
+            "key": "22",
+            "value": true
+          },
+          {
+            "key": "23",
+            "value": true
+          },
+          {
+            "key": "24",
+            "value": true
+          },
+          {
+            "key": "25",
+            "value": true
+          },
+          {
+            "key": "26",
+            "value": true
+          },
+          {
+            "key": "27",
+            "value": true
+          },
+          {
+            "key": "28",
+            "value": true
+          },
+          {
+            "key": "29",
+            "value": true
+          },
+          {
+            "key": "30",
+            "value": true
+          },
+          {
+            "key": "31",
+            "value": true
+          },
+          {
+            "key": "32",
+            "value": true
+          },
+          {
+            "key": "33",
+            "value": true
+          },
+          {
+            "key": "34",
+            "value": true
+          },
+          {
+            "key": "35",
+            "value": true
+          },
+          {
+            "key": "36",
+            "value": true
+          },
+          {
+            "key": "37",
+            "value": true
+          },
+          {
+            "key": "38",
+            "value": true
+          },
+          {
+            "key": "39",
+            "value": true
+          },
+          {
+            "key": "40",
+            "value": true
+          },
+          {
+            "key": "41",
+            "value": true
+          },
+          {
+            "key": "42",
+            "value": true
+          },
+          {
+            "key": "43",
+            "value": true
+          },
+          {
+            "key": "44",
+            "value": true
+          },
+          {
+            "key": "45",
+            "value": true
+          },
+          {
+            "key": "46",
+            "value": true
+          },
+          {
+            "key": "47",
+            "value": true
+          },
+          {
+            "key": "48",
+            "value": true
+          },
+          {
+            "key": "49",
+            "value": true
+          },
+          {
+            "key": "50",
+            "value": true
+          },
+          {
+            "key": "51",
+            "value": true
+          }
+        ],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile1",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile2",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile3",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile4",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile5",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile6",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile7",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile8",
+        "kind": "Bool",
+        "capacity": 52,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile10",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile11",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile12",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondikePile13",
+        "kind": "Bool",
+        "capacity": 13,
+        "cells": [],
+        "domain": {
+          "$type": "keysOf",
+          "row": "solitaireKlondikeCards",
+          "ordered": true
+        }
+      },
+      {
+        "name": "solitaireKlondike",
+        "kind": "Int",
+        "capacity": 27,
+        "cells": [
+          {
+            "key": "request",
+            "value": 0
+          },
+          {
+            "key": "applied",
+            "value": 0
+          },
+          {
+            "key": "action",
+            "value": 0
+          },
+          {
+            "key": "from",
+            "value": -1
+          },
+          {
+            "key": "to",
+            "value": -1
+          },
+          {
+            "key": "card",
+            "value": -1
+          },
+          {
+            "key": "option",
+            "value": 1
+          },
+          {
+            "key": "activeOption",
+            "value": 1
+          },
+          {
+            "key": "stage",
+            "value": 0
+          },
+          {
+            "key": "busy",
+            "value": 0
+          },
+          {
+            "key": "status",
+            "value": 0
+          },
+          {
+            "key": "result",
+            "value": 0
+          },
+          {
+            "key": "moves",
+            "value": 0
+          },
+          {
+            "key": "score",
+            "value": 0
+          },
+          {
+            "key": "passes",
+            "value": 0
+          },
+          {
+            "key": "sourceOk",
+            "value": 0
+          },
+          {
+            "key": "targetOk",
+            "value": 0
+          },
+          {
+            "key": "runLength",
+            "value": 0
+          },
+          {
+            "key": "emptyCells",
+            "value": 0
+          },
+          {
+            "key": "emptyColumns",
+            "value": 0
+          },
+          {
+            "key": "deals",
+            "value": 0
+          },
+          {
+            "key": "dealStep",
+            "value": 0
+          },
+          {
+            "key": "gatherStep",
+            "value": 0
+          },
+          {
+            "key": "scan",
+            "value": 0
+          },
+          {
+            "key": "changed",
+            "value": 0
+          },
+          {
+            "key": "attributeStep",
+            "value": 0
+          },
+          {
+            "key": "drawLeft",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "solitaireKlondikeStream",
+        "kind": "Int",
+        "cells": [],
+        "draw": {
+          "generator": {
+            "source": "StreamDraw",
+            "bound": 1,
+            "mode": "WithReplacement"
+          },
+          "timing": "Event"
+        }
+      },
+      {
+        "name": "solitaire",
+        "kind": "Int",
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "table",
+            "value": 1
+          }
+        ]
+      }
+    ]
+  },
+  "inputHold": {
+    "ceilingSeconds": 0.5,
+    "lowerAfterSeconds": 0.25,
+    "defaultSeconds": 0,
+    "equalizeByDefault": true,
+    "participants": []
+  },
+  "rules": [
+    {
+      "name": "solitaireKlondike-new-deal",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "activeOption",
+          "expression": "solitaireKlondike[option]"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 1,
+          "target": "Self",
+          "key": "stage"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 0,
+          "target": "Self",
+          "key": "status"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 0,
+          "target": "Self",
+          "key": "result"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 1,
+          "target": "Self",
+          "key": "busy"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "action"
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 1,
+                "key": "option"
+              },
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 3,
+                "key": "option"
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-gather",
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "from": "$zones[solitaireKlondike[gatherStep]]",
+            "to": "solitaireKlondikePile0",
+            "selector": "Slice",
+            "key": "$zone:$zones[solitaireKlondike[gatherStep]]:first",
+            "insertFirst": false,
+            "draw": null,
+            "count": 1
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "$reduce:count:$zones[solitaireKlondike[gatherStep]]",
+            "comparison": "Greater",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "zones": [
+        "solitaireKlondikePile1",
+        "solitaireKlondikePile2",
+        "solitaireKlondikePile3",
+        "solitaireKlondikePile4",
+        "solitaireKlondikePile5",
+        "solitaireKlondikePile6",
+        "solitaireKlondikePile7",
+        "solitaireKlondikePile8",
+        "solitaireKlondikePile10",
+        "solitaireKlondikePile11",
+        "solitaireKlondikePile12",
+        "solitaireKlondikePile13"
+      ]
+    },
+    {
+      "name": "solitaireKlondike-attributes-start",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 5,
+          "target": "Self",
+          "key": "stage"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 11,
+            "key": "gatherStep"
+          },
+          {
+            "$type": "compareState",
+            "state": "$reduce:count:solitaireKlondikePile0",
+            "comparison": "Equal",
+            "value": 52
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-reset-attributes",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondikeFace",
+          "value": 0,
+          "target": "Self",
+          "key": "$cell:solitaireKlondike:attributeStep"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 5,
+            "key": "stage"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-shuffle",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "shuffle",
+                "row": "solitaireKlondikePile0",
+                "draw": "solitaireKlondikeStream"
+              }
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 3,
+              "target": "Self",
+              "key": "stage"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 5,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 51,
+            "key": "attributeStep"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-deal",
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "from": "solitaireKlondikePile0",
+            "to": "$zones[(solitaireKlondike[dealStep] < 7) ? (2 + solitaireKlondike[dealStep]) : ((solitaireKlondike[dealStep] < 13) ? (solitaireKlondike[dealStep] - 4) : ((solitaireKlondike[dealStep] < 18) ? (solitaireKlondike[dealStep] - 9) : ((solitaireKlondike[dealStep] < 22) ? (solitaireKlondike[dealStep] - 13) : ((solitaireKlondike[dealStep] < 25) ? (solitaireKlondike[dealStep] - 16) : ((solitaireKlondike[dealStep] < 27) ? (solitaireKlondike[dealStep] - 18) : 8)))))]",
+            "selector": "First",
+            "key": null,
+            "insertFirst": false,
+            "draw": null,
+            "count": 1
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 3,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "LessOrEqual",
+            "value": 27,
+            "key": "dealStep"
+          }
+        ]
+      },
+      "mode": "Level",
+      "zones": [
+        "solitaireKlondikePile0",
+        "solitaireKlondikePile1",
+        "solitaireKlondikePile2",
+        "solitaireKlondikePile3",
+        "solitaireKlondikePile4",
+        "solitaireKlondikePile5",
+        "solitaireKlondikePile6",
+        "solitaireKlondikePile7",
+        "solitaireKlondikePile8",
+        "",
+        "solitaireKlondikePile10",
+        "solitaireKlondikePile11",
+        "solitaireKlondikePile12",
+        "solitaireKlondikePile13"
+      ]
+    },
+    {
+      "name": "solitaireKlondike-deal-finish",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 0,
+              "target": "Self",
+              "key": "stage"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 1,
+              "target": "Self",
+              "key": "status"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 0,
+              "target": "Self",
+              "key": "moves"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 0,
+              "target": "Self",
+              "key": "score"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 0,
+              "target": "Self",
+              "key": "passes"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "deals",
+              "expression": "solitaireKlondike[deals] + 1"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 1,
+              "target": "Self",
+              "key": "result"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "applied",
+              "expression": "solitaireKlondike[request]"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 3,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 27,
+            "key": "dealStep"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-prepare-move",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 0,
+          "target": "Self",
+          "key": "sourceOk"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 0,
+          "target": "Self",
+          "key": "targetOk"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 0,
+          "target": "Self",
+          "key": "runLength"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "action"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-source",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "sourceOk",
+          "expression": "$match:solitaireKlondikeRun:$zones[solitaireKlondike[from]][solitaireKlondike[card]]"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "runLength",
+          "expression": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix[solitaireKlondike[card]]"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "action"
+          },
+          {
+            "$type": "compareState",
+            "state": "$zones[solitaireKlondike[from]]",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "$cell:solitaireKlondike:card"
+          }
+        ]
+      },
+      "mode": "Level",
+      "zones": [
+        "",
+        "",
+        "solitaireKlondikePile2",
+        "solitaireKlondikePile3",
+        "solitaireKlondikePile4",
+        "solitaireKlondikePile5",
+        "solitaireKlondikePile6",
+        "solitaireKlondikePile7",
+        "solitaireKlondikePile8"
+      ]
+    },
+    {
+      "name": "solitaireKlondike-source-1",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "sourceOk",
+          "expression": "$match:solitaireKlondikeSingle:$zones[solitaireKlondike[from]][solitaireKlondike[card]]"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "runLength",
+          "expression": "$match:solitaireKlondikeLength:$zones[solitaireKlondike[from]]:prefix[solitaireKlondike[card]]"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "action"
+          },
+          {
+            "$type": "compareState",
+            "state": "$zones[solitaireKlondike[from]]",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "$cell:solitaireKlondike:card"
+          }
+        ]
+      },
+      "mode": "Level",
+      "zones": [
+        "",
+        "solitaireKlondikePile1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "solitaireKlondikePile10",
+        "solitaireKlondikePile11",
+        "solitaireKlondikePile12",
+        "solitaireKlondikePile13"
+      ]
+    },
+    {
+      "name": "solitaireKlondike-target",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "targetOk",
+          "expression": "$reduce:count:$zones[solitaireKlondike[to]] == 0 ? (solitaireKlondikeRank[solitaireKlondike[card]] == 13) : $match:solitaireKlondikeLanding:$zones[solitaireKlondike[to]]"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "action"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "sourceOk"
+          }
+        ]
+      },
+      "mode": "Level",
+      "zones": [
+        "",
+        "",
+        "solitaireKlondikePile2",
+        "solitaireKlondikePile3",
+        "solitaireKlondikePile4",
+        "solitaireKlondikePile5",
+        "solitaireKlondikePile6",
+        "solitaireKlondikePile7",
+        "solitaireKlondikePile8"
+      ]
+    },
+    {
+      "name": "solitaireKlondike-target-10",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "targetOk",
+          "expression": "(solitaireKlondike[runLength] == 1) * (solitaireKlondikeSuit[solitaireKlondike[card]] == solitaireKlondike[to] - 10) * (solitaireKlondikeRank[solitaireKlondike[card]] == $reduce:count:$zones[solitaireKlondike[to]] + 1)"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "action"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "sourceOk"
+          }
+        ]
+      },
+      "mode": "Level",
+      "zones": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "solitaireKlondikePile10",
+        "solitaireKlondikePile11",
+        "solitaireKlondikePile12",
+        "solitaireKlondikePile13"
+      ]
+    },
+    {
+      "name": "solitaireKlondike-move",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "from": "$zones[solitaireKlondike[from]]",
+                "to": "$zones[solitaireKlondike[to]]",
+                "selector": "Slice",
+                "key": "$cell:solitaireKlondike:card",
+                "insertFirst": false,
+                "draw": null,
+                "count": 1
+              }
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "moves",
+              "expression": "solitaireKlondike[moves] + 1"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 1,
+              "target": "Self",
+              "key": "busy"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "score",
+              "expression": "max(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 1,
+              "target": "Self",
+              "key": "result"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "applied",
+              "expression": "solitaireKlondike[request]"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "action"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "sourceOk"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "targetOk"
+          },
+          {
+            "$type": "compareValue",
+            "left": "solitaireKlondike[from]",
+            "comparison": "NotEqual",
+            "right": "solitaireKlondike[to]",
+            "kind": "Int"
+          }
+        ]
+      },
+      "mode": "Level",
+      "zones": [
+        "solitaireKlondikePile0",
+        "solitaireKlondikePile1",
+        "solitaireKlondikePile2",
+        "solitaireKlondikePile3",
+        "solitaireKlondikePile4",
+        "solitaireKlondikePile5",
+        "solitaireKlondikePile6",
+        "solitaireKlondikePile7",
+        "solitaireKlondikePile8",
+        "",
+        "solitaireKlondikePile10",
+        "solitaireKlondikePile11",
+        "solitaireKlondikePile12",
+        "solitaireKlondikePile13"
+      ]
+    },
+    {
+      "name": "solitaireKlondike-draw-start",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 4,
+              "target": "Self",
+              "key": "stage"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "drawLeft",
+              "expression": "min(solitaireKlondike[activeOption], $reduce:count:solitaireKlondikePile0)"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 1,
+              "target": "Self",
+              "key": "busy"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 3,
+            "key": "action"
+          },
+          {
+            "$type": "compareState",
+            "state": "$reduce:count:solitaireKlondikePile0",
+            "comparison": "Greater",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-draw-card",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "solitaireKlondikeFace",
+              "value": 1,
+              "target": "Self",
+              "key": "$zone:solitaireKlondikePile0:first"
+            },
+            {
+              "$type": "transformState",
+              "transform": {
+                "$type": "transfer",
+                "from": "solitaireKlondikePile0",
+                "to": "solitaireKlondikePile1",
+                "selector": "First",
+                "key": null,
+                "insertFirst": false,
+                "draw": null,
+                "count": 1
+              }
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "drawLeft",
+              "expression": "solitaireKlondike[drawLeft] - 1"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 4,
+            "key": "stage"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-draw-finish",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 0,
+              "target": "Self",
+              "key": "stage"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "moves",
+              "expression": "solitaireKlondike[moves] + 1"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 1,
+              "target": "Self",
+              "key": "result"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "applied",
+              "expression": "solitaireKlondike[request]"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 4,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "drawLeft"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-recycle-start",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 2,
+          "target": "Self",
+          "key": "stage"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "passes",
+          "expression": "solitaireKlondike[passes] + 1"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 3,
+            "key": "action"
+          },
+          {
+            "$type": "compareState",
+            "state": "$reduce:count:solitaireKlondikePile0",
+            "comparison": "Equal",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "$reduce:count:solitaireKlondikePile1",
+            "comparison": "Greater",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-recycle-card",
+      "effects": [
+        {
+          "$type": "transformState",
+          "transform": {
+            "$type": "transfer",
+            "from": "solitaireKlondikePile1",
+            "to": "solitaireKlondikePile0",
+            "selector": "First",
+            "key": null,
+            "insertFirst": false,
+            "draw": null,
+            "count": 1
+          }
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "$reduce:count:solitaireKlondikePile1",
+            "comparison": "Greater",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-recycle-face-down",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondikeFace",
+          "value": 0,
+          "target": "Self",
+          "key": "$each"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondikeFace",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "$each"
+          }
+        ]
+      },
+      "mode": "Level",
+      "forEach": "solitaireKlondikePile0"
+    },
+    {
+      "name": "solitaireKlondike-recycle-finish",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 0,
+              "target": "Self",
+              "key": "stage"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "moves",
+              "expression": "solitaireKlondike[moves] + 1"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": 1,
+              "target": "Self",
+              "key": "result"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "applied",
+              "expression": "solitaireKlondike[request]"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 2,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "$reduce:count:solitaireKlondikePile1",
+            "comparison": "Equal",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-deal-advance",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "dealStep",
+          "expression": "solitaireKlondike[stage] == 0 ? 0 : solitaireKlondike[dealStep] + 1"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 0,
+                "key": "stage"
+              },
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 3,
+                "key": "stage"
+              },
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 4,
+                "key": "stage"
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-reject",
+      "effects": [
+        {
+          "$type": "transaction",
+          "effects": [
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": -1,
+              "target": "Self",
+              "key": "result"
+            },
+            {
+              "$type": "setState",
+              "state": "solitaireKlondike",
+              "value": null,
+              "target": "Self",
+              "key": "applied",
+              "expression": "solitaireKlondike[request]"
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "NotEqual",
+            "value": null,
+            "key": "request",
+            "comparandState": "solitaireKlondike",
+            "comparandKey": "applied"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-maintenance-start",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 0,
+          "target": "Self",
+          "key": "busy"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "busy"
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-reveal",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondikeFace",
+          "value": 1,
+          "target": "Self",
+          "key": "$zone:$zones[$each]:last"
+        },
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": 1,
+          "target": "Self",
+          "key": "busy"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "stage"
+          },
+          {
+            "$type": "compareState",
+            "state": "$reduce:count:$zones[$each]",
+            "comparison": "Greater",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondikeFace",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "$zone:$zones[$each]:last"
+          }
+        ]
+      },
+      "mode": "Level",
+      "forEach": "$zones",
+      "zones": [
+        "solitaireKlondikePile2",
+        "solitaireKlondikePile3",
+        "solitaireKlondikePile4",
+        "solitaireKlondikePile5",
+        "solitaireKlondikePile6",
+        "solitaireKlondikePile7",
+        "solitaireKlondikePile8",
+        "solitaireKlondikePile1"
+      ]
+    },
+    {
+      "name": "solitaireKlondike-gather-advance",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "gatherStep",
+          "expression": "solitaireKlondike[stage] == 0 ? 0 : min(11, solitaireKlondike[gatherStep] + 1)"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 0,
+                "key": "stage"
+              },
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 1,
+                "key": "stage"
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-attribute-advance",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "attributeStep",
+          "expression": "solitaireKlondike[stage] == 0 ? 0 : solitaireKlondike[attributeStep] + 1"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 0,
+                "key": "stage"
+              },
+              {
+                "$type": "compareState",
+                "state": "solitaireKlondike",
+                "comparison": "Equal",
+                "value": 5,
+                "key": "stage"
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Level"
+    },
+    {
+      "name": "solitaireKlondike-win",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "solitaireKlondike",
+          "value": null,
+          "target": "Self",
+          "key": "status",
+          "expression": "($reduce:count:solitaireKlondikePile10 + $reduce:count:solitaireKlondikePile11 + $reduce:count:solitaireKlondikePile12 + $reduce:count:solitaireKlondikePile13) == 52 ? 2 : 1"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "state": "solitaire",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "table"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 1,
+            "key": "status"
+          },
+          {
+            "$type": "compareState",
+            "state": "solitaireKlondike",
+            "comparison": "Equal",
+            "value": 0,
+            "key": "busy"
+          }
+        ]
+      },
+      "mode": "Level"
+    }
+  ],
+  "simulation": {
+    "rateHz": 240
+  },
+  "patterns": [
+    {
+      "name": "solitaireKlondikeLength",
+      "kind": "Int",
+      "symbols": [
+        {
+          "name": "any",
+          "min": 1,
+          "max": 1
+        }
+      ],
+      "pattern": {
+        "$type": "star",
+        "item": {
+          "$type": "any"
+        }
+      },
+      "maxStates": 64,
+      "value": "1"
+    },
+    {
+      "name": "solitaireKlondikeSingle",
+      "kind": "Int",
+      "symbols": [
+        {
+          "name": "any",
+          "min": 1,
+          "max": 1
+        }
+      ],
+      "pattern": {
+        "$type": "any"
+      },
+      "maxStates": 64,
+      "value": "1"
+    },
+    {
+      "name": "solitaireKlondikeRun",
+      "kind": "Int",
+      "symbols": [
+        {
+          "name": "face",
+          "min": 1,
+          "max": 2
+        },
+        {
+          "name": "next",
+          "min": 2,
+          "max": 2
+        }
+      ],
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "symbol",
+            "name": "face"
+          },
+          {
+            "$type": "star",
+            "item": {
+              "$type": "symbol",
+              "name": "next"
+            }
+          }
+        ]
+      },
+      "maxStates": 64,
+      "value": "solitaireKlondikeFace[$token] * (1 + (solitaireKlondikeRank[$token] == solitaireKlondikeRank[$previous] - 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[$previous] % 2))"
+    },
+    {
+      "name": "solitaireKlondikeLanding",
+      "kind": "Int",
+      "symbols": [
+        {
+          "name": "yes",
+          "min": 1,
+          "max": 1
+        }
+      ],
+      "pattern": {
+        "$type": "sequence",
+        "items": [
+          {
+            "$type": "star",
+            "item": {
+              "$type": "any"
+            }
+          },
+          {
+            "$type": "symbol",
+            "name": "yes"
+          }
+        ]
+      },
+      "maxStates": 64,
+      "value": "(solitaireKlondikeRank[$token] == solitaireKlondikeRank[solitaireKlondike[card]] + 1) * (solitaireKlondikeSuit[$token] % 2 != solitaireKlondikeSuit[solitaireKlondike[card]] % 2)"
+    }
+  ],
+  "documentId": null,
+  "schema": "puck.world.def.v1"
+}

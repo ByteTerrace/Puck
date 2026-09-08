@@ -7,10 +7,13 @@ using Puck.World.Protocol;
 namespace Puck.World;
 
 /// <summary>The declared channel ordinals resolved for the engine motion roles. An unclaimed role is <c>-1</c>.</summary>
-public readonly record struct RoleChannelOrdinals(int MoveForward, int MoveStrafe, int Turn, int MoveUp, int Pitch, int Roll, int FaceX = -1, int FaceY = -1, int FaceZ = -1) {
+public readonly record struct RoleChannelOrdinals(int MoveAdvance, int MoveStrafe, int Turn, int MoveUp, int Pitch, int Roll, int FaceX = -1, int FaceY = -1, int FaceZ = -1, int MoveX = -1, int MoveY = -1, int MoveZ = -1) {
+    /// <summary>Gets a value indicating whether the world declares the full world-frame movement-direction triple.</summary>
+    public bool HasMoveDirection => (((MoveX >= 0) && (MoveY >= 0)) && (MoveZ >= 0));
+
     /// <summary>Gets the authored ordinal claiming <paramref name="role"/>, or <c>-1</c> when unclaimed.</summary>
     public int this[ChannelRole role] => role switch {
-        ChannelRole.MoveForward => MoveForward,
+        ChannelRole.MoveAdvance => MoveAdvance,
         ChannelRole.MoveStrafe => MoveStrafe,
         ChannelRole.Turn => Turn,
         ChannelRole.MoveUp => MoveUp,
@@ -19,18 +22,21 @@ public readonly record struct RoleChannelOrdinals(int MoveForward, int MoveStraf
         ChannelRole.FaceX => FaceX,
         ChannelRole.FaceY => FaceY,
         ChannelRole.FaceZ => FaceZ,
+        ChannelRole.MoveX => MoveX,
+        ChannelRole.MoveY => MoveY,
+        ChannelRole.MoveZ => MoveZ,
         _ => -1,
     };
 
     /// <summary>Builds an intent by writing values to the declared role ordinals.</summary>
-    public PlayerIntent Intent(FixedQ4816 moveForward = default, FixedQ4816 moveStrafe = default, FixedQ4816 turn = default,
+    public PlayerIntent Intent(FixedQ4816 moveAdvance = default, FixedQ4816 moveStrafe = default, FixedQ4816 turn = default,
         FixedQ4816 moveUp = default, FixedQ4816 pitch = default, FixedQ4816 roll = default) {
         var intent = default(PlayerIntent);
 
         intent = Write(
             intent: intent,
-            role: ChannelRole.MoveForward,
-            value: moveForward
+            role: ChannelRole.MoveAdvance,
+            value: moveAdvance
         );
         intent = Write(
             intent: intent,
@@ -95,7 +101,7 @@ public sealed class WorldChannelTable {
     public static readonly FixedQ4816 DefaultBinaryThreshold = (FixedQ4816.One / FixedQ4816.FromInteger(value: 2L));
     /// <summary>Gets the empty table — every world/kit compile call site that has not been threaded a real one yet falls
     /// back to this rather than null-checking.</summary>
-    public static WorldChannelTable Empty { get; } = new WorldChannelTable(ordinalByName: new Dictionary<string, int>(comparer: StringComparer.Ordinal));
+    public static WorldChannelTable Empty { get; } = new WorldChannelTable(ordinals: OrdinalTable.Empty);
 
     private readonly ChannelShape[] m_shapes = new ChannelShape[ChannelLimits.MaxChannels];
     private readonly ChannelFrame[] m_frames = new ChannelFrame[ChannelLimits.MaxChannels];
@@ -103,14 +109,15 @@ public sealed class WorldChannelTable {
     private readonly bool[] m_declared = new bool[ChannelLimits.MaxChannels];
     private readonly bool[] m_roles = new bool[ChannelLimits.MaxChannels];
     private readonly int[] m_roleOrdinals = new int[Enum.GetValues<ChannelRole>().Length];
-    // The reverse of m_ordinalByName — an ordinal's declared name, for a read-back that must name a channel rather
-    // than just its ordinal (player.channels). Null past ChannelCount/at an undeclared ordinal.
+    // The reverse of m_ordinals — an ordinal's declared name, for a read-back that must name a channel rather
+    // than just its ordinal (player.channels). Null past ChannelCount/at an undeclared ordinal — unlike m_ordinals,
+    // sized to MaxChannels so any in-range ordinal indexes safely without a bounds check of its own.
     private readonly string?[] m_names = new string?[ChannelLimits.MaxChannels];
 
-    private readonly Dictionary<string, int> m_ordinalByName;
+    private readonly OrdinalTable m_ordinals;
 
-    private WorldChannelTable(Dictionary<string, int> ordinalByName) {
-        m_ordinalByName = ordinalByName;
+    private WorldChannelTable(OrdinalTable ordinals) {
+        m_ordinals = ordinals;
         Array.Fill(
             array: m_roleOrdinals,
             value: -1
@@ -119,9 +126,17 @@ public sealed class WorldChannelTable {
 
     /// <summary>Gets the declared channel count.</summary>
     public int ChannelCount { get; private init; }
+    /// <summary>Gets the frame the MoveAdvance/MoveStrafe pair is authored in — the two declare the same frame by
+    /// validator rule, so this reads either; <see cref="ChannelFrame.World"/> when neither role is claimed.</summary>
+    public ChannelFrame MoveFrame => ((RoleOrdinals.MoveAdvance >= 0)
+        ? m_frames[RoleOrdinals.MoveAdvance]
+        : ((RoleOrdinals.MoveStrafe >= 0)
+            ? m_frames[RoleOrdinals.MoveStrafe]
+            : ChannelFrame.World
+    ));
     /// <summary>Gets the resolved role ordinal set.</summary>
     public RoleChannelOrdinals RoleOrdinals => new(
-        MoveForward: m_roleOrdinals[((int)ChannelRole.MoveForward)],
+        MoveAdvance: m_roleOrdinals[((int)ChannelRole.MoveAdvance)],
         MoveStrafe: m_roleOrdinals[((int)ChannelRole.MoveStrafe)],
         Turn: m_roleOrdinals[((int)ChannelRole.Turn)],
         MoveUp: m_roleOrdinals[((int)ChannelRole.MoveUp)],
@@ -129,21 +144,25 @@ public sealed class WorldChannelTable {
         Roll: m_roleOrdinals[((int)ChannelRole.Roll)],
         FaceX: m_roleOrdinals[((int)ChannelRole.FaceX)],
         FaceY: m_roleOrdinals[((int)ChannelRole.FaceY)],
-        FaceZ: m_roleOrdinals[((int)ChannelRole.FaceZ)]
+        FaceZ: m_roleOrdinals[((int)ChannelRole.FaceZ)],
+        MoveX: m_roleOrdinals[((int)ChannelRole.MoveX)],
+        MoveY: m_roleOrdinals[((int)ChannelRole.MoveY)],
+        MoveZ: m_roleOrdinals[((int)ChannelRole.MoveZ)]
     );
 
     /// <summary>Compiles a world's declared channel table.</summary>
     /// <param name="channels">The world document's declared channel rows, already validated.</param>
     public static WorldChannelTable Compile(IReadOnlyList<WorldChannel> channels) {
-        var ordinalByName = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var table = new WorldChannelTable(ordinalByName: ordinalByName) {
+        var table = new WorldChannelTable(ordinals: OrdinalTable.Build(
+            names: channels.Select(selector: static channel => channel.Name).ToArray(),
+            comparer: StringComparer.Ordinal
+        )) {
             ChannelCount = channels.Count,
         };
 
         for (var ordinal = 0; (ordinal < channels.Count); ordinal++) {
             var channel = channels[ordinal];
 
-            ordinalByName[channel.Name] = ordinal;
             table.m_shapes[ordinal] = channel.Shape;
             table.m_frames[ordinal] = channel.Frame;
             table.m_declared[ordinal] = true;
@@ -204,33 +223,25 @@ public sealed class WorldChannelTable {
                 : sum
         ));
     }
+    /// <summary>Gets a declared channel's movement frame (<see cref="ChannelFrame.World"/> for every channel that
+    /// declares none — and for every channel but the MoveAdvance/MoveStrafe pair, where it is meaningless).</summary>
+    public ChannelFrame Frame(int ordinal) => m_frames[ordinal];
     /// <summary>Determines whether a channel is declared at this ordinal.</summary>
     public bool IsDeclared(int ordinal) => ((ordinal >= 0) && (ordinal < ChannelLimits.MaxChannels) && m_declared[ordinal]);
     /// <summary>Determines whether the declared channel at <paramref name="ordinal"/> claims an engine motion role.</summary>
     public bool IsRole(int ordinal) => ((ordinal >= 0) && (ordinal < ChannelLimits.MaxChannels) && m_roles[ordinal]);
     /// <summary>Returns the declared channel name at this ordinal, or <see langword="null"/> when <see cref="IsDeclared"/> is
     /// <see langword="false"/> for it — the reverse of name-to-ordinal resolution, for a read-back that must name a
-    /// channel (<c>player.channels</c>) rather than address it.</summary>
+    /// channel (<c>body.channels</c>) rather than address it.</summary>
     public string? Name(int ordinal) => m_names[ordinal];
     /// <summary>Returns the declared shape at this ordinal (meaningful only when <see cref="IsDeclared"/>).</summary>
     public ChannelShape Shape(int ordinal) => m_shapes[ordinal];
-    /// <summary>Gets a declared channel's movement frame (<see cref="ChannelFrame.World"/> for every channel that
-    /// declares none — and for every channel but the MoveForward/MoveStrafe pair, where it is meaningless).</summary>
-    public ChannelFrame Frame(int ordinal) => m_frames[ordinal];
-    /// <summary>Gets the frame the MoveForward/MoveStrafe pair is authored in — the two declare the same frame by
-    /// validator rule, so this reads either; <see cref="ChannelFrame.World"/> when neither role is claimed.</summary>
-    public ChannelFrame MoveFrame => ((RoleOrdinals.MoveForward >= 0)
-        ? m_frames[RoleOrdinals.MoveForward]
-        : ((RoleOrdinals.MoveStrafe >= 0)
-            ? m_frames[RoleOrdinals.MoveStrafe]
-            : ChannelFrame.World)
-    );
     /// <summary>Returns the binary crossing threshold at this ordinal (meaningful only for a <see cref="ChannelShape.Binary"/> channel).</summary>
     public FixedQ4816 Threshold(int ordinal) => m_thresholds[ordinal];
     /// <summary>Resolves a declared channel name to its ordinal.</summary>
-    public bool TryGetOrdinal(string name, out int ordinal) => m_ordinalByName.TryGetValue(
-        key: name,
-        value: out ordinal
+    public bool TryGetOrdinal(string name, out int ordinal) => m_ordinals.TryGetOrdinal(
+        name: name,
+        ordinal: out ordinal
     );
     /// <summary>Resolves a binding channel reference to its authored ordinal. <see cref="ChannelRef"/> carries only
     /// the declared-name arm; see <c>ChannelRef.cs</c>'s remarks.</summary>
@@ -252,7 +263,7 @@ public sealed class WorldChannelTable {
 /// <see cref="Puck.World.Protocol.PlayerIntent"/>). The consumer is exactly one of <see cref="Role"/> (an engine
 /// motion channel, claimable by at most one channel) or <see cref="Composition"/> (a kit composition trigger, bound —
 /// or left inert — per kit via <see cref="WorldKit.Actions"/>).</summary>
-/// <param name="Name">The channel's unique, non-empty name — the vocabulary key every binding, <c>player.press</c>,
+/// <param name="Name">The channel's unique, non-empty name — the vocabulary key every binding, <c>body.press</c>,
 /// kit <c>Actions</c> entry, and the addon wire resolve against.</param>
 /// <param name="Shape">The declared value shape: bipolar <c>[-1, 1]</c>, unipolar <c>[0, 1]</c>, or binary.</param>
 /// <param name="Role">The engine motion role this channel claims, or <see langword="null"/> for a composition channel.</param>
@@ -260,7 +271,7 @@ public sealed class WorldChannelTable {
 /// or this must be set.</param>
 /// <param name="Threshold">The binary crossing threshold in <c>[0, 1]</c> raw units (binary channels only); <see langword="null"/>
 /// takes <see cref="WorldChannelTable.DefaultBinaryThreshold"/> (<c>One/2</c>).</param>
-/// <param name="Frame">What the MoveForward/MoveStrafe pair is relative to when a binding row folds into it (see
+/// <param name="Frame">What the MoveAdvance/MoveStrafe pair is relative to when a binding row folds into it (see
 /// <see cref="ChannelFrame"/>); the two roles must declare the same frame, and every other channel leaves it at
 /// <see cref="ChannelFrame.World"/>. Omitted from a saved document at that default.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -272,7 +283,7 @@ public sealed record WorldChannel(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Threshold = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] ChannelFrame Frame = ChannelFrame.World
 );
-/// <summary>The frame a movement contribution to the MoveForward/MoveStrafe pair is authored in — composed by the
+/// <summary>The frame a movement contribution to the MoveAdvance/MoveStrafe pair is authored in — composed by the
 /// seat's client into world axes before it reaches the wire, so the sim never reads a camera pose. A world declares
 /// it once on the pair; the stick's <c>player.move</c> is camera-framed by its own definition, so a world (or a
 /// player's overlay, where the world allows) mixes the two by choosing which rows fold into the channels and which
@@ -290,14 +301,4 @@ public enum ChannelFrame : byte {
     /// keyboard scheme: strafe sidesteps (the drawn attitude angling toward the travel under the kit's facing snap,
     /// the heading intact), turn turns, the camera is its own control.</summary>
     Heading,
-}
-/// <summary>The channel table every document declaring no <c>channels</c> section resolves to.</summary>
-public static class WorldChannelDefaults {
-    /// <summary>Gets the three movement channels the shipped <c>Assets/worlds/default.world.json</c> binding
-    /// document names directly — the minimum a world naming that basis needs for its bindings to compile.</summary>
-    public static IReadOnlyList<WorldChannel> Standard { get; } = [
-        new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveForward),
-        new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe),
-        new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn),
-    ];
 }

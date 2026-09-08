@@ -135,12 +135,11 @@ result reads as a live consumer and the dead code survives.
 
 ### This tier is blind to anything the project system does not compile
 
-Verified in this tree: `src/Puck.Recording/scripts/mux-check.cs:111` contains
-`session.Consume(new CaptureFrame(` — and
-`src/Puck.Recording/Puck.Recording.csproj:5` says
-`<Compile Remove="scripts/**/*.cs" />`. No reference query reports that line.
-`src/Puck.World/Puck.World.csproj:27` removes its `scripts/**` the same way, and
-`tools/*.cs` plus `experimental/**` are in no project at all.
+Verified in this tree: `experimental/scripts/recording/mux-check.cs:111`
+contains `session.Consume(new CaptureFrame(` — a self-contained file-based
+`.NET` app under the quarantined `experimental/` tree, in no project at all
+(none of it is reached by the root build; see `experimental/README.md`). No
+reference query reports that line.
 
 So **"zero references" can mean "zero compiled references"**. Pair a deletion
 decision with `puck search -M 0 -l <name>` or `puck declarations` over the same
@@ -180,8 +179,8 @@ tree — the two walk one identical file set, see the walk contract below;
   from the compilation (a query for a type in it found nothing). Restore before
   trusting an answer that crosses a package boundary.
 - **A symbol with several partial declarations reports one line per
-  declaration.** `references ISdfFrameSource --implementers` lists
-  `OverworldFrameSource` at multiple positions — one per `partial` file. That is
+  declaration.** `references IWorldServerHost --implementers` lists
+  `WorldServer` at multiple positions — one per `partial` file. That is
   the symbol's location set, not duplication.
 - **`--implementers` works on an interface and on an interface member**
   (verified on `ISdfFrameSource` and on its `CaptureFrame` method).

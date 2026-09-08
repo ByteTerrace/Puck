@@ -170,6 +170,9 @@ public sealed partial class Sm83 {
 
         InternalCycle();
     }
+    // ADD SP,e and LD HL,SP+e share this adder and neither reports to the OAM corruption bug: unlike INC/DEC SP, PC, or
+    // the stack pointer's implicit move around PUSH/CALL/RST, this 16-bit add never routes its result through the
+    // increment/decrement unit that drives the address bus.
     private ushort AddStackPointerOffset(sbyte offset) {
         var stackPointer = ((int)m_stackPointer);
         var result = (stackPointer + offset);

@@ -100,7 +100,12 @@ public sealed partial class WorldInstanceHost {
             );
             binding = $"channel:{channel}";
         }
-        Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{adjacencyName}' seat {(seat + 1)} CLOSED ({reason}); response={binding}]");
+        if (instance.Server.Output.HasNarrationSink) {
+            instance.Server.Output.Narrate(
+                channel: "world.adjacency",
+                text: $"[world.adjacency: '{instance.Name}/{adjacencyName}' seat {(seat + 1)} CLOSED ({reason}); response={binding}]"
+            );
+        }
     }
     private WorldAuthorityEndpoint EndpointFor(WorldInstance instance) {
         if (m_authorityEndpoints.TryGetValue(
@@ -201,7 +206,12 @@ public sealed partial class WorldInstanceHost {
                 (announcedTransferId != heldTransferId)
             ) {
                 m_announcedCrossingHolds[(instance.Name, seat)] = heldTransferId;
-                Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]");
+                if (instance.Server.Output.HasNarrationSink) {
+                    instance.Server.Output.Narrate(
+                        channel: "world.adjacency",
+                        text: $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]"
+                    );
+                }
             }
         }
 
@@ -237,7 +247,7 @@ public sealed partial class WorldInstanceHost {
                     continue;
                 }
 
-                // A remotely committed arrival bypasses this host's FinalizeCommittedTransfer path, but escrow
+                // A remotely committed arrival bypasses this host's PublishCommittedTransfer path, but escrow
                 // retains the authenticated source border on the destination authority. Handoff occurs at the far
                 // side of the boundary's own ownership threshold, so a mapped arrival starts at least that far
                 // inside the new owner: a wall carries the reciprocal contact hysteresis, a floor/ceiling the much
@@ -343,7 +353,12 @@ public sealed partial class WorldInstanceHost {
                     seamU: winner.SeamU,
                     seamV: winner.SeamV
                 );
-                Console.Error.WriteLine(value: $"[world.adjacency: '{instance.Name}/{winner.Adjacency.Name}' body:{seat} continuum safety-clamped after {pending.BoundaryEvents} boundary events]");
+                if (instance.Server.Output.HasNarrationSink) {
+                    instance.Server.Output.Narrate(
+                        channel: "world.adjacency",
+                        text: $"[world.adjacency: '{instance.Name}/{winner.Adjacency.Name}' body:{seat} continuum safety-clamped after {pending.BoundaryEvents} boundary events]"
+                    );
+                }
                 continue;
             }
 
@@ -549,6 +564,18 @@ public sealed partial class WorldInstanceHost {
 
         return true;
     }
+    /// <summary>Read-back for <c>world.adjacencies</c>: whether one started authority's own document came from a
+    /// composed image this process already held, rather than one that start merged itself — the fact naming a
+    /// shard's shared basis, or a corner destination reached a second time, as <c>composed=shared</c> instead of
+    /// <c>composed=fresh</c>.</summary>
+    /// <param name="name">The instance name.</param>
+    /// <param name="shared">Whether the instance's document came from a held image.</param>
+    /// <returns><see langword="true"/> when the instance is running and its outcome was recorded.</returns>
+    public bool TryDescribeDocumentSharing(string name, out bool shared) =>
+        m_documentShared.TryGetValue(
+            key: name,
+            value: out shared
+        );
     /// <summary>Finds the local roster seat currently following one concrete instance-local seat. This is the
     /// instance-addressed <c>player.leave</c> join: a raw instance leave must not bypass the roster/router half when
     /// the named body is the local traveler's current embodiment.</summary>
@@ -612,13 +639,9 @@ public sealed partial class WorldInstanceHost {
         if (
             accepted &&
             (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
-            (result is WorldSubmissionResult.Session { Reply.Accepted: true }) &&
-            m_forwardedBodies.TryRemove(
-            key: (source, mobility.Incarnation),
-            value: out var departed
-        )
+            (result is WorldSubmissionResult.Session { Reply.Accepted: true })
         ) {
-            (departed.Authority as IDisposable)?.Dispose();
+            RetireForwardedTraveler(in mobility);
         }
         return accepted;
     }

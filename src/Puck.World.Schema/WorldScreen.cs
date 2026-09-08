@@ -19,9 +19,14 @@ namespace Puck.World;
 [JsonDerivedType(typeof(WorldScreenSource.Qr), typeDiscriminator: "qr")]
 [JsonDerivedType(typeof(WorldScreenSource.Session), typeDiscriminator: "session")]
 [JsonDerivedType(typeof(WorldScreenSource.Text), typeDiscriminator: "text")]
+[JsonDerivedType(typeof(WorldScreenSource.Probe), typeDiscriminator: "probe")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldScreenSource {
-    private WorldScreenSource() {
+    // private protected (not private): WorldFrameSource — the intermediate arm below — derives from this type from
+    // outside its body, so its own constructor needs a base() it can reach; private protected still confines every
+    // arm to this assembly, matching the closed-hierarchy intent a bare private constructor states for the arms
+    // nested directly here.
+    private protected WorldScreenSource() {
     }
 
     /// <summary>No provider is bound — the engine lights the slot with its procedural no-signal fallback (an animated
@@ -37,24 +42,88 @@ public abstract record WorldScreenSource {
     /// names a concrete machine: the engine owns its <paramref name="Options"/> vocabulary (a GamingBrick reads a
     /// dmg/cgb/agb model + a dmgspeed pin).</summary>
     /// <param name="Engine">The screen-machine engine id (e.g. <c>gaming-brick</c>).</param>
-    /// <param name="ContentPath">The content file (a cartridge ROM) the machine boots, or empty when the screen is
-    /// unconfigured — the binder faults the slot gracefully (no crash, no-signal card) rather than booting.</param>
+    /// <param name="ContentPath">The content the machine boots, resolved against the document's own directory: a
+    /// ROM image, or — when the path ends in <see cref="CartridgeDocumentSuffix"/> — an authored
+    /// <c>puck.cartridge.v1</c> document the host compiles through the engine's own forge at bind
+    /// (<c>Puck.World.WorldScreenMachineEngines.CartridgeCompilers</c>), booting the compiled bytes exactly as it
+    /// boots a ROM file; the source's canonical hash and the compiled image's hash ride the slot beside the file's
+    /// own content pin, and <c>screen.state</c> echoes them. A cartridge path on an engine that compiles none
+    /// refuses at validation by name; a document the forge refuses faults the bind with the forge's own message.
+    /// Empty when the screen is unconfigured — the binder faults the slot gracefully (no crash, no-signal card)
+    /// rather than booting.</param>
     /// <param name="Options">The engine-specific options string, or <see langword="null"/> for the engine's defaults.</param>
-    public sealed record Machine(string Engine, string ContentPath, string? Options) : WorldScreenSource;
-    /// <summary>The platform's default live camera feed, with an explicit preferred capture profile. The platform may
-    /// negotiate a nearby extent; every screen sampling the same physical default device shares one session.</summary>
-    /// <param name="Profile">The preferred capture extent and maximum upload cadence.</param>
-    public sealed record Camera(WorldFeedProfile Profile) : WorldScreenSource;
+    /// <param name="Cable">This machine's cable port (see <see cref="WorldMachineCable"/>), or <see langword="null"/>
+    /// for an unlinked machine. Legal only on a declared <c>screens</c> row's own source — a magazine entry or a
+    /// placement face's source is refused one (validated), because a cable is a standing physical connection of the
+    /// machine that owns the slot, not of whatever content happens to rotate through it. Omitted from the wire when
+    /// null, so every machine source authored before cables existed round-trips unchanged.</param>
+    public sealed record Machine(
+        string Engine,
+        string ContentPath,
+        string? Options,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null
+    ) : WorldScreenSource {
+        /// <summary>The content-path suffix that names an authored <c>puck.cartridge.v1</c> document rather than a
+        /// ROM image — the one spelling the host compiles at bind.</summary>
+        public const string CartridgeDocumentSuffix = ".cartridge.json";
+
+        /// <summary>Gets whether <see cref="ContentPath"/> names a cartridge document to compile rather than a ROM
+        /// image to boot as read.</summary>
+        [JsonIgnore]
+        public bool NamesCartridgeDocument => IsCartridgeDocumentPath(contentPath: ContentPath);
+
+        /// <summary>Determines whether a content path names a cartridge document — it ends in
+        /// <see cref="CartridgeDocumentSuffix"/>, compared ordinally without regard to case, so a spelling that
+        /// merely contains the suffix elsewhere boots as a ROM.</summary>
+        /// <param name="contentPath">The content path, or <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> when the path names a cartridge document.</returns>
+        public static bool IsCartridgeDocumentPath(string? contentPath) => (contentPath is { } path) && path.EndsWith(
+            comparisonType: StringComparison.OrdinalIgnoreCase,
+            value: CartridgeDocumentSuffix
+        );
+    }
+    /// <summary>The platform's default live camera feed. The platform may negotiate a nearby extent; every screen
+    /// and probe socket naming the same sensor shares one feed, opened at the richest profile any screen row
+    /// requests.</summary>
+    /// <param name="Profile">The preferred capture extent and maximum upload cadence, or <see langword="null"/> for
+    /// the platform default — a probe socket never needs one. Omitted from the wire when null.</param>
+    /// <param name="Controls">The authored device-control state (<see cref="WorldCameraControls"/>), or
+    /// <see langword="null"/> to leave every control at its driver default. One physical device carries one control
+    /// state across color and infrared, so the FIRST declared camera screen authoring this wins regardless of sensor
+    /// (matching the shared-device model); a later <c>UpsertScreen</c> mutation re-resolves and applies the change live.
+    /// Omitted from the wire when null.</param>
+    /// <param name="Sensor">Which physical sensor this row's shared feed opens: <see cref="WorldCameraSensor.Color"/>
+    /// (the default) or <see cref="WorldCameraSensor.Infrared"/> — the infrared frame source a Windows Hello capable
+    /// device carries. Each sensor gets its own shared feed, so different rows may request different sensors at once;
+    /// the engine honors a Windows Face Authentication Profile V2 when published and admits simultaneous capture only
+    /// after both native streams prove live. A legacy provider available only to the Windows biometric broker is not a
+    /// public dual-camera graph. An absent infrared source faults the bind loudly (the slot shows the no-signal card).
+    /// </param>
+    /// <param name="Seat">The 1-based local seat this row names — a camera is an input device seated like a pad, never
+    /// hardware named directly. <see langword="null"/> means the enclosing seat scope (an identity's HUD panel, a
+    /// seat-scoped probe socket) or seat 1 at world scope — the same explicit-index convention
+    /// <c>$channel:&lt;seat&gt;</c> and axis bindings already use. Validated within <c>1..population.localSeats</c>
+    /// when present. Omitted from the wire when null.</param>
+    public sealed record Camera(
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFeedProfile? Profile = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldCameraControls? Controls = null,
+        WorldCameraSensor Sensor = WorldCameraSensor.Color,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Seat = null) : WorldFrameSource;
     /// <summary>A named view from the presentation view stack, such as a monitor showing another camera's output.</summary>
     /// <param name="CameraName">The registered view name this slot samples.</param>
-    public sealed record View(string CameraName) : WorldScreenSource;
+    public sealed record View(string CameraName) : WorldFrameSource;
+    /// <summary>A declared probe's texture output — the frame a kind that declares an <c>output</c> writes each cycle
+    /// (a relit camera frame, a mask), published like a camera feed. The probe must be a <c>probes</c> row of this
+    /// document; whether its kind writes a texture is checked at boot against the kind's manifest.</summary>
+    /// <param name="Id">The <c>probes[].id</c> whose output this slot shows.</param>
+    public sealed record Probe(string Id) : WorldFrameSource;
     /// <summary>A live compositor capture feed — a desktop window keyed by title, or a whole monitor keyed by index. The
     /// selector is the altitude of the primitive: <paramref name="MonitorIndex"/> null is window mode; non-null is
     /// whole-monitor mode (and <paramref name="WindowTitle"/> is unused).</summary>
     /// <param name="WindowTitle">The captured window's title (window mode; ignored when <paramref name="MonitorIndex"/> is set).</param>
     /// <param name="Profile">This capture consumer's output extent and maximum refresh cadence.</param>
     /// <param name="MonitorIndex">The 0-based monitor to capture whole (0 = primary), or <see langword="null"/> for window mode.</param>
-    public sealed record Capture(string WindowTitle, WorldFeedProfile Profile, int? MonitorIndex = null) : WorldScreenSource;
+    public sealed record Capture(string WindowTitle, WorldFeedProfile Profile, int? MonitorIndex = null) : WorldFrameSource;
     /// <summary>A screen showing the developer console as an object in the world — the diegetic half of the control plane
     /// the unification contract names ("the on-screen panel and process stdin"). The frame is CPU-composed into a
     /// CRT-styled framebuffer and pushed through <c>IGpuSurfaceUpload</c>, exactly as the ported console feed does;
@@ -93,15 +162,11 @@ public abstract record WorldScreenSource {
     /// destination row's own facts.
     /// </summary>
     /// <remarks>
-    /// <para><b>Staged boundary — no avatar/pose mirroring yet.</b> The session projection renders the destination's
-    /// authored static placement geometry (terrain, structures — whatever a fixed camera would already show with
-    /// nobody standing in the world); live embodied bodies in the destination are not yet mirrored into the image.</para>
-    /// <para><b>Staged boundary — no sub-tick interpolation.</b> The projection re-renders whenever the destination
-    /// delivers a new definition (a real content change), never on the host's own presentation alpha — it reads
-    /// neither <c>Puck.SdfVm.ISdfFrameSource.CaptureFrame</c>'s host delta/alpha nor the destination's
-    /// Tick/StepTicks for easing, so "the destination's clock, never the host's" is satisfied by construction rather
-    /// than by a second interpolation implementation. Smooth interpolation of moving destination content is
-    /// meaningless before the avatar mirror above lands, so it is deferred with it.</para>
+    /// <para>The projection renders the destination's authored static placement geometry (terrain, structures) plus
+    /// every mirrored-active body, each posed from the destination's own previous/current snapshot pair at
+    /// <c>WorldSessionMirror.InterpolationAlpha</c> — the destination's clock, never the host's presentation alpha
+    /// (<c>Client.WorldSessionSceneEmitter</c>). Creation text stays omitted until session delivery transports pinned
+    /// font assets.</para>
     /// <para><b>Staged boundary — global scope only.</b> A <c>user</c>/<c>group</c>-scoped destination makes the
     /// resolved image viewer-dependent, and the shipped one-image-per-screen-index binding shows every viewer the
     /// same image — showing one viewer's world to everyone would be silently wrong, so a session face naming a
@@ -162,6 +227,23 @@ public abstract record WorldScreenSource {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Background = null
     ) : WorldScreenSource;
 }
+/// <summary>The <see cref="WorldScreenSource"/> arms that produce a sampled frame — <see cref="WorldScreenSource.Camera"/>,
+/// <see cref="WorldScreenSource.View"/>, <see cref="WorldScreenSource.Probe"/>, and <see cref="WorldScreenSource.Capture"/>
+/// — carrying its own <see cref="JsonPolymorphicAttribute"/> over the SAME four discriminators
+/// (<c>camera</c>/<c>view</c>/<c>probe</c>/<c>capture</c>) their parent union uses, so a member declared as this
+/// narrower type round-trips the identical JSON a full <see cref="WorldScreenSource"/> screen row does. A
+/// <see cref="WorldProbe"/> socket is the driving consumer: it plugs one of these into each named input rather than
+/// the wider union, which would legally admit a decal/machine/console/qr/text/none source no probe kernel can
+/// sample.</summary>
+[JsonDerivedType(typeof(WorldScreenSource.Camera), typeDiscriminator: "camera")]
+[JsonDerivedType(typeof(WorldScreenSource.View), typeDiscriminator: "view")]
+[JsonDerivedType(typeof(WorldScreenSource.Probe), typeDiscriminator: "probe")]
+[JsonDerivedType(typeof(WorldScreenSource.Capture), typeDiscriminator: "capture")]
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+public abstract record WorldFrameSource : WorldScreenSource {
+    private protected WorldFrameSource() {
+    }
+}
 /// <summary>An ordered set of sources one screen may show, plus the entry its selector starts on — the cycle primitive. A
 /// selection is a pointer into this list; changing it never changes how many screen slots exist, so a magazine costs no
 /// render envelope. Entries are the same closed <see cref="WorldScreenSource"/> vocabulary the declared source uses, so a
@@ -173,14 +255,84 @@ public abstract record WorldScreenSource {
 /// <param name="Wrap">Whether advancing past the last entry returns to the first (the arcade cabinet's wrapping cycle);
 /// when false the selector clamps at both ends.</param>
 public sealed record WorldScreenMagazine(IReadOnlyList<WorldScreenSource> Entries, int Selected = 0, bool Wrap = true);
-/// <summary>A cable-linked group of screens whose machines advance as one interleaved unit. The binder steps the link,
+/// <summary>One machine's cable-port declaration — the machine-tier home of cable linking. A cable is the SET of
+/// declared machine sources naming the same cable name, derived by <see cref="WorldDefinition.MachineCableGroups"/>;
+/// no port ever points at another port, so reciprocity holds by construction and a one-port cable is a validation
+/// refusal rather than a dangling half-pair.</summary>
+/// <param name="Name">The cable's stable kebab-case name, shared by every plugged port.</param>
+/// <param name="Position">This machine's 0-based place in cable order — contiguous across the cable's ports
+/// (validated), and what decides the linking engine's deterministic player order.</param>
+public sealed record WorldMachineCable(string Name, int Position);
+/// <summary>A cable-linked group of screens whose machines advance as one interleaved unit — derived from the
+/// declared machine sources' cable ports (<see cref="WorldDefinition.MachineCableGroups"/>), never authored as a row
+/// of its own. The binder steps the group,
 /// never its members individually, so the engine's deterministic interleave — not the host's frame order — decides who
 /// runs when. Every member must resolve to a machine from the same engine, and that engine must implement
-/// <c>IMachineLinkingEngine</c>; a link whose members do not currently satisfy that is reported dormant, never silently
+/// <c>IMachineLinkingEngine</c>; a group whose members do not currently satisfy that is reported dormant, never silently
 /// dropped.</summary>
-/// <param name="Name">The link's stable kebab-case name (its mutation address).</param>
+/// <param name="Name">The cable's stable kebab-case name.</param>
 /// <param name="Screens">The engine screen indices in cable order (2 or more, no duplicates).</param>
-public sealed record WorldScreenLink(string Name, IReadOnlyList<int> Screens);
+public sealed record WorldMachineCableGroup(string Name, IReadOnlyList<int> Screens);
+/// <summary>The authored control state for the shared physical camera — one device-wide state across its color and
+/// infrared streams — and the standard UVC camera/image controls
+/// (pan/tilt/zoom, exposure, focus, color). Every member is optional: an ABSENT member leaves that control at the
+/// device's own driver default (automatic where the device supports it), and a PRESENT member drives the control
+/// manually at that value. The device remains authoritative — a value outside the device's reported range is clamped
+/// (and step-snapped) at apply, a control the device lacks is skipped, and <c>screen.camera</c> reads the resulting
+/// live state (each control's device range, mode, and current value) back over the pipe. Removing a previously
+/// authored member restores that control's driver default on the next apply. Ranges are device-specific by design, so
+/// validation admits any integer rather than guessing one device's envelope.</summary>
+/// <param name="Pan">Horizontal framing offset (digital pan on webcams).</param>
+/// <param name="Tilt">Vertical framing offset (digital tilt on webcams).</param>
+/// <param name="Zoom">Magnification — on sensor-cropping webcams a region-of-interest zoom (e.g. 100..500 = 1x..5x on
+/// a Logitech BRIO), which pairs with <paramref name="Pan"/>/<paramref name="Tilt"/> to frame a region.</param>
+/// <param name="Exposure">Manual exposure time, typically log2 seconds (e.g. -5 = 1/32 s); absent = auto exposure.</param>
+/// <param name="Focus">Manual focus distance; absent = autofocus.</param>
+/// <param name="Brightness">Image brightness offset.</param>
+/// <param name="Contrast">Image contrast.</param>
+/// <param name="Saturation">Color saturation (0 is grayscale on most devices).</param>
+/// <param name="Sharpness">Edge sharpening strength.</param>
+/// <param name="Gain">Sensor gain (ISO-like amplification).</param>
+/// <param name="WhiteBalance">Manual white-balance color temperature in kelvin; absent = auto white balance.</param>
+/// <param name="BacklightCompensation">Backlight compensation (devices commonly report a 0..1 toggle).</param>
+/// <param name="FieldOfView">The lens field of view in DEGREES — a vendor-extension control (hardware-verified on the
+/// Logitech BRIO: discrete 90/78/65, a true sensor crop composing with <paramref name="Zoom"/>); the device snaps to
+/// its nearest supported value, and a camera without the vendor unit skips it. Absent = the device default (widest).</param>
+/// <param name="Vendor">Raw vendor-extension writes — byte-sized (selector, value) pairs on the device's vendor unit,
+/// applied in order after the named controls. The engine assigns NO semantics: the author names the selector, the
+/// device decides what it means (e.g. the BRIO's unconfirmed HDR candidate is selector 12), and a removed row is NOT
+/// restored (its default is unknowable). <c>screen.camera</c> reads each authored selector back. Omitted from the
+/// wire when null.</param>
+public sealed record WorldCameraControls(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Pan = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Tilt = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Zoom = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Exposure = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Focus = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Brightness = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Contrast = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Saturation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Sharpness = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Gain = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? WhiteBalance = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? BacklightCompensation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? FieldOfView = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraVendorControl>? Vendor = null
+);
+/// <summary>One raw vendor-extension write on the shared camera (see <see cref="WorldCameraControls"/>'s
+/// <c>Vendor</c> member): a byte-sized selector on the device's vendor unit and the value to write. Deliberately
+/// semantics-free — the honest vocabulary for device controls no standard names.</summary>
+/// <param name="Id">The vendor extension unit's control selector.</param>
+/// <param name="Value">The byte value to write (0..255; the device clamps or refuses out-of-range writes).</param>
+public sealed record WorldCameraVendorControl(int Id, int Value);
+/// <summary>Which physical sensor a <see cref="WorldScreenSource.Camera"/> row opens.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldCameraSensor>))]
+public enum WorldCameraSensor : byte {
+    /// <summary>The default color camera.</summary>
+    Color,
+    /// <summary>The infrared sensor camera a Windows Hello capable device exposes as its own capture device.</summary>
+    Infrared,
+}
 /// <summary>A live screen feed's requested output policy. It belongs to the source declaration rather than the binder,
 /// so two window captures can choose different extents and cadences. Camera extents are preferences because a physical
 /// device remains authoritative for its negotiated format.</summary>
@@ -195,9 +347,8 @@ public readonly record struct WorldFeedProfile(int Width, int Height, uint Refre
         Width: 320
     );
 }
-/// <summary>The neutral pad element an authored <see cref="WorldScreenTranslationRow"/> maps a channel onto — the
-/// context-routes widening's replacement for <c>WorldEngagement.Translate</c>'s old hard-wired map. Named after the
-/// engine-neutral <c>MachinePadState</c>'s own axis/button vocabulary; a translation row picks exactly one.</summary>
+/// <summary>The neutral pad element a <see cref="WorldKit.Pad"/> entry maps a channel onto. Named after the
+/// engine-neutral <c>MachinePadState</c>'s own axis/button vocabulary; a pad entry picks exactly one.</summary>
 [JsonConverter(typeof(StrictEnumConverter<WorldPadElement>))]
 public enum WorldPadElement : byte {
     /// <summary>The left stick's X axis.</summary>
@@ -237,18 +388,14 @@ public enum WorldPadElement : byte {
     /// <summary>The back/select/view/minus button.</summary>
     Back,
 }
-/// <summary>One authored channel→pad-element mapping row — a <see cref="WorldScreenRoute.Translation"/> entry.</summary>
-/// <param name="Channel">The declared channel name this row reads.</param>
-/// <param name="Element">The neutral pad element the channel's value drives.</param>
-public readonly record struct WorldScreenTranslationRow(string Channel, WorldPadElement Element);
 /// <summary>The route policy a <see cref="WorldScreen"/> carries: whether a player may engage the screen, the activation
 /// radius, whether engaging auto-boots the selected magazine entry, the world-event channels a gesture drives it
-/// through, which channel ordinals the route reaches, and how those channels translate to the target's pad image. The
-/// optional members each default to the inert/baked choice: no auto-boot, no gesture channel, every channel reached,
-/// and the engine's default translation (the two movement roles to the left stick — <c>MoveStrafe</c>/
-/// <c>MoveForward</c>, structural ordinals, never a channel name). The default names no gameplay channel: a
-/// route whose machine needs a face button (or any other element) must author that row explicitly — see
-/// <c>Server.WorldEngagement.CompileTranslation</c>.</summary>
+/// through, which channel ordinals a control application onto it reaches, and which kit's pad map gives those
+/// channels their meaning at the machine. The optional members each default to the inert/baked choice: no auto-boot,
+/// no gesture channel, every channel reached, and the engine's default pad map (the two movement roles to the left
+/// stick — <c>MoveStrafe</c>/<c>MoveAdvance</c>, structural ordinals, never a channel name). The default names no
+/// gameplay channel: a screen whose machine needs a face button (or any other element) must name a kit whose
+/// <see cref="WorldKit.Pad"/> binds it.</summary>
 /// <param name="Engageable">Whether a player may engage this screen.</param>
 /// <param name="EngageRadius">The world-unit radius a player must be inside to engage (meaningful only when
 /// <paramref name="Engageable"/>). Validated finite and non-negative.</param>
@@ -258,17 +405,17 @@ public readonly record struct WorldScreenTranslationRow(string Channel, WorldPad
 /// <see langword="null"/> (the default) for a route that does not answer gestures. The author chooses this name freely;
 /// the engine never special-cases a spelling. Omitted from the wire when null.</param>
 /// <param name="CycleChannel">Same, for advancing the magazine selector. Omitted from the wire when null.</param>
-/// <param name="Channels">The declared channel names this route's mask reaches — a masked-out channel keeps flowing to
-/// the routed body's own pose (relevant under the capture:false mirror policy) but never reaches this route's target.
-/// <see langword="null"/> (the default) reaches every declared channel. Omitted from the wire when null.</param>
-/// <param name="Translation">The authored channel→pad-element rows this route's target reads, replacing the engine's
-/// default when present. <see langword="null"/> uses the engine mapping. Omitted from the wire when
-/// null.</param>
+/// <param name="Channels">The declared channel names an application onto this screen reaches — a masked-out channel
+/// keeps flowing to the source body's own pose (when the own-body application is retained) but never reaches this
+/// screen. <see langword="null"/> (the default) reaches every declared channel. Omitted from the wire when null.</param>
+/// <param name="Kit">The <see cref="WorldKit.Name"/> whose <see cref="WorldKit.Pad"/> map an application onto this
+/// screen wears, or <see langword="null"/> for the engine's default pad map. The named kit must carry a pad map —
+/// refused by name otherwise. Omitted from the wire when null.</param>
 public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadius, bool AutoInsert = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EngageChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? CycleChannel = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Channels = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenTranslationRow>? Translation = null) {
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kit = null) {
     /// <summary>Gets a screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(
         Engageable: false,
@@ -284,7 +431,10 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// this slab declares — the key the source/light providers bind under.</param>
 /// <param name="Origin">The front face's world-space center (the sampled surface origin); the geometry center sits one
 /// <see cref="HalfDepth"/> behind it along the face normal.</param>
-/// <param name="Right">The unit world axis the sampled U increases along (the slab's local +X in world space).</param>
+/// <param name="Right">The unit world axis the sampled U increases along (the slab's local +X in world space). Must be
+/// orthogonal to <paramref name="Up"/>: the client derives the slab's orientation and UV frame from the pair while the
+/// server's collider projects the half-extents onto it, so a skewed pair would render and collide as different
+/// solids.</param>
 /// <param name="Up">The unit world axis the sampled V increases against — V = 0 at the top (the slab's local +Y in
 /// world space).</param>
 /// <param name="HalfWidth">The face half-width (the slab's local X half-extent).</param>
@@ -299,6 +449,9 @@ public readonly record struct WorldScreenRoute(bool Engageable, float EngageRadi
 /// <param name="Magazine">The per-screen source magazine (the cycle primitive), or <see langword="null"/> for a screen
 /// with no magazine — nothing to cycle. Omitted from the wire when null — the whole-row <c>UpsertScreen</c>
 /// carries it for free, so no new mutation kind is needed.</param>
+/// <param name="Memory">The screen's live byte-window bindings between its booted machine's bus and ordinary
+/// <c>state.world</c> Int cells (see <see cref="WorldScreenMemory"/>), or <see langword="null"/> for a screen with
+/// none. Omitted from the wire when null.</param>
 public sealed record WorldScreen(
     int Index,
     DocumentVector3 Origin,
@@ -311,5 +464,6 @@ public sealed record WorldScreen(
     WorldScreenSource Source,
     WorldScreenRoute Route,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSolid? Solid = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenMagazine? Magazine = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScreenMemory>? Memory = null
 );

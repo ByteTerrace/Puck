@@ -19,15 +19,20 @@ public sealed class AdvancedMachineHost : QueuedMachineHost {
     public const int DefaultMaximumPendingSteps = 8;
 
     private readonly byte[] m_bios;
+    private readonly AgbMachineOptions m_options;
 
     /// <summary>Creates an empty host or direct-boots <paramref name="cartridgeRom"/> when supplied.</summary>
     /// <param name="cartridgeRom">The native AGB cartridge image, or <see langword="null"/> for an empty host.</param>
     /// <param name="savePath">The optional battery-save path.</param>
-    /// <param name="biosImage">A 16 KiB BIOS image; <see langword="null"/> selects the zeroed replacement image.</param>
+    /// <param name="biosImage">An explicitly supplied 16 KiB BIOS image. A zeroed image is suitable only for
+    /// BIOS-independent diagnostics; it implements neither software interrupts nor IRQ dispatch.</param>
     /// <param name="audioSampleRate">The audio output rate in frames per emulated second the neutral
     /// <see cref="IAudioMachine"/> surface reports, or 0 (the default) when no consumer wants audio from this host —
     /// a silent host performs zero presentation-side audio synthesis.</param>
-    public AdvancedMachineHost(byte[]? cartridgeRom = null, string? savePath = null, byte[]? biosImage = null, int audioSampleRate = 0)
+    /// <exception cref="ArgumentNullException"><paramref name="biosImage"/> is null.</exception>
+    /// <exception cref="ArgumentException"><paramref name="biosImage"/> is not 16 KiB.</exception>
+    /// <param name="options">Per-machine diagnostic overrides, or null for normal hardware behavior.</param>
+    public AdvancedMachineHost(byte[] biosImage, byte[]? cartridgeRom = null, string? savePath = null, int audioSampleRate = 0, AgbMachineOptions? options = null)
         : base(
         width: ScreenWidth,
         height: ScreenHeight,
@@ -36,17 +41,16 @@ public sealed class AdvancedMachineHost : QueuedMachineHost {
         audioSampleRate: audioSampleRate,
         savePath: savePath
     ) {
-        if (
-            (biosImage is not null) &&
-            (biosImage.Length != ReplacementBios.ImageSize)
-        ) {
+        ArgumentNullException.ThrowIfNull(argument: biosImage);
+        if (biosImage.Length != ReplacementBios.ImageSize) {
             throw new ArgumentException(
                 message: $"The BIOS image must be {ReplacementBios.ImageSize} bytes; got {biosImage.Length}.",
                 paramName: nameof(biosImage)
             );
         }
 
-        m_bios = (biosImage?.ToArray() ?? new byte[ReplacementBios.ImageSize]);
+        m_bios = biosImage.ToArray();
+        m_options = options ?? new AgbMachineOptions();
 
         if (cartridgeRom is not null) {
             LoadContent(
@@ -59,8 +63,7 @@ public sealed class AdvancedMachineHost : QueuedMachineHost {
     /// <inheritdoc/>
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
         new AdvancedGamingBrickCore(
-        bios: m_bios,
-        cartridgeRom: data,
+        configuration: new AgbMachineConfiguration(bios: m_bios, rom: data, options: m_options),
         savePath: savePath
     );
 }

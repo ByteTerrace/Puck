@@ -271,6 +271,161 @@
     ]
   },
   {
+    "Id": "integer.symmetry-word-permutation-order-and-pairing",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "Apply"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "OrbitLength"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "Order"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "IsIdentity"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "Length"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "Mirrors"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "Coxeter"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryWord",
+        "Name": "MaximumLength"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "InnerProduct"
+      },
+      {
+        "Type": "Puck.Maths.SymmetryLattice",
+        "Name": "RingNode"
+      },
+      {
+        "Type": "Puck.Maths.CyclicRotation",
+        "Name": "Rotor"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "SymmetryWord.Create refuses an empty word, a word past MaximumLength (which equals SymmetryLattice.Dimension) and a letter outside the node range naming 'mirrors'; Apply, the counted Apply and OrbitLength refuse an out-of-range node naming 'node'; CyclicRotation.Rotor(step, order) refuses order zero naming 'order'; SymmetryLattice.RingNode refuses a ring outside 0..7 naming 'ring'; SymmetryLattice.InnerProduct refuses either argument out of range naming it",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "SymmetryWord.Coxeter - its letters, length, Order, every node's single-step image and its counted power at steps -40..70",
+        "Against": "SymmetryLattice.Cycle(node) and Cycle(node, steps), CyclicRotation.Period, SymmetryLattice.RingSize",
+        "Shared": "SymmetryLattice.ReflectMap - the word bakes its permutation by composing SymmetryLattice.Reflect over its letters, and CycleMap is composed in the static constructor from the same ReflectRaw closure over the same seeds in the same descending order; this pins that the word spelling [7,6,5,4,3,2,1,0] IS the lattice's cycle, not that either derivation of the reflection is correct",
+        "Citation": "integer.symmetry-lattice-exact-structure pins Reflect as an involution and Cycle's ring partition over the full carrier",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "DelegationTwin",
+        "Subject": "SymmetryWord.Apply(node) for twelve words of every length one through eight",
+        "Against": "the letters applied one SymmetryLattice.Reflect at a time in the test",
+        "Shared": "SymmetryLattice.Reflect, the identical member - Create composes it once per node at bake time, the test composes it again per node; this catches a baked table wired to the wrong node, letter order or orbit slot, never a wrong reflection",
+        "Citation": "integer.symmetry-lattice-exact-structure pins Reflect itself",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "for every one of the twelve words Apply is a permutation of all 240 nodes (no two nodes share an image); OrbitLength(node) is the count iteration measures until the node recurs; the counted Apply(node, steps) equals that iteration at every step from 0 to twice the orbit length and at the same steps offset by minus three orbit lengths; Apply(node, Order) and Apply(node, -7 * Order) are the node; Order is the least common multiple of the measured orbit lengths; IsIdentity holds exactly at Order one; [3,3] is the identity",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "the Order of every one of the twelve words",
+        "Against": "the published list of element orders of the Weyl group W(E8): 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 15, 18, 20, 24, 30 (Carter, Conjugacy classes in the Weyl group, Compositio Mathematica 25, 1972, Table 11); the orthogonal pair [0,1] measures 2 and the adjacent pair [0,2] measures 3, the bond orders of a simply-laced diagram",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedUpstream",
+        "Subject": "the Order of five two-letter words",
+        "Against": "ReflectionSystem.BondMatrix's off-diagonal entry for the same two mirrors",
+        "Shared": "SymmetryLattice.Reflect - the bond is the composite order ReflectionSystem measures by iterating Reflect over every node, the word's Order the least common multiple of the cycle lengths Create measures over the same Reflect; two walks of one table, so this pins that the two measurements of order agree, not the table",
+        "Citation": "presented.reflection-action-lattice pins the bond matrix's braid and involution relations",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "SymmetryLattice.InnerProduct at every node: the count of other nodes pairing to -2, -1, 0, 1 and 2",
+        "Against": "the E8 root system's pairing spectrum 1, 56, 126, 56, 1 (Conway and Sloane, Sphere Packings, Lattices and Groups, chapter 4, section 8.1: each root has 56 neighbours at sixty degrees, 126 orthogonal roots, 56 at one hundred twenty degrees and one opposite) - a published constant table the doubled-coordinate pairing shares no code with",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "InnerProduct over all 240 by 240 pairs is symmetric, lies in -2..2, is 2 on the diagonal and -2 at the antipode, is zero exactly where AreOrthogonal holds, is negated on the reflected side of a reflection (InnerProduct(Reflect(n, m), m) == -InnerProduct(n, m)) and preserved when one reflection is applied to both sides",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "SymmetryLattice.RingNode: for every ring, position zero is the ring's lowest node index, each of the thirty positions holds a distinct node on that ring, position k+1 is Cycle of position k, and a position offset by any multiple of RingSize in either direction reads the same node",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "SharedSubstrate",
+        "Flavor": "SharedExactKernel",
+        "Subject": "CyclicRotation.Rotor(step, order) at order thirty for steps -60..90, at order one, and at every divisor of thirty against the baked table entry the same angle lands on",
+        "Against": "CyclicRotation.Rotor(step), the baked table",
+        "Shared": "FixedComplex.FromAngle over FixedQ4816.FromRawBits(TurnRawQ16 * index / order) - the table is that formula evaluated once per entry, and a divisor's step count scales to the same floored raw angle, so bit equality here pins the formula's carriage, not FromAngle",
+        "Citation": "scalar.cyclic-rotation-closes-its-loop pins the baked table's closure; FromAngle's own laws pin the kernel",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "at nine orders that do not divide thirty, Rotor(0, order) is the identity and Rotor(step + 5 * order, order) equals Rotor(step, order) at every step of the loop",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "integer.hilbert-curve-bijection-and-locality",
     "Tier": "Deep",
     "Members": [

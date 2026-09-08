@@ -6,8 +6,10 @@ namespace Puck.HumbleGamingBrick;
 
 /// <summary>
 /// The APU's generator clock: hardware clocks the channel generators (the square duty positions, the wave sample
-/// fetcher, and the noise LFSR) from the fixed 4 MiHz dot clock, NOT the CPU clock — engaging Color double speed
-/// doubles the frame sequencer's DIV source (compensated by the DIV-APU bit moving up) but never the audio pitch.
+/// fetcher, and the noise counter) from the console's own fixed oscillator, not the CPU clock — engaging Color double
+/// speed doubles the frame sequencer's DIV source (compensated by the DIV-APU bit moving up) but never the audio
+/// pitch. This adapter delivers whole 4 MiHz dots; <see cref="ApuComponent.TickGenerators"/> halves them to the
+/// 2 MiHz audio clock the generators actually run on.
 /// This stateless adapter divides the CPU-domain tick stream down to one <see cref="ApuComponent.TickGenerators"/>
 /// call per whole dot, deriving the phase from the master clock so no state needs snapshotting: at normal speed every
 /// CPU T-cycle is a whole dot; at double speed the CPU takes two half-dot steps per dot and the generator edge sits on

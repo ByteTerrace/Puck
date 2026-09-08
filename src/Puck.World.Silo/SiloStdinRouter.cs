@@ -61,13 +61,11 @@ public sealed class SiloStdinRouter(WorldSiloHost host, SiloConsoleRouting routi
 
         if (
             (routing.DefaultWorldId is { } defaultWorldId) &&
-            routing.TryGetSession(
-            session: out var session,
+            routing.TryEnqueue(
+            line: line,
             worldId: defaultWorldId
         )
         ) {
-            session.Enqueue(line: line.ToString());
-
             return;
         }
 
@@ -99,16 +97,12 @@ public sealed class SiloStdinRouter(WorldSiloHost host, SiloConsoleRouting routi
             return;
         }
 
-        if (!routing.TryGetSession(
-            session: out var session,
+        if (!routing.TryEnqueue(
+            line: content,
             worldId: identity.World.Value
         )) {
             Console.Error.WriteLine(value: $"refused: '{key}' is declared but not currently admitted");
-
-            return;
         }
-
-        session.Enqueue(line: content);
     }
 
     /// <inheritdoc/>

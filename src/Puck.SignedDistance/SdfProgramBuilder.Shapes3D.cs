@@ -428,9 +428,10 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="smooth">The smooth-blend radius (meaningful only for a smooth <paramref name="blend"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside the supported range, this
     /// program has already declared <see cref="MaxScreenSurfaces"/> screen surfaces, a slab dimension is not finite and
-    /// non-negative, <paramref name="worldOrigin"/> is not finite, <paramref name="worldRight"/>/
+    /// non-negative, the sampled face's X or Y half-extent is not positive, <paramref name="worldOrigin"/> is not
+    /// finite, <paramref name="worldRight"/>/
     /// <paramref name="worldUp"/> is not finite or has zero length, <paramref name="worldRight"/> and
-    /// <paramref name="worldUp"/> are parallel, or <paramref name="blend"/> is not a defined
+    /// <paramref name="worldUp"/> are not orthogonal, or <paramref name="blend"/> is not a defined
     /// <see cref="SdfBlendOp"/>.</exception>
     public SdfProgramBuilder ScreenSlab(Vector3 halfExtents, float round, Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, int screenIndex, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         // The slab geometry carries Box's contract; the UV frame's two axes are normalized host-side into the screen
@@ -440,6 +441,21 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(halfExtents),
             subject: "A screen-slab half-extent"
         );
+
+        // The face's X/Y half-extents become the surface frame's half-width/half-height, and sampleScreenSurface
+        // resolves the UV by DIVIDING the hit's projection by each: a zero face maps every hit to a non-finite UV. The
+        // slab's Z (depth) half-extent is unconstrained — nothing divides by it. KEEP IN SYNC with the SdfProgram
+        // constructor's screen-extent refusal, which names the packed surface.
+        if (
+            !(halfExtents.X > 0f) ||
+            !(halfExtents.Y > 0f)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(halfExtents),
+                message: $"An indexed screen slab's X and Y half-extents must be positive; got {halfExtents.X} and {halfExtents.Y}. They are the sampled face's half-width and half-height, which the shader divides the hit's projection by."
+            );
+        }
+
         RequireNonNegative(
             value: round,
             paramName: nameof(round),
@@ -466,23 +482,14 @@ public sealed partial class SdfProgramBuilder {
             subject: "A screen-slab world up axis"
         );
 
-        // Two individually valid axes can still be parallel, and their cross product is then zero — normalizing it
-        // would put NaN into a downstream frame built from right/up/forward (Text's identical hazard; same check).
-        var forward = Vector3.Normalize(value: Vector3.Cross(
-            vector1: Vector3.Normalize(value: worldRight),
-            vector2: Vector3.Normalize(value: worldUp)
-        ));
-
-        if (
-            !float.IsFinite(f: forward.X) ||
-            !float.IsFinite(f: forward.Y) ||
-            !float.IsFinite(f: forward.Z)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(worldUp),
-                message: "A screen-slab world right and up axis must not be parallel — they span the slab's front-face frame."
-            );
-        }
+        // Orthogonality subsumes the parallel case (a parallel pair has |dot| = 1) and is what the packed frame needs:
+        // the UV projects onto these axes while the slab's geometry rides the rotation derived from them.
+        RequireOrthogonalBasis(
+            paramName: nameof(worldUp),
+            right: worldRight,
+            subject: "A screen-slab world right and up axis",
+            up: worldUp
+        );
 
         if (
             (screenIndex < 0) ||

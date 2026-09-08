@@ -46,7 +46,11 @@ public sealed partial class SdfProgramBuilder {
         // of refused as out-of-range. Refuse the growth HERE, at the one place that assigns the composed index, naming
         // the ceiling, rather than let a document's palette-local ordinal reach another host table.
         if (m_materials.Count >= ScreenMaterialId) {
-            throw new InvalidOperationException(message: $"A program's composed material palette may declare at most {ScreenMaterialId} materials (ScreenMaterialId) — material index {ScreenMaterialId} would collide with the reserved screen-material sentinel range. Register fewer materials.");
+            throw new SdfProgramCapacityException(
+                capacity: "materials",
+                limit: ScreenMaterialId,
+                message: $"A program's composed material palette may declare at most {ScreenMaterialId} materials (ScreenMaterialId) — material index {ScreenMaterialId} would collide with the reserved screen-material sentinel range. Register fewer materials."
+            );
         }
 
         m_materials.Add(item: material);
@@ -172,7 +176,11 @@ public sealed partial class SdfProgramBuilder {
         }
 
         if (m_instances.Count >= MaxInstances) {
-            throw new InvalidOperationException(message: $"A program may declare at most {MaxInstances} instances.");
+            throw new SdfProgramCapacityException(
+                capacity: "instances",
+                limit: MaxInstances,
+                message: $"A program may declare at most {MaxInstances} instances."
+            );
         }
 
         m_instances.Add(item: new SdfInstanceRange(

@@ -12,19 +12,21 @@ namespace Puck.Scripting;
 /// export, or content that no longer matches a declared <c>moduleHash</c> pin) loads faulted and never
 /// crashes the run. Takes ownership of the engine and disposes it (with every instance's store) on
 /// <see cref="Dispose"/>.
-/// <para><b>Loading is not admitting.</b> <see cref="Add"/>, <see cref="Reload"/>, and
-/// <see cref="SetEnabled"/> all produce instances in the unadmitted phase of the two-phase mount (see
-/// <see cref="AddonInstance"/>): the consumer runs its own mount gates and calls
-/// <see cref="AddonInstance.Admit"/> before the first tick. A live-reload surface therefore owes the whole
-/// admit sequence, not just this call — <c>Puck.World</c>'s <c>WorldAddonRuntime.Reload</c>/<c>SetEnabled</c> are that
-/// surface, re-running the disclosure + <see cref="AddonInstance.Admit"/> sequence immediately after calling into this
-/// type — and a consumer's tick loop must still skip an enabled-but-unadmitted instance rather than tick it, as a
-/// defensive floor for any caller that reaches this type directly instead.</para>
+/// <para><b>Loading is not admitting, and preparing is not committing.</b> <see cref="Prepare"/> produces an
+/// instance in the unadmitted phase of the two-phase mount (see <see cref="AddonInstance"/>): the consumer runs
+/// its own mount gates and <see cref="AddonInstance.Admit"/> before the first tick, then publishes the complete
+/// prepared registry through <see cref="Adopt"/> once its whole transaction may commit — <c>Puck.World</c>'s
+/// <c>WorldAddonRuntime.TryPrepare</c>/<c>Commit</c> is that surface. A consumer's tick loop must still skip an
+/// enabled-but-unadmitted instance rather than tick it, as a defensive floor for any caller that reaches this
+/// type directly instead.</para>
 /// </summary>
 public sealed class AddonHost : IDisposable {
-    private readonly Dictionary<string, AddonInstance> m_byName = new(comparer: StringComparer.Ordinal);
-    private readonly Dictionary<string, AddonDescriptor> m_descriptors = new(comparer: StringComparer.Ordinal);
-    private readonly List<AddonInstance> m_instances = [];
+    // Reassigned WHOLESALE by Adopt — three reference swaps, never mutated element-by-element — so a caller
+    // publishing a whole-runtime prepare/commit transaction (Puck.World.Addons.WorldAddonRuntime) can adopt a
+    // complete replacement registry, including the removal of a superseded name, with no fallible operation.
+    private Dictionary<string, AddonInstance> m_byName = new(comparer: StringComparer.Ordinal);
+    private Dictionary<string, AddonDescriptor> m_descriptors = new(comparer: StringComparer.Ordinal);
+    private List<AddonInstance> m_instances = [];
 
     private readonly IAddonChannelResolver m_channelResolver;
     private readonly ScriptingEngine m_engine;
@@ -88,7 +90,9 @@ public sealed class AddonHost : IDisposable {
                 engine: m_engine,
                 moduleInfo: info
             );
-        } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException)) {
+        } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException or UnauthorizedAccessException or IOException)) {
+            // A locked file, a permissions denial, or a transient disk error is an ordinary environment failure a
+            // module read can hit — a sticky load fault, never a tick-thread exception.
             return new AddonInstance(
                 descriptor: in descriptor,
                 fault: new AddonFault(
@@ -107,28 +111,38 @@ public sealed class AddonHost : IDisposable {
         };
     }
 
-    /// <summary>Loads an addon from its descriptor and registers it. Load failures produce a faulted instance
-    /// rather than throwing, so one bad addon never fails the whole run.</summary>
+    /// <summary>Publishes a complete replacement registry by three reference swaps — every entry in
+    /// <paramref name="byName"/>/<paramref name="descriptors"/>/<paramref name="instances"/>, and nothing else: a
+    /// name registered before this call but absent from them is no longer registered after it. Pure adoption — no
+    /// compile, I/O, per-name enable/disable, or allocation of its own; the caller builds the three collections
+    /// during its own prepare phase and hands them over already complete.</summary>
+    /// <param name="byName">The complete replacement name-to-instance map.</param>
+    /// <param name="descriptors">The complete replacement name-to-descriptor map.</param>
+    /// <param name="instances">The complete replacement instance list, in mount order.</param>
+    public void Adopt(Dictionary<string, AddonInstance> byName, Dictionary<string, AddonDescriptor> descriptors, List<AddonInstance> instances) {
+        ArgumentNullException.ThrowIfNull(argument: byName);
+        ArgumentNullException.ThrowIfNull(argument: descriptors);
+        ArgumentNullException.ThrowIfNull(argument: instances);
+
+        m_byName = byName;
+        m_descriptors = descriptors;
+        m_instances = instances;
+    }
+    /// <summary>Compiles a guest under <paramref name="descriptor"/> without registering it — the PREPARE half of
+    /// the prepare/commit split: the fallible load (missing file, bad bytes, bad export, a <c>moduleHash</c> pin
+    /// mismatch) runs here. The returned instance is not reachable through <see cref="TryGet"/> or
+    /// <see cref="Instances"/> until a complete registry containing it is published through <see cref="Adopt"/>;
+    /// a discarded preparation is undone by disposing the instance.</summary>
     /// <param name="descriptor">The neutral load request.</param>
+    /// <returns>The prepared instance — faulted rather than thrown on a load failure.</returns>
     /// <exception cref="ArgumentException"><paramref name="descriptor"/> has a null-or-whitespace name.</exception>
-    public void Add(in AddonDescriptor descriptor) {
+    public AddonInstance Prepare(in AddonDescriptor descriptor) {
         ArgumentException.ThrowIfNullOrWhiteSpace(
             argument: descriptor.Name,
             paramName: nameof(descriptor)
         );
 
-        var instance = Load(descriptor: in descriptor);
-
-        if (
-            !descriptor.Enabled &&
-            (instance.State == AddonState.Enabled)
-        ) {
-            instance.Disable();
-        }
-
-        m_byName[descriptor.Name] = instance;
-        m_descriptors[descriptor.Name] = descriptor;
-        m_instances.Add(item: instance);
+        return Load(descriptor: in descriptor);
     }
     /// <summary>Renders one line per addon: petname, content hash, fuel budget, and state.</summary>
     /// <returns>A newline-joined description, or <c>"no addons"</c> when none are loaded.</returns>
@@ -166,79 +180,6 @@ public sealed class AddonHost : IDisposable {
         m_descriptors.Clear();
         m_engine.Dispose();
         GC.SuppressFinalize(obj: this);
-    }
-    /// <summary>Reloads the named addon from its declared module path — the in-session edit loop: re-reads the
-    /// file, recompiles (a changed content hash misses the module cache; an unchanged one reuses it), and swaps
-    /// in a fresh store. The reloaded addon runs regardless of its prior state; a load failure swaps in a sticky
-    /// faulted instance naming the reason (fix the module and reload again). A declared <c>moduleHash</c> pin
-    /// refuses a content change and leaves the running instance untouched.</summary>
-    /// <param name="name">The addon name.</param>
-    /// <returns>A human-readable status line (the consumer-facing formatting <see cref="Describe"/> established).</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
-    public string Reload(string name) {
-        if (!TryGet(
-            instance: out var previous,
-            name: name
-        )) {
-            return $"unknown addon '{name}'";
-        }
-
-        var descriptor = m_descriptors[name];
-
-        if (descriptor.ModuleHash is { } pin) {
-            try {
-                var info = m_loader.Load(path: descriptor.ModulePath);
-
-                if (!string.Equals(
-                    a: info.ContentHash.ToString(),
-                    b: pin,
-                    comparisonType: StringComparison.OrdinalIgnoreCase
-                )) {
-                    return $"refused — content {info.ContentHash} no longer matches the declared moduleHash pin {pin}; remove the pin to hot-reload";
-                }
-            } catch (Exception error) when ((error is ArgumentException or FileNotFoundException or InvalidDataException or WasmtimeException)) {
-                // Unreadable content falls through to the swap below, which surfaces it as a sticky faulted instance.
-            }
-        }
-
-        var instance = Load(descriptor: in descriptor);
-        var index = m_instances.IndexOf(item: previous);
-
-        m_byName[name] = instance;
-        m_instances[index] = instance;
-        previous.Dispose();
-
-        if (instance.State != AddonState.Enabled) {
-            return $"faulted — {instance.Fault.Detail}";
-        }
-
-        var petname = ContentPetname.From(hashHex: $"{instance.Hash.Value:x16}");
-
-        if (instance.Hash == previous.Hash) {
-            return $"{petname} unchanged (fresh store)";
-        }
-
-        return $"{ContentPetname.From(hashHex: $"{previous.Hash.Value:x16}")} became {petname}";
-    }
-    /// <summary>Enables or disables the named addon.</summary>
-    /// <param name="name">The addon name.</param>
-    /// <param name="enabled">Whether to enable (re-instantiate) or disable it.</param>
-    /// <returns><see langword="true"/> if an addon with that name exists; otherwise <see langword="false"/>.</returns>
-    public bool SetEnabled(string name, bool enabled) {
-        if (!TryGet(
-            instance: out var instance,
-            name: name
-        )) {
-            return false;
-        }
-
-        if (enabled) {
-            instance.Enable();
-        } else {
-            instance.Disable();
-        }
-
-        return true;
     }
     /// <summary>Looks up an addon by name.</summary>
     /// <param name="name">The addon name.</param>

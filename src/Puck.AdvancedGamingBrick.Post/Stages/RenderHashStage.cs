@@ -2,24 +2,24 @@ namespace Puck.AdvancedGamingBrick.Post;
 
 /// <summary>Where a render-hash floor's ROM is sourced from.</summary>
 internal enum RenderFloorSource {
-    /// <summary>Under the reference conformance-corpus root (<c>--roms</c> / <c>PUCK_AGB_TESTROMS</c>).</summary>
+    /// <summary>Under the reference conformance-corpus root (the gba-tests corpus, or <c>--roms</c>).</summary>
     Corpus,
-    /// <summary>Under the commercial-ROM directory (<c>--games</c> / <c>PUCK_AGB_GAMES</c>).</summary>
+    /// <summary>Under the commercial-ROM directory (<c>--games</c>).</summary>
     Games,
 }
-/// <summary>One deterministic render-hash floor: a ROM run for a fixed number of instructions whose framebuffer must hash
+/// <summary>One deterministic render-hash floor: a ROM run for a fixed number of CPU steps whose framebuffer must hash
 /// to a known value.</summary>
 /// <param name="Source">Which root the ROM lives under.</param>
 /// <param name="RelativePath">The ROM path relative to that root (forward slashes).</param>
 /// <param name="Name">The floor's display name.</param>
-/// <param name="Steps">The number of instructions to step before hashing.</param>
+/// <param name="Steps">The number of CPU steps, including halted idle steps, before hashing.</param>
 /// <param name="ExpectedHash">The known-good FNV-1a framebuffer hash (captured with a real BIOS when <paramref name="NeedsBios"/>).</param>
 /// <param name="NeedsBios">Whether the ROM's render depends on the BIOS (a commercial game that runs BIOS SWIs during boot);
 /// such a floor skips when only the zeroed BIOS stub is present, since it would otherwise render a blank screen and
 /// mismatch. Simple direct-boot demos (the ppu screens) are BIOS-independent and set this <see langword="false"/>.</param>
 internal sealed record RenderFloor(RenderFloorSource Source, string RelativePath, string Name, long Steps, ulong ExpectedHash, bool NeedsBios);
 /// <summary>
-/// Tier-B stage: deterministic render-hash floors. Each floor boots a ROM, runs it for a fixed number of instructions,
+/// Tier-B stage: deterministic render-hash floors. Each floor boots a ROM, runs it for a fixed number of CPU steps,
 /// and hashes the framebuffer; because the core is fully deterministic, a known-good render must reproduce its FNV-1a
 /// hash exactly. This guards the whole CPU&#8594;bus&#8594;PPU pipeline against silent regressions while the accuracy
 /// frontier is worked. Floors sourced from the corpus (the ppu screen demos) or the commercial-ROM directory skip
@@ -46,24 +46,19 @@ internal sealed class RenderHashStage : IPostStage<PostContext> {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var failures = new List<string>();
-        var passed = 0;
-        var ran = 0;
+        var stubBios = (context.BiosImage.Span.IndexOfAnyExcept(value: ((byte)0)) < 0);
+        var floors = new List<(RenderFloor Floor, string FullPath)>(capacity: m_floors.Count);
 
         foreach (var floor in m_floors) {
             var root = ((floor.Source == RenderFloorSource.Corpus)
                 ? context.TestRomRoot
                 : context.GamesRoot);
 
-            if (root is null) {
-                continue;
-            }
-
             // A BIOS-dependent floor renders a blank screen on the zeroed stub, which would never match — skip it there
             // rather than false-fail; it only reproduces its floor with a real replacement BIOS.
             if (
-                floor.NeedsBios &&
-                (context.BiosImage.Span.IndexOfAnyExcept(value: ((byte)0)) < 0)
+                (root is null) ||
+                (floor.NeedsBios && stubBios)
             ) {
                 continue;
             }
@@ -76,39 +71,37 @@ internal sealed class RenderHashStage : IPostStage<PostContext> {
                 )
             );
 
-            if (!File.Exists(path: fullPath)) {
-                continue;
+            if (File.Exists(path: fullPath)) {
+                floors.Add(item: (floor, fullPath));
             }
+        }
 
-            ++ran;
+        if (floors.Count == 0) {
+            return PostStageOutcome.Skip(detail: "no render-hash floor ROMs present (fetch the gba-tests corpus or pass --roms / --games)");
+        }
 
-            try {
+        var outcome = RomCaseRunner.Run(
+            cases: floors
+                .Select(selector: static item => new RomCase(
+                    FullPath: item.FullPath,
+                    Group: "render-hash",
+                    Name: item.Floor.Name
+                ))
+                .ToArray(),
+            parallelism: context.Parallelism,
+            probe: romCase => {
+                var floor = floors[floors.FindIndex(match: item => (item.Floor.Name == romCase.Name))].Floor;
                 var (pass, _, detail) = RenderHashProbe.Run(
-                    romPath: fullPath,
-                    steps: floor.Steps,
+                    bios: context.BiosImage,
                     expected: floor.ExpectedHash,
-                    bios: context.BiosImage
+                    romPath: romCase.FullPath,
+                    steps: floor.Steps
                 );
 
-                if (pass == true) {
-                    ++passed;
-                } else {
-                    failures.Add(item: $"{floor.Name} ({detail})");
-                }
-            } catch (Exception exception) {
-                failures.Add(item: $"{floor.Name} (threw {exception.GetType().Name}: {exception.Message})");
+                return ((pass == true), detail);
             }
-        }
+        );
 
-        if (ran == 0) {
-            return PostStageOutcome.Skip(detail: "no render-hash floor ROMs present (set PUCK_AGB_TESTROMS / PUCK_AGB_GAMES)");
-        }
-
-        return ((failures.Count == 0)
-            ? PostStageOutcome.Pass(detail: $"{passed}/{ran} floors reproduced")
-            : PostStageOutcome.Fail(detail: $"{passed}/{ran} reproduced; drifted: {string.Join(
-            separator: ", ",
-            values: failures
-        )}"));
+        return outcome;
     }
 }

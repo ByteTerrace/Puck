@@ -1,0 +1,465 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "chinese-checkers",
+  "state": {
+    "lattices": [
+      {
+        "$type": "hex",
+        "name": "ccHex",
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "cellSize": 1,
+        "radius": 3
+      }
+    ],
+    "world": [
+      {
+        "name": "ccBoard",
+        "kind": "Int",
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "ccHex"
+        }
+      },
+      {
+        "name": "pieceCell",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "s0p0",
+            "value": 21
+          },
+          {
+            "key": "s0p1",
+            "value": 22
+          },
+          {
+            "key": "s1p0",
+            "value": 27
+          },
+          {
+            "key": "s1p1",
+            "value": 26
+          },
+          {
+            "key": "s2p0",
+            "value": 33
+          },
+          {
+            "key": "s2p1",
+            "value": 34
+          }
+        ]
+      },
+      {
+        "name": "pieceCellPrev",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "s0p0",
+            "value": 21
+          },
+          {
+            "key": "s0p1",
+            "value": 22
+          },
+          {
+            "key": "s1p0",
+            "value": 27
+          },
+          {
+            "key": "s1p1",
+            "value": 26
+          },
+          {
+            "key": "s2p0",
+            "value": 33
+          },
+          {
+            "key": "s2p1",
+            "value": 34
+          }
+        ]
+      },
+      {
+        "name": "pieceSeat",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "s0p0",
+            "value": 0
+          },
+          {
+            "key": "s0p1",
+            "value": 0
+          },
+          {
+            "key": "s1p0",
+            "value": 1
+          },
+          {
+            "key": "s1p1",
+            "value": 1
+          },
+          {
+            "key": "s2p0",
+            "value": 2
+          },
+          {
+            "key": "s2p1",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "name": "turn",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "verdict",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "moverSeat",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "moverFrom",
+        "kind": "Int",
+        "value": -1
+      },
+      {
+        "name": "moverCell",
+        "kind": "Int",
+        "value": -1
+      },
+      {
+        "name": "movedCount",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "collisionCount",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "legal",
+        "kind": "Int",
+        "capacity": 8,
+        "domain": {
+          "$type": "keysOf",
+          "row": "pieceCell"
+        }
+      },
+      {
+        "name": "counts",
+        "kind": "Int",
+        "capacity": 8,
+        "domain": {
+          "$type": "keysOf",
+          "row": "pieceCell"
+        }
+      },
+      {
+        "name": "best",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "token",
+            "value": -1
+          },
+          {
+            "key": "to",
+            "value": -1
+          },
+          {
+            "key": "score",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "scores",
+        "kind": "Int",
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ]
+      },
+      {
+        "name": "appliedToken",
+        "kind": "Int",
+        "value": -1
+      },
+      {
+        "name": "appliedTo",
+        "kind": "Int",
+        "value": -1
+      },
+      {
+        "name": "shouldApply",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "home0",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "home1",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "home2",
+        "kind": "Int",
+        "value": 0
+      },
+      {
+        "name": "winner",
+        "kind": "Int",
+        "value": -1
+      },
+      {
+        "name": "moveCount",
+        "kind": "Int",
+        "value": 0
+      }
+    ]
+  },
+  "rules": [
+    {
+      "name": "cc-judge",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "moverSeat",
+          "expression": "(pieceSeat[s0p0] * (pieceCell[s0p0] != pieceCellPrev[s0p0])) + (pieceSeat[s0p1] * (pieceCell[s0p1] != pieceCellPrev[s0p1])) + (pieceSeat[s1p0] * (pieceCell[s1p0] != pieceCellPrev[s1p0])) + (pieceSeat[s1p1] * (pieceCell[s1p1] != pieceCellPrev[s1p1])) + (pieceSeat[s2p0] * (pieceCell[s2p0] != pieceCellPrev[s2p0])) + (pieceSeat[s2p1] * (pieceCell[s2p1] != pieceCellPrev[s2p1]))"
+        },
+        {
+          "$type": "setState",
+          "state": "moverFrom",
+          "expression": "(pieceCellPrev[s0p0] * (pieceCell[s0p0] != pieceCellPrev[s0p0])) + (pieceCellPrev[s0p1] * (pieceCell[s0p1] != pieceCellPrev[s0p1])) + (pieceCellPrev[s1p0] * (pieceCell[s1p0] != pieceCellPrev[s1p0])) + (pieceCellPrev[s1p1] * (pieceCell[s1p1] != pieceCellPrev[s1p1])) + (pieceCellPrev[s2p0] * (pieceCell[s2p0] != pieceCellPrev[s2p0])) + (pieceCellPrev[s2p1] * (pieceCell[s2p1] != pieceCellPrev[s2p1]))"
+        },
+        {
+          "$type": "setState",
+          "state": "moverCell",
+          "expression": "(pieceCell[s0p0] * (pieceCell[s0p0] != pieceCellPrev[s0p0])) + (pieceCell[s0p1] * (pieceCell[s0p1] != pieceCellPrev[s0p1])) + (pieceCell[s1p0] * (pieceCell[s1p0] != pieceCellPrev[s1p0])) + (pieceCell[s1p1] * (pieceCell[s1p1] != pieceCellPrev[s1p1])) + (pieceCell[s2p0] * (pieceCell[s2p0] != pieceCellPrev[s2p0])) + (pieceCell[s2p1] * (pieceCell[s2p1] != pieceCellPrev[s2p1]))"
+        },
+        {
+          "$type": "setState",
+          "state": "movedCount",
+          "expression": "(pieceCell[s0p0] != pieceCellPrev[s0p0]) + (pieceCell[s0p1] != pieceCellPrev[s0p1]) + (pieceCell[s1p0] != pieceCellPrev[s1p0]) + (pieceCell[s1p1] != pieceCellPrev[s1p1]) + (pieceCell[s2p0] != pieceCellPrev[s2p0]) + (pieceCell[s2p1] != pieceCellPrev[s2p1])"
+        },
+        {
+          "$type": "setState",
+          "state": "collisionCount",
+          "expression": "(pieceCell[s0p0] == moverCell) + (pieceCell[s0p1] == moverCell) + (pieceCell[s1p0] == moverCell) + (pieceCell[s1p1] == moverCell) + (pieceCell[s2p0] == moverCell) + (pieceCell[s2p1] == moverCell)"
+        },
+        {
+          "$type": "setState",
+          "state": "verdict",
+          "expression": "(movedCount == 1) & (moverSeat == turn) & (collisionCount == 1) & ((hexDistance(moverFrom, moverCell) == 1) | ((hexDistance(moverFrom, moverCell) % 2) == 0))"
+        },
+        {
+          "$type": "setState",
+          "state": "turn",
+          "expression": "(turn + verdict) % 3"
+        },
+        {
+          "$type": "setState",
+          "state": "home0",
+          "expression": "((pieceCell[s0p0] == 30) | (pieceCell[s0p0] == 14)) + ((pieceCell[s0p1] == 30) | (pieceCell[s0p1] == 14))"
+        },
+        {
+          "$type": "setState",
+          "state": "home1",
+          "expression": "((pieceCell[s1p0] == 36) | (pieceCell[s1p0] == 19)) + ((pieceCell[s1p1] == 36) | (pieceCell[s1p1] == 19))"
+        },
+        {
+          "$type": "setState",
+          "state": "home2",
+          "expression": "((pieceCell[s2p0] == 24) | (pieceCell[s2p0] == 25)) + ((pieceCell[s2p1] == 24) | (pieceCell[s2p1] == 25))"
+        },
+        {
+          "$type": "setState",
+          "state": "scores",
+          "key": "0",
+          "expression": "(home0 * 100) - (hexDistance(pieceCell[s0p0], 30) + hexDistance(pieceCell[s0p1], 30))"
+        },
+        {
+          "$type": "setState",
+          "state": "scores",
+          "key": "1",
+          "expression": "(home1 * 100) - (hexDistance(pieceCell[s1p0], 36) + hexDistance(pieceCell[s1p1], 36))"
+        },
+        {
+          "$type": "setState",
+          "state": "scores",
+          "key": "2",
+          "expression": "(home2 * 100) - (hexDistance(pieceCell[s2p0], 24) + hexDistance(pieceCell[s2p1], 24))"
+        },
+        {
+          "$type": "setState",
+          "state": "winner",
+          "expression": "(home0 == 2) ? 0 : ((home1 == 2) ? 1 : ((home2 == 2) ? 2 : winner))"
+        }
+      ]
+    },
+    {
+      "name": "cc-apply-best",
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "shouldApply",
+          "expression": "(best[token] >= 0) & ((best[token] != appliedToken) | (best[to] != appliedTo))"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCell",
+          "key": "s0p0",
+          "expression": "shouldApply ? ((best[token] == 0) ? best[to] : pieceCell[s0p0]) : pieceCell[s0p0]"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCell",
+          "key": "s0p1",
+          "expression": "shouldApply ? ((best[token] == 1) ? best[to] : pieceCell[s0p1]) : pieceCell[s0p1]"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCell",
+          "key": "s1p0",
+          "expression": "shouldApply ? ((best[token] == 2) ? best[to] : pieceCell[s1p0]) : pieceCell[s1p0]"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCell",
+          "key": "s1p1",
+          "expression": "shouldApply ? ((best[token] == 3) ? best[to] : pieceCell[s1p1]) : pieceCell[s1p1]"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCell",
+          "key": "s2p0",
+          "expression": "shouldApply ? ((best[token] == 4) ? best[to] : pieceCell[s2p0]) : pieceCell[s2p0]"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCell",
+          "key": "s2p1",
+          "expression": "shouldApply ? ((best[token] == 5) ? best[to] : pieceCell[s2p1]) : pieceCell[s2p1]"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCellPrev",
+          "key": "s0p0",
+          "fromState": "pieceCell",
+          "fromKey": "s0p0"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCellPrev",
+          "key": "s0p1",
+          "fromState": "pieceCell",
+          "fromKey": "s0p1"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCellPrev",
+          "key": "s1p0",
+          "fromState": "pieceCell",
+          "fromKey": "s1p0"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCellPrev",
+          "key": "s1p1",
+          "fromState": "pieceCell",
+          "fromKey": "s1p1"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCellPrev",
+          "key": "s2p0",
+          "fromState": "pieceCell",
+          "fromKey": "s2p0"
+        },
+        {
+          "$type": "setState",
+          "state": "pieceCellPrev",
+          "key": "s2p1",
+          "fromState": "pieceCell",
+          "fromKey": "s2p1"
+        },
+        {
+          "$type": "setState",
+          "state": "turn",
+          "expression": "shouldApply ? ((turn + 1) % 3) : turn"
+        },
+        {
+          "$type": "setState",
+          "state": "appliedToken",
+          "expression": "shouldApply ? best[token] : appliedToken"
+        },
+        {
+          "$type": "setState",
+          "state": "appliedTo",
+          "expression": "shouldApply ? best[to] : appliedTo"
+        },
+        {
+          "$type": "setState",
+          "state": "moveCount",
+          "expression": "moveCount + shouldApply"
+        }
+      ]
+    }
+  ],
+  "search": {
+    "jobs": [
+      {
+        "name": "ccSearch",
+        "tokens": "pieceCell",
+        "board": "ccBoard",
+        "turn": "turn",
+        "verdict": "verdict",
+        "shapes": [
+          {
+            "$type": "relocate",
+            "displace": false
+          },
+          {
+            "$type": "jump",
+            "over": [
+              "any"
+            ],
+            "maxHops": 2
+          }
+        ],
+        "legal": "legal",
+        "counts": "counts",
+        "depth": 2,
+        "scores": "scores",
+        "best": "best"
+      }
+    ]
+  }
+}

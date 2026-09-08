@@ -2,6 +2,7 @@ namespace Puck.Storage;
 
 internal static class ObjectBlobAddressPath {
     private static string[] GetSegments(string path, string description) {
+        if (path.Length > 4096) { throw new ArgumentException($"The {description} exceeds its length ceiling.", nameof(path)); }
         if (
             Path.IsPathRooted(path: path) ||
             path.StartsWith(value: '/') ||
@@ -14,21 +15,28 @@ internal static class ObjectBlobAddressPath {
         }
 
         var segments = path.Split(
-            options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries,
+            options: StringSplitOptions.RemoveEmptyEntries,
             separator: ['/', '\\']
         );
 
-        if (segments.Length == 0) {
+        if (segments.Length == 0 || segments.Length > 64) {
             throw new ArgumentException(
-                message: $"The {description} must contain at least one segment.",
+                message: $"The {description} must contain between one and 64 segments.",
                 paramName: nameof(path)
             );
         }
 
         foreach (var segment in segments) {
-            if (segment is "." or "..") {
+            var device = segment.Split('.')[0];
+            if (segment is "." or ".." || segment.EndsWith('.') || segment != segment.Trim() ||
+                segment.Any(c => char.IsControl(c) || c is ':' or '<' or '>' or '"' or '|' or '?' or '*') ||
+                segment.StartsWith(".puck-", StringComparison.OrdinalIgnoreCase) ||
+                device.Equals("CON", StringComparison.OrdinalIgnoreCase) || device.Equals("PRN", StringComparison.OrdinalIgnoreCase) ||
+                device.Equals("AUX", StringComparison.OrdinalIgnoreCase) || device.Equals("NUL", StringComparison.OrdinalIgnoreCase) ||
+                (device.Length == 4 && (device.StartsWith("COM", StringComparison.OrdinalIgnoreCase) ||
+                    device.StartsWith("LPT", StringComparison.OrdinalIgnoreCase)) && "123456789¹²³".Contains(device[3]))) {
                 throw new ArgumentException(
-                    message: $"The {description} must not contain current-directory or parent-directory segments.",
+                    message: $"The {description} contains an unsafe or reserved path segment.",
                     paramName: nameof(path)
                 );
             }

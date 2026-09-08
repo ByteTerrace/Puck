@@ -12,19 +12,22 @@ namespace Puck.Assets.Documents;
 /// </remarks>
 [JsonConverter(typeof(DocumentIdentifierJsonConverter))]
 public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<DocumentIdentifier> {
+    /// <summary>The JSON string prefix that marks a value as a state reference rather than a literal identifier.</summary>
+    public const string ReferencePrefix = "state.";
+
     private bool m_isResolved;
     private string? m_value;
 
     /// <summary>Creates a literal identifier.</summary>
     public DocumentIdentifier(string value) {
-        m_value = value ?? throw new ArgumentNullException(paramName: nameof(value));
+        m_value = (value ?? throw new ArgumentNullException(paramName: nameof(value)));
         m_isResolved = true;
     }
 
     private DocumentIdentifier(string reference, bool _) => Reference = reference;
 
     /// <inheritdoc/>
-    public string? Reference { get; }
+    public string? Reference { get; private set; }
     /// <inheritdoc/>
     public string ExpectedValue => "a non-empty identifier";
     /// <summary>The resolved identifier.</summary>
@@ -32,6 +35,11 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
         ? m_value!
         : throw new InvalidOperationException(message: $"document identifier reference '{Reference}' has not been resolved by its containing document."));
 
+    /// <inheritdoc/>
+    public void Detach() {
+        _ = Value;
+        Reference = null;
+    }
     /// <inheritdoc/>
     public bool TryResolve(string text, out string reason) {
         if (string.IsNullOrEmpty(value: text)) {
@@ -49,20 +57,20 @@ public sealed class DocumentIdentifier : IDocumentStateValue, IEquatable<Documen
     public static implicit operator DocumentIdentifier(string value) => new(value: value);
     /// <summary>Reads the resolved identifier.</summary>
     public static implicit operator string(DocumentIdentifier value) => value.Value;
+
     /// <inheritdoc/>
-    public bool Equals(DocumentIdentifier? other) => (other is not null) && ((Reference is { } reference)
+    public bool Equals(DocumentIdentifier? other) => ((other is not null) && ((Reference is { } reference)
         ? string.Equals(a: reference, b: other.Reference, comparisonType: StringComparison.Ordinal)
-        : (other.Reference is null) && string.Equals(a: m_value, b: other.m_value, comparisonType: StringComparison.Ordinal));
+        : ((other.Reference is null) && string.Equals(a: m_value, b: other.m_value, comparisonType: StringComparison.Ordinal))));
     /// <inheritdoc/>
-    public override bool Equals(object? obj) => (obj is DocumentIdentifier other) && Equals(other: other);
+    public override bool Equals(object? obj) => ((obj is DocumentIdentifier other) && Equals(other: other));
     /// <inheritdoc/>
-    public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(obj: (Reference ?? m_value ?? string.Empty));
+    public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(obj: (Reference ?? (m_value ?? string.Empty)));
     /// <inheritdoc/>
     public override string ToString() => Value;
 
-    internal static DocumentIdentifier FromReference(string reference) => new(reference: reference, _: true);
+    internal static DocumentIdentifier FromReference(string reference) => new(_: true, reference: reference);
 }
-
 /// <summary>Reads literal identifiers and state references while preserving both as JSON strings.</summary>
 public sealed class DocumentIdentifierJsonConverter : JsonConverter<DocumentIdentifier>, IJsonSchemaStringConverter {
     /// <inheritdoc/>
@@ -75,15 +83,15 @@ public sealed class DocumentIdentifierJsonConverter : JsonConverter<DocumentIden
         }
 
         var value = reader.GetString();
+
         if (value is null) {
             throw new JsonException(message: "a document identifier must be a non-null string.");
         }
 
-        return value.StartsWith(value: "state.", comparisonType: StringComparison.Ordinal)
+        return (value.StartsWith(comparisonType: StringComparison.Ordinal, value: DocumentIdentifier.ReferencePrefix)
             ? DocumentIdentifier.FromReference(reference: value)
-            : new DocumentIdentifier(value: value);
+            : new DocumentIdentifier(value: value));
     }
-
     /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, DocumentIdentifier value, JsonSerializerOptions options) =>
         writer.WriteStringValue(value: (value.Reference ?? value.Value));

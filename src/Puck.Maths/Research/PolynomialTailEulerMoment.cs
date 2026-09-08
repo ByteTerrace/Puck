@@ -21,13 +21,13 @@ public readonly record struct PolynomialTailEulerMomentExclusionCertificate(
     BigInteger TailIndex,
     BigInteger IntegerBoundary,
     BigInteger SignedNumeratorDiscriminantRoot,
-    QuadraticSurd HypergeometricA,
-    QuadraticSurd HypergeometricB,
-    QuadraticSurd HypergeometricC,
-    QuadraticSurd HypergeometricArgument,
-    QuadraticSurd HypergeometricRatioTarget,
-    QuadraticSurd FirstEndpoint,
-    QuadraticSurd SecondEndpoint
+    RealQuadratic HypergeometricA,
+    RealQuadratic HypergeometricB,
+    RealQuadratic HypergeometricC,
+    RealQuadratic HypergeometricArgument,
+    RealQuadratic HypergeometricRatioTarget,
+    RealQuadratic FirstEndpoint,
+    RealQuadratic SecondEndpoint
 );
 /// <summary>
 /// An exact failed Hausdorff-moment inequality for a putative Euler representation of an integer tail equality.
@@ -44,7 +44,7 @@ public readonly record struct PolynomialTailEulerHausdorffExclusionCertificate(
     BigInteger SignedNumeratorDiscriminantRoot,
     int MomentIndex,
     int DifferenceOrder,
-    QuadraticSurd Witness
+    RealQuadratic Witness
 );
 /// <summary>
 /// An exact failed Hausdorff inequality after moving a non-native Gauss chart into the positive Euler region by
@@ -62,14 +62,14 @@ public readonly record struct PolynomialTailEulerRegularizedHausdorffExclusionCe
     BigInteger TailIndex,
     BigInteger IntegerBoundary,
     BigInteger GaussTailIndex,
-    QuadraticSurd GaussBoundary,
+    RealQuadratic GaussBoundary,
     BigInteger SignedNumeratorDiscriminantRoot,
     int AnchorMomentIndex,
     int AnchorDifferenceOrder,
     int WitnessMomentIndex,
     int WitnessDifferenceOrder,
-    QuadraticSurd Anchor,
-    QuadraticSurd Witness
+    RealQuadratic Anchor,
+    RealQuadratic Witness
 );
 /// <summary>
 /// The canonical nonresonant contiguous shifts that put a Gauss quotient into a positive Euler chart.
@@ -83,13 +83,13 @@ public readonly record struct PolynomialTailEulerRegularization(
     BigInteger TailIndex,
     BigInteger IntegerBoundary,
     BigInteger GaussTailIndex,
-    QuadraticSurd GaussBoundary,
+    RealQuadratic GaussBoundary,
     BigInteger SignedNumeratorDiscriminantRoot,
-    QuadraticSurd HypergeometricA,
-    QuadraticSurd HypergeometricB,
-    QuadraticSurd HypergeometricC,
-    QuadraticSurd HypergeometricArgument,
-    QuadraticSurd HypergeometricRatioTarget,
+    RealQuadratic HypergeometricA,
+    RealQuadratic HypergeometricB,
+    RealQuadratic HypergeometricC,
+    RealQuadratic HypergeometricArgument,
+    RealQuadratic HypergeometricRatioTarget,
     BigInteger MomentShift,
     BigInteger DifferenceShift
 );
@@ -344,7 +344,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var isZeroAnchorCertificate =
             ((certificate.WitnessMomentIndex == certificate.AnchorMomentIndex) &&
             (certificate.WitnessDifferenceOrder == certificate.AnchorDifferenceOrder) &&
-            (anchor == QuadraticSurd.Zero));
+            (anchor == RealQuadratic.Zero));
         var isFailedStrictSign =
             (!isZeroAnchorCertificate &&
             ((certificate.WitnessMomentIndex + certificate.WitnessDifferenceOrder) >
@@ -550,7 +550,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             moments: moments
         );
 
-        if (anchor == QuadraticSurd.Zero) {
+        if (anchor == RealQuadratic.Zero) {
             var zeroAnchor = new PolynomialTailEulerRegularizedHausdorffExclusionCertificate(
                 Anchor: anchor,
                 AnchorDifferenceOrder: anchorDifferenceOrder,
@@ -684,9 +684,9 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
             right: ((data.HypergeometricB - data.HypergeometricC).Floor() + BigInteger.One)
         );
         if (
-            ((data.HypergeometricB + QuadraticSurd.Rational(value: momentShift)).Sign <= 0) ||
+            ((data.HypergeometricB + RealQuadratic.Rational(value: momentShift)).Sign <= 0) ||
             (((data.HypergeometricC - data.HypergeometricB) +
-                QuadraticSurd.Rational(value: differenceShift)).Sign <= 0)
+                RealQuadratic.Rational(value: differenceShift)).Sign <= 0)
         ) {
             return false;
         }
@@ -710,7 +710,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         )
         );
     }
-    private static bool PochhammerIsNonzero(QuadraticSurd initial, BigInteger length) {
+    private static bool PochhammerIsNonzero(RealQuadratic initial, BigInteger length) {
         if (
             (length <= BigInteger.Zero) ||
             !initial.IsRational
@@ -732,9 +732,9 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         BigInteger signedRoot,
         out PolynomialTailEulerMomentExclusionCertificate data,
         out BigInteger gaussTailIndex,
-        out QuadraticSurd gaussBoundary) {
+        out RealQuadratic gaussBoundary) {
         gaussTailIndex = tailIndex;
-        gaussBoundary = QuadraticSurd.Rational(value: integerBoundary);
+        gaussBoundary = RealQuadratic.Rational(value: integerBoundary);
         if (
             TryCreateEulerMomentData(
             tailIndex,
@@ -770,7 +770,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         if (boundaryIncrement <= BigInteger.Zero) { return false; }
 
         gaussTailIndex = (tailIndex + BigInteger.One);
-        gaussBoundary = QuadraticSurd.Rational(
+        gaussBoundary = RealQuadratic.Rational(
             denominator: boundaryIncrement,
             numerator: Parameters.NumeratorQuadratic
         );
@@ -798,7 +798,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         out PolynomialTailEulerMomentExclusionCertificate certificate) {
         return TryCreateEulerMomentData(
             tailIndex,
-            QuadraticSurd.Rational(value: integerBoundary),
+            RealQuadratic.Rational(value: integerBoundary),
             integerBoundary,
             signedRoot,
             requirePositiveEulerChart: true,
@@ -813,7 +813,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         out PolynomialTailEulerMomentExclusionCertificate certificate) {
         return TryCreateEulerMomentData(
             tailIndex,
-            QuadraticSurd.Rational(value: integerBoundary),
+            RealQuadratic.Rational(value: integerBoundary),
             integerBoundary,
             signedRoot,
             requirePositiveEulerChart,
@@ -822,7 +822,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     }
     private bool TryCreateEulerMomentData(
         BigInteger tailIndex,
-        QuadraticSurd tailBoundary,
+        RealQuadratic tailBoundary,
         BigInteger recordedIntegerBoundary,
         BigInteger signedRoot,
         bool requirePositiveEulerChart,
@@ -838,21 +838,21 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         if ((signedRoot * signedRoot) != discriminant) { return false; }
 
-        var p = QuadraticSurd.Rational(value: Parameters.Linear);
-        var r = QuadraticSurd.Rational(value: rInteger);
+        var p = RealQuadratic.Rational(value: Parameters.Linear);
+        var r = RealQuadratic.Rational(value: rInteger);
         var dominant = Slope;
         var other = (p - dominant);
         var twoR = (2 * rInteger);
         var alpha = (
-            QuadraticSurd.Rational(value: tailIndex) +
-            QuadraticSurd.Rational(
+            RealQuadratic.Rational(value: tailIndex) +
+            RealQuadratic.Rational(
             denominator: twoR,
             numerator: (Parameters.NumeratorLinear + signedRoot)
         )
         );
         var gammaConstant = (r * (
-            QuadraticSurd.Rational(value: (tailIndex - 1)) +
-            QuadraticSurd.Rational(
+            RealQuadratic.Rational(value: (tailIndex - 1)) +
+            RealQuadratic.Rational(
             denominator: twoR,
             numerator: (Parameters.NumeratorLinear - signedRoot)
         )
@@ -860,10 +860,10 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         var betaConstant = ((Parameters.Linear * tailIndex) + Parameters.Constant);
         var parameterA = (
             ((((other * other) * alpha) -
-                (other * QuadraticSurd.Rational(value: betaConstant))) - gammaConstant) /
+                (other * RealQuadratic.Rational(value: betaConstant))) - gammaConstant) /
             (other * (other - dominant))
         );
-        var parameterB = (alpha - QuadraticSurd.One);
+        var parameterB = (alpha - RealQuadratic.One);
         var parameterC = (parameterA + (gammaConstant / r));
         var argument = (other / dominant);
         var target = (tailBoundary / dominant);
@@ -871,7 +871,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
 
         if (
             (argument.Sign >= 0) ||
-            (argument.Abs() >= QuadraticSurd.One) ||
+            (argument.Abs() >= RealQuadratic.One) ||
             (requirePositiveEulerChart &&
                 ((parameterB.Sign <= 0) || ((parameterC - parameterB).Sign <= 0)))
         ) {
@@ -918,28 +918,28 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
     private static bool TryForcedEulerMoments(
         PolynomialTailEulerMomentExclusionCertificate data,
         int maximumOrder,
-        out QuadraticSurd[] moments) {
+        out RealQuadratic[] moments) {
         moments = [];
         var target = data.HypergeometricRatioTarget;
 
-        if (target == QuadraticSurd.Zero) { return false; }
+        if (target == RealQuadratic.Zero) { return false; }
 
-        var result = new QuadraticSurd[(maximumOrder + 1)];
+        var result = new RealQuadratic[(maximumOrder + 1)];
 
-        result[0] = QuadraticSurd.One;
+        result[0] = RealQuadratic.One;
         if (maximumOrder >= 1) {
             result[1] = (data.HypergeometricB / target);
         }
         for (var index = 0; ((index + 2) <= maximumOrder); ++index) {
-            var k = QuadraticSurd.Rational(value: index);
+            var k = RealQuadratic.Rational(value: index);
             var denominator = (data.HypergeometricArgument *
-                (((data.HypergeometricC + k) + QuadraticSurd.One) - data.HypergeometricA));
+                (((data.HypergeometricC + k) + RealQuadratic.One) - data.HypergeometricA));
 
-            if (denominator == QuadraticSurd.Zero) { return false; }
+            if (denominator == RealQuadratic.Zero) { return false; }
             var middleCoefficient = (
                 (data.HypergeometricC + k) +
                 (data.HypergeometricArgument *
-                    (((data.HypergeometricB + k) + QuadraticSurd.One) - data.HypergeometricA))
+                    (((data.HypergeometricB + k) + RealQuadratic.One) - data.HypergeometricA))
             );
 
             result[(index + 2)] = ((
@@ -951,11 +951,11 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
         moments = result;
         return true;
     }
-    private static QuadraticSurd EulerHausdorffWitness(
-        IReadOnlyList<QuadraticSurd> moments,
+    private static RealQuadratic EulerHausdorffWitness(
+        IReadOnlyList<RealQuadratic> moments,
         int momentIndex,
         int differenceOrder) {
-        var result = QuadraticSurd.Zero;
+        var result = RealQuadratic.Zero;
 
         for (var offset = 0; (offset <= differenceOrder); ++offset) {
             var sign = (((offset & 1) == 0)
@@ -963,7 +963,7 @@ public sealed partial class PolynomialContinuedFractionAnalysis {
                 : -BigInteger.One
             );
 
-            result += (QuadraticSurd.Rational(value: (sign * BinomialCoefficient(
+            result += (RealQuadratic.Rational(value: (sign * BinomialCoefficient(
                 lower: offset,
                 upper: differenceOrder
             ))) * moments[(momentIndex + offset)]);

@@ -131,21 +131,19 @@ public interface IViewContent {
 }
 ```
 
-Three shapes implement it today:
+Two shapes implement it today:
 
 - **`SdfCameraView`** — a tiny offscreen `SdfWorldEngine`, posed each resolve
   by a rig against a live anchor. This is a camera: it films an
   already-lit world and contributes no light of its own.
-- **`GuestSurfaceView`** — wraps a delegate that returns *someone else's*
-  already-current image handle. It costs nothing to resolve (no render
-  pass — whatever owns the producer already keeps it current), so it is
-  **unbudgeted**: it resolves every frame regardless of the round-robin
-  below.
-- **`NestedWorldView`** — a fully independent SDF world, its own frame
-  source and its own emitters, rendered offscreen exactly like a camera view
-  renders the host world. This is the hypervisor proof: a screen wired to
-  this view shows a **world inside the world**, and if that inner world
-  itself wires a screen to yet another nested view, the chain composes.
+- **`WorldSessionView`** — another world's own frame source, rendered
+  offscreen exactly like a camera view renders the host world. A screen
+  wired to this view shows a **world inside the world**, and if that inner
+  world itself wires a screen to another session view, the chain composes.
+
+Content whose resolve is a cheap read of a handle some other path already
+keeps current declares `IsBudgeted => false` and resolves every frame,
+regardless of the round-robin below.
 
 **Registration is cheap; refreshing is not — so they are budgeted
 separately.** Up to `OffscreenRenderBudget.RegisteredViews` (64) views may be live at once;
@@ -258,4 +256,4 @@ the room's own frame.
   content seams under "Engine semantics."
 - Source: `src/Puck.SdfVm/SdfAnchor.cs`, `src/Puck.SdfVm/Views/SdfCameraRig.cs`,
   `src/Puck.SdfVm/Views/ViewStack.cs`, `src/Puck.SdfVm/Views/ViewTransition.cs`,
-  `src/Puck.SdfVm/Views/{SdfCameraView,GuestSurfaceView,NestedWorldView}.cs`.
+  `src/Puck.SdfVm/Views/{SdfCameraView,WorldSessionView}.cs`.

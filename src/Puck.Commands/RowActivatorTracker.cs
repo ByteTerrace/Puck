@@ -233,6 +233,24 @@ public sealed class RowActivatorTracker {
             : ApplyTapped(signal: in signal)
         );
     }
+    /// <summary>Returns whether this tracker currently holds <paramref name="source"/> down as a member of its
+    /// sequence — the state a release of that source would give up.</summary>
+    /// <param name="source">The provider-neutral input source id.</param>
+    /// <returns><see langword="true"/> for a <see cref="BindingActivatorMode.Held"/> sequence whose held order
+    /// contains the source. Always <see langword="false"/> for a <see cref="BindingActivatorMode.Tapped"/> sequence:
+    /// tap progress is a record of PRESSES already accepted, and no release ever revises it.</returns>
+    public bool HoldsSource(string source) {
+        if (m_heldTracker is null) {
+            return false;
+        }
+
+        var index = IndexOf(source: source);
+
+        return (
+            (index >= 0) &&
+            m_heldTracker.HeldOrder.Contains(value: index)
+        );
+    }
     /// <summary>Resets the tracker to its empty state (focus loss, a page/group flip that takes the owning row out
     /// of scope, or a profile reload) — releases every held member and abandons any partial tap progress.</summary>
     public void Reset() {

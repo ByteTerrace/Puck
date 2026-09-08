@@ -15,7 +15,7 @@
 //! from under with no build error to catch it — exactly the defect this crate's own doc used to
 //! carry (it once listed five channels while the shipped default world had already grown to eight).
 //! For the shipped default world's current table (name, shape, and host-side intent effect), read
-//! `Assets/worlds/play.world.json`'s `channels` array directly, or its rendered form in
+//! `Assets/worlds/nexus.world.json`'s `channels` array directly, or its rendered form in
 //! `src/Puck.Scripting/README.md`.
 //!
 //! **Declaring a name the host table lacks is never a mount fault.** An unresolved declaration is

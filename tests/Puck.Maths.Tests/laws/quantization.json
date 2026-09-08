@@ -12,8 +12,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "BeattyQuantization.QuantizeNearest — nearest dyadic grid numerator and its side, decided in QuadraticSurd arithmetic (floor, remainder, half comparison)",
-        "Against": "QuantizationClaims.OracleQuantize — the same decision reached without QuadraticSurd: an independent Newton-descent integer square root, a cleared-denominator floor division, and a cleared half-step sign evaluation; ties decided on the even numerator by the reference's own branch. ENVELOPE: the battery holds positive values only, fraction widths 0..16, and rational entries placed on grid points and exact half-steps so the tie and exact-hit branches are exercised",
+        "Subject": "BeattyQuantization.QuantizeNearest — nearest dyadic grid numerator and its side, decided in RealQuadratic arithmetic (floor, remainder, half comparison)",
+        "Against": "QuantizationClaims.OracleQuantize — the same decision reached without RealQuadratic: an independent Newton-descent integer square root, a cleared-denominator floor division, and a cleared half-step sign evaluation; ties decided on the even numerator by the reference's own branch. ENVELOPE: the battery holds positive values only, fraction widths 0..16, and rational entries placed on grid points and exact half-steps so the tie and exact-hit branches are exercised",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -79,7 +79,7 @@
         "Kind": "Classical",
         "Flavor": "None",
         "Subject": "CertifySlope and FirstFloorDisagreement — the first index at which quantized and exact Beatty floors disagree, located through SimplestRational's Stern–Brocot descent",
-        "Against": "a brute-force linear scan comparing floors index by index, computed without QuadraticSurd or SimplestRational: exact floors from an independent integer square root plus floor division, quantized floors from integer multiply and shift. The scan confirms the divergence index, the direction against RoundingSign, and that the witness is one above the lower line. ENVELOPE: slope battery of five quadratic irrationals at widths 0..8 plus four rational pairs, every first divergence within the 200000 scan cap; minimality beyond the cap is carried by the construction, not this scan",
+        "Against": "a brute-force linear scan comparing floors index by index, computed without RealQuadratic or SimplestRational: exact floors from an independent integer square root plus floor division, quantized floors from integer multiply and shift. The scan confirms the divergence index, the direction against RoundingSign, and that the witness is one above the lower line. ENVELOPE: slope battery of five quadratic irrationals at widths 0..8 plus four rational pairs, every first divergence within the 200000 scan cap; minimality beyond the cap is carried by the construction, not this scan",
         "Shared": "",
         "Citation": "",
         "Absolute": ""
@@ -108,7 +108,7 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "SimplestRational.InOpenInterval — the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot digit stripping in QuadraticSurd arithmetic",
+        "Subject": "SimplestRational.InOpenInterval — the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot digit stripping in RealQuadratic arithmetic",
         "Against": "an exhaustive scan of every smaller denominator, in cleared-denominator integer arithmetic only: for each n below the returned denominator, the least integer above low·n is tested against high·n by sign evaluation — membership of any such fraction refutes minimality. Strict interior membership and lowest terms are checked the same way. ENVELOPE: the battery keeps returned denominators within the 5000 scan cap; both endpoint kinds (rational and quadratic irrational) appear on both sides",
         "Shared": "",
         "Citation": "",

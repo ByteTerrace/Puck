@@ -3,14 +3,13 @@ namespace Puck.AdvancedGamingBrick.Post;
 /// <summary>
 /// Tier-C stage: a golden replay proving a recorded light-level input SEQUENCE — the same per-segment discipline a
 /// queued host's <c>ApplyInput</c> drives via <see cref="AgbCartridge.SetLightLevel"/> — replays byte-identically on a
-/// real solar-sensor cart (named by <c>PUCK_AGB_SOLARROM</c>). Two freshly built, full-booted consoles run the identical
+/// real solar-sensor cart (named by <c>--solar-rom</c>). Two freshly built, full-booted consoles run the identical
 /// varying-light script; their final whole-machine snapshots must agree. Skips cleanly when the ROM or a real boot BIOS
 /// is absent — no solar-sensor dump ships with the repo, so a clean machine never sees a red stage from this one. The
 /// self-contained proof of the solar device's OWN protocol (no ROM asset needed) is the sibling <see cref="SolarDeviceStage"/>.
 /// </summary>
 internal sealed class SolarReplayStage : IPostStage<PostContext> {
     /// <summary>The environment variable naming the commercial solar-sensor ROM this stage replays a light script against.</summary>
-    private const string RomEnvironmentVariable = "PUCK_AGB_SOLARROM";
     // Frames to advance: enough to cover a boot + several seconds of the varying-light script.
     private const int Frames = 300;
     // The light level changes every this many frames, cycling through the script below — coarse enough that a whole
@@ -31,17 +30,14 @@ internal sealed class SolarReplayStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        var romPath = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
+        var romPath = context.SolarRomPath;
 
-        if (
-            string.IsNullOrEmpty(value: romPath) ||
-            !File.Exists(path: romPath)
-        ) {
-            return PostStageOutcome.Skip(detail: $"no solar-sensor ROM (set {RomEnvironmentVariable} to a commercial solar-sensor dump; the core protocol is proven ROM-free by solar-device)");
+        if (romPath is null) {
+            return PostStageOutcome.Skip(detail: "no solar-sensor ROM (pass --solar-rom with a commercial solar-sensor dump; the core protocol is proven ROM-free by solar-device)");
         }
 
         if (AgbBiosProfile.Identify(image: context.BiosImage.Span).Kind == AgbBiosKind.ReplacementStub) {
-            return PostStageOutcome.Skip(detail: $"needs a real boot BIOS (PUCK_AGB_BIOS) to full-boot {Path.GetFileName(path: romPath)}");
+            return PostStageOutcome.Skip(detail: $"needs a real boot BIOS (--bios) to full-boot {Path.GetFileName(path: romPath)}");
         }
 
         var rom = File.ReadAllBytes(path: romPath);

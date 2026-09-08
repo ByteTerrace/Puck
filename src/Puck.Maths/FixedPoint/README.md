@@ -8,7 +8,8 @@ resolution — and a signed Q32.32 scalar splitting the two evenly, three
 fraction types that live on the unit interval, two- and three-component
 vectors, the three planar number systems (complex, dual, and split),
 quaternions and the rigid transforms built on them, a hierarchical world
-position, and two exact-tick rate accumulators.
+position, two exact-tick rate accumulators, and the scalar-field seam a
+gravity or contact consumer reads a direction from.
 
 *Fixed point* is the idea underneath all of it. Where `float` and `double`
 store a fraction plus an exponent that slides the point around, a fixed-point
@@ -63,9 +64,10 @@ its final half-ULP tie **up** — *ULP* stands for *unit in the last place*, the
 gap between one representable value and the next, which for Q48.16 is `2⁻¹⁶`
 — which is why `Exp2(−17)` answers `Epsilon` rather than `Zero`. `Log2` and
 `Atan2` narrow their Q61 intermediates with a half-up shift. `SinCos` narrows
-Q60 → Q16 with ties toward `+∞` before clamping to `±1`. All three are
-internal narrowings inside a kernel that is already correctly rounded to
-within an ULP; they are not a second public rounding discipline.
+Q60 → Q16 to nearest with ties to even on the magnitude and re-signs.
+Magnitude-first turn reduction and quadrant reflection make sine exactly odd
+and cosine exactly even. These are internal approximation narrowings; the
+ordinary arithmetic operators retain their documented rounding discipline.
 
 **Wrapping is the default; saturation and refusal are named where they
 happen.** Three things can happen when a result will not fit the type that has
@@ -138,11 +140,16 @@ give each type its full contract.
 | `FixedPosition` | `readonly record struct` | The hierarchical world position: three signed 64-bit cell indices plus a centred `FixedVector3` offset, where a cell spans `2²⁰` world units. This is the floating-origin coordinate — position + displacement → position, and position − position → displacement, both exactly. |
 | `FixedRateAccumulator` | `struct` | Exact-tick integration of a Q48.16 per-second rate. The part of the division too small to represent is kept as a remainder across calls, so a constant rate advances by exactly one unit after `ticksPerSecond` one-tick steps. That remainder is authoritative simulation state. |
 | `FixedVector3RateAccumulator` | `struct` | Three independent axes of the same integration under one shared time base, bound once. Four readers, four selective resets. |
+| `SecondOrderDynamics` (with `SecondOrderStep`, `SecondOrderState`/`SecondOrderState3`, `SecondOrderSample`) | `readonly record struct` | A pole-matched second-order response — `Create(f, ζ, r)` derives the coefficients from an authored frequency, damping ratio, and initial response; `Compile`+`Step` advance per tick/frame, `Evaluate`+`Retarget` read a closed form from initial conditions. Q32 authoritative state; a `MathF` float twin lives in `Puck.SdfVm.Views` for presentation-only followers. |
+| `CurvatureSpline` (with `CompiledCurvatureSpline`, `CurvatureSplineKnot`, `CurvatureSplineSample`, `CurvatureSplineSegment`, `CurvatureSplineException`/`CurvatureSplineRefusal`) | `static` class + `readonly record struct`s | A curve authored by knot curvature rather than control points — `Compile` derives the cubic-Bézier tangent lengths that reproduce declared endpoint curvatures exactly, at Q32, plus a Simpson arc-length table; `Evaluate(arcLength)` reads position, tangent, elevation grade, and curvature back per tick/frame. Zero-allocation, exception-free evaluation; a float twin (`Puck.SdfVm.Views.SdfCurvePath`) converts the compiled raws once for presentation. |
 | `FixedVectorMath` | `internal static` | **Substrate.** The scale-free normalizers and norm helpers that every direction and length operation in the folder routes through: the common power-of-two preconditioner, the exact sums of squares, the restoring per-component division (restoring division is schoolbook long division, one bit at a time), and the `Try…` boundary reports. |
 | `FusedArithmetic` (with `LimbBig`) | `public static` | The public refusing faces provide one-rounding mixed-scale products, three-lane dot products, scaled reciprocals, and the generalized `TryDivideMagnitudeRounded` divider. Their sign-plus-`UInt128` accumulation and wrapping siblings remain internal substrate. `LimbBig`, sharing the file, remains the internal exact signed multi-limb accumulator serving `Algebra/MonogenicAlgebra`'s higher-degree lanes. |
 | `FixedSymmetricSolve` | `public static` | Scale-free 2×2/3×3 symmetric apply, solve, and invert for the effective-mass matrices a rigid-body solver uses. `TryApplySymmetric3`, `TryApplySymmetric2` and `TryInvertSymmetric2` are public; the 2×2/3×3 solve kernels and `TryInvertSymmetric3` stay internal until a consumer needs them. Raw-`long` operands may use any shared caller scale; each output rounds exactly once and every refusing call clears its outputs. |
 | `FixedMassProperties` | `public static` | Volume, mass and centroidal inertia for the solid primitives (sphere, box, capsule bodies; all four volumes), the parallel-axis transfer, compound accumulation, and mass/inertia inversion. `TrySphereBody`, `TryBoxBody`, `TryCapsuleBody`, `TryTranslateInertia`, `TryInvertMass` and `TryInvertInertia` are public — the construction path a rigid body needs from a collider; the four `Try*Volume` overloads, `TryCylinderBody`/`TryCylinderVolume` and `TryCompound` stay internal until a consumer needs volume alone, a cylinder collider, or a compound body. |
+| `IWorldQuery` (with `RayHit`, `WorldQueryConfidence`, `QueryCapabilities`) | `interface` | The five geometric verbs over a world — raycast, sphere cast, overlap, ground height, line of sight — each answer tagged `Exact` or `Bounded` so a caller knows whether it read a live field or a quantized bake. Declared here for the same reason as `IFieldEvaluator`: it names no representation. |
+| `IFieldEvaluator` (with `FieldEvaluatorCapabilities`) | `interface` | A scalar field and its gradient over `FixedPosition`, read as `TryDistance` (signed: negative inside geometry) and `TryFieldGradient` (unit-length, pointing away from the nearest surface). It names no representation, so a field's producer and its gravity, contact or wind consumers can sit in sibling libraries that never reference each other; a consumer wanting "down" computes `-gradient.Normalize()`. |
 | `FixedPointRounding` | `public static` | The shared nearest-result decision for integer kernels: compare the exact distance to the truncated result with the exact distance to its next neighbour, then resolve an equal-distance tie toward the even raw. `TryRoundRational` applies that decision to a whole exact `BigInteger` rational — the scale shift folded onto the numerator, one division, one rounding, refusing rather than wrapping — and is where both the mass-property chain here and Physics's softness chain round, so simulation subsystems cannot drift onto different tie rules. |
+| `Rational` | `readonly record struct` | The exact `BigInteger` rational, reduced to lowest terms with a positive denominator on construction (a root-level type; listed here because every exact derivation in this folder forms its intermediates in it), never narrowed until a caller's own closing rounding through `FixedPointRounding`. Every `BigInteger`-exact authoring/compile-time derivation in this folder, and `Puck.Physics`'s soft-constraint chain, forms its intermediates here — `SecondOrderDynamics`'s exact-transition-matrix derivation, `CurvatureSpline`'s tangent-length solve and Sturm-sequence root isolation, and `FixedSoftConstraint`'s stiffness/damping algebra all round through the same core rather than hand-inlining numerator/denominator pairs. |
 | `SignedFixedPointArithmetic` | `internal static` | **Substrate.** The common signed-raw division, fused interpolation, and magnitude selection for Q48.16, Q32.32 and Q16.48. The binary-point count is an input where the operation depends on it; the x64 division fast path, `UInt128` fallback, tie comparison, sign application, checked narrowing, and shared generic-math tie rules each live once. |
 | `FixedPointText` | `internal static` | **Substrate.** Exact decimal parsing and rendering shared by all six formattable carriers. Rendering is always allocation-free. Parsing is allocation-free too, in `UInt128`, for every carrier at or below thirty-seven fraction bits — `FixedQ4816`, `UFixedQ4816`, `UnitFraction16`, `UnitFraction32` and `FixedQ3232` all sit under that today. Only `FixedQ1648`'s Q16.48 crosses it: a format reads `F + 1` decimal digits, and forty-nine of them no longer fit `UInt128`, so its accumulation and rounding alone route through `BigInteger` (and therefore allocate) — a strict generalization of the narrow path that changes no result where both could run. The platform parser validates the culture syntax and supplies only the sign; the original digits are then quantized directly, so an arbitrarily long run of digits sitting on a midpoint cannot get rounded twice. On the rendering side it owns the format-specifier check and terminating fraction digits for every carrier, plus the raw prefix, exact length check, and culture-token splicing shared by the four Q formats as an unsigned magnitude plus a sign flag. |
 | `FixedPointConvert` | `internal static` | **Substrate.** The single `INumberBase<T>` conversion body for all three signed Q formats, including their signed/unsigned or cross-width peer seams, plus the recognized-source predicates and exact scaling steps. A known BCL numeric is expressed at the target scale with no range clamp before the requested checked, saturating or truncating policy is applied. Decimal sources are read from their own bits and rounded once; Q16.48 and Q32.32 use the wide `BigInteger` lane their fraction counts require, while Q48.16 stays on `Int128`. |
@@ -238,12 +245,14 @@ allocates only the returned string; `TryFormat` allocates nothing at all.
 | `Abs` / `Sign` / `CopySign` | The magnitude, `-1`/`0`/`1`, and the magnitude carrying another value's sign. |
 | `Min` / `Max` / `Clamp` | Ordinary order; `Clamp` refuses an inverted range. |
 | `Lerp(from, to, amount)` | `from + (to − from)·amount` — exactly `from` at zero and exactly `to` at one, extrapolating outside `[0, 1]`, and wrapping like the operators do. |
-| `Sqrt` | Exactly `⌊√(raw·2¹⁶)⌋`; a non-positive input yields `Zero`. |
+| `MoveToward(current, target, maxDelta)` | `target` when within `maxDelta`, otherwise `current` stepped `maxDelta` toward it. `maxDelta` negative throws `ArgumentOutOfRangeException`. |
+| `AngularFrequency(frequencyHz)` | The exact `ω = 2π·frequencyHz` as an unscaled `Rational`, formed from `PiQ61` — the one derivation every `ω = 2πf` site in this folder and in `Puck.Physics` shares. |
+| `Sqrt` | The integer nearest `√(raw·2¹⁶)` — tie-free, since consecutive squares differ by `2r + 1` — so the result is correctly rounded; a non-positive input yields `Zero`. |
 | `Log2` | The integer part from the bit length, plus a 128-interval reciprocal table and a quartic (fourth-degree polynomial) residual, narrowed Q61 → Q16. The range is the closed `[−16, 47]` with both ends attained; a non-positive input yields `MinValue`. Maximum observed error 0.50 ULP. |
 | `Exp2` | A 128-entry mantissa table indexed by the exponent's top seven fraction bits, plus a quartic at Q62. Saturates to `MaxValue` at exponents of 47 and above; lands exactly on `Epsilon` at −17; answers `Zero` strictly below −17. The error is half a ULP from the closing narrowing plus the mantissa's own relative error, which stays under `2⁻⁴⁴`: 0.51 ULP observed below `2²⁰`, rising to 0.82 just under `2²⁷` as the relative term catches up, and relative from there on — under roughly `2⁻⁴³`. |
-| `Pow` | Whole exponents of zero and ±1 answer exactly: `One`, the base itself, and the single correctly-rounded inverse. Other whole exponents within ±32 square the base's **magnitude** (a negative one squares the correctly-rounded inverse) on the carrier, so each ladder multiply rounds once to Q16 and the accumulated error grows with the exponent's binary weight — the result is not in general the single correct rounding of the true power. Overflow on that path is decided exactly, by the ladder's own rounded magnitude leaving the carrier, so near the top of the range a power whose correctly rounded value is representable can still saturate — only within the ladder's accumulated rounding; a log-derived shortcut answers `Zero` below an exponent product of −18. Everything else goes through `Exp2(y·Log2(\|x\|))`, whose relative error grows with `\|y·log₂ x\|`. The sign is applied last, from the exponent's parity, so a **negative base is supported at every whole exponent** — `(−2)³` is `−8` — and an overflowing negative result saturates to `MinValue` rather than `MaxValue`. A negative base at a *non-whole* exponent answers `Zero`: the real power is not a real number and this carrier has no not-a-number to say so with. A zero base answers `One`, `Zero`, or `MaxValue` depending on the exponent's sign; every base answers `One` at exponent zero and itself at exponent one. `MinValue` never enters the squaring loop — its magnitude 2⁴⁷ is one raw past the carrier — because every exponent of magnitude two or more saturates or underflows anyway. |
+| `Pow` | Whole exponents of zero and ±1 answer exactly: `One`, the base itself, and the single correctly-rounded inverse. Other whole exponents within ±32 square the base's **magnitude** (a negative one squares the correctly-rounded inverse) on the carrier, so each ladder multiply rounds once to Q16 and the accumulated error grows with the exponent's binary weight — the result is not in general the single correct rounding of the true power. Overflow on that path is decided exactly, by the ladder's own rounded magnitude leaving the carrier, so near the top of the range a power whose correctly rounded value is representable can still saturate — only within the ladder's accumulated rounding; a log-derived shortcut answers `Zero` below an exponent product of −18. Everything else goes through `Exp2(y·Log2(\|x\|))` with the logarithm carried at Q46 and the product rounded once to a Q32 exponent, so the exponent's quantization sits far below the exponential's own error, whose relative size grows with `\|y·log₂ x\|`. The sign is applied last, from the exponent's parity, so a **negative base is supported at every whole exponent** — `(−2)³` is `−8` — and an overflowing negative result saturates to `MinValue` rather than `MaxValue`. A negative base at a *non-whole* exponent answers `Zero`: the real power is not a real number and this carrier has no not-a-number to say so with. A zero base answers `One`, `Zero`, or `MaxValue` depending on the exponent's sign; every base answers `One` at exponent zero and itself at exponent one. `MinValue` never enters the squaring loop — its magnitude 2⁴⁷ is one raw past the carrier — because every exponent of magnitude two or more saturates or underflows anyway. |
 | `Atan2(y, x)` | An octant fold, one 128-by-64 ratio division, then a per-interval cubic at Q61. The range is `(−π, π]`; both arguments zero answers `Zero`. Maximum observed 0.51 ULP. |
-| `SinCos` / `Sin` / `Cos` | Turn-domain reduction by the single Q64 constant `round(2⁶⁴/2π)` — the two's-complement wrap of the 128-bit product *is* the exact mod-one-turn — then seven- and eight-term odd and even Taylor polynomials at Q60, narrowed and clamped to `±1`. Maximum observed 0.51 ULP within a few turns, and around 2 ULP at extreme magnitudes. |
+| `SinCos` / `Sin` / `Cos` / `SinCosTurns` | Q96 reciprocal reduction preserves full-range radian accuracy. A 65-entry Q60 quarter-wave table shares sine/cosine symmetry; degree-five/four residual corrections cover at most pi/256 radians. Final narrowing is ties-to-even, with a 0.50000001 raw Q16 ULP error envelope over the full carrier. This is not a correctly-rounded guarantee. Sine is exactly odd and cosine exactly even. Single-output calls reconstruct only their requested component; `SinCosTurns` accepts an exact binary fraction of one turn, avoiding radian quantization. |
 | `ToString` / `TryFormat` / `Parse` / `TryParse` | The exact decimal expansion, which always terminates within sixteen fraction digits; parsing quantizes the original digits, so `Parse(x.ToString()) == x` at every raw. The parameterless overloads are invariant. The `format`-taking ones accept only an empty format or `G`/`g` and throw `FormatException` on anything else — there is only one rendering, so offering a menu of numeric formats would be a lie — while still honouring an explicit provider's `NumberDecimalSeparator` **and** its `NegativeSign`, both spliced into the invariant expansion, each of which may be several characters wide. `TryFormat` sizes itself from those widths and is all-or-nothing: a short destination returns `false` and reports zero written. |
 | `T.CreateChecked` / `CreateSaturating` / `CreateTruncating` | Numeric conversion, never raw storage, and **three different operations**. Checked throws on range, NaN or infinity; saturating clamps, with NaN becoming zero; truncating reduces the scaled value **modulo the target's width** — no clamp — for *integer* sources, while a `double`/`float`/`Half` source inherits the platform's saturating floating-to-integer convention through `FromDouble` (NaN becomes zero), exactly as the BCL's own `CreateTruncating` saturates a floating source. Across the signed/unsigned peer the reduction is the low sixty-four bits verbatim, because the two share a width and a scale — spelled through a constrained type parameter, since the `Create*` members are `INumberBase` default implementations no static call on the carrier can name: with `T` bound to `FixedQ4816`, `T.CreateTruncating(UFixedQ4816.MaxValue)` is `−2⁻¹⁶`, and with `T` bound to `UFixedQ4816`, `T.CreateTruncating(FixedQ4816.FromRawBits(−1))` is the whole unsigned top. A BCL integer target gets the integer part and makes its *own* truncation decision, rather than inheriting `decimal`'s saturating one. All three quantize a fractional input to nearest, ties to even — a `decimal` source is read from its own bits and rounded once, never through a decimal multiply that could round twice. Outbound, a `float` target rounds the raw once (the integer-to-float conversion is the only lossy step; the power-of-two scale is exact), so the returned single is correctly rounded rather than double-rounded through `double`. |
 
@@ -761,6 +770,174 @@ schedule leaves the other two remainders exactly zero, and the four readers
 
 ---
 
+## `SecondOrderDynamics`
+
+A pole-matched second-order response — `y'' + 2ζω y' + ω² y = ω² x + rζω x'`,
+`ω = 2πf` — for a target that should ease toward, overshoot, or anticipate a
+moving value rather than snap to it. Authors declare only `f` (natural
+frequency, Hz), `ζ` (damping ratio), and `r` (initial response); everything
+else is derived. `Create(frequencyHz, dampingRatio, initialResponse)` derives
+the closed-form coefficients once (an exact rational derivation, `FixedQ4816`
+inputs, refusing a non-positive `frequencyHz` or a negative `dampingRatio` by
+name) and selects the branch by damping: `Branch` is `Underdamped` (`ζ < 1`,
+rings and overshoots), `CriticallyDamped` (`ζ = 1`, the fastest approach with
+no overshoot), or `Overdamped` (`ζ > 1`, slower, still no overshoot). `ζ = 0`
+is admitted and rings forever — there is no floor beyond non-negative.
+
+The underdamped `ω_d` and the overdamped `σ` — both `ω√|1 − ζ²|` — are not
+part of that exact rational derivation: they settle from
+`BigIntegerFunctions.SquareRoot` at `SecondOrderExactMath.GuardFractionBitCount`
+guard bits rather than carrying the irrational root exactly through
+`RealQuadratic`. Every representable `(f, ζ)` pair already resolves under the
+guard width, so this is a precision margin rather than an open defect; an
+exact root would still round once at the Q32 coefficient, same as today.
+
+Two evaluation forms of the same system, both exact matched-Z-transform state
+transitions (never naive Euler):
+
+- **`Compile(stepTicks, ticksPerSecond)` → `SecondOrderStep`, then
+  `Step(state, target, targetVelocity)`** — the per-tick/per-frame advance,
+  for simulation state that is stepped every tick (a kit's planar velocity
+  follower) or a presentation follower stepped every frame (a camera boom, a
+  stamped part). `SecondOrderState`/`SecondOrderState3` carry both raw Q32
+  position and velocity lanes — persist both in snapshots; narrowing to Q16
+  loses the sixteen guard bits that make rest exact. `r` acts through
+  `targetVelocity`, held constant over the step (zero-order hold).
+- **`Evaluate(initialValue, initialVelocity, target, elapsedTicks,
+  ticksPerSecond)` → `SecondOrderSample`** — the closed form from initial
+  conditions, computed lazily on read with no per-tick work, mirroring
+  `WorldStateAdvance`'s epoch-based accumulation. `Retarget(sample, oldTarget,
+  newTarget)` adds the velocity kick a piecewise-constant target change
+  implies, so a rewritten target keeps the sample continuous instead of
+  snapping. `r` is inert in `Evaluate` — the closed form has no history of
+  target motion to react to; it only shapes `Step`'s per-interval response.
+
+Both forms round every returned raw exactly once (ties to even); `Step`
+overflow throws `OverflowException` and leaves the input state untouched. A
+default-initialized `SecondOrderDynamics`/`SecondOrderStep` throws
+`InvalidOperationException` from `Compile`/`Evaluate`/`Retarget` rather than
+computing against unbound coefficients. A float twin
+(`Puck.SdfVm.Views.SecondOrderFollower.cs`, `Puck.SdfVm` project) transcribes
+the identical closed forms in `MathF` for presentation-only followers that
+never feed back into the tick.
+
+---
+
+## `CurvatureSpline`
+
+A curve authored by declaring **curvature at each knot** rather than raw
+Bézier control points — Steven Wittens' curvature-continuous cubic-Bézier
+construction ("Making Curvature Front and Center"). A `CurvatureSplineKnot` is
+a planar `(X, Z)` position, an `Elevation` (the `Y` lift, carried outside the
+planar curvature and arc-length solve as a linear grade per segment), a
+`TangentYaw` (radians; the unit tangent is `(cos, sin)` in the XZ plane, the
+same convention `FixedQ4816.SinCos` uses), and the signed `Curvature` the
+compiled segments on either side of the knot must reach there, under
+`cross2(a, b) = a.X·b.Z − a.Z·b.X`: positive curvature turns from the tangent
+toward `+Z` faster than toward `−Z`. `Compile(knots, closed)` derives the two
+tangent lengths a cubic Bézier segment needs to reproduce each endpoint's
+declared curvature exactly — a quadratic system in the two lengths, reduced to
+a quartic in the general case — so the author never touches a control point.
+
+**Root isolation is exact; admissibility and the tie are certified, not
+guessed at from a single point.** `Compile` never runs on a per-tick path: it
+works in `System.Numerics.BigInteger`/`Rational` throughout
+(`CurvatureSpline.Exact.cs`, internal), isolating every real root of the
+tangent-length quartic with a Sturm sequence over exact rational coefficients
+— no float, no iteration-order dependence. For each isolated root, whether its
+(l0, l1) pair is admissible is decided by refining the isolating interval
+(never searching for a different root — exactly one is already certified
+inside it) until every admissibility inequality holds, or fails, across the
+WHOLE interval, up to a bounded budget; a root whose admissibility cannot be
+decided within that budget refuses rather than picking a side of the
+boundary. When more than one root is admissible, the pair minimizing
+`l0² + l1²` is picked the same way — refining both candidates' objective
+intervals until they separate, or, on an unresolved tie after the budget, by
+the documented policy of keeping the smaller `l0` (the ascending isolation
+order's own first candidate) rather than an unproved exact tie rule. The
+single-root branches (one or both curvatures zero) need no such refinement:
+their `(l0, l1)` is an exact closed-form rational, decided outright against
+the same bounds. Every step is a pure function of the authored knots and the
+segment index: the same knots compile to bit-identical raws every time, from
+scratch, on every machine. Every compiled raw — control points, quadratic
+derivative points, linear second-derivative points, the arc-length table, the
+tangent lengths — rounds exactly ONCE, from a representative point of its
+final certified interval, to `CoefficientFractionBitCount` (Q32), through
+`FixedPointRounding.TryRoundRational`; that interval is always many orders of
+magnitude narrower than the Q32 rounding grid, which is what makes rounding
+from a representative point safe, not a claim that the point IS the algebraic
+root — `SinCosExact` and `ExactSqrt` are themselves guard-precision roundings
+of transcendental and irrational values, so no step in this pipeline carries
+an unrounded real number end to end.
+
+**The arc-length table is a composite-Simpson integral of exact geometry,
+adaptively subdivided to a declared error bound.** Each segment carries a
+cumulative table over uniform-`t` subintervals of `|B′(t)|`, each node
+evaluated exactly from the pre-rounding derivative control points before the
+one Q32 rounding per cumulative entry. The panel count starts at 64 and
+doubles — always a power of two, so
+`CompiledCurvatureSpline`'s own per-tick lookup keeps dividing by it with a
+shift — until two successive doublings agree at every matching station to
+within a bound RELATIVE to the segment's own arc length (`ArcLengthRelativeErrorShift`,
+floored at `ArcLengthMinimumErrorBoundRaw` so a short segment is never held to
+an unreachable absolute precision — a fixed absolute bound is unreachable
+within any sane panel budget on a million-unit segment, since Simpson's own
+error term scales with the integrand's magnitude) — a Richardson estimate of
+the Simpson quadrature error — AND a per-panel midpoint-vs-chord check (a
+conservative proxy for the linear-in-`t` interpolation error `Evaluate`
+itself commits to within an accepted panel) falls under the same bound, or
+refuses `ArcLengthErrorUnbounded` if neither holds within 65,536 panels.
+`CompiledCurvatureSpline.EvaluateRaw(arcRaw)` binary-searches the accepted
+table to invert arc length back to a Bézier parameter, so callers work in arc
+length — the units a follow-rate or a dolly fraction actually wants — rather
+than the non-uniform-speed `t`; `Evaluate(FixedQ4816)` is the Q16-typed
+convenience overload that promotes exactly and delegates to it. A caller
+already holding a Q32 raw (a curve-follow producer's per-tick accumulator)
+must call `EvaluateRaw` directly — narrowing to Q16 first loses up to 65,535
+Q32 raws of precision at the wrap/clamp boundary.
+
+**The refusal ladder is named, ordered, and total.** `Compile` never returns a
+NaN-shaped result and never falls back silently; every input either compiles
+or throws `CurvatureSplineException` naming a `CurvatureSplineRefusal`:
+`TooFewKnots` (an open curve needs two, a closed one three), `KnotOutOfRange`
+(a coordinate past `MaxCoordinate` or a curvature past `MaxCurvature`),
+`ZeroLengthChord` (consecutive knots closer than `MinChordLength`),
+`TangentCurvatureInconsistent` (the tangent-length system's cross term
+`w = cross2(T0, T1)` is zero and the remaining linear equation on the
+affected side cannot meet the declared curvature), `CurvatureUnreachable` (no
+tangent-length pair within the authoring bounds solves the curvature system),
+`InteriorCusp` (the segment's speed `|B′(t)|` dips below `MinSpeedFloor`
+somewhere on `[0, 1]`, found by the same exact root isolation applied to the
+speed-squared polynomial's derivative), `ArcLengthErrorUnbounded` (the
+arc-length table's estimated error would not fall under its scaled bound
+within the panel-doubling budget), and `CarrierOverflow` (an exact rational
+does not fit the Q32 carrier).
+`CurvatureSplineException.SegmentIndex` names the offending segment, or `-1`
+for a whole-curve refusal.
+
+**`CompiledCurvatureSpline.Evaluate` is the zero-allocation per-tick/per-frame
+form.** It never throws and never returns a non-finite component over its
+whole domain: a closed curve wraps the arc-length argument modulo
+`TotalLength` (the canonical non-negative residue), an open curve clamps to
+`[0, TotalLength]`. `MinTangentLength`, `MinChordLength`, `MaxCurvature`, and
+`MaxTangentChordRatio` are each derived limits rather than free knobs — the
+member remarks on `CurvatureSpline` state what each one bounds (a Q32
+rounding's perturbation of reconstructed curvature, the arc-table's increment
+floor, the solve's sensitivity to declared curvature, the quartic
+root-search interval — respectively). A presentation twin
+(`Puck.SdfVm.Views.SdfCurvePath.cs`, `Puck.SdfVm` project) converts an
+already-compiled spline's Q32 raws once at construction — it carries no
+solver of its own, so it cannot diverge from the fixed-point primitive's
+tangent-length branch pick or refusal ladder, only from its own
+de Casteljau/table-inversion arithmetic. It carries every intermediate
+(converted control points, arc table, wrap/clamp/lookup) in `double`, never
+`float` — a legal curve can accumulate arc well past `2^24` units, where a
+`float` ULP already exceeds a legal short segment and would collapse distinct
+Q32 stations onto the same value; `float` appears only at the two public
+seams, `TotalLength` and `Sample`'s returned position/yaw.
+
+---
+
 ## Substrate
 
 Three internal types carry the arithmetic that the public surface is a thin
@@ -957,8 +1134,10 @@ types. Each one is a real dependency in the sources, not a resemblance.
   `FixedVector2.Dot`/`Wedge`, `FixedVector3.Dot`/`Cross`, and both of
   `FixedDual<TValue>`'s fused kernels all call. The `Int128` overload is
   `RoundProduct`, the arbitrary-shift form, at shift 16;
-  `FixedRigidTransform.Exp` reaches `RoundProduct` directly at Q62 and
-  `FusedArithmetic.RoundQ48SumToRaw` at shift 32. That one
+  `FixedRigidTransform.Exp` reaches `RoundProduct` directly at Q62,
+  `FusedArithmetic.RoundQ48SumToRaw` at shift 32, and
+  `CompiledCurvatureSpline.Evaluate` at shift 32 for its de Casteljau lerp and
+  its Q32 → Q16 narrowing. That one
   member is why "one rounding per returned component" is a single fact rather
   than eleven parallel ones — and it is also why a *leg*, one named piece of
   evidence a law stands on, that proves it in one type proves the *kernel*

@@ -3,24 +3,68 @@
 This project owns `IWorldConsoleAuthority` (resolves the `WorldInstance` a
 console invocation addresses) and the server-only command modules moved out
 of [`Puck.World`](../Puck.World/README.md): `world.grant`/`.revoke`/`.grants`/
-`.why` (`WorldGrantCommandModule`), `world.group.*`/`world.ownership.*`/
+`.why` (`WorldGrantCommandModule`), `world.contributions`
+(`WorldContributionCommandModule` — the contribution-slot read-back; slots are
+authored and filled through `world.row.set placements`, so it carries no
+mutating verb), `world.dynamics` (`WorldDynamicsCommandModule` — the
+`dynamics` section's read-back: every row's authored triple, the derived
+fixed-point constants, and its live reference count), `world.curves`
+(`WorldCurveCommandModule` — the `curves` section's read-back: every row's
+authored shape, its compiled segment count and total arc length, and its live
+reference count), `world.group.*`/`world.ownership.*`/
 `world.groups` (`WorldGroupCommandModule`), `world.population.spawn`/
-`world.looks` (`WorldLookCommandModule`), `market.*`/`world.market`
-(`WorldMarketCommandModule`), `world.peers`/`world.projection`
+`world.looks` (`WorldLookCommandModule`), `world.peers`/`world.projection`
 (`WorldNetworkCommandModule`), `world.row.*`/`world.kits`/`world.assign`
 (`WorldRowCommandModule`), `world.state.*`/`world.generate`/`world.state`
-(`WorldStateCommandModule`), `world.update` (`WorldUpdateCommandModule`), and
+(`WorldStateCommandModule`), `world.tabletop` (`WorldTabletopCommandModule` —
+the tabletop primitive's read-back: every placement carrying a `board` facet,
+its anchored frame, its occupancy row's live cells, and any bound
+`turn`/`verdict`/`move`/`plan` rows; read-only, since a board's rows are
+authored/mutated through the same ordinary state doors any other row uses),
+`world.update` (`WorldUpdateCommandModule`),
 `world.wait` (`WorldWaitCommandModule`, alongside the tick-barrier gate it
 arms, `WorldConsoleWaitGate`, and `IWorldWaitGateResolver` — the row's own
 gate, since a host running several rows has one gate per row and a singleton
-would always arm whichever row it was constructed against). `WorldCommandArguments` (the free-text-tail
+would always arm whichever row it was constructed against), `world.timing`
+(`WorldTimingCommandModule` — the live performance-metrics arming verb,
+registered here so a headless boot lights the world-simulation timing digest
+too; `world.gpu`, the GPU per-pass read-back the same arming lights when a
+window is present, stays in `Puck.World`), and `replay.*`
+(`WorldReplayCommandModule.cs`, `WorldReplayCommandModule.Drive.cs`,
+`WorldReplayCommandModule.Inspect.cs` — record/stop/cancel/
+drive/fork/verify/inspect/list/status; a client-local control surface over the
+tape, none of it touching a live player-facing session). The tape mechanism
+itself (`WorldReplayTape`, `WorldReplaySnapshot`, `WorldReplayInspector`,
+`WorldReplayEntryDescriber`) stays in
+[`Puck.World.Server`](../Puck.World.Server/README.md#deterministic-replay-worldreplaytapecs-worldreplaytapedrivecs-worldreplaysnapshotcs) —
+`WorldReplaySnapshot` reads `WorldReplayInspector.DescribeRate`, a Server-internal
+coupling this project cannot see through, so only the verb surface moves; the
+module reaches the tape, the inspector, and `WorldInstanceHost` by their
+already-public surface. `WorldCommandArguments` (the free-text-tail
 reconstruction every JSON/prose-tailed verb shares) lives in
 [`Puck.World.Server`](../Puck.World.Server/README.md) instead, since modules
 that stayed in `Puck.World` need it too.
 
+`WorldConsoleNarrationSink` (`WorldConsoleNarrationSink.cs`) is the
+`IWorldNarrationSink` implementation every composition root binds so a
+headless script or canary reads byte-identical lines to a direct
+`Console.Error` write — it lives here rather than in `Puck.World.Server`
+because `build/Architecture.props` denies that project a reference to
+`System.Console`.
+
 Project references: `Puck.World.Server`, `Puck.World.Protocol`,
-`Puck.World.Schema`, `Puck.Commands`, `Puck.Launcher` (the
-`ITextCommandHoldGate` seam `WorldConsoleWaitGate` implements), `Puck.Networking`.
+`Puck.World.Schema`, `Puck.Commands`, and `Puck.Launcher`. `Puck.Hosting`
+(`GpuTimingControl`, the arming authority `WorldTimingCommandModule` reads and
+writes) and `Puck.Networking` are reached only transitively, through
+`Puck.Launcher`/`Puck.World.Server`; no `ProjectReference` here names either
+directly.
+
+`world.wait` holds only its issuing `TextCommandSession`. A row's
+`WorldConsoleWaitGate` supplies the host-work clock; sessions keep independent
+release deadlines. Other text sessions remain responsive. Pausing or stopping
+the row releases its armed waits. Direct registry calls without an originating
+text session are refused. A clock reset invalidates all earlier deadlines,
+including an expired wait the command pump has not yet observed.
 
 ## `IWorldConsoleAuthority`
 
@@ -44,10 +88,12 @@ a placeholder.
 A module moves here when every type its constructor and handlers touch is
 reachable from this project's own reference set. A module whose ctor or
 handlers touch `WorldClient`, `PlayerRoster`, the seat surface (e.g.
-`WorldSeatAuthorityRouter`), views, HUD, editor, screens, audio, or recording
+`WorldSeatAuthorityRouter`), views, HUD, screens, audio, or recording
 stays in `Puck.World` instead — those verbs need a live player-facing session
 this project never carries. `Puck.World.Addons` is likewise out of reach (not
 in this project's reference set), so `WorldAddonCommandModule` (the
-`world.addon.*` lifecycle verbs) stays in `Puck.World` too.
+`world.addons` cost-surface read-back — mounting/unmounting/reloading/
+enabling/disabling an addon rides `world.row.set addons`/`.remove` instead,
+this project's own door) stays in `Puck.World` too.
 
 Inventory control: `puck declarations src/Puck.World.Console --kind class --name CommandModule`.

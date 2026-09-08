@@ -1,0 +1,2085 @@
+{
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "grounded",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "ResolveHold",
+        "ComputePlanarTargetVelocity",
+        "ShapeVelocity",
+        "SnapYawToPlanarIntent",
+        "ApplyHold",
+        "IntegratePlanarAndVerticalVelocity",
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "channels": [
+    {
+      "composition": true,
+      "name": "attack",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "target",
+      "shape": "Binary"
+    },
+    {
+      "composition": true,
+      "name": "element",
+      "shape": "Binary"
+    }
+  ],
+  "exports": {
+    "actions": [],
+    "bindings": [
+      "hp",
+      "targeted"
+    ],
+    "reads": [
+      "hp",
+      "targeted",
+      "dead",
+      "elementLabel"
+    ]
+  },
+  "interactions": {
+    "interactions": [
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "burning",
+            "valueSeconds": 3.0
+          }
+        ],
+        "left": "flammable",
+        "mode": "Edge",
+        "name": "pit-ignites",
+        "range": 0,
+        "right": "firePit"
+      },
+      {
+        "coOccurrence": "Region",
+        "effects": [
+          {
+            "$type": "setState",
+            "key": "$left",
+            "state": "frozen",
+            "valueSeconds": 3.0
+          }
+        ],
+        "left": "freezable",
+        "mode": "Edge",
+        "name": "pool-chills",
+        "range": 0,
+        "right": "icePool"
+      }
+    ]
+  },
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Solid",
+        "bodyMotionProgram": "grounded",
+        "collider": {
+          "$type": "capsule",
+          "endpoint": [
+            0,
+            1.6,
+            0
+          ],
+          "radius": 0.35
+        },
+        "motion": {
+          "facingSnap": true,
+          "holds": [
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "envelope": {
+                "sinkSpeed": 20
+              },
+              "gravity": {
+                "fall": 23,
+                "rise": 14
+              },
+              "hold": "Gravity",
+              "name": "ground",
+              "reach": 1.2
+            },
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 20
+              },
+              "gravity": {
+                "fall": 23,
+                "rise": 14
+              },
+              "hold": "Gravity",
+              "name": "air"
+            }
+          ],
+          "shaping": [
+            {
+              "along": {}
+            }
+          ],
+          "speed": {
+            "value": 0.01
+          },
+          "turn": {
+            "rate": 0.01
+          }
+        },
+        "name": "dummyKit"
+      }
+    ]
+  },
+  "navigation": {
+    "domains": [
+      {
+        "agentHeight": 1.8,
+        "agentRadius": 0.35,
+        "arrivalDistance": 0.5,
+        "cellSize": 1,
+        "depth": 20,
+        "kind": "Surface",
+        "layers": 1,
+        "maxExpandedNodes": 400,
+        "maxPathNodes": 64,
+        "maxSlopeDegrees": 60,
+        "maxStepHeight": 0.55,
+        "name": "yard",
+        "origin": [
+          -10,
+          -2,
+          -10
+        ],
+        "probeDown": 3,
+        "probeUp": 2.5,
+        "width": 20
+      }
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "arenaCourt",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "prototypeId": "arenaYard",
+        "scale": 1,
+        "solid": {
+          "margin": 0
+        },
+        "yawDegrees": 0
+      },
+      {
+        "id": "firePit",
+        "parent": "arenaCourt",
+        "position": [
+          6,
+          0,
+          -6
+        ],
+        "prototypeId": "firePit",
+        "region": {
+          "radius": 1.5
+        },
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "icePool",
+        "parent": "arenaCourt",
+        "position": [
+          -6,
+          0,
+          -6
+        ],
+        "prototypeId": "icePool",
+        "region": {
+          "radius": 1.5
+        },
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "dummyA",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.1
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "dummyKit",
+          "look": null,
+          "source": "Idle"
+        },
+        "parent": "arenaCourt",
+        "position": [
+          3,
+          0,
+          4
+        ],
+        "prototypeId": "trainingDummy",
+        "scale": 1,
+        "yawDegrees": 180
+      },
+      {
+        "id": "dummyB",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 0.1
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0.01
+            }
+          },
+          "kit": "dummyKit",
+          "look": null,
+          "source": "Idle"
+        },
+        "parent": "arenaCourt",
+        "position": [
+          -3,
+          0,
+          4
+        ],
+        "prototypeId": "trainingDummy",
+        "scale": 1,
+        "yawDegrees": 180
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "arenaYard",
+        "palette": [
+          {
+            "color": "#8C8C77"
+          },
+          {
+            "color": "#6B6B5E"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "floor",
+            "position": [
+              0,
+              -0.05,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              10,
+              0.05,
+              10
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "wall-north",
+            "position": [
+              0,
+              1,
+              10
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              10.3,
+              1,
+              0.15
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 1,
+            "name": "wall-south",
+            "position": [
+              0,
+              1,
+              -10
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              10.3,
+              1,
+              0.15
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 1,
+            "name": "wall-east",
+            "position": [
+              10,
+              1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.15,
+              1,
+              10.3
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 1,
+            "name": "wall-west",
+            "position": [
+              -10,
+              1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.15,
+              1,
+              10.3
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "arenaYard"
+    },
+    {
+      "document": {
+        "name": "trainingDummy",
+        "palette": [
+          {
+            "color": "#8A5A34"
+          },
+          {
+            "color": "#C2A05A"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "base",
+            "position": [
+              0,
+              0.1,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.3,
+              0.1,
+              0.3
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "post",
+            "position": [
+              0,
+              0.9,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.08,
+              0.8,
+              0.08
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 1,
+            "name": "torso",
+            "position": [
+              0,
+              1.5,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.35,
+              0.5,
+              0.25
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 1,
+            "name": "head",
+            "position": [
+              0,
+              2.05,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.22,
+              0.22,
+              0.22
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "trainingDummy"
+    },
+    {
+      "document": {
+        "name": "firePit",
+        "palette": [
+          {
+            "color": "#FF5A1F"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "disc",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.5,
+              0.08,
+              1.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "firePit"
+    },
+    {
+      "document": {
+        "name": "icePool",
+        "palette": [
+          {
+            "color": "#5AC8FA"
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "disc",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.5,
+              0.08,
+              1.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "icePool"
+    }
+  ],
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$nearest:body:0:enemy",
+          "key": "0",
+          "state": "targeted"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "0",
+        "state": "autoTarget",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "auto-target"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "$nearest:body:0:enemy",
+          "key": "0",
+          "state": "targeted"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$channel:1:target",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "target-nearest"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttackOn",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttackToggle",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackToggle",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackPrev",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "auto-attack-on"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttackOn",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "autoAttackToggle",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackToggle",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackPrev",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "auto-attack-off"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "0",
+          "fromState": "autoAttackOn",
+          "key": "0",
+          "state": "autoAttackPrev"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparandKey": "0",
+        "comparandState": "autoAttackOn",
+        "comparison": "NotEqual",
+        "key": "0",
+        "state": "autoAttackPrev"
+      },
+      "mode": "Level",
+      "name": "auto-attack-mirror"
+    },
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "key": "0",
+          "state": "attackCooldown"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "0",
+        "state": "attackCooldown",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "attack-cooldown"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:targeted:0",
+          "fromState": "targeted",
+          "key": "0",
+          "state": "targetOfTarget"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "key": "0",
+        "state": "targeted",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-of-target"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "targetOfTarget",
+          "value": -1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Less",
+        "key": "0",
+        "state": "targeted",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-of-target-none"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:targeted:0",
+          "fromState": "bodyName",
+          "key": "0",
+          "state": "targetName"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "key": "0",
+        "state": "targeted",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-name"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "targetName",
+          "text": "none"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Less",
+        "key": "0",
+        "state": "targeted",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-name-none"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:targetOfTarget:0",
+          "fromState": "bodyName",
+          "key": "0",
+          "state": "targetOfTargetName"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "key": "0",
+        "state": "targetOfTarget",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-of-target-name"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "targetOfTargetName",
+          "text": "none"
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Less",
+        "key": "0",
+        "state": "targetOfTarget",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "target-of-target-name-none"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "0",
+          "state": "elementIndex",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$channel:1:element",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "element-cycle"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "elementIndex",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "0",
+        "state": "elementIndex",
+        "value": 2
+      },
+      "mode": "Level",
+      "name": "element-wrap"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:elementIndex:0",
+          "fromState": "elementName",
+          "key": "0",
+          "state": "elementLabel"
+        }
+      ],
+      "mode": "Level",
+      "name": "element-label"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "$cell:targeted:0",
+          "state": "hp",
+          "value": -25
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:targeted:0",
+          "state": "hitRecently",
+          "valueSeconds": 4.0
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:targeted:0",
+          "state": "targeted",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "attackCooldown",
+          "valueSeconds": 1.0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:attack",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "targeted",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:body:0:cell:targeted:0",
+            "value": 2.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "0",
+            "state": "attackCooldown",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "manual-attack"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "$cell:targeted:0",
+          "state": "hp",
+          "value": -25
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:targeted:0",
+          "state": "hitRecently",
+          "valueSeconds": 4.0
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:targeted:0",
+          "state": "targeted",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "attackCooldown",
+          "valueSeconds": 1.0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "autoAttackOn",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "targeted",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:body:0:cell:targeted:0",
+            "value": 2.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "0",
+            "state": "attackCooldown",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "auto-attack"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:targeted:0",
+          "state": "burning",
+          "valueSeconds": 4.0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:attack",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "elementIndex",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "targeted",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:body:0:cell:targeted:0",
+            "value": 2.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "fire-strike"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$cell:targeted:0",
+          "state": "frozen",
+          "valueSeconds": 4.0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:attack",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "0",
+            "state": "elementIndex",
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "key": "0",
+            "state": "targeted",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$distance:body:0:cell:targeted:0",
+            "value": 2.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "0",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "frost-strike"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "$each",
+          "state": "hp",
+          "value": -3
+        },
+        {
+          "$type": "countdownState",
+          "key": "$each",
+          "state": "burning"
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "hot",
+          "value": 1
+        }
+      ],
+      "forEach": "burning",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "burn"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "hot",
+          "value": 0
+        }
+      ],
+      "forEach": "burning",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$each",
+            "state": "hot",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "burn-out"
+    },
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "key": "$each",
+          "state": "frozen"
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "cold",
+          "value": 1
+        }
+      ],
+      "forEach": "frozen",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "$each",
+        "state": "frozen",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "thaw"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "cold",
+          "value": 0
+        }
+      ],
+      "forEach": "frozen",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$each",
+            "state": "cold",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "thawed"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "burning",
+          "value": 0
+        }
+      ],
+      "forEach": "frozen",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "frost-quenches-fire"
+    },
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "key": "$each",
+          "state": "hitRecently"
+        }
+      ],
+      "forEach": "hitRecently",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "$each",
+        "state": "hitRecently",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "hit-memory"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "key": "$each",
+          "state": "hp",
+          "value": 5
+        }
+      ],
+      "forEach": "regenerates",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "hitRecently",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "hp",
+            "value": 995
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "regen"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "dead",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "burning",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "frozen",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "respawnIn",
+          "valueSeconds": 3.0
+        }
+      ],
+      "forEach": "mortal",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "LessOrEqual",
+        "key": "$each",
+        "state": "hp",
+        "value": 0
+      },
+      "mode": "Edge",
+      "name": "death"
+    },
+    {
+      "effects": [
+        {
+          "$type": "countdownState",
+          "key": "$each",
+          "state": "respawnIn"
+        }
+      ],
+      "forEach": "respawnIn",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Greater",
+        "key": "$each",
+        "state": "respawnIn",
+        "value": 0
+      },
+      "mode": "Level",
+      "name": "respawn-countdown"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "hp",
+          "value": 300
+        },
+        {
+          "$type": "setState",
+          "key": "$each",
+          "state": "dead",
+          "value": 0
+        }
+      ],
+      "forEach": "mortal",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "respawnIn",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "respawn"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "deadLook",
+          "key": "$each",
+          "state": "lookOf"
+        }
+      ],
+      "forEach": "dead",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "key": "$each",
+        "state": "dead",
+        "value": 1
+      },
+      "mode": "Edge",
+      "name": "look-dead"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "iceLook",
+          "key": "$each",
+          "state": "lookOf"
+        }
+      ],
+      "forEach": "frozen",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "look-ice"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "fireLook",
+          "key": "$each",
+          "state": "lookOf"
+        }
+      ],
+      "forEach": "burning",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "look-fire"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$each",
+          "fromState": "normalLook",
+          "key": "$each",
+          "state": "lookOf"
+        }
+      ],
+      "forEach": "dead",
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "burning",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "key": "$each",
+            "state": "frozen",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "key": "$each",
+            "state": "dead",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Edge",
+      "name": "look-normal"
+    }
+  ],
+  "spawnPoints": [
+    {
+      "id": "arena-arrival",
+      "position": [
+        0,
+        0,
+        8
+      ],
+      "yawDegrees": 180
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          }
+        ],
+        "kind": "Int",
+        "name": "enemy"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          }
+        ],
+        "kind": "Int",
+        "max": 7,
+        "min": -1,
+        "name": "targeted"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": -1
+          }
+        ],
+        "kind": "Int",
+        "max": 7,
+        "min": -1,
+        "name": "targetOfTarget"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 1
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "autoTarget"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "autoAttackOn"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "autoAttackPrev"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "autoAttackToggle"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 50400,
+        "min": 0,
+        "name": "attackCooldown",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 2,
+        "min": 0,
+        "name": "elementIndex"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "plain"
+          },
+          {
+            "key": "1",
+            "value": "fire"
+          },
+          {
+            "key": "2",
+            "value": "frost"
+          }
+        ],
+        "kind": "Text",
+        "name": "elementName"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "plain"
+          }
+        ],
+        "kind": "Text",
+        "name": "elementLabel"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "you"
+          },
+          {
+            "key": "1",
+            "value": "dummy-a"
+          },
+          {
+            "key": "2",
+            "value": "dummy-b"
+          }
+        ],
+        "kind": "Text",
+        "name": "bodyName"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "none"
+          }
+        ],
+        "kind": "Text",
+        "name": "targetName"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": "none"
+          }
+        ],
+        "kind": "Text",
+        "name": "targetOfTargetName"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "hot"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          }
+        ],
+        "kind": "Int",
+        "name": "flammable"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          }
+        ],
+        "kind": "Int",
+        "name": "freezable"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 201600,
+        "min": 0,
+        "name": "burning",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "gatesDrive": true,
+        "kind": "Int",
+        "max": 201600,
+        "min": 0,
+        "name": "frozen",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "name": "cold"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 201600,
+        "min": 0,
+        "name": "hitRecently",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "gatesDrive": true,
+        "kind": "Int",
+        "name": "dead"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 0
+          },
+          {
+            "key": "2",
+            "value": 0
+          }
+        ],
+        "kind": "Int",
+        "max": 151200,
+        "min": 0,
+        "name": "respawnIn",
+        "nonNegative": true
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          }
+        ],
+        "kind": "Int",
+        "name": "mortal"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 1
+          }
+        ],
+        "kind": "Int",
+        "name": "regenerates"
+      },
+      {
+        "capacity": 8,
+        "cells": [
+          {
+            "key": "1",
+            "value": 1000
+          },
+          {
+            "key": "2",
+            "value": 1000
+          }
+        ],
+        "kind": "Int",
+        "max": 1000,
+        "min": 0,
+        "name": "hp"
+      },
+      {
+        "cells": [
+          {
+            "key": "1",
+            "value": "dummy"
+          },
+          {
+            "key": "2",
+            "value": "dummy"
+          }
+        ],
+        "kind": "Text",
+        "name": "lookOf"
+      },
+      {
+        "cells": [
+          {
+            "key": "1",
+            "value": "dummy"
+          },
+          {
+            "key": "2",
+            "value": "dummy"
+          }
+        ],
+        "kind": "Text",
+        "name": "normalLook"
+      },
+      {
+        "cells": [
+          {
+            "key": "1",
+            "value": "dummy-fire"
+          },
+          {
+            "key": "2",
+            "value": "dummy-fire"
+          }
+        ],
+        "kind": "Text",
+        "name": "fireLook"
+      },
+      {
+        "cells": [
+          {
+            "key": "1",
+            "value": "dummy-ice"
+          },
+          {
+            "key": "2",
+            "value": "dummy-ice"
+          }
+        ],
+        "kind": "Text",
+        "name": "iceLook"
+      },
+      {
+        "cells": [
+          {
+            "key": "1",
+            "value": "dummy-down"
+          },
+          {
+            "key": "2",
+            "value": "dummy-down"
+          }
+        ],
+        "kind": "Text",
+        "name": "deadLook"
+      }
+    ]
+  }
+}

@@ -16,6 +16,9 @@ internal sealed class RumbleDeviceStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -25,7 +28,7 @@ internal sealed class RumbleDeviceStage : IPostStage<PostContext> {
         ); // MBC5+RAM+RUMBLE+BATTERY
 
         using var rumbleMachine = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rumbleRom
         );
 
@@ -68,7 +71,7 @@ internal sealed class RumbleDeviceStage : IPostStage<PostContext> {
         var snapshot = rumbleMachine.Machine.Snapshot();
 
         using var restored = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: rumbleRom
         );
 
@@ -88,7 +91,7 @@ internal sealed class RumbleDeviceStage : IPostStage<PostContext> {
         );
 
         using var plainMachine = PostMachine.Build(
-            model: ConsoleModel.Cgb,
+            model: ConsoleModel.CgbE,
             rom: plainRom
         );
 

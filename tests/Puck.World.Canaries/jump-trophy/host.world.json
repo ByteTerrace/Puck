@@ -1,0 +1,155 @@
+{
+  "schema": "puck.world.def.v1",
+  "basis": "../../../src/Puck.World/Assets/worlds/standard.basis.json",
+  "documentId": "jump-trophy-canary",
+  "simulation": {
+    "rateHz": 30
+  },
+  "imports": [
+    {
+      "document": "../../../src/Puck.World/Assets/worlds/modules/jump.world.json",
+      "as": "jump"
+    }
+  ],
+  "bodies": {
+    "capacity": 4,
+    "localSeats": 1,
+    "seatSpawns": [
+      "jump-arrival"
+    ],
+    "networkPlayers": 0,
+    "defaultPeerSource": "Idle"
+  },
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "turn",
+      "role": "Turn",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceX",
+      "role": "FaceX",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceZ",
+      "role": "FaceZ",
+      "shape": "Bipolar"
+    },
+    {
+      "name": "faceY",
+      "role": "FaceY",
+      "shape": "Bipolar"
+    },
+    {
+      "composition": true,
+      "name": "jump",
+      "shape": "Binary"
+    },
+    {
+      "name": "rise",
+      "role": "MoveUp",
+      "shape": "Bipolar"
+    }
+  ],
+  "defaultSeatKit": "vaulter",
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 800,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "Windowed",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 60,
+    "timing": false,
+    "width": 1280
+  },
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0.0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "requirements": [
+      "SmoothUnionContact"
+    ]
+  },
+  "gravity": {
+    "attractors": [],
+    "gravitationalConstant": 0.0,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -46,
+      0
+    ]
+  },
+  "views": {
+    "seatRig": {
+      "name": "jump-chase",
+      "version": "puck.camera.v1",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 6,
+          "pitch": 0.35,
+          "yaw": 0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          },
+          "targetOffset": [
+            0,
+            1,
+            0
+          ],
+          "worldAxes": false
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.95
+        }
+      ]
+    },
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "layouts": [
+      {
+        "name": "action",
+        "transitionSeconds": 0.4,
+        "transitionRenderScale": 0.5,
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": null,
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      }
+    ]
+  }
+}

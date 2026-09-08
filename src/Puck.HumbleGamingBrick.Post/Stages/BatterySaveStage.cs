@@ -22,6 +22,9 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
@@ -31,7 +34,7 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
         ); // MBC3+RAM+BATTERY, 32 KiB RAM
 
         using var machine = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
 
@@ -83,7 +86,7 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
 
         // The power-on load: a fresh machine imports the exported save and must expose the identical bytes.
         using var reboot = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
 
@@ -183,7 +186,7 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
         ); // HuC3 (RAM + battery per the type decode)
 
         using var machine = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
 
@@ -213,7 +216,7 @@ internal sealed class BatterySaveStage : IPostStage<PostContext> {
         }
 
         using var reboot = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
 

@@ -1,0 +1,9 @@
+world.status
+world.imports
+body.where 0
+body.fly 1 0 0 -1 0 0 5
+world.wait 150
+body.where 0
+world.state kart_gateStage
+world.state kart_lap
+world.state kart_lapTicks

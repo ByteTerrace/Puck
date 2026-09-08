@@ -14,7 +14,19 @@ public sealed partial class WorldServer {
     // Whether a mutation recompiles the population's fixed-point derived state (kit table, kit indices, live bodies'
     // compiled tuning/actions, AND the analytic collider set). A screen/collision edit rebuilds the collider set so a
     // live screens or collision change takes effect on the next tick with no restart.
-    private static bool AffectsPopulation(WorldMutation mutation) => (mutation is
+    // A batch is classified by its members: it affects whatever any member affects.
+    private static bool AnyMember(WorldMutation mutation, Func<WorldMutation, bool> affects) {
+        if (mutation is not WorldMutation.Batch batch) {
+            return false;
+        }
+        foreach (var member in batch.Mutations) {
+            if (affects(member)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private static bool AffectsPopulation(WorldMutation mutation) => AnyMember(mutation, AffectsPopulation) || (mutation is
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or
         WorldMutation.SetKitAssignment or WorldMutation.SetMotion or WorldMutation.SetSpawns or
         WorldMutation.SetCollision or
@@ -25,15 +37,27 @@ public sealed partial class WorldServer {
         // SetPopulationDefaults carries the distribution and variation rows: Rebuild recompiles their fixed spawn
         // policy so it is LIVE for future activations (the live census count still stays the world.population verb — this
         // Rebuild re-seeds SpawnPosition but never re-activates or teleports a standing body).
-        WorldMutation.SetPopulationDefaults or
+        WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or
         // A placement row can change the census (Arc 7's Inhabit facet: a placement contributes driven bodies), and an
         // inhabited row's kit resolution reads the creation's Locomotion, so a creation swap can move a body between
         // kits — all must trigger Rebuild + ReconcileInhabitants. (R13: the third and last edit to this switch.)
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
-        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation);
+        WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
+        // A dynamics row retune must recompile every fixed-point table that resolved it (a kit's planar shaping
+        // among them), the same live-recompile rule a motion/collision edit already rides.
+        WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics or
+        // A curves row retune must recompile the population's curve table index a body-motion producer's curve
+        // target source resolves by ordinal, the same live-recompile rule a dynamics retune already rides.
+        WorldMutation.UpsertCurve or WorldMutation.RemoveCurve);
+    // Whether a mutation touches the addons section — the only door WorldAddonRow row content (or document order)
+    // moves through OUTSIDE a whole-document rebuild (ApplyRebuild carries its own unconditional prepare, which
+    // also covers a channel-table change by restaging the whole host), so a per-row structural diff gated on JUST
+    // these two kinds is the whole trigger a live mutation needs — see IWorldAddonHost.TryPrepare's own remarks.
+    private static bool AffectsAddons(WorldMutation mutation) => AnyMember(mutation, AffectsAddons) || (mutation is
+        WorldMutation.UpsertAddon or WorldMutation.RemoveAddon);
     // Whether a mutation can grow the SDF program past the probed render envelope (screen slabs / creation stamps — an
     // UpsertCreation re-shapes every live placement of it, so it measures too).
-    private static bool AffectsRenderEnvelope(WorldMutation mutation) => (mutation is
+    private static bool AffectsRenderEnvelope(WorldMutation mutation) => AnyMember(mutation, AffectsRenderEnvelope) || (mutation is
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
         WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
@@ -42,14 +66,17 @@ public sealed partial class WorldServer {
         // mutations already ride the envelope gate so the loud capacity rejection will fire at apply time, not at a later
         // GPU allocation, the moment creation stamps render.
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment);
-    // Whether a mutation can change the SDF contact field: the collision tuning and every solid-bearing section
-    // (screens, creations that reshape a stamp, placements). Coarse by section,
-    // matching AffectsPopulation/AffectsRenderEnvelope.
-    private static bool AffectsSolidField(WorldMutation mutation) => (mutation is
+    // Whether a mutation can change the SDF contact field: the collision tuning, every solid-bearing section
+    // (screens, creations that reshape a stamp, placements), and the inputs of the field's contact band — the kit
+    // colliders and the bodies row naming the scale row. Coarse by section, matching AffectsPopulation/
+    // AffectsRenderEnvelope; a whole-row upsert of the scale row itself is not listed, since every state-row edit
+    // would then rebuild the population.
+    private static bool AffectsSolidField(WorldMutation mutation) => AnyMember(mutation, AffectsSolidField) || (mutation is
         WorldMutation.SetCollision or
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen or
         WorldMutation.UpsertCreation or WorldMutation.RemoveCreation or
-        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement);
+        WorldMutation.UpsertPlacement or WorldMutation.RemovePlacement or
+        WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetPopulationDefaults);
     private static bool ContainsMember(IReadOnlyList<WorldPrincipal> members, WorldPrincipal member) {
         foreach (var existing in members) {
             if (existing == member) {
@@ -126,50 +153,24 @@ public sealed partial class WorldServer {
     }
     // Whether a mutation is DOCUMENT-DEFAULTS class (edits the next boot's wake state; live session levers own "now").
     // Everything else, cameras included, applies live on delivery.
-    private static bool IsDocumentDefaults(WorldMutation mutation) => (mutation is
-        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetHostDefaults);
-    // An EXPLICIT write to an advancing cell — a whole-row UpsertStateRow (which re-bases the row's OWN slot advance
-    // AND every keyed cell's own advance, since it re-declares the whole row), an UpsertStateCell (which re-bases
-    // ONLY the one cell it names — the row's slot advance when that cell IS the slot key, or that cell's own advance
-    // otherwise), or a market mutation (which re-bases every (row, key) cell it actually wrote through
-    // WriteMarketCell — see MarketCellTouches) — re-bases WorldStateAdvance.EpochTick to `tick`, unconditionally
-    // overwriting whatever epoch the write's own payload carried (see WorldStateAdvance's remarks). A market write
-    // that skipped this would let a cell's elapsed accrual apply a second time on its very next read: WriteMarketCell
-    // preserves the pre-write Advance record verbatim (it is a value move, never a re-mint), so the base it installs
-    // already has that accrual baked in — an un-rebased epoch would let the same elapsed span compute again from the
-    // old epoch against the new base. Runs AFTER TryCompose so it sees the row/cell TryCompose just installed, and
-    // BEFORE validation/journal so a rebased epoch is what gets journaled, replayed by world.undo, and read back.
-    // `original` is the document the mutation composed against (before this mutation applied) — market's own touches
-    // need it to resolve a listing's pre-write state (its standing bidder, in particular) since `candidate` already
-    // reflects the write. A no-op for every other mutation kind, and for a cell (row-level or per-cell) that carries
-    // no advance trait at all.
-    private static WorldDefinition RebaseAdvanceEpoch(WorldDefinition original, WorldDefinition candidate, WorldMutation mutation, ulong tick) {
-        if (MarketCellTouches(
-            mutation: mutation,
-            original: original
-        ) is { } touches) {
-            var touchedState = candidate.State;
-
-            foreach (var touch in touches) {
-                touchedState = RebaseKeyedCellAdvanceEpoch(
-                    rows: touchedState,
-                    rowName: touch.Row,
-                    key: touch.Key,
-                    tick: tick
-                );
-            }
-
-            return (ReferenceEquals(
-                objA: touchedState,
-                objB: candidate.State
-            )
-                ? candidate
-                : candidate.WithWorldState(rows: touchedState)
-            );
-        }
-
+    private static bool IsDocumentDefaults(WorldMutation mutation) => AnyMember(mutation, IsDocumentDefaults) || (mutation is
+        WorldMutation.SetRenderDefaults or WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus or WorldMutation.SetHostDefaults);
+    // An EXPLICIT write to a cell carrying StateAdvance or StateDynamics — a whole-row UpsertStateRow
+    // (which re-bases the row's OWN slot trait AND every keyed cell's own trait, since it re-declares the whole
+    // row), or an UpsertStateCell (which re-bases ONLY the one cell it names — the row's slot trait when that cell IS
+    // the slot key, or that cell's own trait otherwise) — re-bases the trait to `tick`,
+    // unconditionally overwriting whatever epoch the write's own payload carried. An Advance trait's base becomes
+    // exactly the value the write installed (see StateAdvance's remarks); a Dynamics trait's Y0/V0 become the
+    // eased value/velocity the OLD trait would report at this tick plus a Retarget kick for the target's own jump
+    // (see RebaseDynamics) — never the raw write, so the follower keeps chasing from wherever it actually was. Runs
+    // AFTER TryCompose so it sees the row/cell TryCompose just installed, and BEFORE validation/journal so a rebased
+    // trait is what gets journaled, replayed by world.undo, and read back. `original` is the document the mutation
+    // composed against (before this mutation applied) — a Dynamics rebase needs it to evaluate the OLD trait/target
+    // at `tick`. A no-op for every other mutation kind, and for a cell (row-level or per-cell) that carries neither
+    // trait.
+    private static WorldDefinition RebaseCellTraits(WorldDefinition original, WorldDefinition candidate, WorldMutation mutation, ulong tick) {
         string? rowName;
-        string? cellKey; // null on a whole-row write (every advancing cell re-bases); the named key on a per-cell write.
+        string? cellKey; // null on a whole-row write (every trait-bearing cell re-bases); the named key on a per-cell write.
 
         switch (mutation) {
             case WorldMutation.UpsertStateRow m:
@@ -191,44 +192,16 @@ public sealed partial class WorldServer {
             return candidate;
         }
 
-        var epoch = unchecked((long)tick);
-        var rebasedRow = row;
-
-        if (
-            ((cellKey is null) || string.Equals(
-            a: cellKey,
-            b: WorldStateRow.SlotKey,
-            comparisonType: StringComparison.Ordinal
-        )) &&
-            (row.Advance is { } rowAdvance)
-        ) {
-            rebasedRow = (rebasedRow with { Advance = (rowAdvance with { EpochTick = epoch }) });
-        }
-
-        var cells = (rebasedRow.Cells ?? []);
-        List<WorldStateCell>? rebasedCells = null;
-
-        for (var index = 0; (index < cells.Count); index++) {
-            var cell = cells[index];
-
-            if (
-                (cell.Advance is not { } cellAdvance) ||
-                ((cellKey is not null) && !string.Equals(
-                a: cell.Key.Value,
-                b: cellKey,
-                comparisonType: StringComparison.Ordinal
-            ))
-            ) {
-                continue;
-            }
-
-            rebasedCells ??= new List<WorldStateCell>(collection: cells);
-            rebasedCells[index] = (cell with { Advance = (cellAdvance with { EpochTick = epoch }) });
-        }
-
-        if (rebasedCells is not null) {
-            rebasedRow = (rebasedRow with { Cells = rebasedCells });
-        }
+        var rebasedRow = RebaseCellTraits(
+            cellKey: cellKey,
+            original: original,
+            originalRow: WorldDefinitionRows.FindStateRow(
+                rows: original.State,
+                name: rowName
+            ),
+            row: row,
+            tick: tick
+        );
 
         return (ReferenceEquals(
             objA: rebasedRow,
@@ -242,44 +215,168 @@ public sealed partial class WorldServer {
             ))
         );
     }
-    // Rebases one keyed cell's WorldStateAdvance.EpochTick to `tick` — the same rebase RebaseAdvanceEpoch's own
-    // UpsertStateCell arm performs on a single named cell, factored out so a market write (which may touch several
-    // cells across two rows in one mutation) can apply it per touch without duplicating the clamp-free with-expression
-    // rebuild. A no-op for a cell that carries no advance trait, or a row/key MarketCellTouches named that this
-    // document does not (or no longer) declare.
-    private static IReadOnlyList<WorldStateRow> RebaseKeyedCellAdvanceEpoch(IReadOnlyList<WorldStateRow> rows, WorldCellName rowName, string key, ulong tick) {
-        if (WorldDefinitionRows.FindStateRow(
-            name: rowName,
-            rows: rows
-        ) is not { } row) {
-            return rows;
+    // The row-level rebase the mutation-level overload and a batch's workspace share: `row` is the written row as
+    // composed, `originalRow` the same row before the write (null when the write declared it), `cellKey` null for
+    // a whole-row write. Returns `row` itself when nothing it carries needed re-basing.
+    private static WorldStateRow RebaseCellTraits(WorldDefinition original, WorldStateRow? originalRow, WorldStateRow row, string? cellKey, ulong tick) {
+        var epoch = unchecked((long)tick);
+        var rebasedRow = row;
+        var addressesSlot = ((cellKey is null) || string.Equals(
+            a: cellKey,
+            b: WorldStateRow.SlotKey,
+            comparisonType: StringComparison.Ordinal
+        ));
+
+        if (addressesSlot) {
+            if (row.Advance is { } rowAdvance) {
+                rebasedRow = (rebasedRow with { Advance = (rowAdvance with { EpochTick = epoch }) });
+            }
+
+            if (row.Dynamics is { } rowDynamics) {
+                rebasedRow = (rebasedRow with {
+                    Dynamics = RebaseDynamics(
+                    candidateTrait: rowDynamics,
+                    newTarget: (StateRows.FindCell(
+                        cells: row.Cells,
+                        key: WorldStateRow.SlotKey
+                    )?.Value ?? 0L),
+                    original: original,
+                    originalCell: StateRows.FindCell(
+                        cells: originalRow?.Cells,
+                        key: WorldStateRow.SlotKey
+                    ),
+                    originalRow: originalRow,
+                    tick: tick
+                ),
+                });
+            }
         }
 
-        var cellKey = WorldCellName.Parse(candidate: key);
-        var cells = (row.Cells ?? []);
+        var cells = (rebasedRow.Cells ?? []);
+        List<StateCell>? rebasedCells = null;
 
         for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
 
             if (
-                (cell.Key != cellKey) ||
-                (cell.Advance is not { } advance)
+                (cellKey is not null) &&
+                !string.Equals(
+                a: cell.Key.Value,
+                b: cellKey,
+                comparisonType: StringComparison.Ordinal
+            )
             ) {
                 continue;
             }
 
-            var rebasedCells = new List<WorldStateCell>(collection: cells);
+            if (RebaseOneCell(
+                cell: cell,
+                definition: original,
+                row: originalRow,
+                tick: tick
+            ) is not { } rebased) {
+                continue;
+            }
 
-            rebasedCells[index] = (cell with { Advance = (advance with { EpochTick = unchecked((long)tick) }) });
-
-            return Upsert(
-                list: rows,
-                item: (row with { Cells = rebasedCells }),
-                keyOf: static (WorldStateRow r) => r.Name
-            );
+            rebasedCells ??= new List<StateCell>(collection: cells);
+            rebasedCells[index] = rebased;
         }
 
-        return rows;
+        if (rebasedCells is not null) {
+            rebasedRow = (rebasedRow with { Cells = rebasedCells });
+        }
+
+        return rebasedRow;
+    }
+    // Rebases ONE cell's Advance/Dynamics trait to `tick`, against the PRE-write `row`/`definition` — the shared
+    // body RebaseCellTraits' per-cell loop and RebaseKeyedCellTraits' single-cell arm both perform. Returns null
+    // for a cell that carries neither trait, so a caller's own loop can skip an untouched cell in one check.
+    private static StateCell? RebaseOneCell(StateCell cell, WorldStateRow? row, WorldDefinition definition, ulong tick) {
+        var advance = cell.Advance;
+        var dynamics = cell.Dynamics;
+        var changed = false;
+
+        if (advance is { } cellAdvance) {
+            advance = (cellAdvance with { EpochTick = unchecked((long)tick) });
+            changed = true;
+        }
+
+        if (dynamics is { } cellDynamics) {
+            dynamics = RebaseDynamics(
+                candidateTrait: cellDynamics,
+                newTarget: cell.Value,
+                original: definition,
+                originalCell: StateRows.FindCell(
+                    cells: row?.Cells,
+                    key: cell.Key
+                ),
+                originalRow: row,
+                tick: tick
+            );
+            changed = true;
+        }
+
+        return (changed ? (cell with { Advance = advance, Dynamics = dynamics }) : null);
+    }
+    // The write-side counterpart of WorldStateReader.TryEvaluateDynamics: a cell's StateDynamics trait is
+    // rebased, never replaced wholesale, by an explicit write to its own truth value. The trait's Y0/V0 become the
+    // eased sample the OLD trait (against original/originalCell's own PRE-write target) would report AT `tick` —
+    // never the raw write, so the follower keeps chasing from wherever it actually was — plus a Retarget velocity
+    // kick for the target's own jump from the old truth to `newTarget`, both computed through the SAME dynamics row
+    // that produced the sample. A cell that had no PRIOR active trait (originalRow/originalCell absent, or its own
+    // trait unresolvable) keeps whatever Y0/V0 candidateTrait's own payload carries — there is nothing yet to ease
+    // from — and only re-bases the epoch, mirroring StateAdvance's own rebase rule.
+    private static StateDynamics? RebaseDynamics(
+        StateDynamics? candidateTrait,
+        WorldDefinition original,
+        WorldStateRow? originalRow,
+        StateCell? originalCell,
+        long newTarget,
+        ulong tick
+    ) {
+        if (candidateTrait is null) {
+            return null;
+        }
+
+        var epoch = unchecked((long)tick);
+
+        if (
+            (originalRow is null) ||
+            (originalCell is null) ||
+            !WorldStateReader.TryEvaluateDynamics(
+            cell: originalCell,
+            definition: original,
+            row: originalRow,
+            sample: out var sample,
+            tick: tick,
+            trait: out var originalTrait
+        ) ||
+            (StateRows.FindDynamics(
+            dynamics: original.Dynamics,
+            name: originalTrait.Row
+        ) is not { } dynamicsRow)
+        ) {
+            return (candidateTrait with { EpochTick = epoch });
+        }
+
+        var kicked = dynamicsRow.Compiled.Retarget(
+            current: sample,
+            newTarget: StateReader.DynamicsRowRawToFixed(
+                raw: newTarget,
+                row: originalRow
+            ),
+            oldTarget: StateReader.DynamicsRowRawToFixed(
+                row: originalRow,
+                raw: originalCell.Value
+            )
+        );
+
+        return new StateDynamics(
+            Row: candidateTrait.Row,
+            Y0: StateReader.DynamicsFixedToTraitRaw(value: sample.Value),
+            V0: StateReader.DynamicsFixedToTraitRaw(value: kicked.Velocity),
+            EpochTick: epoch
+        );
     }
     // Drop the first row whose key matches — reports whether a row was actually removed.
     private static bool Remove<T, TKey>(IReadOnlyList<T> list, TKey key, Func<T, TKey> keyOf, out IReadOnlyList<T> result) {
@@ -364,6 +461,16 @@ public sealed partial class WorldServer {
         WorldMutation.Generate m => GrantSubject.State(name: m.Row),
         _ => null,
     };
+    // The row-scoped Mutate subject a creations/placements mutation names, for gate 1's disjunction — null for every
+    // other mutation kind (the section hold is then the only way through). The id is the mutation's own target key,
+    // the same key the compose arm upserts/removes by, so a row grant admits exactly the row it names.
+    private static GrantSubject? RowScopedMutateSubjectOf(WorldMutation mutation) => mutation switch {
+        WorldMutation.UpsertCreation m => GrantSubject.Creation(id: m.Creation.Id.Value),
+        WorldMutation.RemoveCreation m => GrantSubject.Creation(id: m.Id),
+        WorldMutation.UpsertPlacement m => GrantSubject.Placement(id: m.Placement.Id),
+        WorldMutation.RemovePlacement m => GrantSubject.Placement(id: m.Id),
+        _ => null,
+    };
     // The world-document section a mutation targets — the Mutate-capability subject it is checked against. One section
     // per mutation kind (coarse, section-keyed — a genre world adds sections + kinds, never changes this mapping).
     private static WorldSection SectionOf(WorldMutation mutation) => mutation switch {
@@ -372,7 +479,7 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertCamera or WorldMutation.RemoveCamera => WorldSection.Cameras,
         WorldMutation.SetSpawns => WorldSection.Spawns,
         WorldMutation.SetMotion => WorldSection.Motion,
-        WorldMutation.SetPopulationDefaults => WorldSection.Population,
+        WorldMutation.SetPopulationDefaults or WorldMutation.SetPopulationDistribution or WorldMutation.SetPopulationCensus => WorldSection.Population,
         WorldMutation.SetRenderDefaults => WorldSection.Render,
         WorldMutation.UpsertAddon or WorldMutation.RemoveAddon => WorldSection.Addons,
         WorldMutation.UpsertBindingOverlay or WorldMutation.RemoveBindingOverlay => WorldSection.Bindings,
@@ -385,23 +492,24 @@ public sealed partial class WorldServer {
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
-        WorldMutation.SetViewDefaults or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
-        WorldMutation.SetPlayerDefaults => WorldSection.PlayerDefaults,
+        WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
+        WorldMutation.SetPlayerDefaults or WorldMutation.SetPlayerSeatLook => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
-        WorldMutation.UpsertScreenLink or WorldMutation.RemoveScreenLink => WorldSection.Links,
+        WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
+        WorldMutation.UpsertCurve or WorldMutation.RemoveCurve => WorldSection.Curves,
         WorldMutation.UpsertGrant or WorldMutation.RemoveGrant => WorldSection.Grants,
         WorldMutation.UpsertHudPanel or WorldMutation.RemoveHudPanel or WorldMutation.UpsertHudElement or WorldMutation.RemoveHudElement or WorldMutation.SetHudDefaults => WorldSection.Hud,
         // Generate's OBSERVABLE effect is a state write, so it shares the state section's coarse hold; its narrower
         // authority is the SAME row-scoped Edit/state:<row> hold every other state write takes, never a second
         // section.
-        WorldMutation.UpsertStateRow or WorldMutation.RemoveStateRow or WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.Generate => WorldSection.State,
+        WorldMutation.UpsertStateRow or WorldMutation.RemoveStateRow or WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.Generate or WorldMutation.TransformState => WorldSection.State,
         WorldMutation.SetInputHold => WorldSection.InputHold,
+        WorldMutation.Batch => WorldSection.State,
         WorldMutation.UpsertWorldRule or WorldMutation.RemoveWorldRule => WorldSection.Rules,
         WorldMutation.UpsertGroupKind or WorldMutation.RemoveGroupKind or WorldMutation.FormGroup or WorldMutation.JoinGroup or WorldMutation.LeaveGroup or WorldMutation.KickMember
             or WorldMutation.OfferOwnership or WorldMutation.SettleOwnership => WorldSection.Groups,
         WorldMutation.SetProperty => WorldSection.Properties,
         WorldMutation.UpsertInteraction or WorldMutation.RemoveInteraction => WorldSection.Interactions,
-        WorldMutation.CreateMarketListing or WorldMutation.PlaceMarketBid or WorldMutation.BuyoutMarketListing or WorldMutation.CancelMarketListing or WorldMutation.SettleMarketListing or WorldMutation.PruneMarketListings => WorldSection.Market,
         // No silent fallback: a new mutation kind added without its own arm would otherwise inherit Kits authority. A
         // missing arm throws the first time that kind is mapped — surfaced loudly at runtime rather than mis-authorized.
         _ => throw new ArgumentOutOfRangeException(
@@ -411,10 +519,15 @@ public sealed partial class WorldServer {
     ),
     };
     /// <summary>Owns canonical document validation and authored-hash matching at the mutation composition boundary.</summary>
+    // `hash` is the row's AUTHORED hash lane (a creation's HashRaw, a tune/patch's stored Hash) — never a computed
+    // property, whose canonicalize-on-read would throw on a hostile document in the caller's own argument list,
+    // before this boundary's refusal could run. Null means the submitter carried none: the canonical hash is adopted
+    // (an absent hash is trivially self-consistent — WorldPrototype.Hash's own rule), while a CARRIED hash must equal
+    // the one this pipeline computes.
     private static bool TryCanonicalizeDocument<TDocument>(
         TDocument document,
         string id,
-        string hash,
+        string? hash,
         string kind,
         Func<TDocument, string, Puck.Assets.Documents.CanonicalDocument<TDocument>> canonicalize,
         out TDocument canonicalDocument,
@@ -426,8 +539,65 @@ public sealed partial class WorldServer {
                 arg1: document,
                 arg2: id
             );
-        } catch (Puck.Assets.Documents.DocumentValidationException exception) {
+        } catch (Exception exception) when ((exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException)) {
+            // The canonicalizer refuses a malformed document with DocumentValidationException; an unresolved
+            // `state.` reference inside the document surfaces as InvalidOperationException from the value's own
+            // read. Both are the submitter's document being inadmissible at this boundary — a loud refusal, never a
+            // tick-killing throw (this arm decides submissions from remote travelers and peers).
             canonicalDocument = document;
+            reason = exception.Message.ReplaceLineEndings(replacementText: " ");
+
+            return false;
+        }
+
+        if (
+            (hash is not null) &&
+            !string.Equals(
+            a: hash,
+            b: canonical.Hash,
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            canonicalDocument = document;
+            reason = $"{kind} '{id}' hash '{hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
+
+            return false;
+        }
+
+        canonicalDocument = canonical.Document;
+        reason = string.Empty;
+
+        return true;
+    }
+
+    /// <summary>Owns load + canonical hash verification for a name/source/hash reference row at the mutation
+    /// composition boundary (<see cref="WorldTune"/>/<see cref="WorldPatch"/>) — the referenced twin of <see
+    /// cref="TryCanonicalizeDocument{TDocument}"/>: the row carries no document to write back, so a successful
+    /// verify only proves the row is admissible, never returns a payload.</summary>
+    private delegate bool AssetRowLoader<in TRow, TDocument>(TRow row, out TDocument? document, out string? error);
+
+    private static bool TryVerifyReferencedAsset<TRow, TDocument>(
+        TRow row,
+        string id,
+        string hash,
+        string kind,
+        AssetRowLoader<TRow, TDocument> tryLoad,
+        Func<TDocument, string, Puck.Assets.Documents.CanonicalDocument<TDocument>> canonicalize,
+        out string reason) where TDocument : class {
+        if (!tryLoad(row, out var document, out var loadError)) {
+            reason = $"{kind} '{id}': {loadError}";
+
+            return false;
+        }
+
+        Puck.Assets.Documents.CanonicalDocument<TDocument> canonical;
+
+        try {
+            canonical = canonicalize(
+                arg1: document!,
+                arg2: id
+            );
+        } catch (Exception exception) when ((exception is Puck.Assets.Documents.DocumentValidationException or InvalidOperationException)) {
             reason = exception.Message.ReplaceLineEndings(replacementText: " ");
 
             return false;
@@ -438,13 +608,11 @@ public sealed partial class WorldServer {
             b: canonical.Hash,
             comparisonType: StringComparison.Ordinal
         )) {
-            canonicalDocument = document;
             reason = $"{kind} '{id}' hash '{hash}' does not match the canonical sha256 '{canonical.Hash}' — a hash must come from the canonicalize pipeline";
 
             return false;
         }
 
-        canonicalDocument = canonical.Document;
         reason = string.Empty;
 
         return true;
@@ -458,46 +626,144 @@ public sealed partial class WorldServer {
     // never silently compose against tick zero. `evictedKey` is non-null only when an UpsertStateCell write against an
     // Evicts row dropped its oldest cell to make room — the same pure function every re-composition (live apply,
     // world.undo's journal replay) runs, so the reported victim and the actually-dropped cell can never disagree.
-    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey) {
+    private static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns = null) {
         if (!TryComposeCore(
-            current: current,
-            mutation: mutation,
-            tick: tick,
-            instanceIdentity: instanceIdentity,
             candidate: out candidate,
+            current: current,
+            evictedKey: out evictedKey,
+            instanceIdentity: instanceIdentity,
+            mutation: mutation,
             reason: out reason,
-            evictedKey: out evictedKey
+            tick: tick,
+            patterns: patterns
         )) {
             return false;
         }
 
-        var stateRow = mutation switch {
-            WorldMutation.UpsertStateRow value => value.Row.Name.Value,
-            WorldMutation.RemoveStateRow value => value.Name,
-            WorldMutation.UpsertStateCell value => value.Row,
-            WorldMutation.RemoveStateCell value => value.Row,
-            _ => null,
-        };
+        var stateRow = StateRowOf(mutation: mutation);
 
-        return (
-            (stateRow is null) ||
-            WorldStateDocumentValues.TryRefresh(
+        if (
+            (stateRow is not null) &&
+            !WorldStateDocumentValues.TryRefresh(
                 definition: candidate,
-                rowName: stateRow,
+                reason: out reason,
                 refreshed: out candidate,
-                reason: out reason
+                rowName: stateRow
             )
-        );
-    }
+        ) {
+            return false;
+        }
 
-    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out WorldCellName? evictedKey) {
+        // Every accepted mutation recomposes a derived board's cells from its tokens/codes rows' CURRENT values, so
+        // the candidate this call hands back — the one validation checks and the journal records — already carries
+        // them; a hypothetical evaluation's own frame recomputes the identical answer incrementally instead (see
+        // StateFrame), never through this whole-document pass.
+        candidate = RecomposeDerivedBoards(definition: candidate, previous: current);
+
+        return true;
+    }
+    // The one recompute a document-level derived board gets: for every CellsOf row declaring Inverse, its cells
+    // become exactly DerivedBoards.Compose's answer over the candidate's OWN current tokens/codes rows — so a
+    // mutation that moves a token, and one that never touches either row, both leave every derived board correct.
+    private static WorldDefinition RecomposeDerivedBoards(WorldDefinition definition, WorldDefinition? previous = null) {
+        var rows = definition.State;
+        List<WorldStateRow>? recomposed = null;
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+
+            if ((row.EffectiveDomain is not StateDomain.CellsOf board) || (row.Inverse is not { } inverse)) {
+                continue;
+            }
+            // A compose that left both source rows as the very objects the installed document holds cannot have
+            // changed the derivation; only an install with no prior document recomputes unconditionally.
+            if ((previous is not null) && SameSourceRows(previous: previous.State, current: rows, inverse: inverse)) {
+                continue;
+            }
+            if (WorldTopologyCompilation.Find(definition, board.Topology) is not { } topology) {
+                continue;
+            }
+
+            var derived = DerivedBoards.Compose(rows: rows, inverse: inverse, topology: topology);
+
+            if (SameCells(left: row.Cells, right: derived)) {
+                continue;
+            }
+
+            recomposed ??= new List<WorldStateRow>(collection: rows);
+            recomposed[index] = (row with { Cells = derived });
+        }
+
+        return ((recomposed is null) ? definition : definition.WithWorldState(rows: recomposed));
+    }
+    private static bool SameSourceRows(IReadOnlyList<WorldStateRow> previous, IReadOnlyList<WorldStateRow> current, StateInverse inverse) =>
+        ReferenceEquals(objA: WorldDefinitionRows.FindStateRow(rows: previous, name: inverse.Tokens.Value), objB: WorldDefinitionRows.FindStateRow(rows: current, name: inverse.Tokens.Value)) &&
+        ReferenceEquals(objA: WorldDefinitionRows.FindStateRow(rows: previous, name: inverse.Codes.Value), objB: WorldDefinitionRows.FindStateRow(rows: current, name: inverse.Codes.Value));
+    private static bool SameCells(IReadOnlyList<StateCell>? left, IReadOnlyList<StateCell> right) {
+        var leftCells = (left ?? []);
+
+        if (leftCells.Count != right.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < leftCells.Count); index++) {
+            if ((leftCells[index].Key != right[index].Key) || (leftCells[index].Value != right[index].Value)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // The state row a state mutation writes, or null for every other kind — the row whose bound document values
+    // TryRefresh re-resolves.
+    private static string? StateRowOf(WorldMutation mutation) => mutation switch {
+        WorldMutation.UpsertStateRow value => value.Row.Name.Value,
+        WorldMutation.RemoveStateRow value => value.Name,
+        WorldMutation.UpsertStateCell value => value.Row,
+        WorldMutation.RemoveStateCell value => value.Row,
+        _ => null,
+    };
+    // A state write re-resolves every document value bound to its row; when one of those values is a
+    // look-assignment row name, the population's look indices are derived from it and must re-resolve too —
+    // KEEP IN SYNC with AffectsPopulation, which lists the mutation KINDS that rebuild.
+    private bool RefreshesLookAssignment(WorldMutation mutation, WorldDefinition candidate) {
+        if (StateRowOf(mutation: mutation) is { } row) {
+            return WorldStateDocumentValues.ReferencesRow(definition: candidate, graph: candidate.LookAssignment, rowName: row);
+        }
+
+        // A transform, a draw, or a batch touches the rows it names; any one of them bound into the look graph
+        // refreshes it. One walk collects what the look graph binds; the touched rows are then set lookups.
+        m_touchedRows.Clear();
+
+        if (!TryCollectStateMutationRowNames(mutation: mutation, names: m_touchedRows, reason: out _) || (m_touchedRows.Count == 0)) {
+            return false;
+        }
+
+        m_lookReferencedRows.Clear();
+        WorldStateDocumentValues.CollectReferencedRows(graph: candidate.LookAssignment, rows: m_lookReferencedRows);
+
+        if (m_lookReferencedRows.Count == 0) {
+            return false;
+        }
+
+        foreach (var name in m_touchedRows) {
+            if (m_lookReferencedRows.Contains(item: name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    // Scratch for the rows the look graph binds; the step is single-threaded, so one set serves every door.
+    private readonly HashSet<string> m_lookReferencedRows = new(comparer: StringComparer.Ordinal);
+    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, CompiledPatterns? patterns = null) {
         reason = string.Empty;
         evictedKey = null;
 
         switch (mutation) {
             case WorldMutation.UpsertKit m:
                 candidate = (current with {
-                    KitsRaw = Upsert(
+                    KitRowsRaw = Upsert(
                     list: current.Kits,
                     item: m.Kit,
                     keyOf: static kit => kit.Name
@@ -518,7 +784,7 @@ public sealed partial class WorldServer {
                     return false;
                 }
 
-                candidate = (current with { KitsRaw = kits });
+                candidate = (current with { KitRowsRaw = kits });
 
                 return true;
             case WorldMutation.SetDefaultSeatKit m:
@@ -593,6 +859,27 @@ public sealed partial class WorldServer {
                 candidate = (current with { PopulationRaw = m.Population });
 
                 return true;
+            case WorldMutation.Batch batch:
+                return TryComposeBatch(
+                    batch: batch,
+                    candidate: out candidate,
+                    current: current,
+                    evictedKey: out evictedKey,
+                    instanceIdentity: instanceIdentity,
+                    reason: out reason,
+                    tick: tick,
+                    patterns: patterns
+                );
+            // The field-scoped population and views edits compose against the row AS IT STANDS HERE — the pending
+            // candidate — so two console verbs queued in one tick each keep the other's field.
+            case WorldMutation.SetPopulationDistribution m:
+                candidate = (current with { PopulationRaw = (current.Population with { DistributionRaw = m.Distribution }) });
+
+                return true;
+            case WorldMutation.SetPopulationCensus m:
+                candidate = (current with { PopulationRaw = (current.Population with { SeatActivationRaw = m.SeatActivation, NetworkPlayers = m.NetworkPlayers }) });
+
+                return true;
             case WorldMutation.SetRenderDefaults m:
                 candidate = (current with { RenderRaw = m.Render });
 
@@ -627,9 +914,9 @@ public sealed partial class WorldServer {
                     if (!TryCanonicalizeDocument(
                         document: m.Creation.Document,
                         id: m.Creation.Id,
-                        hash: m.Creation.Hash,
+                        hash: m.Creation.HashRaw,
                         kind: "creation",
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+                        canonicalize: static (document, source) => Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
@@ -658,7 +945,7 @@ public sealed partial class WorldServer {
 
                     foreach (var placement in current.Placements) {
                         if (string.Equals(
-                            a: placement.CreationId,
+                            a: placement.PrototypeId,
                             b: m.Id,
                             comparisonType: StringComparison.Ordinal
                         )) {
@@ -690,15 +977,12 @@ public sealed partial class WorldServer {
                     return true;
                 }
             case WorldMutation.UpsertPlacement m:
-                candidate = (current with {
-                    PlacementsRaw = Upsert(
-                    list: current.Placements,
-                    item: m.Placement,
-                    keyOf: static placement => placement.Id
-                ),
-                });
-
-                return true;
+                return TryComposeUpsertPlacement(
+                    candidate: out candidate,
+                    current: current,
+                    mutation: m,
+                    reason: out reason
+                );
             case WorldMutation.RemovePlacement m: {
                     // The no-cascade guard: a placement a speaker anchors to rejects loudly naming the dependents, never
                     // silently unanchoring the speaker (full-document revalidation would also catch the dangling anchor,
@@ -725,7 +1009,7 @@ public sealed partial class WorldServer {
                         return false;
                     }
 
-                    candidate = (current with { PlacementsRaw = placements });
+                    candidate = (current with { PlacementRowsRaw = placements });
 
                     return true;
                 }
@@ -756,16 +1040,16 @@ public sealed partial class WorldServer {
 
                 return true;
             case WorldMutation.UpsertTune m: {
-                    if (!TryCanonicalizeDocument(
-                        document: m.Tune.Document,
-                        id: m.Tune.Id,
+                    if (!TryVerifyReferencedAsset<WorldTune, Puck.Assets.Documents.AudioDocument>(
+                        row: m.Tune,
+                        id: m.Tune.Name,
                         hash: m.Tune.Hash,
                         kind: "tune",
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.AudioCanonicalizer.Canonicalize(
+                        tryLoad: WorldAssetRowLoader.TryLoadTune,
+                        canonicalize: static (document, source) => Puck.Assets.Documents.AudioCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
-                        canonicalDocument: out var canonicalDocument,
                         reason: out reason
                     )) {
                         candidate = current;
@@ -776,8 +1060,8 @@ public sealed partial class WorldServer {
                     candidate = (current with {
                         TunesRaw = Upsert(
                         list: current.Tunes,
-                        item: (m.Tune with { Document = canonicalDocument }),
-                        keyOf: static tune => tune.Id
+                        item: m.Tune,
+                        keyOf: static tune => tune.Name
                     ),
                     });
 
@@ -788,24 +1072,24 @@ public sealed partial class WorldServer {
                         speakers: current.Speakers,
                         matches: source => ((source is WorldSpeakerSource.Tune tune) && string.Equals(
                             a: tune.TuneId,
-                            b: m.Id,
+                            b: m.Name,
                             comparisonType: StringComparison.Ordinal
                         ))
                     ) is { } dependents) {
                         candidate = current;
-                        reason = $"tune '{m.Id}' feeds speaker(s) {dependents} — remove or re-source them first";
+                        reason = $"tune '{m.Name}' feeds speaker(s) {dependents} — remove or re-source them first";
 
                         return false;
                     }
 
                     if (!Remove(
                         list: current.Tunes,
-                        key: m.Id,
-                        keyOf: static tune => tune.Id,
+                        key: m.Name,
+                        keyOf: static tune => tune.Name,
                         result: out var tunes
                     )) {
                         candidate = current;
-                        reason = $"no tune with id '{m.Id}'";
+                        reason = $"no tune named '{m.Name}'";
 
                         return false;
                     }
@@ -815,16 +1099,16 @@ public sealed partial class WorldServer {
                     return true;
                 }
             case WorldMutation.UpsertPatch m: {
-                    if (!TryCanonicalizeDocument(
-                        document: m.Patch.Document,
-                        id: m.Patch.Id,
+                    if (!TryVerifyReferencedAsset<WorldPatch, Puck.Assets.Documents.SynthPatchDocument>(
+                        row: m.Patch,
+                        id: m.Patch.Name,
                         hash: m.Patch.Hash,
                         kind: "patch",
-                        canonicalize: static (document, source) => Puck.Forge.Authoring.SynthPatchCanonicalizer.Canonicalize(
+                        tryLoad: WorldAssetRowLoader.TryLoadPatch,
+                        canonicalize: static (document, source) => Puck.Assets.Documents.SynthPatchCanonicalizer.Canonicalize(
                             document: document,
                             source: source
                         ),
-                        canonicalDocument: out var canonicalDocument,
                         reason: out reason
                     )) {
                         candidate = current;
@@ -835,8 +1119,8 @@ public sealed partial class WorldServer {
                     candidate = (current with {
                         PatchesRaw = Upsert(
                         list: current.Patches,
-                        item: (m.Patch with { Document = canonicalDocument }),
-                        keyOf: static patch => patch.Id
+                        item: m.Patch,
+                        keyOf: static patch => patch.Name
                     ),
                     });
 
@@ -845,22 +1129,22 @@ public sealed partial class WorldServer {
             case WorldMutation.RemovePatch m: {
                     if (DescribePatchDependents(
                         current: current,
-                        patchId: m.Id
+                        patchId: m.Name
                     ) is { } dependents) {
                         candidate = current;
-                        reason = $"patch '{m.Id}' is referenced by {dependents} — remove or re-source them first";
+                        reason = $"patch '{m.Name}' is referenced by {dependents} — remove or re-source them first";
 
                         return false;
                     }
 
                     if (!Remove(
                         list: current.Patches,
-                        key: m.Id,
-                        keyOf: static patch => patch.Id,
+                        key: m.Name,
+                        keyOf: static patch => patch.Name,
                         result: out var patches
                     )) {
                         candidate = current;
-                        reason = $"no patch with id '{m.Id}'";
+                        reason = $"no patch named '{m.Name}'";
 
                         return false;
                     }
@@ -899,8 +1183,20 @@ public sealed partial class WorldServer {
                 candidate = (current with { ViewsRaw = m.Views });
 
                 return true;
+            case WorldMutation.SetViewSeatRig m:
+                candidate = (current with { ViewsRaw = (current.Views with { SeatRig = m.SeatRig }) });
+
+                return true;
+            case WorldMutation.SetViewSeatControl m:
+                candidate = (current with { ViewsRaw = (current.Views with { SeatControl = m.SeatControl }) });
+
+                return true;
             case WorldMutation.SetPlayerDefaults m:
                 candidate = (current with { PlayerDefaultsRaw = m.Defaults });
+
+                return true;
+            case WorldMutation.SetPlayerSeatLook m:
+                candidate = (current with { PlayerDefaultsRaw = (current.PlayerDefaults with { SeatLookRaw = m.SeatLook }) });
 
                 return true;
             case WorldMutation.UpsertViewLayout m: {
@@ -955,7 +1251,7 @@ public sealed partial class WorldServer {
                 return true;
             case WorldMutation.UpsertLook m:
                 candidate = (current with {
-                    LooksRaw = Upsert(
+                    LookRowsRaw = Upsert(
                     list: current.Looks,
                     item: m.Look,
                     keyOf: static look => look.Name.Value
@@ -976,37 +1272,63 @@ public sealed partial class WorldServer {
                     return false;
                 }
 
-                candidate = (current with { LooksRaw = looks });
+                candidate = (current with { LookRowsRaw = looks });
 
                 return true;
             case WorldMutation.SetLookAssignment m:
                 candidate = (current with { LookAssignmentRaw = m.Assignment });
 
                 return true;
-            case WorldMutation.UpsertScreenLink m:
+            case WorldMutation.UpsertDynamics m:
                 candidate = (current with {
-                    LinksRaw = Upsert(
-                    list: current.Links,
-                    item: m.Link,
-                    keyOf: static link => link.Name
+                    DynamicsRaw = Upsert(
+                    list: current.Dynamics,
+                    item: m.Row,
+                    keyOf: static row => row.Name
                 ),
                 });
 
                 return true;
-            case WorldMutation.RemoveScreenLink m:
+            case WorldMutation.RemoveDynamics m:
                 if (!Remove(
-                    list: current.Links,
+                    list: current.Dynamics,
                     key: m.Name,
-                    keyOf: static link => link.Name,
-                    result: out var links
+                    keyOf: static row => row.Name,
+                    result: out var dynamics
                 )) {
                     candidate = current;
-                    reason = $"no cable link named '{m.Name}'";
+                    reason = $"no dynamics row named '{m.Name}'";
 
                     return false;
                 }
 
-                candidate = (current with { LinksRaw = links });
+                candidate = (current with { DynamicsRaw = dynamics });
+
+                return true;
+            case WorldMutation.UpsertCurve m:
+                candidate = (current with {
+                    CurvesRaw = Upsert(
+                    list: current.Curves,
+                    item: m.Row,
+                    keyOf: static row => row.Name
+                ),
+                });
+
+                return true;
+            case WorldMutation.RemoveCurve m:
+                if (!Remove(
+                    list: current.Curves,
+                    key: m.Name,
+                    keyOf: static row => row.Name,
+                    result: out var curves
+                )) {
+                    candidate = current;
+                    reason = $"no curves row named '{m.Name}'";
+
+                    return false;
+                }
+
+                candidate = (current with { CurvesRaw = curves });
 
                 return true;
             case WorldMutation.UpsertGrant m:
@@ -1135,7 +1457,35 @@ public sealed partial class WorldServer {
                 candidate = (current with { HudRaw = (current.Hud with { Defaults = m.Defaults }) });
 
                 return true;
+            case WorldMutation.TransformState m:
+                if (m.Principal != WorldPrincipal.World && WorldStateTransforms.Subjects(m.Transform).Any(name =>
+                    WorldDefinitionRows.FindStateRow(current.State, name)?.PhaseOf is { } required && m.Guard?.Row != required)) {
+                    candidate = current;
+                    reason = "operation requires its declared phase guard";
+                    return false;
+                }
+                if (m.Guard is { } guard && !WorldStateTransforms.CanAct(current, guard, m.Principal)) {
+                    candidate = current;
+                    reason = "phase admission refused";
+                    return false;
+                }
+                if (!WorldStateTransforms.TryApply(current, m.Transform, m.Principal, tick, instanceIdentity, out candidate, out reason, patterns)) {
+                    return false;
+                }
+                // A matching guard both admits and completes: advancing the phase row's generation is the guard's
+                // whole job now that turn order, rounds, and readiness are ordinary rows a world's rules author.
+                if (m.Guard is { } applied) {
+                    candidate = WorldStateTransforms.Advance(candidate, applied.Row);
+                }
+                return true;
             case WorldMutation.UpsertStateRow m:
+                if (WorldDefinitionRows.FindStateRow(rows: current.State, name: m.Row.Name.Value) is { Inverse: { } existingInverse }) {
+                    candidate = current;
+                    reason = $"state row '{m.Row.Name}' is a derived board (inverse names '{existingInverse.Tokens}'/'{existingInverse.Codes}') — write those rows instead; the engine recomputes '{m.Row.Name}' on install";
+
+                    return false;
+                }
+
                 candidate = current.WithWorldState(rows: Upsert(
                     list: current.State,
                     item: m.Row,
@@ -1159,229 +1509,46 @@ public sealed partial class WorldServer {
                 candidate = current.WithWorldState(rows: stateRows);
 
                 return true;
-            case WorldMutation.UpsertStateCell m: {
-                    // The ONE door: every row-existence and row-KIND decision this write depends on is asked here, against
-                    // the CANDIDATE this batch has built so far — never at the console verb, which cannot know whether a
-                    // same-batch UpsertStateRow ahead of this one has already declared (or redeclared the kind of) the row
-                    // it names.
-                    if (WorldDefinitionRows.FindStateRow(
-                        rows: current.State,
-                        name: m.Row
-                    ) is not { } row) {
-                        candidate = current;
-                        reason = $"no state row named '{m.Row}' — declare it first with world.row.set state <json>";
+            case WorldMutation.UpsertStateCell m:
+                if (!TryComposeCellUpsert(
+                    composed: out var upsertedRow,
+                    rows: current.State,
+                    evictedKey: out evictedKey,
+                    mutation: m,
+                    reason: out reason,
+                    tick: tick
+                )) {
+                    candidate = current;
 
-                        return false;
-                    }
-
-                    if (!WorldCellName.TryParse(
-                        candidate: m.Key,
-                        name: out var cellKey,
-                        reason: out var keyReason
-                    )) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell key '{m.Key}' {keyReason}";
-
-                        return false;
-                    }
-
-                    // Whether THIS write is a text write is a fact of the WRITE, not the row — a text write always
-                    // carries a non-null Text (even ""), a numeric one never does. Asking it this way
-                    // (rather than switching on row.Kind) is what lets a kind-mismatched write refuse BY NAME instead of
-                    // silently composing against the wrong field: a numeric write against a text row would
-                    // otherwise fall into this arm with Text null and overwrite the cell with an empty string.
-                    var isTextWrite = (m.Text is not null);
-
-                    // A TEXT row's cell carries a literal string, never a numeric operand: world.state.cell.set's text
-                    // arm is this shape's ONE ingress, always submitting Kind=Set, so the Add/advance machinery below never applies.
-                    // The whole upsert-or-append-plus-eviction composition (including the reserved-key rule — a text row
-                    // is never a generator, so its only legitimate reserved key is the slot cell) delegates to
-                    // WorldStateCellWriter — the SHARED pure function an owned-identity document write (which has no
-                    // ordered mutation domain of its own) also runs, so the two can never disagree about a victim or a
-                    // reserved-cell refusal. TryComposeTextCell itself refuses BY NAME when row.Kind is not Text, which is
-                    // this arm's ONE check for "a text operand against a numeric/bool row".
-                    if (isTextWrite) {
-                        if (!WorldStateCellWriter.TryComposeTextCell(
-                            row: row,
-                            key: cellKey,
-                            text: m.Text!,
-                            cells: out var textCells,
-                            evictedKey: out evictedKey,
-                            reason: out var composeTextReason
-                        )) {
-                            candidate = current;
-                            reason = $"state row '{m.Row}' cell '{m.Key}' {composeTextReason}";
-
-                            return false;
-                        }
-
-                        candidate = current.WithWorldState(rows: Upsert(
-                            list: current.State,
-                            item: (row with { Cells = textCells }),
-                            keyOf: static row => row.Name
-                        ));
-
-                        return true;
-                    }
-
-                    // The reverse kind mismatch: a numeric operand against a Text-kind row. This, and the bool+add
-                    // refusal below, are the two kind-dependent REFUSALS the console verb used to ask before submitting —
-                    // moved here so they see the same candidate row the existence check above just resolved, rather than
-                    // whatever the live definition happened to hold at text-submit time.
-                    if (row.Kind == CellKind.Text) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' is text-kind and takes a text operand, never a numeric one";
-
-                        return false;
-                    }
-
-                    if (
-                        (m.Kind == WorldDocumentWriteKind.Add) &&
-                        (row.Kind == CellKind.Bool)
-                    ) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' — 'add' is refused on a bool-kind row";
-
-                        return false;
-                    }
-
-                    // The honest encoding for a payload whose SHAPE depends on the row's kind: a console write carries
-                    // the un-interpreted wire token (RawToken) because it cannot know Fixed-vs-Int-vs-Bool before this
-                    // row's kind resolves against the candidate; a caller that already knows the kind (the rule-effect
-                    // engine, which reads the destination row itself before submitting) carries the resolved Value
-                    // directly. See WorldMutation.UpsertStateCell.RawToken's remarks.
-                    long operand;
-
-                    if (m.RawToken is { } rawToken) {
-                        if (!WorldStateCellWriter.TryParseNumericToken(
-                            kind: row.Kind,
-                            token: rawToken,
-                            value: out operand,
-                            reason: out var tokenReason
-                        )) {
-                            candidate = current;
-                            reason = $"state row '{m.Row}' cell '{m.Key}' {tokenReason}";
-
-                            return false;
-                        }
-                    } else {
-                        operand = m.Value;
-                    }
-
-                    // The Add operand comes from WorldStateReader — the SAME read every gate, binding and read-back runs —
-                    // rather than from the stored cell. On an ORDINARY row the two are the same value, so this arm keeps
-                    // the read-modify-write-onto-the-base behaviour it always had. On an ADVANCING row they differ, and
-                    // the live value is the right operand: the stored cell there is a BASE the row has been accumulating
-                    // away from, so adding to it would silently discard every unit gained since the epoch (a regen row
-                    // sitting at a live 41 taking a -10 would land on -10, not 31). Add means "add to what a reader
-                    // sees"; RebaseAdvanceEpoch then makes that sum the new base and starts the accumulation again from
-                    // this tick, so the row keeps advancing from the value the author just composed.
-                    _ = WorldStateReader.TryRead(
-                        definition: current,
-                        rowName: m.Row,
-                        key: m.Key,
-                        tick: tick,
-                        row: out _,
-                        rawValue: out var addend,
-                        text: out _
-                    );
-
-                    long value;
-
-                    try {
-                        value = ((m.Kind == WorldDocumentWriteKind.Add)
-                            ? checked(((addend ?? 0L) + operand))
-                            : operand
-                        );
-                    } catch (OverflowException) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' overflowed";
-
-                        return false;
-                    }
-
-                    // The engine-minted-cell rule, asked at the VERB so the operator reads why the cell they just typed
-                    // was refused rather than a whole-document validation error. Same code, not a second reading: the
-                    // document walk (boot, every mutation, every undo-replay entry) calls the identical
-                    // WorldStateReservedCells rule, so the two can never disagree about which reserved keys a row mints.
-                    if (!WorldStateReservedCells.TryValidateReservedCell(
-                        key: cellKey,
-                        reason: out var reservedReason,
-                        row: row
-                    )) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' cell '{m.Key}' {reservedReason}";
-
-                        return false;
-                    }
-
-                    // UpsertStateCell carries only a scalar VALUE — a cell's own advance RATE is authored only through a
-                    // whole-row UpsertStateRow — so a base-value write here preserves whatever the existing cell already
-                    // declared rather than silently deleting it; RebaseAdvanceEpoch (below TryCompose) then re-bases its
-                    // epoch to this tick, exactly as it already does for a row-level advance's slot cell.
-                    var existingAdvance = FindCellAdvance(
-                        cells: (row.Cells ?? []),
-                        key: cellKey
-                    );
-                    var isNewKey = !WorldStateCellWriter.ContainsKey(
-                        cells: (row.Cells ?? []),
-                        key: cellKey
-                    );
-                    var cells = Upsert(
-                        list: (row.Cells ?? []),
-                        item: new WorldStateCell(
-                            Key: cellKey,
-                            Value: value,
-                            Advance: existingAdvance
-                        ),
-                        keyOf: static (WorldStateCell cell) => cell.Key
-                    );
-
-                    cells = WorldStateCellWriter.ApplyEviction(
-                        addedNewKey: isNewKey,
-                        cells: cells,
-                        evictedKey: out evictedKey,
-                        row: row
-                    );
-                    candidate = current.WithWorldState(rows: Upsert(
-                        list: current.State,
-                        item: (row with { Cells = cells }),
-                        keyOf: static row => row.Name
-                    ));
-
-                    return true;
+                    return false;
                 }
-            case WorldMutation.RemoveStateCell m: {
-                    if (WorldDefinitionRows.FindStateRow(
-                        rows: current.State,
-                        name: m.Row
-                    ) is not { } row) {
-                        candidate = current;
-                        reason = $"no state row named '{m.Row}'";
 
-                        return false;
-                    }
+                candidate = current.WithWorldState(rows: Upsert(
+                    list: current.State,
+                    item: upsertedRow,
+                    keyOf: static row => row.Name
+                ));
 
-                    if (!Remove(
-                        list: (row.Cells ?? []),
-                        key: m.Key,
-                        keyOf: static (WorldStateCell cell) => cell.Key,
-                        result: out var cells
-                    )) {
-                        candidate = current;
-                        reason = $"state row '{m.Row}' has no cell keyed '{m.Key}'";
+                return true;
+            case WorldMutation.RemoveStateCell m:
+                if (!TryComposeCellRemove(
+                    composed: out var trimmedRow,
+                    rows: current.State,
+                    mutation: m,
+                    reason: out reason
+                )) {
+                    candidate = current;
 
-                        return false;
-                    }
-
-                    candidate = current.WithWorldState(rows: Upsert(
-                        list: current.State,
-                        item: (row with { Cells = cells }),
-                        keyOf: static row => row.Name
-                    ));
-
-                    return true;
+                    return false;
                 }
+
+                candidate = current.WithWorldState(rows: Upsert(
+                    list: current.State,
+                    item: trimmedRow,
+                    keyOf: static row => row.Name
+                ));
+
+                return true;
             case WorldMutation.SetInputHold m:
                 // The mutation's own wire shape is the COMPILED (ticks) form — the addon-mutation ABI's raw-ticks
                 // contract, unchanged — but InputHold itself stores the AUTHORED (seconds) shape (see its remarks), so
@@ -1496,13 +1663,13 @@ public sealed partial class WorldServer {
             case WorldMutation.FormGroup m: {
                     var groupsSection = (current.Groups ?? WorldGroupsSection.Empty);
 
-                    // The earliest door a LIVE-minted group id crosses (WorldSafeName's own doctrine — see
+                    // The earliest door a LIVE-minted group id crosses (SafeName's own doctrine — see
                     // WorldGroup.Id's remarks): a document-authored id already crossed this door at JSON parse, but
                     // FormGroup mints one at RUNTIME, so this mutation's own apply site IS that door for it. Refused by
                     // name rather than let an unsafe id reach WorldGroup.Id, which the id-to-instance-name composition
                     // (WorldSessionResolver.MintInstanceName) depends on staying safe for every group id, live-formed or
                     // authored alike.
-                    if (!WorldSafeName.TryParse(
+                    if (!SafeName.TryParse(
                         candidate: m.Id,
                         name: out var safeId,
                         reason: out var idReason
@@ -1929,152 +2096,12 @@ public sealed partial class WorldServer {
 
                     return true;
                 }
-            case WorldMutation.CreateMarketListing m:
-                return TryComposeCreateMarketListing(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.PlaceMarketBid m:
-                return TryComposePlaceMarketBid(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.BuyoutMarketListing m:
-                return TryComposeBuyoutMarketListing(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.CancelMarketListing m:
-                return TryComposeCancelMarketListing(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.SettleMarketListing m:
-                return TryComposeSettleMarketListing(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
-            case WorldMutation.PruneMarketListings m:
-                return TryComposePruneMarketListings(
-                    candidate: out candidate,
-                    current: current,
-                    mutation: m,
-                    reason: out reason,
-                    tick: tick
-                );
             default:
                 candidate = current;
                 reason = "unknown mutation kind";
 
                 return false;
         }
-    }
-    // Composes Generate as a PURE function of (candidate document, instance identity): the site's source resolves
-    // from the document, WorldGeneratorEngine SEEKS the stream to the position the site's own DrawCursor records, and
-    // BOTH the drawn value and the advanced cursor/decks land in the SAME candidate. Nothing lives outside the
-    // document, which is what makes world.undo rewind a draw bit-identically with no bookkeeping to reconcile. The
-    // sampling itself lives in Puck.World.Schema because the BOOT resolver — which runs before this server exists —
-    // must reach the identical code.
-    private static bool TryComposeGenerate(WorldDefinition current, WorldMutation.Generate mutation, string instanceIdentity, out WorldDefinition candidate, out string reason) {
-        candidate = current;
-
-        if (WorldDefinitionRows.FindStateRow(
-            rows: current.State,
-            name: mutation.Row
-        ) is not { } siteRow) {
-            reason = $"no state row named '{mutation.Row}'";
-
-            return false;
-        }
-
-        if (siteRow.Draw is not { } draw) {
-            reason = $"state row '{mutation.Row}' declares no draw — 'generate' redraws a draw site";
-
-            return false;
-        }
-
-        if (draw.Timing == WorldDrawTiming.Boot) {
-            reason = $"state row '{mutation.Row}' declares timing=boot — it draws once at first fill and is never redrawn";
-
-            return false;
-        }
-
-        if (!WorldGeneratorEngine.TryResolveSource(
-            generators: current.Generators,
-            draw: draw,
-            generator: out var generator,
-            reason: out var resolveReason
-        )) {
-            reason = $"state row '{mutation.Row}' {resolveReason}";
-
-            return false;
-        }
-
-        var site = WorldDrawSites.StateRow(rowName: siteRow.Name);
-
-        if (!WorldGeneratorEngine.TryFire(
-            generator: generator,
-            targetKind: siteRow.Kind,
-            seedState: WorldGeneratorEngine.ComputeSeedState(
-                worldSeed: (current.Generation?.WorldSeed ?? 0UL),
-                instanceIdentity: instanceIdentity,
-                site: site
-            ),
-            stream: WorldGeneratorEngine.ComputeStreamId(site: site),
-            cursor: siteRow.DrawCursor,
-            decks: siteRow.DrawDecks,
-            result: out var fired,
-            reason: out var fireReason
-        )) {
-            reason = $"state row '{mutation.Row}' {fireReason}";
-
-            return false;
-        }
-
-        if (
-            (fired.Text is { } emission) &&
-            (emission.Length > WorldStateCapacity.MaxTextValueLength)
-        ) {
-            reason = $"state row '{mutation.Row}' emission length {emission.Length} exceeds the {WorldStateCapacity.MaxTextValueLength}-unit text bound";
-
-            return false;
-        }
-
-        var cell = ((fired.Text is { } text)
-            ? new WorldStateCell(
-                Key: WorldStateRow.SlotKey,
-                Text: text
-            )
-            : new WorldStateCell(
-                Key: WorldStateRow.SlotKey,
-                Value: fired.Numeric!.Value
-            )
-        );
-        var state = Upsert(
-            list: current.State,
-            item: (siteRow with { Cells = [cell], DrawCursor = (siteRow.DrawCursor + fired.Samples), DrawDecks = (fired.Decks ?? siteRow.DrawDecks) }),
-            keyOf: static (WorldStateRow row) => row.Name
-        );
-
-        candidate = current.WithWorldState(rows: state);
-        reason = string.Empty;
-
-        return true;
     }
     // Replace the row whose key matches the item's, or append it — the coarse whole-row upsert.
     private static IReadOnlyList<T> Upsert<T, TKey>(IReadOnlyList<T> list, T item, Func<T, TKey> keyOf) {
@@ -2103,4 +2130,15 @@ public sealed partial class WorldServer {
 
         return result;
     }
+    // The token after the one <paramref name="matches"/> accepts, wrapping; the first when none matches.
+    private static string NextInCycle(IReadOnlyList<string> tokens, Func<string, bool> matches) {
+        for (var index = 0; (index < tokens.Count); index++) {
+            if (matches(arg: tokens[index])) {
+                return tokens[((index + 1) % tokens.Count)];
+            }
+        }
+
+        return tokens[0];
+    }
+
 }

@@ -8,18 +8,19 @@
       "description": "The declared interaction rows, in authoring/evaluation order.",
       "type": "array",
       "items": {
-        "description": "One row of the world\u0027s interactions section \u2014 an authorable property x property (or property x region) -\u003E effect table entry, the generalized A x B -\u003E F emergent-chemistry primitive. Not a second rule engine: WorldRuleCompiler.CompileAllInteractions desugars every row into a synthesized WorldRule \u2014 its co-occurrence spelled as an ordinary CompareState/All gate over the same reserved channels a hand-authored rule already reads \u2014 and compiles it through the identical WorldRuleCompiler.Compile path, so it rides the same per-tick evaluation, edge/level latch, journal, and undo a rule already has. This is a second authoring surface over one evaluation engine.",
+        "description": "One row of the world\u0027s interactions section \u2014 an authorable property x property (or property x region) -\u003E effect table entry, the A x B -\u003E F chemistry primitive. Evaluated over every carrier pair (or every occupant) each tick with the matched carriers bound as $left/$right, and compiled through the same effect compiler a WorldRule uses, so it rides the same edge/level latch (kept per pair), journal, and undo.",
         "type": [
           "object",
           "null"
         ],
         "properties": {
           "name": {
-            "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name: an interaction desugars into its own synthesized rule rather than sharing the authored rule list, so the two may coincide without colliding). A WorldCellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
+            "description": "The interaction\u0027s stable name \u2014 unique within the section (a separate namespace from Name, so the two may coincide without colliding). A CellName, never $-prefixed \u2014 that prefix marks what the engine mints, and nothing mints an interaction.",
+            "title": "CellName",
             "type": "string"
           },
           "left": {
-            "description": "A property name, validated against the declared properties registry \u2014 the carrier a candidate co-occurrence is searched from (the $argmax: resolution \u2014 \u0022the carrier most strongly tagged Left\u0022).",
+            "description": "A property name, validated against the declared properties registry \u2014 every body whose cell in that keyed row reads nonzero is a left carrier.",
             "type": "string"
           },
           "right": {
@@ -31,10 +32,11 @@
             "enum": [
               "Distance",
               "Region"
-            ]
+            ],
+            "title": "WorldInteractionCoOccurrence"
           },
           "range": {
-            "description": "The distance threshold, for Distance alone \u2014 ignored (and unchecked) under Region.",
+            "description": "The distance threshold, for Distance alone \u2014 an exact JSON decimal lowered directly to deterministic fixed point, with no binary32 intermediate. Ignored (and unchecked) under Region.",
             "type": "number"
           },
           "effects": {
@@ -45,12 +47,20 @@
             }
           },
           "mode": {
-            "description": "Whether the interaction fires every tick the co-occurrence holds (Level) or once per crossing (Edge, the default \u2014 an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).",
+            "description": "Whether the interaction fires every tick the co-occurrence holds For a distance interaction, at most this many right carriers per left carrier \u2014 the nearest first, ties broken by the lower body index \u2014 or null for every carrier in range. The work sheet prices the pair count at this budget. (Level) or once per crossing (Edge, the default \u2014 an interaction that transforms/spawns/despawns almost always wants Edge, for the same reason a rule that writes a row does: level-firing a spawn is a journal entry every tick the co-occurrence holds).",
             "enum": [
               "Level",
               "Edge"
             ],
-            "default": "Edge"
+            "default": "Edge",
+            "title": "ActionTriggerMode"
+          },
+          "neighbours": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [
@@ -61,7 +71,8 @@
           "range",
           "effects"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "title": "WorldInteraction"
       }
     }
   },
@@ -69,5 +80,6 @@
     "interactions"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldInteractionsSection"
 }

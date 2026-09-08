@@ -32,6 +32,31 @@ carries, echoed with the unavailable treatment by `world.adjacencies`. Portals
 remain intentional authored travel and are not used to represent seamless
 topology.
 
+A shard names one document several times over — its own `basis`, each adjacency
+neighbour, each derived corner destination — and a composed document is reused
+per resolved path when every file its composition read still holds the bytes it
+read (`WorldDefinitionFileSource`; identity is the path, freshness is content,
+no clock takes part in either). `world.adjacencies` names `composed=shared` or
+`composed=fresh` per started neighbour authority, and `unknown` when that
+authority is not running here. The process totals sit on `world.status`
+(`documents composed N shared M held K (B bytes)`) and on the boot's own
+`[world.documents]` line, since they belong to the process rather than to one
+instance's rows. `held` is one image per distinct document path this process
+composed; the store is not capped, so `B` is what to read when a host composes
+unusually many documents.
+
+A row may also author `livenessGraceSeconds`: how long that edge may go without
+a delivered neighbour refresh before the world calls the link dropped. `0` (the
+default) disables sensing for the row entirely — no event, and `$link:` reads 0
+— so a world authoring none is unchanged. Compiled per document through
+`WorldDefinition.AdjacencyLivenessGraceTicks`, the
+`population.reconnectGraceSeconds` idiom; validated `0..600`. This is what the
+`linkEstablished`/`linkDropped` world event family and the `$link:<name>` rule
+channel threshold against, and `world.links` is its read-back — one line per
+authored row naming the destination, the neighbour authority, the tick-derived
+staleness and grace, and (clearly marked presentation-only, never a simulation
+input) the transport lane's wall-clock backoff state.
+
 One traversal mints one crossing. The adjacency scan skips a seat already named
 by a queued or in-flight transfer (announced once per transfer id on stderr),
 because the sweep keeps answering `Crossed` while the traveler waits for its own
@@ -64,8 +89,8 @@ same attestation shape, reached through `WorldCounterpartAttestationProtocol.Try
 which verifies a signed claim against the reading world's own `admission` keys
 and returns both what it attests and the verified chain's own subject — a
 resolver must still bind that subject to the neighbour key it was resolving
-before trusting the result: `WorldApiCounterpartResolver` (`Puck.World.Server`)
-is the production resolver for an owner-named `WorldReference`, and refuses
+before trusting the result: `WorldApiCounterpartResolver` (`Puck.World.Azure`)
+provides the extension resolver for an owner-named `WorldReference`, and refuses
 unless the verified subject parses as the same `Guid` as the reference's own
 `Owner`), or `Unavailable`. Both attested arms prove the same four per-fact
 refusals the document arm does for an ordinary two-document adjacency: missing
@@ -97,10 +122,52 @@ IDs. Acknowledgement retires that outcome; a later epoch for the same traveler
 may supersede a lost acknowledgement. The one current credential per mobility
 identity rejects delayed replay. These tables are bounded by active
 transactions/travelers, not lifetime crossing count.
+An exact committed retry includes action-continuity collection order and every
+channel/register value, not just profile and motion. Escrow retains detached
+continuity values at commit and checkpoint restore; mutating a caller's original
+lists cannot rewrite the accepted receipt. Independently allocated equal values
+remain idempotent; altered edge bits, held values, names, register kinds, values,
+or timers refuse as a different commit.
+Failed source restoration on non-commit retains rollback-only recovery and never retries Commit.
+Non-atomic parties split before any parent reservation. Full details and limits:
+[Server transfer-recovery contract](../../../../src/Puck.World.Server/README.md#transfer-recovery-and-forwarding).
+Host restore preflights every in-doubt and forwarding record before installing that host slice.
+It preserves unresolved peer addresses and source-boundary completion data across
+repeated restarts. A later local admission resolves by exact authority identity;
+a same-named unrelated authority cannot resolve the transaction. Remote recovery
+reconnects to the retained endpoint with the expected authority identity. On
+confirmed commit, forwarding and local seat routes reconstruct the credential
+from the retained member's incarnation and next ownership epoch, not a fresh
+connection's empty reservation cache or a later occupant's slot-keyed entry.
+`CommitConfirmed` remains checkpointed while source-side publication is pending.
+Neither status nor commit is reissued in that phase, and rollback is forbidden.
+Retain frozen source histories and the captured followed-seat masks until every
+route/roster publication succeeds; partial publication must not vacate an already
+moved participant. Invalid phases or overlapping seat masks refuse before host
+restore writes. Publication failures are named `PUBLICATION-PENDING` once per run.
+Finalized forwarding routes persist independently of in-doubt transactions. Preserve
+their source namespace and mobility credential; never reconstruct the namespace from
+the new process's machine ID. Missing local destinations remain checkpointed and bind
+on exact-identity admission. Remote routes retain endpoint/definition seeds and
+reconnect lazily through QUIC. Empty authorities with outgoing routes are not reaped.
+Explicit destination stop unbinds incoming routes; later admission can rebind them.
+Replacing a local arm releases its held-input lease and forbids further publication.
+Traveler observations use `ObserveTraveler` over the original authenticated QUIC
+entry, not the final route's endpoint label. Local destinations need no listener.
+Each hop validates its own source-scoped credential and reduces the shared 64-hop
+budget; document disclosure cannot exceed any hop's arrival tier at stream opening.
+The final owner uses the traveler's body-relative disclosure and Observe grant.
+Its ownership, document, or grant change invalidates the stream for reopening.
+Client lease disposal cancels observation; EOF detaches the server sink even paused.
 A committed route can forward later input and submissions through further
 handoffs, so an old credential remains a route to the one current writer
 rather than a stale body slot. Generation recycle creates a different mobility
 identity and cannot inherit the old credential.
+Local arms validate their source-scoped credential before following an onward
+route, exactly as QUIC ingress does. Never hold one authority gate across that
+call. Local synchronous traversal has a 64-hop stack-safety bound. Accepted leave
+retires every retained branch for the incarnation in each traversed host, including
+branches left by revisiting the final authority; other incarnations remain intact.
 
 Entity identity is `WorldEntityAddress(authority, index, generation)`.
 `WorldAuthorityRoute` carries that complete address plus an epoch, and
@@ -175,9 +242,18 @@ action state by declared name rather than document-local ordinal:
   cooldown, charge, or other gameplay meaning.
 
 The bridge is why holding jump across a handoff remains one physical hold
-rather than release-then-press. `player.press`, `player.channels`,
-`player.state`, `player.targets`, `world.contacts`, and `player.where` follow
-the same seat route after a crossing. A new seat-facing verb that reads the
+rather than release-then-press. `body.press`, `body.channels`,
+`body.state`, `body.targets`, `world.contacts`, and `body.where` follow
+the same seat route after a crossing, and so do the seat-routed document
+writes `player.row.set`/`body.state.cell.set` — the `world.row.set`/
+`world.state.cell.set` grammars submitted through the seat's current
+authority (`WorldFederatedServerLink.SubmitWorldMutation` → the federation
+`Routed` lane → `WorldForwardedAuthority.TryApplySubmission`, where the
+DESTINATION re-stamps the envelope with the traveler's own transfer principal
+and its ordinary admission door — row-scoped grants included — decides it; the
+verdict narrates on the destination's transcript). That is how a
+contribution-slot holder fills its slot from the console it is sitting at. A
+new seat-facing verb that reads the
 boot population directly is a routing defect.
 
 ## Contact across the overlap
@@ -199,14 +275,59 @@ geometry. Do not replace this with endpoint-only sampling: a capsule endpoint
 inside a thin slab has an ambiguous nearest gradient and can be extracted
 through an edge or the underside.
 
+`WorldAdjacencySceneEmitter` renders the same projection set under two per-band
+budgets, both `WorldAdjacencyGeometry` constants: `MaximumPlacementsPerBand`
+solids and `MaximumEntitiesPerBand` delivered bodies, each selected in document
+or delivered-slot order from what falls inside the band, each truncation named
+on stderr. The construction-time probe reserves exactly those two budgets for
+every band `WorldAdjacencyBands.ProjectionCapacity` admits — direct edges plus
+derivable corner pairs, so the reservation is quadratic in authored edges. A
+world whose composed scene cannot fit the engine's instance ceiling refuses at
+boot by name (`[world] definition refused: the composed render scene exceeds …`,
+from `WorldPostBuildWiring`'s pre-flight) rather than throwing out of the
+presentation service graph.
+
 Remote dynamic poses currently enter `WorldAdjacencyContactField` from
 delivered floating-point snapshots. Until Track 3 tapes fixed, tick-aligned
 neighbour records and installs the field at delivery time, do not claim replay
 determinism for cross-authority dynamic contact.
 
-The boot replay tape also does not reproduce federated arrival/forwarding. Do
-not cite `replay.verify` MATCH as federation evidence; the five-authority runner
-and focused laws below are the current executable proof.
+## What the tape does and does not carry about federation
+
+Exactly one federation fact rides the tape: `WorldReplayEntry.LinkDelivery`,
+one entry per authored `adjacencies` row per tick on which that row's delivered
+neighbour snapshot tick advanced. It is what makes the `linkEstablished`/
+`linkDropped` event family and the `$link:<adjacencyName>` rule channel
+replay-faithful — a rule gated on link staleness fires on the same tick in a
+re-drive as it did live, because the staleness count and the grace comparison
+both derive from that boolean plus the local tick.
+
+Everything else about federation is still absent, and a `replay.verify` MATCH
+says nothing about it:
+
+- The delivered CONTENT is not taped — neighbour poses, definition revisions,
+  and geometry. Cross-authority contact against remote dynamic bodies is
+  therefore still outside what a MATCH proves (see the paragraph above).
+- Federated ARRIVAL is not reproduced. A traveller entering this authority from
+  elsewhere has no source population in the shadow world to arrive from; only
+  the DEPARTURE half replays, through `WorldReplayEntry.Transfer`'s
+  `DepartedBootSlots`.
+- Transfer reserve/commit/abort/acknowledge traffic is not taped as protocol —
+  `Transfer` records the decided outcome as narration, not a re-executed
+  handshake.
+
+What IS now taped on the submission side: every document mutation, whatever
+ingress it arrived through. `WorldServer.MutationTap` fires at the envelope
+dispatch every submission shares, so a local console write, an admitted socket
+peer's, and a traveller's submission forwarded by its source authority
+(`WorldForwardedAuthority.TryApplySubmission`) all tape identically, each with
+the acting principal its own envelope stamped. The two internal producers that
+reach `EnqueueMutation` directly — a mounted guest's decoded act and a world
+rule's `generate` effect — are deliberately untaped and re-derive during the
+drive.
+
+Do not cite `replay.verify` MATCH as evidence that federated transfer works;
+the five-authority runner and focused laws below remain that proof.
 
 ## Federation transport
 
@@ -219,14 +340,22 @@ codec. It reuses the framing, bounded reader/writer, and refusal vocabulary in
 Try-shaped and bounded before it allocates; a decoder that throws on hostile
 bytes is a defect. Add a message as a leaf there, never as a second dialect.
 
-One connection carries the whole conversation: the federation wire key
+World uses `WorldPeerNetwork` over `Puck.Networking.Peers.Peer` and its QUIC
+transport. Never introduce a TCP fallback or a second connection identity.
+`PeerStream` carries the existing bounded application codecs over signed peer
+messages; the networking handshake precedes World's own admission policy.
+`PersistentRequestLane` receives a stream connector and owns no socket choice.
+Desktop boot shares one network owner across the listener, transfers, observations,
+and intent streams; silo activations own their configured peer lifetime.
+
+One application stream carries the whole conversation: the federation wire key
 (`WorldFederationCodec.WireKey`, distinct from the interactive peer key), then
-`Challenge`/`Authenticate`/`Ack`, then framed requests in order,
+`Challenge`/`Authenticate`/`Authenticated` (the destination namespace), then framed requests in order,
 request-then-response, until `Observe` or `IntentStream` takes the connection
 over and streams on it. There is no second hello and no correlation id.
 
 Refusals are named (`WorldFederationRefusal`) and every refusal frame's text
-opens with the name, so a peer and `WorldTcpHost.FederationRefusals` count the
+opens with the name, so a peer and `WorldPeerHost.FederationRefusals` count the
 same vocabulary.
 
 `WorldRemoteAuthority` holds persistent authenticated lanes per source authority
@@ -240,12 +369,27 @@ in flight; that is why the two concerns are separate, and why adding a request
 kind means deciding which lane it belongs on.
 
 Only a failure to CONNECT takes a lane out of service, and only after a retry.
-A break on an established connection reconnects and re-sends once without
-entering backoff — a live neighbour must not be marked unavailable over one
-recycled socket. Slowness never changes lane state: the worker has no read
-deadline. A lane inside its backoff window answers every request immediately
-with `LaneUnavailable` without touching a socket, which is what keeps a closed
-edge from stalling the source's tick.
+A break on an established connection reconnects without entering backoff — a
+live neighbour must not be marked unavailable over one recycled socket — and
+re-sends once ONLY when `ILaneProtocol.MayResend` says the kind is safe to send
+twice (`WorldFederationLaneProtocol` answers false for `Submission`, which the
+host applies straight through with no dedup, and true for the transfer-id-keyed
+kinds); otherwise the request is answered `ConnectionClosed` and left in
+doubt. Every attempt runs under the lane's per-request deadline
+(`WorldRemoteAuthority.LaneRequestTimeout`): a peer that goes silent after the
+request was written is answered `RequestTimedOut` without a re-send and
+without backoff, so slowness never changes lane state. An unexpected exception
+from the dialect answers that one request `LaneUnavailable` and the worker
+serves the next. A lane inside its backoff window answers every request
+immediately with `LaneUnavailable` without touching a socket, which is what
+keeps a closed edge from stalling the source's tick. A run that holds no
+federation signing identity (no `--federation-key-file`) never opens a lane, an
+observer session, or an intent stream: every request is answered
+`LaneUnavailable` naming that, with one stderr line per authority. An
+authenticator that verifies but cannot prove (trust entries, no signing oracle)
+passes `IsConfigured`; the first proof it refuses reveals it, and the same gate
+closes on it from then on. Every refused `WorldFederationAnswer`, lane-refused
+ones included, carries `WorldFederationResponse.Refusal` as its kind.
 
 Every transfer step answers. A step that ran out of time is a named refusal,
 never "ask again": a caller told to retry would hold the transfer while the
@@ -265,23 +409,23 @@ dotnet test tests/Puck.World.Tests/Puck.World.Tests.csproj -c Release --no-resto
 dotnet test tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~WorldFrameIsometryLawTests"
 ```
 
-Run `puck canary seamless-adjacency` for the automatic crossing and stationary
-real-path proof, `puck canary quilt-nw-gap-corner-strip` for the four-way
-corner specifically (quilt-nw-gap drops both of NW's direct adjacencies, so a
-body resting past NW's own east and south edges — where the local field is
-identically absent in both legs — is grounded only when at least one direct
-edge still delivers the corner, isolating that continuity from local geometry),
-and `puck canary four-corners-sharded` for the topology stress proof: five real
-`Puck.World` processes (four ground worlds and the floating island), each
-binding its own dynamic loopback endpoint and trusting the others' generated
-federation identity, with one human-driven body ringing all four ground
-authorities (nw's east edge into ne, ne's south edge into se, se's west edge
-into sw, sw's own north edge closing the ring back onto nw) purely through the
-router that follows a body wherever it now lives. Vertical/island crossing,
-retained dual-stick camera/movement control, autonomous producer travellers,
-derived diagonal peers, and cross-authority contact-pair settling are not
-exercised by this canary; widening its scripts to cover them is future work,
-not a runner limitation.
+Run `puck canary seamless-adjacency` for the driven crossing on NW's east face,
+`puck canary quilt-nw-gap-edge-carry` for the undriven one (a body placed past
+NW's own ground on the `south` face's centre line is minted a crossing by the
+per-tick scan alone; quilt-nw-gap drops that adjacency, so the identical body
+falls the full sixteen units instead), `puck canary
+seamless-four-corners-circuit` for the colocated four-hop ring, and `puck
+canary four-corners-sharded` for the federated hop: five real `Puck.World`
+processes (four ground worlds and the floating island), each binding its own
+dynamic loopback endpoint and trusting the others' generated federation
+identity, with one driven body crossing NW's east face onto NE's own process.
+
+A body that arrives over a federation hop is minted rigid on the destination,
+and `WorldInstanceHost.Transfers` refuses a rigid body's own transfer by name,
+so a federated ring cannot be driven past its first hop today. Vertical/island
+crossing, retained dual-stick camera/movement control, autonomous producer
+travellers, derived diagonal peers, and cross-authority contact-pair settling
+are not exercised either.
 
 For federation transport changes, both sides need the same
 `--federation-key-file`; inspect both stdout and stderr. Authentication must

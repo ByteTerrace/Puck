@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <Description>Native CGB cartridge compilation from editable puck.cartridge.v1 data, with SM83 emitters, hardware framework primitives, Tune audio-document compilation and boot-ROM tools.</Description>
+        <IsAotCompatible>false</IsAotCompatible>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.HumbleGamingBrick.Forge</PackageId>
+        <PackageTags>authoring;cgb;determinism;dmg;homebrew;rom;sm83</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.HumbleGamingBrick.Forge</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.GamingBricks.Forge\Puck.GamingBricks.Forge.csproj" />
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
+    </ItemGroup>
+</Project>

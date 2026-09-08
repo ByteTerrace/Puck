@@ -127,13 +127,13 @@ One-time toolchain setup:
 rustup target add wasm32-unknown-unknown
 ```
 
-Then, from anywhere in the repository:
+Then, from the repository root:
 
 ```sh
-dotnet run -c Release wasm/build.cs
+puck wasm build
 ```
 
-The script wraps `cargo build --release`, run from `wasm/`. `.cargo/config.toml` already pins the
+The command wraps `cargo build --release`, run from `wasm/`. `.cargo/config.toml` already pins the
 default target, so no `--target` flag is needed. This builds every workspace member; `puck-stdlib`
 has no standalone artifact (it is an `rlib`), so the interesting output is:
 
@@ -149,18 +149,15 @@ way — see "Drop it into a world document" below.
 `src/Puck.World/Assets/addons/puck-addon-default.wasm` is a **committed binary**, not something
 Puck.World builds from this workspace at its own build time. An `addons` row points at that
 committed copy and pins its content hash in the row's own `hash` field. After the `cargo build`,
-`build.cs` copies the freshly built `puck_addon_default.wasm` over that path and prints its new
+`puck wasm build` copies the freshly built module over that path and prints its new
 `sha256-64/{16 hex}` hash to paste into every such row.
 
-**None of the four shipped worlds declares an `addons` row today** — the `default` world that once
-mounted this module was retired under the four-world charter, so the rows that pin this hash live
-only in hand-authored documents: the fixtures under `docs/verification/`, and
-`puck-addon-hudbuilder/worlds/`. There is no built-in `WorldAddonRow` to update.
+Update every authored document's `addons` row that pins the changed module.
 
 **The committed bytes' provenance is not gate-enforced.** No build step proves the `.wasm` sitting
 in `src/Puck.World/Assets/addons/` was actually built from the Rust sitting beside it here — they
 can drift silently if someone edits one without the other. Refreshing the artifact is therefore a
-**deliberate step**: run `build.cs` whenever `puck-addon-default`'s (or a `puck-stdlib`
+**deliberate step**: run `puck wasm build` whenever `puck-addon-default`'s (or a `puck-stdlib`
 dependency's) source changes, then update every pinning row's `hash` to match the printed value **in
 the same change**. An unrefreshed hash after a real source change means the host is running stale
 bytes under a pin that no longer describes them; a refreshed artifact with a stale hash means the

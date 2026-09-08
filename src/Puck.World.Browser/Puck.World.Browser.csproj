@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+        <RuntimeIdentifiers>browser-wasm</RuntimeIdentifiers>
+        <WasmMainJSPath>main.mjs</WasmMainJSPath>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Composition roots</PuckLayer>
+        <!-- The browser-wasm runtime pack ships every Puck.* dependency it links as AnyCPU; PlatformTarget x64 (the
+             Directory.Build.props tree default) makes Mono's browser-wasm loader refuse the whole closure at publish
+             (every referenced assembly's PE machine type disagrees with the wasm host, which is neither x64 nor
+             x86). This is the one project in the tree that must run at AnyCPU instead. -->
+        <PlatformTarget>AnyCPU</PlatformTarget>
+        <!-- Trimming is the point of a browser publish (payload size), but WorldStateDocumentValues' reflection walk
+             (see its own remarks) is real and stays; TrimmerRootAssembly below keeps every member of the assemblies
+             that reflect over the document graph, so a trimmed publish cannot silently strip what that walk reaches.
+             PublishTrimmed itself only takes effect on `dotnet publish`, never on an ordinary build. -->
+        <PublishTrimmed>true</PublishTrimmed>
+        <TrimMode>partial</TrimMode>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <!-- No console, no window, no file system, no threads: WasmEnableSIMD/WasmEnableExceptionHandling stay at
+             their SDK defaults; single-threaded per the plan's own API contract (JSON-string marshalling, no
+             cross-thread state). -->
+        <WasmEnableThreads>false</WasmEnableThreads>
+        <!-- The Mono interpreter (this project's default without this switch) runs every call — Parse, ComposeTree,
+             Compile — 5-6x slower than the identical native JIT call over the same bytes (see the project README's
+             own "Performance" table): ComposeTree over the shipped island measured ~12.7 s interpreted vs ~2.3 s
+             AOT'd, Compile ~9.9 s vs ~2.0 s, an editing loop the interpreter cannot serve. AOT compiles every
+             assembly in the closure to native wasm ahead of time instead of interpreting IL per call.
+             WasmStripILAfterAOT (the SDK default) cannot strip TrimmerRootAssembly's three rooted assemblies'
+             IL — their reflection surface depends on it staying real (see the NoWarn remarks above) — so their
+             AOT'd native code and their original IL both ship, which is most of the size cost this switch carries
+             (see the README's own AppBundle-size table). -->
+        <RunAOTCompilation>true</RunAOTCompilation>
+        <!-- Puck.Assets and Puck.World.Schema each carry IsAotCompatible=false for a REAL reason (reflection-based
+             JsonSerializer calls in Puck.Assets' DocumentCanonicalizer/DocumentSpatialValues/CreationDocumentJsonConverter;
+             WorldSchema/WorldNameRegistry.Walk/WorldStateDocumentValues' own reflection walk in Puck.World.Schema) —
+             but that property only silences the Roslyn analyzer at THEIR OWN build, never ILLink's trim analysis of
+             their IL when a downstream publish (this one) actually trims. IL2026/IL3050 fire on every
+             RequiresUnreferencedCode/RequiresDynamicCode call those files make regardless of whether the calling
+             assembly is itself kept whole, because the risk is in the type graph JsonSerializer reflects over at
+             runtime, not in whether the caller survives trimming. TrimmerRootAssembly below keeps every member of
+             Puck.World.Schema, Puck.World.Authoring, and Puck.Assets through a trimmed publish (the WorldStateDocumentValues
+             walk stays real and reachable) — proven by BrowserParityRecordingTests and the wasm Node harness, not by
+             the trim analyzer, which none of the three assemblies pass. IL2070/IL2075/IL2026/IL3050 are recorded once
+             as the accepted baseline (see the project README) rather than fixed member-by-member: none of the flagged
+             call sites (schema/name-registry reflection, the puck.creation.v1 embedded-document converter, JsonNode
+             diffing in WorldDocumentBasis) are reachable from this project's own Engine/Exports surface today. -->
+        <NoWarn>$(NoWarn);IL2026;IL2070;IL2075;IL3050</NoWarn>
+        <!-- A trimmed publish defaults this feature switch off, so System.Text.Json.JsonSerializer's generic
+             Serialize<T>/Deserialize<T>(…, JsonSerializerOptions) overloads (never the JsonTypeInfo<T> ones this
+             project's own Engine code uses) throw NotSupportedException("JsonSerializerIsReflectionDisabled") the
+             first time DocumentJsonOptions.Shared-rooted code reaches one — verified against the real AppBundle
+             under Node: WorldDocumentBasis's JsonArray.Add(non-primitive) merge/diff logic (the same call sites
+             IL2026 above already names) hits exactly this the moment a fragment composes. Puck.Assets/Puck.World.Schema
+             already carry that reflection surface deliberately (see the NoWarn remarks above); this switch restores
+             the runtime behavior that surface was written against, at a real payload-size cost this project's own
+             README records. -->
+        <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+        <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <Using Include="Puck.State" />
+    </ItemGroup>
+    <ItemGroup>
+        <TrimmerRootAssembly Include="Puck.Assets" />
+        <TrimmerRootAssembly Include="Puck.World.Authoring" />
+        <TrimmerRootAssembly Include="Puck.World.Schema" />
+    </ItemGroup>
+    <!-- Directory.Build.props' win-x64/linux-x64 mimalloc None items condition off '$(RuntimeIdentifier)' ==
+         'browser-wasm' for THIS project's own evaluation, but a referenced class library (Puck.Assets, Puck.Maths, …)
+         never sets a RuntimeIdentifier of its own — it evaluates that condition as '' != 'browser-wasm' and still
+         copies the win-x64/linux-x64 binaries into ITS OWN output, which then flow into this project's output/publish
+         directories through ordinary cross-project CopyToOutputDirectory propagation (never into the AppBundle
+         itself, which only ever collects _framework/*.wasm — nothing here reaches the shipped payload). Deleting the
+         stray copies after they land is simpler than intercepting the flow at every dependency's own item list. -->
+    <Target Name="PuckRemoveNativeMimallocFromWasmOutput" AfterTargets="Build;Publish">
+        <ItemGroup>
+            <PuckStrayMimalloc Include="$(OutDir)mimalloc*.dll;$(OutDir)libmimalloc.so*;$(PublishDir)mimalloc*.dll;$(PublishDir)libmimalloc.so*" />
+        </ItemGroup>
+        <Delete Condition="'@(PuckStrayMimalloc)' != ''" Files="@(PuckStrayMimalloc)" />
+    </Target>
+</Project>

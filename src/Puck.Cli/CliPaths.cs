@@ -7,7 +7,7 @@ namespace Puck.Cli;
 // relative, forward-slashed form that every printed path and every glob comparison uses, so output is
 // stable regardless of where the tree sits.
 internal static class CliPaths {
-    private static readonly string? Root = Discover();
+    private static readonly string? Root = RepositoryPaths.FindRoot();
     // No verb changes the working directory, so it is captured once: the display form is computed per
     // candidate file per glob during a walk and again per emitted record.
     private static readonly string WorkingDirectory = Directory.GetCurrentDirectory();
@@ -38,14 +38,12 @@ internal static class CliPaths {
     public static string RelForGlob(string fullPath) =>
         ToDisplay(fullPath: fullPath);
 
-    // The published executable lives inside the tree it operates on, so its own directory is the first
-    // probe; the working directory covers an executable invoked from elsewhere in a checkout.
-    private static string? Discover() =>
-        (Ascend(start: AppContext.BaseDirectory) ?? Ascend(start: Environment.CurrentDirectory));
-    private static string? Ascend(string start) {
+    // The marker walk every verb that ascends from a start directory shares: try `probe` at `start`, then each
+    // parent in turn, stopping at the first non-null result (or the file system root).
+    public static string? AscendUntil(string start, Func<DirectoryInfo, string?> probe) {
         for (var directory = new DirectoryInfo(path: start); (directory is not null); directory = directory.Parent) {
-            if (File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
-                return directory.FullName;
+            if (probe(directory) is { } match) {
+                return match;
             }
         }
 

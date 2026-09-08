@@ -27,6 +27,22 @@ public enum OverlayHudElementKind : byte {
 
     /// <summary>A fill-bar readout of a bound binding's normalized 0..1 value.</summary>
     Gauge,
+
+    /// <summary>A sampled frame: the element rect shows the live content <see cref="OverlayHudElement.FrameSource"/>
+    /// names, drawn through <see cref="OverlayFrameSlots"/>.</summary>
+    Frame,
+}
+/// <summary>How a sampled <see cref="OverlayHudElementKind.Frame"/> element's content maps onto its element rect —
+/// the presentation-side twin of the document's <c>WorldHudFrameFit</c>.</summary>
+public enum OverlayHudFrameFit : byte {
+    /// <summary>Fills the rect, cropping the source's longer axis.</summary>
+    Cover,
+
+    /// <summary>Fits entirely inside the rect, letterboxing the source's shorter axis.</summary>
+    Contain,
+
+    /// <summary>Maps the source directly onto the rect, ignoring its aspect.</summary>
+    Stretch,
 }
 /// <summary>A normalized rect (origin top-left, Y down) in the same two coordinate spaces
 /// <c>Puck.World.WorldHudRect</c> uses: a panel's rect is screen space, an element's rect is its owning panel's local
@@ -59,13 +75,40 @@ public readonly record struct OverlayHudTemplateSegment(bool IsPlaceholder, stri
 /// for an untemplated element. Takes priority over <paramref name="Binding"/> when both are somehow present (the
 /// document validator refuses that combination before it ever reaches a live document, so this is a defensive
 /// ordering, never the primary rule).</param>
+/// <param name="FrameSource">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the opaque key the host
+/// declared for this element's <c>WorldFrameSource</c> — the id <see cref="OverlayFrameSlots.Bind"/> is called with.
+/// -1 for a non-<c>Frame</c> element, or a <c>Frame</c> element the host never assigned a key.</param>
+/// <param name="Fit">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: how the sampled content maps
+/// onto the element rect.</param>
+/// <param name="Mirror">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: whether the sampled content
+/// flips horizontally (a face cam's conventional mirroring).</param>
+/// <param name="Radius">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the element's corner
+/// rounding, px.</param>
+/// <param name="Opacity">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the element's opacity,
+/// <c>[0,1]</c>.</param>
+/// <param name="FrameSourceB">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the key of the
+/// outgoing source while the element cross-fades, bound exactly like <paramref name="FrameSource"/>. -1 when the
+/// element shows <paramref name="FrameSource"/> alone. A cross-fading element occupies two
+/// <see cref="OverlayFrameSlots"/> slots for the frame.</param>
+/// <param name="FrameMix">Meaningful only for <see cref="OverlayHudElementKind.Frame"/>: the weight of
+/// <paramref name="FrameSource"/> (the incoming, winning source) in the cross-fade, <c>[0,1]</c>. 0 shows
+/// <paramref name="FrameSourceB"/> alone, 1 shows <paramref name="FrameSource"/> alone, so a fade runs 0 to 1 from
+/// the outgoing B to the incoming A. Ignored when <paramref name="FrameSourceB"/> is -1 or cannot be bound: the
+/// winner then draws at full weight.</param>
 public readonly record struct OverlayHudElement(
     OverlayHudElementKind Kind,
     OverlayHudRect Rect,
     OverlayColorRole Role,
     string? Text,
     string? Binding,
-    ReadOnlyMemory<OverlayHudTemplateSegment> Template = default
+    ReadOnlyMemory<OverlayHudTemplateSegment> Template = default,
+    int FrameSource = -1,
+    OverlayHudFrameFit Fit = OverlayHudFrameFit.Cover,
+    bool Mirror = false,
+    float Radius = 0f,
+    float Opacity = 1f,
+    int FrameSourceB = -1,
+    float FrameMix = 0f
 );
 /// <summary>One HUD panel the writer resolves and draws — the presentation-side twin of
 /// <c>Puck.World.WorldHudPanel</c>.</summary>
@@ -74,12 +117,15 @@ public readonly record struct OverlayHudElement(
 /// <param name="Band">Which band the panel draws in.</param>
 /// <param name="Style">The panel's chrome recipe.</param>
 /// <param name="Elements">The panel's child elements, in authored order.</param>
+/// <param name="Alpha">The panel's presence, 0..1 — its visibility predicate's eased value, multiplied into the
+/// chrome and every element's alpha so a fading predicate fades the panel rather than cutting it.</param>
 public readonly record struct OverlayHudPanel(
     string Id,
     OverlayHudRect Rect,
     OverlayHudBand Band,
     OverlayPanelStyle Style,
-    ReadOnlyMemory<OverlayHudElement> Elements
+    ReadOnlyMemory<OverlayHudElement> Elements,
+    float Alpha = 1f
 );
 /// <summary>One player-scope HUD panel: a profile's private single panel plus the local seat viewport it is confined
 /// to (screen-normalized, the same convention <c>Puck.Abstractions.Presentation.NormalizedRect</c> uses for a seat's
@@ -95,7 +141,7 @@ public readonly record struct OverlayHudSeatPanel(
     OverlayHudPanel Panel
 );
 /// <summary>The per-revision HUD structure snapshot <see cref="HudWriter"/> renders — <see cref="Panels"/> reconciled
-/// from the delivered world definition only when its revision moves (the <c>WorldFrameSource</c> revision-reconcile
+/// from the delivered world definition only when its revision moves (the <c>WorldFramePresenter</c> revision-reconcile
 /// pattern); <see cref="SeatPanels"/> recomposed every produced frame (it depends on the roster and per-profile
 /// state, which the definition revision does not cover) but from a preallocated per-seat array, so the rebuild is
 /// zero-allocation and cheap even though it is unconditional. Live binding values are resolved separately, per
@@ -126,10 +172,10 @@ public interface IHudBindingResolver {
     bool TryResolve(string binding, out float fraction, out string text);
 }
 /// <summary>
-/// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>, published only when
-/// the delivered world definition's HUD section actually changes (structure — panels/elements/rects/bindings), not
-/// every frame; live binding values are resolved separately by <see cref="HudWriter"/> every produced frame. Same
-/// threading contract as <see cref="EditorHudStore"/>.
+/// The HUD structure store. A thin named wrapper over the shared <see cref="PublishBuffer{T}"/>. The world feed
+/// publishes every produced frame because visibility, seat membership, and per-seat panels are live even while the
+/// delivered document structure is unchanged; <see cref="HudWriter"/> resolves binding values from that snapshot in
+/// the same frame. Same threading contract as every other overlay store.
 /// </summary>
 public sealed class HudStore : IHudSource {
     private readonly PublishBuffer<OverlayHudFrame> m_buffer = new();

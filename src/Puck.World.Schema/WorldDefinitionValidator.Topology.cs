@@ -1,6 +1,5 @@
 using Puck.Abstractions.Presentation;
 using Puck.Maths;
-using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -14,8 +13,8 @@ public static partial class WorldDefinitionValidator {
     /// on every seed that does not draw it, so whether the world starts would move with the world seed and the
     /// instance identity. Every reachable token is checked instead — the same reason a numeric site's distribution is
     /// narrowed against its domain rather than against what it happened to roll.</summary>
-    private static void ValidateBackendTokens(WorldDraw draw, IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
-        if (!WorldGeneratorEngine.TryResolveSource(
+    private static void ValidateBackendTokens(Draw draw, IReadOnlyList<GeneratorRow>? generators, List<string> errors) {
+        if (!GeneratorEngine.TryResolveSource(
             draw: draw,
             generator: out var generator,
             generators: generators,
@@ -30,7 +29,7 @@ public static partial class WorldDefinitionValidator {
                     (alternative is not null) &&
                     (WorldHostTokens.ParseBackend(token: alternative.Token) is null)
                 ) {
-                    errors.Add(item: $"host.backendDraw could emit token '{alternative.Token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}').");
+                    errors.Add(item: $"a backend-row generator could emit token '{alternative.Token}', which names no backend ('{WorldHostTokens.BackendAuto}', '{WorldHostTokens.BackendDirectX}', or '{WorldHostTokens.BackendVulkan}').");
                 }
             }
         }
@@ -48,7 +47,7 @@ public static partial class WorldDefinitionValidator {
             !source.IsProducer ||
             (source.ProducerName is not { } producerName)
         ) {
-            errors.Add(item: $"population.defaultPeerSource '{source}' is not a defined IntentSource.");
+            errors.Add(item: $"bodies.defaultPeerSource '{source}' is not a defined IntentSource.");
 
             return;
         }
@@ -71,11 +70,11 @@ public static partial class WorldDefinitionValidator {
                 (kit.Producers is null) ||
                 !kit.Producers.ContainsKey(key: producerName)
             ) {
-                errors.Add(item: $"population.defaultPeerSource names producer '{producerName}', but assigned kit '{kit.Name}' declares no parameters for it.");
+                errors.Add(item: $"bodies.defaultPeerSource names producer '{producerName}', but assigned kit '{kit.Name}' declares no parameters for it.");
             }
         }
     }
-    // The destinations section: null names nothing. Each row's Name already crossed WorldSafeName; Durability/Scope
+    // The destinations section: null names nothing. Each row's Name already crossed SafeName; Durability/Scope
     // already crossed their strict-token converters; an unrecognized Selector $type already failed JSON parse. This
     // pass owns uniqueness within the section, a destinations section with no references section to name, each
     // row's Reference resolving to a declared references row, and the scope/selector pairing (ValidateGroupSelector).
@@ -105,17 +104,13 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
             }
 
-            if (
-                string.IsNullOrWhiteSpace(value: row.Reference) ||
-                !referenceNames.Contains(item: row.Reference)
-            ) {
-                errors.Add(item: ((referenceNames.Count > 0)
-                    ? $"{path}.reference '{row.Reference}' names no references row; the world declares: {string.Join(
-                        separator: ", ",
-                        values: referenceNames
-                    )}."
-                    : $"{path}.reference '{row.Reference}' names no references row; the world declares none."));
-            }
+            RequireDeclaredListing(
+                declaredSet: referenceNames,
+                errors: errors,
+                rowNoun: "references row",
+                subject: $"{path}.reference '{row.Reference}'",
+                value: row.Reference
+            );
 
             if (row.Scope == WorldDestinationScope.Group) {
                 if (row.Selector is null) {
@@ -135,7 +130,7 @@ public static partial class WorldDefinitionValidator {
 
         return names;
     }
-    private static void ValidateHost(WorldHostDefaults host, IReadOnlyList<WorldGeneratorRow>? generators, List<string> errors) {
+    private static void ValidateHost(WorldHostDefaults host, IReadOnlyList<GeneratorRow>? generators, IReadOnlyList<WorldStateRow> stateRows, List<string> errors) {
         if (!Enum.IsDefined(value: host.Presentation)) {
             errors.Add(item: $"host.presentation '{host.Presentation}' is not a defined WorldHostPresentation.");
         }
@@ -177,33 +172,28 @@ public static partial class WorldDefinitionValidator {
         }
 
         // The honest XOR this site can afford: WorldHostDefaults is a CLASS, so a null Backend is distinguishable
-        // from an authored one and declaring both is refused BY NAME (population.capacityDraw's struct-typed site
+        // from an authored one and declaring both is refused BY NAME (bodies.capacityDraw's struct-typed site
         // cannot do this — see its own remarks). Declaring NEITHER stays legitimate and reads as 'auto'.
         if (
             (host.Backend is not null) &&
-            (host.BackendDraw is not null)
+            (host.BackendRow is not null)
         ) {
-            errors.Add(item: "host declares both 'backend' and 'backendDraw' — the backend is an authored literal or a draw, never both.");
+            errors.Add(item: "host declares both 'backend' and 'backendRow' — the backend is an authored literal or a row read, never both.");
         }
 
-        if (host.BackendDraw is { } backendDraw) {
-            // A TEXT site: the backend is drawn BY NAME, so the source is held to the same kind predicate as any
-            // other text site. No numeric domain applies, hence the full band.
-            ValidateDrawSite(
-                bootOnly: true,
-                domainHigh: long.MaxValue,
-                domainLow: long.MinValue,
-                draw: backendDraw,
-                errors: errors,
-                generators: generators,
-                path: "host.backendDraw",
-                targetKind: CellKind.Text
-            );
-            ValidateBackendTokens(
-                draw: backendDraw,
-                errors: errors,
-                generators: generators
-            );
+        if (host.BackendRow is { } backendRow) {
+            if (WorldDefinitionRows.FindStateRow(
+                name: backendRow,
+                rows: stateRows
+            ) is not { } tokenRow) {
+                errors.Add(item: $"host.backendRow names state row '{backendRow}', which the document does not declare.");
+            } else if (
+                (tokenRow.Kind != CellKind.Text) ||
+                tokenRow.IsKeyed ||
+                (tokenRow.Field is not null)
+            ) {
+                errors.Add(item: $"host.backendRow names state row '{backendRow}', which must be a scalar kind=Text row.");
+            }
         }
 
         if (!Enum.IsDefined(value: host.PresentMode)) {
@@ -225,7 +215,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         // Listen is SHAPE-only too: null (loopback-only, the default) or a non-whitespace "host:port" pair.
-        // Server.WorldTcpHost is what actually parses/binds it; the validator only refuses an obviously malformed
+        // Server.WorldPeerHost is what actually parses/binds it; the validator only refuses an obviously malformed
         // value so a typo fails loudly at boot rather than surfacing as a silent "never listening".
         if ((host.Listen is { } listen)) {
             if (string.IsNullOrWhiteSpace(value: listen)) {
@@ -251,6 +241,14 @@ public static partial class WorldDefinitionValidator {
         ValidateHostEndpoint(
             value: host.Authority,
             path: "host.authority",
+            errors: errors
+        );
+
+        RequireIntRange(
+            value: host.JournalDepth,
+            min: 0,
+            max: int.MaxValue,
+            name: "host.journalDepth",
             errors: errors
         );
     }
@@ -280,15 +278,15 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} '{value}' must be a \"host:port\" pair with a port 1..65535.");
         }
     }
-    /// <summary>Validates the <c>interactions</c> section by compiling it — <see cref="WorldRuleCompiler.CompileAllInteractions"/>
+    /// <summary>Validates the <c>interactions</c> section by compiling it — <see cref="WorldRuleCompiler.CompileAllInteractions(WorldDefinition)"/>
     /// owns which co-occurrence/effect kinds are admissible and which names resolve (the property registry, a region
     /// placement), so this pass calls it and reports its by-name refusal, mirroring <see cref="ValidateRules"/>'s own
-    /// division against <see cref="WorldRuleCompiler.CompileAll"/>.</summary>
-    private static void ValidateInteractions(WorldInteractionsSection? interactions, WorldDefinition definition, List<string> errors) {
+    /// division against <see cref="WorldRuleCompiler.CompileAll(WorldDefinition)"/>.</summary>
+    private static CompiledWorldRule[] ValidateInteractions(WorldInteractionsSection? interactions, WorldDefinition definition, List<string> errors, ref WorldRuleCompileContext? context) {
         var rows = (interactions?.Interactions ?? []);
 
         if (rows.Count == 0) {
-            return;
+            return [];
         }
 
         if (rows.Count > WorldInteractionCapacity.MaxInteractions) {
@@ -319,262 +317,17 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance) &&
-                (interaction.Range < 0f)
+                (interaction.Range < decimal.Zero)
             ) {
                 errors.Add(item: $"{path}.range {interaction.Range} is negative — a distance threshold cannot be negative.");
             }
         }
 
         try {
-            _ = WorldRuleCompiler.CompileAllInteractions(definition: definition);
-        } catch (WorldRuleException exception) {
+            return WorldRuleCompiler.CompileAllInteractions(definition, context ??= WorldRuleCompiler.Context(definition));
+        } catch (RuleException exception) {
             errors.Add(item: exception.Message);
-        }
-    }
-    // The market section: null IS today's no-market world. A declared section validates its config (formats/fee/
-    // duration bounds/admission tiers) and its live listing ledger. A listing's item/currency rows must already be
-    // declared, Int-kind, capacity-bounded (keyed-table intent) state rows — the same rows the compose-time doors in
-    // Server.WorldServer re-check before every escrow move, so an authored (or engine-composed) listing can never
-    // outlive the row it depends on without this pass catching it first.
-    private static void ValidateMarket(WorldMarketSection? market, Dictionary<string, WorldStateRow> stateRows, List<string> errors) {
-        if (market is null) {
-            return;
-        }
-
-        if (
-            (market.FeeBasisPoints < 0) ||
-            (market.FeeBasisPoints > WorldMarketCapacity.MaxFeeBasisPoints)
-        ) {
-            errors.Add(item: $"market.feeBasisPoints {market.FeeBasisPoints} is outside 0..{WorldMarketCapacity.MaxFeeBasisPoints}.");
-        }
-
-        var minDuration = market.MinDurationSeconds;
-        var maxDuration = market.MaxDurationSeconds;
-
-        if (
-            !float.IsFinite(f: minDuration) ||
-            (minDuration < WorldMarketCapacity.MinDurationFloorSeconds) ||
-            (minDuration > WorldMarketCapacity.MaxDurationCeilingSeconds)
-        ) {
-            errors.Add(item: $"market.minDurationSeconds {minDuration} is outside {WorldMarketCapacity.MinDurationFloorSeconds}..{WorldMarketCapacity.MaxDurationCeilingSeconds}.");
-        }
-
-        if (
-            !float.IsFinite(f: maxDuration) ||
-            (maxDuration < WorldMarketCapacity.MinDurationFloorSeconds) ||
-            (maxDuration > WorldMarketCapacity.MaxDurationCeilingSeconds)
-        ) {
-            errors.Add(item: $"market.maxDurationSeconds {maxDuration} is outside {WorldMarketCapacity.MinDurationFloorSeconds}..{WorldMarketCapacity.MaxDurationCeilingSeconds}.");
-        }
-
-        if (
-            float.IsFinite(f: minDuration) &&
-            float.IsFinite(f: maxDuration) &&
-            (minDuration > maxDuration)
-        ) {
-            errors.Add(item: $"market.minDurationSeconds {minDuration} exceeds market.maxDurationSeconds {maxDuration}.");
-        }
-
-        var retention = market.RetentionSeconds;
-
-        if (
-            !float.IsFinite(f: retention) ||
-            (retention < WorldMarketCapacity.MinRetentionSeconds) ||
-            (retention > WorldMarketCapacity.MaxRetentionSeconds)
-        ) {
-            errors.Add(item: $"market.retentionSeconds {retention} is outside {WorldMarketCapacity.MinRetentionSeconds}..{WorldMarketCapacity.MaxRetentionSeconds}.");
-        }
-
-        if (market.Formats is { } formats) {
-            var seenFormats = new HashSet<WorldMarketFormat>();
-
-            for (var index = 0; (index < formats.Count); index++) {
-                if (!seenFormats.Add(item: formats[index])) {
-                    errors.Add(item: $"market.formats[{index}] '{formats[index]}' is duplicated.");
-                }
-            }
-        }
-
-        if (market.AdmissionTiers is { } tiers) {
-            if (tiers.Count > WorldMarketCapacity.MaxAdmissionTiers) {
-                errors.Add(item: $"market.admissionTiers count {tiers.Count} exceeds the maximum of {WorldMarketCapacity.MaxAdmissionTiers}.");
-            }
-
-            var seenTierNames = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            for (var index = 0; (index < tiers.Count); index++) {
-                var tier = tiers[index];
-                var path = $"market.admissionTiers[{index}]";
-
-                if (string.IsNullOrWhiteSpace(value: tier.Name)) {
-                    errors.Add(item: $"{path}.name is required.");
-                } else if (tier.Name.Length > WorldStateCapacity.MaxTextValueLength) {
-                    errors.Add(item: $"{path}.name length {tier.Name.Length} exceeds the maximum of {WorldStateCapacity.MaxTextValueLength}.");
-                } else if (!seenTierNames.Add(item: tier.Name)) {
-                    errors.Add(item: $"{path}.name '{tier.Name}' is duplicated.");
-                }
-            }
-        }
-
-        var listings = (market.Listings ?? []);
-
-        if (listings.Count > WorldMarketCapacity.MaxListings) {
-            errors.Add(item: $"market.listings count {listings.Count} exceeds the maximum of {WorldMarketCapacity.MaxListings}.");
-        }
-
-        var seenIds = new HashSet<long>();
-        var maxSeenId = 0L;
-
-        for (var index = 0; (index < listings.Count); index++) {
-            var listing = listings[index];
-            var path = $"market.listings[{index}]";
-
-            if (listing is null) {
-                errors.Add(item: $"{path} is required.");
-
-                continue;
-            }
-
-            if (!seenIds.Add(item: listing.Id)) {
-                errors.Add(item: $"{path}.id {listing.Id} is duplicated.");
-            }
-
-            maxSeenId = Math.Max(
-                val1: maxSeenId,
-                val2: listing.Id
-            );
-
-            if (
-                (listing.Seller.Kind != PrincipalKind.Seat) &&
-                (listing.Seller.Kind != PrincipalKind.Peer)
-            ) {
-                errors.Add(item: $"{path}.seller {listing.Seller.Describe()} must be a seat or peer.");
-            }
-
-            if (listing.Quantity <= 0) {
-                errors.Add(item: $"{path}.quantity {listing.Quantity} must be positive.");
-            }
-
-            ValidateMarketRow(
-                path: $"{path}.itemRow",
-                rowName: listing.ItemRow,
-                stateRows: stateRows,
-                errors: errors
-            );
-            ValidateMarketRow(
-                path: $"{path}.currencyRow",
-                rowName: listing.CurrencyRow,
-                stateRows: stateRows,
-                errors: errors
-            );
-
-            switch (listing.Format) {
-                case WorldMarketFormat.English:
-                    if (listing.StartPrice <= 0) {
-                        errors.Add(item: $"{path}.startPrice {listing.StartPrice} must be positive for an English listing.");
-                    }
-
-                    break;
-                case WorldMarketFormat.Buyout:
-                    if (listing.CurrentBid != 0) {
-                        errors.Add(item: $"{path} is a buyout listing but carries a nonzero currentBid — buyout takes no incremental bids.");
-                    }
-
-                    if (listing.CurrentBidder is not null) {
-                        errors.Add(item: $"{path} is a buyout listing but carries a currentBidder — buyout takes no incremental bids.");
-                    }
-
-                    // startPrice is the English minimum-opening-bid field; a buyout listing never reads it (see
-                    // WorldMarketListing.StartPrice's remarks), but it is still a carried long, not an omittable
-                    // one — refused by name to its documented inert value (market.list's own help text: "unused by
-                    // buyout, pass 0") rather than left representable-but-meaningless, the same door-not-type
-                    // instinct currentBid/currentBidder above already apply to this arm.
-                    if (listing.StartPrice != 0) {
-                        errors.Add(item: $"{path}.startPrice {listing.StartPrice} is nonzero but buyout takes no incremental bids — startPrice is unused and must be 0.");
-                    }
-
-                    break;
-            }
-
-            if (
-                (listing.BuyoutPrice is { } buyoutPrice) &&
-                (buyoutPrice <= 0)
-            ) {
-                errors.Add(item: $"{path}.buyoutPrice {buyoutPrice} must be positive.");
-            }
-
-            if (
-                (listing.Format == WorldMarketFormat.Buyout) &&
-                (listing.BuyoutPrice is null)
-            ) {
-                errors.Add(item: $"{path} is a buyout listing but declares no buyoutPrice.");
-            }
-
-            if (listing.DeadlineTick < 0) {
-                errors.Add(item: $"{path}.deadlineTick {listing.DeadlineTick} must be non-negative.");
-            }
-
-            if (listing.CurrentBid < 0) {
-                errors.Add(item: $"{path}.currentBid {listing.CurrentBid} must be non-negative.");
-            }
-
-            if ((listing.CurrentBid > 0) != (listing.CurrentBidder is not null)) {
-                errors.Add(item: $"{path}.currentBid and .currentBidder must be set together.");
-            }
-
-            if (
-                (listing.CurrentBidder is { } bidder) &&
-                (bidder.Kind != PrincipalKind.Seat) &&
-                (bidder.Kind != PrincipalKind.Peer)
-            ) {
-                errors.Add(item: $"{path}.currentBidder {bidder.Describe()} must be a seat or peer.");
-            }
-
-            // The retention sweep's own age basis: a terminal row must carry the tick it resolved at (so the sweep
-            // has a basis to age it from), and an active row must carry none (it has not resolved yet).
-            if ((listing.Status == WorldMarketListingStatus.Active) != (listing.ResolvedTick is null)) {
-                errors.Add(item: $"{path}.resolvedTick must be set exactly when .status is not active (status={listing.Status}).");
-            }
-
-            if (
-                (listing.ResolvedTick is { } resolvedTick) &&
-                (resolvedTick < 0)
-            ) {
-                errors.Add(item: $"{path}.resolvedTick {resolvedTick} must be non-negative.");
-            }
-        }
-
-        if (market.NextListingId <= maxSeenId) {
-            errors.Add(item: $"market.nextListingId {market.NextListingId} must exceed every listing's id (highest seen: {maxSeenId}).");
-        }
-
-        if (market.NextListingId < 1) {
-            errors.Add(item: $"market.nextListingId {market.NextListingId} must be positive.");
-        }
-
-        if (market.FeeReserve < 0) {
-            errors.Add(item: $"market.feeReserve {market.FeeReserve} must be non-negative.");
-        }
-    }
-    // A listing's item/currency row must already be a declared, Int-kind, capacity-bounded state row — the SAME
-    // "declaring a capacity is declaring table intent" rule WorldStateRow's own remarks state, since a listing
-    // always writes a per-holder cell, never a slot.
-    private static void ValidateMarketRow(string path, WorldCellName rowName, Dictionary<string, WorldStateRow> stateRows, List<string> errors) {
-        if (!stateRows.TryGetValue(
-            key: rowName,
-            value: out var row
-        )) {
-            errors.Add(item: $"{path} '{rowName}' names no declared state row.");
-
-            return;
-        }
-
-        if (row.Kind != CellKind.Int) {
-            errors.Add(item: $"{path} '{rowName}' is kind {row.Kind}, not int.");
-        }
-
-        if (row.Capacity is null) {
-            errors.Add(item: $"{path} '{rowName}' declares no capacity — a market row must be an explicitly keyed table (declaring capacity is declaring table intent).");
+            return [];
         }
     }
     private static void ValidatePortals(WorldPortalsSection? portals, List<string> errors) {
@@ -630,7 +383,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (!WorldCellName.TryParse(
+            if (!CellName.TryParse(
                 candidate: name,
                 name: out _,
                 reason: out var nameReason
@@ -652,7 +405,7 @@ public static partial class WorldDefinitionValidator {
             )) {
                 errors.Add(item: $"{path} '{name}' names no declared state row — a property's per-carrier tags are stored in a keyed int state row of the SAME name; declare it first with world.row.set state.");
             } else if (row.Kind != CellKind.Int) {
-                errors.Add(item: $"{path} '{name}' names state row '{name}', which is kind={row.Kind.ToString().ToLowerInvariant()} — a property's per-carrier tags are stored as kind=int.");
+                errors.Add(item: $"{path} '{name}' names state row '{name}', which is kind={StateSpelling.Kind(kind: row.Kind)} — a property's per-carrier tags are stored as kind=Int.");
             } else if (!row.IsKeyed) {
                 errors.Add(item: $"{path} '{name}' names state row '{name}', which is not keyed — a property's per-carrier tags are one cell per carrier (a keyed row, exactly like an argmax-eligible tally); author it with a 'capacity' (or several cells) so it is keyed.");
             }
@@ -714,9 +467,9 @@ public static partial class WorldDefinitionValidator {
     /// predicate/effect kinds are admissible at world scope and which names resolve, so this pass calls it and
     /// reports its by-name refusal rather than restating the rule set (the exact division
     /// <c>BodyMotionProgramException</c> already has for kit programs).</summary>
-    private static void ValidateRules(IReadOnlyList<WorldRule>? rules, WorldDefinition definition, List<string> errors) {
+    private static CompiledWorldRule[] ValidateRules(IReadOnlyList<WorldRule>? rules, WorldDefinition definition, List<string> errors, ref WorldRuleCompileContext? context) {
         if (rules is not { Count: > 0 }) {
-            return;
+            return [];
         }
 
         for (var index = 0; (index < rules.Count); index++) {
@@ -733,25 +486,582 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.mode '{rule.Mode}' is not a defined ActionTriggerMode.");
             }
 
-            if (rule.Effects is not { Count: > 0 }) {
+            if (rule.Effects is null || (rule.Effects.Count == 0 && rule.Decision is null)) {
                 errors.Add(item: $"{path}.effects must be non-empty — a rule that does nothing is a rule nothing can read back.");
             }
         }
 
         try {
-            _ = WorldRuleCompiler.CompileAll(definition: definition);
-        } catch (WorldRuleException exception) {
+            return WorldRuleCompiler.CompileAll(definition, context ??= WorldRuleCompiler.Context(definition));
+        } catch (RuleException exception) {
             errors.Add(item: exception.Message);
+            return [];
         }
     }
-    // The water section: null IS the dry world, so the only refusable shape is a non-finite level. JSON cannot spell
-    // NaN/Infinity, so this guards the programmatic-construction path a future consumer would compile from.
-    private static void ValidateWater(WorldWaterSection? water, List<string> errors) {
+    /// <summary>Gets whether the document declares at least one medium lattice field — the premise a kit authoring
+    /// a <c>Medium</c> hold row requires.</summary>
+    private static bool HasMediumField(WorldDefinition definition) {
+        var fields = (definition.Fields?.Fields ?? []);
+
+        for (var index = 0; (index < fields.Count); index++) {
+            if (fields[index].Medium) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    private static void ValidateFields(WorldDefinition definition, List<string> errors) {
+        ValidateDiscreteState(definition, errors);
+        var physical = WorldTopologyCompilation.FindPhysical(definition.StateRaw);
+        var physicalCount = (definition.StateRaw?.Lattices ?? []).Count(t => t?.Kind == TopologyKind.Field);
+        if (physicalCount > 1) {
+            errors.Add("state.lattices admits at most one physical field topology.");
+        }
+        foreach (var row in definition.StateRaw?.World ?? []) {
+            if (row?.Field is not null) {
+                var topologyName = (row.EffectiveDomain is StateDomain.CellsOf cellsOf ? cellsOf.Topology : null);
+
+                if (physical is null || topologyName != physical.Name) {
+                    errors.Add($"state row '{row.Name}' field domain.topology '{topologyName}' names no physical topology.");
+                }
+            }
+        }
+        if (physical is not null && definition.Fields is { Fields.Count: 0 }) {
+            errors.Add($"state.lattices '{physical.Name}' is declared but no state row carries a field trait.");
+        }
+        if (definition.Fields is not { } fields) {
+            return;
+        }
+
+        var lattice = fields.Lattice;
+
+        if (lattice is null) {
+            errors.Add(item: "fields.lattice is required.");
+
+            return;
+        }
+
         if (
-            (water is not null) &&
-            !float.IsFinite(f: water.Level)
+            !float.IsFinite(f: lattice.Origin.X) ||
+            !float.IsFinite(f: lattice.Origin.Y) ||
+            !float.IsFinite(f: lattice.Origin.Z)
         ) {
-            errors.Add(item: $"water.level must be finite (was {water.Level}).");
+            errors.Add(item: "fields.lattice.origin must contain finite coordinates.");
+        }
+
+        if (
+            !TopologyCompilation.FitsFixed(value: lattice.CellSize) ||
+            (FixedQ4816.FromDouble(value: lattice.CellSize) <= FixedQ4816.Zero)
+        ) {
+            errors.Add(item: $"fields.lattice.cellSize must quantize to a positive Q48.16 value (was {lattice.CellSize}).");
+        }
+
+        if (
+            !TopologyCompilation.FitsFixed(value: lattice.Origin.X) ||
+            !TopologyCompilation.FitsFixed(value: lattice.Origin.Y) ||
+            !TopologyCompilation.FitsFixed(value: lattice.Origin.Z)
+        ) {
+            errors.Add(item: "fields.lattice.origin must fit Q48.16.");
+        } else if (
+            TopologyCompilation.FitsFixed(value: lattice.CellSize) &&
+            (lattice.CellSize > 0f) &&
+            (
+                !TopologyCompilation.FitsFixed(value: ((float)(((double)lattice.Origin.X) + (((double)lattice.CellSize) * lattice.Width)))) ||
+                !TopologyCompilation.FitsFixed(value: ((float)(((double)lattice.Origin.Y) + (((double)lattice.CellSize) * lattice.Layers)))) ||
+                !TopologyCompilation.FitsFixed(value: ((float)(((double)lattice.Origin.Z) + (((double)lattice.CellSize) * lattice.Depth))))
+            )
+        ) {
+            errors.Add(item: "fields.lattice extent must fit Q48.16.");
+        }
+
+        if (
+            (lattice.Width < 1) ||
+            (lattice.Width > WorldFieldCapacity.MaxExtent) ||
+            (lattice.Depth < 1) ||
+            (lattice.Depth > WorldFieldCapacity.MaxExtent)
+        ) {
+            errors.Add(item: $"fields.lattice.width/depth must be in 1..{WorldFieldCapacity.MaxExtent} (was {lattice.Width}x{lattice.Depth}).");
+        }
+
+        if (
+            (lattice.Layers < 1) ||
+            (lattice.Layers > WorldFieldCapacity.MaxLayers)
+        ) {
+            errors.Add(item: $"fields.lattice.layers must be in 1..{WorldFieldCapacity.MaxLayers} (was {lattice.Layers}).");
+        }
+
+        if (((((long)lattice.Width) * lattice.Depth) * lattice.Layers) > WorldFieldCapacity.MaxCells) {
+            errors.Add(item: $"fields.lattice declares {((((long)lattice.Width) * lattice.Depth) * lattice.Layers)} cells, exceeding the {WorldFieldCapacity.MaxCells}-cell ceiling.");
+        }
+
+        if (lattice.StepEveryTicks < 1) {
+            errors.Add(item: $"fields.lattice.stepEveryTicks must be at least 1 (was {lattice.StepEveryTicks}).");
+        }
+
+        var rows = (fields.Fields ?? []);
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var hasHeightField = false;
+
+        if (rows.Count == 0) {
+            errors.Add(item: "fields.fields declares no field.");
+        }
+
+        if (rows.Count > WorldFieldCapacity.MaxFields) {
+            errors.Add(item: $"fields.fields declares {rows.Count} rows, exceeding the {WorldFieldCapacity.MaxFields}-field ceiling.");
+        }
+
+        for (var index = 0; (index < rows.Count); index++) {
+            var row = rows[index];
+            var path = $"fields.fields[{index}]";
+
+            if (row is null) {
+                errors.Add(item: $"{path} is null.");
+
+                continue;
+            }
+
+            if (
+                string.IsNullOrWhiteSpace(value: row.Name) ||
+                row.Name.Contains(value: '.') ||
+                row.Name.StartsWith(
+                comparisonType: StringComparison.Ordinal,
+                value: WorldStateRow.ReservedNamePrefix
+            )
+            ) {
+                errors.Add(item: $"{path}.name '{row.Name}' must be non-empty, dot-free, and not '{WorldStateRow.ReservedNamePrefix}'-prefixed.");
+            } else if (!names.Add(item: row.Name)) {
+                errors.Add(item: $"{path}.name '{row.Name}' is duplicated.");
+            }
+
+            if (
+                !TopologyCompilation.FitsFixed(value: row.Min) ||
+                !TopologyCompilation.FitsFixed(value: row.Max) ||
+                (FixedQ4816.FromDouble(value: row.Min) >= FixedQ4816.FromDouble(value: row.Max))
+            ) {
+                errors.Add(item: $"{path} must declare Q48.16-representable min < max after quantization (was {row.Min}..{row.Max}).");
+            } else if (
+                !TopologyCompilation.FitsFixed(value: row.Initial) ||
+                (row.Initial < row.Min) ||
+                (row.Initial > row.Max)
+            ) {
+                errors.Add(item: $"{path}.initial {row.Initial} is outside {row.Min}..{row.Max}.");
+            }
+
+            if (
+                !TopologyCompilation.FitsFixed(value: row.HeightScale) ||
+                (row.HeightScale < 0f)
+            ) {
+                errors.Add(item: $"{path}.heightScale must be finite and non-negative (was {row.HeightScale}).");
+            }
+
+            if (
+                row.Medium &&
+                (row.HeightScale <= 0f)
+            ) {
+                errors.Add(item: $"{path}.medium requires a heightScale greater than 0 — a surface-less medium is meaningless.");
+            }
+
+            if (row.HeightScale > 0f) {
+                hasHeightField = true;
+
+                if (
+                    (row.Color is null) ||
+                    !WorldColor.IsAuthorable(
+                    definition: definition,
+                    value: row.Color
+                )
+                ) {
+                    errors.Add(item: $"{path}.color {WorldColor.Grammar} on a field carrying a heightScale.");
+                }
+
+                var maximumRaise = ((((double)row.Max) * row.HeightScale) * lattice.Layers);
+                var minimumRaise = ((((double)row.Min) * row.HeightScale) * lattice.Layers);
+
+                if (maximumRaise > (WorldFieldCapacity.MaxSurfaceCells * ((double)lattice.CellSize))) {
+                    errors.Add(item: $"{path} can raise {maximumRaise} units of surface across {lattice.Layers} layers, above the {(WorldFieldCapacity.MaxSurfaceCells * lattice.CellSize)}-unit ceiling ({WorldFieldCapacity.MaxSurfaceCells} cells of cellSize).");
+                }
+
+                if (minimumRaise < (((double)long.MinValue) / 65536.0)) {
+                    errors.Add(item: $"{path}'s minimum layered height {minimumRaise} does not fit Q48.16.");
+                }
+            } else if (
+                (row.Color is not null) &&
+                !IsHexColor(value: row.Color)
+            ) {
+                errors.Add(item: $"{path}.color '{row.Color}' is not #RRGGBB.");
+            }
+        }
+
+        if (
+            hasHeightField &&
+            ((lattice.Width > WorldFieldCapacity.MaxSurfaceCells) || (lattice.Depth > WorldFieldCapacity.MaxSurfaceCells))
+        ) {
+            errors.Add(item: $"fields.lattice width/depth must be at most {WorldFieldCapacity.MaxSurfaceCells} when a field carries heightScale; one {(WorldFieldCapacity.MaxSurfaceCells + 2)}-voxel render brick must cover the lattice plus its border (was {lattice.Width}x{lattice.Depth}).");
+        }
+
+        var reactions = (fields.Reactions ?? []);
+
+        if (reactions.Count > WorldFieldCapacity.MaxReactions) {
+            errors.Add(item: $"fields.reactions declares {reactions.Count} rows, exceeding the {WorldFieldCapacity.MaxReactions}-reaction ceiling.");
+        }
+
+        void RequireField(string? name, string path) {
+            if (
+                (name is null) ||
+                !names.Contains(item: name)
+            ) {
+                errors.Add(item: $"{path} names field '{name}', which fields.fields does not declare.");
+            }
+        }
+
+        void RequireScalarRow(string row, string path) {
+            if (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: row
+            ) is not { } declared) {
+                errors.Add(item: $"{path} references state row '{row}', which the document does not declare.");
+            } else if (
+                (declared.Kind != CellKind.Fixed) ||
+                declared.IsKeyed ||
+                (declared.Field is not null)
+            ) {
+                errors.Add(item: $"{path} references state row '{row}', which must be a scalar kind=Fixed row (a reaction scalar reads one slot cell per step).");
+            }
+        }
+
+        void RequireRate(WorldLatticeScalar rate, string path) {
+            if (rate.Row is { } row) {
+                RequireScalarRow(
+                    path: path,
+                    row: row
+                );
+
+                return;
+            }
+
+            RequireUnitInterval(
+                value: (rate.Literal ?? 0f),
+                name: path,
+                errors: errors
+            );
+        }
+
+        void RequireScalarValue(WorldLatticeScalar value, string path) {
+            if (value.Row is { } row) {
+                RequireScalarRow(
+                    path: path,
+                    row: row
+                );
+
+                return;
+            }
+
+            if (!TopologyCompilation.FitsFixed(value: (value.Literal ?? 0f))) {
+                errors.Add(item: $"{path} must carry a finite Q48.16 value.");
+            }
+        }
+
+        void RequireKeyedIntRow(string? row, string path) {
+            if (
+                (row is null) ||
+                (WorldDefinitionRows.FindStateRow(
+                rows: definition.State,
+                name: row
+            ) is not { } declared)
+            ) {
+                errors.Add(item: $"{path} names state row '{row}', which the document does not declare.");
+            } else if (
+                (declared.Kind != CellKind.Int) ||
+                !declared.IsKeyed
+            ) {
+                errors.Add(item: $"{path} names state row '{row}', which must be a keyed kind=Int row.");
+            }
+        }
+
+        for (var index = 0; (index < reactions.Count); index++) {
+            var path = $"fields.reactions[{index}]";
+
+            switch (reactions[index]) {
+                case WorldReaction.Diffuse diffuse:
+                    RequireField(
+                        name: diffuse.Field,
+                        path: $"{path}.field"
+                    );
+                    RequireRate(
+                        rate: diffuse.Rate,
+                        path: $"{path}.rate"
+                    );
+                    break;
+                case WorldReaction.Decay decay:
+                    RequireField(
+                        name: decay.Field,
+                        path: $"{path}.field"
+                    );
+                    RequireRate(
+                        rate: decay.Rate,
+                        path: $"{path}.rate"
+                    );
+                    break;
+                case WorldReaction.Transform transform: {
+                        var conditions = (transform.When ?? []);
+                        var writes = (transform.Then ?? []);
+
+                        if (conditions.Count > WorldFieldCapacity.MaxTransformTerms) {
+                            errors.Add(item: $"{path}.when declares {conditions.Count} conditions, exceeding the {WorldFieldCapacity.MaxTransformTerms}-term ceiling.");
+                        }
+
+                        if (writes.Count > WorldFieldCapacity.MaxTransformTerms) {
+                            errors.Add(item: $"{path}.then declares {writes.Count} writes, exceeding the {WorldFieldCapacity.MaxTransformTerms}-term ceiling.");
+                        }
+
+                        if (writes.Count == 0) {
+                            errors.Add(item: $"{path}.then is empty.");
+                        }
+
+                        for (var c = 0; (c < conditions.Count); c++) {
+                            RequireField(
+                                name: conditions[c]?.Field,
+                                path: $"{path}.when[{c}].field"
+                            );
+
+                            if (conditions[c] is { } condition) {
+                                RequireScalarValue(
+                                    path: $"{path}.when[{c}].value",
+                                    value: condition.Value
+                                );
+                            }
+
+                            if ((conditions[c] is { } definedCondition) && !Enum.IsDefined(value: definedCondition.Comparison)) {
+                                errors.Add(item: $"{path}.when[{c}].comparison '{definedCondition.Comparison}' is unknown.");
+                            }
+                        }
+
+                        for (var t = 0; (t < writes.Count); t++) {
+                            RequireField(
+                                name: writes[t]?.Field,
+                                path: $"{path}.then[{t}].field"
+                            );
+
+                            if (writes[t] is { } write) {
+                                RequireScalarValue(
+                                    path: $"{path}.then[{t}].value",
+                                    value: write.Value
+                                );
+                            }
+
+                            if ((writes[t] is { } definedWrite) && !Enum.IsDefined(value: definedWrite.Op)) {
+                                errors.Add(item: $"{path}.then[{t}].op '{definedWrite.Op}' is unknown.");
+                            }
+                        }
+
+                        break;
+                    }
+                case WorldReaction.Emit emit:
+                    RequireField(
+                        name: emit.Field,
+                        path: $"{path}.field"
+                    );
+                    RequireKeyedIntRow(
+                        row: emit.Tag,
+                        path: $"{path}.tag"
+                    );
+
+                    RequireScalarValue(
+                        path: $"{path}.amount",
+                        value: emit.Amount
+                    );
+
+                    break;
+                case WorldReaction.Expose expose:
+                    RequireField(
+                        name: expose.Field,
+                        path: $"{path}.field"
+                    );
+                    RequireKeyedIntRow(
+                        row: expose.Row,
+                        path: $"{path}.row"
+                    );
+
+                    RequireScalarValue(
+                        path: $"{path}.value",
+                        value: expose.Value
+                    );
+
+                    if (!Enum.IsDefined(value: expose.Comparison)) {
+                        errors.Add(item: $"{path}.comparison '{expose.Comparison}' is unknown.");
+                    }
+
+                    break;
+                case WorldReaction.Flow flow: {
+                        RequireField(
+                            name: flow.Field,
+                            path: $"{path}.field"
+                        );
+                        RequireRate(
+                            rate: flow.Rate,
+                            path: $"{path}.rate"
+                        );
+
+                        var over = (flow.Over ?? []);
+                        var overNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+                        for (var o = 0; (o < over.Count); o++) {
+                            var overPath = $"{path}.over[{o}]";
+
+                            RequireField(
+                                name: over[o],
+                                path: overPath
+                            );
+
+                            if (string.Equals(a: over[o], b: flow.Field, comparisonType: StringComparison.Ordinal)) {
+                                errors.Add(item: $"{overPath} names '{over[o]}', the field flow itself transports; the field's own value already contributes without repeating it in over.");
+                            } else if ((over[o] is { } overName) && !overNames.Add(item: overName)) {
+                                errors.Add(item: $"{overPath} names '{over[o]}', duplicated within over.");
+                            }
+                        }
+
+                        if (flow.SpillRow is { } spillRow) {
+                            RequireScalarRow(
+                                path: $"{path}.spillRow",
+                                row: spillRow
+                            );
+                        }
+
+                        break;
+                    }
+                default:
+                    errors.Add(item: $"{path} is an unknown reaction kind.");
+                    break;
+            }
+        }
+
+        var paint = (fields.Paint ?? []);
+
+        if (paint.Count > WorldFieldCapacity.MaxPaint) {
+            errors.Add(item: $"fields.paint declares {paint.Count} rows, exceeding the {WorldFieldCapacity.MaxPaint}-row ceiling.");
+        }
+
+        var drawnFields = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        for (var index = 0; (index < paint.Count); index++) {
+            var path = $"fields.paint[{index}]";
+            var row = paint[index];
+
+            if (row is null) {
+                errors.Add(item: $"{path} is null.");
+
+                continue;
+            }
+
+            RequireField(
+                name: row.Field,
+                path: $"{path}.field"
+            );
+
+            switch (row) {
+                case WorldLatticeFill.Rect rect:
+                    if (
+                        !TopologyCompilation.FitsFixed(value: rect.Value) ||
+                        !TopologyCompilation.FitsFixed(value: rect.MinX) ||
+                        !TopologyCompilation.FitsFixed(value: rect.MinZ) ||
+                        !TopologyCompilation.FitsFixed(value: rect.MaxX) ||
+                        !TopologyCompilation.FitsFixed(value: rect.MaxZ) ||
+                        (rect.MinX > rect.MaxX) ||
+                        (rect.MinZ > rect.MaxZ)
+                    ) {
+                        errors.Add(item: $"{path} must carry a finite value and a finite min <= max rectangle.");
+                    }
+
+                    break;
+                case WorldLatticeFill.Noise noise:
+                    if (
+                        !TopologyCompilation.FitsFixed(value: noise.Value) ||
+                        !float.IsFinite(f: noise.Threshold) ||
+                        (noise.Threshold < 0f) ||
+                        (noise.Threshold >= 1f)
+                    ) {
+                        errors.Add(item: $"{path} must carry a finite value and a threshold in [0, 1).");
+                    }
+                    if (noise.Frequency < 1) {
+                        errors.Add(item: $"{path}.frequency must be at least 1 (noise-cell edge in lattice cells; was {noise.Frequency}).");
+                    }
+                    if ((noise.Octaves < 1) || (noise.Octaves > 4)) {
+                        errors.Add(item: $"{path}.octaves must be in 1..4 (was {noise.Octaves}).");
+                    }
+
+                    break;
+                case WorldLatticeFill.Draw draw:
+                    if (!drawnFields.Add(item: row.Field)) {
+                        errors.Add(item: $"{path} is a second draw fill on field '{row.Field}' — a lattice row draws one whole-field pass at a time through its own cursor and masks, so it carries at most one draw fill.");
+                    }
+
+                    if (!GeneratorEngine.TryResolveSource(
+                        generators: definition.Generators,
+                        draw: new Draw(Source: draw.Source, Generator: draw.Generator),
+                        generator: out var drawSource,
+                        reason: out var drawReason
+                    )) {
+                        errors.Add(item: $"{path} {drawReason}.");
+
+                        break;
+                    }
+
+                    if (draw.Generator is { } inlineSource) {
+                        ValidateSource(
+                            errors: errors,
+                            generator: inlineSource,
+                            path: $"{path}.generator"
+                        );
+                    }
+
+                    if (!GeneratorEngine.TryCheckTargetKind(
+                        source: drawSource.Source,
+                        targetKind: CellKind.Fixed,
+                        reason: out var kindReason
+                    )) {
+                        errors.Add(item: $"{path} {kindReason} — a lattice cell is a fixed value.");
+                    }
+
+                    var latticeSamples = ((((long)lattice.Width) * lattice.Depth) * lattice.Layers);
+                    var drawnMasks = WorldDefinitionRows.FindStateRow(
+                        rows: definition.State,
+                        name: row.Field
+                    )?.DrawnMasks;
+
+                    ValidateDrawnMasks(
+                        masks: drawnMasks,
+                        errors: errors,
+                        generator: drawSource,
+                        path: $"state row '{row.Field}' drawnMasks"
+                    );
+
+                    if (
+                        (latticeSamples > 0L) &&
+                        !GeneratorEngine.TryCheckBatchCapacity(
+                            generator: drawSource,
+                            masks: drawnMasks,
+                            sampleCount: latticeSamples,
+                            reason: out var batchReason
+                        )
+                    ) {
+                        errors.Add(item: $"{path} {batchReason}.");
+                    }
+
+                    break;
+                case WorldLatticeFill.Scatter scatter:
+                    if (!TopologyCompilation.FitsFixed(value: scatter.Value)) {
+                        errors.Add(item: $"{path} must carry a finite value.");
+                    }
+                    if (scatter.Spacing < 2) {
+                        errors.Add(item: $"{path}.spacing must be at least 2 cells (was {scatter.Spacing}).");
+                    }
+                    if ((scatter.Radius < 1) || ((2 * scatter.Radius) > scatter.Spacing)) {
+                        errors.Add(item: $"{path}.radius must be at least 1 and at most spacing/2 (a disc never leaves its block; was {scatter.Radius} against spacing {scatter.Spacing}).");
+                    }
+
+                    break;
+            }
         }
     }
 }

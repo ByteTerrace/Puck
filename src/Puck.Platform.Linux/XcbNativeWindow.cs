@@ -17,6 +17,11 @@ namespace Puck.Platform.Linux;
 /// capture equivalent to Win32's <c>SetCapture</c> is implemented (XCB's is <c>xcb_grab_pointer</c>): a drag
 /// that leaves the client area on this path stops receiving motion until the pointer re-enters.</summary>
 internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
+    // XCB reports no per-device identity for key or pointer events (unlike Win32 Raw Input's per-hDevice
+    // resolution) — every physical keyboard and every physical mouse collapses onto these two fixed ids.
+    private static readonly InputDeviceId CollapsedKeyboardDevice = InputDeviceId.FromKey(key: "keyboard");
+    private static readonly InputDeviceId CollapsedMouseDevice = InputDeviceId.FromKey(key: "mouse");
+
     private const uint XcbAtomAtom = 4;
     private const uint XcbAtomString = 31;
     private const uint XcbAtomWmName = 39;
@@ -485,10 +490,13 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
                 (deltaX != 0) ||
                 (deltaY != 0)
             ) {
-                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(delta: new Vector2(
+                m_pendingInput.Enqueue(item: WindowInputEvent.PointerDelta(
+                    deviceId: CollapsedMouseDevice,
+                    delta: new Vector2(
                     x: deltaX,
                     y: deltaY
-                )));
+                )
+                ));
             }
         }
 
@@ -499,9 +507,9 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
         var detail = Marshal.ReadByte(ofs: 1, ptr: eventPointer);
 
         if (TryMapWheel(detail: detail, notches: out var notches)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(notches: notches));
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerWheel(deviceId: CollapsedMouseDevice, notches: notches));
         } else if (TryMapButton(button: out var button, detail: detail)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Started));
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, deviceId: CollapsedMouseDevice, phase: CommandPhase.Started));
         }
     }
     private void HandleButtonRelease(nint eventPointer) {
@@ -510,7 +518,7 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
         // X11 models wheel notches as button press/release pairs. The press is the impulse; its release is not a
         // second act and carries no held state to clear.
         if (!TryMapWheel(detail: detail, notches: out _) && TryMapButton(button: out var button, detail: detail)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, phase: CommandPhase.Completed));
+            m_pendingInput.Enqueue(item: WindowInputEvent.PointerButton(button: button, deviceId: CollapsedMouseDevice, phase: CommandPhase.Completed));
         }
     }
     // X11 button numbering (1=left, 2=middle, 3=right; 4..7 are wheel directions; 8+ are extra buttons) mapped to
@@ -567,12 +575,12 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
         );
 
         if (TryMapKeycode(key: out var key, keycode: keycode)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(key: key));
+            m_pendingInput.Enqueue(item: WindowInputEvent.KeyDown(deviceId: CollapsedKeyboardDevice, key: key));
         }
     }
     private void EmitKeyRelease(byte keycode) {
         if (TryMapKeycode(key: out var key, keycode: keycode)) {
-            m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(key: key));
+            m_pendingInput.Enqueue(item: WindowInputEvent.KeyUp(deviceId: CollapsedKeyboardDevice, key: key));
         }
     }
     // F1-F10 are contiguous on the standard evdev keymap (67-76), so one range check covers them; F11/F12

@@ -30,7 +30,7 @@ public sealed partial class WorldServer {
         }
 
         var tick = (NextInputTick - 1UL);
-        var key = index.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
+        var key = IndexKeyCache.Get(index: index);
         var tags = new List<string>();
 
         foreach (var name in names) {
@@ -129,6 +129,8 @@ public sealed partial class WorldServer {
         WorldMutation.SetSpawns => "SetSpawns",
         WorldMutation.SetMotion => "SetMotion",
         WorldMutation.SetPopulationDefaults => "SetPopulationDefaults",
+        WorldMutation.SetPopulationDistribution => "SetPopulationDistribution",
+        WorldMutation.SetPopulationCensus => "SetPopulationCensus",
         WorldMutation.SetRenderDefaults => "SetRenderDefaults",
         WorldMutation.UpsertAddon m => $"UpsertAddon '{m.Addon.Name}'",
         WorldMutation.RemoveAddon m => $"RemoveAddon '{m.Name}'",
@@ -141,22 +143,27 @@ public sealed partial class WorldServer {
         WorldMutation.SetAuthoringDefaults => "SetAuthoringDefaults",
         WorldMutation.UpsertSpeaker m => $"UpsertSpeaker '{m.Speaker.Name}'",
         WorldMutation.RemoveSpeaker m => $"RemoveSpeaker '{m.Name}'",
-        WorldMutation.UpsertTune m => $"UpsertTune '{m.Tune.Id}'",
-        WorldMutation.RemoveTune m => $"RemoveTune '{m.Id}'",
-        WorldMutation.UpsertPatch m => $"UpsertPatch '{m.Patch.Id}'",
-        WorldMutation.RemovePatch m => $"RemovePatch '{m.Id}'",
+        WorldMutation.UpsertTune m => $"UpsertTune '{m.Tune.Name}'",
+        WorldMutation.RemoveTune m => $"RemoveTune '{m.Name}'",
+        WorldMutation.UpsertPatch m => $"UpsertPatch '{m.Patch.Name}'",
+        WorldMutation.RemovePatch m => $"RemovePatch '{m.Name}'",
         WorldMutation.SetAudioDefaults => "SetAudioDefaults",
         WorldMutation.SetCollision => "SetCollision",
         WorldMutation.SetHostDefaults => "SetHostDefaults",
         WorldMutation.SetViewDefaults => "SetViewDefaults",
+        WorldMutation.SetViewSeatRig => "SetViewSeatRig",
+        WorldMutation.SetViewSeatControl => "SetViewSeatControl",
         WorldMutation.SetPlayerDefaults => "SetPlayerDefaults",
+        WorldMutation.SetPlayerSeatLook => "SetPlayerSeatLook",
         WorldMutation.UpsertViewLayout m => $"UpsertViewLayout '{m.Layout.Name}'",
         WorldMutation.RemoveViewLayout m => $"RemoveViewLayout '{m.Name}'",
         WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
         WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
+        WorldMutation.UpsertDynamics m => $"UpsertDynamics '{m.Row.Name}'",
+        WorldMutation.RemoveDynamics m => $"RemoveDynamics '{m.Name}'",
+        WorldMutation.UpsertCurve m => $"UpsertCurve '{m.Row.Name}'",
+        WorldMutation.RemoveCurve m => $"RemoveCurve '{m.Name}'",
         WorldMutation.SetLookAssignment m => $"SetLookAssignment '{m.Assignment.Sequence.Name}'",
-        WorldMutation.UpsertScreenLink m => $"UpsertScreenLink '{m.Link.Name}'",
-        WorldMutation.RemoveScreenLink m => $"RemoveScreenLink '{m.Name}'",
         WorldMutation.UpsertGrant m => $"UpsertGrant {m.Row.Principal.Describe()} {m.Row.Capability.ToString().ToLowerInvariant()} {m.Row.Subject.Describe()}",
         WorldMutation.RemoveGrant m => $"RemoveGrant {m.Target.Principal.Describe()} {m.Target.Capability.ToString().ToLowerInvariant()} {m.Target.Subject.Describe()}",
         WorldMutation.UpsertHudPanel m => $"UpsertHudPanel '{m.Panel.Id}'",
@@ -164,6 +171,8 @@ public sealed partial class WorldServer {
         WorldMutation.UpsertHudElement m => $"UpsertHudElement '{m.PanelId}'.'{m.Element.Id}'",
         WorldMutation.RemoveHudElement m => $"RemoveHudElement '{m.PanelId}'.'{m.ElementId}'",
         WorldMutation.SetHudDefaults => "SetHudDefaults",
+        WorldMutation.TransformState => "TransformState",
+        WorldMutation.Batch m => $"Batch[{string.Join(separator: ", ", values: m.Mutations.Select(Describe))}]",
         WorldMutation.UpsertStateRow m => $"UpsertStateRow '{m.Row.Name}'",
         WorldMutation.RemoveStateRow m => $"RemoveStateRow '{m.Name}'",
         WorldMutation.UpsertStateCell m => $"UpsertStateCell '{m.Row}'.'{m.Key}'",
@@ -187,43 +196,38 @@ public sealed partial class WorldServer {
         : $"UpsertProperty '{m.Name}'"),
         WorldMutation.UpsertInteraction m => $"UpsertInteraction '{m.Interaction.Name}'",
         WorldMutation.RemoveInteraction m => $"RemoveInteraction '{m.Name}'",
-        WorldMutation.CreateMarketListing m => $"CreateMarketListing {m.Quantity}x'{m.ItemRow}' seller={m.Seller.Describe()} by {m.Principal.Describe()}",
-        WorldMutation.PlaceMarketBid m => $"PlaceMarketBid #{m.ListingId} {m.Amount} bidder={m.Bidder.Describe()} by {m.Principal.Describe()}",
-        WorldMutation.BuyoutMarketListing m => $"BuyoutMarketListing #{m.ListingId} buyer={m.Buyer.Describe()} by {m.Principal.Describe()}",
-        WorldMutation.CancelMarketListing m => $"CancelMarketListing #{m.ListingId} canceler={m.Canceler.Describe()} by {m.Principal.Describe()}",
-        WorldMutation.SettleMarketListing m => $"SettleMarketListing #{m.ListingId}",
-        WorldMutation.PruneMarketListings => "PruneMarketListings",
         _ => "unknown",
     };
-    /// <summary>Composes the <c>player.channels</c> echo — the fold and held-image join's read-back
+    /// <summary>Composes the <c>body.channels</c> echo — the fold and held-image join's read-back
     /// (the arithmetic rule lives in <see cref="FixedContributionFold"/>), so a script can tell "the addon asked for more
     /// and the pool held it" apart from "the addon asked for exactly this" without inferring it from displacement
     /// across ticks. Reports every declared channel of <paramref name="bodyIndex"/>'s last write: the folded value
     /// the simulation received, the owning seat's own base <c>h</c>, every contributor that reached it tagged by
     /// principal (trusted/untrusted), the pool ceiling in force, whether the pool actually clamped, the held overlay
     /// admitted later by <see cref="WorldBody"/>, and the value after that overlay composed with the movement tier.</summary>
-    /// <param name="index">The 1-based player display index (for the echo's own tag).</param>
-    /// <param name="bodyIndex">The 0-based entity index already resolved to a live body.</param>
+    /// <param name="bodyIndex">The 0-based body index already resolved to a live body.</param>
     /// <param name="body">The live body retaining the later held-overlay decision.</param>
-    private string DescribeChannels(int index, int bodyIndex, WorldBody body) {
+    private string DescribeChannels(int bodyIndex, WorldBody body) {
         // The fold — and this read-back — only ever exists over a HUMAN-OCCUPIED LOCAL SEAT
         // (WorldPopulation.IsHumanOccupied; the whole per-seat retention above is sized WorldPopulation.LocalSeatCount).
-        // A population entry (5..128) or an unoccupied local seat is a bot at full authority by construction — there
+        // A peer-slice population entry (4 through capacity minus one) or an unoccupied local seat is a bot at full authority by construction — there
         // is no base/pool/contributor to report, so say that rather than fabricating one.
         if (!m_population.IsHumanOccupied(bodyIndex: bodyIndex)) {
-            return $"[player.channels: p{index} body:{bodyIndex} is not human-occupied — the co-driving pool only ever exists over an occupied local seat (see world.population); nothing folds here]";
+            return $"[body.channels: body:{bodyIndex} is not human-occupied — the co-driving pool only ever exists over an occupied local seat (see world.population); nothing folds here]";
         }
 
-        // The route summary — context-routes widening: what target (if any) this seat's channels also reach, its
-        // capture policy, and its channel mask, so the same read-back that already shows the fold shows the routing
-        // truth beside it (CLAUDE.md's read-back rule: no decision surface without an echoing verb).
-        var routePrincipal = WorldPrincipal.Seat(slot: bodyIndex);
-        var routeText = ((m_grants.ControlRoute(principal: routePrincipal) is { } route)
-            ? $"route={route.Describe()}({(m_grants.RouteCapture(principal: routePrincipal)
-                ? "capture"
-                : "mirror")},mask=0x{m_grants.RouteChannelMask(principal: routePrincipal).Bits:x4})"
-            : "route=none"
-        );
+        // The application-set summary: every target this seat's channels reach, each with its kit and reach mask, so
+        // the same read-back that already shows the fold shows the whole engagement truth beside it (CLAUDE.md's
+        // read-back rule: no decision surface without an echoing verb). The own-body member is listed like any
+        // other, so its ABSENCE — capture — is legible rather than inferred.
+        var applyPrincipal = WorldPrincipal.Seat(slot: bodyIndex);
+        var applications = m_grants.Applications(principal: applyPrincipal);
+        var routeText = $"applications={((applications.Count == 0)
+            ? "none"
+            : string.Join(
+                separator: ",",
+                values: applications.Select(selector: static application => application.Describe())
+            ))}";
 
         var channels = m_population.Channels;
         var h = m_channelReadBase[bodyIndex];
@@ -271,7 +275,7 @@ public sealed partial class WorldServer {
                 : "no")}");
         }
 
-        return $"[player.channels: p{index} {routeText} {string.Join(
+        return $"[body.channels: body:{bodyIndex} {routeText} {string.Join(
             separator: " | ",
             values: segments
         )}]";
@@ -281,7 +285,7 @@ public sealed partial class WorldServer {
     //
     // `latch=held|open` is HELD when the gate held at the last evaluation (an Edge row will not fire again until it
     // lets go) and OPEN when it did not (so the next tick the gate holds is a crossing, and an Edge row fires).
-    private static string DescribeCompiledRules(string verb, CompiledWorldRule[] rules, Dictionary<string, bool> latch) {
+    private static string DescribeCompiledRules(string verb, CompiledWorldRule[] rules, RuleLatch latch) {
         if (rules.Length == 0) {
             return $"[{verb}: none]";
         }
@@ -301,7 +305,25 @@ public sealed partial class WorldServer {
                 values: rule.Effects.Select(selector: static effect => effect.Describe)
             );
 
-            lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()} latch={(latch.GetValueOrDefault(key: rule.Name)
+            if (rule.Decision is { } decision) {
+                lines.Add($"{rule.Name} decision={decision.Mode} options={decision.Options.Length} when {gate} -> common [{effects}]; choices/timers: world.decisions");
+                continue;
+            }
+
+            var held = latch.Held(name: rule.Name);
+            var boundValues = ((rule.Bindings is { Length: > 0 } declared)
+                ? $" bind [{string.Join(separator: ", ", values: declared.Select(selector: static b => $"{b.Name}:{b.Kind.ToString().ToLowerInvariant()}"))}]"
+                : string.Empty);
+            var scope = ((rule.Interaction is { } interaction)
+                ? $" {interaction.CoOccurrence.ToString().ToLowerInvariant()} {interaction.Left} x {interaction.Right}{((interaction.CoOccurrence == WorldInteractionCoOccurrence.Distance)
+                    ? $" <= {((double)interaction.Range)}"
+                    : string.Empty)}"
+                : ((rule.ForEach is { } forEach)
+                    ? $" forEach {forEach}"
+                    : string.Empty)
+            );
+
+            lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()}{scope}{boundValues} latch={(held
                 ? "held"
                 : "open")} when {gate} -> {effects}");
         }
@@ -325,9 +347,9 @@ public sealed partial class WorldServer {
             provider: CultureInfo.InvariantCulture,
             handler: $"[world.contacts: p{index} grounded={(body.Grounded
             ? "true"
-            : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount} submerged={(body.Submerged
+            : "false")} planarSpeed={body.PlanarSpeed:0.00} resolved={body.ContactCount} inMedium={(body.InMedium
             ? "true"
-            : "false")} atSurface={(body.AtSurface
+            : "false")} atMediumBand={(body.AtMediumBand
             ? "true"
             : "false")} obstruction={obstruction}]"
         );

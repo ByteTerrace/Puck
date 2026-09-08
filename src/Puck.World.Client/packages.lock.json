@@ -338,42 +338,36 @@
       "ByteTerrace.Puck.Commands": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "System.CommandLine": "[2.*, )"
-        }
-      },
-      "ByteTerrace.Puck.GamingBricks": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
         }
       },
       "ByteTerrace.Puck.Hosting": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )"
-        }
-      },
-      "ByteTerrace.Puck.HumbleGamingBrick": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
+          "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
       },
+      "ByteTerrace.Puck.Networking": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Physics": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Scripting": {
@@ -384,11 +378,27 @@
           "Wasmtime": "[44.0.0, 44.0.0]"
         }
       },
+      "ByteTerrace.Puck.Shaders": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.SignedDistance": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.State": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Text": {
@@ -417,13 +427,6 @@
           "Puck.Input": "[1.0.0, )"
         }
       },
-      "puck.networking": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
-        }
-      },
       "puck.overlays": {
         "type": "Project",
         "dependencies": {
@@ -445,11 +448,10 @@
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )"
         }
       },
-      "puck.world.forge": {
+      "puck.world.authoring": {
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )"
         }
@@ -460,7 +462,7 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Puck.Networking": "[1.0.0, )",
+          "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )",
           "Puck.World.Schema": "[1.0.0, )"
         }
       },
@@ -471,10 +473,12 @@
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Physics": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
-          "Puck.World.Forge": "[1.0.0, )"
+          "Puck.World.Authoring": "[1.0.0, )"
         }
       }
     }

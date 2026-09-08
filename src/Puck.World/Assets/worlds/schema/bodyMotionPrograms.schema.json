@@ -24,32 +24,28 @@
           "Motion",
           "Producer",
           null
-        ]
+        ],
+        "title": "BodyProgramKind"
       },
       "operations": {
         "description": "The selected domain operations; their phases are intrinsic and cannot be reordered.",
         "type": "array",
         "items": {
-          "description": "Identifies a body motion program instruction from the closed domain-operation vocabulary.",
           "enum": [
             "SenseNearestInCone",
-            "ProduceWanderIntent",
-            "ProduceAttendIntent",
+            "ProduceSteeringIntent",
             "FaceSensorTarget",
+            "ProduceFlockIntent",
             "ResolveYawAttitudeAndPlanarFrame",
             "IntegrateLocalAttitude",
             "ComputePlanarTargetVelocity",
             "ComputeLocalTargetVelocity",
-            "ComputeSwimTargetVelocity",
-            "ShapePlanarVelocity",
+            "ShapeVelocity",
             "SnapYawToPlanarIntent",
-            "ResolveVehicleFrame",
-            "ShapeVehicleVelocity",
+            "ResolveDriveFrame",
+            "ResolveHold",
             "RunActionTriggers",
-            "ApplyVerticalGravity",
-            "ApplyVerticalDecay",
-            "ApplyBuoyancyAndSurface",
-            "ApplyVerticalDrive",
+            "ApplyHold",
             "IntegratePlanarAndVerticalVelocity",
             "IntegrateScratchVelocity",
             "CommitPose",
@@ -60,9 +56,9 @@
             "AddState",
             "StartTimer",
             "Designate",
-            "Generate",
-            "Judge"
-          ]
+            "Generate"
+          ],
+          "title": "BodyMotionOp"
         }
       },
       "target": {
@@ -76,28 +72,24 @@
         ],
         "anyOf": [
           {
-            "description": "Selects the nearest member of Scope inside a body-forward cone.",
             "properties": {
               "$type": {
                 "const": "sensed"
               },
               "scope": {
-                "description": "The population subset considered.",
                 "enum": [
                   "Seats",
                   "Bodies"
-                ]
+                ],
+                "title": "BodyTargetScope"
               },
               "range": {
-                "description": "The cone\u0027s maximum world-space distance.",
                 "type": "number"
               },
               "halfAngleDegrees": {
-                "description": "The cone half-angle in degrees.",
                 "type": "number"
               },
               "requiresLineOfSight": {
-                "description": "Whether solid world geometry must leave the segment unobstructed.",
                 "type": "boolean"
               }
             },
@@ -107,26 +99,65 @@
               "halfAngleDegrees",
               "requiresLineOfSight"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "BodyTargetSourceSensed"
           },
           {
-            "description": "Reads the named target register owned by the body running the producer.",
             "properties": {
               "$type": {
                 "const": "designated"
               },
               "register": {
-                "description": "The authored Name.",
                 "type": "string"
               }
             },
             "required": [
               "register"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "title": "BodyTargetSourceDesignated"
+          },
+          {
+            "properties": {
+              "$type": {
+                "const": "curve"
+              },
+              "curve": {
+                "type": "string"
+              },
+              "rate": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "curve",
+              "rate"
+            ],
+            "additionalProperties": false,
+            "title": "BodyTargetSourceCurveFollow"
+          },
+          {
+            "properties": {
+              "$type": {
+                "const": "navigated"
+              },
+              "domain": {
+                "type": "string"
+              },
+              "register": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "domain",
+              "register"
+            ],
+            "additionalProperties": false,
+            "title": "BodyTargetSourceNavigated"
           }
         ],
-        "default": null
+        "default": null,
+        "title": "BodyTargetSource"
       }
     },
     "required": [
@@ -135,7 +166,8 @@
       "kind",
       "operations"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "BodyMotionProgram"
   },
   "default": null
 }

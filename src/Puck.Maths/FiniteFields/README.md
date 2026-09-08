@@ -388,7 +388,12 @@ so construction costs only the primality test.
 **What the hot path deliberately does not guard.** Every operation expects
 reduced operands in `[0, p)`, and none of them checks. `Inverse` throws
 `DivideByZeroException` on zero, and `BatchInverse` throws it when any element
-is zero, because the shared running product is then zero and has no inverse.
+is zero — before writing anything, so the region comes back untouched — because
+the shared running product is then zero and has no inverse. `BatchInverse` is a
+chain, so it runs the kernel's three passes in Montgomery form: one encode and
+one decode per element replace a hardware division per product.
+`LegendreCharacter` reads its zero after reduction, so a multiple of the modulus
+answers `0` rather than reaching the exponentiation as a non-square.
 
 **One-shot versus chain.** `Multiply` stays on the hardware divide deliberately.
 `ScaledResidueRing64` wins only across a chain of multiplications, and the two
@@ -485,10 +490,13 @@ posture exactly: both coordinates are expected reduced, and nothing checks.
 `Inverse` throws `DivideByZeroException` through the base field when the norm
 vanishes, which for a genuine field element it cannot.
 
-**Chain shape.** The extension's own `Pow` is a chain of extension multiplies,
-each of whose base-field products stays on the divide. Montgomery form is
-entered by the base field rather than by the extension: it is `BaseField.Inverse`
-and `BaseField.Pow` that convert in once and out once.
+**Chain shape.** A single extension `Multiply` is four base-field products —
+`AA'`, `BB'`, the Karatsuba cross `(A + B)(A' + B') − AA' − BB'`, and the fold of
+`BB'` by the non-square — each on the hardware divide, as a one-shot base
+product is. The extension's own `Pow` is a chain, so it enters Montgomery form
+itself: both coordinates and the non-square are encoded once, every product
+along the ladder is one REDC, and the two coordinates decode once at the end.
+`Inverse` reaches the ring through `BaseField.Inverse`.
 
 **Allocation.** None on the managed heap. `BatchInverse` carries the same
 threshold as the base field's: a `stackalloc` of `Element` at 512 or fewer,

@@ -133,8 +133,8 @@ world.view.pointer
 world.wait 720
 world.view.pointer
 world.wait 720
-player.assign kbd 2
-player.assign kbd 1
+player.assign keyboard1 2
+player.assign keyboard1 1
 world.wait 720
 world.view.pointer
 world.wait 720
@@ -157,7 +157,8 @@ function Invoke-Attempt([int] $index) {
     $proc = Start-Process -FilePath 'dotnet' -WorkingDirectory $RepoRoot -NoNewWindow -PassThru `
         -ArgumentList @(
             'run', '--project', 'src/Puck.World', '-c', 'Release', '--no-build', '--',
-            '--world', 'src\Puck.World\Assets\worlds\play.world.json',
+            '--world', 'src\Puck.World\Assets\worlds
+exus.world.json',
             '--exit-after-seconds', '120',
             '--width', '640', '--height', '480',
             '--state-dir', $stateDir
@@ -265,7 +266,7 @@ function Invoke-Attempt([int] $index) {
         $foregroundFailures += 'read-rel-timeout'
     }
     if ([Probe]::GetForegroundWindow() -ne $puck) { $foregroundFailures += 'pre-stage-3' }
-    Note 'STAGE 3: READ REL landed. right button DOWN again (re-arm) - player.assign kbd 2/1 runs from stdin next while it stays down'
+    Note 'STAGE 3: READ REL landed. right button DOWN again (re-arm) - player.assign keyboard1 2/1 runs from stdin next while it stays down'
     [Probe]::RightDown()
     Start-Sleep -Milliseconds 150
 

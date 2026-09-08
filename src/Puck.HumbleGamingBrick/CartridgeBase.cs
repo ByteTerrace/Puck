@@ -222,6 +222,18 @@ public abstract class CartridgeBase : ICartridge {
             ? (bankCount - 1)
             : 0);
     }
+    /// <summary>Maps a ROM-region address through the standard MBC banking window every plain-banking mapper shares: the
+    /// fixed <c>[0x0000, 0x3FFF]</c> region reads bank zero at its own address, and the switchable
+    /// <c>[0x4000, 0x7FFF]</c> window reads <paramref name="romBank"/> at the window-relative offset. Mappers whose fixed
+    /// region can itself move (MBC1's advanced mode, the MMM01's menu/game split) map their own offsets instead.</summary>
+    /// <param name="address">An address in <c>[0x0000, 0x7FFF]</c>.</param>
+    /// <param name="romBank">The bank currently selected into the switchable window.</param>
+    /// <param name="bankSize">The size of one ROM bank in bytes.</param>
+    /// <returns>The absolute ROM offset.</returns>
+    protected static int MapStandardRomOffset(ushort address, int romBank, int bankSize) =>
+        ((address <= MemoryMap.RomBank0End)
+        ? address
+        : ((romBank * bankSize) + (address - MemoryMap.RomBankNStart)));
     /// <summary>Maps a ROM-region address to an absolute byte offset into the ROM image (mirrored on read).</summary>
     /// <param name="address">An address in <c>[0x0000, 0x7FFF]</c>.</param>
     /// <returns>The absolute ROM offset.</returns>

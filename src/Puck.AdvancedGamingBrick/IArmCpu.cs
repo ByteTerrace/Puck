@@ -14,7 +14,8 @@ public interface IArmCpu {
     /// <paramref name="entryPoint"/>. Used to launch a cartridge without running the BIOS.</summary>
     /// <param name="entryPoint">The address to begin executing from (typically the cartridge entry, 0x08000000).</param>
     void SetupDirectBoot(uint entryPoint);
-    /// <summary>Executes one instruction, charging its cycles to the machine through the bus.</summary>
+    /// <summary>Executes one instruction or exception entry, or advances a halted idle cycle and pending DMA.
+    /// Charges the cycles through the bus and returns even if the CPU remains halted.</summary>
     void Step();
 
     /// <summary>Gets or sets the level of the IRQ line the interrupt controller drives. While asserted and IRQs

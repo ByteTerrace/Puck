@@ -237,6 +237,8 @@ public sealed partial class WorldAddonRuntime {
         WorldEventFamily.CollisionEnd => AddonAbi.ObservationVerbs.EventCollisionEnd,
         WorldEventFamily.RouteEngaged => AddonAbi.ObservationVerbs.EventRouteEngaged,
         WorldEventFamily.RouteDisengaged => AddonAbi.ObservationVerbs.EventRouteDisengaged,
+        WorldEventFamily.LinkEstablished => AddonAbi.ObservationVerbs.EventLinkEstablished,
+        WorldEventFamily.LinkDropped => AddonAbi.ObservationVerbs.EventLinkDropped,
         _ => -1,
     };
     // Picks the first requested, granted event row with remaining allowance. GateA precedes GateB, so an edge visible

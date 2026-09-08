@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 
 namespace Puck.AdvancedGamingBrick;
@@ -108,8 +109,9 @@ public sealed partial class AgbCartridge {
 
     /// <summary>Creates a cartridge from a ROM image, detecting and allocating its save backup.</summary>
     /// <param name="rom">The cartridge ROM image.</param>
+    /// <param name="options">Per-machine diagnostic overrides, or null for normal cartridge detection.</param>
     /// <exception cref="ArgumentNullException"><paramref name="rom"/> is <see langword="null"/>.</exception>
-    public AgbCartridge(byte[] rom) {
+    public AgbCartridge(byte[] rom, AgbMachineOptions? options = null) {
         ArgumentNullException.ThrowIfNull(rom);
 
         m_rom = rom;
@@ -129,13 +131,13 @@ public sealed partial class AgbCartridge {
             value: ((byte)0xFF)
         );
 
-        // RTC presence: the override wins, else the SIIRTC_V string scan. Diagnostic override (PUCK_AGB_NO_RTC=1)
-        // forces the GPIO/RTC off, to isolate whether an RTC-protocol issue stalls a boot vs an engine-timing issue.
+        // RTC presence: the game override wins, else the SIIRTC_V string scan. The caller can suppress the RTC
+        // explicitly to isolate a device-protocol issue from an engine-timing issue.
         m_hasRtc = ((over?.HasRtc ?? Contains(
             haystack: rom,
             needle: RtcSignature
         ))
-            && (Environment.GetEnvironmentVariable(variable: "PUCK_AGB_NO_RTC") != "1"));
+            && !(options?.DisableRtc ?? false));
         m_rtcControl = 0x40; // 24-hour mode
         InitRtcTime();
 
@@ -304,7 +306,18 @@ public sealed partial class AgbCartridge {
 
         ++m_romBurstPage;
 
-        return ((ushort)(ReadRom(offset: romAddr) | (ReadRom(offset: (romAddr + 1u)) << 8)));
+        return ReadRomHalfword(offset: romAddr);
+    }
+    // Fetch both bytes together for ordinary mask ROM. Keep the byte path at sensor overlays and image edges:
+    // those reads may have side effects, return open bus, or span one ROM byte and one out-of-range byte.
+    internal ushort ReadRomHalfword(uint offset) {
+        if ((((ulong)offset + 1u) < ((uint)m_rom.Length))
+            && !(m_hasGpio && (offset >= 0xC3u) && (offset <= 0xC9u))
+            && !(m_hasTilt && (offset >= 0x81FFu) && (offset <= 0x8500u))) {
+            return BinaryPrimitives.ReadUInt16LittleEndian(source: m_rom.AsSpan(start: ((int)offset)));
+        }
+
+        return ((ushort)(ReadRom(offset: offset) | (ReadRom(offset: (offset + 1u)) << 8)));
     }
     /// <summary>Reads a ROM byte at <paramref name="offset"/>, or the open-bus pattern beyond the image.</summary>
     /// <param name="offset">The byte offset into the cartridge ROM address space (0–0x01FFFFFF).</param>

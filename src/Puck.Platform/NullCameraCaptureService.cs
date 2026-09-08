@@ -2,22 +2,23 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Puck.Platform;
 
-/// <summary>The graceful "no camera" fallback: reports unsupported and never opens a device. Registered on platforms
-/// without a camera backend (or where Media Foundation / a device is unavailable), so a live-camera content source
-/// cleanly falls back rather than failing.</summary>
+/// <summary>The "no camera" fallback: reports unsupported and never opens a device. Registered on platforms without a
+/// camera backend, so a live-camera content source faults cleanly rather than failing.</summary>
 public sealed class NullCameraCaptureService : ICameraCaptureService {
     /// <inheritdoc/>
     public bool IsSupported => false;
 
     /// <inheritdoc/>
-    public bool TryOpenDefault(int requestedWidth, int requestedHeight, [NotNullWhen(true)] out ICameraCaptureSession? session) {
-        session = null;
+    public IReadOnlyList<CameraDeviceInfo> EnumerateDevices() => [];
+    /// <inheritdoc/>
+    public bool TryOpenPixels(string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraPixelStream>? graph) {
+        graph = null;
 
         return false;
     }
     /// <inheritdoc/>
-    public bool TryOpenSharedDefault(long adapterLuid, int requestedWidth, int requestedHeight, [NotNullWhen(true)] out ICameraSharedCaptureSession? session) {
-        session = null;
+    public bool TryOpenShared(long adapterLuid, string deviceId, ReadOnlySpan<CameraStreamRequest> streams, [NotNullWhen(true)] out ICameraGraph<ICameraSharedStream>? graph) {
+        graph = null;
 
         return false;
     }

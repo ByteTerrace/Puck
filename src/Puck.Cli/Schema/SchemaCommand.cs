@@ -31,8 +31,7 @@ internal static class SchemaCommand {
           --stdout          emit the generated ROOT document to stdout instead of writing
                             the checked-in files (skips --check)
           --bundle [path]   emit the single-file equivalent with every cross-file $ref
-                            inlined (a genuinely recursive shape keeps its $ref, same as
-                            the un-split generator always did) — not a checked-in artifact;
+                            resolved through named $defs — not a checked-in artifact;
                             written to [path] if given, else stdout
           -h, --help        this text
 

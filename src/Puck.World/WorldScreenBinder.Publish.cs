@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Puck.Abstractions.Gpu;
-using Puck.DirectX.Interfaces;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.SdfVm.Views;
@@ -68,14 +67,17 @@ internal sealed partial class WorldScreenBinder {
                 (slot.View is { } view) &&
                 (ResolveCamera(name: view.Name) is { } camera)
             ) {
-                RegisterCameraView(camera: camera);
+                RegisterCameraView(
+                    camera: camera,
+                    seat: DefaultViewSeat
+                );
                 view.Stack = m_viewStack;
                 _ = (wiredByName.TryGetValue(
-                    key: camera.Name,
+                    key: view.Name,
                     value: out var indices
                 )
                     ? indices
-                    : (wiredByName[camera.Name] = new HashSet<int>())).Add(item: slot.Index);
+                    : (wiredByName[view.Name] = new HashSet<int>())).Add(item: slot.Index);
             }
         }
 
@@ -108,29 +110,30 @@ internal sealed partial class WorldScreenBinder {
     /// their latest framebuffer (the one GPU call this project makes on a machine's behalf) and services
     /// presentation-only camera/window captures on source-owned cadences.</summary>
     /// <param name="tick">The world's completed-step ordinal driving deterministic pattern animation.</param>
-    /// <param name="elapsedTicks">The exact completed simulation time in engine ticks, used by feed deadlines.</param>
     /// <param name="deviceContext">The live GPU device context to upload on.</param>
     /// <param name="gpu">The neutral GPU compute services (resolves the upload factory).</param>
-    public void Publish(ulong tick, ulong elapsedTicks, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
+    public void Publish(ulong tick, IGpuDeviceContext deviceContext, IGpuComputeServices gpu) {
         if (m_disposed) {
             return;
         }
 
         ReconcileSessionLifecycles();
 
-        // Resolve the render adapter LUID once — the device is created lazily, so the value is first available here (not
-        // at construction). Capture feeds then open their platform capture on the render GPU so the shared textures import.
+        // Resolve the render adapter LUID once, backend-neutrally — the device is created lazily, so the value is
+        // first available here (not at construction). Capture feeds and the camera GPU tier then open their platform
+        // and shim devices on the render GPU so shared textures import across the API boundary. A driver reporting no
+        // LUID (zero) stays unresolved, which the camera GPU tier reads as "sharing unavailable" and falls back on.
         if (
-            m_hostsOnDirectX &&
             (m_renderAdapterLuid is null) &&
             OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
             build: 10240
         ) &&
-            (deviceContext is IDirectXDeviceContext renderDeviceContext)
+            (deviceContext.AdapterLuid is var renderAdapterLuid) &&
+            (0 != renderAdapterLuid)
         ) {
-            m_renderAdapterLuid = renderDeviceContext.AdapterLuid;
+            m_renderAdapterLuid = renderAdapterLuid;
         }
 
         var timingEnabled = GpuTimingControl.Shared.Armed;
@@ -143,7 +146,11 @@ internal sealed partial class WorldScreenBinder {
         // advanced. Window captures below each own an independent deadline from their declaration.
         CaptureCamera(
             deviceContext: deviceContext,
-            elapsedTicks: elapsedTicks,
+            gpu: gpu
+        );
+        ServiceProbeFeeds(deviceContext: deviceContext);
+        PublishFrameCaptures(
+            deviceContext: deviceContext,
             gpu: gpu
         );
         var cameraTicks = (timingEnabled
@@ -172,13 +179,14 @@ internal sealed partial class WorldScreenBinder {
                 continue;
             }
 
-            // The shared webcam is published once (in CaptureCamera above), so a camera screen only rides that feed.
-            if (slot.Camera is not null) {
+            // The shared webcam and every probe output are published once (in CaptureCamera and ServiceProbeFeeds
+            // above), so their screens only ride those feeds.
+            if ((slot.CameraSeat is not null) || (slot.Probe is not null)) {
                 continue;
             }
 
             if (slot.Capture is { } capture) {
-                if (capture.ShouldPull(elapsedTicks: elapsedTicks)) {
+                if (capture.ShouldPull()) {
                     phaseStart = (timingEnabled
                         ? Stopwatch.GetTimestamp()
                         : 0L
@@ -272,7 +280,7 @@ internal sealed partial class WorldScreenBinder {
     /// <param name="hostFrame">The frame the room is rendering this frame. Offscreen content derives its own
     /// submission from this rather than building one beside it, so every per-frame lever reaches a jumbotron by
     /// construction (see <c>SdfCameraView.Resolve</c>).</param>
-    public void RenderViews(in FrameContext context, SdfProgram program, int revision, IReadOnlyList<DynamicTransform> transforms, float time, ulong authoritativeTick, SdfFrame hostFrame) {
+    public void RenderViews(in FrameContext context, SdfProgram program, int revision, DynamicTransform[] transforms, float time, ulong authoritativeTick, SdfFrame hostFrame) {
         if (
             m_disposed ||
             (m_viewStack is not { } stack)

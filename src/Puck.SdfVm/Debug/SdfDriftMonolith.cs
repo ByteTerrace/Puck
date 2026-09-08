@@ -223,7 +223,7 @@ public static class SdfDriftMonolith {
         }
 
         // BACK — thin far grazing wall: a wide, tall, razor-thin slab set far behind the origin so its top and side
-        // silhouettes graze near MaxDistance under footprint-adaptive termination (the ground horizon does the same).
+        // silhouettes graze near the far distance under footprint-adaptive termination (the ground horizon does the same).
         _ = builder.ResetPoint().Translate(offset: new Vector3(
             x: 0f,
             y: 2f,

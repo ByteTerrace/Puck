@@ -1,0 +1,132 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "parity-inside",
+  "host": {
+    "presentation": "offscreen",
+    "backend": "auto",
+    "width": 640,
+    "height": 480,
+    "surfaceFormat": "r8g8b8a8",
+    "fullscreen": false,
+    "presentMode": "Immediate",
+    "targetHertz": 0,
+    "exitAfterSeconds": 0,
+    "rayQuery": true,
+    "timing": false,
+    "genlock": null,
+    "listen": null
+  },
+  "simulation": {
+    "rateHz": 240
+  },
+  "generation": {
+    "worldSeed": 424242
+  },
+  "collision": {
+    "requirements": ["SmoothUnionContact"],
+    "contactSkin": 0.02,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60.0,
+    "gradientProbe": 0.0
+  },
+  "prototypes": [
+    {
+      "id": "innerSphere",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "innerSphere",
+        "palette": [
+          { "color": "#4A6FA5" }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "shell",
+            "type": "Sphere",
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [4, 4, 4],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "policy": {
+      "authoringHeadroomPlacements": 8,
+      "authoringHeadroomScreens": 4,
+      "candidateCap": 16,
+      "candidateRadius": 32,
+      "derivedFaceScreens": 4,
+      "maxPlacementScale": 5.0,
+      "minPlacementScale": 0.2,
+      "previewDeadlineFrames": 12
+    },
+    "rows": [
+      {
+        "id": "innerSphere",
+        "prototypeId": "innerSphere",
+        "position": [0, 0, 0],
+        "scale": 1,
+        "yawDegrees": 0,
+        "solid": { "margin": 0 }
+      }
+    ]
+  },
+  "captures": {
+    "directory": "captures",
+    "rows": [
+      {
+        "station": "inside",
+        "ticks": [10],
+        "palette": [
+          { "material": 0, "color": "#4A6FA5" },
+          { "material": 1, "color": "#000000" }
+        ]
+      }
+    ]
+  },
+  "cameras": [
+    {
+      "name": "inside-cam",
+      "anchor": null,
+      "renderWidth": 640,
+      "renderHeight": 480,
+      "rig": {
+        "name": "inside-cam",
+        "version": "puck.camera.v1",
+        "operations": [
+          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [0, 0, 0] } },
+          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [1, 0, 0] } },
+          { "$type": "fov", "fieldOfViewRadians": 0.9 }
+        ]
+      }
+    }
+  ],
+  "views": {
+    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
+    "seatRig": {
+      "name": "unusedSeatRig",
+      "version": "puck.camera.v1",
+      "operations": [
+        { "$type": "orbit", "distance": 5, "yaw": 0, "pitch": 0.3 },
+        { "$type": "lookAt", "subject": { "$type": "reference" } },
+        { "$type": "fov", "fieldOfViewRadians": 0.9 }
+      ]
+    },
+    "layouts": [
+      {
+        "name": "inside",
+        "seatCount": 0,
+        "slots": [
+          { "x": 0, "y": 0, "width": 1, "height": 1, "camera": "inside-cam" }
+        ],
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1
+      }
+    ]
+  }
+}

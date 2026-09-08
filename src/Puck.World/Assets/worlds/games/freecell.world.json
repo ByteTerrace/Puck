@@ -1,0 +1,1443 @@
+{
+  "exports": {
+    "actions": [
+      "solitaireFreecell"
+    ],
+    "bindings": [
+      "solitaireFreecell"
+    ],
+    "reads": [
+      "solitaireFreecell",
+      "solitaireFreecellCards",
+      "solitaireFreecellFace",
+      "solitaireFreecellRank",
+      "solitaireFreecellSuit"
+    ]
+  },
+  "state": {
+  "world": [
+    {
+      "name": "solitaireFreecellCards",
+      "kind": "Int",
+      "capacity": 52,
+      "cells": [
+        {
+          "key": "0",
+          "value": 0
+        },
+        {
+          "key": "1",
+          "value": 1
+        },
+        {
+          "key": "2",
+          "value": 2
+        },
+        {
+          "key": "3",
+          "value": 3
+        },
+        {
+          "key": "4",
+          "value": 4
+        },
+        {
+          "key": "5",
+          "value": 5
+        },
+        {
+          "key": "6",
+          "value": 6
+        },
+        {
+          "key": "7",
+          "value": 7
+        },
+        {
+          "key": "8",
+          "value": 8
+        },
+        {
+          "key": "9",
+          "value": 9
+        },
+        {
+          "key": "10",
+          "value": 10
+        },
+        {
+          "key": "11",
+          "value": 11
+        },
+        {
+          "key": "12",
+          "value": 12
+        },
+        {
+          "key": "13",
+          "value": 13
+        },
+        {
+          "key": "14",
+          "value": 14
+        },
+        {
+          "key": "15",
+          "value": 15
+        },
+        {
+          "key": "16",
+          "value": 16
+        },
+        {
+          "key": "17",
+          "value": 17
+        },
+        {
+          "key": "18",
+          "value": 18
+        },
+        {
+          "key": "19",
+          "value": 19
+        },
+        {
+          "key": "20",
+          "value": 20
+        },
+        {
+          "key": "21",
+          "value": 21
+        },
+        {
+          "key": "22",
+          "value": 22
+        },
+        {
+          "key": "23",
+          "value": 23
+        },
+        {
+          "key": "24",
+          "value": 24
+        },
+        {
+          "key": "25",
+          "value": 25
+        },
+        {
+          "key": "26",
+          "value": 26
+        },
+        {
+          "key": "27",
+          "value": 27
+        },
+        {
+          "key": "28",
+          "value": 28
+        },
+        {
+          "key": "29",
+          "value": 29
+        },
+        {
+          "key": "30",
+          "value": 30
+        },
+        {
+          "key": "31",
+          "value": 31
+        },
+        {
+          "key": "32",
+          "value": 32
+        },
+        {
+          "key": "33",
+          "value": 33
+        },
+        {
+          "key": "34",
+          "value": 34
+        },
+        {
+          "key": "35",
+          "value": 35
+        },
+        {
+          "key": "36",
+          "value": 36
+        },
+        {
+          "key": "37",
+          "value": 37
+        },
+        {
+          "key": "38",
+          "value": 38
+        },
+        {
+          "key": "39",
+          "value": 39
+        },
+        {
+          "key": "40",
+          "value": 40
+        },
+        {
+          "key": "41",
+          "value": 41
+        },
+        {
+          "key": "42",
+          "value": 42
+        },
+        {
+          "key": "43",
+          "value": 43
+        },
+        {
+          "key": "44",
+          "value": 44
+        },
+        {
+          "key": "45",
+          "value": 45
+        },
+        {
+          "key": "46",
+          "value": 46
+        },
+        {
+          "key": "47",
+          "value": 47
+        },
+        {
+          "key": "48",
+          "value": 48
+        },
+        {
+          "key": "49",
+          "value": 49
+        },
+        {
+          "key": "50",
+          "value": 50
+        },
+        {
+          "key": "51",
+          "value": 51
+        }
+      ]
+    },
+    {
+      "name": "solitaireFreecellRank",
+      "kind": "Int",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards"
+      },
+      "capacity": 52,
+      "cells": [
+        {
+          "key": "0",
+          "value": 1
+        },
+        {
+          "key": "1",
+          "value": 2
+        },
+        {
+          "key": "2",
+          "value": 3
+        },
+        {
+          "key": "3",
+          "value": 4
+        },
+        {
+          "key": "4",
+          "value": 5
+        },
+        {
+          "key": "5",
+          "value": 6
+        },
+        {
+          "key": "6",
+          "value": 7
+        },
+        {
+          "key": "7",
+          "value": 8
+        },
+        {
+          "key": "8",
+          "value": 9
+        },
+        {
+          "key": "9",
+          "value": 10
+        },
+        {
+          "key": "10",
+          "value": 11
+        },
+        {
+          "key": "11",
+          "value": 12
+        },
+        {
+          "key": "12",
+          "value": 13
+        },
+        {
+          "key": "13",
+          "value": 1
+        },
+        {
+          "key": "14",
+          "value": 2
+        },
+        {
+          "key": "15",
+          "value": 3
+        },
+        {
+          "key": "16",
+          "value": 4
+        },
+        {
+          "key": "17",
+          "value": 5
+        },
+        {
+          "key": "18",
+          "value": 6
+        },
+        {
+          "key": "19",
+          "value": 7
+        },
+        {
+          "key": "20",
+          "value": 8
+        },
+        {
+          "key": "21",
+          "value": 9
+        },
+        {
+          "key": "22",
+          "value": 10
+        },
+        {
+          "key": "23",
+          "value": 11
+        },
+        {
+          "key": "24",
+          "value": 12
+        },
+        {
+          "key": "25",
+          "value": 13
+        },
+        {
+          "key": "26",
+          "value": 1
+        },
+        {
+          "key": "27",
+          "value": 2
+        },
+        {
+          "key": "28",
+          "value": 3
+        },
+        {
+          "key": "29",
+          "value": 4
+        },
+        {
+          "key": "30",
+          "value": 5
+        },
+        {
+          "key": "31",
+          "value": 6
+        },
+        {
+          "key": "32",
+          "value": 7
+        },
+        {
+          "key": "33",
+          "value": 8
+        },
+        {
+          "key": "34",
+          "value": 9
+        },
+        {
+          "key": "35",
+          "value": 10
+        },
+        {
+          "key": "36",
+          "value": 11
+        },
+        {
+          "key": "37",
+          "value": 12
+        },
+        {
+          "key": "38",
+          "value": 13
+        },
+        {
+          "key": "39",
+          "value": 1
+        },
+        {
+          "key": "40",
+          "value": 2
+        },
+        {
+          "key": "41",
+          "value": 3
+        },
+        {
+          "key": "42",
+          "value": 4
+        },
+        {
+          "key": "43",
+          "value": 5
+        },
+        {
+          "key": "44",
+          "value": 6
+        },
+        {
+          "key": "45",
+          "value": 7
+        },
+        {
+          "key": "46",
+          "value": 8
+        },
+        {
+          "key": "47",
+          "value": 9
+        },
+        {
+          "key": "48",
+          "value": 10
+        },
+        {
+          "key": "49",
+          "value": 11
+        },
+        {
+          "key": "50",
+          "value": 12
+        },
+        {
+          "key": "51",
+          "value": 13
+        }
+      ]
+    },
+    {
+      "name": "solitaireFreecellSuit",
+      "kind": "Int",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards"
+      },
+      "capacity": 52,
+      "cells": [
+        {
+          "key": "0",
+          "value": 0
+        },
+        {
+          "key": "1",
+          "value": 0
+        },
+        {
+          "key": "2",
+          "value": 0
+        },
+        {
+          "key": "3",
+          "value": 0
+        },
+        {
+          "key": "4",
+          "value": 0
+        },
+        {
+          "key": "5",
+          "value": 0
+        },
+        {
+          "key": "6",
+          "value": 0
+        },
+        {
+          "key": "7",
+          "value": 0
+        },
+        {
+          "key": "8",
+          "value": 0
+        },
+        {
+          "key": "9",
+          "value": 0
+        },
+        {
+          "key": "10",
+          "value": 0
+        },
+        {
+          "key": "11",
+          "value": 0
+        },
+        {
+          "key": "12",
+          "value": 0
+        },
+        {
+          "key": "13",
+          "value": 1
+        },
+        {
+          "key": "14",
+          "value": 1
+        },
+        {
+          "key": "15",
+          "value": 1
+        },
+        {
+          "key": "16",
+          "value": 1
+        },
+        {
+          "key": "17",
+          "value": 1
+        },
+        {
+          "key": "18",
+          "value": 1
+        },
+        {
+          "key": "19",
+          "value": 1
+        },
+        {
+          "key": "20",
+          "value": 1
+        },
+        {
+          "key": "21",
+          "value": 1
+        },
+        {
+          "key": "22",
+          "value": 1
+        },
+        {
+          "key": "23",
+          "value": 1
+        },
+        {
+          "key": "24",
+          "value": 1
+        },
+        {
+          "key": "25",
+          "value": 1
+        },
+        {
+          "key": "26",
+          "value": 2
+        },
+        {
+          "key": "27",
+          "value": 2
+        },
+        {
+          "key": "28",
+          "value": 2
+        },
+        {
+          "key": "29",
+          "value": 2
+        },
+        {
+          "key": "30",
+          "value": 2
+        },
+        {
+          "key": "31",
+          "value": 2
+        },
+        {
+          "key": "32",
+          "value": 2
+        },
+        {
+          "key": "33",
+          "value": 2
+        },
+        {
+          "key": "34",
+          "value": 2
+        },
+        {
+          "key": "35",
+          "value": 2
+        },
+        {
+          "key": "36",
+          "value": 2
+        },
+        {
+          "key": "37",
+          "value": 2
+        },
+        {
+          "key": "38",
+          "value": 2
+        },
+        {
+          "key": "39",
+          "value": 3
+        },
+        {
+          "key": "40",
+          "value": 3
+        },
+        {
+          "key": "41",
+          "value": 3
+        },
+        {
+          "key": "42",
+          "value": 3
+        },
+        {
+          "key": "43",
+          "value": 3
+        },
+        {
+          "key": "44",
+          "value": 3
+        },
+        {
+          "key": "45",
+          "value": 3
+        },
+        {
+          "key": "46",
+          "value": 3
+        },
+        {
+          "key": "47",
+          "value": 3
+        },
+        {
+          "key": "48",
+          "value": 3
+        },
+        {
+          "key": "49",
+          "value": 3
+        },
+        {
+          "key": "50",
+          "value": 3
+        },
+        {
+          "key": "51",
+          "value": 3
+        }
+      ]
+    },
+    {
+      "name": "solitaireFreecellFace",
+      "kind": "Int",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards"
+      },
+      "capacity": 52,
+      "cells": [
+        {
+          "key": "0",
+          "value": 0
+        },
+        {
+          "key": "1",
+          "value": 0
+        },
+        {
+          "key": "2",
+          "value": 0
+        },
+        {
+          "key": "3",
+          "value": 0
+        },
+        {
+          "key": "4",
+          "value": 0
+        },
+        {
+          "key": "5",
+          "value": 0
+        },
+        {
+          "key": "6",
+          "value": 0
+        },
+        {
+          "key": "7",
+          "value": 0
+        },
+        {
+          "key": "8",
+          "value": 0
+        },
+        {
+          "key": "9",
+          "value": 0
+        },
+        {
+          "key": "10",
+          "value": 0
+        },
+        {
+          "key": "11",
+          "value": 0
+        },
+        {
+          "key": "12",
+          "value": 0
+        },
+        {
+          "key": "13",
+          "value": 0
+        },
+        {
+          "key": "14",
+          "value": 0
+        },
+        {
+          "key": "15",
+          "value": 0
+        },
+        {
+          "key": "16",
+          "value": 0
+        },
+        {
+          "key": "17",
+          "value": 0
+        },
+        {
+          "key": "18",
+          "value": 0
+        },
+        {
+          "key": "19",
+          "value": 0
+        },
+        {
+          "key": "20",
+          "value": 0
+        },
+        {
+          "key": "21",
+          "value": 0
+        },
+        {
+          "key": "22",
+          "value": 0
+        },
+        {
+          "key": "23",
+          "value": 0
+        },
+        {
+          "key": "24",
+          "value": 0
+        },
+        {
+          "key": "25",
+          "value": 0
+        },
+        {
+          "key": "26",
+          "value": 0
+        },
+        {
+          "key": "27",
+          "value": 0
+        },
+        {
+          "key": "28",
+          "value": 0
+        },
+        {
+          "key": "29",
+          "value": 0
+        },
+        {
+          "key": "30",
+          "value": 0
+        },
+        {
+          "key": "31",
+          "value": 0
+        },
+        {
+          "key": "32",
+          "value": 0
+        },
+        {
+          "key": "33",
+          "value": 0
+        },
+        {
+          "key": "34",
+          "value": 0
+        },
+        {
+          "key": "35",
+          "value": 0
+        },
+        {
+          "key": "36",
+          "value": 0
+        },
+        {
+          "key": "37",
+          "value": 0
+        },
+        {
+          "key": "38",
+          "value": 0
+        },
+        {
+          "key": "39",
+          "value": 0
+        },
+        {
+          "key": "40",
+          "value": 0
+        },
+        {
+          "key": "41",
+          "value": 0
+        },
+        {
+          "key": "42",
+          "value": 0
+        },
+        {
+          "key": "43",
+          "value": 0
+        },
+        {
+          "key": "44",
+          "value": 0
+        },
+        {
+          "key": "45",
+          "value": 0
+        },
+        {
+          "key": "46",
+          "value": 0
+        },
+        {
+          "key": "47",
+          "value": 0
+        },
+        {
+          "key": "48",
+          "value": 0
+        },
+        {
+          "key": "49",
+          "value": 0
+        },
+        {
+          "key": "50",
+          "value": 0
+        },
+        {
+          "key": "51",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "solitaireFreecellPile0",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": [
+        {
+          "key": "0",
+          "value": true
+        },
+        {
+          "key": "1",
+          "value": true
+        },
+        {
+          "key": "2",
+          "value": true
+        },
+        {
+          "key": "3",
+          "value": true
+        },
+        {
+          "key": "4",
+          "value": true
+        },
+        {
+          "key": "5",
+          "value": true
+        },
+        {
+          "key": "6",
+          "value": true
+        },
+        {
+          "key": "7",
+          "value": true
+        },
+        {
+          "key": "8",
+          "value": true
+        },
+        {
+          "key": "9",
+          "value": true
+        },
+        {
+          "key": "10",
+          "value": true
+        },
+        {
+          "key": "11",
+          "value": true
+        },
+        {
+          "key": "12",
+          "value": true
+        },
+        {
+          "key": "13",
+          "value": true
+        },
+        {
+          "key": "14",
+          "value": true
+        },
+        {
+          "key": "15",
+          "value": true
+        },
+        {
+          "key": "16",
+          "value": true
+        },
+        {
+          "key": "17",
+          "value": true
+        },
+        {
+          "key": "18",
+          "value": true
+        },
+        {
+          "key": "19",
+          "value": true
+        },
+        {
+          "key": "20",
+          "value": true
+        },
+        {
+          "key": "21",
+          "value": true
+        },
+        {
+          "key": "22",
+          "value": true
+        },
+        {
+          "key": "23",
+          "value": true
+        },
+        {
+          "key": "24",
+          "value": true
+        },
+        {
+          "key": "25",
+          "value": true
+        },
+        {
+          "key": "26",
+          "value": true
+        },
+        {
+          "key": "27",
+          "value": true
+        },
+        {
+          "key": "28",
+          "value": true
+        },
+        {
+          "key": "29",
+          "value": true
+        },
+        {
+          "key": "30",
+          "value": true
+        },
+        {
+          "key": "31",
+          "value": true
+        },
+        {
+          "key": "32",
+          "value": true
+        },
+        {
+          "key": "33",
+          "value": true
+        },
+        {
+          "key": "34",
+          "value": true
+        },
+        {
+          "key": "35",
+          "value": true
+        },
+        {
+          "key": "36",
+          "value": true
+        },
+        {
+          "key": "37",
+          "value": true
+        },
+        {
+          "key": "38",
+          "value": true
+        },
+        {
+          "key": "39",
+          "value": true
+        },
+        {
+          "key": "40",
+          "value": true
+        },
+        {
+          "key": "41",
+          "value": true
+        },
+        {
+          "key": "42",
+          "value": true
+        },
+        {
+          "key": "43",
+          "value": true
+        },
+        {
+          "key": "44",
+          "value": true
+        },
+        {
+          "key": "45",
+          "value": true
+        },
+        {
+          "key": "46",
+          "value": true
+        },
+        {
+          "key": "47",
+          "value": true
+        },
+        {
+          "key": "48",
+          "value": true
+        },
+        {
+          "key": "49",
+          "value": true
+        },
+        {
+          "key": "50",
+          "value": true
+        },
+        {
+          "key": "51",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "solitaireFreecellPile2",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile3",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile4",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile5",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile6",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile7",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile8",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile9",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 52,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile10",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 13,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile11",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 13,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile12",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 13,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile13",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 13,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile14",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 1,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile15",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 1,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile16",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 1,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecellPile17",
+      "kind": "Bool",
+      "domain": {
+        "$type": "keysOf",
+        "row": "solitaireFreecellCards",
+        "ordered": true
+      },
+      "capacity": 1,
+      "cells": []
+    },
+    {
+      "name": "solitaireFreecell",
+      "kind": "Int",
+      "capacity": 27,
+      "cells": [
+        {
+          "key": "request",
+          "value": 0
+        },
+        {
+          "key": "applied",
+          "value": 0
+        },
+        {
+          "key": "action",
+          "value": 0
+        },
+        {
+          "key": "from",
+          "value": -1
+        },
+        {
+          "key": "to",
+          "value": -1
+        },
+        {
+          "key": "card",
+          "value": -1
+        },
+        {
+          "key": "option",
+          "value": 1
+        },
+        {
+          "key": "activeOption",
+          "value": 1
+        },
+        {
+          "key": "stage",
+          "value": 0
+        },
+        {
+          "key": "busy",
+          "value": 0
+        },
+        {
+          "key": "status",
+          "value": 0
+        },
+        {
+          "key": "result",
+          "value": 0
+        },
+        {
+          "key": "moves",
+          "value": 0
+        },
+        {
+          "key": "score",
+          "value": 0
+        },
+        {
+          "key": "passes",
+          "value": 0
+        },
+        {
+          "key": "sourceOk",
+          "value": 0
+        },
+        {
+          "key": "targetOk",
+          "value": 0
+        },
+        {
+          "key": "runLength",
+          "value": 0
+        },
+        {
+          "key": "emptyCells",
+          "value": 0
+        },
+        {
+          "key": "emptyColumns",
+          "value": 0
+        },
+        {
+          "key": "deals",
+          "value": 0
+        },
+        {
+          "key": "dealStep",
+          "value": 0
+        },
+        {
+          "key": "gatherStep",
+          "value": 0
+        },
+        {
+          "key": "scan",
+          "value": 0
+        },
+        {
+          "key": "changed",
+          "value": 0
+        },
+        {
+          "key": "attributeStep",
+          "value": 0
+        },
+        {
+          "key": "drawLeft",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "solitaireFreecellStream",
+      "kind": "Int",
+      "draw": {
+        "generator": {
+          "source": "StreamDraw"
+        },
+        "timing": "Event"
+      }
+    }
+  ]
+},
+  "patterns": [
+    {"name": "solitaireFreecellLength","kind": "Int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "star","item": {"$type": "any"}}},
+    {"name": "solitaireFreecellSingle","kind": "Int","value": "1","symbols": [{"name": "any","min": 1,"max": 1}],"pattern": {"$type": "any"}},
+    {"name": "solitaireFreecellRun","kind": "Int","value": "solitaireFreecellFace[$token] * (1 + (solitaireFreecellRank[$token] == solitaireFreecellRank[$previous] - 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[$previous] % 2))","symbols": [{"name": "face","min": 1,"max": 2},{"name": "next","min": 2,"max": 2}],"pattern": {"$type": "sequence","items": [{"$type": "symbol","name": "face"},{"$type": "star","item": {"$type": "symbol","name": "next"}}]}},
+    {"name": "solitaireFreecellLanding","kind": "Int","value": "(solitaireFreecellRank[$token] == solitaireFreecellRank[solitaireFreecell[card]] + 1) * (solitaireFreecellSuit[$token] % 2 != solitaireFreecellSuit[solitaireFreecell[card]] % 2)","symbols": [{"name": "yes","min": 1,"max": 1}],"pattern": {"$type": "sequence","items": [{"$type": "star","item": {"$type": "any"}},{"$type": "symbol","name": "yes"}]}}
+  ],
+  "rules": [
+    {"name": "solitaireFreecell-new-deal","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 1},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireFreecell","key": "option","comparison": "Equal","value": 1}]}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "activeOption","expression": "solitaireFreecell[option]"},{"$type": "setState","state": "solitaireFreecell","key": "stage","value": 1},{"$type": "setState","state": "solitaireFreecell","key": "status","value": 0},{"$type": "setState","state": "solitaireFreecell","key": "result","value": 0},{"$type": "setState","state": "solitaireFreecell","key": "busy","value": 1}]},
+    {"name": "solitaireFreecell-gather","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 1},{"$type": "compareState","state": "$reduce:count:$zones[solitaireFreecell[gatherStep]]","comparison": "Greater","value": 0}]},"effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireFreecell[gatherStep]]","to": "solitaireFreecellPile0","selector": "Slice","key": "$zone:$zones[solitaireFreecell[gatherStep]]:first"}}],"zones": ["solitaireFreecellPile2","solitaireFreecellPile3","solitaireFreecellPile4","solitaireFreecellPile5","solitaireFreecellPile6","solitaireFreecellPile7","solitaireFreecellPile8","solitaireFreecellPile9","solitaireFreecellPile10","solitaireFreecellPile11","solitaireFreecellPile12","solitaireFreecellPile13","solitaireFreecellPile14","solitaireFreecellPile15","solitaireFreecellPile16","solitaireFreecellPile17"]},
+    {"name": "solitaireFreecell-attributes-start","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "gatherStep","comparison": "Equal","value": 15},{"$type": "compareState","state": "$reduce:count:solitaireFreecellPile0","comparison": "Equal","value": 52}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "stage","value": 5}]},
+    {"name": "solitaireFreecell-reset-attributes","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 5}]},"effects": [{"$type": "setState","state": "solitaireFreecellFace","key": "$cell:solitaireFreecell:attributeStep","value": 1}]},
+    {"name": "solitaireFreecell-shuffle","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 5},{"$type": "compareState","state": "solitaireFreecell","key": "attributeStep","comparison": "Equal","value": 51}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "shuffle","row": "solitaireFreecellPile0","draw": "solitaireFreecellStream"}},{"$type": "setState","state": "solitaireFreecell","key": "stage","value": 3}]}]},
+    {"name": "solitaireFreecell-deal","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "dealStep","comparison": "LessOrEqual","value": 51}]},"effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "solitaireFreecellPile0","to": "$zones[2 + (solitaireFreecell[dealStep] % 8)]","selector": "First"}}],"zones": ["solitaireFreecellPile0","","solitaireFreecellPile2","solitaireFreecellPile3","solitaireFreecellPile4","solitaireFreecellPile5","solitaireFreecellPile6","solitaireFreecellPile7","solitaireFreecellPile8","solitaireFreecellPile9","solitaireFreecellPile10","solitaireFreecellPile11","solitaireFreecellPile12","solitaireFreecellPile13","solitaireFreecellPile14","solitaireFreecellPile15","solitaireFreecellPile16","solitaireFreecellPile17"]},
+    {"name": "solitaireFreecell-deal-finish","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "dealStep","comparison": "Equal","value": 51}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireFreecell","key": "stage","value": 0},{"$type": "setState","state": "solitaireFreecell","key": "status","value": 1},{"$type": "setState","state": "solitaireFreecell","key": "moves","value": 0},{"$type": "setState","state": "solitaireFreecell","key": "score","value": 0},{"$type": "setState","state": "solitaireFreecell","key": "passes","value": 0},{"$type": "setState","state": "solitaireFreecell","key": "deals","expression": "solitaireFreecell[deals] + 1"},{"$type": "setState","state": "solitaireFreecell","key": "result","value": 1},{"$type": "setState","state": "solitaireFreecell","key": "applied","expression": "solitaireFreecell[request]"}]}]},
+    {"name": "solitaireFreecell-prepare-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 2}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "sourceOk","value": 0},{"$type": "setState","state": "solitaireFreecell","key": "targetOk","value": 0},{"$type": "setState","state": "solitaireFreecell","key": "runLength","value": 0}]},
+    {"name": "solitaireFreecell-count-workspace","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 2}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "emptyCells","expression": "($reduce:count:solitaireFreecellPile14 == 0) + ($reduce:count:solitaireFreecellPile15 == 0) + ($reduce:count:solitaireFreecellPile16 == 0) + ($reduce:count:solitaireFreecellPile17 == 0)"},{"$type": "setState","state": "solitaireFreecell","key": "emptyColumns","expression": "($reduce:count:solitaireFreecellPile2 == 0) + ($reduce:count:solitaireFreecellPile3 == 0) + ($reduce:count:solitaireFreecellPile4 == 0) + ($reduce:count:solitaireFreecellPile5 == 0) + ($reduce:count:solitaireFreecellPile6 == 0) + ($reduce:count:solitaireFreecellPile7 == 0) + ($reduce:count:solitaireFreecellPile8 == 0) + ($reduce:count:solitaireFreecellPile9 == 0)"}]},
+    {"name": "solitaireFreecell-source","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "$zones[solitaireFreecell[from]]","key": "$cell:solitaireFreecell:card","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "sourceOk","expression": "$match:solitaireFreecellRun:$zones[solitaireFreecell[from]][solitaireFreecell[card]]"},{"$type": "setState","state": "solitaireFreecell","key": "runLength","expression": "$match:solitaireFreecellLength:$zones[solitaireFreecell[from]]:prefix[solitaireFreecell[card]]"}],"zones": ["","","solitaireFreecellPile2","solitaireFreecellPile3","solitaireFreecellPile4","solitaireFreecellPile5","solitaireFreecellPile6","solitaireFreecellPile7","solitaireFreecellPile8","solitaireFreecellPile9"]},
+    {"name": "solitaireFreecell-source-14","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "$zones[solitaireFreecell[from]]","key": "$cell:solitaireFreecell:card","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "sourceOk","expression": "$match:solitaireFreecellSingle:$zones[solitaireFreecell[from]][solitaireFreecell[card]]"},{"$type": "setState","state": "solitaireFreecell","key": "runLength","expression": "$match:solitaireFreecellLength:$zones[solitaireFreecell[from]]:prefix[solitaireFreecell[card]]"}],"zones": ["","","","","","","","","","","","","","","solitaireFreecellPile14","solitaireFreecellPile15","solitaireFreecellPile16","solitaireFreecellPile17"]},
+    {"name": "solitaireFreecell-target","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireFreecell","key": "sourceOk","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "targetOk","expression": "($reduce:count:$zones[solitaireFreecell[to]] == 0 ? 1 : $match:solitaireFreecellLanding:$zones[solitaireFreecell[to]]) * (solitaireFreecell[runLength] <= ((solitaireFreecell[emptyCells] + 1) << max(0, solitaireFreecell[emptyColumns] - ($reduce:count:$zones[solitaireFreecell[to]] == 0))))"}],"zones": ["","","solitaireFreecellPile2","solitaireFreecellPile3","solitaireFreecellPile4","solitaireFreecellPile5","solitaireFreecellPile6","solitaireFreecellPile7","solitaireFreecellPile8","solitaireFreecellPile9"]},
+    {"name": "solitaireFreecell-target-10","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireFreecell","key": "sourceOk","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "targetOk","expression": "(solitaireFreecell[runLength] == 1) * (solitaireFreecellSuit[solitaireFreecell[card]] == solitaireFreecell[to] - 10) * (solitaireFreecellRank[solitaireFreecell[card]] == $reduce:count:$zones[solitaireFreecell[to]] + 1)"}],"zones": ["","","","","","","","","","","solitaireFreecellPile10","solitaireFreecellPile11","solitaireFreecellPile12","solitaireFreecellPile13"]},
+    {"name": "solitaireFreecell-target-14","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireFreecell","key": "sourceOk","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "targetOk","expression": "($reduce:count:$zones[solitaireFreecell[to]] == 0) * (solitaireFreecell[runLength] == 1)"}],"zones": ["","","","","","","","","","","","","","","solitaireFreecellPile14","solitaireFreecellPile15","solitaireFreecellPile16","solitaireFreecellPile17"]},
+    {"name": "solitaireFreecell-move","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "action","comparison": "Equal","value": 2},{"$type": "compareState","state": "solitaireFreecell","key": "sourceOk","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "targetOk","comparison": "Equal","value": 1},{"$type": "compareValue","comparison": "NotEqual","kind": "Int","left": "solitaireFreecell[from]","right": "solitaireFreecell[to]"}]},"effects": [{"$type": "transaction","effects": [{"$type": "transformState","transform": {"$type": "transfer","from": "$zones[solitaireFreecell[from]]","to": "$zones[solitaireFreecell[to]]","selector": "Slice","key": "$cell:solitaireFreecell:card"}},{"$type": "setState","state": "solitaireFreecell","key": "moves","expression": "solitaireFreecell[moves] + 1"},{"$type": "setState","state": "solitaireFreecell","key": "busy","value": 1},{"$type": "setState","state": "solitaireFreecell","key": "score","expression": "max(0, solitaireFreecell[score] + (((solitaireFreecell[to] >= 10) & (solitaireFreecell[to] <= 13)) ? 10 : 0))"},{"$type": "setState","state": "solitaireFreecell","key": "result","value": 1},{"$type": "setState","state": "solitaireFreecell","key": "applied","expression": "solitaireFreecell[request]"}]}],"zones": ["solitaireFreecellPile0","","solitaireFreecellPile2","solitaireFreecellPile3","solitaireFreecellPile4","solitaireFreecellPile5","solitaireFreecellPile6","solitaireFreecellPile7","solitaireFreecellPile8","solitaireFreecellPile9","solitaireFreecellPile10","solitaireFreecellPile11","solitaireFreecellPile12","solitaireFreecellPile13","solitaireFreecellPile14","solitaireFreecellPile15","solitaireFreecellPile16","solitaireFreecellPile17"]},
+    {"name": "solitaireFreecell-deal-advance","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 4}]}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "dealStep","expression": "solitaireFreecell[stage] == 0 ? 0 : solitaireFreecell[dealStep] + 1"}]},
+    {"name": "solitaireFreecell-reject","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "request","comparison": "NotEqual","comparandState": "solitaireFreecell","comparandKey": "applied"},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0}]},"effects": [{"$type": "transaction","effects": [{"$type": "setState","state": "solitaireFreecell","key": "result","value": -1},{"$type": "setState","state": "solitaireFreecell","key": "applied","expression": "solitaireFreecell[request]"}]}]},
+    {"name": "solitaireFreecell-maintenance-start","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 1}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "busy","value": 0}]},
+    {"name": "solitaireFreecell-gather-advance","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 1}]}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "gatherStep","expression": "solitaireFreecell[stage] == 0 ? 0 : min(15, solitaireFreecell[gatherStep] + 1)"}]},
+    {"name": "solitaireFreecell-attribute-advance","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "any","predicates": [{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 0},{"$type": "compareState","state": "solitaireFreecell","key": "stage","comparison": "Equal","value": 5}]}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "attributeStep","expression": "solitaireFreecell[stage] == 0 ? 0 : solitaireFreecell[attributeStep] + 1"}]},
+    {"name": "solitaireFreecell-win","gate": {"$type": "all","predicates": [{"$type": "compareState","state": "solitaire","key": "table","comparison": "Equal","value": 3},{"$type": "compareState","state": "solitaireFreecell","key": "status","comparison": "Equal","value": 1},{"$type": "compareState","state": "solitaireFreecell","key": "busy","comparison": "Equal","value": 0}]},"effects": [{"$type": "setState","state": "solitaireFreecell","key": "status","expression": "($reduce:count:solitaireFreecellPile10 + $reduce:count:solitaireFreecellPile11 + $reduce:count:solitaireFreecellPile12 + $reduce:count:solitaireFreecellPile13) == 52 ? 2 : 1"}]}
+  ]
+}

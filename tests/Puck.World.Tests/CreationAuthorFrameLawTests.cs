@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Text;
 
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
@@ -25,7 +25,7 @@ public sealed class CreationAuthorFrameLawTests {
         var sphere = new ShapeDocument(
             Id: 0,
             Name: "core",
-            Type: AvatarPrimitive.Sphere,
+            Type: SdfSolidPrimitive.Sphere,
             Position: new Vector3(x: 0f, y: 1f, z: 5f),
             Rotation: Quaternion.Identity,
             Scale: Vector3.One,
@@ -49,9 +49,9 @@ public sealed class CreationAuthorFrameLawTests {
             Frames: null,
             TextRuns: [faceRun]);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "faced");
-        var creation = new WorldCreation(Id: "faced", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "faced", Document: canonical.Document, HashRaw: canonical.Hash);
 
-        // The render conversion: the same function WorldCreation.EngineDocument caches for every stamp/collision
+        // The render conversion: the same function WorldPrototype.EngineDocument caches for every stamp/collision
         // consumer.
         var engineRun = CreationFrame.ToEngine(document: canonical.Document).TextRuns![0];
 
@@ -60,14 +60,14 @@ public sealed class CreationAuthorFrameLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "faced", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "faced", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
 
         var surfacePoint = FixedVector3.FromVector3(value: engineRun.Position);
 
-        Assert.True(condition: field!.Probe(position: in surfacePoint, distance: out var distance, material: out _, gradient: out _));
+        Assert.True(condition: field!.Probe(distance: out var distance, gradient: out _, material: out _, position: in surfacePoint));
         Assert.True((FixedQ4816.Abs(value: distance) < SurfaceTolerance),
             userMessage: $"the compiled solid field disagrees with the render conversion at the authored front point; distance={((double)distance):0.####}");
     }
@@ -79,7 +79,7 @@ public sealed class CreationAuthorFrameLawTests {
         var capsule = new ShapeDocument(
             Id: 0,
             Name: "cap",
-            Type: AvatarPrimitive.Capsule,
+            Type: SdfSolidPrimitive.Capsule,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: new Vector3(x: 0.5f, y: 1f, z: 0.5f),
@@ -94,12 +94,12 @@ public sealed class CreationAuthorFrameLawTests {
             Shapes: [capsule],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "cap");
-        var creation = new WorldCreation(Id: "cap", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "cap", Document: canonical.Document, HashRaw: canonical.Hash);
 
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "cap", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "cap", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
@@ -107,11 +107,11 @@ public sealed class CreationAuthorFrameLawTests {
         var equatorPoint = new FixedVector3(X: FixedQ4816.FromDouble(value: 0.5), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero);
         var topPoint = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: 1.0), Z: FixedQ4816.Zero);
 
-        Assert.True(condition: field!.Probe(position: in equatorPoint, distance: out var equatorDistance, material: out _, gradient: out _));
+        Assert.True(condition: field!.Probe(distance: out var equatorDistance, gradient: out _, material: out _, position: in equatorPoint));
         Assert.True((FixedQ4816.Abs(value: equatorDistance) < SurfaceTolerance),
             userMessage: $"scale.x/z=0.5 did not compile to radius 0.5; equator distance={((double)equatorDistance):0.####}");
 
-        Assert.True(condition: field.Probe(position: in topPoint, distance: out var topDistance, material: out _, gradient: out _));
+        Assert.True(condition: field.Probe(distance: out var topDistance, gradient: out _, material: out _, position: in topPoint));
         Assert.True((FixedQ4816.Abs(value: topDistance) < SurfaceTolerance),
             userMessage: $"scale.y=1 did not compile to a 1-unit cylindrical section (2·radius + length = 2); top distance={((double)topDistance):0.####}");
     }
@@ -126,7 +126,7 @@ public sealed class CreationAuthorFrameLawTests {
         var sphere = new ShapeDocument(
             Id: 0,
             Name: "eye",
-            Type: AvatarPrimitive.Sphere,
+            Type: SdfSolidPrimitive.Sphere,
             Position: new Vector3(x: 0.3f, y: 1f, z: 0f),
             Rotation: Quaternion.Identity,
             Scale: new Vector3(value: radius),
@@ -142,7 +142,7 @@ public sealed class CreationAuthorFrameLawTests {
             Shapes: [sphere],
             Frames: null);
         var canonical = CreationCanonicalizer.Canonicalize(document: document, source: "symmetric-eye");
-        var creation = new WorldCreation(Id: "symmetric-eye", Document: canonical.Document, HashRaw: canonical.Hash);
+        var creation = new WorldPrototype(Id: "symmetric-eye", Document: canonical.Document, HashRaw: canonical.Hash);
         var enginePosition = creation.EngineDocument.Shapes![0].Position;
         // A point on the sphere's +Y pole — offset perpendicular to the fold's X normal, so reflecting it across X
         // (the same reflection the fold applies) lands squarely on the mirrored copy's own +Y pole too.
@@ -170,14 +170,14 @@ public sealed class CreationAuthorFrameLawTests {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var definition = source with {
             CreationsRaw = [creation],
-            PlacementsRaw = [new WorldPlacement(Id: "symmetric-eye", CreationId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
+            PlacementRowsRaw = [new WorldPlacement(Id: "symmetric-eye", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f, Solid: new WorldSolid(Margin: 0f))],
         };
 
         Assert.True(condition: WorldSolidField.TryBuild(definition: definition, built: out var field, reason: out var reason), userMessage: reason);
-        Assert.True(condition: field!.Probe(position: in authoredPoint, distance: out var authoredFieldDistance, material: out _, gradient: out _));
+        Assert.True(condition: field!.Probe(distance: out var authoredFieldDistance, gradient: out _, material: out _, position: in authoredPoint));
         Assert.True((FixedQ4816.Abs(value: authoredFieldDistance) < SurfaceTolerance),
             userMessage: $"the authored point did not read as solid in the compiled contact field; distance={((double)authoredFieldDistance):0.####}");
-        Assert.True(condition: field.Probe(position: in reflectedPoint, distance: out var reflectedFieldDistance, material: out _, gradient: out _));
+        Assert.True(condition: field.Probe(distance: out var reflectedFieldDistance, gradient: out _, material: out _, position: in reflectedPoint));
         Assert.True((FixedQ4816.Abs(value: reflectedFieldDistance) < SurfaceTolerance),
             userMessage: $"the fold-reflected point did not read as solid in the compiled contact field; distance={((double)reflectedFieldDistance):0.####}");
     }
@@ -189,7 +189,7 @@ public sealed class CreationAuthorFrameLawTests {
         var shape = new ShapeDocument(
             Id: 0,
             Name: "plain",
-            Type: AvatarPrimitive.Box,
+            Type: SdfSolidPrimitive.Box,
             Position: Vector3.Zero,
             Rotation: Quaternion.Identity,
             Scale: Vector3.One,

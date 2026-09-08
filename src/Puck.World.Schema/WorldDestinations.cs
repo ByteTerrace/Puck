@@ -44,7 +44,7 @@ public enum WorldDestinationScope {
 /// <c>$type</c>-discriminated union docs/vision.md's "Durability, scope and generation" names. Required exactly
 /// when <see cref="WorldDestination.Scope"/> is <see cref="WorldDestinationScope.Group"/>; admitted nowhere else. A
 /// future selection form widens this union with another <c>$type</c> arm rather than adding parallel optional fields
-/// to <see cref="WorldDestination"/> itself (the same closed-union discipline <see cref="WorldCameraMotion"/>/
+/// to <see cref="WorldDestination"/> itself (the same closed-union discipline <see cref="WorldCameraSubject"/>/
 /// <see cref="WorldAnchor"/> already follow).</summary>
 [JsonDerivedType(typeof(WorldGroupSelector.Named), typeDiscriminator: "named")]
 [JsonDerivedType(typeof(WorldGroupSelector.Tagged), typeDiscriminator: "tagged")]
@@ -75,7 +75,7 @@ public abstract record WorldGroupSelector {
 /// layers under: no live mutation arm, no <c>Protocol.WorldSection</c> axis, no grant subject. Making a destination
 /// live-editable later is a complete mutation-axis addition, not an accidental consequence of introducing the
 /// row.</remarks>
-/// <param name="Name">The destination's own name — <see cref="WorldSafeName"/>-shaped, unique within the section. A
+/// <param name="Name">The destination's own name — <see cref="SafeName"/>-shaped, unique within the section. A
 /// <see cref="WorldPlacementPortal.Destination"/> facet resolves against this name (see
 /// <see cref="WorldDefinitionValidator"/>).</param>
 /// <param name="Reference">The <see cref="WorldReference.Name"/> of the <c>references</c> row this destination
@@ -86,13 +86,13 @@ public abstract record WorldGroupSelector {
 /// <param name="Scope">Which scoped identity/generation this destination selects (see
 /// <see cref="WorldDestinationScope"/>). Absent resolves to <see cref="WorldDestinationScope.Global"/> — today's
 /// behavior, unchanged for every row authored before this member existed. Trailing member: the same
-/// widen-without-moving-existing-members shape <see cref="WorldWaterSection"/>'s own remarks describe.</param>
+/// widen-without-moving-existing-members shape <see cref="WorldLatticeMedium"/>'s own remarks describe.</param>
 /// <param name="Selector">Which group a <see cref="WorldDestinationScope.Group"/> row resolves through (see
 /// <see cref="WorldGroupSelector"/>). Required exactly when <paramref name="Scope"/> is
 /// <see cref="WorldDestinationScope.Group"/> — a selector on any other scope, or a group scope with none, refuses by
 /// name (see <see cref="WorldDefinitionValidator"/>).</param>
 public sealed record WorldDestination(
-    WorldSafeName Name,
+    SafeName Name,
     string Reference,
     WorldDestinationDurability Durability,
     WorldDestinationScope Scope = WorldDestinationScope.Global,

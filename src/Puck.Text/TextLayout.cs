@@ -1,4 +1,6 @@
+using System.Collections;
 using System.Numerics;
+using System.Text;
 
 namespace Puck.Text;
 
@@ -74,15 +76,38 @@ public sealed class TextLayout {
 
         return blockWidth;
     }
-    private static IEnumerable<TextEffectRune> EnumeratePlainRunes(string text) {
-        foreach (var rune in text.EnumerateRunes()) {
-            yield return new TextEffectRune(
-                Effect: TextEffect.None,
-                Rune: rune
-            );
-        }
+
+    // The plain-string Layout overloads' fast path: every glyph carries TextEffect.None (there is no enrichment tier
+    // to carry here), so this wraps the framework's own rune decoder (StringRuneEnumerator, itself a struct) instead
+    // of routing through the enrichment-aware IEnumerable<TextEffectRune> shape. Because this type is a genuine
+    // value type implementing IEnumerator<TextEffectRune> directly (not via a compiler-generated iterator class),
+    // LayoutRunes's generic instantiation over it dispatches MoveNext/Current through a devirtualized constrained
+    // call, so laying out a plain string allocates neither an iterator object nor a boxed enumerator.
+    private struct PlainRuneEnumerator(string text) : IEnumerator<TextEffectRune> {
+        private StringRuneEnumerator m_runes = text.EnumerateRunes();
+
+        public readonly TextEffectRune Current => new(
+            Effect: TextEffect.None,
+            Rune: m_runes.Current
+        );
+
+        readonly object IEnumerator.Current => Current;
+
+        public bool MoveNext() => m_runes.MoveNext();
+        public readonly void Reset() => throw new NotSupportedException();
+        public readonly void Dispose() { }
     }
-    private static TextLayoutResult LayoutRunes(FontAtlas atlas, IEnumerable<TextEffectRune> runes, float scale, TextLayoutOptions options) {
+
+    // Generic over the enumerator type rather than IEnumerable<TextEffectRune> so the plain-string fast path
+    // (PlainRuneEnumerator, a value type) gets its own devirtualized instantiation while the enrichment-aware
+    // overloads (an interface-typed IEnumerator<TextEffectRune>) share the ordinary interface-dispatch instantiation
+    // exactly as a plain foreach over IEnumerable<TextEffectRune> would — MoveNext/Current/Dispose called manually
+    // here reproduce foreach's own desugaring (including disposing the enumerator in a finally) bit for bit.
+    // placementCapacity seeds the placements list; 0 reproduces List<T>'s own default (lazy, grow-from-empty)
+    // behavior for a caller with no cheap upper bound to offer.
+    // The argument gate every public Layout overload runs before acquiring any rune enumerator: an invalid scale or
+    // option must throw before a caller-supplied IEnumerable's GetEnumerator can run (or leak undisposed).
+    private static void ValidateArguments(TextLayoutOptions options, float scale) {
         if (
             !float.IsFinite(f: scale) ||
             (scale <= 0.0f)
@@ -128,8 +153,13 @@ public sealed class TextLayout {
                 paramName: nameof(options)
             );
         }
+    }
+    private static TextLayoutResult LayoutRunes<TEnumerator>(FontAtlas atlas, TEnumerator runes, float scale, TextLayoutOptions options, int placementCapacity) where TEnumerator : IEnumerator<TextEffectRune> {
+        // Arguments are validated by ValidateArguments in every public entry point before an enumerator is
+        // acquired, so an invalid argument can never leak a caller-supplied enumerator.
+        var maxLineWidth = options.MaxLineWidth;
 
-        var placements = new List<TextGlyphPlacement>();
+        var placements = new List<TextGlyphPlacement>(capacity: placementCapacity);
         var lineBreaks = ((options.Alignment == TextAlignment.Left)
             ? null
             : new List<(int StartIndex, float VisualLeft, float VisualRight)>()
@@ -162,87 +192,92 @@ public sealed class TextLayout {
             previousUnicode = null;
         }
 
-        foreach (var enriched in runes) {
-            var unicode = enriched.Rune.Value;
+        try {
+            while (runes.MoveNext()) {
+                var enriched = runes.Current;
+                var unicode = enriched.Rune.Value;
 
-            if (unicode == '\r') {
-                continue;
-            }
+                if (unicode == '\r') {
+                    continue;
+                }
 
-            if (unicode == '\n') {
-                StartNewLine();
-                continue;
-            }
+                if (unicode == '\n') {
+                    StartNewLine();
+                    continue;
+                }
 
-            if (!atlas.TryGetGlyph(
-                glyph: out var glyph,
-                unicode: unicode
-            )) {
-                previousUnicode = null;
-                continue;
-            }
+                if (!atlas.TryGetGlyph(
+                    glyph: out var glyph,
+                    unicode: unicode
+                )) {
+                    previousUnicode = null;
+                    continue;
+                }
 
-            if (previousUnicode is int previous) {
-                cursorX += (atlas.GetKerningAdjustment(
-                    leftUnicode: previous,
-                    rightUnicode: unicode
-                ) * scale);
-            }
+                if (previousUnicode is int previous) {
+                    cursorX += (atlas.GetKerningAdjustment(
+                        leftUnicode: previous,
+                        rightUnicode: unicode
+                    ) * scale);
+                }
 
-            if (ShouldWrapGlyph(
-                cursorX: cursorX,
-                glyph: glyph,
-                lineHasContent: lineHasContent,
-                maxLineWidth: maxLineWidth,
-                scale: scale
-            )) {
-                StartNewLine();
-            }
+                if (ShouldWrapGlyph(
+                    cursorX: cursorX,
+                    glyph: glyph,
+                    lineHasContent: lineHasContent,
+                    maxLineWidth: maxLineWidth,
+                    scale: scale
+                )) {
+                    StartNewLine();
+                }
 
-            if (
-                (glyph.PlaneBounds is FontAtlasBounds planeBounds) &&
-                (glyph.AtlasBounds is FontAtlasBounds atlasBounds)
-            ) {
-                var transformedPlaneBounds = new FontAtlasBounds(
-                    Bottom: (baselineY + (planeBounds.Bottom * scale)),
-                    Left: (cursorX + (planeBounds.Left * scale)),
-                    Right: (cursorX + (planeBounds.Right * scale)),
-                    Top: (baselineY + (planeBounds.Top * scale))
-                );
+                if (
+                    (glyph.PlaneBounds is FontAtlasBounds planeBounds) &&
+                    (glyph.AtlasBounds is FontAtlasBounds atlasBounds)
+                ) {
+                    var transformedPlaneBounds = new FontAtlasBounds(
+                        Bottom: (baselineY + (planeBounds.Bottom * scale)),
+                        Left: (cursorX + (planeBounds.Left * scale)),
+                        Right: (cursorX + (planeBounds.Right * scale)),
+                        Top: (baselineY + (planeBounds.Top * scale))
+                    );
 
-                placements.Add(item: new TextGlyphPlacement(
-                    Atlas: atlas,
-                    AtlasBounds: atlasBounds,
-                    BaselineOrigin: new Vector2(
-                        x: cursorX,
-                        y: baselineY
-                    ),
-                    Effect: enriched.Effect,
-                    Glyph: glyph,
-                    PlaneBounds: transformedPlaneBounds,
-                    Unicode: unicode
-                ));
+                    placements.Add(item: new TextGlyphPlacement(
+                        Atlas: atlas,
+                        AtlasBounds: atlasBounds,
+                        BaselineOrigin: new Vector2(
+                            x: cursorX,
+                            y: baselineY
+                        ),
+                        Effect: enriched.Effect,
+                        Glyph: glyph,
+                        PlaneBounds: transformedPlaneBounds,
+                        Unicode: unicode
+                    ));
+                    maxRight = MathF.Max(
+                        x: maxRight,
+                        y: transformedPlaneBounds.Right
+                    );
+                    lineVisualLeft = MathF.Min(
+                        x: lineVisualLeft,
+                        y: transformedPlaneBounds.Left
+                    );
+                    lineVisualRight = MathF.Max(
+                        x: lineVisualRight,
+                        y: transformedPlaneBounds.Right
+                    );
+                }
+
+                cursorX += ((glyph.Advance * scale) + tracking);
                 maxRight = MathF.Max(
                     x: maxRight,
-                    y: transformedPlaneBounds.Right
+                    y: cursorX
                 );
-                lineVisualLeft = MathF.Min(
-                    x: lineVisualLeft,
-                    y: transformedPlaneBounds.Left
-                );
-                lineVisualRight = MathF.Max(
-                    x: lineVisualRight,
-                    y: transformedPlaneBounds.Right
-                );
+                lineHasContent = true;
+                previousUnicode = unicode;
             }
-
-            cursorX += ((glyph.Advance * scale) + tracking);
-            maxRight = MathF.Max(
-                x: maxRight,
-                y: cursorX
-            );
-            lineHasContent = true;
-            previousUnicode = unicode;
+        } finally {
+            runes.Dispose();
         }
 
         if (lineBreaks is not null) {
@@ -304,12 +339,20 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(text);
 
+        var resolvedOptions = ((maxLineWidth is null)
+            ? TextLayoutOptions.Default
+            : new TextLayoutOptions(MaxLineWidth: maxLineWidth));
+
+        ValidateArguments(
+            options: resolvedOptions,
+            scale: scale
+        );
+
         return LayoutRunes(
             atlas: atlas,
-            options: ((maxLineWidth is null)
-            ? TextLayoutOptions.Default
-            : new TextLayoutOptions(MaxLineWidth: maxLineWidth)),
-            runes: EnumeratePlainRunes(text: text),
+            options: resolvedOptions,
+            placementCapacity: text.Length,
+            runes: new PlainRuneEnumerator(text: text),
             scale: scale
         );
     }
@@ -328,10 +371,16 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(options);
 
+        ValidateArguments(
+            options: options,
+            scale: scale
+        );
+
         return LayoutRunes(
             atlas: atlas,
             options: options,
-            runes: EnumeratePlainRunes(text: text),
+            placementCapacity: text.Length,
+            runes: new PlainRuneEnumerator(text: text),
             scale: scale
         );
     }
@@ -348,12 +397,20 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(atlas);
         ArgumentNullException.ThrowIfNull(runes);
 
+        var resolvedOptions = ((maxLineWidth is null)
+            ? TextLayoutOptions.Default
+            : new TextLayoutOptions(MaxLineWidth: maxLineWidth));
+
+        ValidateArguments(
+            options: resolvedOptions,
+            scale: scale
+        );
+
         return LayoutRunes(
             atlas: atlas,
-            options: ((maxLineWidth is null)
-            ? TextLayoutOptions.Default
-            : new TextLayoutOptions(MaxLineWidth: maxLineWidth)),
-            runes: runes,
+            options: resolvedOptions,
+            placementCapacity: 0,
+            runes: runes.GetEnumerator(),
             scale: scale
         );
     }
@@ -372,10 +429,16 @@ public sealed class TextLayout {
         ArgumentNullException.ThrowIfNull(runes);
         ArgumentNullException.ThrowIfNull(options);
 
+        ValidateArguments(
+            options: options,
+            scale: scale
+        );
+
         return LayoutRunes(
             atlas: atlas,
             options: options,
-            runes: runes,
+            placementCapacity: 0,
+            runes: runes.GetEnumerator(),
             scale: scale
         );
     }

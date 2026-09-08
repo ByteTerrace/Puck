@@ -1,9 +1,9 @@
 namespace Puck.Cli.Source;
 
-// The recursive file walk shared by the verbs that address the tree by path — the search verb's content
-// search and the declarations inventory. Generated, vendored and artifact directories are pruned at every
-// depth; the include/exclude globs, an optional extension filter and an optional per-file gate decide
-// the rest. The result is ordinal-sorted absolute paths, each file admitted exactly once.
+// The recursive file walk shared by the verbs that address the tree by path. Generated, vendored and
+// artifact directories are pruned at every depth; the include/exclude globs, an optional extension
+// filter and an optional per-file gate decide the rest. The result is ordinal-sorted absolute paths,
+// each file admitted exactly once.
 internal static class FileWalk {
     // Pruned at every depth of the walk, and below the scan root of the scan/format corpus
     // (SourceFiles). Naming one as a search root still searches it, and so does naming a file inside it.

@@ -8,21 +8,10 @@
       "description": "Which boot shape the world composes \u2014 see WorldHostPresentation. Defaults to Windowed, so every world authored before this field existed boots byte-identically; the --headless CLI flag reflects None for a single run without editing the document.",
       "enum": [
         "Windowed",
-        "None"
-      ]
-    },
-    "backend": {
-      "description": "The preferred graphics backend (Auto is OS-portable), or null when BackendDraw draws it \u2014 omitting both reads as Auto.",
-      "type": [
-        "string",
-        "null"
+        "None",
+        "Offscreen"
       ],
-      "enum": [
-        "auto",
-        "directx",
-        "vulkan",
-        null
-      ]
+      "title": "WorldHostPresentation"
     },
     "width": {
       "description": "The window client width in pixels.",
@@ -34,6 +23,7 @@
     },
     "surfaceFormat": {
       "description": "The swapchain surface format (Unknown is rejected by the validator).",
+      "title": "SurfaceFormat",
       "type": "string",
       "enum": [
         "r8g8b8a8",
@@ -51,7 +41,8 @@
         "Mailbox",
         "Immediate",
         "Adaptive"
-      ]
+      ],
+      "title": "PresentMode"
     },
     "targetHertz": {
       "description": "The boot present-pacing target in Hz; 0 selects automatic display pacing. The world.target live lever owns \u0022now\u0022 thereafter.",
@@ -77,29 +68,51 @@
       ]
     },
     "listen": {
-      "description": "The TCP listen endpoint (host:port) the authoritative host binds for remote peer admission, or null to stay loopback-only (no socket ever opens). Durable configuration per the unification contract \u2014 the --listen CLI flag reflects it for a single run without editing the document. Shape-only validation (null or a non-whitespace host:port pair); Server.WorldTcpHost is what actually parses and binds it.",
+      "description": "The QUIC listen endpoint (host:port) the authoritative host binds for remote peer admission, or null to stay loopback-only (no socket ever opens). Durable configuration per the unification contract \u2014 the --listen CLI flag reflects it for a single run without editing the document. Shape-only validation (null or a non-whitespace host:port pair); Server.WorldPeerHost is what actually parses and binds it.",
       "type": [
         "string",
         "null"
       ]
     },
     "authority": {
-      "description": "The TCP endpoint at which this world\u0027s authority is reached when another world resolves it as a destination, or null when the authority is colocated with the resolver. Colocation short-circuits the authority transport; it does not select a separate transfer path.",
+      "description": "The QUIC endpoint at which this world\u0027s authority is reached when another world resolves it as a destination, or null when the authority is colocated with the resolver. Colocation short-circuits the authority transport; it does not select a separate transfer path.",
       "type": [
         "string",
         "null"
       ],
       "default": null
     },
-    "backendDraw": {
-      "$ref": "./common.schema.json#/$defs/WorldDraw",
-      "description": "The backend choice\u0027s authored-randomness facet, or null for an ordinary literal Backend. A boot-only site (HostBackend): the resolver draws it once at composition, writes the settled preference into Backend, clears this facet, and narrates the settlement on stderr \u2014 the only surface that can say the backend was drawn at all, since a settled field is indistinguishable from an authored one thereafter. Its natural spelling is a weighted text source over the backend tokens (auto/directx/ vulkan \u2014 a one-context Markov table with bound 1, the degenerate flat weighted draw), parsed through ParseBackend at settle. A token naming no backend refuses by name. Drawing the name rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is inserted, and reads at the authoring site as a number nothing explains. Declared together with Backend it is refused by name \u2014 this record is a class, so presence is honestly observable here, unlike CapacityDraw\u0027s struct-typed site.",
+    "backend": {
+      "description": "The preferred graphics backend (Auto is OS-portable), or null when BackendRow reads it from a row \u2014 omitting both reads as Auto.",
+      "default": null,
+      "title": "WorldBackendPreference",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "auto",
+        "directx",
+        "vulkan",
+        null
+      ]
+    },
+    "backendRow": {
+      "description": "A scalar kind=Text state row whose slot names the backend token, read at boot after literal Backend. A boot-only site (HostBackend): the resolver draws it once at composition, writes the settled preference into Backend, clears this facet, and narrates the settlement on stderr \u2014 the only surface that can say the backend was drawn at all, since a settled field is indistinguishable from an authored one thereafter. Its natural spelling is a weighted text source over the backend tokens (auto/directx/ vulkan \u2014 a one-context Markov table with bound 1, the degenerate flat weighted draw), parsed through ParseBackend at settle. A token naming no backend refuses by name. Drawing the name rather than an ordinal is deliberate: an ordinal draw over an enum silently re-points itself the day a member is inserted, and reads at the authoring site as a number nothing explains. Declared together with Backend it is refused by name \u2014 this record is a class, so presence is honestly observable here, unlike bodies.capacityRow\u0027s struct-typed site.",
+      "type": [
+        "string",
+        "null"
+      ],
       "default": null
+    },
+    "journalDepth": {
+      "description": "The undo horizon, in journal entries: world.undo can never reach past this many trailing entries. 0 is unbounded \u2014 every world authored before this field existed keeps growing its journal for the life of the process, exactly as before. A positive depth bounds it: once the journal holds more than this many entries, the oldest ones fold forward into the base the journal already keeps (the same document-level replay WorldServer.ApplyUndo performs, run forward), so a checkpoint restore and a replay from the new base plus the retained tail still reproduce the live definition bit-identically. world.status echoes the authored value; world.undo names it when a requested count reaches past what the horizon has kept.",
+      "type": "integer",
+      "default": 0
     }
   },
   "required": [
     "presentation",
-    "backend",
     "width",
     "height",
     "surfaceFormat",
@@ -113,5 +126,6 @@
     "listen"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldHostDefaults"
 }

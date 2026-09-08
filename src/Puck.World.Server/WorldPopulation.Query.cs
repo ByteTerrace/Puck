@@ -1,10 +1,27 @@
 using System.Numerics;
 using Puck.Maths;
+using Puck.Physics.Motion;
+using Puck.Physics.Navigation;
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
+    /// <summary>Gets the number of active non-seat bodies currently asleep — the <c>world.status</c> read-back's own
+    /// population-level echo of <see cref="WorldBody.Asleep"/>.</summary>
+    public int SleepingCount {
+        get {
+            var count = 0;
+
+            for (var index = LocalSeatCount; (index < Capacity); index++) {
+                if (m_entries[index] is { Active: true, Body.Asleep: true }) {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+    }
     private int AvailableCensusSlots() {
         var count = 0;
 
@@ -24,8 +41,9 @@ public sealed partial class WorldPopulation {
     private static void ClearDesignations(Entry entry) {
         Array.Fill(
             array: entry.Designations,
-            value: -1
+            value: WorldTargetDesignation.None
         );
+        entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
         entry.DesignationRefusal = string.Empty;
     }
     private int CountActiveCensus() {
@@ -75,7 +93,7 @@ public sealed partial class WorldPopulation {
 
         return null;
     }
-    // The highest slot (127 downward) not currently claimed by an active seat/census peer or an inhabited peer — where a
+    // The highest slot (capacity minus one downward) not currently claimed by an active seat/census peer or an inhabited peer — where a
     // new inhabited body lands, so inhabitants cluster at the top and never renumber an existing peer. A free slot is one
     // that holds no placement back-reference and no active census body.
     private int HighestFreeSlot() {
@@ -105,12 +123,12 @@ public sealed partial class WorldPopulation {
 
         return -1;
     }
-    private int[] NewDesignations() {
-        var values = new int[m_targets.Count];
+    private WorldTargetDesignation[] NewDesignations() {
+        var values = new WorldTargetDesignation[m_targets.Count];
 
         Array.Fill(
             array: values,
-            value: -1
+            value: WorldTargetDesignation.None
         );
         return values;
     }
@@ -132,6 +150,23 @@ public sealed partial class WorldPopulation {
         }
 
         return count;
+    }
+    /// <summary>Returns whether every active, UNCARRIED rigid body currently latches
+    /// <see cref="Puck.Physics.Motion.ActionFact.Resting"/> — the <c>$physics:quiescent</c> rule fact. A carried
+    /// body's own integration is suspended (its pose is derived from its carrier, never solved), so it contributes
+    /// neither a settle nor a bounce here — carrying the world's one rigid body off a resting surface must not read
+    /// as newly quiescent, and neither must it read as newly unsettled. Vacuously <see langword="true"/> when the
+    /// world activates no rigid body.</summary>
+    public bool RigidBodiesQuiescent() {
+        for (var index = 0; (index < m_entries.Length); index++) {
+            if (
+                (m_entries[index] is { Active: true, Body: { IsRigid: true, Resting: false, CarriedBy: null } })
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
     /// <summary>Counts the active entities per kit row for console diagnostics (one slot per definition row).</summary>
     public int[] ActiveKitCounts() {
@@ -177,7 +212,7 @@ public sealed partial class WorldPopulation {
     /// <param name="slot">The seat index (0-based).</param>
     /// <returns>A defensive copy of the slot's current designation register, or an empty array for an out-of-range
     /// slot.</returns>
-    public int[] CaptureDesignations(int slot) => ((((uint)slot) < m_entries.Length)
+    public WorldTargetDesignation[] CaptureDesignations(int slot) => ((((uint)slot) < m_entries.Length)
         ? [.. m_entries[slot].Designations]
         : []
     );
@@ -188,8 +223,6 @@ public sealed partial class WorldPopulation {
     public void ClearDesignationOutputs() => m_designationOutputs.Clear();
     /// <summary>Clears staged generator invocations after the world authority has enqueued them.</summary>
     public void ClearGeneratorInvocationOutputs() => m_generatorInvocations.Clear();
-    /// <summary>Clears staged judge invocations after the world authority has graded them.</summary>
-    public void ClearJudgeInvocationOutputs() => m_judgeInvocations.Clear();
     /// <summary>Collects every currently-inhabited body slot bound to <paramref name="placementId"/> into
     /// <paramref name="into"/> (cleared first) — the despawn-ownership guard's read: which live bodies a
     /// <c>removePlacement</c> rule effect targeting this placement would strip their Inhabit binding from. Rule
@@ -216,12 +249,17 @@ public sealed partial class WorldPopulation {
 
         for (var index = 0; (index < rows.Length); index++) {
             var register = m_targetRows[index];
-            var subject = entry.Designations[index];
-            var status = ((subject >= 0)
-                ? $"body:{subject}{(IsActive(index: subject)
+            var target = entry.Designations[index];
+            var status = (target.HasBody
+                ? $"body:{target.Index}{(IsActive(index: target.Index)
                     ? string.Empty
                     : "(inactive)")}"
-                : "none"
+                : (target.IsPoint
+                    ? string.Create(
+                        provider: System.Globalization.CultureInfo.InvariantCulture,
+                        handler: $"at:{((double)target.Point.X):0.###},{((double)target.Point.Y):0.###},{((double)target.Point.Z):0.###}"
+                    )
+                    : "none")
             );
             var effectiveRange = EffectiveTargetValue(
                 body: entry.Body,
@@ -245,19 +283,145 @@ public sealed partial class WorldPopulation {
             : entry.DesignationRefusal
         );
 
-        return $"[player.targets: p{(bodyIndex + 1)} {((rows.Length == 0)
+        var navigation = entry.NavigationState;
+        var navigationStatus = navigation.Status.ToString().ToLowerInvariant();
+        var navigationName = (((uint)navigation.DomainIndex < (uint)m_navigation.Count) ? m_navigation[navigation.DomainIndex].Name : "none");
+
+        return $"[body.targets: body:{bodyIndex} {((rows.Length == 0)
             ? "registers=none"
             : string.Join(
                 separator: "; ",
                 values: rows
-            ))} lastRefusal={refusal}]";
+            ))} navigation={navigationStatus},domain={navigationName},waypoint={navigation.Waypoint}/{navigation.PathLength},expanded={navigation.ExpandedLast} lastRefusal={refusal}]";
+    }
+    /// <summary>Describes the authored navigation domains and their compiled occupancy/cost envelopes.</summary>
+    public string DescribeNavigation() {
+        if (m_navigation.Count == 0) {
+            return "[world.navigation: none]";
+        }
+        var rows = new string[m_navigation.Count];
+        for (var index = 0; index < rows.Length; index++) {
+            var domain = m_navigation[index];
+            var tuning = domain.Tuning;
+            var frame = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $" origin=({(double)tuning.Origin.X:0.###},{(double)tuning.Origin.Y:0.###},{(double)tuning.Origin.Z:0.###}) yaw={(double)tuning.YawRadians * (180 / Math.PI):0.###}");
+            var shared = domain.Sharing is { } sharing ? $",shared={domain.SharedResidentGoals}/{sharing.GoalCapacity},expanded={domain.SharedExpandedLast}/{sharing.ExpandedNodesPerTick},paths={domain.SharedPathsLast},capacityRefusals={domain.SharedCapacityRefusalsLast}" : ",shared=none";
+            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}{frame}";
+        }
+        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount}; {string.Join(separator: "; ", values: rows)}]";
+    }
+    /// <summary>Gets the number of navigation domains retained by the most recent population compile.</summary>
+    public int NavigationRetainedDomainCount => m_navigation.RetainedDomainCount;
+    /// <summary>Gets the number of navigation domains rebuilt by the most recent population compile.</summary>
+    public int NavigationRebuiltDomainCount => m_navigation.RebuiltDomainCount;
+    /// <summary>Gets the compiled navigation cell total.</summary>
+    public long NavigationCellCount => m_navigation.CellCount;
+    /// <summary>Gets the fixed domain-search workspace allocated at compile time.</summary>
+    public long NavigationWorkspaceBytes => m_navigation.WorkspaceBytes;
+    /// <summary>Gets the sum of shared per-tick or independent per-search caps across declared domains.</summary>
+    public long NavigationDeclaredSearchWork => Enumerable.Range(0, m_navigation.Count).Sum(index => (long)(m_navigation[index].Sharing?.ExpandedNodesPerTick ?? m_navigation[index].Tuning.MaxExpandedNodes));
+    /// <summary>Gets active navigated producers, this tick's expansion total, and the maximum work they could
+    /// consume together if every follower had to replan on the same tick.</summary>
+    public (int Followers, long LastExpanded, long WorstExpanded) NavigationWork() {
+        var followers = 0;
+        var expanded = 0L;
+        var worst = 0L;
+        for (var domain = 0; domain < m_navigation.Count; domain++) {
+            if (m_navigation[domain].Sharing is { } sharing) {
+                expanded += m_navigation[domain].SharedExpandedLast;
+                worst += sharing.ExpandedNodesPerTick;
+            }
+        }
+        for (var index = 0; index < Capacity; index++) {
+            var entry = m_entries[index];
+            if (!entry.Active || entry.Body?.Source.ProducerName is not { } name) {
+                continue;
+            }
+            var kitIndex = (entry.Kind == PopulationKind.LocalSeat ? m_seatKit : entry.KitIndex);
+            if (m_kits[kitIndex].Producers.TryGetValue(key: name, value: out var producer) && producer.Target?.Source is BodyTargetSource.Navigated) {
+                followers++;
+                expanded += entry.NavigationState.ExpandedLast;
+                var domainIndex = producer.Target.Value.NavigationDomainIndex;
+                if ((uint)domainIndex < (uint)m_navigation.Count) {
+                    if (m_navigation[domainIndex].Sharing is null) { worst += m_navigation[domainIndex].Tuning.MaxExpandedNodes; }
+                }
+            }
+        }
+        return (followers, expanded, worst);
+    }
+    /// <summary>Reads one rule-facing navigation facet for a body.</summary>
+    public long NavigationFact(int index, string facet) {
+        if ((uint)index >= (uint)Capacity || !m_entries[index].Active) {
+            return 0L;
+        }
+        var state = m_entries[index].NavigationState;
+        return facet switch {
+            "hasPath" => (state.PathLength != 0 ? 1L : 0L),
+            "active" => (state.Status == NavigationStatus.Active ? 1L : 0L),
+            "arrived" => (state.Status == NavigationStatus.Arrived ? 1L : 0L),
+            "pending" => (state.Status == NavigationStatus.Pending ? 1L : 0L),
+            "capacity" => (state.Status == NavigationStatus.CapacityLimited ? 1L : 0L),
+            "unreachable" => (state.Status is NavigationStatus.Unreachable or NavigationStatus.SearchLimit or NavigationStatus.PathLimit or NavigationStatus.OutsideDomain ? 1L : 0L),
+            "remaining" => Math.Max(0, state.PathLength - state.Waypoint),
+            _ => 0L,
+        };
+    }
+    /// <summary>Appends route state that can affect rule reads and subsequent producer motion.</summary>
+    internal void AppendNavigationStateHash(ref Fnv1aHash hash) {
+        m_navigation.AppendSharedHash(ref hash);
+        hash.Add(value: ((uint)Capacity));
+        for (var index = 0; index < Capacity; index++) {
+            var entry = m_entries[index];
+            hash.Add(value: ((byte)(entry.Active ? 1 : 0)));
+            if (!entry.Active) {
+                continue;
+            }
+            var state = entry.NavigationState;
+            hash.Add(value: entry.ProducerState.ActiveProducerNavigationDomainIndex);
+            hash.Add(value: ((byte)state.Status));
+            hash.Add(value: state.DomainIndex);
+            hash.Add(value: state.GoalCell);
+            hash.Add(value: state.Waypoint);
+            hash.Add(value: state.PathLength);
+            for (var pathIndex = 0; pathIndex < state.PathLength; pathIndex++) {
+                hash.Add(value: state.Path[pathIndex]);
+            }
+        }
     }
     /// <summary>Re-resolves a proposed body subject against one designation envelope.</summary>
     public bool DesignationWithinEnvelope(int sourceIndex, int targetIndex, WorldTargetRegister register, float rangeValue, float halfAngleDegrees, out string reason) {
-        var source = m_entries[sourceIndex].Body!;
         var target = m_entries[targetIndex].Body!;
+
+        return DesignationWithinEnvelope(
+            candidate: target.FixedPosition,
+            candidateLabel: $"body:{targetIndex}",
+            candidateOrientation: target.FixedOrientation,
+            halfAngleDegrees: halfAngleDegrees,
+            rangeValue: rangeValue,
+            reason: out reason,
+            register: register,
+            sourceIndex: sourceIndex
+        );
+    }
+    /// <summary>Re-resolves a proposed world-space point against one designation envelope.</summary>
+    public bool DesignationWithinEnvelope(int sourceIndex, in FixedVector3 point, WorldTargetRegister register, float rangeValue, float halfAngleDegrees, out string reason) =>
+        DesignationWithinEnvelope(
+            candidate: point,
+            candidateLabel: string.Create(
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"at:{((double)point.X):0.###},{((double)point.Y):0.###},{((double)point.Z):0.###}"
+            ),
+            candidateOrientation: FixedQuaternion.Identity,
+            halfAngleDegrees: halfAngleDegrees,
+            rangeValue: rangeValue,
+            reason: out reason,
+            register: register,
+            sourceIndex: sourceIndex
+        );
+
+    private bool DesignationWithinEnvelope(int sourceIndex, in FixedVector3 candidate, string candidateLabel, in FixedQuaternion candidateOrientation, WorldTargetRegister register, float rangeValue, float halfAngleDegrees, out string reason) {
+        var source = m_entries[sourceIndex].Body!;
         var origin = source.FixedPosition;
-        var candidate = target.FixedPosition;
         var forward = source.FixedOrientation.Rotate(vector: LocalForward);
         var range = FixedQ4816.FromDouble(value: rangeValue);
         var minimumDot = FixedQ4816.FromDouble(value: Math.Cos(d: (halfAngleDegrees * (Math.PI / 180.0))));
@@ -270,11 +434,13 @@ public sealed partial class WorldPopulation {
             origin: in origin,
             range: range
         )) {
-            var distance = FixedQ4816.Sqrt(value: distanceSquared);
+            // The distance formats through double: FixedQ4816's own TryFormat admits only exact-expansion formats
+            // and refuses '0.###'.
+            var distance = ((double)FixedQ4816.Sqrt(value: distanceSquared));
 
             reason = string.Create(
                 provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"body:{targetIndex} is outside range/cone (distance={distance:0.###}, range={rangeValue:0.###}, halfAngle={halfAngleDegrees:0.###})"
+                handler: $"{candidateLabel} is outside range/cone (distance={distance:0.###}, range={rangeValue:0.###}, halfAngle={halfAngleDegrees:0.###})"
             );
             return false;
         }
@@ -284,16 +450,17 @@ public sealed partial class WorldPopulation {
             from: origin,
             fromOrientation: source.FixedOrientation,
             to: candidate,
-            toOrientation: target.FixedOrientation
+            toOrientation: candidateOrientation
         )
         ) {
-            reason = $"solid geometry blocks line of sight to body:{targetIndex}";
+            reason = $"solid geometry blocks line of sight to {candidateLabel}";
             return false;
         }
 
         reason = string.Empty;
         return true;
     }
+
     /// <summary>Reads a visited-world effective slot and composes it with a register maximum by taking the tighter value.</summary>
     public static float EffectiveTargetValue(WorldBody? body, string? stateName, float authoredMaximum) {
         if (
@@ -311,6 +478,19 @@ public sealed partial class WorldPopulation {
             min: 0f,
             value: ((float)((double)requested))
         );
+    }
+    /// <summary>Resolves an active occupant's original mobility incarnation without minting or changing state.</summary>
+    /// <param name="index">The current population slot.</param>
+    /// <param name="authority">The local authority identity used for a not-yet-minted local incarnation.</param>
+    /// <returns>The stable original address, or null when the slot is inactive or outside capacity.</returns>
+    /// <exception cref="ArgumentException">The authority is empty or whitespace.</exception>
+    public WorldEntityAddress? ResolveIncarnation(int index, string authority) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(authority);
+        if ((uint)index >= (uint)Capacity) { return null; }
+        var entry = m_entries[index];
+        if (!entry.Active || entry.Body is null) { return null; }
+        return entry.Mobility is { } mobility && entry.MobilityGeneration == entry.Generation
+            ? mobility.Incarnation : new WorldEntityAddress(authority, index, entry.Generation);
     }
     /// <summary>Reads or mints the stable mobility identity for one active occupant. A new local incarnation is
     /// derived from the complete authority/index/generation address; a transferred incarnation retains its origin.</summary>
@@ -360,20 +540,20 @@ public sealed partial class WorldPopulation {
     /// <param name="index">The population index (0-based).</param>
     /// <returns>The slot's assigned kit row index.</returns>
     public byte KitIndex(int index) => m_entries[index].KitIndex;
-    /// <summary>The declared locomotion model of the kit assigned to a stable population slot — the runtime
-    /// <c>player.motion</c> door's read of the same fact <see cref="WorldDefinitionValidator.TryValidateProgramCoherence"/>
-    /// checks at boot, so a document-legal kit cannot runtime-switch into a program its model cannot back.</summary>
+    /// <summary>The declared motion tuning of the kit assigned to a stable population slot — the runtime
+    /// <c>body.motion</c> door's read of the same fact <see cref="WorldDefinitionValidator.TryValidateProgramCoherence"/>
+    /// checks at boot, so a document-legal kit cannot runtime-switch into a program its tuning cannot back.</summary>
     /// <param name="index">The population index (0-based).</param>
-    /// <returns>The slot's assigned kit's motion model.</returns>
-    public WorldMotionModel KitMotion(int index) => m_kitRows[ResolveKitIndex(index: index)].Motion;
-    /// <summary>The most recent timed <c>player.press</c> outcome for a body, or a zeroed/<see cref="PressHoldCapKind.None"/>
+    /// <returns>The slot's assigned kit's motion tuning.</returns>
+    public WorldMotion KitMotion(int index) => m_kitRows[ResolveKitIndex(index: index)].Motion;
+    /// <summary>The most recent timed <c>body.press</c> outcome for a body, or a zeroed/<see cref="PressHoldCapKind.None"/>
     /// outcome when none has been made (or the last attempt was refused — see <see cref="PressRefusal"/>).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public PressOutcome LastPressOutcome(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))
         ? m_entries[bodyIndex].PressOutcome
         : default
     );
-    /// <summary>The most recent <c>player.stop</c> outcome for a body, or a zeroed outcome when none has been made
+    /// <summary>The most recent <c>body.stop</c> outcome for a body, or a zeroed outcome when none has been made
     /// (or the last attempt was refused — see <see cref="StopRefusal"/>).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public StopOutcome LastStopOutcome(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))
@@ -384,7 +564,7 @@ public sealed partial class WorldPopulation {
     /// renderer (presentation-only).</summary>
     /// <param name="index">The 0-based population index.</param>
     public byte LookIndex(int index) => m_entries[index].LookIndex;
-    /// <summary>The most recent <c>player.motion</c> switch refusal for a body, or <see cref="string.Empty"/> when its
+    /// <summary>The most recent <c>body.motion</c> switch refusal for a body, or <see cref="string.Empty"/> when its
     /// last attempt succeeded (or none has been made).</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string MotionRefusal(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))
@@ -397,8 +577,8 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].DesignationRefusal = reason;
         }
     }
-    /// <summary>Records the outcome of the latest <c>player.motion</c> switch attempt for a body — an empty
-    /// <paramref name="reason"/> on success, the named refusal otherwise. <c>player.motion</c>'s handler reads this
+    /// <summary>Records the outcome of the latest <c>body.motion</c> switch attempt for a body — an empty
+    /// <paramref name="reason"/> on success, the named refusal otherwise. <c>body.motion</c>'s handler reads this
     /// back through <see cref="MotionRefusal(int)"/> immediately after its synchronous submit (<c>WorldServer.Submit</c>
     /// drains inline) so its immediate echo reports the true outcome instead of assuming success.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
@@ -408,7 +588,7 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].MotionRefusal = reason;
         }
     }
-    /// <summary>Records the outcome of a successful timed <c>player.press</c> — the effective hold (post
+    /// <summary>Records the outcome of a successful timed <c>body.press</c> — the effective hold (post
     /// grant-ceiling and engine-backstop clamping) and which cap, if any, decided it — the same synchronous-submit
     /// read-back shape as <see cref="NoteMotionRefusal"/>, so the handler can name a silent truncation instead of
     /// echoing the requested duration as if it were honored. Always clears any refusal note the body's press slot
@@ -421,7 +601,7 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].PressOutcome = outcome;
         }
     }
-    /// <summary>Records a refused <c>player.press</c> attempt (timed or untimed alike — they share one refusal
+    /// <summary>Records a refused <c>body.press</c> attempt (timed or untimed alike — they share one refusal
     /// slot) for a body — <see cref="WorldServer.ApplyCommand"/> calls this from every early return a
     /// <see cref="WorldCommand.PressChannel"/> can take, so the slot is written on every single outcome the command
     /// can have. Also resets the timed-path's outcome to a neutral default, so a handler that reads it without
@@ -434,7 +614,7 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].PressOutcome = default;
         }
     }
-    /// <summary>Records a successful untimed <c>player.press</c> (the host-step tap, which carries no numeric
+    /// <summary>Records a successful untimed <c>body.press</c> (the host-step tap, which carries no numeric
     /// outcome of its own) — clears any refusal note the body's press slot carried, the same way
     /// <see cref="NotePressOutcome"/> does for the timed path, so the one shared refusal slot both press paths read
     /// back through is always fresh regardless of which one last ran.</summary>
@@ -444,8 +624,8 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].PressRefusal = string.Empty;
         }
     }
-    /// <summary>Records the outcome of a successful <c>player.stop</c> for a body — the same synchronous-submit
-    /// read-back shape as <see cref="NoteMotionRefusal"/>, so <c>player.stop</c>'s handler can quote the true
+    /// <summary>Records the outcome of a successful <c>body.stop</c> for a body — the same synchronous-submit
+    /// read-back shape as <see cref="NoteMotionRefusal"/>, so <c>body.stop</c>'s handler can quote the true
     /// released/cleared counts instead of a fixed template string. Always clears any refusal note the body's stop
     /// slot carried, so a denial from an earlier attempt can never bleed into a fresh success's echo.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
@@ -456,7 +636,7 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].StopOutcome = outcome;
         }
     }
-    /// <summary>Records a refused <c>player.stop</c> attempt for a body — <see cref="WorldServer.ApplyCommand"/>
+    /// <summary>Records a refused <c>body.stop</c> attempt for a body — <see cref="WorldServer.ApplyCommand"/>
     /// calls this from every early return a <see cref="WorldCommand.Stop"/> can take (the grant-table denial, the
     /// missing/inactive body) before it ever reaches <see cref="NoteStopOutcome"/>, so the slot is written on every
     /// single outcome a Stop command can have — never left holding a stale success from some earlier, unrelated
@@ -470,8 +650,8 @@ public sealed partial class WorldPopulation {
             m_entries[bodyIndex].StopOutcome = default;
         }
     }
-    /// <summary>The most recent <c>player.press</c> refusal for a body, or <see cref="string.Empty"/> when its last
-    /// attempt succeeded (or none has been made). <c>player.press</c>'s handler checks this before
+    /// <summary>The most recent <c>body.press</c> refusal for a body, or <see cref="string.Empty"/> when its last
+    /// attempt succeeded (or none has been made). <c>body.press</c>'s handler checks this before
     /// <see cref="LastPressOutcome"/> — a non-empty refusal means no press was applied.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string PressRefusal(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))
@@ -508,7 +688,7 @@ public sealed partial class WorldPopulation {
         var kit = m_kits[kitIndex];
 
         return new WorldBody(
-            motion: m_kitRows[kitIndex].Motion,
+            tuning: kit.Tuning,
             program: kit.BodyMotionProgram,
             programs: m_bodyMotionPrograms,
             actions: kit.Actions,
@@ -518,9 +698,11 @@ public sealed partial class WorldPopulation {
             roleOrdinals: kit.RoleOrdinals,
             actionState: kit.ActionState,
             collider: kit.Collider,
+            rigid: kit.Rigid,
+            carry: kit.Carry,
+            tether: kit.Tether,
             maxSmoothError: m_fixedMotion.MaxSmoothError,
-            sprintChannelOrdinal: kit.SprintChannelOrdinal,
-            driftChannelOrdinal: kit.DriftChannelOrdinal
+            holds: kit.Holds
         ) {
             Profile = profile,
         };
@@ -538,10 +720,12 @@ public sealed partial class WorldPopulation {
             m_entries[slot].CatalogRig = catalogRig;
         }
     }
-    /// <summary>Writes one already-validated body subject into a body's named register.</summary>
-    public void SetDesignation(int bodyIndex, int registerIndex, int subjectIndex) {
-        m_entries[bodyIndex].Designations[registerIndex] = subjectIndex;
+    /// <summary>Writes one already-validated target into a body's named register. Wakes the target body — its own
+    /// producer reads this register to steer, and a sleeping body's producer never runs to notice the change.</summary>
+    public void SetDesignation(int bodyIndex, int registerIndex, WorldTargetDesignation target) {
+        m_entries[bodyIndex].Designations[registerIndex] = target;
         m_entries[bodyIndex].DesignationRefusal = string.Empty;
+        m_entries[bodyIndex].Body?.WakeUp();
     }
     /// <summary>Installs the committed mobility epoch on an already-admitted destination occupant.</summary>
     public void SetMobility(int index, in WorldMobilityIdentity mobility) {
@@ -580,7 +764,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Activates the first <paramref name="count"/> census stand-ins (indices <c>4..</c>), clamped to
     /// <c>0..min(networkPlayers cap, </c><see cref="MaxSimulated"/><c>)</c>, and deactivates the rest. A newly-activated
     /// entry is re-seeded to a fresh spawn and given its own <see cref="WorldBody"/> (a server-authoritative spawn at that
-    /// pose); a deactivated entry drops its body; entries already active keep wandering. Bumps the revision only when an
+    /// pose); a deactivated entry drops its body; entries already active keep running their producers. Bumps the revision only when an
     /// occupancy flips.</summary>
     /// <param name="count">The requested active census count.</param>
     /// <param name="admitted">Optional sink for the peer generations admitted by the census change.</param>
@@ -643,8 +827,8 @@ public sealed partial class WorldPopulation {
 
         return clamped;
     }
-    /// <summary>The most recent <c>player.stop</c> refusal for a body, or <see cref="string.Empty"/> when its last
-    /// attempt succeeded (or none has been made). <c>player.stop</c>'s handler checks this before
+    /// <summary>The most recent <c>body.stop</c> refusal for a body, or <see cref="string.Empty"/> when its last
+    /// attempt succeeded (or none has been made). <c>body.stop</c>'s handler checks this before
     /// <see cref="LastStopOutcome"/> — a non-empty refusal means the counts were never applied.</summary>
     /// <param name="bodyIndex">The 0-based entity index.</param>
     public string StopRefusal(int bodyIndex) => ((((uint)bodyIndex) < ((uint)m_entries.Length))

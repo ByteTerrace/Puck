@@ -177,7 +177,8 @@ function Invoke-Attempt([int] $index) {
     $proc = Start-Process -FilePath 'dotnet' -WorkingDirectory $RepoRoot -NoNewWindow -PassThru `
         -ArgumentList @(
             'run', '--project', 'src/Puck.World', '-c', 'Release', '--no-build', '--',
-            '--world', 'src\Puck.World\Assets\worlds\play.world.json',
+            '--world', 'src\Puck.World\Assets\worlds
+exus.world.json',
             '--exit-after-seconds', '55',
             '--width', '640', '--height', '480',
             '--state-dir', $stateDir

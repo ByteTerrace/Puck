@@ -1,6 +1,6 @@
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 
 namespace Puck.World;
 
@@ -31,11 +31,11 @@ public abstract record WorldSpeakerSource {
     public sealed record Machine(int ScreenIndex) : WorldSpeakerSource;
     /// <summary>A tune asset (<see cref="WorldTune"/>) played through a headless machine host — acquired while any
     /// speaker references it, released when orphaned (a runtime derivation, never a data concept).</summary>
-    /// <param name="TuneId">The referenced <see cref="WorldTune.Id"/> (must resolve).</param>
+    /// <param name="TuneId">The referenced <see cref="WorldTune.Name"/> (must resolve).</param>
     public sealed record Tune(string TuneId) : WorldSpeakerSource;
     /// <summary>The world voice synth playing a patch asset (<see cref="WorldPatch"/>). Patches are mono by
     /// construction: the feed's channel selectors degenerate to <c>mix</c> — documented, never rejected.</summary>
-    /// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> (must resolve).</param>
+    /// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> (must resolve).</param>
     public sealed record Synth(string PatchId) : WorldSpeakerSource;
 }
 /// <summary>A speaker's feed — what it plays: a shared source identity, a stereo channel selector,
@@ -115,16 +115,16 @@ public abstract record WorldSpeaker(
     /// <param name="Center">The region's extent center, world space.</param>
     /// <param name="Radius">The region's outer radius — the envelope's zero and the cull edge.</param>
     /// <param name="InnerRadius">The full-presence inner radius; <c>0</c> shoulders the envelope from the center.</param>
+    /// <param name="Feed">The feed it plays.</param>
     /// <param name="FadeSeconds">The presence slew bound in seconds (null = the audio defaults'
     /// <c>DefaultBedFadeSeconds</c>).</param>
-    /// <param name="Feed">The feed it plays.</param>
     public sealed record Bed(
         string Name,
         DocumentVector3 Center,
         float Radius,
         float InnerRadius,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FadeSeconds,
-        WorldSpeakerFeed Feed
+        WorldSpeakerFeed Feed,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? FadeSeconds = null
     ) : WorldSpeaker(
         Name: Name,
         Feed: Feed,
@@ -132,33 +132,33 @@ public abstract record WorldSpeaker(
     );
 }
 /// <summary>
-/// One tune asset row — a whole <c>puck.audio.v1</c> document embedded inline-canonical with its identity hash
-/// pinned beside it (the same hash-pin/canonicalize contract as <see cref="WorldCreation"/>): the compose boundary
-/// canonicalizes on upsert through <see cref="AudioCanonicalizer"/> and rejects a hash the pipeline did not itself compute; the
-/// validator re-verifies the pin on every candidate; <c>world.save</c> re-canonicalizes. The hash doubles as the
-/// runtime restart discriminator: a content change restarts the tune's headless host, a rename does not.
+/// One tune asset reference row — a <c>puck.audio.v1</c> document's stable name, its file path (relative to
+/// <see cref="AppContext.BaseDirectory"/>, the same convention <see cref="WorldMusicRow"/> uses), and the SHA-256
+/// hex64 pin of the referenced document's own canonical bytes. Never embedded: the document is loaded,
+/// canonicalized, and hash-verified where it is compiled, the same load-then-pin discipline <see cref="WorldMusicRow"/>
+/// already applies. The hash doubles as the runtime restart discriminator: a content change restarts the tune's
+/// headless host, a rename does not.
 /// </summary>
-/// <param name="Id">The row's stable string id — its mutation address and the handle a speaker's
+/// <param name="Name">The row's stable name — its mutation address and the handle a speaker's
 /// <see cref="WorldSpeakerSource.Tune"/> references.</param>
-/// <param name="Document">The canonical (validated + normalized) audio document.</param>
-/// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes.</param>
-public sealed record WorldTune(string Id, AudioDocument Document, string Hash);
+/// <param name="Source">The referenced document's file path.</param>
+/// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
+public sealed record WorldTune(string Name, string Source, string Hash);
 /// <summary>
-/// One synth-patch asset row — a whole <c>puck.synth.v1</c> document embedded inline-canonical with its identity
-/// hash pinned beside it via <see cref="SynthPatchCanonicalizer"/>, the same pin/restart contract as
-/// <see cref="WorldCreation"/>; see <see cref="WorldTune"/> for the shared pin/restart semantics.
+/// One synth-patch asset reference row — the <c>puck.synth.v1</c> twin of <see cref="WorldTune"/>, same
+/// name/source/hash shape and load-then-pin discipline.
 /// </summary>
-/// <param name="Id">The row's stable string id — its mutation address; referenced by
+/// <param name="Name">The row's stable name — its mutation address; referenced by
 /// <see cref="WorldSpeakerSource.Synth"/> and by <see cref="WorldEmission.PatchId"/> facets.</param>
-/// <param name="Document">The canonical (validated + normalized) synth patch document.</param>
-/// <param name="Hash">The SHA-256 hex64 of the document's canonical bytes.</param>
-public sealed record WorldPatch(string Id, SynthPatchDocument Document, string Hash);
+/// <param name="Source">The referenced document's file path.</param>
+/// <param name="Hash">The SHA-256 hex64 of the referenced document's canonical bytes.</param>
+public sealed record WorldPatch(string Name, string Source, string Hash);
 /// <summary>An emission facet — a synth voice a world row itself makes (phenomena sound like
 /// themselves; a creek is not a speaker). Nullable on <see cref="WorldPlacement"/>
 /// — a facet edit is the row's existing whole-row upsert. Under a repeat facet the
 /// emission binds to the placement root only (an 8×8 lattice must not become 64 voices; a per-copy flag is a future
 /// facet field, not a schema fork).</summary>
-/// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> (must resolve).</param>
+/// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> (must resolve).</param>
 /// <param name="Level">The emitter level (1 = unity), bounded by <see cref="CreationSoundDocument.MaxLevel"/>.</param>
 /// <param name="Radius">The audible support radius in world units, or <see langword="null"/> for the audio
 /// defaults' <c>DefaultSpeakerRadius</c>.</param>
@@ -166,35 +166,43 @@ public sealed record WorldEmission(string PatchId, float Level, float? Radius = 
 /// <summary>
 /// One world-event → sound binding — a row of the Audio section's cue table: when the named engine
 /// event fires, the referenced patch voices through a short-lived transient emitter placed per <see cref="Placement"/>.
-/// Event tokens are a closed, published vocabulary of engine mechanisms (<see cref="EventTokens"/>): a genre ships
-/// different cue rows; new tokens appear only when the engine grows new mechanisms.
+/// Event tokens are either a published engine mechanism (<see cref="EventTokens"/>) or a cue name emitted by one of
+/// the same world's rules. A genre can therefore bind authored rule events without widening the engine vocabulary.
 /// </summary>
-/// <param name="Event">The event token (must be one of <see cref="EventTokens"/>).</param>
-/// <param name="PatchId">The referenced <see cref="WorldPatch.Id"/> the cue voices (must resolve).</param>
-/// <param name="GainThousandths">The cue's voice gain in thousandths (1000 = unity), or <see langword="null"/> for
-/// unity. Bounded by <see cref="CreationSoundDocument.MaxLevel"/> × 1000 — the shared audio gain ceiling in the cue
-/// table's integer unit.</param>
+/// <param name="Event">The published engine token or rule-emitted cue name.</param>
+/// <param name="PatchId">The referenced <see cref="WorldPatch.Name"/> the cue voices (must resolve).</param>
 /// <param name="Placement">Where the cue sounds: <see cref="PlacementAtSite"/> (spatial, at the event's world
 /// position — the shimmer's audio twin; events with no derivable site fall back to the listener),
 /// <see cref="PlacementListener"/> (UI feedback — rides the listener pose, so distance 0 renders full gain and the
 /// mixer's on-top-of-listener pan hold centers it), or <c>emitter:&lt;name&gt;</c> (sounds from the named speaker's
 /// resolved pose and support radius).</param>
+/// <param name="GainThousandths">The cue's voice gain in thousandths (1000 = unity), or <see langword="null"/> for
+/// unity. Bounded by <see cref="CreationSoundDocument.MaxLevel"/> × 1000 — the shared audio gain ceiling in the cue
+/// table's integer unit.</param>
 public sealed record WorldAudioCue(
     string Event,
     string PatchId,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? GainThousandths,
-    string Placement
+    string Placement,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? GainThousandths = null
 ) {
     /// <summary>A capability denial — a mutate attempt without its grant, or a refused grant acquisition.</summary>
     public const string GrantDenied = "grant.denied";
+    /// <summary>A director embellishment fired — fired the tick <c>MusicDirector</c> voices it, listener-placed (an
+    /// embellishment carries no world site). This token is never targeted by an authored <c>audio.cues</c> row (see
+    /// <see cref="ProducerBypassedTokens"/>): the voiced patch is chosen per embellishment in the <c>puck.music.v1</c>
+    /// document itself (<c>MusicEmbellishmentDocument.PatchId</c>), so <c>WorldAudioDirector.SubmitEmbellishment</c>
+    /// fires the transient directly rather than resolving this token against the cue table. A <c>puck.music.v1</c>
+    /// transition/layer/embellishment's own <c>when</c> field never uses this token — it names the embellishment
+    /// FIRING, not a condition anything arms on.</summary>
+    public const string MusicEmbellishment = "music.embellishment";
+    /// <summary>A music segment transition committed — fired the tick <c>MusicDirector</c> commits it, listener-
+    /// placed (a transition carries no world site). A <c>puck.music.v1</c> transition's own <c>when</c> field never
+    /// uses this token — it names the transition FIRING, not a condition a transition arms on.</summary>
+    public const string MusicTransition = "music.transition";
     /// <summary>A world mutation applied (the edit-echo lane — fired beside the loud accept line).</summary>
     public const string MutationApplied = "mutation.applied";
     /// <summary>A world mutation rejected (validator/guard/capacity — never a grant denial).</summary>
     public const string MutationRejected = "mutation.rejected";
-    /// <summary>A music segment transition committed. Reserved: no cue row consumes it yet (the same posture as
-    /// <see cref="PlayerJump"/>), but a <c>puck.music.v1</c> transition's own <c>when</c> field never uses this
-    /// token — it names the transition FIRING, not a condition a transition arms on.</summary>
-    public const string MusicTransition = "music.transition";
     /// <summary>The spatial placement token — the cue sounds at the event's world position.</summary>
     public const string PlacementAtSite = "at-site";
     /// <summary>The named-speaker placement prefix (<c>emitter:&lt;speaker-name&gt;</c>).</summary>
@@ -209,18 +217,26 @@ public sealed record WorldAudioCue(
     public const string PlayerJump = "player.jump";
     /// <summary>A local seat avatar's landing. Reserved (see <see cref="PlayerJump"/>).</summary>
     public const string PlayerLand = "player.land";
-    /// <summary>A machine booted onto a screen slot (the binder lifecycle — <c>screen.insert</c> and the
-    /// reconcile-driven declared-source boot).</summary>
-    public const string ScreenBoot = "screen.boot";
-    /// <summary>A machine boot/lifecycle fault on a screen slot (missing content, unresolved engine).</summary>
-    public const string ScreenFault = "screen.fault";
     /// <summary>A body entered a named region — a <c>puck.music.v1</c> transition's <c>when</c> field names this to
     /// arm on the region-events feed's <c>RegionEnter</c> family.</summary>
     public const string RegionEnter = "region.enter";
     /// <summary>A body left a named region. See <see cref="RegionEnter"/>.</summary>
     public const string RegionExit = "region.exit";
+    /// <summary>A machine booted onto a screen slot (the binder lifecycle — <c>screen.insert</c> and the
+    /// reconcile-driven declared-source boot).</summary>
+    public const string ScreenBoot = "screen.boot";
+    /// <summary>A machine boot/lifecycle fault on a screen slot (missing content, unresolved engine).</summary>
+    public const string ScreenFault = "screen.fault";
     /// <summary>A local seat joined the roster.</summary>
     public const string SeatJoin = "seat.join";
+    /// <summary>One syllable of an identity's synthesized voice babble firing — see
+    /// <c>Puck.Audio.Simulation.VoiceBabbler</c> for the trigger-tick schedule and
+    /// <see cref="WorldIdentityDefinition.Voice"/> for the authored per-identity selectors. Fired directly by
+    /// <c>WorldAudioDirector.FireBabbleSyllable</c>, one seeded trigger per syllable, driven by
+    /// <c>WorldAudioDirector.TriggerBabble</c>. Like <see cref="MusicEmbellishment"/>, this token is never targeted
+    /// by an authored <c>audio.cues</c> row (see <see cref="ProducerBypassedTokens"/>) — the producer resolves it
+    /// itself, per syllable, rather than through the cue table.</summary>
+    public const string VoiceBabble = "voice.babble";
 
     /// <summary>The closed cue-event vocabulary: the validator rejects any token outside it, and this list is the
     /// published contract — new tokens appear only
@@ -236,17 +252,60 @@ public sealed record WorldAudioCue(
         ScreenFault,
         SeatJoin,
         MusicTransition,
+        MusicEmbellishment,
         RegionEnter,
         RegionExit,
+        VoiceBabble,
+    ];
+    /// <summary>The sense-mappable subset of <see cref="EventTokens"/> a <c>puck.music.v1</c>
+    /// transition/layer/embellishment <c>when</c> field may name — exactly the tokens the director compiler
+    /// (<c>Puck.World.Server.MusicDirectorFactory.ParseFamily</c>) maps to a sim-side sense family. Single-sourced
+    /// here so the validator's refusal and the compiler's mapping cannot drift: a cue-only token
+    /// (<see cref="GrantDenied"/>, <see cref="MutationApplied"/>, <see cref="PlayerJump"/>, …) refuses at world
+    /// validation instead of validating cleanly and then compiling to a lane that can never fire. Extend this list
+    /// and that mapping together, in the same change.</summary>
+    public static readonly IReadOnlyList<string> MusicWhenTokens = [
+        RegionEnter,
+        RegionExit,
+        SeatJoin,
+    ];
+    /// <summary>The subset of <see cref="EventTokens"/> a producer fires directly rather than resolving against an
+    /// authored <c>audio.cues</c> row: <see cref="MusicEmbellishment"/> (<c>WorldAudioDirector.SubmitEmbellishment</c>,
+    /// the <c>puck.music.v1</c>-authored patch) and <see cref="VoiceBabble"/>
+    /// (<c>WorldAudioDirector.FireBabbleSyllable</c>, driven by <see cref="WorldIdentityDefinition.Voice"/>).
+    /// Single-sourced here so the validator's refusal and each producer's bypass cannot drift: extend this list and
+    /// its producer together, in the same change.</summary>
+    public static readonly IReadOnlyList<string> ProducerBypassedTokens = [
+        MusicEmbellishment,
+        VoiceBabble,
     ];
 
     /// <summary>Determines whether <paramref name="token"/> is one of the published <see cref="EventTokens"/>.</summary>
     /// <param name="token">The candidate token.</param>
-    public static bool IsEventToken(string? token) {
-        foreach (var candidate in EventTokens) {
+    public static bool IsEventToken(string? token) => Contains(
+        candidate: token,
+        tokens: EventTokens
+    );
+    /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="MusicWhenTokens"/> a
+    /// <c>puck.music.v1</c> <c>when</c> field may name.</summary>
+    /// <param name="token">The candidate token.</param>
+    public static bool IsMusicWhenToken(string? token) => Contains(
+        candidate: token,
+        tokens: MusicWhenTokens
+    );
+    /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="ProducerBypassedTokens"/> a
+    /// producer fires directly, so an authored <c>audio.cues</c> row can never target it.</summary>
+    /// <param name="token">The candidate token.</param>
+    public static bool IsProducerBypassedToken(string? token) => Contains(
+        candidate: token,
+        tokens: ProducerBypassedTokens
+    );
+    // Ordinal membership over a published token list, allocation-free — the one scan the three Is*Token doors share.
+    private static bool Contains(IReadOnlyList<string> tokens, string? candidate) {
+        for (var index = 0; (index < tokens.Count); index++) {
             if (string.Equals(
-                a: candidate,
-                b: token,
+                a: tokens[index],
+                b: candidate,
                 comparisonType: StringComparison.Ordinal
             )) {
                 return true;
@@ -258,7 +317,8 @@ public sealed record WorldAudioCue(
 }
 /// <summary>
 /// The world's audio host-section defaults — document defaults with the same absence-coalesce convention every
-/// defaults section uses (see <see cref="WorldStorageDefaults"/>): absent-in-JSON coalesces to <see cref="Default"/>.
+/// defaults section uses (see <see cref="WorldStorageDefaults"/>): absent-in-JSON coalesces to <see cref="Absent"/>
+/// (silent); the standard values are authored in <c>Assets/worlds/standard.world.json</c>.
 /// These are document data, not editor policy; live master volume is the <c>world.volume</c> session lever: the lever
 /// owns "now" once touched, <see cref="MasterGain"/> owns boot, and <c>world.save</c> folds the lever back into
 /// <see cref="MasterGain"/> (the render-levers asymmetry).
@@ -295,19 +355,21 @@ public sealed record WorldAudioDefaults(
     private readonly IReadOnlyList<WorldAudioCue> m_cues = (Cues ?? []);
 
     /// <summary>Gets the cue table. The absence-coalesce lives in the accessor for the same reason
-    /// <see cref="WorldMotionModel.Grounded.Response"/>'s does.</summary>
+    /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldAudioCue> Cues {
         get => m_cues;
         init => m_cues = (value ?? []);
     }
-    /// <summary>Gets the built-in audio defaults: unity master, an 8-unit speaker radius, the smoothstep curve, a
-    /// half-second bed fade, the focus listener.</summary>
-    public static WorldAudioDefaults Default { get; } = new WorldAudioDefaults(
+    /// <summary>Gets the inert absence — zero master gain (silent), zero speaker radius, no fade, no cues. The
+    /// engine holds no audio posture of its own: the standard values are AUTHORED, in
+    /// <c>Assets/worlds/standard.world.json</c>, and a world inherits them by naming that document as its
+    /// basis.</summary>
+    public static WorldAudioDefaults Absent { get; } = new WorldAudioDefaults(
         Cues: [],
-        DefaultBedFadeSeconds: 0.5f,
-        DefaultCurve: CurveSmoothstep,
-        DefaultSpeakerRadius: 8f,
+        DefaultBedFadeSeconds: 0f,
+        DefaultCurve: CurveLinear,
+        DefaultSpeakerRadius: 0f,
         Listener: ListenerFocus,
-        MasterGain: 1f
+        MasterGain: 0f
     );
 }

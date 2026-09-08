@@ -35,8 +35,12 @@ internal static class SyntheticRom {
     /// <param name="cartridgeType">The header cartridge-type byte (<c>0x0147</c>); the default <c>0x00</c> is
     /// ROM-only. The battery-save stage passes <c>0x13</c> (MBC3+RAM+BATTERY).</param>
     /// <param name="ramSize">The header RAM-size byte (<c>0x0149</c>); the default <c>0x00</c> is no RAM.</param>
+    /// <param name="supportsColor">Whether the header declares Color support (<c>0x80</c>, dual-compatible) at
+    /// <c>0x0143</c>; the default <see langword="false"/> is the monochrome flag. A case that runs this ROM on Color
+    /// silicon and needs the Color-only registers (KEY1, RP, palette RAM, SVBK/VBK, HDMA) to answer natively rather
+    /// than sealed for DMG-compatibility mode must pass <see langword="true"/> — see <see cref="DmgCompatibilityState"/>.</param>
     /// <returns>A 32&#160;KiB cartridge image whose entry point runs a deterministic WRAM-fill loop.</returns>
-    public static byte[] Create(byte cartridgeType = 0x00, byte ramSize = 0x00) {
+    public static byte[] Create(byte cartridgeType = 0x00, byte ramSize = 0x00, bool supportsColor = false) {
         // A zero-filled image already carries a valid ROM-only header (type 0x00, ROM-size 0x00 = 32 KiB, no RAM, a
         // monochrome color flag), so only the program bytes — and any non-default header bytes — need to be written.
         var rom = new byte[RomSize];
@@ -46,6 +50,9 @@ internal static class SyntheticRom {
             index: EntryPoint
         );
 
+        rom[0x0143] = (supportsColor
+            ? (byte)0x80
+            : (byte)0x00);
         rom[0x0147] = cartridgeType;
         rom[0x0149] = ramSize;
 

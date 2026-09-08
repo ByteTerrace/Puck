@@ -429,7 +429,7 @@ internal static partial class Subjects {
     // The Betti numbers a field material reads through the echelon path, against the ones the elementary divisors give.
     // They agree away from the torsion's characteristic, which is the whole content of reading homology over a field.
     private static string? FieldTwin(string name, int[] dimensions, (int Face, int Coface, int Sign)[] incidences, IntegerHomology homology) {
-        var rational = FieldHomology<QuadraticSurd, RationalMaterial>.Create(calculus: ExteriorCalculus<QuadraticSurd, RationalMaterial>.Create(
+        var rational = FieldHomology<RealQuadratic, RationalMaterial>.Create(calculus: ExteriorCalculus<RealQuadratic, RationalMaterial>.Create(
             dimensions: dimensions,
             incidences: incidences,
             material: default
@@ -1077,7 +1077,7 @@ internal static partial class Subjects {
         )
             ?? (RefusesDeclaration(
             name: "Betti numbers of no complex at all",
-            build: static () => _ = FieldHomology<QuadraticSurd, RationalMaterial>.Create(calculus: null!)
+            build: static () => _ = FieldHomology<RealQuadratic, RationalMaterial>.Create(calculus: null!)
         )
             ?? (RefusesDeclaration(
             name: "the integral homology of no complex at all",
@@ -1185,7 +1185,7 @@ internal static partial class Subjects {
             ?? (RefusesDeclaration(
             name: "a field Betti number of a negative degree",
             build: static () => {
-                var homology = FieldHomology<QuadraticSurd, RationalMaterial>.Create(calculus: ExteriorCalculus<QuadraticSurd, RationalMaterial>.Create(
+                var homology = FieldHomology<RealQuadratic, RationalMaterial>.Create(calculus: ExteriorCalculus<RealQuadratic, RationalMaterial>.Create(
                     dimensions: [0, 0, 1],
                     incidences: [(0, 2, 1), (1, 2, -1)],
                     material: default
@@ -1197,7 +1197,7 @@ internal static partial class Subjects {
             ?? (RefusesDeclaration(
             name: "a field boundary rank two degrees past the top",
             build: static () => {
-                var homology = FieldHomology<QuadraticSurd, RationalMaterial>.Create(calculus: ExteriorCalculus<QuadraticSurd, RationalMaterial>.Create(
+                var homology = FieldHomology<RealQuadratic, RationalMaterial>.Create(calculus: ExteriorCalculus<RealQuadratic, RationalMaterial>.Create(
                     dimensions: [0, 0, 1],
                     incidences: [(0, 2, 1), (1, 2, -1)],
                     material: default

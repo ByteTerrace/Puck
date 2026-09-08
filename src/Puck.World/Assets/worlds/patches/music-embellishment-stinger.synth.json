@@ -1,0 +1,16 @@
+{
+  "schema": "puck.synth.v1",
+  "name": "embellishment-stinger",
+  "oscillator": "Sine",
+  "dutyThousandths": null,
+  "polynomial": null,
+  "attackFrames": 120,
+  "decayFrames": 2400,
+  "sustainThousandths": 0,
+  "releaseFrames": 1200,
+  "pitchMillihertz": 1320000,
+  "sweepMillihertzPerFrame": null,
+  "vibratoDepthMillihertz": null,
+  "vibratoRateMillihertz": null,
+  "durationFrames": null
+}

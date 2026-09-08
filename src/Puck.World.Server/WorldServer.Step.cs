@@ -1,10 +1,61 @@
 using Puck.Hosting;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    /// <summary>Observes a music segment transition the instant it commits (the same tick <c>MusicDirector</c>
+    /// records it, from the music-step call site in <see cref="StepCore"/>) — mirroring
+    /// <see cref="SaveEffectTap"/>/<see cref="IWorldMachineHost.MachineLifecycleTap"/>'s "the server calls out, the
+    /// composition root supplies the capability" shape: this project references no audio director, so it cannot fire
+    /// the <c>music.transition</c> cue itself. Carries nothing but the tick — the committed segment ids are already
+    /// re-derivable from <c>MusicDirector.LastTransitionFromSegmentId</c>/<c>LastTransitionToSegmentId</c>, so no
+    /// second value need round-trip through the tap. A <see langword="null"/> tap is a silent no-op, the same
+    /// convention every other tap here follows; every live boot shape wires one (<c>WorldPostBuildWiring.Install</c>).
+    /// Never taped — see <c>MusicReplayReDerivabilityLawTests</c>: the director's own state is purely
+    /// re-derivable from the document plus tick, so a fresh replay boot re-fires the identical sequence of
+    /// invocations without a recorded entry.</summary>
+    public Action<ulong>? MusicTransitionTap { get; set; }
+    /// <summary>Observes the active conditional-layer set the instant it CHANGES tick over tick (the same music-step
+    /// call site <see cref="MusicTransitionTap"/> fires from) — level-triggered, so unlike a transition this can
+    /// fire on any tick, not only a commit. Carries the whole new set (never a delta): a layer is level-triggered,
+    /// so the composition root's own consumer re-derives from the current set every time regardless. A
+    /// <see langword="null"/> tap is a silent no-op; every live boot shape wires one.</summary>
+    public Action<IReadOnlyList<string>>? MusicLayerTap { get; set; }
+    /// <summary>Observes a director embellishment the instant it fires (the same music-step call site
+    /// <see cref="MusicTransitionTap"/> fires from) — carries the patch id, since (unlike a transition) an
+    /// embellishment's PATCH is authored per-embellishment and not re-derivable from any fixed cue-table row. A
+    /// <see langword="null"/> tap is a silent no-op; every live boot shape wires one.</summary>
+    public Action<string>? MusicEmbellishmentTap { get; set; }
+
+    // The active-layer set observed as of the end of the PREVIOUS Step call — MusicLayerTap fires only when this
+    // tick's set differs, so a level-triggered layer that stays active for many ticks in a row costs one comparison
+    // per tick, not one tap invocation per tick.
+    private readonly List<Puck.Audio.Simulation.MusicSenseEdge> m_senseEdgeScratch = [];
+    private IReadOnlyList<Puck.Audio.Simulation.MusicSenseEdge> ProjectSenseEdges() {
+        MusicDirectorFactory.ProjectSenseEdges(edges: m_events.Edges, projected: m_senseEdgeScratch);
+
+        return m_senseEdgeScratch;
+    }
+    private IReadOnlyList<string> m_lastTappedActiveLayerTuneIds = [];
+
+    // MusicDirector.ActiveLayerTuneIds is recomputed in stable declared order every Step, so an ordinal sequence
+    // compare is exact — never a set compare, which would treat a reorder as a no-op.
+    private static bool ActiveLayerSetsEqual(IReadOnlyList<string> a, IReadOnlyList<string> b) {
+        if (a.Count != b.Count) {
+            return false;
+        }
+
+        for (var index = 0; (index < a.Count); index++) {
+            if (!string.Equals(a: a[index], b: b[index], comparisonType: StringComparison.Ordinal)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
     private void DispatchServerEvent(WorldServerEvent serverEvent, bool ordered) {
         if (ordered) {
             EnqueueOrdered(entry: new OrderedEntry.ServerEvent(Value: serverEvent));
@@ -55,7 +106,7 @@ public sealed partial class WorldServer {
                 tick: tick,
                 connectionId: mutate.ConnectionId,
                 correlationId: mutate.CorrelationId,
-                preMetered: (mutate.SourceAddonIndex >= 0)
+                preMetered: (mutate.SourceAddonInstanceId >= 0L)
             ),
                 PendingOp.Rebuild rebuild => ApplyRebuild(
                 request: rebuild.Request,
@@ -71,21 +122,13 @@ public sealed partial class WorldServer {
                 connectionId: undo.ConnectionId,
                 correlationId: undo.CorrelationId
             ),
-                PendingOp.AddonLifecycle lifecycle => TryApplyAddonLifecycle(
-                lifecycle: lifecycle.Lifecycle,
-                principal: lifecycle.Principal,
-                connectionId: lifecycle.ConnectionId,
-                correlationId: lifecycle.CorrelationId
-            ),
                 _ => false,
             };
 
-            // An addon-lifecycle op never touches WorldDefinition (see TryApplyAddonLifecycle's own remarks), so its
-            // outcome must never fold into `applied` below — that flag exists to trigger ONE redundant-free
-            // DeliverDefinition when the document actually moved, and a mount/unmount redelivering the SAME
-            // definition would be a wasted send masquerading as a document change.
-            if (op is PendingOp.AddonLifecycle) {
-                continue;
+            // The tape's own completion field: fires exactly once, for exactly the ops ApplyEnvelope's own dispatch
+            // threaded one onto — see EnqueueMutation's own remarks.
+            if (op is PendingOp.Mutate { OutcomeObserved: { } outcomeObserved }) {
+                outcomeObserved(obj: ok);
             }
 
             // The addon mutation seam's I2: an addon-sourced Mutate op's OUTCOME — never its application, which
@@ -95,9 +138,9 @@ public sealed partial class WorldServer {
             // which verdict that staging will use. A well-formed mutation the document-apply pipeline itself
             // refused (a validation/capacity/cross-row failure — TryApplyMutation already printed the loud reason)
             // answers Rejected, distinct from every dispatch-door refusal the seam's earlier stages produce.
-            if ((op is PendingOp.Mutate { SourceAddonIndex: >= 0 } addonMutate)) {
+            if ((op is PendingOp.Mutate { SourceAddonInstanceId: >= 0L } addonMutate)) {
                 m_addons?.CompleteMutation(
-                    addonIndex: addonMutate.SourceAddonIndex,
+                    addonInstanceId: addonMutate.SourceAddonInstanceId,
                     actOrdinal: addonMutate.ActOrdinal,
                     applied: ok
                 );
@@ -107,7 +150,7 @@ public sealed partial class WorldServer {
         }
 
         if (applied) {
-            m_output.DeliverDefinition(definition: m_definition);
+            DeliverPending();
         }
 
         return applied;
@@ -135,46 +178,197 @@ public sealed partial class WorldServer {
             DrainOrdered();
         }
     }
-    // The rule/interaction ARRAY is snapshotted first (the caller's own m_rules/m_interactions read), which is a
-    // different thing from the state the gates read: a rule's own effect installs a new definition, which reassigns
-    // m_rules/m_interactions — and iterating a field an inner call reassigns is how a rule would silently stop seeing
-    // its siblings mid-tick. Every row declared at the top of the tick evaluates during this tick; a row ADDED by
-    // this tick's effects starts on the next one, the same next-tick boundary every other mutation already lands on.
-    private void EvaluateCompiledRules(CompiledWorldRule[] rules, Dictionary<string, bool> latch, ulong tick, ulong stepTicks) {
-        if (rules.Length == 0) {
+    // Every (left carrier, right carrier) pair within range, or every left carrier inside the region, fires the
+    // interaction once with left/right bound — the chemistry is evaluated over all carriers, never one argmax pair.
+    private bool EvaluateInteraction(CompiledWorldRule rule, CompiledInteraction interaction, RuleLatch latch, Dictionary<LatchKey, bool> bindings, ulong tick, ulong stepTicks) {
+        var applied = false;
+        var lefts = m_carrierScratchLeft;
+
+        Carriers(
+            into: lefts,
+            row: interaction.Left,
+            tick: tick
+        );
+        latch.BeginSweep();
+
+        if (interaction.CoOccurrence == WorldInteractionCoOccurrence.Region) {
+            foreach (var left in lefts) {
+                if (!m_events.IsOccupant(
+                    body: left,
+                    placementId: interaction.Right
+                )) {
+                    continue;
+                }
+
+                m_evaluator.BoundLeft = left;
+                m_evaluator.BoundRight = -1;
+                applied |= m_evaluator.EvaluateOnce(rule: rule, latch: latch, bindings: bindings, binding: new LatchKey(Left: left, Right: -1), tick: tick, stepTicks: stepTicks);
+            }
+        } else {
+            var rights = m_carrierScratchRight;
+            // Range is a finite non-negative authored distance; its square only leaves the carrier past 2^39 raw,
+            // where every saturated LengthSquared already compares within it.
+            var rangeSquared = ((interaction.Range.Value < (1L << 39))
+                ? (interaction.Range * interaction.Range)
+                : FixedQ4816.MaxValue
+            );
+
+            Carriers(
+                into: rights,
+                row: interaction.Right,
+                tick: tick
+            );
+
+            var budget = interaction.Neighbours;
+
+            foreach (var left in lefts) {
+                var kept = 0;
+
+                foreach (var right in rights) {
+                    // A carrier an earlier pair's effect despawned mid-sweep reads the sentinel, never a distance.
+                    var distanceSquared = ReadBodyDistanceSquared(
+                        bodyA: left,
+                        bodyB: right
+                    );
+
+                    if (
+                        (right == left) ||
+                        (distanceSquared == NoBodyDistance) ||
+                        (distanceSquared > rangeSquared)
+                    ) {
+                        continue;
+                    }
+
+                    if (budget > 0) {
+                        // Keep the nearest `budget` rights, ascending by distance then index; the sweep evaluates them
+                        // after the scan so the kept set is the same whatever order the carriers were listed in.
+                        var slot = kept;
+                        while ((slot > 0) && ((m_neighbourDistance[slot - 1] > distanceSquared) || ((m_neighbourDistance[slot - 1] == distanceSquared) && (m_neighbourIndex[slot - 1] > right)))) {
+                            if (slot < budget) {
+                                m_neighbourDistance[slot] = m_neighbourDistance[slot - 1];
+                                m_neighbourIndex[slot] = m_neighbourIndex[slot - 1];
+                            }
+                            slot--;
+                        }
+                        if (slot < budget) {
+                            m_neighbourDistance[slot] = distanceSquared;
+                            m_neighbourIndex[slot] = right;
+                            kept = Math.Min(val1: (kept + 1), val2: budget);
+                        }
+
+                        continue;
+                    }
+
+                    m_evaluator.BoundLeft = left;
+                    m_evaluator.BoundRight = right;
+                    applied |= m_evaluator.EvaluateOnce(rule: rule, latch: latch, bindings: bindings, binding: new LatchKey(Left: left, Right: right), tick: tick, stepTicks: stepTicks);
+                }
+
+                for (var index = 0; index < kept; index++) {
+                    var right = m_neighbourIndex[index];
+
+                    m_evaluator.BoundLeft = left;
+                    m_evaluator.BoundRight = right;
+                    applied |= m_evaluator.EvaluateOnce(rule: rule, latch: latch, bindings: bindings, binding: new LatchKey(Left: left, Right: right), tick: tick, stepTicks: stepTicks);
+                }
+            }
+        }
+
+        m_evaluator.BoundLeft = -1;
+        m_evaluator.BoundRight = -1;
+        latch.EndSweep(bindings: bindings);
+
+        return applied;
+    }
+    // Resolves a document row once through the catalog's name -> handle dictionary (StateCatalog.TryResolve) and the
+    // handle's own LaneOrdinal as a direct row-array index, instead of WorldDefinitionRows.FindStateRow's linear scan
+    // over every declared row. Shared by every tick-path reader that starts from a row name (Carriers/CarrierKeys
+    // below, WorldServer.BoardEnforcement.cs) — the handle is handed back too, so a caller that walks the row's own
+    // cells afterward reads each one through it rather than resolving the row by name again per cell.
+    private bool TryResolveDocumentRow(string name, out StateHandle handle, out WorldStateRow? row) {
+        var catalog = RuleReadCatalog;
+
+        if (
+            catalog.TryResolve(lane: StateLane.Document, name: name, handle: out handle) &&
+            catalog.TryGetDescriptor(handle: handle, descriptor: out var descriptor) &&
+            (((uint)descriptor.LaneOrdinal) < ((uint)m_definition.State.Count))
+        ) {
+            row = m_definition.State[descriptor.LaneOrdinal];
+
+            return true;
+        }
+
+        row = null;
+
+        return false;
+    }
+    private bool TryResolveCarrierRow(string row, out StateHandle handle, out IReadOnlyList<StateCell>? cells) {
+        if (TryResolveDocumentRow(name: row, handle: out handle, row: out var resolved)) {
+            cells = resolved!.Cells;
+
+            return (cells is not null);
+        }
+
+        cells = null;
+
+        return false;
+    }
+    // The integer keys a keyed row holds at this moment, ascending — the iteration set of a decision rule. Fills
+    // the caller's scratch list; the cells themselves are not retained.
+    private void CarrierKeys(string row, List<int> into) {
+        into.Clear();
+
+        if (TryResolveCarrierRow(row: row, handle: out _, cells: out var cells)) {
+            for (var index = 0; index < cells!.Count; index++) {
+                var cell = cells[index];
+                if (StateReader.TryParseCandidateIndex(
+                    index: out var key,
+                    key: cell.Key
+                )) {
+                    into.Add(item: key);
+                }
+            }
+        }
+
+        into.Sort();
+    }
+    // The active bodies whose cell in a keyed tag row reads nonzero, ascending, into the caller's scratch list. A
+    // plain cell's stored value is its live value; only an advancing cell goes through the reader's as-of-tick walk,
+    // through the row's own handle rather than a per-cell ReadStateCell(string) name resolve.
+    private void Carriers(string row, ulong tick, List<int> into) {
+        into.Clear();
+
+        if (!TryResolveCarrierRow(row: row, handle: out var handle, cells: out var cells)) {
             return;
         }
 
-        foreach (var rule in rules) {
-            var open = RuleGateOpen(
-                gate: rule.Gate,
-                tick: tick
-            );
-            var wasOpen = latch.GetValueOrDefault(key: rule.Name);
-
-            latch[rule.Name] = open;
-
-            if (!open) {
-                continue;
-            }
-
-            // EDGE fires on the CROSSING alone and re-arms only when the gate closes again; LEVEL fires every tick
-            // the gate holds. One vocabulary, the same ActionTriggerMode a per-body fact trigger reads.
+        for (var cellIndex = 0; cellIndex < cells!.Count; cellIndex++) {
+            var cell = cells[cellIndex];
             if (
-                (rule.Mode == ActionTriggerMode.Edge) &&
-                wasOpen
+                !StateReader.TryParseCandidateIndex(
+                index: out var index,
+                key: cell.Key
+            ) ||
+                (Body(index: index) is null)
             ) {
                 continue;
             }
 
-            foreach (var effect in rule.Effects) {
-                FireWorldRuleEffect(
-                    effect: effect,
-                    stepTicks: stepTicks,
+            var nonzero = (((cell.Advance is null) && (cell.Cycle is null))
+                ? (cell.Value != 0L)
+                : (ReadStateCellByHandle(
+                    handle: handle,
+                    key: cell.Key,
                     tick: tick
-                );
+                ) != FixedQ4816.Zero)
+            );
+
+            if (nonzero) {
+                into.Add(item: index);
             }
         }
+
+        into.Sort();
     }
     // Evaluates every compiled rule's gate and fires its effects, in DOCUMENT ORDER — then every compiled
     // INTERACTION's, same terms, AFTER every rule. That ordering (rules, then interactions, each internally in
@@ -182,264 +376,411 @@ public sealed partial class WorldServer {
     // gate reads THIS tick, and two interactions cascade in their own declared order (interaction A tags a carrier
     // interaction B's gate then reads) on the identical terms a rule chain already does.
     //
-    // Effects apply IMMEDIATELY, not at a boundary: FireWorldRuleEffect calls TryApplyMutation, which installs the
-    // composed definition on the spot. So a later rule's gate DOES read an earlier rule's same-tick write — and so
-    // does a later effect's live 'from' operand, which reads through the same ReadWorldFact walk. The rules in one
-    // tick are a sequence, not a simultaneous snapshot, and a chain (rule A sets a flag, rule B gates on it, rule C
-    // copies it) fires end to end within one tick. That is deterministic because document order is: the same
-    // document and the same input produce the same sequence on every run, machine, and backend.
+    // Rules and interactions use the installed compiled program for this tick. Their state and document writes
+    // become visible to later effects and gates in authored order, through the value frame and speculative
+    // definition. One end-of-evaluation fold installs the ordered mutations and delivers once, matching the
+    // once-per-step delivery shape of DrainPendingOps.
     private void EvaluateWorldRules(ulong tick, ulong stepTicks) {
-        EvaluateCompiledRules(
-            latch: m_ruleGateHeld,
-            rules: m_rules,
-            stepTicks: stepTicks,
-            tick: tick
-        );
-        EvaluateCompiledRules(
-            latch: m_interactionGateHeld,
-            rules: m_interactions,
-            stepTicks: stepTicks,
-            tick: tick
-        );
-    }
-    // Submits the effect's own ORDINARY mutation through the ordinary pipeline (admission → compose → whole-document
-    // validate → install → journal → echo), stamped WorldPrincipal.World — the SAME door UpsertHudPanel/RemoveHudPanel
-    // /UpsertPlacement/RemovePlacement already have from the console or an addon; nothing here is a new admission
-    // path. A WRITE THAT CANNOT MOVE THE DESTINATION is skipped before submission — either the resolved value already
-    // matches the cell, or the row's declared envelope pins the cell where it is (see the Write arm): a
-    // level-triggered gate re-fires every tick it holds, and without this a standing rule would append an identical
-    // journal entry forever, or draw an identical refusal forever. A GENERATE is never a no-op — it advances the
-    // generator's cursor by construction — and neither is a HUD/placement upsert or remove, so both are submitted
-    // (the one exception being a removePlacement on a possessed carrier, which the CarrierPossessed guard below skips
-    // outright rather than submitting). SAVE is the one exception to all of this: it submits no WorldMutation at all (see
-    // ActionEffect.Save's remarks) and is handled before the mutation switch below ever runs.
-    private void FireWorldRuleEffect(CompiledWorldEffect effect, ulong tick, ulong stepTicks) {
-        if (effect.Kind == WorldRuleEffectKind.Save) {
-            // No compose, no validate, no install, no journal — SaveEffectTap performs the identical settle-at-save
-            // capture 'world.save' itself runs, straight to the world's own loaded file. A null tap (no composition
-            // root wired) is a silent no-op, the same convention EchoTap follows.
-            SaveEffectTap?.Invoke(tick);
+        m_decisionWork = default;
+        FreezeDecisionPerception(m_rules);
+        LoadRuleFrame(tick: tick);
+        var applied = m_evaluator.Evaluate(rules: m_rules, latch: m_ruleGateHeld, tick: tick, stepTicks: stepTicks);
 
-            return;
+        applied |= m_evaluator.Evaluate(rules: m_interactions, latch: m_interactionGateHeld, tick: tick, stepTicks: stepTicks);
+
+        m_ruleFrameActive = false;
+        FoldRuleFrameMutations(tick: tick);
+
+        if (applied) {
+            DeliverPending();
         }
-
-        if (effect.Kind is WorldRuleEffectKind.Write or WorldRuleEffectKind.Countdown) {
-            // The destination's CURRENT value through the same shared resolver the gate read: an absent cell reads as
-            // zero (an Add mints it), an absent ROW is nothing to write. On an ADVANCING row that is the LIVE value,
-            // not the stored base, which is what the could-this-move skip below needs: a base is a fixed point of
-            // its own accumulation, so comparing against it would call a write "no-op" whenever the base already
-            // happened to match — silently skipping the write, and with it the rebase that is the only way a rule
-            // can reset an advancing row at all.
-            if (!WorldStateReader.TryRead(
-                definition: m_definition,
-                rowName: effect.Row,
-                key: effect.Key,
-                tick: tick,
-                row: out var row,
-                rawValue: out var destination,
-                text: out _
-            )) {
-                return;
-            }
-
-            var current = (destination ?? 0L);
-
-            // A live 'from' operand is read fresh EVERY firing (Install swaps m_definition on every apply, so this
-            // reads the same settled state a compareState comparand would this tick) and converted to the
-            // destination row's own encoding; a literal effect keeps the value the compiler already converted once.
-            // A FOREVER fact ($parked: on a forever-parked body) has no number to store — the copy silently does not
-            // fire, the same no-narration shape a level gate's own not-holding takes (see ReadParkedRemaining).
-            if (
-                (effect.Kind != WorldRuleEffectKind.Countdown) &&
-                (effect.From is { } foreverProbe) &&
-                ReadWorldFact(
-                operand: foreverProbe,
-                tick: tick
-            ).IsForever
-            ) {
-                return;
-            }
-
-            var raw = ((effect.Kind == WorldRuleEffectKind.Countdown)
-                ? -Math.Min(
-                    val1: current,
-                    val2: checked((long)stepTicks)
-                )
-                : ((effect.From is { } from)
-                    ? ConvertWorldFactToRaw(
-                        value: ReadWorldFact(
-                            operand: from,
-                            tick: tick
-                        ).Value,
-                        kind: row.Kind
-                    )
-                    : effect.RawValue
-            ));
-            var next = ((effect.Write == WorldDocumentWriteKind.Add)
-                ? unchecked((current + raw))
-                : raw
-            );
-
-            // SUBMIT ONLY WHAT COULD MOVE THE DESTINATION. Arithmetic identity is not the whole of that test: a cell
-            // already sitting ON a bound its own row declares (NonNegative/Min/Max) cannot be pushed further past it,
-            // so a Level gate pointed at a floored row would go on composing a candidate the whole-document validator
-            // refuses, once per tick, for the life of the session — the same standing-rule failure the arithmetic
-            // check was added for, reached through the row's envelope instead of through its arithmetic.
-            //
-            // The projection decides WHETHER to submit and never WHAT is submitted: the mutation still carries the
-            // rule's own unclamped operand, so a write that genuinely tries to cross a bound (a cell at 3 taking -5)
-            // is still submitted and still refused BY NAME. That is the settled envelope duality — a computed value
-            // clamps, an explicit write refuses — with the inert case removed from the write side, not softened.
-            if (row.ClampToEnvelope(value: next) == current) {
-                return;
-            }
-
-            _ = TryApplyMutation(
-                mutation: new WorldMutation.UpsertStateCell(
-                    Principal: WorldPrincipal.World,
-                    Row: effect.Row,
-                    Key: effect.Key,
-                    Value: raw,
-                    Kind: effect.Write
-                ),
-                tick: tick,
-                connectionId: SubmissionEnvelope.LocalConnectionId,
-                correlationId: 0,
-                preMetered: false
-            );
-
-            return;
+    }
+    // The effect arms only the world can fire, on the evaluator's terms. A non-mutating arm (cue, body, field, save,
+    // pose) acts, or refuses by name. A document-row arm (HUD panel, placement) submits its own ORDINARY mutation
+    // through the ordinary pipeline (admission → compose → whole-document validate → install → journal → echo),
+    // stamped WorldPrincipal.World — the SAME door UpsertHudPanel/RemoveHudPanel/UpsertPlacement/RemovePlacement
+    // already have from the console or an addon; nothing here is a new admission path. A HUD/placement upsert or
+    // remove is never a no-op, so both are submitted — the one exception being a removePlacement on a possessed
+    // carrier, which the CarrierPossessed guard refuses outright rather than submitting. SAVE submits no
+    // WorldMutation at all (see WorldEffect.Save's remarks).
+    EffectOutcome IRuleHost.FireEffect(EffectFact effect, string ruleName, ulong tick, ulong stepTicks, bool preflight) {
+        switch (effect) {
+            case EmitCueEffect cue:
+                if (!preflight) {
+                    FireGameplayCue(effect: cue, tick: tick);
+                }
+                return EffectOutcome.Skipped;
+            case BodyEffect body:
+                return (FireBodyEffect(effect: body, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
+            case RigidImpulseEffect impulse:
+                return (FireRigidImpulseEffect(effect: impulse, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
+            case PaintFieldEffect paint:
+                return (FireFieldPaint(effect: paint, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
+            case SaveEffect:
+                if (preflight) {
+                    m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "save effects are not atomic transaction steps");
+                    return EffectOutcome.Refused;
+                }
+                if (SaveEffectTap is { } save) {
+                    save(tick);
+                } else {
+                    m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.SaveUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "no save-effect host is attached");
+                }
+                return EffectOutcome.Skipped;
+            case PoseEffect pose:
+                return (FirePoseEffect(effect: pose, ruleName: ruleName, tick: tick, preflight: preflight) ? EffectOutcome.Refused : EffectOutcome.Skipped);
+            case IdentityFactEffect fact:
+                return FireIdentityFactEffect(effect: fact, ruleName: ruleName, tick: tick, preflight: preflight);
         }
 
         // DESPAWN-OF-OWNED-CARRIER GUARD (WorldRuleEffectRefusal.CarrierPossessed): a removePlacement targeting a
         // placement whose Inhabit facet is currently bound to a POSSESSED body (a concrete drive grant — see
-        // WorldGrants.IsBodyPossessed's own remarks) is skipped rather than fired. This is the widening
-        // UpsertPlacement/RemovePlacement's admission into the rule-effect vocabulary was missing: a placement's
-        // Inhabit/Region facets already make an ordinary whole-row upsert/remove a BODY/REGION carrier spawn/despawn
-        // (WorldPopulation.ReconcileInhabitants reconciles from ANY accepted mutation, principal-agnostic) — this is
-        // the one case that must NOT go through silently, because it would destroy an explicit possession grant's
-        // binding out from under it (the slot a later, unrelated inhabitant can then claim). OWNER DECISION: REFUSE,
-        // never orphan-to-escrow (see the refusal's own remarks for why).
+        // WorldGrants.IsBodyPossessed's own remarks) is refused rather than fired. A placement's Inhabit/Region facets
+        // make an ordinary whole-row upsert/remove a BODY/REGION carrier spawn/despawn (WorldPopulation
+        // .ReconcileInhabitants reconciles from ANY accepted mutation, principal-agnostic) — this is the one case
+        // that must NOT go through silently, because it would destroy an explicit possession grant's binding out
+        // from under it (the slot a later, unrelated inhabitant can then claim). REFUSE, never orphan-to-escrow (see
+        // the refusal's own remarks for why).
         if (
-            (effect.Kind == WorldRuleEffectKind.RemovePlacement) &&
-            TryFindPossessedInhabitant(
-            placementId: effect.Row,
-            bodyIndex: out var possessedBody,
-            holder: out var possessor
-        )
+            (effect is RemovePlacementEffect removePlacement) &&
+            TryFindPossessedInhabitant(placementId: removePlacement.Row, bodyIndex: out var possessedBody, holder: out var possessor)
         ) {
-            Console.Error.WriteLine(value: $"[world.rule: despawn refused ({WorldRuleEffectRefusal.CarrierPossessed}) — placement '{effect.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}; revoke the drive grant before despawning, or clear the possession in the rule's own effects first]");
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.CarrierPossessed, ruleName: ruleName, effect: effect, tick: tick, detail: $"placement '{removePlacement.Row}' carries inhabitant body:{possessedBody}, possessed by {possessor.Describe()}");
 
-            return;
+            return EffectOutcome.Refused;
         }
 
-        WorldMutation mutation = effect.Kind switch {
-            WorldRuleEffectKind.Generate => new WorldMutation.Generate(
-            Principal: WorldPrincipal.World,
-            Row: effect.Row
-        ),
-            WorldRuleEffectKind.UpsertHudPanel => new WorldMutation.UpsertHudPanel(
-            Principal: WorldPrincipal.World,
-            Panel: effect.HudPanel!
-        ),
-            WorldRuleEffectKind.RemoveHudPanel => new WorldMutation.RemoveHudPanel(
-            Principal: WorldPrincipal.World,
-            Id: effect.Row
-        ),
-            WorldRuleEffectKind.UpsertPlacement => new WorldMutation.UpsertPlacement(
-            Principal: WorldPrincipal.World,
-            Placement: effect.Placement!
-        ),
-            WorldRuleEffectKind.RemovePlacement => new WorldMutation.RemovePlacement(
-            Principal: WorldPrincipal.World,
-            Id: effect.Row
-        ),
-            _ => throw new InvalidOperationException(message: $"world rule effect kind '{effect.Kind}' has no fire mapping."),
+        WorldMutation mutation = effect switch {
+            UpsertHudPanelEffect upsertHudPanel => new WorldMutation.UpsertHudPanel(Principal: WorldPrincipal.World, Panel: upsertHudPanel.HudPanel),
+            RemoveHudPanelEffect removeHudPanel => new WorldMutation.RemoveHudPanel(Principal: WorldPrincipal.World, Id: removeHudPanel.Row),
+            UpsertPlacementEffect upsertPlacement => new WorldMutation.UpsertPlacement(Principal: WorldPrincipal.World, Placement: upsertPlacement.Placement),
+            RemovePlacementEffect removePlacementFire => new WorldMutation.RemovePlacement(Principal: WorldPrincipal.World, Id: removePlacementFire.Row),
+            _ => throw new InvalidOperationException(message: $"world rule effect '{effect.Describe}' has no fire mapping."),
         };
 
-        _ = TryApplyMutation(
-            connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            mutation: mutation,
-            preMetered: false,
-            tick: tick
-        );
+        return (TryApplyRuleMutation(effect: effect, ruleName: ruleName, mutation: mutation, tick: tick, preflight: preflight) ? EffectOutcome.Applied : EffectOutcome.Refused);
     }
-    // A rule/interaction that no longer exists loses its latch; every surviving name KEEPS its bit, which is the
-    // whole reason the latch does not live inside the recompiled array. Shared by m_ruleGateHeld/m_interactions'
-    // OWN latch — the two never cross since each call is handed only its own compiled array.
-    private static void PruneGateLatch(Dictionary<string, bool> latch, CompiledWorldRule[] compiled) {
-        if (latch.Count == 0) {
-            return;
-        }
-
-        var live = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        foreach (var rule in compiled) {
-            _ = live.Add(item: rule.Name);
-        }
-
-        foreach (var name in latch.Keys.ToArray()) {
-            if (!live.Contains(item: name)) {
-                _ = latch.Remove(key: name);
+    private void FireGameplayCue(EmitCueEffect effect, ulong tick) {
+        var cueEffect = effect;
+        int? body = null;
+        if (cueEffect.Key.Length > 0) {
+            var key = ResolveOperandKey(key: cueEffect.Key, keyFrom: cueEffect.KeyFrom, tick: tick);
+            if (int.TryParse(s: key, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var parsed) && (Body(index: parsed) is not null)) {
+                body = parsed;
             }
         }
+
+        var cue = new WorldGameplayCue(Name: cueEffect.Cue, Payload: cueEffect.Payload, Body: body, Tick: tick);
+        GameplayCueTap?.Invoke(obj: cue);
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.cue", text: $"[world.cue: {cue.Name} tick={tick}{(body is { } index ? $" body:{index}" : string.Empty)}]");
+        }
+    }
+    private bool FireBodyEffect(BodyEffect effect, string ruleName, ulong tick, bool preflight) {
+        var bodyEffect = effect;
+        var key = ResolveOperandKey(key: bodyEffect.Key, keyFrom: bodyEffect.KeyFrom, tick: tick);
+        if (!int.TryParse(s: key, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var bodyIndex) || (Body(index: bodyIndex) is not { } body)) {
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"body '{key}' is inactive");
+            return true;
+        }
+
+        var operation = bodyEffect.Body;
+        if (operation.Operation == BodyMotionOp.Designate) {
+            if (!m_population.TryResolveTargetRegister(name: operation.Register!, index: out var registerIndex)) {
+                m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: $"target register '{operation.Register}' is unavailable");
+                return true;
+            }
+            if (operation.Designation == WorldBodyDesignationKind.Clear) {
+                if (!preflight) {
+                    m_population.SetDesignation(bodyIndex: bodyIndex, registerIndex: registerIndex, target: WorldTargetDesignation.None);
+                }
+                return false;
+            }
+
+            var targetKey = ResolveOperandKey(key: operation.TargetKey, keyFrom: operation.TargetKeyFrom, tick: tick);
+            if (!int.TryParse(s: targetKey, style: System.Globalization.NumberStyles.Integer, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var targetIndex)) {
+                m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: $"target body key '{targetKey}' is invalid");
+                return true;
+            }
+            if ((targetIndex == bodyIndex) || (Body(index: targetIndex) is null)) {
+                var detail = ((targetIndex == bodyIndex)
+                    ? $"body:{bodyIndex} cannot designate itself"
+                    : $"target body:{targetIndex} is inactive"
+                );
+                m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyTargetInvalid, ruleName: ruleName, effect: effect, tick: tick, detail: detail);
+                return true;
+            }
+            if (preflight) {
+                return false;
+            }
+            _ = ApplyDesignationCore(
+                designation: new WorldDesignation(EntityIndex: bodyIndex, Register: operation.Register!, Subject: GrantSubject.Body(index: targetIndex)),
+                principal: WorldPrincipal.World,
+                knownSubject: true,
+                connectionId: SubmissionEnvelope.LocalConnectionId,
+                correlationId: 0
+            );
+            return false;
+        }
+
+        if (preflight) {
+            return false;
+        }
+        _ = body.ApplyTargetedEffect(
+            // A world-authored kinematic effect has no affecting body. Passing the recipient here would mint a
+            // false Affected fact on its next action pass and could recursively trigger unrelated body actions.
+            sourceIndex: -1,
+            instruction: new CompiledBodyInstruction(
+                Operation: operation.Operation,
+                Value: operation.Value,
+                Direction: operation.Direction,
+                DurationTicks: operation.DurationTicks,
+                StateSlot: -1
+            )
+        );
+
+        return false;
+    }
+    private bool FireFieldPaint(PaintFieldEffect effect, string ruleName, ulong tick, bool preflight) {
+        if (m_population.Fields is not { } lattice) {
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: "no live field lattice is installed");
+            return true;
+        }
+
+        var paint = effect.Paint;
+        if (!lattice.TryFieldIndex(name: paint.Field, field: out _)) {
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.FieldUnavailable, ruleName: ruleName, effect: effect, tick: tick, detail: $"live field '{paint.Field}' is unavailable");
+            return true;
+        }
+        if (preflight) {
+            return false;
+        }
+        _ = lattice.PaintSphere(
+            fieldName: paint.Field,
+            centerX: paint.X,
+            centerY: paint.Y,
+            centerZ: paint.Z,
+            radius: paint.Radius,
+            operation: (paint.Operation switch {
+                WorldFieldWriteOp.Set => Puck.Physics.Fields.FieldWriteOp.Set,
+                WorldFieldWriteOp.Add => Puck.Physics.Fields.FieldWriteOp.Add,
+                _ => throw new ArgumentOutOfRangeException(paramName: nameof(paint.Operation), actualValue: paint.Operation, message: null),
+            }),
+            value: paint.Value
+        );
+
+        return false;
+    }
+    // During rule evaluation, document effects validate privately against the whole ordered prefix and become
+    // visible to subsequent effects. Scope rollback restores the prefix; the tick fold owns actual installation.
+    // Transaction steps cannot add or remove state rows, so compiled row ordinals remain valid as cells move.
+    private bool TryApplyRuleMutation(WorldMutation mutation, ulong tick, bool preflight, out string reason) {
+        reason = string.Empty;
+
+        if (!preflight && !m_ruleFrameActive) {
+            if (TryApplyMutation(mutation: mutation, tick: tick, connectionId: SubmissionEnvelope.LocalConnectionId, correlationId: 0, preMetered: false)) {
+                return true;
+            }
+
+            reason = "the ordinary mutation door refused the effect; its mutation rejection names the concrete reason";
+
+            return false;
+        }
+
+        if (!TryComposeRuleFrameCandidate(next: mutation, tick: tick, candidate: out var candidate, reason: out reason)) {
+            return false;
+        }
+
+        if (!TryValidateMutationCandidate(candidate: candidate, mutation: mutation, reason: out reason, compilation: out _, retainCompilation: false)) {
+            return false;
+        }
+
+        if ((candidate.Adjacencies is { Count: > 0 }) && AdjacencyProofInputsChanged(candidate: candidate, current: m_definition, mutation: mutation)) {
+            reason = "the mutation changes an adjacency overlap input and requires world.load/world.reload";
+        } else if (ExceedsBootDerivedFaceReservation(candidate: candidate, reason: out var reservationReason)) {
+            reason = reservationReason;
+        } else if (AffectsRenderEnvelope(mutation: mutation) && !m_envelope.TryFit(candidate: candidate, reason: out var capacityReason)) {
+            reason = capacityReason;
+        } else if (!m_population.CanInstallFields(definition: candidate, reason: out var fieldReason)) {
+            reason = fieldReason!;
+        } else if (AffectsSolidField(mutation: mutation) && !TryBuildSolids(definition: candidate, reason: out var solidReason, solids: out _)) {
+            reason = solidReason!;
+        }
+
+        if (reason.Length > 0) {
+            return false;
+        }
+
+        m_definition = candidate;
+        QueueRuleFrameMutation(mutation: mutation);
+        ReloadRuleFrame(extraScopesToClose: 0);
+
+        return true;
+    }
+    private bool TryApplyRuleMutation(EffectFact effect, string ruleName, WorldMutation mutation, ulong tick, bool preflight) {
+        if (TryApplyRuleMutation(mutation: mutation, tick: tick, preflight: preflight, reason: out var reason)) {
+            return true;
+        }
+
+        m_evaluator.ReportRefusal(refusal: RuleEffectRefusal.MutationRejected, ruleName: ruleName, effect: effect, tick: tick, detail: reason);
+
+        return false;
+    }
+    // Body state, not document state: the same WorldBody.Pose door ApplyCommand's SnapPose arm (body.pose) uses,
+    // but as the world's own act — no drive-gate or grant check, since a gated body is one a rule still needs to
+    // move.
+    private bool FirePoseEffect(PoseEffect effect, string ruleName, ulong tick, bool preflight) {
+        var poseEffect = effect;
+        // A '$cell:' indirection yields the cell's integer, which may exceed int — a body index it can never name.
+        var spelled = ResolveOperandKey(
+            key: poseEffect.Key,
+            keyFrom: poseEffect.KeyFrom,
+            tick: tick
+        );
+
+        if (
+            !long.TryParse(
+                s: spelled,
+                style: System.Globalization.NumberStyles.AllowLeadingSign,
+                provider: System.Globalization.CultureInfo.InvariantCulture,
+                result: out var resolved
+            ) ||
+            (resolved < 0L) ||
+            (resolved > int.MaxValue)
+        ) {
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"key '{spelled}' is not a body index");
+
+            return true;
+        }
+
+        var bodyIndex = ((int)resolved);
+
+        if (Body(index: bodyIndex) is not { } body) {
+            m_evaluator.ReportRefusal(refusal: WorldRuleEffectRefusal.BodyInactive, ruleName: ruleName, effect: effect, tick: tick, detail: $"body:{bodyIndex} is inactive");
+
+            return true;
+        }
+
+        CompiledWorldPose pose;
+
+        if (poseEffect.Pose is { } literal) {
+            pose = literal;
+        } else if (WorldDefinitionRows.FindSpawnPoint(
+            spawnPoints: m_definition.SpawnPoints,
+            id: poseEffect.SpawnPoint
+        ) is { } point) {
+            var spawn = FixedSpawnPoint.Compile(point: in point);
+
+            pose = new CompiledWorldPose(
+                Position: spawn.Position,
+                YawRadians: spawn.YawRadians,
+                PitchRadians: FixedQ4816.Zero,
+                RollRadians: FixedQ4816.Zero
+            );
+        } else {
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(channel: "world.rule", text: $"[world.rule: pose skipped — spawnPoint '{poseEffect.SpawnPoint}' is no longer declared]");
+            }
+
+            return false;
+        }
+
+        if (preflight) {
+            return false;
+        }
+        body.Pose(
+            position: pose.Position,
+            yawRadians: pose.YawRadians,
+            pitchRadians: pose.PitchRadians,
+            rollRadians: pose.RollRadians
+        );
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(channel: "world.rule", text: $"[world.rule: pose body:{bodyIndex} -> ({pose.Position.X}, {pose.Position.Y}, {pose.Position.Z})]");
+        }
+
+        return false;
     }
     // Recompiles the rules section and prunes the edge latch to the surviving names. The compiler is called here
     // UNWRAPPED because WorldDefinitionValidator already compiled this exact candidate and refused it if it could
     // not — the same trusted-second-call shape every other derived-state rebuild in Install has.
-    private void RecompileRules(WorldDefinition definition) {
-        m_rules = WorldRuleCompiler.CompileAll(definition: definition);
-        m_interactions = WorldRuleCompiler.CompileAllInteractions(definition: definition);
+    //
+    // This is also every install's one derived-board fix-up point: boot, Install, and checkpoint restore all call
+    // this before anything else reads the document, so a hand-authored or restored definition whose derived boards
+    // have drifted from their tokens/codes rows never survives past this call — RecomposeDerivedBoards is a no-op
+    // for the ordinary case where the live mutation pipeline already composed them correctly.
+    private WorldDefinition RecompileRules(WorldDefinition definition, WorldRuleCompilation? compilation = null) {
+        definition = RecomposeDerivedBoards(definition: definition);
+        m_definition = definition;
+        // Recomposition may change dependencies: only the exact definition can reuse its validation result.
+        if (!ReferenceEquals(compilation?.Definition, definition)) { compilation = WorldRuleCompilation.Compile(definition); }
+        m_tables = compilation!.Tables;
+        m_rules = compilation.Rules;
+        m_interactions = compilation.Interactions;
 
-        PruneGateLatch(
-            compiled: m_rules,
-            latch: m_ruleGateHeld
-        );
-        PruneGateLatch(
-            compiled: m_interactions,
-            latch: m_interactionGateHeld
-        );
-    }
-    private bool RuleGateOpen(CompiledWorldPredicate[] gate, ulong tick) {
-        foreach (var predicate in gate) {
-            var value = ReadWorldFact(
-                operand: predicate.Left,
-                tick: tick
-            );
+        m_ruleGateHeld.Prune(compiled: m_rules);
+        m_interactionGateHeld.Prune(compiled: m_interactions);
+        PruneBoardEnforcement(definition: definition);
+        ReconcileDecisions();
+        ReconcilePatterns(definition);
 
-            // The comparand is EITHER the compile-time constant (Comparand null) or a second live operand read on the
-            // SAME terms as the primary side — the cross-row spelling of compareState. Both facts are read from THIS
-            // tick's live m_definition, so a rule that just advanced its own comparand row (a self-advancing
-            // schedule) sees the post-advance value on the VERY NEXT evaluation, never the value it opened against.
-            var expected = ((predicate.Comparand is { } comparand)
-                ? ReadWorldFact(
-                    operand: comparand,
-                    tick: tick
-                )
-                : new WorldFact(
-                    Value: predicate.Value,
-                    IsForever: false
-                )
-            );
-
-            if (!predicate.Comparison.Holds(
-                value: value.Value,
-                valueIsForever: value.IsForever,
-                expected: expected.Value,
-                expectedIsForever: expected.IsForever
-            )) {
-                return false;
-            }
+        if (!WorldSearchCompilation.TryPlanAll(definition: definition, rules: m_rules, plans: out var searchPlans, judge: out var searchJudge, reason: out var searchReason)) {
+            throw new InvalidOperationException(message: $"search failed to plan after validation: {searchReason}");
         }
 
-        return true;
+        m_search.Rebuild(
+            plans: searchPlans, judge: searchJudge, rows: definition.State, catalog: definition.StateCatalog,
+            topology: name => WorldTopologyCompilation.Find(definition, name), patterns: m_patterns, tables: m_tables
+        );
+        m_population.BindFlockAffinities(definition, EvaluateFlockAffinity);
+
+        return definition;
+    }
+    // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a
+    // finished job's outputs are delivered with the same tick.
+    private ulong m_searchTick;
+    private void StepSearch(ulong tick) {
+        m_searchTick = tick;
+
+        if (m_search.Step(tick: tick, apply: m_searchApply)) {
+            DeliverPending();
+        }
+    }
+    /// <summary>Lists every search job's progress.</summary>
+    public IReadOnlyList<SearchStatus> SearchStatus() => m_search.Status();
+    // The live half of link liveness: each DIRECT projection in the tick's frozen graph whose delivered snapshot tick
+    // advanced is one refresh. An authored row the source could not resolve contributes no projection at all, which
+    // is exactly "nothing was delivered" — the staleness count rises and the grace comparison decides. Replay drives
+    // this from taped LinkDelivery entries instead; a shadow server holds no adjacency source, so the two never
+    // double-count.
+    private void ObserveAdjacencyDeliveries() {
+        if (m_population.Adjacencies is not { } adjacencies) {
+            return;
+        }
+
+        var projections = adjacencies.Visuals();
+
+        for (var index = 0; (index < projections.Count); index++) {
+            var projection = projections[index];
+
+            if (
+                !projection.Direct ||
+                !m_events.ObserveLinkDelivery(
+                adjacencyName: projection.Name,
+                deliveredTick: projection.Neighbour.SnapshotTick
+            )
+            ) {
+                continue;
+            }
+
+            LinkDeliveryTap?.Invoke(obj: projection.Name);
+        }
     }
     private void StepCore(in FixedStepContext context) {
         // The per-tick mutation-dispatch allowance opens HERE, before either half of the tick that spends it: the
         // addon seam's pre-flight (TickAddons, immediately below) and the drain that applies what it — and every peer
         // submission buffered since the last step — enqueued.
         m_mutationBudget.BeginTick();
+        DrainRecordedExtensions();
         m_addons?.TickAddons(tick: (context.Tick + 1UL));
         _ = DrainPendingOps(tick: context.Tick);
         TransferForwarder?.ResolveContinuations(source: this);
@@ -487,8 +828,20 @@ public sealed partial class WorldServer {
         var tick = (context.Tick + 1UL);
 
         m_population.Adjacencies?.BeginTick(tick: tick);
+        // Immediately after the projection graph freezes, so "did this seam refresh" is read off the SAME pinned
+        // image contact and rendering will read for this tick, never a delivery that lands mid-step.
+        ObserveAdjacencyDeliveries();
+
         var stepStartEngineTick = (context.ElapsedTicks - context.StepTicks);
 
+        // Release every carry relationship this tick's drain invalidated (a partner gone inactive, a kit retune away
+        // from the facet either side needs) BEFORE the advance passes, so an orphaned target re-enters rigid
+        // integration and contact in the same tick its carrier disappeared rather than skipping one.
+        m_population.PrepareCarriedBodies();
+        // Sample every active body's medium surface BEFORE either half of the tick advances it, so a medium
+        // hold's phase-4 law (inside AdvanceSimulated/AdvanceSeats' own body.Advance calls) reads this tick's
+        // surface, never last tick's.
+        m_population.SampleMediumSurfaces();
         m_population.AdvanceSimulated(
             tick: tick,
             stepTicks: context.StepTicks,
@@ -502,6 +855,8 @@ public sealed partial class WorldServer {
             engageEdges: engageEdges
         );
         m_population.ResolveDynamicContacts();
+        m_population.ResolveTethers();
+        m_population.UpdateCarriedBodies();
         m_population.CompleteStep(tick: tick);
         foreach (var designation in m_population.DesignationOutputs) {
             _ = ApplyDesignationCore(
@@ -529,29 +884,6 @@ public sealed partial class WorldServer {
 
         m_population.ClearGeneratorInvocationOutputs();
 
-        // Kit-fired `judge` effects, staged during THIS tick's advance — graded and folded into m_judgeGrades right
-        // here, within the SAME Step call, rather than through the mutation pipeline: the acting body's own
-        // last-grade fact is not a document row, so judge.state observes this tick's grade on this tick's read-back
-        // instead of paying Generate's own next-tick round trip. Graded against context.ElapsedTicks, not the
-        // simulation-step ordinal `tick` above — RhythmJudge compares against MusicClock.TicksPerBeat, which is
-        // engine-tick-denominated (the SAME domain ElapsedTicks carries and MusicClock.Advance just advanced by
-        // context.StepTicks), so the step ordinal is the wrong unit to grade against. A judgeRef with no clock to
-        // grade against (a world declaring judges with no music row) still records the firing tick against a null
-        // (miss) grade.
-        foreach (var invocation in m_population.JudgeInvocationOutputs) {
-            var windows = FindJudgeWindows(judgeRef: invocation.JudgeRef);
-            var grade = (((m_musicClock is { } clock) && (windows is not null))
-                ? Puck.Audio.Simulation.RhythmJudge.Evaluate(
-                    tick: context.ElapsedTicks,
-                    clock: clock,
-                    windows: windows
-                )
-                : (Puck.Audio.Simulation.JudgeWindow?)null);
-
-            m_judgeGrades[(invocation.EntityIndex, invocation.JudgeRef)] = (grade?.Grade, context.ElapsedTicks);
-        }
-
-        m_population.ClearJudgeInvocationOutputs();
         if (m_population.DurableStateOutputs.Count > 0) {
             DurableStateOutputTap?.Invoke(obj: m_population.DurableStateOutputs);
             foreach (var output in m_population.DurableStateOutputs) {
@@ -572,7 +904,7 @@ public sealed partial class WorldServer {
             }
         }
 
-        // Route every fired probe into an ordinary Engage, through the SAME authority path a manual player.engage
+        // Route every fired probe into an ordinary Engage, through the SAME authority path a manual body.engage
         // takes — see ResolveEngageProbes for why this is expected to succeed (its own eligibility pass already
         // re-checks CheckEngage), so a denial here can only mean the grant table changed between the two passes on
         // this single-threaded step (an admin revoke applied in between — not a concurrent race, the step runs one
@@ -585,14 +917,16 @@ public sealed partial class WorldServer {
             var principal = WorldPrincipal.Seat(slot: slot);
             var target = GrantSubject.Screen(index: engageProbeScreens[slot]);
 
-            if (m_engagement.Engage(
+            if (m_engagement.Compose(
                 actingPrincipal: principal,
-                capture: true,
                 entityIndex: slot,
+                exclusive: true,
                 target: target,
                 targetPrincipal: principal
             )) {
-                Console.Error.WriteLine(value: $"[world.engage: {principal.Describe()} auto-engaged {target.Describe()} — context button]");
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: "world.engage", text: $"[world.engage: {principal.Describe()} auto-engaged {target.Describe()} — context button]");
+                }
             }
         }
 
@@ -605,16 +939,43 @@ public sealed partial class WorldServer {
         );
 
         // The music clock/director step HERE — immediately after Collect() so this tick's own edges (never a stale
-        // tick's) drive this tick's transition arming, and before anything else reads m_events.Edges (Finding 3: one
-        // call site, one reader, no second-consumer ordering to pin).
+        // tick's) drive this tick's transition arming, and before anything else reads m_events.Edges (one call site,
+        // one reader, no second-consumer ordering to pin).
         if ((m_musicClock is { } musicClock) && (m_musicDirector is { } musicDirector)) {
+            var previousElapsedTicks = musicClock.ElapsedTicks;
             var boundary = musicClock.Advance(stepTicks: context.StepTicks);
+
+            // Diegetic-instrument clock fold — see InstrumentClockBoundary's own remarks for why holding the screen
+            // application is the whole gate (never a WorldSessionLever) and why only Beat, never Bar, is contributed.
+            boundary |= InstrumentClockBoundary(
+                previousElapsedTicks: previousElapsedTicks,
+                currentElapsedTicks: musicClock.ElapsedTicks
+            );
 
             musicDirector.Step(
                 boundary: boundary,
-                edges: MusicDirectorFactory.ProjectSenseEdges(edges: m_events.Edges),
+                edges: ProjectSenseEdges(),
                 tick: tick
             );
+
+            // Fire the music.transition cue lane on the SAME tick the transition committed — never a later tick's
+            // read-back of LastTransitionTick, which would fire once per subsequent Step call instead of once.
+            if (musicDirector.LastTransitionTick == tick) {
+                MusicTransitionTap?.Invoke(obj: tick);
+            }
+
+            // The active-layer set is level-triggered (never queued), so the tap fires on ANY tick the set differs
+            // from what was last tapped — not only a transition-commit tick, and not gated to only fire once.
+            if (!ActiveLayerSetsEqual(a: musicDirector.ActiveLayerTuneIds, b: m_lastTappedActiveLayerTuneIds)) {
+                m_lastTappedActiveLayerTuneIds = [.. musicDirector.ActiveLayerTuneIds];
+                MusicLayerTap?.Invoke(obj: m_lastTappedActiveLayerTuneIds);
+            }
+
+            // Fire the music.embellishment cue lane on the SAME tick it fired — the same reasoning as the transition
+            // tap immediately above.
+            if (musicDirector.LastEmbellishmentTick == tick) {
+                MusicEmbellishmentTap?.Invoke(obj: musicDirector.LastEmbellishmentPatchId!);
+            }
         }
 
         // World rules evaluate HERE — after the event feed (so a $region gate reads this tick's settled occupancy)
@@ -624,21 +985,31 @@ public sealed partial class WorldServer {
             tick: tick,
             stepTicks: context.StepTicks
         );
-        // Escrow recovery evaluates on the SAME terms, right beside rules — see ReclaimExpiredEscrows' own remarks.
-        ReclaimExpiredEscrows(tick: tick);
-        m_transferEscrow.ReclaimExpired(tick: tick);
-        // Market deadline recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
-        // establishes, for a listing that reached its deadline instead of an unaccepted ownership offer's.
-        SettleExpiredMarketListings(tick: tick);
-        // Market retention sweep — runs right beside deadline recovery, archiving terminal rows once they have aged
-        // past market.retentionSeconds so the section's lifetime listing count stays bounded.
-        PruneExpiredMarketListings(tick: tick);
-        // Reconnect-park recovery — the SAME tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
-        // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's.
+        StepBoardEnforcement(tick: tick);
+        StepSearch(tick: tick);
+        StepFields(tick: tick);
+        // Escrow, transfer, and contribution deadline recovery evaluate on the SAME terms, right beside rules — see
+        // SweepDeadlines' own remarks.
+        SweepDeadlines(tick: tick);
+        // Placement response sweep — AFTER StepFields, so a response condition reads this tick's own lattice writes;
+        // a state-driven prototype swap for a placement carrying a Respond trait (see WorldPlacementResponse).
+        SweepPlacementResponses(tick: tick);
+        // Placement deal sweep — after the rule frame has folded, so a cell a rule wrote this tick deals on this
+        // tick; each dealt template's children follow its row (see WorldPlacementDeal).
+        SweepPlacementDeals(tick: tick);
+        // Reconnect-park recovery — the same tick-driven, replay-deterministic shape ReclaimExpiredEscrows already
+        // establishes, for a disconnected body's deferred teardown instead of an unaccepted ownership offer's. The
+        // body half only: a peer generation's grant rows go at its PeerDisconnected event, and a restored parked
+        // generation's go at RestoreCheckpoint, so an expiring park holds nothing to release here.
         m_population.ReclaimExpiredParks(tick: tick);
         m_addons?.ResolveReads(tick: (context.Tick + 1UL));
         // Fold this tick's routed intents into their targets BEFORE the snapshot is built.
         m_engagement.FoldTick();
+
+        // screens[].memory bindings poke a moved cell into its machine and mirror a machine's moved byte into its
+        // cell — see WorldServer.MachineMemory.cs. Runs right before the machine steps so a Write binding's poke
+        // reaches it before this tick's advance.
+        SyncMachineMemory(tick: tick);
 
         // Step every booted machine off THIS tick's freshly-folded pads: reads WorldEngagement.BuildPadSnapshot()
         // directly, in-process, no client/wire round-trip. Runs in EVERY boot shape via WorldServerStepShell.Step
@@ -704,30 +1075,35 @@ public sealed partial class WorldServer {
     /// released, never latched: once the gate row's cell reads zero, this check passes straight through to the
     /// ordinary <see cref="WorldGrants.Allows"/> call below. <see cref="ApplyCommand"/>'s generic Drive gate checks
     /// the same <see cref="TryDriveGateVerdict"/> before its own <see cref="WorldGrants.Allows"/> call, so a
-    /// scripted tape segment (<c>player.fly</c>/<c>EnqueueSegment</c>) is refused by the same fact a raw per-tick
+    /// scripted tape segment (<c>body.fly</c>/<c>EnqueueSegment</c>) is refused by the same fact a raw per-tick
     /// channel submission is.</remarks>
     public GrantVerdict ApplyIntentSubmission(WorldBody body, in IntentSubmission submission) {
-        if (TryDriveGateVerdict(
+        var gated = TryDriveGateVerdict(
             bodyIndex: submission.EntityIndex,
-            verdict: out var gated
-        )) {
-            if (!m_driveDenied[submission.EntityIndex]) {
-                Console.Error.WriteLine(value: $"[world.grant denied: {submission.Principal.Describe()} cannot drive body:{submission.EntityIndex} ({gated.DescribeDenial()}) — intent dropped, body idle]");
-                m_driveDenied[submission.EntityIndex] = true;
-            }
-
-            return gated;
-        }
-
-        var verdict = m_grants.Allows(
-            principal: submission.Principal,
-            capability: WorldCapability.Drive,
-            subject: GrantSubject.Body(index: submission.EntityIndex)
+            verdict: out var gatedVerdict
+        );
+        var verdict = (gated
+            ? gatedVerdict
+            : m_grants.Allows(
+                principal: submission.Principal,
+                capability: WorldCapability.Drive,
+                subject: GrantSubject.Body(index: submission.EntityIndex)
+            )
         );
 
         if (!verdict.IsAllowed) {
             if (!m_driveDenied[submission.EntityIndex]) {
-                Console.Error.WriteLine(value: $"[world.grant denied: {submission.Principal.Describe()} cannot drive body:{submission.EntityIndex} ({verdict.DescribeDenial()}) — intent dropped, body idle]");
+                var actor = submission.Principal;
+                var entityIndex = submission.EntityIndex;
+
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {verdict.DescribeRefusal(
+                        actor: actor,
+                        dropped: "intent dropped, body idle",
+                        subject: $"body:{entityIndex}",
+                        verb: "drive"
+                    )}]");
+                }
                 m_driveDenied[submission.EntityIndex] = true;
             }
 
@@ -834,13 +1210,17 @@ public sealed partial class WorldServer {
 
                 break;
             case WorldServerEvent.PeerDisconnected disconnected:
-                foreach (var grant in disconnected.RevokedGrants) {
-                    Revoke(
-                        grant: grant,
-                        actor: WorldPrincipal.Console
-                    );
-                }
-
+                // The body parks with grace; the authority does not. Park serves body continuity (pose, durable
+                // state, collidability, targetability) and ApplyPeerDisconnected still defers that half to
+                // ReclaimExpiredParks. Authority follows the CONNECTION: while disconnected, nothing can exercise
+                // the generation's rows, yet an Exclusive subject it reserved would refuse every live acquirer —
+                // for the whole grace window, and forever at rate 0, where the compiled grace is Never and no sweep
+                // ever runs. Release is therefore unconditional here, the same path a non-parking disconnect (an
+                // authored-zero grace, or no live match) takes; a verified-identity reconnect that resumes the
+                // parked BODY re-mints its admission templates through the ordinary PeerAdmitted event
+                // (WorldServer.TryAdmitVerifiedParticipant's resume arm), so only live acquisitions beyond the
+                // templates fail to survive the gap. It rides this event, so replay re-drives the identical
+                // revocations through the identical door at the identical tick, with no separate tape entry.
                 foreach (var peer in disconnected.Entries) {
                     m_population.ApplyPeerDisconnected(
                         peer: in peer,
@@ -848,9 +1228,18 @@ public sealed partial class WorldServer {
                     );
                 }
 
+                foreach (var grant in disconnected.RevokedGrants) {
+                    Revoke(
+                        grant: grant,
+                        actor: WorldPrincipal.Console
+                    );
+                }
+
                 break;
             default:
-                Console.Error.WriteLine(value: $"[world.server-event refused: {serverEvent.GetType().Name} is not declared]");
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(channel: "world.server-event refused", text: $"[world.server-event refused: {serverEvent.GetType().Name} is not declared]");
+                }
                 return;
         }
 
@@ -877,9 +1266,11 @@ public sealed partial class WorldServer {
     /// method introduces no new tape interaction.</remarks>
     /// <returns><see langword="true"/> when anything applied (a definition delivery occurred).</returns>
     public bool DrainAdministrative() {
-        m_mutationBudget.BeginTick();
-
-        return DrainPendingOps(tick: m_lastCompletedTick);
+        lock (m_authorityGate) {
+            m_mutationBudget.BeginTick();
+            DrainRecordedExtensions();
+            return DrainPendingOps(tick: m_lastCompletedTick);
+        }
     }
     /// <summary>Buffers one entity's submitted intent for the next <see cref="Step"/>.</summary>
     /// <param name="submission">The tick, entity index, and merged intent.</param>
@@ -907,17 +1298,32 @@ public sealed partial class WorldServer {
     /// semantics, because occupancy is what makes a pool exist at all (a bot at full authority is not an oversight
     /// there). <see cref="WorldBody.NextIntent"/>'s tape-outranks-submitted ladder is itself untouched; only how the
     /// submitted tier is produced differs by occupancy.</remarks>
-    /// <param name="context">The launcher's fixed-step context for this tick.</param>
+    /// <param name="context">Explicit simulation coordinates for this tick. Hosts and ordinary replay drivers
+    /// use <see cref="Advance"/> to derive these from the authority's own checkpointed clock.</param>
     public void Step(in FixedStepContext context) {
         lock (m_authorityGate) {
             StepCore(context: in context);
+        }
+    }
+    /// <summary>Advances one step from this authority's own checkpointed clock. Hosts and replay drivers use this
+    /// entry point so restoring a timeline cannot inherit the host pacing counter's old tick or elapsed time.</summary>
+    /// <param name="stepTicks">The exact duration of this step in engine ticks.</param>
+    /// <exception cref="OverflowException">The completed tick or engine-time coordinate would overflow.</exception>
+    public void Advance(ulong stepTicks) {
+        lock (m_authorityGate) {
+            _ = checked(m_lastCompletedTick + 1UL);
+            var context = new FixedStepContext(
+                ElapsedTicks: checked(m_lastCompletedEngineTicks + stepTicks),
+                StepTicks: stepTicks,
+                Tick: m_lastCompletedTick);
+            StepCore(in context);
         }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind
     /// drains through (see <see cref="IWorldServerHost.Submit"/>'s own remarks). Enqueues, then immediately drains
     /// the whole queue inline, so a submission applies synchronously before this call returns — exactly matching the
     /// per-kind synchronous methods it replaces. The in-process <c>LoopbackTransport</c> submits on connection 0;
-    /// <c>WorldTcpHost</c> submits each admitted socket peer under its own per-connection id.</summary>
+    /// <c>WorldPeerHost</c> submits each admitted socket peer under its own per-connection id.</summary>
     /// <param name="envelope">The envelope to submit.</param>
     /// <param name="completion">Invoked once with the envelope's typed result, or <see langword="null"/>.</param>
     public void Submit(SubmissionEnvelope envelope, Action<WorldSubmissionResult>? completion = null) =>
@@ -930,15 +1336,19 @@ public sealed partial class WorldServer {
     // envelope's connection/correlation identity (see EnqueueMutation's own remarks) so its eventual WorldEditEcho —
     // fired later, from inside DrainPendingOps, not at submit time — still names the right submitter.
     private abstract record PendingOp {
-        // SourceAddonIndex/ActOrdinal are the addon mutation seam's completion fields (Phase-3 plan AXIS 2, I1):
-        // -1/0 for every non-addon submitter (a console/client mutation has no act to complete). A Mutate op WITH a
-        // source addon carries them through DrainPendingOps -> WorldAddonRuntime.CompleteMutation so the reserved
-        // Answer cell EmitDisclosures already withheld space for gets its verdict staged at ResolveReads(T), for
-        // delivery in the guest's batch T+1 — never applied here, only routed.
-        public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, int SourceAddonIndex = -1, ushort ActOrdinal = 0) : PendingOp;
+        // SourceAddonInstanceId/ActOrdinal are the addon mutation seam's completion fields: -1/0 for every non-addon
+        // submitter (a console/client mutation has no act to complete). A Mutate op WITH a source addon carries them
+        // through DrainPendingOps -> WorldAddonRuntime.CompleteMutation so the reserved Answer cell EmitDisclosures
+        // already withheld space for gets its verdict staged at ResolveReads(T), for delivery in the guest's batch
+        // T+1 — never applied here, only routed. SourceAddonInstanceId names the mounted instance's own stable
+        // token (WorldAddonRuntime.MountedAddon.InstanceId), never a positional index — a queued removal or reorder
+        // draining ahead of this op must not deliver its completion to whatever guest now sits where the source
+        // guest used to. OutcomeObserved is the tape's own completion field (see EnqueueMutation's own remarks):
+        // non-null only for the one dispatch point (ApplyEnvelope) MutationTap already covers, invoked exactly
+        // once, right after this op's own TryApplyMutation outcome is known.
+        public sealed record Mutate(WorldMutation Mutation, int ConnectionId, long CorrelationId, long SourceAddonInstanceId = -1L, ushort ActOrdinal = 0, Action<bool>? OutcomeObserved = null) : PendingOp;
         public sealed record Rebuild(WorldRebuildRequest Request, WorldPrincipal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : PendingOp;
         public sealed record Undo(int Count, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
-        public sealed record AddonLifecycle(WorldAddonLifecycle Lifecycle, WorldPrincipal Principal, int ConnectionId, long CorrelationId) : PendingOp;
     }
     // One entry in the ordered domain (see m_ordered's own remarks): the envelope plus the completion its submitter
     // supplied (null when the caller does not need one).

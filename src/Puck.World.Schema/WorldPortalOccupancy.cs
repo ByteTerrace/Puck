@@ -11,6 +11,9 @@ namespace Puck.World;
 public sealed class WorldPortalOccupancy {
     private readonly Dictionary<(string PlacementId, string FaceName, int Seat), bool> m_inside = new();
 
+    /// <summary>Captures every latched (placement, face, seat) row currently inside.</summary>
+    public IReadOnlyList<(string PlacementId, string FaceName, int Seat)> Capture() =>
+        [.. m_inside.Where(predicate: static pair => pair.Value).Select(selector: static pair => pair.Key)];
     /// <summary>Drops a body's latch at one face, so its next scan re-arms. An inactive seat carries no stale state
     /// forward: a seat that leaves mid-transit and later rejoins the same slot re-arms rather than firing on its
     /// very first step back.</summary>
@@ -50,17 +53,6 @@ public sealed class WorldPortalOccupancy {
             crossed
         );
     }
-    /// <summary>Latches a body as already inside a face's region without firing it — what an ARRIVING traveler owes
-    /// the door it lands at. Without it, a mapped pair whose isometry sets a traveler down on its counterpart's own
-    /// threshold reads as a fresh entry edge and bounces the traveler straight back.</summary>
-    /// <param name="placementId">The face's owning placement id.</param>
-    /// <param name="faceName">The declared face name.</param>
-    /// <param name="seat">The local seat index.</param>
-    public void SeedInside(string placementId, string faceName, int seat) =>
-        m_inside[(placementId, faceName, seat)] = true;
-    /// <summary>Captures every latched (placement, face, seat) row currently inside.</summary>
-    public IReadOnlyList<(string PlacementId, string FaceName, int Seat)> Capture() =>
-        [.. m_inside.Where(predicate: static pair => pair.Value).Select(selector: static pair => pair.Key)];
     /// <summary>Restores every latched row from a previously captured set, replacing whatever this instance already
     /// holds.</summary>
     public void Restore(IReadOnlyList<(string PlacementId, string FaceName, int Seat)> rows) {
@@ -72,4 +64,12 @@ public sealed class WorldPortalOccupancy {
             m_inside[(row.PlacementId, row.FaceName, row.Seat)] = true;
         }
     }
+    /// <summary>Latches a body as already inside a face's region without firing it — what an ARRIVING traveler owes
+    /// the door it lands at. Without it, a mapped pair whose isometry sets a traveler down on its counterpart's own
+    /// threshold reads as a fresh entry edge and bounces the traveler straight back.</summary>
+    /// <param name="placementId">The face's owning placement id.</param>
+    /// <param name="faceName">The declared face name.</param>
+    /// <param name="seat">The local seat index.</param>
+    public void SeedInside(string placementId, string faceName, int seat) =>
+        m_inside[(placementId, faceName, seat)] = true;
 }

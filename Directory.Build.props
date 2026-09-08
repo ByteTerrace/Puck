@@ -38,11 +38,9 @@
              $(NuGetPackageRoot) is not yet defined when this file is imported. -->
         <WindowsSdkNetRefVersion>10.0.22621.57</WindowsSdkNetRefVersion>
 
-        <!-- `dotnet run foo.cs` synthesizes a project at "foo.cs.csproj", which is the only signal that
-             separates a file-based program from a real one. It matters because a file-based program is a
-             single compilation unit by definition: injecting a second Compile item into it displaces the
-             top-level-statement entry point and the SDK rejects the build with CA2266. Every item below
-             that adds source or an analyzer to "every project" means every real project. -->
+        <!-- The SDK synthesizes "foo.cs.csproj" for a file-based program. Keep its entry point and
+             explicit directives, linking only the BCL helpers below; repository analyzers and project
+             verification inputs apply to ordinary projects. -->
         <IsFileBasedProgram
             Condition="$(MSBuildProjectFullPath.EndsWith('.cs.csproj'))"
         >true</IsFileBasedProgram>
@@ -50,8 +48,8 @@
         <!-- A file-based program's project is synthesized, so it is the one shape in the tree that cannot
              carry its own <PuckKind>. Classifying it here rather than leaving it undeclared is the whole
              point: these are the projects an analyzer-hosted architecture gate could not have seen at all
-             (see the ItemGroups below, which exclude them by this same condition), and two of them hold
-             InternalsVisibleTo grants into Puck.World. A terminal kind declares no <PuckLayer>. -->
+             (see the ItemGroups below, which exclude them by this same condition).
+             A terminal kind declares no <PuckLayer>. -->
         <PuckKind Condition="'$(IsFileBasedProgram)' == 'true'">FileApp</PuckKind>
 
         <!-- A file-based program's synthesized project sits beside the .cs file rather than in its own
@@ -65,6 +63,17 @@
             Condition="'$(IsFileBasedProgram)' == 'true'"
         >false</RestorePackagesWithLockFile>
     </PropertyGroup>
+
+    <!-- File apps use the same runtime repository lookup as project-based tools.
+         Linking source keeps bootstrap programs independent of the CLI build. -->
+    <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true'">
+        <Compile Include="$(MSBuildThisFileDirectory)build\RepositoryPaths.cs" Link="RepositoryPaths.cs" />
+        <Compile Include="$(MSBuildThisFileDirectory)build\AutomationProcess.cs" Link="AutomationProcess.cs" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(MSBuildProjectName)' == 'FormatSubmit.cs'">
+        <!-- Keep the privileged GitHub submitter SDK-only, with its policy also compiled by tests. -->
+        <Compile Include="$(MSBuildThisFileDirectory)build\FormatSubmission.cs" Link="FormatSubmission.cs" />
+    </ItemGroup>
 
     <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('VerifiedCodeAttribute.cs')))">
         <!-- Puck.Maths carries zero ProjectReferences by design (see Puck.Maths.csproj), so the [VerifiedCode]
@@ -95,20 +104,23 @@
 
     <ItemGroup>
         <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
+        <!-- win-x64/linux-x64 native binaries: meaningless on browser-wasm (a wasm-hosted allocator, "mimalloc.wasm",
+             already rides the Mono runtime pack itself) and otherwise copied into every RID's output regardless of
+             which native host will ever load them. -->
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
             Include="$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc.dll"
             Link="mimalloc.dll"
         />
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
             Include="$(MSBuildThisFileDirectory)lib\win-x64\mimalloc-3.3\bin\mimalloc-redirect.dll"
             Link="mimalloc-redirect.dll"
         />
         <None
-            Condition="Exists('$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3')"
+            Condition="Exists('$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3') AND ('$(RuntimeIdentifier)' != 'browser-wasm')"
             CopyToOutputDirectory="PreserveNewest"
             Include="$(MSBuildThisFileDirectory)lib\linux-x64\mimalloc-3.3\lib\libmimalloc.so.3.3"
             Link="libmimalloc.so"

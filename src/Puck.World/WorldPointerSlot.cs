@@ -3,16 +3,18 @@ using Puck.World.Client;
 namespace Puck.World;
 
 /// <summary>
-/// Owns the seat-assignment policy for the process-wide pointer. The mouse has no device identity of its own, so it
-/// follows whichever seat currently owns the keyboard and falls back to slot 0 if that device is unmapped.
+/// The fallback seat for a pointer event whose device the roster cannot yet resolve to a mapped seat — every mouse
+/// carries its own <see cref="Puck.Commands.InputDeviceId"/> now (<see cref="WorldPointerSink"/> resolves each
+/// event through its OWN device), so this is reached only for a genuinely unclassified device (e.g. a platform that
+/// has not yet stamped one, or the brief window before a fresh mouse's first report is observed).
 /// </summary>
 internal static class WorldPointerSlot {
-    /// <summary>Resolves the seat the pointer currently rides.</summary>
+    /// <summary>Resolves the fallback seat for an unresolvable pointer event.</summary>
     /// <param name="roster">The live local-player roster.</param>
-    /// <returns>The keyboard's assigned slot, or slot 0 while it is unmapped.</returns>
+    /// <returns>Slot 0.</returns>
     public static int Resolve(PlayerRoster roster) {
         ArgumentNullException.ThrowIfNull(argument: roster);
 
-        return (roster.DeviceSlot(device: PlayerRoster.KeyboardDevice) ?? 0);
+        return 0;
     }
 }

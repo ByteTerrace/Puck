@@ -1,43 +1,18 @@
 using System.Text.Json.Serialization;
-using Puck.Abstractions.Documents;
 using Puck.Maths;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 
 /// <summary>One kit's named arguments for an authored producer program.</summary>
 /// <param name="Scalars">Fixed-point scalar arguments keyed by instruction-defined name.</param>
 /// <param name="Channels">Authored channel arguments keyed by instruction-defined name.</param>
+/// <param name="Flock">Bounded perception and steering arguments for ProduceFlockIntent, absent otherwise.</param>
 public sealed record BodyProgramParameters(
     IReadOnlyDictionary<string, float> Scalars,
-    IReadOnlyDictionary<string, string> Channels
+    IReadOnlyDictionary<string, string> Channels,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFlockProfile? Flock = null
 );
-/// <summary>The population subset a sensed target source considers.</summary>
-[JsonConverter(typeof(StrictEnumConverter<BodyTargetScope>))]
-public enum BodyTargetScope : byte {
-    /// <summary>Active local-seat bodies.</summary>
-    Seats,
-
-    /// <summary>Every active body other than the sensing body.</summary>
-    Bodies,
-}
-/// <summary>The one target source a producer program declares.</summary>
-[JsonDerivedType(typeof(BodyTargetSource.Sensed), typeDiscriminator: "sensed")]
-[JsonDerivedType(typeof(BodyTargetSource.Designated), typeDiscriminator: "designated")]
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-public abstract record BodyTargetSource {
-    private BodyTargetSource() {
-    }
-
-    /// <summary>Selects the nearest member of <paramref name="Scope"/> inside a body-forward cone.</summary>
-    /// <param name="Scope">The population subset considered.</param>
-    /// <param name="Range">The cone's maximum world-space distance.</param>
-    /// <param name="HalfAngleDegrees">The cone half-angle in degrees.</param>
-    /// <param name="RequiresLineOfSight">Whether solid world geometry must leave the segment unobstructed.</param>
-    public sealed record Sensed(BodyTargetScope Scope, float Range, float HalfAngleDegrees, bool RequiresLineOfSight) : BodyTargetSource;
-    /// <summary>Reads the named target register owned by the body running the producer.</summary>
-    /// <param name="Register">The authored <see cref="WorldTargetRegister.Name"/>.</param>
-    public sealed record Designated(string Register) : BodyTargetSource;
-}
 /// <summary>One authored per-body target register and the envelope a designation into it must satisfy.</summary>
 /// <param name="Name">The game-authored register name.</param>
 /// <param name="MaximumRange">The greatest designation distance.</param>
@@ -56,66 +31,62 @@ public sealed record WorldTargetRegister(
 );
 /// <summary>The compiled target-register name and Drive-reach ordinal tables.</summary>
 public sealed class WorldTargetRegisterTable {
-    private readonly Dictionary<string, int> m_indexByName;
-    private readonly string[] m_names;
+    private readonly OrdinalTable m_table;
 
-    private WorldTargetRegisterTable(Dictionary<string, int> indexByName, string[] names, int reachBase) {
-        m_indexByName = indexByName;
-        m_names = names;
+    private WorldTargetRegisterTable(OrdinalTable table, int reachBase) {
+        m_table = table;
         ReachBase = reachBase;
     }
 
     /// <summary>Gets the number of authored registers.</summary>
-    public int Count => m_names.Length;
+    public int Count => m_table.Count;
     /// <summary>Gets an empty target-register table.</summary>
     public static WorldTargetRegisterTable Empty { get; } = new(
-        indexByName: new Dictionary<string, int>(comparer: StringComparer.Ordinal),
-        names: [],
+        table: OrdinalTable.Empty,
         reachBase: 0
     );
     /// <summary>Gets the first target-register bit in a Drive row's shared reach mask.</summary>
     public int ReachBase { get; }
 
     /// <summary>Compiles target registers after the world's channel ordinal range.</summary>
-    public static WorldTargetRegisterTable Compile(IReadOnlyList<WorldTargetRegister> registers, int channelCount) {
-        var names = new string[registers.Count];
-        var indexByName = new Dictionary<string, int>(
-            capacity: registers.Count,
+    public static WorldTargetRegisterTable Compile(IReadOnlyList<WorldTargetRegister> registers, int channelCount) => new(
+        table: OrdinalTable.Build(
+            names: registers.Select(selector: static register => register.Name).ToArray(),
             comparer: StringComparer.Ordinal
-        );
-
-        for (var index = 0; (index < registers.Count); index++) {
-            names[index] = registers[index].Name;
-            indexByName.Add(
-                key: registers[index].Name,
-                value: index
-            );
-        }
-
-        return new WorldTargetRegisterTable(
-            indexByName: indexByName,
-            names: names,
-            reachBase: channelCount
-        );
-    }
+        ),
+        reachBase: channelCount
+    );
     /// <summary>Gets a register's authored name.</summary>
-    public string Name(int index) => m_names[index];
+    public string Name(int index) => m_table.Name(ordinal: index);
     /// <summary>Gets the Drive-reach ordinal for a compact register index.</summary>
     public int ReachOrdinal(int index) => (ReachBase + index);
     /// <summary>Resolves a register name to its compact storage index.</summary>
-    public bool TryGetIndex(string name, out int index) => m_indexByName.TryGetValue(
-        key: name,
-        value: out index
+    public bool TryGetIndex(string name, out int index) => m_table.TryGetOrdinal(
+        name: name,
+        ordinal: out index
     );
 }
 /// <summary>The fixed-point target source a producer executes.</summary>
 /// <param name="Source">The authored source declaration.</param>
-/// <param name="Range">The sensed cone range, or zero for a designated source.</param>
-/// <param name="MinimumDot">The cosine of the sensed cone half-angle, or zero for a designated source.</param>
-/// <param name="RegisterIndex">The designated register index, or <c>-1</c> for a sensed source.</param>
-public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex) {
+/// <param name="Range">The sensed cone range, or zero for a designated/curve source.</param>
+/// <param name="MinimumDot">The cosine of the sensed cone half-angle, or zero for a designated/curve source.</param>
+/// <param name="RegisterIndex">The designated register index, or <c>-1</c> for a sensed/curve source.</param>
+/// <param name="CurveIndex">The curve row's compact index, or <c>-1</c> for a sensed/designated source.</param>
+/// <param name="ArcStepRaw">The per-tick arc-length increment, Q32 raw — the exact rational
+/// <see cref="BodyTargetSource.CurveFollow.Rate"/><c> / simulationRateHz</c> rounded once at compile time so the
+/// runtime step is a single addition, never a division. Zero for a sensed/designated source.</param>
+/// <param name="NavigationDomainIndex">The bounded navigation-domain index, or <c>-1</c> for a non-navigated source.</param>
+/// <param name="NavigationKind">The navigated domain's topology; surface for non-navigated sources.</param>
+public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, FixedQ4816 Range, FixedQ4816 MinimumDot, int RegisterIndex, int CurveIndex = -1, long ArcStepRaw = 0L, int NavigationDomainIndex = -1, WorldNavigationKind NavigationKind = WorldNavigationKind.Surface) {
     /// <summary>Compiles one validated target declaration.</summary>
-    public static FixedBodyTargetSource Compile(BodyTargetSource source, WorldTargetRegisterTable registers) => source switch {
+    /// <param name="source">The authored source declaration.</param>
+    /// <param name="registers">The world's compiled target-register table.</param>
+    /// <param name="curves">The world's compiled curves-row table.</param>
+    /// <param name="navigation">The world's compiled navigation-domain table.</param>
+    /// <param name="simulationRateHz">The world's own simulation rate — the per-tick arc step's divisor. A
+    /// <see cref="BodyTargetSource.CurveFollow"/> source at rate 0 (never validated through) compiles a zero step
+    /// rather than dividing.</param>
+    public static FixedBodyTargetSource Compile(BodyTargetSource source, WorldTargetRegisterTable registers, WorldCurveTable curves, WorldNavigationDomainTable navigation, int simulationRateHz) => source switch {
         BodyTargetSource.Sensed sensed => new FixedBodyTargetSource(
         Source: source,
         Range: FixedQ4816.FromDouble(value: sensed.Range),
@@ -133,8 +104,64 @@ public readonly record struct FixedBodyTargetSource(BodyTargetSource Source, Fix
         ? index
         : -1)
     ),
+        BodyTargetSource.CurveFollow curve => new FixedBodyTargetSource(
+        Source: source,
+        Range: FixedQ4816.Zero,
+        MinimumDot: FixedQ4816.Zero,
+        RegisterIndex: -1,
+        CurveIndex: (curves.TryGetIndex(
+            name: curve.Curve,
+            index: out var curveIndex
+        )
+        ? curveIndex
+        : -1),
+        ArcStepRaw: CompileArcStepRaw(
+            rate: curve.Rate,
+            simulationRateHz: simulationRateHz
+        )
+        ),
+        BodyTargetSource.Navigated navigated => CompileNavigated(
+            source: source,
+            navigated: navigated,
+            registers: registers,
+            navigation: navigation
+        ),
         _ => throw new InvalidOperationException(message: $"Unknown body target source '{source.GetType().Name}'."),
     };
+
+    private static FixedBodyTargetSource CompileNavigated(
+        BodyTargetSource source,
+        BodyTargetSource.Navigated navigated,
+        WorldTargetRegisterTable registers,
+        WorldNavigationDomainTable navigation
+    ) {
+        var hasDomain = navigation.TryGetIndex(name: navigated.Domain, index: out var domainIndex);
+        return new FixedBodyTargetSource(
+            Source: source,
+            Range: FixedQ4816.Zero,
+            MinimumDot: FixedQ4816.Zero,
+            RegisterIndex: (registers.TryGetIndex(name: navigated.Register, index: out var registerIndex) ? registerIndex : -1),
+            NavigationDomainIndex: (hasDomain ? domainIndex : -1),
+            NavigationKind: (hasDomain ? navigation.Kind(index: domainIndex) : WorldNavigationKind.Surface)
+        );
+    }
+
+    // rate/simulationRateHz rounded once to Q32: rate parses to Q16 at the authoring boundary (the same one rounding
+    // every authored float takes), then the division to Q32 is the ONE further rounding — never repeated per tick.
+    // simulationRateHz <= 0 (an unvalidated caller) rounds to zero rather than dividing by zero.
+    private static long CompileArcStepRaw(float rate, int simulationRateHz) {
+        var rateRaw = FixedQ4816.FromDouble(value: rate).Value;
+
+        return (FixedPointRounding.TryRoundRational(
+            denominator: simulationRateHz,
+            fractionBitCount: 16,
+            numerator: rateRaw,
+            result: out var arcStepRaw
+        )
+            ? arcStepRaw
+            : 0L
+        );
+    }
 }
 /// <summary>The shared fixed-point body-forward cone predicate used by client proposals and authoritative senses.</summary>
 public static class BodyTargetConeSense {
@@ -184,7 +211,8 @@ public static class WorldTargetSelection {
         foreach (var rule in rules) {
             if (
                 (rule is not null) &&
-                (PredicateReferencesLineOfSight(predicate: rule.Gate) || rule.Effects.Any(predicate: EffectReferencesLineOfSight))
+                (PredicateReferencesLineOfSight(predicate: rule.Gate) || rule.Effects.Any(predicate: EffectReferencesLineOfSight) ||
+                 rule.Decision?.Options.Any(static option => option.Neighbors?.RequiresLineOfSight == true) == true)
             ) {
                 return true;
             }
@@ -193,15 +221,18 @@ public static class WorldTargetSelection {
         return false;
     }
 
-    /// <summary>Returns whether any designation envelope, sensed source, or world-rule <c>$los:</c> operand requires
-    /// line of sight — the one gate <c>Server.WorldPopulation.CompileFixedTables</c> reads to decide whether to build
-    /// the solid field at all. A world rule's <c>$los:</c> channel rides the same
+    /// <summary>Returns whether any navigation domain, designation envelope, sensed source, or world-rule
+    /// <c>$los:</c> operand requires the deterministic solid field — the one gate
+    /// <c>Server.WorldPopulation.CompileFixedTables</c> reads to decide whether to build that field at all.
+    /// Navigation compiles collision-clear cells and swept edges from it. A world rule's <c>$los:</c> channel rides the same
     /// <c>Server.WorldPopulation.HasLineOfSight</c> primitive a sensed target's own check does, and that primitive
     /// reads a field the population would otherwise never build if nothing else in the document asked for one —
     /// admitting it here is what keeps a rules-only <c>$los:</c> authoring from silently reading "always false"
     /// forever.</summary>
     public static bool RequiresLineOfSight(WorldDefinition definition) =>
         (definition.TargetRegisters.Any(predicate: register => register.RequiresLineOfSight)
+        || definition.Navigation.Rows.Count != 0
+        || definition.Kits.Any(kit => kit.Producers.Values.Any(parameters => parameters?.Flock?.RequiresLineOfSight == true))
         || definition.BodyMotionPrograms.Any(predicate: program => (program.Target is BodyTargetSource.Sensed { RequiresLineOfSight: true }))
         || RulesReferenceLineOfSight(rules: definition.Rules));
 }

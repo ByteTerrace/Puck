@@ -22,6 +22,8 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
     /// <inheritdoc/>
     public required IGpuShaderModuleFactory ShaderModuleFactory { get; init; }
     /// <inheritdoc/>
+    public required IGpuSurfaceTransferFactory SurfaceTransferFactory { get; init; }
+    /// <inheritdoc/>
     public required IGpuVertexBufferFactory VertexBufferFactory { get; init; }
 
     /// <summary>Resolves the services bundle for a post-render pass on World's single registered backend.</summary>
@@ -48,6 +50,7 @@ internal sealed record WorldPostRenderExtensionServices : IFullscreenPassService
             PipelineFactory = Resolve<IGpuPipelineFactory>(),
             QueueSubmitter = Resolve<IGpuQueueSubmitter>(),
             ShaderModuleFactory = Resolve<IGpuShaderModuleFactory>(),
+            SurfaceTransferFactory = Resolve<IGpuSurfaceTransferFactory>(),
             VertexBufferFactory = Resolve<IGpuVertexBufferFactory>(),
         };
     }

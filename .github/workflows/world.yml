@@ -1,0 +1,82 @@
+name: Puck world
+
+on:
+  push:
+    branches: [main, codex/azure-ci]
+    paths: ['src/**', 'build/**', 'tests/Puck.World.Azure.Tests/**', 'tests/Puck.World.Schema.Tests/**', 'tests/Puck.World.Tests/**', '.github/workflows/world.yml', '.github/actions/setup-puck/**', 'Directory.*', 'global.json', 'nuget.config', '.dockerignore']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: Puck
+    concurrency:
+      group: azure-production-deployment
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: ./.github/actions/setup-puck
+      - name: Build this release
+        run: docker build -f src/Puck.World.Silo/Dockerfile -t "puck/world-silo:$GITHUB_SHA" .
+      - name: Install QUIC for verification
+        run: bash build/Install-Quic.sh
+      - name: Verify world authentication and recovery laws
+        run: |
+          dotnet test tests/Puck.World.Azure.Tests -c Release -p:RestoreLockedMode=true --filter FullyQualifiedName~EntraWorldAuthenticatorTests
+          dotnet test tests/Puck.World.Schema.Tests -c Release -p:RestoreLockedMode=true --filter FullyQualifiedName~WorldSiloDefinitionLawTests
+          dotnet test tests/Puck.World.Tests -c Release -p:RestoreLockedMode=true --filter FullyQualifiedName~WorldSiloLifecycleLawTests
+      - name: Verify primary world checkpoint and restart
+        shell: bash
+        run: dotnet run -c Release --file build/Azure.cs -- test-world-container --image "puck/world-silo:$GITHUB_SHA"
+      - name: Skip a superseded commit
+        id: current
+        shell: bash
+        run: dotnet run -c Release --file build/Azure.cs -- current
+      - uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        if: steps.current.outputs.deploy == 'True'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy world platform and publish image
+        if: steps.current.outputs.deploy == 'True'
+        shell: bash
+        run: |
+          dotnet run -c Release --file build/Azure.cs -- deploy-world-platform
+          dotnet run -c Release --file build/Azure.cs -- stage-world-image --commit "$GITHUB_SHA"
+      - name: Admit the runner to the signing-key vault
+        if: steps.current.outputs.deploy == 'True'
+        id: vault
+        shell: bash
+        run: dotnet run -c Release --file build/Azure.cs -- vault-access
+      - name: Deploy and verify the world
+        if: steps.current.outputs.deploy == 'True'
+        shell: bash
+        run: |
+          dotnet run -c Release --file build/Azure.cs -- deploy-world
+          dotnet run -c Release --file build/Azure.cs -- test-world-release
+      - name: Restore vault restrictions
+        if: always() && steps.vault.outcome != 'skipped'
+        shell: bash
+        run: dotnet run -c Release --file build/Azure.cs -- vault-access --restore
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: puck-world-release
+          path: |
+            artifacts/production-outputs.json
+            artifacts/world-silo.digest
+            artifacts/world-silo.public-key
+            artifacts/world-authentication.json
+            artifacts/world-rollback.json
+          if-no-files-found: ignore

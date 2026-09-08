@@ -41,21 +41,16 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             return RequiresWindowed(verb: CancelCommand);
         }
 
-        int slot;
-
-        if (context.Origin == CommandOrigin.Binding) {
-            slot = context.Slot;
-        } else if (!WorldArgs.TryParseIndex(
-            args: args,
+        var (slot, error) = SeatCommandArgs.ResolveJoinedSeat(
+            args: in args,
             at: 0,
-            fallback: 1,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var player
-        )) {
-            return CommandResult.Error(output: $"[{CancelCommand}: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
-        } else {
-            slot = PlayerRoster.SlotFromDisplay(number: player);
+            context: context,
+            roster: m_roster,
+            verb: CancelCommand
+        );
+
+        if (error is { } refusal) {
+            return refusal;
         }
 
         feed.Revoke(slot: slot);
@@ -67,32 +62,26 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             return RequiresWindowed(verb: CommitCommand);
         }
 
-        int slot;
+        var (slot, error) = SeatCommandArgs.ResolveJoinedSeat(
+            args: in args,
+            at: 0,
+            context: context,
+            defaultSlot: 0,
+            roster: m_roster,
+            verb: CommitCommand
+        );
 
-        if (context.Origin == CommandOrigin.Binding) {
-            slot = context.Slot;
+        if (error is { } refusal) {
+            return refusal;
+        }
 
-            // The router's synthesized focus-loss cancellation is the ONE non-release edge that reaches this
-            // handler (the bound row's ActivateOn gate passes only the real Completed edge and the Canceled
-            // synthesis) — an alt-tab mid-hold revokes silently, never commits.
-            if (context.Phase == CommandPhase.Canceled) {
-                feed.Revoke(slot: slot);
+        // The router's synthesized focus-loss cancellation is the ONE non-release edge that reaches this handler
+        // (the bound row's ActivateOn gate passes only the real Completed edge and the Canceled synthesis) — an
+        // alt-tab mid-hold revokes silently, never commits.
+        if (context.Phase == CommandPhase.Canceled) {
+            feed.Revoke(slot: slot);
 
-                return CommandResult.None;
-            }
-        } else {
-            if (!WorldArgs.TryParseIndex(
-                args: args,
-                at: 0,
-                fallback: 1,
-                max: PlayerRoster.MaxSlots,
-                min: 1,
-                value: out var player
-            )) {
-                return CommandResult.Error(output: $"[{CommitCommand}: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
-            }
-
-            slot = PlayerRoster.SlotFromDisplay(number: player);
+            return CommandResult.None;
         }
 
         var outcome = feed.Commit(slot: slot);
@@ -170,18 +159,20 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
                 // Anything else is left for the player-index parse below, whose own refusal names the grammar.
             }
 
-            if (!WorldArgs.TryParseIndex(
-                args: args,
+            var (resolved, error) = SeatCommandArgs.ResolveJoinedSeat(
+                args: in args,
                 at: playerAt,
-                fallback: 1,
-                max: PlayerRoster.MaxSlots,
-                min: 1,
-                value: out var player
-            )) {
-                return CommandResult.Error(output: $"[{RingCommand}: expected [next|prev] [player], player an integer 1..{PlayerRoster.MaxSlots}]");
+                context: context,
+                defaultSlot: 0,
+                roster: m_roster,
+                verb: RingCommand
+            );
+
+            if (error is { } refusal) {
+                return refusal;
             }
 
-            slot = PlayerRoster.SlotFromDisplay(number: player);
+            slot = resolved;
         }
 
         if (!feed.TryCycleRing(
@@ -234,18 +225,18 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             return CommandResult.Error(output: $"[world.view.wheel: too many arguments — expected [<player>], player an integer 1..{PlayerRoster.MaxSlots}]");
         }
 
-        if (!WorldArgs.TryParseIndex(
-            args: args,
+        var (slot, error) = SeatCommandArgs.ResolveSlot(
+            args: in args,
             at: 0,
-            fallback: 1,
-            max: PlayerRoster.MaxSlots,
-            min: 1,
-            value: out var player
-        )) {
-            return CommandResult.Error(output: $"[world.view.wheel: player index must be an integer 1..{PlayerRoster.MaxSlots}]");
+            context: context,
+            verb: "world.view.wheel"
+        );
+
+        if (error is { } refusal) {
+            return refusal;
         }
 
-        return new CommandResult(Output: Describe(status: feed.StatusFor(slot: PlayerRoster.SlotFromDisplay(number: player))));
+        return new CommandResult(Output: Describe(status: feed.StatusFor(slot: slot)));
     }
 
     /// <inheritdoc/>
@@ -263,7 +254,7 @@ internal sealed class WorldWheelCommandModule(PlayerRoster roster, WorldWheelFee
             description: "Cycles an Explicit open radial menu's ACTIVE ring (wrapping): player.wheel.ring [next|prev] [player] (player 1..4, default 1). Authors may bind any digital source with a constant Axis1D direction; mouse-wheel motion cycles the pointer seat too. REFUSES when no radial is open or its ring selection is neutral-relative Excursion.",
             handler: RingHandler,
             // Every binding row targeting this verb carries a constant Axis1D value — declared so
-            // BindingVocabularyCheck admits the rows (the editor.cam.speed precedent).
+            // BindingVocabularyCheck admits the rows (the world.row.step delta-fold precedent).
             valueKind: CommandValueKind.Axis1D
         );
         yield return CommandDefinition.WithWireArgs(

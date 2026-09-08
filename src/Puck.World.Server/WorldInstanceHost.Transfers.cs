@@ -19,6 +19,10 @@ public sealed partial class WorldInstanceHost {
         // same transfer id submitted again) refuses by name rather than double-landing. A diegetic crossing
         // can never collide here on its own (it always mints a fresh id); only an explicitly-supplied id
         // (the verification seam) can.
+        // Narrate's deferred formatter cannot capture an `in` parameter, so this transfer's id and source name are
+        // copied to ordinary locals once, up front, for every narration below to close over.
+        var transferId = transfer.TransferId;
+        var sourceInstanceName = transfer.SourceInstance;
         var appliedKey = (transfer.SourceInstance, transfer.TransferId);
         var hadAppliedHighWater = m_appliedTransferHighWater.TryGetValue(
             key: transfer.SourceInstance,
@@ -29,7 +33,12 @@ public sealed partial class WorldInstanceHost {
             (hadAppliedHighWater && (transfer.TransferId <= previousAppliedHighWater)) ||
             !m_appliedTransferIds.Add(item: appliedKey)
         ) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (already applied — refused rather than double-landing)]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused (already applied — refused rather than double-landing)]"
+                );
+            }
 
             return;
         }
@@ -49,7 +58,12 @@ public sealed partial class WorldInstanceHost {
             key: transfer.SourceInstance,
             value: out var source
         )) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (no instance named '{transfer.SourceInstance}')]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused (no instance named '{sourceInstanceName}')]"
+                );
+            }
 
             return;
         }
@@ -100,7 +114,12 @@ public sealed partial class WorldInstanceHost {
             }
 
             if (driftReason.Length > 0) {
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (membership drifted between scan and drain in '{transfer.SourceInstance}' — the cohort no longer proves scope key '{frozenScopeKey}': {driftReason})]");
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        text: $"[world.transfer: transfer={transferId} refused (membership drifted between scan and drain in '{sourceInstanceName}' — the cohort no longer proves scope key '{frozenScopeKey}': {driftReason})]"
+                    );
+                }
 
                 return;
             }
@@ -124,7 +143,12 @@ public sealed partial class WorldInstanceHost {
         }
 
         if (members.Length == 0) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (no active local seat in '{transfer.SourceInstance}' to party-transfer)]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused (no active local seat in '{sourceInstanceName}' to party-transfer)]"
+                );
+            }
 
             return;
         }
@@ -140,7 +164,12 @@ public sealed partial class WorldInstanceHost {
             comparisonType: StringComparison.Ordinal
         )
         ) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ('{transfer.SourceInstance}' names both the source and the target)]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused ('{sourceInstanceName}' names both the source and the target)]"
+                );
+            }
 
             return;
         }
@@ -153,7 +182,12 @@ public sealed partial class WorldInstanceHost {
             spawned: out var spawned,
             transfer: in transfer
         )) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({destinationReason})]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused ({destinationReason})]"
+                );
+            }
 
             // A resolve minted this generation's cache entry before this drain ever attempted to start or
             // reuse the instance it names; that attempt just failed outright (an unstartable reference
@@ -183,6 +217,29 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
+        // Resolve once, then split BEFORE reserving anything. A parent cohort lease would consume the very
+        // slots its children need and incorrectly require capacity for the whole non-atomic party.
+        if (!transfer.PartyAllOrNothing && members.Length > 1) {
+            var splitDestination = targetAuthority.Remote is { } remote
+                ? TransferDestination.Remote(name: targetName, documentPath: transfer.Destination.DocumentPath!, authority: remote.Endpoint)
+                : TransferDestination.Existing(name: targetName);
+            for (var ordinal = 0; ordinal < members.Length; ordinal++) {
+                var member = members[ordinal];
+                ApplyTransfer(transfer: transfer with {
+                    TransferId = MintUnappliedTransferId(sourceInstance: transfer.SourceInstance),
+                    Scope = TransferScope.Body,
+                    SourceSlot = member,
+                    Destination = splitDestination,
+                    FrozenCohortSlots = [member],
+                    PartyAllOrNothing = true,
+                    TestForceJoinRefusalOrdinal = transfer.TestForceJoinRefusalOrdinal == ordinal ? 0 : null,
+                    ScopeProofAlreadyVerified = true,
+                });
+            }
+            if (spawned) { ReapIfEmpty(name: targetName); }
+            return;
+        }
+
         // Reserve through the destination authority's escrow even when both authorities happen to be colocated.
         // Loopback is only a transport optimization beneath this contract; it is not a second transfer path.
         var sourceTick = (source.Server.NextInputTick - 1UL);
@@ -195,7 +252,12 @@ public sealed partial class WorldInstanceHost {
             ticks: out var holdEngineTicks
         )
         ) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused (source lease cannot be expressed exactly across the {FixedTickConversion.TicksPerSecond} engine-tick bridge)]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused (source lease cannot be expressed exactly across the {FixedTickConversion.TicksPerSecond} engine-tick bridge)]"
+                );
+            }
 
             if (spawned) {
                 ReapIfEmpty(name: targetName);
@@ -210,6 +272,8 @@ public sealed partial class WorldInstanceHost {
             val2: checked((((holdEngineTicks + sourceStepTicks) - 1UL) / sourceStepTicks))
         );
         var reservationMembers = new WorldTransferReservationMember[members.Length];
+        // Use the source row's authenticated namespace, not a locally invented composite label.
+        var sourceAuthority = source.Server.AuthorityIdentity;
 
         for (var reservationIndex = 0; (reservationIndex < members.Length); reservationIndex++) {
             var sourceSlot = members[reservationIndex];
@@ -241,7 +305,6 @@ public sealed partial class WorldInstanceHost {
         // The wire-facing federation identity is the SOURCE ROW's own authenticated namespace — the value
         // WorldAttestedAuthenticator proves and the receiving door's SourceAuthorityMismatch check compares every
         // subsequent frame against — never a locally-invented composite label the far side never verified.
-        var sourceAuthority = source.Server.AuthorityIdentity;
         var reservationRequest = new WorldTransferReservationRequest(
             TransferId: transfer.TransferId,
             SourceAuthority: sourceAuthority,
@@ -272,7 +335,12 @@ public sealed partial class WorldInstanceHost {
             );
             var reserveReason = $"'{targetName}' refused reservation ({reservation.Reason}; {retryText})";
 
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({reserveReason}) — the whole transfer is held, no reservation leaked]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused ({reserveReason}) — the whole transfer is held, no reservation leaked]"
+                );
+            }
 
             if (spawned) {
                 ReapIfEmpty(name: targetName);
@@ -319,7 +387,12 @@ public sealed partial class WorldInstanceHost {
 
             var malformedReason = $"'{targetName}' returned a malformed accepted reservation (expected {members.Length} body indices and a destination definition)";
 
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({malformedReason}) — every source member remains attached]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} refused ({malformedReason}) — every source member remains attached]"
+                );
+            }
             if (spawned) { ReapIfEmpty(name: targetName); }
             NoteResolvedTransferOutcome(
                 transfer: in transfer,
@@ -331,44 +404,6 @@ public sealed partial class WorldInstanceHost {
                 reason: malformedReason,
                 transfer: in transfer
             );
-            return;
-        }
-
-        // Resolve ONCE for the party before splitting: a Fresh target is one shared instance, and a resolver-driven
-        // party keeps the one generation its frozen proof named. Each member then receives an independent transfer
-        // identity, lease, reserve/commit verdict and rollback boundary against that already-resolved target. A full
-        // destination may land an earlier member and refuse a later one — the authored distinction from atomic.
-        if (
-            !transfer.PartyAllOrNothing &&
-            (members.Length > 1)
-        ) {
-            var splitDestination = ((targetAuthority.Remote is { } remote)
-                ? TransferDestination.Remote(
-                    name: targetName,
-                    documentPath: transfer.Destination.DocumentPath!,
-                    authority: remote.Endpoint
-                )
-                : TransferDestination.Existing(name: targetName)
-            );
-
-            for (var ordinal = 0; (ordinal < members.Length); ordinal++) {
-                var member = members[ordinal];
-
-                ApplyTransfer(transfer: transfer with {
-                    TransferId = MintUnappliedTransferId(sourceInstance: transfer.SourceInstance),
-                    Scope = TransferScope.Body,
-                    SourceSlot = member,
-                    Destination = splitDestination,
-                    FrozenCohortSlots = [member],
-                    PartyAllOrNothing = true,
-                    TestForceJoinRefusalOrdinal = ((transfer.TestForceJoinRefusalOrdinal == ordinal)
-                    ? 0
-                    : null),
-                    ScopeProofAlreadyVerified = true,
-                });
-            }
-
-            if (spawned) { ReapIfEmpty(name: targetName); }
             return;
         }
 
@@ -403,7 +438,12 @@ public sealed partial class WorldInstanceHost {
                     sourceAuthority: sourceAuthority,
                     transferId: transfer.TransferId
                 );
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} refused ({standingPrincipal.Describe()} cannot leave '{transfer.SourceInstance}' seat {(slot + 1)} — {standing.Denial}); the whole transfer is held]");
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        text: $"[world.transfer: transfer={transferId} refused ({standingPrincipal.Describe()} cannot leave '{sourceInstanceName}' seat {(slot + 1)} — {standing.Denial}); the whole transfer is held]"
+                    );
+                }
 
                 if (spawned) {
                     ReapIfEmpty(name: targetName);
@@ -517,7 +557,8 @@ public sealed partial class WorldInstanceHost {
                 AdmissionGrants: admissionGrants,
                 SourceGrants: sourceGrants,
                 SourcePrincipal: memberPrincipal,
-                Mobility: reservationMembers[index].Mobility!.Value
+                Mobility: reservationMembers[index].Mobility!.Value,
+                FollowedSeatMask: CaptureFollowedSeats(transfer.SourceInstance, sourceSlot)
             ));
             var actionContinuity = source.Server.Population.NameTransferActionContinuity(
                 slot: sourceSlot,
@@ -615,7 +656,7 @@ public sealed partial class WorldInstanceHost {
                 // lease, or restore the source after a confirmed missing/expired reservation. Never infer from a
                 // still-in-flight or failed transport whether the destination applied the commit.
                 m_inDoubtTransfers.Add(item: new InDoubtTransfer(
-                    Transfer: transfer,
+                    Transfer: transfer with { FrozenCohortSlots = [.. members] },
                     TargetAuthority: targetAuthority,
                     SourceAuthority: sourceAuthority,
                     TargetName: targetName,
@@ -625,7 +666,12 @@ public sealed partial class WorldInstanceHost {
                     CommitMembers: commitMembers,
                     MemberCount: members.Length
                 ));
-                Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]");
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        text: $"[world.transfer: transfer={transferId} IN-DOUBT ('{targetName}' commit acknowledgement was lost: {commitReason}) — recovery state retained for status reconciliation]"
+                    );
+                }
                 return;
             }
 
@@ -635,21 +681,32 @@ public sealed partial class WorldInstanceHost {
         }
 
         if (abortReason is not null) {
-            if (landed.Count > 0) {
+            try {
                 targetAuthority.Abort(
                     sourceAuthority: sourceAuthority,
                     transferId: transfer.TransferId
                 );
+            } catch (Exception exception) when (exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException) {
+                // No ambiguous commit reaches this arm. A failed abort leaves only the expiring destination lease.
+            }
+            if (!RestoreDetachedMembers(source, landed, commitMembers)) {
+                m_inDoubtTransfers.Add(new(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority, sourceAuthority, targetName, spawned,
+                    reservationRequest.DeadlineSourceTick, landed, commitMembers, members.Length, RollbackOnly: true));
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.transfer",
+                        text: $"[world.transfer: transfer={transferId} ROLLBACK-PENDING ({abortReason}) — {landed.Count} source member(s) retain recovery state]"
+                    );
+                }
+                return;
             }
 
-            foreach (var member in landed) {
-                RestoreDetachedMember(
-                    member: member,
-                    source: source
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transferId} ABORTED ({abortReason}) — every landed member returned to '{sourceInstanceName}' at its exact source pose]"
                 );
             }
-
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} ABORTED ({abortReason}) — every landed member returned to '{transfer.SourceInstance}' at its exact source pose]");
 
             if (spawned) {
                 ReapIfEmpty(name: targetName);
@@ -672,14 +729,14 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
-        FinalizeCommittedTransfer(
-            transfer: in transfer,
-            targetAuthority: targetAuthority,
-            targetName: targetName,
-            spawned: spawned,
-            landed: landed,
-            memberCount: members.Length
-        );
+        var confirmed = new InDoubtTransfer(transfer with { FrozenCohortSlots = [.. members] }, targetAuthority,
+            sourceAuthority, targetName, spawned, reservationRequest.DeadlineSourceTick, landed, commitMembers,
+            members.Length, CommitConfirmed: true);
+        m_inDoubtTransfers.Add(confirmed);
+        if (TryPublishCommittedTransfer(confirmed)) {
+            m_inDoubtTransfers.Remove(confirmed);
+            CompleteCommittedTransfer(confirmed);
+        }
     }
     // The candidate cohort a set of local seats resolves as — read live off the server, shared by every resolver
     // call this file makes (the per-hit TryDeriveScopeKey probe and the per-group TryResolve mint/reuse alike).
@@ -840,7 +897,11 @@ public sealed partial class WorldInstanceHost {
             border: $"adjacency/{hit.Adjacency.Name.Value}"
         );
 
-        Console.Out.WriteLine(value: $"[world.adjacency: '{label}' seat {(hit.Seat + 1)} crossed -> queued transfer={transferId} generation={resolvedSession.GenerationId} instance={resolvedSession.InstanceName}]");
+        var seat = (hit.Seat + 1);
+
+        if (m_narration.HasNarrationSink) {
+            m_narration.Narrate(stream: WorldNarrationStream.Output, channel: "world.adjacency", text: $"[world.adjacency: '{label}' seat {seat} crossed -> queued transfer={transferId} generation={resolvedSession.GenerationId} instance={resolvedSession.InstanceName}]");
+        }
     }
     // One (destination, scope key) group's own single resolve+enqueue — the ONE resolver call and ONE
     // EnqueueTransfer call the whole merged cohort shares, mirroring the pre-coalescing single-hit TriggerPortal's
@@ -909,13 +970,18 @@ public sealed partial class WorldInstanceHost {
                     reason: out _
                 );
             } else if (ambiguousNames is { Count: > 1 }) {
-                Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}' {string.Join(
-                    separator: ", ",
-                    values: group.Descriptions
-                )} refused (destination '{group.Destination.Name}' resolves document '{group.ReferenceDocument}', matching {ambiguousNames.Count} running instances [{string.Join(
-                    separator: ",",
-                    values: ambiguousNames
-                )}] by origin — ambiguous, refused rather than adopting one arbitrarily)]");
+                if (m_narration.HasNarrationSink) {
+                    m_narration.Narrate(
+                        channel: "world.portal",
+                        text: $"[world.portal: '{instance.Name}' {string.Join(
+                            separator: ", ",
+                            values: group.Descriptions
+                        )} refused (destination '{group.Destination.Name}' resolves document '{group.ReferenceDocument}', matching {ambiguousNames.Count} running instances [{string.Join(
+                            separator: ",",
+                            values: ambiguousNames
+                        )}] by origin — ambiguous, refused rather than adopting one arbitrarily)]"
+                    );
+                }
 
                 return;
             }
@@ -929,10 +995,15 @@ public sealed partial class WorldInstanceHost {
             resolved: out var resolvedSession,
             reason: out var resolveReason
         )) {
-            Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}' {string.Join(
-                separator: ", ",
-                values: group.Descriptions
-            )} refused (destination '{group.Destination.Name}' — {resolveReason})]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.portal",
+                    text: $"[world.portal: '{instance.Name}' {string.Join(
+                        separator: ", ",
+                        values: group.Descriptions
+                    )} refused (destination '{group.Destination.Name}' — {resolveReason})]"
+                );
+            }
 
             return;
         }
@@ -972,17 +1043,22 @@ public sealed partial class WorldInstanceHost {
             border: group.Border
         );
 
-        Console.Out.WriteLine(value: $"[world.portal: '{instance.Name}' {string.Join(
-            separator: ", ",
-            values: group.Descriptions
-        )} entered -> queued transfer={transferId} to '{group.Destination.Name}' (durability={WorldDestinationTokens.DurabilityToken(durability: group.Destination.Durability)} scope={WorldDestinationTokens.ScopeToken(scope: group.Destination.Scope)} travel={WorldDestinationTokens.TravelToken(travel: group.Travel)} arrival={WorldDestinationTokens.ArrivalToken(arrival: group.Arrival)} generation={resolvedSession.GenerationId}{(resolvedSession.IsNewGeneration
-            ? " (new)"
-            : "")} instance={resolvedSession.InstanceName} cohort=[{string.Join(
-            separator: ",",
-            values: cohortSlots.Select(selector: static slot => (slot + 1))
-        )}])]");
+        if (m_narration.HasNarrationSink) {
+            m_narration.Narrate(stream: WorldNarrationStream.Output, channel: "world.portal", text: $"[world.portal: '{instance.Name}' {string.Join(
+                separator: ", ",
+                values: group.Descriptions
+            )} entered -> queued transfer={transferId} to '{group.Destination.Name}' (durability={WorldDestinationTokens.DurabilityToken(durability: group.Destination.Durability)} scope={WorldDestinationTokens.ScopeToken(scope: group.Destination.Scope)} travel={WorldDestinationTokens.TravelToken(travel: group.Travel)} arrival={WorldDestinationTokens.ArrivalToken(arrival: group.Arrival)} generation={resolvedSession.GenerationId}{(resolvedSession.IsNewGeneration
+                ? " (new)"
+                : "")} instance={resolvedSession.InstanceName} cohort=[{string.Join(
+                separator: ",",
+                values: cohortSlots.Select(selector: static slot => (slot + 1))
+            )}])]");
+        }
     }
-    private void FinalizeCommittedTransfer(in PendingTransfer transfer, WorldPeerCall targetAuthority, string targetName, bool spawned, List<LandedMember> landed, int memberCount) {
+    private void PublishCommittedTransfer(in PendingTransfer transfer, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed) {
+        // Copied for the same reason ApplyTransfer copies it — an `in` parameter cannot be captured into Narrate's
+        // deferred formatter.
+        var transferId = transfer.TransferId;
 
         _ = m_instances.TryGetValue(
             key: transfer.SourceInstance,
@@ -1008,13 +1084,13 @@ public sealed partial class WorldInstanceHost {
                 var onwardSlot = member.TargetSlot;
 
                 if (targetAuthority.Remote is { } forwardedAuthority) {
-                    if (!forwardedAuthority.TryRouteCredential(
-                        bodyIndex: member.TargetSlot,
-                        credential: out var credential
-                    )) {
-                        throw new InvalidOperationException(message: $"committed remote body:{member.TargetSlot} has no source-scoped transfer credential");
-                    }
-
+                    // Recovery opens a fresh remote link, with no reservation cache. The confirmed commit's
+                    // retained member is the credential's authority: a slot-keyed cache could also name a later
+                    // occupant by the time an ambiguous handoff is resolved.
+                    var credential = new WorldRemoteRouteCredential(
+                        BodyIndex: member.TargetSlot,
+                        SourceAuthority: sourceInstance.Server.AuthorityIdentity,
+                        Mobility: member.Mobility.Advance());
                     onward = new WorldRemoteForwardedAuthority(
                         authority: forwardedAuthority,
                         credential: credential
@@ -1024,7 +1100,7 @@ public sealed partial class WorldInstanceHost {
                     onward = new WorldLocalForwardedAuthority(
                         server: localTarget.Server,
                         endpoint: (localTarget.Server.Definition.Host.Authority ?? EndpointFor(instance: localTarget).Identity),
-                        sourceAuthority: $"{m_machineId:N}/{transfer.SourceInstance}",
+                        sourceAuthority: sourceInstance.Server.AuthorityIdentity,
                         mobility: member.Mobility.Advance()
                     );
                 }
@@ -1040,7 +1116,7 @@ public sealed partial class WorldInstanceHost {
                     }
 
                     m_forwardedBodies[key] = new ForwardedBody(
-                        Authority: onward,
+                        Authority: new WorldDeferredForwardedAuthority(onward.DescribeForCheckpoint(), onward),
                         BodyIndex: onwardSlot
                     );
                 }
@@ -1064,13 +1140,16 @@ public sealed partial class WorldInstanceHost {
             // boot<->anywhere and anywhere<->anywhere, the ONE new write this stage adds. At most one roster slot
             // ever matches (a followed seat's own location is exactly its own presenting body), but the walk costs
             // O(4) regardless of which instance is source or destination.
-            var followed = false;
+            // A previous attempt may already have published one or more routes. Such a participant still follows
+            // this member even though its endpoint no longer names the source; never vacate its roster on retry.
+            var followed = member.FollowedSeatMask != 0;
 
             for (var followedSlot = 0; (followedSlot < m_seats.SeatCount); followedSlot++) {
                 var locationEndpoint = m_seats.RoutedEndpoint(slot: followedSlot);
                 var locationEntity = m_seats.RoutedEntity(slot: followedSlot);
 
                 if (
+                    ((member.FollowedSeatMask & (1 << followedSlot)) == 0) ||
                     (locationEndpoint is null) ||
                     !string.Equals(
                     a: locationEndpoint.Identity,
@@ -1082,29 +1161,36 @@ public sealed partial class WorldInstanceHost {
                     continue;
                 }
 
-                followed = true;
                 WorldAuthorityEndpoint endpoint;
                 WorldAuthorityRouteDescription? initialRoute = null;
 
                 if (targetAuthority.Remote is { } remoteTarget) {
-                    if (!remoteTarget.TryRouteCredential(
-                        bodyIndex: member.TargetSlot,
-                        credential: out var routeCredential
-                    )) {
-                        throw new InvalidOperationException(message: $"committed remote body:{member.TargetSlot} has no source-scoped transfer credential");
-                    }
+                    var routeCredential = new WorldRemoteRouteCredential(
+                        BodyIndex: member.TargetSlot,
+                        SourceAuthority: sourceInstance!.Server.AuthorityIdentity,
+                        Mobility: member.Mobility.Advance());
                     try {
                         if (remoteTarget.TryDescribeRoute(
-                            bodyIndex: member.TargetSlot,
+                            credential: in routeCredential,
                             route: out var describedRoute,
                             reason: out var routeReason
                         )) {
                             initialRoute = describedRoute;
                         } else {
-                            Console.Error.WriteLine(value: $"[world.continuum: committed transfer={transfer.TransferId} route seed unavailable for body:{member.TargetSlot} ({routeReason})]");
+                            if (m_narration.HasNarrationSink) {
+                                m_narration.Narrate(
+                                    channel: "world.continuum",
+                                    text: $"[world.continuum: committed transfer={transferId} route seed unavailable for body:{member.TargetSlot} ({routeReason})]"
+                                );
+                            }
                         }
                     } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
-                        Console.Error.WriteLine(value: $"[world.continuum: committed transfer={transfer.TransferId} route seed transport failed for body:{member.TargetSlot} ({exception.GetType().Name}: {exception.Message})]");
+                        if (m_narration.HasNarrationSink) {
+                            m_narration.Narrate(
+                                channel: "world.continuum",
+                                text: $"[world.continuum: committed transfer={transferId} route seed transport failed for body:{member.TargetSlot} ({exception.GetType().Name}: {exception.Message})]"
+                            );
+                        }
                     }
 
                     var trackedSlot = followedSlot;
@@ -1129,6 +1215,7 @@ public sealed partial class WorldInstanceHost {
                             submissionCredential: routeCredential,
                             initialRoute: initialRoute,
                             applicationStopping: m_applicationStopping,
+                            narrationHub: m_narration,
                             routeChanged: route => {
                                 if (
                                     (publishedEndpoint is not null) &&
@@ -1224,18 +1311,35 @@ public sealed partial class WorldInstanceHost {
             }
 
             // The accepted transfer echoes its full decision on STDOUT — departed source seat, arrived target seat,
-            // the transfer id, and the arrival pose read from the target's OWN snapshot (PlayerWhere is 1-based,
-            // hence TargetSlot + 1) — so a caller reads the outcome here rather than inferring it from a later
-            // world.instance.seats.
+            // the transfer id, and the arrival pose read from the target's OWN snapshot (PlayerWhere.Index is the
+            // 0-based body index, identical to TargetSlot) — so a caller reads the outcome here rather than
+            // inferring it from a later world.instance.seats.
             var arrival = ((targetAuthority.Local is { } localTarget)
-                ? localTarget.Server.Answer(query: new WorldQuery.PlayerWhere(Index: (member.TargetSlot + 1)))
+                ? localTarget.Server.Answer(query: new WorldQuery.PlayerWhere(Index: member.TargetSlot))
                 : new QueryAnswer(Text: $"remote authority {targetAuthority.Remote!.Endpoint} body:{member.TargetSlot}")
             );
 
-            Console.Out.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} '{transfer.SourceInstance}' seat {(member.SourceSlot + 1)} departed -> '{targetName}' seat {(member.TargetSlot + 1)} arrived{((member.Profile is not null)
-                ? $" as {member.Profile.Id}"
-                : " (anonymous)")} — {arrival.Text}]");
+            var arrivedTransferId = transfer.TransferId;
+            var arrivedSource = transfer.SourceInstance;
+
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(stream: WorldNarrationStream.Output, channel: "world.transfer", text: $"[world.transfer: transfer={arrivedTransferId} '{arrivedSource}' seat {(member.SourceSlot + 1)} departed -> '{targetName}' seat {(member.TargetSlot + 1)} arrived{((member.Profile is not null)
+                    ? $" as {member.Profile.Id}"
+                    : " (anonymous)")} — {arrival.Text}]");
+            }
         }
+
+    }
+    // Only after all route/roster publication returned successfully may recovery and the destination's exact-retry
+    // receipt be retired. No external publication callback runs during retirement.
+    private void CompleteCommittedTransfer(InDoubtTransfer pending) {
+        var transfer = pending.Transfer;
+        var targetAuthority = pending.TargetAuthority!.Value;
+        var targetName = pending.TargetName;
+        var spawned = pending.Spawned;
+        var landed = pending.Landed;
+        var memberCount = pending.MemberCount;
+        var sourceInstance = m_instances[transfer.SourceInstance];
 
         // A freshly spawned destination that seated NOBODY (every member skipped at detach — see the defense-in-
         // depth branch above) is worth cleaning up rather than leaking an empty one-shot instance. ReapIfEmpty
@@ -1257,7 +1361,12 @@ public sealed partial class WorldInstanceHost {
                 transferId: transfer.TransferId
             );
         } catch (Exception exception) when ((exception is IOException or System.Net.Sockets.SocketException or OperationCanceledException)) {
-            Console.Error.WriteLine(value: $"[world.transfer: transfer={transfer.TransferId} cleanup acknowledgement deferred ({exception.GetType().Name}: {exception.Message})]");
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: transfer={transfer.TransferId} cleanup acknowledgement deferred ({exception.GetType().Name}: {exception.Message})]"
+                );
+            }
         }
 
         // A SOURCE that this transfer just emptied is reaped by the SAME rule as any other departure.
@@ -1409,7 +1518,7 @@ public sealed partial class WorldInstanceHost {
     // nothing, correctly: a refusal or an abort leaves the source row's own population untouched by definition.
     private void NoteResolvedTransferOutcome(in PendingTransfer transfer, string sourceName, string targetName, string outcome, IReadOnlyList<int>? departedBootSlots = null) {
         if (
-            (transfer.ResolvedDestinationRow is not { } row) ||
+            ((transfer.RecoveryDestinationName ?? transfer.ResolvedDestinationRow?.Name.Value) is not { } destinationName) ||
             (transfer.FrozenScopeKey is not { } scopeKey) ||
             (transfer.FrozenGenerationId is not { } generationId)
         ) {
@@ -1420,7 +1529,7 @@ public sealed partial class WorldInstanceHost {
 
         void Note(WorldReplayTape? tape) => tape?.NoteTransfer(
             transferId: transferId,
-            destinationName: row.Name.Value,
+            destinationName: destinationName,
             scopeKey: scopeKey,
             generationId: generationId,
             outcome: outcome,
@@ -1453,16 +1562,16 @@ public sealed partial class WorldInstanceHost {
         WorldSubmissionPayload.Session { Value: SessionRequest.Join join } => new WorldSubmissionPayload.Session(Value: join with { Slot = bodyIndex }),
         WorldSubmissionPayload.Session { Value: SessionRequest.Leave leave } => new WorldSubmissionPayload.Session(Value: leave with { Slot = bodyIndex }),
         WorldSubmissionPayload.Session { Value: SessionRequest.SetIdentity identity } => new WorldSubmissionPayload.Session(Value: identity with { Slot = bodyIndex }),
-        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerWhere } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerWhere(Index: (bodyIndex + 1))),
-        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerChannels } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerChannels(Index: (bodyIndex + 1))),
-        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerState } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerState(Index: (bodyIndex + 1))),
-        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerTargets } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerTargets(Index: (bodyIndex + 1))),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerWhere } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerWhere(Index: bodyIndex)),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerChannels } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerChannels(Index: bodyIndex)),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerState } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerState(Index: bodyIndex)),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerTargets } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerTargets(Index: bodyIndex)),
         WorldSubmissionPayload.Query { Value: WorldQuery.Contacts } => new WorldSubmissionPayload.Query(Value: new WorldQuery.Contacts(Index: (bodyIndex + 1))),
         WorldSubmissionPayload.Query { Value: WorldQuery.Properties properties } when (properties.BodyIndex is not null) => new WorldSubmissionPayload.Query(Value: properties with { BodyIndex = bodyIndex }),
         _ => payload,
     };
-    private static void RestoreDetachedMember(WorldInstance source, LandedMember member) {
-        source.Server.ExecuteAuthorityOperation(operation: () => {
+    private static bool RestoreDetachedMember(WorldInstance source, LandedMember member) {
+        return source.Server.ExecuteAuthorityOperation(operation: () => {
             var restored = ((member.Peer is { } peer)
                 ? source.Server.Population.RestoreDetachedPeer(
                     peer: in peer,
@@ -1484,10 +1593,18 @@ public sealed partial class WorldInstanceHost {
             );
 
             if (restored) {
+                // A slot reused during recovery has a new local generation, not the returning individual's
+                // durable identity. Reinstall the captured mobility credential before releasing its memory hold.
+                source.Server.Population.SetMobility(index: member.SourceSlot, mobility: member.Mobility);
                 source.Server.Population.SetBodyColor(
                     slot: member.SourceSlot,
                     color: member.BodyColor
                 );
+
+                // The restored WorldBody instance postdates the last Install/construction-time resync — the same
+                // reason every other admission door in WorldServer.Admission.cs catches a freshly minted body up
+                // from bodies.scaleRow before it starts stepping at the constructed default (Scale == One).
+                source.Server.Population.SyncBodyScale(definition: source.Server.Definition);
 
                 // A rollback re-installs rows this server itself captured and revoked an instant earlier, so the
                 // restored principal provably holds none of them at this moment and cannot administer its own
@@ -1499,7 +1616,18 @@ public sealed partial class WorldInstanceHost {
                     );
                 }
             }
+            return restored;
         });
+    }
+    // Remove successful restores from BOTH lists so checkpoint profile ordinals still match. Failed restores keep
+    // their recovery record; no retry may overwrite an occupied source slot.
+    private static bool RestoreDetachedMembers(WorldInstance source, List<LandedMember> members, List<WorldTransferCommitMember> commits) {
+        for (var index = 0; index < members.Count;) {
+            if (!RestoreDetachedMember(source, members[index])) { index++; continue; }
+            members.RemoveAt(index);
+            commits.RemoveAt(index);
+        }
+        return members.Count == 0;
     }
     private static void SeedArrivalOccupancy(WorldInstance instance, int seat) {
         if (
@@ -1560,7 +1688,7 @@ public sealed partial class WorldInstanceHost {
     // (the landing collapses previous to current — WorldBody.Pose) makes the swept test the point test, so
     // the region's own Inside answer is exactly what the next scan would latch.
     // The same seed for an arrival this host did not itself land: a traveler committed into one of this process's
-    // instances over the wire reaches the destination through the escrow, never through FinalizeCommittedTransfer,
+    // instances over the wire reaches the destination through the escrow, never through PublishCommittedTransfer,
     // so the commit-time seed there covers colocated arrivals only. The escrow's own border admission is written by
     // the destination for both topologies, which is what makes this reachable at all.
     private void SeedFederatedArrivalOccupancy(WorldInstance instance) {
@@ -1624,7 +1752,7 @@ public sealed partial class WorldInstanceHost {
     // source out from under a transfer still in flight) — see WorldPopulation.TryDetachSeatForTransfer. The
     // Drive/leave standing re-check here is defensive: ApplyTransfer's own pre-check loop already proved it
     // for every still-active member immediately before this runs, and is never load-bearing on its own.
-    private static bool TryDetachAndCaptureMember(WorldInstance source, int sourceSlot, string sourceName, WorldPrincipal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBody.TransferState dynamicState, out int[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMember(WorldInstance source, int sourceSlot, string sourceName, WorldPrincipal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBody.TransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
         var captured = source.Server.ExecuteAuthorityOperation(operation: () => {
             var success = TryDetachAndCaptureMemberCore(
                 actingPrincipal: actingPrincipal,
@@ -1656,7 +1784,7 @@ public sealed partial class WorldInstanceHost {
         sourceGrants = captured.SourceGrants;
         return captured.Success;
     }
-    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, int sourceSlot, string sourceName, WorldPrincipal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBody.TransferState dynamicState, out int[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
+    private static bool TryDetachAndCaptureMemberCore(WorldInstance source, int sourceSlot, string sourceName, WorldPrincipal actingPrincipal, out WorldIdentity? profile, out Vector3 bodyColor, out FixedVector3 position, out FixedQ4816 yaw, out WorldBody.TransferState dynamicState, out WorldTargetDesignation[] designations, out WorldPeerEventEntry? peer, out IReadOnlyList<WorldAdmissionGrant> admissionGrants, out IReadOnlyList<WorldGrant> sourceGrants) {
         profile = null;
         bodyColor = default;
         position = default;
@@ -1668,7 +1796,12 @@ public sealed partial class WorldInstanceHost {
         sourceGrants = [];
 
         if (((uint)sourceSlot) >= ((uint)source.Server.Population.Capacity)) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused (body:{sourceSlot} out of range in '{sourceName}')]");
+            if (source.Server.Output.HasNarrationSink) {
+                source.Server.Output.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: refused (body:{sourceSlot} out of range in '{sourceName}')]"
+                );
+            }
 
             return false;
         }
@@ -1677,7 +1810,41 @@ public sealed partial class WorldInstanceHost {
             !source.Server.Population.IsActive(index: sourceSlot) ||
             (source.Server.Population.EntryBody(index: sourceSlot) is not { } body)
         ) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} is not active in '{sourceName}')]");
+            if (source.Server.Output.HasNarrationSink) {
+                source.Server.Output.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: refused (seat {(sourceSlot + 1)} is not active in '{sourceName}')]"
+                );
+            }
+
+            return false;
+        }
+
+        // A rigid kit's mass/inertia and momentum are meaningless without the source authority's own contact field
+        // and manifold state; carrying one across is out of scope, refused by name here rather than transferred
+        // silently as an inert avatar.
+        if (body.IsRigid) {
+            if (source.Server.Output.HasNarrationSink) {
+                source.Server.Output.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' wears a rigid kit — cross-world transfer of a rigid body is not supported)]"
+                );
+            }
+
+            return false;
+        }
+
+        // A carried rigid body's pose is derived from the carrier's own frame every tick (WorldBody.Carry.cs) —
+        // there is no destination authority for it to keep deriving from once the carrier lands elsewhere, and the
+        // rigid-kit refusal above already blocks transferring the passenger directly. Refuse the carrier's own
+        // transfer instead of silently dropping or orphaning what it holds.
+        if (body.Carrying is not null) {
+            if (source.Server.Output.HasNarrationSink) {
+                source.Server.Output.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' is carrying body:{body.Carrying} — cross-world transfer while carrying is not supported)]"
+                );
+            }
 
             return false;
         }
@@ -1688,7 +1855,12 @@ public sealed partial class WorldInstanceHost {
             slot: sourceSlot,
             denial: out var leaveDenial
         )) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused ({actingPrincipal.Describe()} cannot leave '{sourceName}' seat {(sourceSlot + 1)} — {leaveDenial})]");
+            if (source.Server.Output.HasNarrationSink) {
+                source.Server.Output.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: refused ({actingPrincipal.Describe()} cannot leave '{sourceName}' seat {(sourceSlot + 1)} — {leaveDenial})]"
+                );
+            }
 
             return false;
         }
@@ -1717,7 +1889,12 @@ public sealed partial class WorldInstanceHost {
             profile: out profile,
             slot: sourceSlot
         )) {
-            Console.Error.WriteLine(value: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' has no body to transfer)]");
+            if (source.Server.Output.HasNarrationSink) {
+                source.Server.Output.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: refused (seat {(sourceSlot + 1)} in '{sourceName}' has no body to transfer)]"
+                );
+            }
 
             return false;
         }
@@ -1955,7 +2132,7 @@ public sealed partial class WorldInstanceHost {
     /// <summary>Which of a source instance's local seats a queued transfer moves — see
     /// <see cref="PendingTransfer.Scope"/>.</summary>
     public enum TransferScope {
-        /// <summary>One named seat.</summary>
+        /// <summary>One body by its source-authority index, including peers and creatures.</summary>
         Body,
 
         /// <summary>The source instance's whole active local-seat set (0..<see cref="Server.WorldPopulation.LocalSeatCount"/>-1),
@@ -1971,7 +2148,7 @@ public sealed partial class WorldInstanceHost {
     /// <see cref="Server.WorldServer"/>'s own pending-ops FIFO (compose/validate at apply, never at submit).</summary>
     /// <param name="SourceInstance">The console-facing name of the instance the seat(s) currently occupy.</param>
     /// <param name="Scope">Whether this moves one named seat or the source's whole active local-seat set.</param>
-    /// <param name="SourceSlot">The source instance's 0-based local seat — ignored when <paramref name="Scope"/> is
+    /// <param name="SourceSlot">The source instance's 0-based body index — ignored when <paramref name="Scope"/> is
     /// <see cref="TransferScope.Party"/>.</param>
     /// <param name="Destination">How the destination instance resolves.</param>
     /// <param name="ActingPrincipal">The principal that submitted the transfer.</param>
@@ -2029,6 +2206,8 @@ public sealed partial class WorldInstanceHost {
     /// <param name="ScopeProofAlreadyVerified">Internal split-party marker: the parent already re-verified the
     /// frozen cohort's membership proof before creating one-member transactions against its one resolved target.</param>
     /// <param name="Attempt">How many times a retryable capacity refusal has already re-queued this crossing.</param>
+    /// <param name="RecoveryDestinationName">The captured resolver destination used only for outcome narration
+    /// after restart. Recovery never resolves or re-enqueues this already-detached crossing.</param>
     private readonly record struct PendingTransfer(
         string SourceInstance,
         TransferScope Scope,
@@ -2053,7 +2232,8 @@ public sealed partial class WorldInstanceHost {
         int? BorderCapacity,
         string Border,
         bool ScopeProofAlreadyVerified = false,
-        int Attempt = 0
+        int Attempt = 0,
+        string? RecoveryDestinationName = null
     );
     // One landed member's captured state — enough to restore it exactly at the source if the transfer
     // aborts after it already joined the destination. Body color/position/yaw/dynamic state/designations are all
@@ -2070,22 +2250,31 @@ public sealed partial class WorldInstanceHost {
         FixedVector3 Position,
         FixedQ4816 Yaw,
         WorldBody.TransferState DynamicState,
-        int[] Designations,
+        WorldTargetDesignation[] Designations,
         WorldPeerEventEntry? Peer,
         IReadOnlyList<WorldAdmissionGrant> AdmissionGrants,
         IReadOnlyList<WorldGrant> SourceGrants,
         WorldPrincipal SourcePrincipal,
-        WorldMobilityIdentity Mobility
+        WorldMobilityIdentity Mobility,
+        byte FollowedSeatMask = 0
     );
     private sealed record InDoubtTransfer(
         PendingTransfer Transfer,
-        WorldPeerCall TargetAuthority,
+        WorldPeerCall? TargetAuthority,
         string SourceAuthority,
         string TargetName,
         bool Spawned,
         ulong SourceDeadlineTick,
         List<LandedMember> Landed,
         List<WorldTransferCommitMember> CommitMembers,
-        int MemberCount
-    );
+        int MemberCount,
+        bool RollbackOnly = false,
+        bool ConflictingCommitReported = false,
+        string? RecoveryAuthority = null,
+        string? RecoveryEndpoint = null,
+        WorldDefinition? RecoveryDefinition = null,
+        bool CommitConfirmed = false
+    ) {
+        public bool PublicationFailureReported { get; set; }
+    }
 }

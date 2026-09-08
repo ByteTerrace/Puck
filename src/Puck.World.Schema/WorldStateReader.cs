@@ -3,232 +3,108 @@ using Puck.Maths;
 
 namespace Puck.World;
 
-/// <summary>
-/// The one (row, key) → raw-value read over a world document's <c>state</c> section. Every live numeric read of a
-/// declared cell resolves here — a world rule's gate comparand and its live copy operand, a rule effect's
-/// read-modify-write, the <c>world.state</c> console read-backs, the HUD <c>state.&lt;row&gt;</c>/
-/// <c>state.&lt;row&gt;.&lt;key&gt;</c> binding, and the <c>UpsertStateCell</c> Add compose arm — so no two of them
-/// can drift in how a pair addresses a cell, or in what that cell currently holds.
-/// </summary>
-/// <remarks>
-/// <para><b>The pair rule, once.</b> A null <c>key</c> means the row's slot cell
-/// (<see cref="WorldStateRow.SlotKey"/>); a non-null one names a cell inside the row. Which pairs are admissible is a
-/// separate, author-time question decided by <see cref="WorldStateRow.IsKeyed"/> at the doors that accept a pair (the
-/// rule compiler, the whole-document validator, the <c>Generate</c> compose arm) — this reader only resolves an
-/// already-admitted pair, and a pair naming a row or cell the document does not declare reads as "absent" rather than
-/// refusing: a mid-tick <c>RemoveStateRow</c> is the only way to get there, and the next install's recompile refuses
-/// the rule outright if it can no longer resolve.</para>
-/// <para><b>Why a null key can just be the slot key here.</b> Resolving a null key to
-/// <see cref="WorldStateRow.SlotKey"/> and scanning is equivalent to asking <see cref="WorldStateRow.IsSlot"/> first
-/// and taking the row's single cell, and the equivalence is what lets one rule serve both the callers that pass an
-/// already-resolved key and the HUD binding that passes null. It holds because a <c>$value</c> cell can only exist on
-/// a slot-shaped row in the first place: the validator refuses the reserved slot key as an authored cell key on any
-/// row that declares a capacity or carries a cell count other than one, and refuses it outright on a generator row,
-/// at boot, on every mutation, and on every undo-replay entry. So an installed document that has a <c>$value</c> cell
-/// is slot-shaped, and one that does not resolves to nothing under either reading.</para>
-/// <para><b>The value is computed, not fetched.</b> A row declaring <see cref="WorldStateRow.Advance"/> stores a
-/// base in its slot cell and advances from it with elapsed ticks; a keyed row's own cell may independently declare
-/// <see cref="WorldStateCell.Advance"/> the same way over its own base — the two never both name the same cell (the
-/// slot cell may carry only the row's own trait), so this reader checks the row's trait first and only then the
-/// cell's own, never both. Either way it returns <see cref="WorldStateAdvance.ComputeCurrentValue"/> at <c>tick</c>
-/// for the advancing cell and the stored value for every other. This is the trait's only application site, which is
-/// what makes a reader and a writer unable to disagree: an <c>add</c> composes against what a reader sees (the
-/// compose arm reads here too), a rule gates on it, a HUD gauge draws it, and <c>world.state</c> echoes it, all from
-/// this one computation — and because <see cref="Reduce"/>/<see cref="ArgExtremum"/> already resolve each candidate
-/// cell through this same seam rather than reading <see cref="WorldStateCell.Value"/> off the row directly, a
-/// <c>$reduce:</c>/<c>$argmax:</c>/<c>$argmin:</c> operand over a table of independently advancing cells sees every
-/// cell's live value for free — no special case anywhere in either method.</para>
-/// <para><b>Allocation-free.</b> The HUD path runs this once per bound element per frame, so this is an ordinal
-/// linear scan over the row's own cells with no LINQ, no closure, and no intermediate collection — matching
-/// <see cref="WorldDefinitionRows"/>'s own idiom — and it hands back a raw value rather than a cell record, because
-/// an advancing row's computed value has no stored <see cref="WorldStateCell"/> to hand back and minting one per
-/// read would allocate on that per-frame path. An ordinary row's read allocates nothing at all; an advancing row's
-/// pays only what <see cref="Puck.Maths.DiscreteMeasure"/>'s exact rational allocation costs for its magnitude.</para>
-/// </remarks>
+/// <summary>The document-anchored entrance to <see cref="StateReader"/>: every overload resolves the rows, the
+/// catalog, the dynamics rows, and the simulation rate off one <see cref="WorldDefinition"/>, so a reader holding the
+/// document never re-derives which section the engine reads. The reading itself is the engine's — see
+/// <see cref="StateReader"/> for the pair rule, the computed value, and the allocation contract.</summary>
 public static class WorldStateReader {
-    /// <summary>Finds the winning cell's key over a keyed row under <paramref name="op"/>
-    /// (<see cref="WorldStateReduceOp.Max"/> or <see cref="WorldStateReduceOp.Min"/>), resolving each candidate
-    /// cell's value through this same per-(row, key) seam as <see cref="TryRead"/> rather than walking the row's
-    /// declared cell list raw. A cell key that does not parse as a non-negative integer, or that
-    /// <paramref name="isCandidateIndex"/> rejects, is excluded from the comparison; ties go to the lowest parsed
-    /// index.</summary>
+    /// <summary>Resolves one world-owned row by its compiled typed handle (see
+    /// <see cref="StateReader.TryReadHandle(IReadOnlyList{StateRow}, StateCatalog, StateHandle, string?, ulong, out StateRow?, out long?, out string?)"/>).</summary>
     /// <param name="definition">The document to read.</param>
-    /// <param name="rowName">The state row's name.</param>
-    /// <param name="op">The extremum to find (<see cref="WorldStateReduceOp.Max"/> or
-    /// <see cref="WorldStateReduceOp.Min"/>).</param>
-    /// <param name="tick">The tick this read is answering AS OF; forwarded to each per-cell <see cref="TryRead"/>.</param>
-    /// <param name="isCandidateIndex">An optional additional filter over a cell key's parsed index (for example, a
-    /// caller-side population-capacity bound). <see langword="null"/> admits every non-negative parsed index.</param>
-    /// <returns>The winning cell's key, or <see langword="null"/> when the row is absent, holds no cells, or no cell
-    /// key both parses and passes <paramref name="isCandidateIndex"/>.</returns>
-    public static string? ArgExtremum(
+    /// <param name="catalog">The document's current state catalog.</param>
+    /// <param name="handle">A world-lane handle minted by <paramref name="catalog"/>.</param>
+    /// <param name="key">The cell key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="row">The resolved row.</param>
+    /// <param name="rawValue">The addressed live raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed text payload, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row resolves; the call throws rather than answering
+    /// <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="catalog"/> is not the definition's current catalog, or
+    /// <paramref name="handle"/> does not address a world-owned row in it.</exception>
+    public static bool TryReadHandle(
         WorldDefinition definition,
-        string rowName,
-        WorldStateReduceOp op,
+        StateCatalog catalog,
+        StateHandle handle,
+        string? key,
         ulong tick,
-        Func<int, bool>? isCandidateIndex = null
+        [NotNullWhen(true)] out WorldStateRow? row,
+        out long? rawValue,
+        out string? text
     ) {
-        if (!TryRead(
-            definition: definition,
-            key: null,
-            rawValue: out _,
-            row: out var declared,
-            rowName: rowName,
-            text: out _,
-            tick: tick
-        )) {
-            return null;
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+
+        if (!ReferenceEquals(objA: definition.StateCatalog, objB: catalog)) {
+            throw new ArgumentException(message: "The state catalog is not current for this definition.", paramName: nameof(catalog));
         }
 
-        var isFixed = (declared.Kind == CellKind.Fixed);
-        var bestIndex = -1;
-        string? bestKey = null;
-        var bestValue = FixedQ4816.Zero;
+        _ = StateReader.TryReadHandle(rows: definition.State, catalog: catalog, handle: handle, key: key, tick: tick, row: out var resolved, rawValue: out rawValue, text: out text);
+        row = (WorldStateRow)resolved!;
 
-        foreach (var candidate in (declared.Cells ?? [])) {
-            if (
-                !int.TryParse(
-                s: candidate.Key,
-                style: System.Globalization.NumberStyles.Integer,
-                provider: System.Globalization.CultureInfo.InvariantCulture,
-                result: out var index
-            ) ||
-                (index < 0) ||
-                ((isCandidateIndex is not null) && !isCandidateIndex(index))
-            ) {
-                continue;
-            }
-
-            if (
-                !TryRead(
-                definition: definition,
-                rowName: rowName,
-                key: candidate.Key,
-                tick: tick,
-                row: out _,
-                rawValue: out var raw,
-                text: out _
-            ) ||
-                (raw is null)
-            ) {
-                continue;
-            }
-
-            var value = (isFixed
-                ? FixedQ4816.FromRawBits(value: raw.Value)
-                : FixedQ4816.FromInteger(value: raw.Value)
-            );
-            var better = ((bestIndex < 0) || ((op == WorldStateReduceOp.Max)
-                ? (value > bestValue)
-                : (value < bestValue)));
-            var tieLower = ((bestIndex >= 0) && (value == bestValue) && (index < bestIndex));
-
-            if (
-                better ||
-                tieLower
-            ) {
-                bestIndex = index;
-                bestKey = candidate.Key;
-                bestValue = value;
-            }
-        }
-
-        return bestKey;
+        return true;
     }
-    /// <summary>Reduces a keyed row's cell values with <paramref name="op"/>, resolving each cell through this same
-    /// per-(row, key) seam as <see cref="TryRead"/> rather than walking the row's declared cell list raw — so a
-    /// table whose cells independently advance (<see cref="WorldStateCell.Advance"/>) reduces over every cell's live
-    /// value for free, never a stale base read straight off <see cref="WorldStateCell.Value"/>.</summary>
+    /// <summary>Finds the winning cell's key over a keyed row (see
+    /// <see cref="StateReader.ArgExtremum(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,Func{int,bool}?)"/>).</summary>
     /// <param name="definition">The document to read.</param>
     /// <param name="rowName">The state row's name.</param>
-    /// <param name="op">The reduction to apply. <see cref="WorldStateReduceOp.Count"/> answers with the row's cell
-    /// count as an integer regardless of the row's <see cref="WorldStateRow.Kind"/>; the others preserve that
-    /// kind.</param>
-    /// <param name="tick">The tick this read is answering as of; forwarded to each per-cell <see cref="TryRead"/>.</param>
-    /// <returns>The reduced value, or <see cref="FixedQ4816.Zero"/> when the row is absent or holds no cells.</returns>
-    public static FixedQ4816 Reduce(WorldDefinition definition, string rowName, WorldStateReduceOp op, ulong tick) {
-        if (!TryRead(
-            definition: definition,
-            key: null,
-            rawValue: out _,
-            row: out var declared,
-            rowName: rowName,
-            text: out _,
-            tick: tick
-        )) {
-            return FixedQ4816.Zero;
-        }
+    /// <param name="op">The extremum to find.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="isCandidateIndex">An optional filter over a cell key's parsed index.</param>
+    public static string? ArgExtremum(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, Func<int, bool>? isCandidateIndex = null) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var keys = (declared.Cells ?? []);
-
-        if (op == WorldStateReduceOp.Count) {
-            return FixedQ4816.FromInteger(value: keys.Count);
-        }
-
-        if (keys.Count == 0) {
-            return FixedQ4816.Zero;
-        }
-
-        var isFixed = (declared.Kind == CellKind.Fixed);
-        var hasAcc = false;
-        var acc = FixedQ4816.Zero;
-
-        foreach (var candidate in keys) {
-            if (
-                !TryRead(
-                definition: definition,
-                rowName: rowName,
-                key: candidate.Key,
-                tick: tick,
-                row: out _,
-                rawValue: out var raw,
-                text: out _
-            ) ||
-                (raw is null)
-            ) {
-                continue;
-            }
-
-            var value = (isFixed
-                ? FixedQ4816.FromRawBits(value: raw.Value)
-                : FixedQ4816.FromInteger(value: raw.Value)
-            );
-
-            acc = (!hasAcc
-                ? value
-                : (op switch {
-                    WorldStateReduceOp.Sum => (acc + value),
-                    WorldStateReduceOp.Max => ((value > acc)
-                    ? value
-                    : acc),
-                    _ => ((value < acc)
-                    ? value
-                    : acc), // Min.
-                })
-            );
-            hasAcc = true;
-        }
-
-        return acc;
+        return StateReader.ArgExtremum(rows: definition.State, rowName: rowName, op: op, tick: tick, isCandidateIndex: isCandidateIndex);
     }
-    /// <summary>Resolves one (row, key) pair against a document's live <c>state</c> section.</summary>
-    /// <param name="definition">The document to read. The whole document rather than just its rows: a cell's value
-    /// is the document's answer, and what the value-over-time trait reads to compute one is a document-scoped
-    /// question (see <paramref name="tick"/>).</param>
+    /// <summary>Finds the winning cell's key over a keyed row with caller state (see
+    /// <see cref="StateReader.ArgExtremum{TState}(IReadOnlyList{StateRow}?,string,StateReduceOp,ulong,TState,Func{int,TState,bool})"/>).</summary>
+    /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
+    /// <param name="definition">The document to read.</param>
     /// <param name="rowName">The state row's name.</param>
-    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell
-    /// (<see cref="WorldStateRow.SlotKey"/>).</param>
-    /// <param name="tick">The tick this read is answering as of — what an advancing row's value is computed at.
-    /// Callers pass the tick their frame already knows: the server's completed tick on the authoritative side, the
-    /// last delivered snapshot's tick on the client side (which is a server tick, so it is comparable to an epoch;
-    /// it lags by delivery, never by a different clock).</param>
+    /// <param name="op">The extremum to find.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
+    /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
+    public static string? ArgExtremum<TState>(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick, TState state, Func<int, TState, bool> isCandidateIndex) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return StateReader.ArgExtremum(rows: definition.State, rowName: rowName, op: op, tick: tick, state: state, isCandidateIndex: isCandidateIndex);
+    }
+    /// <summary>Finds the winning cell's key through a compiled handle (see
+    /// <see cref="StateReader.ArgExtremum{TState}(IReadOnlyList{StateRow},StateCatalog,StateHandle,StateReduceOp,ulong,TState,Func{int,TState,bool})"/>).</summary>
+    /// <typeparam name="TState">The caller's filter-state carrier.</typeparam>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="catalog">The document's current state catalog.</param>
+    /// <param name="handle">The compiled handle for the row to search.</param>
+    /// <param name="op">The extremum to find.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="state">State passed to <paramref name="isCandidateIndex"/>.</param>
+    /// <param name="isCandidateIndex">The allocation-free candidate predicate.</param>
+    public static string? ArgExtremum<TState>(WorldDefinition definition, StateCatalog catalog, StateHandle handle, StateReduceOp op, ulong tick, TState state, Func<int, TState, bool> isCandidateIndex) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return StateReader.ArgExtremum(rows: definition.State, catalog: catalog, handle: handle, op: op, tick: tick, state: state, isCandidateIndex: isCandidateIndex);
+    }
+    /// <summary>Reduces a keyed row's cell values (see <see cref="StateReader.Reduce"/>).</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="op">The reduction to apply.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    public static FixedQ4816 Reduce(WorldDefinition definition, string rowName, StateReduceOp op, ulong tick) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return StateReader.Reduce(rows: definition.State, rowName: rowName, op: op, tick: tick);
+    }
+    /// <summary>Resolves one (row, key) pair against the document's live <c>state</c> section (see
+    /// <see cref="StateReader.TryRead(IReadOnlyList{StateRow}?, string, string?, ulong, out StateRow?, out long?, out string?)"/>).</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
     /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
-    /// <param name="rawValue">The addressed cell's live raw value, or <see langword="null"/> when the row declares no
-    /// cell under that key — a distinct outcome from an unknown row, because a rule effect's read-modify-write treats
-    /// an absent cell as zero but an absent row as nothing to write.</param>
-    /// <param name="text">The addressed cell's text payload (<see cref="CellKind.Text"/> rows only), or
-    /// <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when the row resolved (whether or not it holds the addressed cell).</returns>
+    /// <param name="rawValue">The addressed cell's live raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed cell's text payload, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row resolved.</returns>
     public static bool TryRead(
         WorldDefinition definition,
         string rowName,
@@ -239,45 +115,50 @@ public static class WorldStateReader {
         out string? text
     ) {
         ArgumentNullException.ThrowIfNull(argument: definition);
-        rawValue = null;
-        text = null;
-        row = WorldDefinitionRows.FindStateRow(
-            rows: definition.State,
-            name: rowName
-        );
 
-        if (row is null) {
-            return false;
-        }
+        var resolved = StateReader.TryRead(rows: definition.State, rowName: rowName, key: key, tick: tick, row: out var found, rawValue: out rawValue, text: out text);
+        row = (WorldStateRow?)found;
 
-        var target = (key ?? WorldStateRow.SlotKey.Value);
+        return resolved;
+    }
+    /// <summary>Resolves one (row, key) pair, reading an eased cell's follower rather than its stored truth (see
+    /// <see cref="StateReader.TryReadEased"/>).</summary>
+    /// <param name="definition">The document to read.</param>
+    /// <param name="rowName">The state row's name.</param>
+    /// <param name="key">The cell key inside the row, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    /// <param name="row">The named row, or <see langword="null"/> when the section declares none by that name.</param>
+    /// <param name="rawValue">The addressed cell's live eased raw value, or <see langword="null"/> when absent.</param>
+    /// <param name="text">The addressed cell's text payload, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the row resolved.</returns>
+    public static bool TryReadEased(
+        WorldDefinition definition,
+        string rowName,
+        string? key,
+        ulong tick,
+        [NotNullWhen(true)] out WorldStateRow? row,
+        out long? rawValue,
+        out string? text
+    ) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
-        foreach (var candidate in (row.Cells ?? [])) {
-            if (string.Equals(
-                a: candidate.Key,
-                b: target,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                rawValue = (((row.Advance is { } advance) && (candidate.Key == WorldStateRow.SlotKey))
-                    ? advance.ComputeCurrentValue(
-                        row: row,
-                        baseValue: candidate.Value,
-                        currentTick: tick
-                    )
-                    : ((candidate.Advance is { } cellAdvance)
-                        ? cellAdvance.ComputeCurrentValue(
-                            row: row,
-                            baseValue: candidate.Value,
-                            currentTick: tick
-                        )
-                        : candidate.Value
-                ));
-                text = candidate.Text;
+        var resolved = StateReader.TryReadEased(rows: definition.State, dynamics: definition.Dynamics, ticksPerSecond: definition.SimulationRateHz, rowName: rowName, key: key, tick: tick, row: out var found, rawValue: out rawValue, text: out text);
+        row = (WorldStateRow?)found;
 
-                break;
-            }
-        }
+        return resolved;
+    }
+    /// <summary>Evaluates a cell's easing trait against the document's dynamics rows and rate (see
+    /// <see cref="StateReader.TryEvaluateDynamics"/>).</summary>
+    /// <param name="definition">The document to resolve the trait's referenced <c>dynamics</c> row against.</param>
+    /// <param name="row">The carrying row.</param>
+    /// <param name="cell">The addressed cell.</param>
+    /// <param name="tick">The tick to evaluate at.</param>
+    /// <param name="trait">The resolved trait, or <see langword="null"/>.</param>
+    /// <param name="sample">The evaluated value/velocity.</param>
+    /// <returns><see langword="true"/> when a trait resolved and was evaluated.</returns>
+    public static bool TryEvaluateDynamics(WorldDefinition definition, StateRow row, StateCell cell, ulong tick, [NotNullWhen(true)] out StateDynamics? trait, out SecondOrderSample sample) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return true;
+        return StateReader.TryEvaluateDynamics(dynamics: definition.Dynamics, ticksPerSecond: definition.SimulationRateHz, row: row, cell: cell, tick: tick, trait: out trait, sample: out sample);
     }
 }

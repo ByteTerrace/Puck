@@ -542,6 +542,13 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "sampling.pcg3d-lattice-noise-reference-and-corners",
+            run: () => Laws.Claim(
+                claim: Subjects.Pcg3dLatticeNoiseReferenceAndCorners,
+                lawId: "sampling.pcg3d-lattice-noise-reference-and-corners"
+            )
+        ),
+        Case(
             id: "sampling.normal-quantile-ladder",
             run: () => Laws.Claim(
                 claim: Subjects.NormalQuantileLadderAndRefusals,
@@ -1267,6 +1274,14 @@ internal static partial class LawRegistry {
                 lawId: "integer.symmetry-lattice-exact-structure"
             )
         ),
+        // Default rather than Deep: twelve words over 240 nodes and one 240 x 240 pairing sweep is well under a second.
+        Case(
+            id: "integer.symmetry-word-permutation-order-and-pairing",
+            run: () => Laws.Claim(
+                claim: LatticeClaims.SymmetryWordAndPairingSurface,
+                lawId: "integer.symmetry-word-permutation-order-and-pairing"
+            )
+        ),
     ];
     private static LawCase[] HilbertCurveCases() => [
         // ---- HilbertCurve (locality-preserving space-filling curve) ----
@@ -1790,10 +1805,45 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
+            id: "scalar.move-toward-boundaries-and-segment",
+            run: () => Laws.Claim(
+                claim: MoveTowardAndEmitterClaims.ScalarMoveTowardSurface,
+                lawId: "scalar.move-toward-boundaries-and-segment"
+            )
+        ),
+        Case(
+            id: "vector.move-toward-carrier-extremes",
+            run: () => Laws.Claim(
+                claim: MoveTowardAndEmitterClaims.MoveTowardCarrierExtremesSurface,
+                lawId: "vector.move-toward-carrier-extremes"
+            )
+        ),
+        Case(
+            id: "scalar.move-toward-carrier-extremes",
+            run: () => Laws.Claim(
+                claim: MoveTowardAndEmitterClaims.ScalarMoveTowardCarrierExtremesSurface,
+                lawId: "scalar.move-toward-carrier-extremes"
+            )
+        ),
+        Case(
             id: "core.rust-port-emitters-are-pure-and-live",
             run: () => Laws.Claim(
                 claim: MoveTowardAndEmitterClaims.RustPortEmitterSurface,
                 lawId: "core.rust-port-emitters-are-pure-and-live"
+            )
+        ),
+        Case(
+            id: "algebra.angular-frequency-exact-and-vs-double",
+            run: () => Laws.Claim(
+                claim: AngularFrequencyAndRationalClaims.AngularFrequencySurface,
+                lawId: "algebra.angular-frequency-exact-and-vs-double"
+            )
+        ),
+        Case(
+            id: "algebra.rational-field-axioms",
+            run: () => Laws.Claim(
+                claim: AngularFrequencyAndRationalClaims.RationalAlgebraSurface,
+                lawId: "algebra.rational-field-axioms"
             )
         ),
         Case(
@@ -2010,10 +2060,10 @@ internal static partial class LawRegistry {
             )
         ),
         Case(
-            id: "algebra.quadratic-surd-twin-lane",
+            id: "algebra.real-quadratic-twin-lane",
             run: () => Laws.Claim(
-                claim: DoublingTowerClaims.QuadraticSurdTwinLaneSurface,
-                lawId: "algebra.quadratic-surd-twin-lane"
+                claim: DoublingTowerClaims.RealQuadraticTwinLaneSurface,
+                lawId: "algebra.real-quadratic-twin-lane"
             )
         ),
         Case(
@@ -2246,124 +2296,5 @@ internal static partial class LawRegistry {
             )
         ),
 
-    ];
-    private static LawCase[] NttCases() => [
-        // ---- the exact number-theoretic transform over PrimeField64 ----
-        Case(
-            id: "ntt.prime-and-primitive-root",
-            run: () => Laws.Claim(
-                claim: NttClaims.PrimeAndPrimitiveRoot,
-                lawId: "ntt.prime-and-primitive-root"
-            )
-        ),
-        Case(
-            id: "ntt.round-trip-exact",
-            run: () => Laws.Claim(
-                claim: NttClaims.RoundTripExact,
-                lawId: "ntt.round-trip-exact"
-            )
-        ),
-        Case(
-            id: "ntt.linearity-exact",
-            run: () => Laws.Claim(
-                claim: NttClaims.LinearityExact,
-                lawId: "ntt.linearity-exact"
-            )
-        ),
-        Case(
-            id: "ntt.convolution-vs-oracle",
-            run: () => Laws.Claim(
-                claim: NttClaims.ConvolutionVsOracle,
-                lawId: "ntt.convolution-vs-oracle"
-            )
-        ),
-        Case(
-            id: "ntt.length-refusals",
-            run: () => Laws.Claim(
-                claim: NttClaims.LengthRefusals,
-                lawId: "ntt.length-refusals"
-            )
-        ),
-
-    ];
-    private static LawCase[] FftCases() => [
-        // ---- the fixed-point FFT over FixedComplex ----
-        Case(
-            id: "fft.impulse-dc-nyquist-exact",
-            run: () => Laws.Claim(
-                claim: FftClaims.ImpulseDcNyquistExact,
-                lawId: "fft.impulse-dc-nyquist-exact"
-            )
-        ),
-        Case(
-            id: "fft.round-trip-bound",
-            run: () => Laws.Claim(
-                claim: FftClaims.RoundTripBound,
-                lawId: "fft.round-trip-bound"
-            )
-        ),
-        Case(
-            id: "fft.round-trip-bound-deep",
-            run: () => Laws.Claim(
-                claim: FftClaims.RoundTripBoundDeepMirror,
-                lawId: "fft.round-trip-bound-deep"
-            )
-        ),
-        Case(
-            id: "fft.linearity-bound",
-            run: () => Laws.Claim(
-                claim: FftClaims.LinearityBound,
-                lawId: "fft.linearity-bound"
-            )
-        ),
-        Case(
-            id: "fft.linearity-bound-deep",
-            run: () => Laws.Claim(
-                claim: FftClaims.LinearityBoundDeepMirror,
-                lawId: "fft.linearity-bound-deep"
-            )
-        ),
-        Case(
-            id: "fft.parseval-bound",
-            run: () => Laws.Claim(
-                claim: FftClaims.ParsevalBound,
-                lawId: "fft.parseval-bound"
-            )
-        ),
-        Case(
-            id: "fft.parseval-bound-deep",
-            run: () => Laws.Claim(
-                claim: FftClaims.ParsevalBoundDeepMirror,
-                lawId: "fft.parseval-bound-deep"
-            )
-        ),
-        Case(
-            id: "fft.self-referential-bit-identity",
-            run: () => Laws.Claim(
-                claim: FftClaims.SelfReferentialBitIdentity,
-                lawId: "fft.self-referential-bit-identity"
-            )
-        ),
-        Case(
-            id: "fft.radix2-vs-direct-sum",
-            run: () => Laws.Claim(
-                claim: FftClaims.Radix2VsDirectSum,
-                lawId: "fft.radix2-vs-direct-sum"
-            )
-        ),
-        Case(
-            id: "fft.real-wrappers-are-faithful-embeddings",
-            run: () => Laws.Claim(
-                claim: FftClaims.RealWrappersAreFaithfulEmbeddings,
-                lawId: "fft.real-wrappers-are-faithful-embeddings"
-            )
-        ),
-        Case(
-            id: "fft.length-refusals",
-            run: () => Laws.Claim(
-                claim: FftClaims.LengthRefusals,
-                lawId: "fft.length-refusals"
-            )
-        ),
     ];
 }

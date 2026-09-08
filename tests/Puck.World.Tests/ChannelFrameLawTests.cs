@@ -2,16 +2,17 @@ using Puck.World.Protocol;
 using Puck.World.Server;
 using System.Numerics;
 using Xunit;
+using Puck.Physics.Motion;
 
 namespace Puck.World.Tests;
 
-/// <summary>The MoveForward/MoveStrafe pair's authored frame (<see cref="ChannelFrame"/>): meaningful only on those
+/// <summary>The MoveAdvance/MoveStrafe pair's authored frame (<see cref="ChannelFrame"/>): meaningful only on those
 /// two roles, declared identically by both (the pair rotates together), and refused beside a kit on the sim's own
 /// Heading arm (which would rotate an already-composed pair a second time); the table exposes it as one value.</summary>
 public sealed class ChannelFrameLawTests {
     private static readonly WorldChannel Turn = new(Name: "turn", Shape: ChannelShape.Bipolar, Role: ChannelRole.Turn);
 
-    private static WorldChannel Forward(ChannelFrame frame) => new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveForward, Frame: frame);
+    private static WorldChannel Forward(ChannelFrame frame) => new(Name: "forward", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveAdvance, Frame: frame);
     private static WorldChannel Strafe(ChannelFrame frame) => new(Name: "strafe", Shape: ChannelShape.Bipolar, Role: ChannelRole.MoveStrafe, Frame: frame);
     // The sim's yaw convention: facing (-sin yaw, -cos yaw), read back from the attitude the body is drawn in.
     private static float AttitudeYaw(Quaternion orientation) {
@@ -21,8 +22,8 @@ public sealed class ChannelFrameLawTests {
         );
 
         return MathF.Atan2(
-            y: -facing.X,
-            x: -facing.Z
+            x: -facing.Z,
+            y: -facing.X
         );
     }
     private static bool TryValidate(WorldDefinition definition) => WorldDefinitionValidator.TryValidate(
@@ -63,7 +64,7 @@ public sealed class ChannelFrameLawTests {
 
             return (document with {
                 ChannelsRaw = [Forward(frame: ChannelFrame.Heading), Strafe(frame: ChannelFrame.Heading), Turn],
-                KitsRaw = [kit with { Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MoveFrame = kitFrame } }],
+                KitRowsRaw = [kit with { Motion = kit.Motion with { MoveFrame = kitFrame } }],
             });
         }
 
@@ -83,7 +84,7 @@ public sealed class ChannelFrameLawTests {
         var kit = document.Kits[0];
 
         using var fixture = Fixtures.FreshServer(definition: (document with {
-            KitsRaw = [kit with { Motion = ((WorldMotionModel.Grounded)kit.Motion) with { MoveFrame = MotionMoveFrame.World, FacingSnap = true } }],
+            KitRowsRaw = [kit with { Motion = kit.Motion with { MoveFrame = MotionMoveFrame.World, FacingSnap = true } }],
         }));
         var actor = WorldPrincipal.Seat(slot: 0);
 

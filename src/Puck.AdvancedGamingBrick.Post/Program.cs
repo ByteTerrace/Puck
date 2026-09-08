@@ -4,21 +4,54 @@ using Puck.AdvancedGamingBrick.Post;
 // Puck.AdvancedGamingBrick.Post — the AdvancedGamingBrick machine's power-on self-test and the primary way the machine is
 // validated. It runs an ordered battery of self-checking stages and exits 0 (all passed), 1 (a check failed), or 2 (a
 // stage could not run). There is no rich CLI for the battery: a few hand-parsed knobs — where artifacts land, the corpus
-// and commercial-ROM roots, and an optional tier/name subset for iterating. Tier A runs anywhere on hand-assembled
-// vectors and a synthetic cartridge; Tier B needs the reference corpus (PUCK_AGB_TESTROMS), user ROMs (PUCK_AGB_GAMES),
-// and/or a real replacement BIOS (PUCK_AGB_BIOS), and its stages skip when those are absent. The accuracy-frontier
-// diagnostic modes (the cosim oracles, single-ROM inspectors) live in Diagnostics and run before the battery when their
-// flag is present; see the README.
+// roots and per-machine cartridges, and an optional tier/name subset for iterating. Tier A runs anywhere on
+// hand-assembled vectors and a synthetic cartridge; Tier B needs the corpora declared in corpora.json (--fetch-corpora
+// fills the cache), a real BIOS (--bios), or user ROMs (--games), and its stages skip when those are absent. The
+// accuracy-frontier diagnostic modes (the cosim oracles, single-ROM inspectors) live in Diagnostics and run before the
+// battery when their flag is present; see the README.
 
-var biosImage = LoadBios();
-Diagnostics.BiosImage = biosImage;
+if (!CommandLineArguments.TryValidateValues(args: args, names: ["--bios", "--ares", "--suite-focus", "--corpus-cache"], error: out var optionError)) {
+    Console.Error.WriteLine(value: optionError);
+    return 2;
+}
+ReadOnlyMemory<byte> biosImage;
+try {
+    biosImage = LoadBios(path: CommandLineArguments.Value(args: args, name: "--bios"));
+} catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException) {
+    Console.Error.WriteLine(value: $"--bios: {exception.Message}");
+    return 2;
+}
+var machineOptions = new AgbMachineOptions {
+    DisablePrefetch = args.Contains(value: "--no-prefetch", comparer: StringComparer.OrdinalIgnoreCase),
+    DisableRtc = args.Contains(value: "--no-rtc", comparer: StringComparer.OrdinalIgnoreCase),
+    BusTrace = args.Contains(value: "--bus-trace", comparer: StringComparer.OrdinalIgnoreCase) ? Console.Error.WriteLine : null,
+};
+if (machineOptions.DisablePrefetch || machineOptions.DisableRtc || machineOptions.BusTrace is not null) {
+    string[] supported = ["--render", "--probe", "--ags", "--accuracy-suite", "--lockstep", "--pctrace", "--statetrace", "--trace-cycles", "--trace-crash", "--iodump", "--link-init-trace"];
+    if (!args.Any(predicate: arg => supported.Contains(value: arg, comparer: StringComparer.OrdinalIgnoreCase))) {
+        Console.Error.WriteLine(value: "--no-prefetch, --no-rtc and --bus-trace require a single-ROM inspection diagnostic; battery and benchmark runs use normal hardware behavior.");
+        return 2;
+    }
+}
+var diagnostics = new Diagnostics(biosImage: biosImage, machineOptions: machineOptions);
 // A diagnostic flag short-circuits the battery: run that single investigative mode and return its exit code.
-if (Diagnostics.TryRun(
+if (diagnostics.TryRun(
     args: args,
     exitCode: out var diagnosticExitCode
 )) {
     return diagnosticExitCode;
 }
+var corpora = CorpusManifest.Load(path: CorpusManifest.InRepository(projectName: "Puck.AdvancedGamingBrick.Post"), cacheRoot: CommandLineArguments.Value(args: args, name: "--corpus-cache"));
+
+if (args.Contains(
+    comparer: StringComparer.OrdinalIgnoreCase,
+    value: "--fetch-corpora"
+)) {
+    Console.Out.WriteLine(value: $"{corpora.Fetch()} corpus archive(s) fetched into {corpora.EffectiveCacheRoot}");
+
+    return 0;
+}
+
 var artifactsDirectory = (CommandLineArguments.Value(
     args: args,
     name: "--artifacts"
@@ -34,90 +67,92 @@ var nameFilter = CommandLineArguments.Value(
     args: args,
     name: "--filter"
 );
-var testRomRoot = ResolveRoot(
-    args: args,
-    flag: "--roms",
-    variable: "PUCK_AGB_TESTROMS"
-);
-var gamesRoot = ResolveRoot(
-    args: args,
-    flag: "--games",
-    variable: "PUCK_AGB_GAMES"
+var parallelism = int.Parse(
+    provider: System.Globalization.CultureInfo.InvariantCulture,
+    s: (CommandLineArguments.Value(
+        args: args,
+        name: "--parallelism"
+    ) ?? "0")
 );
 var stages = PostStages.Create()
-    .Where(predicate: stage => TierMatches(
+    .Where(predicate: stage => PostStageFilters.TierMatches(
     stage: stage,
     tierFilter: tierFilter
 ))
-    .Where(predicate: stage => NameMatches(
+    .Where(predicate: stage => PostStageFilters.NameMatches(
     nameFilter: nameFilter,
     stage: stage
 ))
     .ToArray();
 var context = new PostContext(
+    accuracySuitePath: ExistingFile(path: CommandLineArguments.Value(
+        args: args,
+        name: "--accuracy-suite"
+    )),
+    agsPath: ExistingFile(path: CommandLineArguments.Value(
+        args: args,
+        name: "--ags"
+    )),
     artifactsDirectory: artifactsDirectory,
     biosImage: biosImage,
-    gamesRoot: gamesRoot,
-    testRomRoot: testRomRoot
+    fuzzRoot: corpora.Resolve(
+        args: args,
+        flag: "--fuzz",
+        name: "fuzzarm"
+    ),
+    gamesRoot: ExistingDirectory(path: CommandLineArguments.Value(
+        args: args,
+        name: "--games"
+    )),
+    linkGamePath: ExistingFile(path: CommandLineArguments.Value(
+        args: args,
+        name: "--link-game"
+    )),
+    parallelism: parallelism,
+    solarRomPath: ExistingFile(path: CommandLineArguments.Value(
+        args: args,
+        name: "--solar-rom"
+    )),
+    testRomRoot: corpora.Resolve(
+        args: args,
+        flag: "--roms",
+        name: "gba-tests"
+    )
 );
 var report = new PostBattery<PostContext>(
     banner: "Puck.AdvancedGamingBrick.Post - AdvancedGamingBrick machine power-on self-test",
     stages: stages
 ).Run(context: context);
-report.Write(artifactsDirectory: artifactsDirectory);
-return report.ExitCode;
-// Loads a BIOS image from PUCK_AGB_BIOS when present and correctly sized, so the BIOS-dependent stages (BIOS IRQ
-// dispatch) run; otherwise a zeroed 16 KiB stub, on which those stages skip cleanly. The banner reports the image's
-// real classification (retail / replacement / unknown) via AgbBiosProfile rather than assuming a replacement — a
-// retail image once loaded here was mislabelled "replacement", masking whether cycle-parity work was even eligible.
-static ReadOnlyMemory<byte> LoadBios() {
-    var biosPath = Environment.GetEnvironmentVariable(variable: "PUCK_AGB_BIOS");
 
-    if (
-        !string.IsNullOrEmpty(value: biosPath) &&
-        File.Exists(path: biosPath)
-    ) {
-        var bytes = File.ReadAllBytes(path: biosPath);
+report.Write(artifactsDirectory: artifactsDirectory);
+
+return report.ExitCode;
+
+static string? ExistingDirectory(string? path) =>
+    (((path is not null) && Directory.Exists(path: path))
+        ? path
+        : null);
+static string? ExistingFile(string? path) =>
+    (((path is not null) && File.Exists(path: path))
+        ? path
+        : null);
+// Loads the explicit --bios image, rejecting unreadable or wrong-sized files. Only omission selects the zeroed
+// 16 KiB stub, on which BIOS-dependent stages skip cleanly. The banner reports the image's
+// real classification (retail / replacement / unknown) via AgbBiosProfile rather than assuming a replacement.
+static ReadOnlyMemory<byte> LoadBios(string? path) {
+    if (path is not null) {
+        var bytes = File.ReadAllBytes(path: path);
 
         if (bytes.Length == ReplacementBios.ImageSize) {
             var identity = AgbBiosProfile.Identify(image: bytes);
 
-            Console.WriteLine(value: $"== BIOS: loaded {identity.Description} (sha1 {identity.Sha1}) from {biosPath} ==");
+            Console.WriteLine(value: $"== BIOS: loaded {identity.Description} (sha1 {identity.Sha1}) from {path} ==");
 
             return bytes;
         }
 
-        Console.WriteLine(value: $"== BIOS: ignoring {biosPath} (expected {ReplacementBios.ImageSize} bytes, got {bytes.Length}) ==");
+        throw new ArgumentException(message: $"Expected {ReplacementBios.ImageSize} bytes in '{path}', got {bytes.Length}.");
     }
 
     return new byte[ReplacementBios.ImageSize];
 }
-// A directory root: the CLI flag wins, else the environment variable (when it names an existing directory), else null
-// (the stages that need it skip when it is absent).
-static string? ResolveRoot(string[] args, string flag, string variable) {
-    var explicitRoot = CommandLineArguments.Value(
-        args: args,
-        name: flag
-    );
-
-    if (!string.IsNullOrEmpty(value: explicitRoot)) {
-        return explicitRoot;
-    }
-
-    var fromEnvironment = Environment.GetEnvironmentVariable(variable: variable);
-
-    return ((!string.IsNullOrEmpty(value: fromEnvironment) && Directory.Exists(path: fromEnvironment))
-        ? fromEnvironment
-        : null);
-}
-static bool TierMatches(IPostStage<PostContext> stage, string? tierFilter) =>
-    (string.IsNullOrEmpty(value: tierFilter) || string.Equals(
-    a: stage.Tier.ToString(),
-    b: tierFilter,
-    comparisonType: StringComparison.OrdinalIgnoreCase
-));
-static bool NameMatches(IPostStage<PostContext> stage, string? nameFilter) =>
-    (string.IsNullOrEmpty(value: nameFilter) || stage.Name.Contains(
-    comparisonType: StringComparison.OrdinalIgnoreCase,
-    value: nameFilter
-));

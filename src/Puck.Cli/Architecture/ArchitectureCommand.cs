@@ -196,7 +196,7 @@ internal static class ArchitectureCommand {
             _ = output.AppendLine(value: $"  {name}: {reason}");
         }
 
-        // The absent finding is the load-bearing half, so it is REPORTED rather than left as a silence:
+        // The absent finding is the load-bearing half, so it is reported rather than left as a silence:
         // empty-because-the-rule-was-too-wide and empty-because-the-graph-is-clean read identically.
         var engineHolders = model.Projects.Values
             .Where(predicate: p => string.Equals(a: p.Layer, b: "Engine services", comparisonType: StringComparison.OrdinalIgnoreCase))

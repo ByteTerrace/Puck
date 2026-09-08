@@ -200,7 +200,7 @@ public static class AddonAbi {
         public const int SubmitMutationAnswerParts = 1;
     }
     /// <summary>The host-written, 0-based disclosure verb vocabulary an <c>Observation</c> cell carries. Verbs
-    /// <c>1..9</c> are world events — edges delivered in pinned sim iteration order, gated by an Observe grant
+    /// <c>1..9</c> and <c>11..12</c> are world events — edges delivered in pinned sim iteration order, gated by an Observe grant
     /// carrying an event budget (see <c>Puck.World.Protocol.WorldGrant.EventBudget</c>); they mint no handle
     /// (<c>HandleIndex</c>/<c>HandleGeneration</c> are always zero on an event cell — events are data, never
     /// authority). The closed event-family vocabulary lives host-side (<c>Server.WorldEventFeed</c>); this ABI only
@@ -240,6 +240,13 @@ public static class AddonAbi {
         /// <summary>A seat became human-occupied. <c>A</c> = the 0-based seat index (also its body index); <c>B</c>
         /// is always zero.</summary>
         public const int EventSeatJoin = 3;
+        /// <summary>An adjacency row's federation link came back after being dropped. <c>A</c> = the adjacency row's
+        /// 0-based ordinal (document order among <c>adjacencies</c> rows); <c>B</c> is always zero.</summary>
+        public const int EventLinkEstablished = 11;
+        /// <summary>An adjacency row's federation link went its authored grace without a delivered neighbour
+        /// refresh. <c>A</c> = the adjacency row's 0-based ordinal; <c>B</c> = the staleness in simulation ticks at
+        /// the moment the edge fired.</summary>
+        public const int EventLinkDropped = 12;
         /// <summary>A seat stopped being human-occupied. Same payload shape as <see cref="EventSeatJoin"/>.</summary>
         public const int EventSeatLeave = 4;
         /// <summary>The disclosure of a minted handle over a body the addon's principal was granted.</summary>

@@ -29,6 +29,21 @@ surface:
 An undersized bound creates missing tiles and march holes. An oversized bound
 is safe but reduces acceleration.
 
+## Instance ranges as an ownership partition
+
+The packed instance directory expresses "this instance owns segments `[a, b)`",
+so the segment walk attributes each segment to exactly one owner. Two ranges
+claiming one instruction therefore leave the loser packing the empty segment
+range behind a live cull bound: its geometry renders only where the winner's
+mask bit happens to be set, and vanishes wherever the beam culls the winner but
+not the loser.
+
+Overlap is refused at the program constructor rather than resolved. The
+first-match owner resolve stays in place as defence in depth — it keeps the
+packed words a total, deterministic function of any range set that reaches it —
+but a deterministic answer to an incoherent declaration is still the wrong
+image, so the door never admits one.
+
 ## When to consider another hierarchy
 
 A BVH, TLAS/BLAS split, or work-graph traversal is justified only by a measured

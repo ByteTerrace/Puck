@@ -1,0 +1,22 @@
+[
+  {
+    "Id": "integer.layer-sequence-full-range",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.LayerSequence", "Name": "LayerOf" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Locate" },
+      { "Type": "Puck.Maths.LayerSequence", "Name": "Project" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "LayerOf, Locate and in-range Project agree at core seams, large layer boundaries, the reduced discriminant transition and long.MaxValue; invalid indices and an unrepresentable layer are refused.",
+        "Against": "Independent BigInteger prefix-count bracketing by binary search, with no square root or production count/lookup calls. ENVELOPE: fixed matrix of scaled triangular sequences with coefficients 1,2,3,4,5,6,8,12,2^32 and seeds 0,1,2^62-1; shifted square sequences; linear, empty, initially empty, shrinking and wide-coefficient general sequences. Boundary neighbours are sampled through layer 2^32-1 and across the long index endpoints, not exhaustively over long.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

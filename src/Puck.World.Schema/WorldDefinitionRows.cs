@@ -1,105 +1,120 @@
+using Puck.Physics.Motion;
+
 namespace Puck.World;
 
 /// <summary>Resolves stable row names in world-definition collections.</summary>
 public static class WorldDefinitionRows {
-    /// <summary>Finds an adjacency row by stable name.</summary>
-    public static WorldAdjacency? FindAdjacency(IReadOnlyList<WorldAdjacency>? adjacencies, string name) {
-        foreach (var adjacency in (adjacencies ?? [])) {
+    // The one linear scan every Find* below composes: allocation-free (selector is a static, capture-free lambda, so
+    // the compiler caches ONE delegate instance rather than allocating one per call) and null-tolerant, so a
+    // section's own nullability is never a second thing a caller must guard before resolving a name against it.
+    private static T? Find<T>(IReadOnlyList<T>? rows, string name, Func<T, string> selector) {
+        if (rows is null) {
+            return default;
+        }
+
+        for (var index = 0; index < rows.Count; index++) {
+            var row = rows[index];
             if (
-                (adjacency is not null) &&
+                (((object?)row) is not null) &&
                 string.Equals(
-                a: adjacency.Name.Value,
+                a: selector(row),
                 b: name,
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                return adjacency;
+                return row;
             }
         }
 
-        return null;
+        return default;
     }
+
+    /// <summary>Finds an adjacency row by stable name.</summary>
+    public static WorldAdjacency? FindAdjacency(IReadOnlyList<WorldAdjacency>? adjacencies, string name) => Find(
+        rows: adjacencies,
+        name: name,
+        selector: static adjacency => adjacency.Name.Value
+    );
     /// <summary>Finds a creation by stable id.</summary>
     /// <param name="creations">The section's creations.</param>
     /// <param name="id">The creation id to find.</param>
     /// <returns>The creation, or <see langword="null"/> when the section declares none by that id.</returns>
-    public static WorldCreation? FindCreation(IReadOnlyList<WorldCreation> creations, string id) {
-        foreach (var creation in creations) {
-            if (
-                (creation is not null) &&
-                string.Equals(
-                a: creation.Id,
-                b: id,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return creation;
-            }
-        }
-
-        return null;
-    }
+    public static WorldPrototype? FindCreation(IReadOnlyList<WorldPrototype>? creations, string id) => Find(
+        rows: creations,
+        name: id,
+        selector: static creation => creation.Id
+    );
     /// <summary>Finds a destinations row by stable name — the primitive a portal facet's <c>destination</c> resolves
     /// against (see <see cref="WorldPlacementPortal.Destination"/>).</summary>
     /// <param name="destinations">The section's destinations, or <see langword="null"/> for a document declaring none.</param>
     /// <param name="name">The destination name to find.</param>
     /// <returns>The destination, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldDestination? FindDestination(IReadOnlyList<WorldDestination>? destinations, string name) {
-        foreach (var destination in (destinations ?? [])) {
-            if (
-                (destination is not null) &&
-                string.Equals(
-                a: destination.Name.Value,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return destination;
-            }
-        }
-
-        return null;
-    }
+    public static WorldDestination? FindDestination(IReadOnlyList<WorldDestination>? destinations, string name) => Find(
+        rows: destinations,
+        name: name,
+        selector: static destination => destination.Name.Value
+    );
+    /// <summary>Finds a curves row by stable name.</summary>
+    /// <param name="curves">The section's curve rows.</param>
+    /// <param name="name">The curve row name to find.</param>
+    /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
+    public static WorldCurveRow? FindCurve(IReadOnlyList<WorldCurveRow>? curves, string name) => Find(
+        rows: curves,
+        name: name,
+        selector: static row => row.Name
+    );
+    /// <summary>Resolves an entity's look row: <paramref name="rows"/> indexed at <paramref name="index"/>, or the
+    /// implicit single catalog look (<see cref="WorldLook.Implicit"/>) when the world authors no <c>looks</c>
+    /// section, or for an index no declared row covers.</summary>
+    /// <param name="rows">The world's declared look rows (see <see cref="WorldDefinition.Looks"/>).</param>
+    /// <param name="index">The entity's resolved look-row index.</param>
+    public static WorldLook ResolveLook(IReadOnlyList<WorldLook> rows, int index) => (((index >= 0) && (index < rows.Count))
+        ? rows[index]
+        : WorldLook.Implicit
+    );
+    /// <summary>Resolves the world's whole look table: the declared rows, or a single-row table holding just the
+    /// implicit catalog look when the world declares none — so a consumer that materializes a fixed table up front
+    /// (rather than resolving per entity through <see cref="ResolveLook"/>) never holds an empty one.</summary>
+    /// <param name="looks">The world's declared look rows (see <see cref="WorldDefinition.Looks"/>).</param>
+    public static IReadOnlyList<WorldLook> ResolveLookRows(IReadOnlyList<WorldLook> looks) => ((looks.Count > 0)
+        ? looks
+        : [WorldLook.Implicit]
+    );
     /// <summary>Finds a kit by stable name.</summary>
     /// <param name="kits">The section's kits.</param>
     /// <param name="name">The kit name to find.</param>
     /// <returns>The kit, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldKit? FindKit(IReadOnlyList<WorldKit> kits, string name) {
-        foreach (var kit in kits) {
-            if (
-                (kit is not null) &&
-                string.Equals(
-                a: kit.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return kit;
-            }
-        }
-
-        return null;
-    }
+    public static WorldKit? FindKit(IReadOnlyList<WorldKit>? kits, string name) => Find(
+        rows: kits,
+        name: name,
+        selector: static kit => kit.Name
+    );
     /// <summary>Finds a placement by stable id.</summary>
     /// <param name="placements">The section's placements.</param>
     /// <param name="id">The placement id to find.</param>
     /// <returns>The placement, or <see langword="null"/> when the section declares none by that id.</returns>
-    public static WorldPlacement? FindPlacement(IReadOnlyList<WorldPlacement> placements, string id) {
-        foreach (var placement in placements) {
-            if (
-                (placement is not null) &&
-                string.Equals(
-                a: placement.Id,
-                b: id,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return placement;
-            }
-        }
+    public static WorldPlacement? FindPlacement(IReadOnlyList<WorldPlacement>? placements, string id) => Find(
+        rows: placements,
+        name: id,
+        selector: static placement => placement.Id
+    );
+    /// <summary>Resolves a placement's WORLD-space transform through <see cref="WorldDefinition.PlacementFrames"/> —
+    /// the composed frame every consumer of a placement's transform reads instead of its own Position/YawDegrees.
+    /// Falls back to <paramref name="placement"/>'s own authored Position/YawDegrees when the table carries no entry
+    /// for it (an ad hoc placement outside <paramref name="definition"/>'s own rows).</summary>
+    public static CompiledPlacementFrame ResolvedFrame(WorldDefinition definition, WorldPlacement placement) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: placement);
 
-        return null;
+        return (definition.PlacementFrames.TryGetValue(key: placement.Id, value: out var frame)
+            ? frame
+            : new CompiledPlacementFrame(Position: placement.Position, YawDegrees: placement.YawDegrees)
+        );
     }
+    /// <summary>Resolves a placement's composed world position (see <see cref="ResolvedFrame"/>).</summary>
+    public static System.Numerics.Vector3 ResolvedPosition(WorldDefinition definition, WorldPlacement placement) => ResolvedFrame(definition: definition, placement: placement).Position;
+    /// <summary>Resolves a placement's composed world yaw, degrees (see <see cref="ResolvedFrame"/>).</summary>
+    public static float ResolvedYawDegrees(WorldDefinition definition, WorldPlacement placement) => ResolvedFrame(definition: definition, placement: placement).YawDegrees;
     /// <summary>Finds a placement's declared face by name — the primitive a
     /// <see cref="WorldPlacementPortal.Counterpart"/> resolves its face half against (see
     /// <see cref="WorldPortalCounterpart"/>), and every other placement/face reader (<c>world.portals</c>,
@@ -108,60 +123,30 @@ public static class WorldDefinitionRows {
     /// <param name="face">The face name to find.</param>
     /// <returns>The face row, or <see langword="null"/> when the placement declares no <c>faceSources</c> row by
     /// that name.</returns>
-    public static WorldPlacementFace? FindPlacementFace(WorldPlacement placement, string face) {
-        foreach (var row in (placement.FaceSources ?? [])) {
-            if (
-                (row is not null) &&
-                string.Equals(
-                a: row.Face,
-                b: face,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return row;
-            }
-        }
-
-        return null;
-    }
+    public static WorldPlacementFace? FindPlacementFace(WorldPlacement placement, string face) => Find(
+        rows: placement.FaceSources,
+        name: face,
+        selector: static row => row.Face
+    );
     /// <summary>Finds a references row by stable name — the primitive a <see cref="WorldDestination.Reference"/>
     /// resolves against.</summary>
     /// <param name="references">The section's references, or <see langword="null"/> for a document declaring none.</param>
     /// <param name="name">The reference name to find.</param>
     /// <returns>The reference, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static WorldReference? FindReference(IReadOnlyList<WorldReference>? references, string name) {
-        foreach (var reference in (references ?? [])) {
-            if (
-                (reference is not null) &&
-                string.Equals(
-                a: reference.Name.Value,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return reference;
-            }
-        }
-
-        return null;
-    }
+    public static WorldReference? FindReference(IReadOnlyList<WorldReference>? references, string name) => Find(
+        rows: references,
+        name: name,
+        selector: static reference => reference.Name.Value
+    );
     /// <summary>Finds a spawn point by stable id.</summary>
     /// <param name="spawnPoints">The section's spawn points.</param>
     /// <param name="id">The spawn point id to find.</param>
     /// <returns>The spawn point, or <see langword="null"/> when the section declares none by that id.</returns>
-    public static WorldSpawnPoint? FindSpawnPoint(IReadOnlyList<WorldSpawnPoint> spawnPoints, string id) {
-        foreach (var point in spawnPoints) {
-            if (string.Equals(
-                a: point.Id,
-                b: id,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return point;
-            }
-        }
-
-        return null;
-    }
+    public static WorldSpawnPoint? FindSpawnPoint(IReadOnlyList<WorldSpawnPoint>? spawnPoints, string id) => Find(
+        rows: spawnPoints,
+        name: id,
+        selector: static point => point.Id
+    );
     /// <summary>Finds a state row by stable name — the ONE row-find every reader of the <c>state</c> section shares
     /// (the rule compiler's operand walk, the mutation compose arms, the console read-backs, the HUD binding
     /// resolver, and an owned identity document's own durable slots).</summary>
@@ -171,17 +156,125 @@ public static class WorldDefinitionRows {
     /// <remarks>Allocation-free and ordinal, like its siblings: the HUD path runs this per frame. The whole-document
     /// validator deliberately does NOT route here — it builds a name-keyed map once per walk and asks it O(1), which
     /// a linear scan per lookup would turn quadratic.</remarks>
-    public static WorldStateRow? FindStateRow(IReadOnlyList<WorldStateRow> rows, string name) {
-        foreach (var row in rows) {
-            if (string.Equals(
-                a: row.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return row;
+    public static WorldStateRow? FindStateRow(IReadOnlyList<WorldStateRow>? rows, string name) => StateRows.FindStateRow(rows: rows, name: name);
+    /// <summary>Enumerates every declared reference to a <c>dynamics</c> row across the document: a camera's own rig
+    /// and the world's <c>views.seatRig</c>/<c>views.cameraRig</c> (<c>Section</c> <c>"cameras"</c>), a look's root
+    /// follower (<c>"looks"</c>) and per-part followers (<c>"parts"</c>), a kit's planar shaping (<c>"kits"</c>), and
+    /// a state row's or cell's own eased trait (<c>"state"</c>) — the one walk both the <c>world.dynamics</c> census
+    /// and a dangling-reference check can share. Yields nothing for a reference that is absent; never yields a
+    /// section/row pairing that names no dynamics row.</summary>
+    /// <param name="definition">The document to walk.</param>
+    /// <returns>One entry per declared reference, in authored order: <c>Section</c> is the referencing area,
+    /// <c>Path</c> locates the specific reference within it, and <c>RowName</c> is the <c>dynamics</c> row name it
+    /// names.</returns>
+    public static IEnumerable<(string Section, string Path, string RowName)> EnumerateDynamicsReferences(WorldDefinition definition) {
+        foreach (var camera in definition.Cameras) {
+            if (camera is null) {
+                continue;
+            }
+
+            if (camera.Rig.DynamicsOp is { } cameraOp) {
+                yield return ("cameras", $"cameras.{camera.Name}", cameraOp.Row);
             }
         }
 
-        return null;
+        if (definition.ViewsRaw is { } views) {
+            if (views.SeatRig.DynamicsOp is { } seatOp) {
+                yield return ("cameras", "views.seatRig", seatOp.Row);
+            }
+
+            if (views.CameraRig?.DynamicsOp is { } viewCameraOp) {
+                yield return ("cameras", "views.cameraRig", viewCameraOp.Row);
+            }
+        }
+
+        foreach (var look in definition.Looks) {
+            if (look is null) {
+                continue;
+            }
+
+            if (look.Motion.Dynamics is { } lookDynamics) {
+                yield return ("looks", $"looks.{look.Name}", lookDynamics);
+            }
+
+            if (look.Motion.PartDynamics is { } partDynamics) {
+                foreach (var (part, partRow) in partDynamics) {
+                    yield return ("parts", $"looks.{look.Name}.parts.{part}", partRow);
+                }
+            }
+        }
+
+        foreach (var kit in definition.Kits) {
+            if (kit is null) {
+                continue;
+            }
+
+            var shapingRows = (kit.Motion.Shaping ?? []);
+
+            for (var index = 0; (index < shapingRows.Count); index++) {
+                if (shapingRows[index]?.Dynamics is { } shapingDynamics) {
+                    yield return ("kits", $"kits.{kit.Name}.shaping[{index}]", shapingDynamics);
+                }
+            }
+        }
+
+        foreach (var row in definition.State) {
+            if (row is null) {
+                continue;
+            }
+
+            if (row.Dynamics?.Row is { } rowDynamics) {
+                yield return ("state", $"state.{row.Name}", rowDynamics);
+            }
+
+            foreach (var cell in (row.Cells ?? [])) {
+                if (cell is null) {
+                    continue;
+                }
+
+                if (cell.Dynamics?.Row is { } cellDynamics) {
+                    yield return ("state", $"state.{row.Name}.{cell.Key}", cellDynamics);
+                }
+            }
+        }
+    }
+    /// <summary>Enumerates every declared reference to a <c>curves</c> row across the document: a camera's own rig and
+    /// the world's <c>views.seatRig</c>/<c>views.cameraRig</c> <c>path</c> op (<c>Section</c> <c>"cameras"</c>), plus
+    /// whatever a body-motion program's <c>curve</c> target source contributes (<c>"follows"</c>) — the one walk both
+    /// a <c>world.curves</c> census and a dangling-reference check can share. Yields nothing for a reference that is
+    /// absent; never yields a section/row pairing that names no curves row.</summary>
+    /// <param name="definition">The document to walk.</param>
+    /// <returns>One entry per declared reference, in authored order: <c>Section</c> is the referencing area,
+    /// <c>Path</c> locates the specific reference within it, and <c>RowName</c> is the <c>curves</c> row name it
+    /// names.</returns>
+    public static IEnumerable<(string Section, string Path, string RowName)> EnumerateCurveReferences(WorldDefinition definition) {
+        foreach (var camera in definition.Cameras) {
+            if (camera is null) {
+                continue;
+            }
+
+            if (camera.Rig.PathOp is { } cameraOp) {
+                yield return ("cameras", $"cameras.{camera.Name}", cameraOp.Curve);
+            }
+        }
+
+        if (definition.ViewsRaw is { } views) {
+            if (views.SeatRig.PathOp is { } seatOp) {
+                yield return ("cameras", "views.seatRig", seatOp.Curve);
+            }
+
+            if (views.CameraRig?.PathOp is { } viewCameraOp) {
+                yield return ("cameras", "views.cameraRig", viewCameraOp.Curve);
+            }
+        }
+
+        foreach (var program in definition.BodyMotionPrograms) {
+            if (
+                (program is not null) &&
+                (program.Target is BodyTargetSource.CurveFollow curve)
+            ) {
+                yield return ("follows", $"bodyMotionPrograms.{program.Name}", curve.Curve);
+            }
+        }
     }
 }

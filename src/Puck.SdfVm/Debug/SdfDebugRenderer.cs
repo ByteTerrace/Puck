@@ -815,7 +815,7 @@ public sealed class SdfDebugRenderer {
                 Shininess: SubjectShininess
             ));
 
-            // Route through the scene's carve-bake planner (carve-bake plan §4): it emits one SampledRegion per adopted
+            // Route through the scene's carve-bake planner: it emits one SampledRegion per adopted
             // bin and analytic instances for the rest — and, with the switch off or nothing baked, a byte-identical
             // analytic emission (the same instructions the raw EmitCarves loop produces).
             scene.CarvePlanner.Emit(
@@ -828,7 +828,7 @@ public sealed class SdfDebugRenderer {
     /// <summary>Emits one bench configuration's workload into <paramref name="builder"/> (a takeover — the room is
     /// replaced). Dispatched by <see cref="SdfBenchWorkload"/>. A <paramref name="carvePlanner"/> (the bench's settle-0
     /// planner) routes the <see cref="SdfBenchWorkload.Carves"/> workload through the carve-bake pipeline — adopted bins
-    /// emit as bricks, the rest analytic (carve-bake plan §4); null keeps carves fully analytic.</summary>
+    /// emit as bricks, the rest analytic; null keeps carves fully analytic.</summary>
     public void EmitBench(SdfProgramBuilder builder, SdfBenchConfig config, SdfCarveBakePlanner? carvePlanner = null) {
         ArgumentNullException.ThrowIfNull(builder);
 
@@ -952,7 +952,7 @@ public sealed class SdfDebugRenderer {
         );
 
         // With a planner (the sdf.carves workload) route through the carve-bake pipeline: adopted clusters emit as
-        // bricks, the rest analytic (carve-bake plan §4). Without one (the gallery's carve-ceiling exhibit) stay fully
+        // bricks, the rest analytic. Without one (the gallery's carve-ceiling exhibit) stay fully
         // analytic. The planner is fed the IDENTICAL list by SdfBenchScene.AdvanceCarveBake (BuildBenchCarves is a pure
         // function of family/count), so its binning at Advance matches this emission exactly.
         if (carvePlanner is not null) {
@@ -973,9 +973,9 @@ public sealed class SdfDebugRenderer {
     /// instances of the wordiest single shape (a lifted Star bakes the most constants) — so <c>sdf.bench instances 4096</c>
     /// always fits the frozen program/instance envelope. Never rendered.
     /// <para>Storm does not grow this probe. Its worst rung is 4096 dynamic spheres
-    /// (<see cref="SdfBenchScene.MaxStormInstances"/>); 4096 &lt; 16384 (MaxInstances) on the instance axis, and a
+    /// (<see cref="SdfBenchScene.MaxStormInstances"/>); 4096 &lt; 32768 (MaxInstances) on the instance axis, and a
     /// dynamic sphere instance (BeginInstanceDynamic + ResetPoint + TransformDynamic + Sphere) is fewer words than a
-    /// lifted Star, so 16384 Stars dominates both the word and instance dimensions this probe already reserves. The one
+    /// lifted Star, so 32768 Stars dominates both the word and instance dimensions this probe already reserves. The one
     /// axis storm does grow is dynamic-transform capacity — 4096 moving slots vs the room's few dozen — but that floor
     /// is a separate render-assembly reservation (the frame source's WorstCaseDynamicTransformCapacity →
     /// SdfWorldRenderSpec.DynamicTransformCapacity), not this word/instance probe, so nothing here changes for it.</para></summary>
@@ -995,9 +995,9 @@ public sealed class SdfDebugRenderer {
             shape: SdfDebugShapeKind.Star
         );
 
-        // The sdf.carves workload can adopt up to MaxBricks bricks on top of its analytic carves (carve-bake plan §4);
+        // The sdf.carves workload can adopt up to MaxBricks bricks on top of its analytic carves;
         // fold that worst mixed case into the bench probe so a baked carves rung fits the frozen envelope. Negligible
-        // against the 16384 Star instances above, which already dominate both the word and instance dimensions.
+        // against the 32768 Star instances above, which already dominate both the word and instance dimensions.
         SdfCarveBakePlanner.EmitWorstCaseBricks(
             builder: builder,
             material: material
@@ -1341,10 +1341,10 @@ public sealed class SdfDebugRenderer {
         // ENVELOPE MATH. Each carve = 1 instance (BeginInstance/EndInstance) + 3 instructions (ResetPoint, Translate,
         // Sphere) + one instance-directory entry (2 vectors = 8 words). The debug subject + floor are WORLD-level (0
         // instances), so the LIVE debug program tops out at MaxCarves = 4096 instances — well inside MaxInstances =
-        // 16384. This probe over-covers by folding the 4096 carves ON TOP OF the room's own instances (a few dozen), so
-        // the subject probe is (room + 4096) << 16384. The BENCH probe (EmitBenchProbe: 16384 lifted-Star instances) is
+        // 32768. This probe over-covers by folding the 4096 carves ON TOP OF the room's own instances (a few dozen), so
+        // the subject probe is (room + 4096) << 32768. The BENCH probe (EmitBenchProbe: 32768 lifted-Star instances) is
         // a SEPARATE probe MAX-folded against this one (OverworldFrameSource.MeasureWorstCaseEnvelope) and DOMINATES
-        // both dimensions — 16384 > room + 4096 instances, and 16384 wordy Stars > 4096 carve spheres + the op stack —
+        // both dimensions — 32768 > room + 4096 instances, and 32768 wordy Stars > 4096 carve spheres + the op stack —
         // so the frozen envelope stays bench-bound and carves do not grow it. Folding them here keeps the subject probe
         // honest regardless of which probe wins the MAX.
         var carveMaterial = builder.AddMaterial(material: new SdfMaterial(
@@ -1370,7 +1370,7 @@ public sealed class SdfDebugRenderer {
         );
 
         // CARVE-BAKE: the worst MIXED case adds MaxBricks full-resolution SampledRegion instances ON TOP of the full
-        // analytic pool (carve-bake plan §4) — over-covering (a baked bin's carves are NOT also emitted analytic), but
+        // analytic pool — over-covering (a baked bin's carves are NOT also emitted analytic), but
         // it keeps the frozen envelope safe for any settle state, brick or analytic.
         SdfCarveBakePlanner.EmitWorstCaseBricks(
             builder: builder,

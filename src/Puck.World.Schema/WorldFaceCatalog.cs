@@ -1,30 +1,23 @@
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
 using Puck.Maths;
+using Puck.SignedDistance;
 
 namespace Puck.World;
 
-/// <summary>Which region arm a face's named shape maps to.</summary>
-public enum WorldFaceApertureKind : byte {
-    /// <summary>The shape kind has no aperture mapping — the face can be drawn, but it cannot be walked through.
-    /// A portal facet on such a face is refused by name at validation.</summary>
-    None,
-
-    /// <summary>A planar rectangular aperture (<see cref="WorldFaceAperture.Box"/>).</summary>
-    Box,
-}
 /// <summary>
 /// One derived face: the geometry a placement's declared creation face resolves to, plus the screen source it shows
 /// and the slot that source claims.
 /// </summary>
 /// <param name="PlacementId">The owning placement's id.</param>
-/// <param name="FaceName">The declared <see cref="Puck.Forge.Authoring.CreationFaceDocument.Name"/>.</param>
+/// <param name="FaceName">The declared <see cref="Puck.World.Authoring.CreationFaceDocument.Name"/>.</param>
 /// <param name="ShapeId">The named shape id, or <see langword="null"/> when the face names none.</param>
 /// <param name="ShapeType">The named shape's primitive kind, or <see langword="null"/> when the face names none.</param>
 /// <param name="Frame">The face's derived geometry.</param>
-/// <param name="Aperture">Which region arm the named shape maps to.</param>
+/// <param name="Aperture">The region recipe the named shape's primitive opens (<see cref="WorldFaceApertures"/>), or
+/// <see langword="null"/> when it opens none — the face can be drawn, but not walked through.</param>
 /// <param name="Source">The resolved screen source.</param>
 /// <param name="ScreenIndex">The reserved derived-face screen index this row occupies, or <c>-1</c> when it holds
 /// none — either because <paramref name="Source"/> renders nothing or because the band was exhausted (see
@@ -35,9 +28,9 @@ public readonly record struct WorldFaceRow(
     string PlacementId,
     string FaceName,
     int? ShapeId,
-    AvatarPrimitive? ShapeType,
+    SdfSolidPrimitive? ShapeType,
     WorldFaceFrame Frame,
-    WorldFaceApertureKind Aperture,
+    WorldFaceApertureRecipe? Aperture,
     WorldScreenSource Source,
     int ScreenIndex,
     bool SlotStarved
@@ -70,15 +63,14 @@ public sealed class WorldFaceCatalog {
     private readonly Dictionary<(string PlacementId, string FaceName), int> m_index;
 
     private static readonly ConditionalWeakTable<WorldDefinition, WorldFaceCatalog> PerDefinition = new();
-    private static readonly FixedQ4816 DegreesToRadians = FixedQ4816.FromDouble(value: (Math.PI / 180.0));
-    // Puck.Forge.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
+    // Puck.World.Authoring.CreationFrame's 180°-about-+Y conversion quaternion, built the same way (an exact axis
     // swap/negate, never Quaternion.CreateFromAxisAngle) — the value every author-frame shape's own rotation carries
     // when the author declared none.
     private static readonly Quaternion EngineFrameHalfTurn = new(
+        w: 0f,
         x: 0f,
         y: 1f,
-        z: 0f,
-        w: 0f
+        z: 0f
     );
     private static readonly FixedQ4816 FallbackHalfDepthFixed = FixedQ4816.FromDouble(value: FallbackHalfDepth);
     private static readonly FixedQ4816 FallbackHalfHeightFixed = FixedQ4816.FromDouble(value: FallbackHalfHeight);
@@ -123,20 +115,6 @@ public sealed class WorldFaceCatalog {
     /// (<c>authoring.derivedFaceScreens</c>).</summary>
     public int SlotCapacity { get; }
 
-    // Only a Box maps onto the rectangular-slab arm today. Every other primitive — and a face naming no shape at
-    // all — draws its billboard but opens no aperture, so a portal facet on one is refused rather than silently
-    // walked through a rectangle nobody authored.
-    //
-    // THE ONE SHAPE-KIND DECISION. WorldDefinitionValidator's portal refusal and WorldFacePortalPolicy.TryAperture's
-    // region builder both read the WorldFaceApertureKind this method returns off the derived WorldFaceRow — neither
-    // re-asks ShapeType. TryAperture's own switch is the one remaining sibling: it dispatches on the KIND this
-    // method assigns to build each arm's region, so a new WorldFaceApertureKind arm owes both switches an entry, or
-    // TryAperture's default will silently answer "no aperture" for a shape the validator already approved.
-    private static WorldFaceApertureKind ApertureFor(ShapeDocument? shape) =>
-        ((shape is { Type: AvatarPrimitive.Box })
-            ? WorldFaceApertureKind.Box
-            : WorldFaceApertureKind.None
-        );
     private static bool DeclaresCamera(WorldDefinition definition, string name) {
         foreach (var camera in definition.Cameras) {
             if (string.Equals(
@@ -163,7 +141,7 @@ public sealed class WorldFaceCatalog {
                 (placement is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;
@@ -209,10 +187,11 @@ public sealed class WorldFaceCatalog {
                     ShapeId: shape?.Id,
                     ShapeType: shape?.Type,
                     Frame: DeriveFrame(
+                        definition: definition,
                         placement: placement,
                         shape: shape
                     ),
-                    Aperture: ApertureFor(shape: shape),
+                    Aperture: WorldFaceApertures.For(primitive: shape?.Type),
                     Source: source,
                     ScreenIndex: seated,
                     SlotStarved: starved
@@ -237,16 +216,17 @@ public sealed class WorldFaceCatalog {
     // own normal as Cross(Right, Up) (Client.WorldScreenStamper), so the drawn screen and the walked slab would sit
     // on planes that disagree by the pitch angle, with nothing to notice it. A yaw-only face is unaffected bit for
     // bit — rotating (0,1,0) about +Y leaves it unchanged exactly (both cross products vanish).
-    private static WorldFaceFrame DeriveFrame(WorldPlacement placement, ShapeDocument? shape) {
-        var origin = FixedVector3.FromVector3(value: placement.Position);
+    private static WorldFaceFrame DeriveFrame(WorldDefinition definition, WorldPlacement placement, ShapeDocument? shape) {
+        var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
+        var origin = FixedVector3.FromVector3(value: frame.Position);
         var scale = FixedQ4816.FromDouble(value: placement.Scale);
-        var yawDegrees = FixedQ4816.FromDouble(value: placement.YawDegrees);
+        var yawDegrees = FixedQ4816.FromDouble(value: frame.YawDegrees);
 
         // Authored cardinal yaw with an unrotated (or half-turned) face has an exact axis-aligned frame. Sending those
         // angles through pi, SinCos, quaternion rotation, and normalization introduces a small perpendicular
         // component, so reciprocal quilt faces that occupy the same plane derive different seam points. Preserve the
         // exact authored geometry. A shape's own rotation is HalfTurn (0,1,0,0), never Identity, whenever it entered
-        // the engine through Puck.Forge.Authoring.CreationFrame — the author-frame conversion pre-multiplies every
+        // the engine through Puck.World.Authoring.CreationFrame — the author-frame conversion pre-multiplies every
         // shape by exactly that quaternion, so an author's OWN unrotated shape is this exact value, not Identity, on
         // every real creation. Both are pure Y rotations Right/Normal negate under exactly, so both stay on this path.
         var shapeIsIdentity = ((shape is null) || shape.Rotation.Equals(other: Quaternion.Identity));
@@ -292,7 +272,7 @@ public sealed class WorldFaceCatalog {
         }
 
         var placementRotation = FixedQuaternion.FromAxisAngle(
-            angle: (yawDegrees * DegreesToRadians),
+            angle: (yawDegrees * WorldAngles.DegreesToRadians),
             axis: UnitY
         );
 
@@ -329,7 +309,7 @@ public sealed class WorldFaceCatalog {
                 (placement is null) ||
                 (WorldDefinitionRows.FindCreation(
                 creations: definition.Creations,
-                id: placement.CreationId
+                id: placement.PrototypeId
             ) is not { } creation)
             ) {
                 continue;

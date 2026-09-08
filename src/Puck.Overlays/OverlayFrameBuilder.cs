@@ -12,8 +12,8 @@ public enum OverlayPanelStyle : uint {
 /// <summary>
 /// The unified overlay's record packer: writers call the <c>Write*</c> methods in pixel coordinates (the design
 /// tokens are px values) and the builder packs normalized screen-space records into the one storage-buffer scratch —
-/// panels, then a flat element list (rects, fixed-cell text runs, icon chips), then the pre-resolved glyph-code
-/// words the text runs index. Preallocated once; <see cref="BeginFrame"/> resets it with zero steady-state
+/// panels, then a flat element list (rects, fixed-cell text runs, icon chips, rings, wedges, sampled frames), then
+/// the pre-resolved glyph-code words the text runs index. Preallocated once; <see cref="BeginFrame"/> resets it with zero steady-state
 /// allocation. Word layouts are documented at each writer — KEEP IN SYNC with <c>overlay-unified.frag.hlsl</c>.
 /// </summary>
 /// <remarks>
@@ -40,9 +40,9 @@ public sealed class OverlayFrameBuilder {
     /// <summary>The clip-rect ceiling (index 0 is the unclipped sentinel; the table holds indices 1..MaxClips) — a
     /// cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
     public const int MaxClips = 32;
-    /// <summary>The element-record ceiling (rects + rings + text runs + icon chips together) — a cannot-overflow
-    /// backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
-    public const int MaxElements = 1024;
+    /// <summary>The element-record ceiling (all rect, text, icon, ring, wedge, and sampled-frame records together) —
+    /// a cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
+    public const int MaxElements = 2048;
     /// <summary>The panel-record ceiling — a cannot-overflow backstop, never a budget.</summary>
     /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all — the four
     /// backstops size the GPU region the shader addresses. The budget is <see cref="OverlayChannelLeases"/>'
@@ -99,9 +99,11 @@ public sealed class OverlayFrameBuilder {
     /// <param name="glyphs">The shared glyph SDF pack (cell metrics + the static prefix the node uploads).</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
+    /// <param name="theme">The boot-resolved theme the token slab is filled from (see <see cref="UpdateTokenBlock"/>
+    /// for live retheme).</param>
     /// <exception cref="ArgumentNullException"><paramref name="leases"/> or <paramref name="glyphs"/> is
     /// <see langword="null"/>.</exception>
-    public OverlayFrameBuilder(OverlayChannelLeases leases, OverlayGlyphSdfPack glyphs, uint width, uint height) {
+    public OverlayFrameBuilder(OverlayChannelLeases leases, OverlayGlyphSdfPack glyphs, uint width, uint height, in OverlayThemeValues theme) {
         ArgumentNullException.ThrowIfNull(argument: leases);
         ArgumentNullException.ThrowIfNull(argument: glyphs);
 
@@ -128,12 +130,26 @@ public sealed class OverlayFrameBuilder {
         WordCount = (total + 3) & ~3;
         m_scratch = new uint[WordCount];
 
-        OverlayTokenBlock.Write(destination: m_scratch);
+        OverlayTokenBlock.Write(
+            destination: m_scratch,
+            theme: in theme
+        );
 
         for (var index = 0; (index < glyphs.PackedSdf.Count); index++) {
             m_scratch[(OverlayTokenBlock.WordCount + index)] = glyphs.PackedSdf[index];
         }
     }
+
+    /// <summary>Re-fills the token slab (the static prefix's front <see cref="OverlayTokenBlock.WordCount"/> words)
+    /// from a newly resolved theme, in place — the glyph atlas immediately after it is untouched. The caller (the
+    /// composition root, on a definition-revision change) is responsible for re-uploading
+    /// <see cref="Scratch"/>[..<see cref="OverlayTokenBlock.WordCount"/>] to the GPU buffer afterward; this call is
+    /// CPU-side only.</summary>
+    /// <param name="theme">The newly resolved theme.</param>
+    public void UpdateTokenBlock(in OverlayThemeValues theme) => OverlayTokenBlock.Write(
+        destination: m_scratch,
+        theme: in theme
+    );
 
     /// <summary>Gets the clip table's first word index.</summary>
     public int ClipBaseWords { get; }
@@ -197,31 +213,6 @@ public sealed class OverlayFrameBuilder {
         return ((int)channel);
     }
     private static uint Pack(float value) => BitConverter.SingleToUInt32Bits(value: value);
-    // A badge label's two 7-bit lanes at bits 9-15 (char0) and 16-22 (char1), each an (atlas glyph index + 1), or 0
-    // for the iconographic glyphs that stay procedural. The shader uses a present char0 as the atlas-text flag.
-    private static uint PackBadgeLabel(OverlayGlyphId glyph) {
-        if (OverlayGamepadGlyphs.BadgeLabel(glyph: glyph) is not { Length: > 0 } label) {
-            return 0u;
-        }
-
-        var first = OverlayGlyphSdfPack.GlyphIndex(codePoint: label[0]);
-
-        if (first < 0) {
-            return 0u;
-        }
-
-        var bits = (((uint)(first + 1)) << 9);
-
-        if (label.Length > 1) {
-            var second = OverlayGlyphSdfPack.GlyphIndex(codePoint: label[1]);
-
-            if (second >= 0) {
-                bits |= (((uint)(second + 1)) << 16);
-            }
-        }
-
-        return bits;
-    }
     // The one place both NoteRefused and WriteText's own maxChars truncation land: content the WRITER declared it
     // would never offer, kept in its own bucket (m_refused) so it can never be reported as a reservation overflow.
     private void RefuseOwnCap(int index, int elements, int textWords) {
@@ -389,14 +380,14 @@ public sealed class OverlayFrameBuilder {
         Array.Clear(array: m_dropped);
         Array.Clear(array: m_refused);
     }
-    /// <summary>The on-screen glyph cell height for a token type size — the size-to-cell ratio
-    /// (<c>TypeMonoLine / TypeMonoSize</c> = 1.5), so a 12px mono run gets an 18px cell.</summary>
-    /// <param name="sizePx">The token type size, px.</param>
+    /// <summary>The on-screen glyph cell height for a type size — the fixed size-to-cell ratio
+    /// (<see cref="DesignTokens.Glyph.CellAspectRatio"/> = 1.5), so a 12px run gets an 18px cell.</summary>
+    /// <param name="sizePx">The type size, px.</param>
     /// <returns>The cell height, px.</returns>
     public static int CellHeight(float sizePx) =>
         Math.Max(
             val1: 1,
-            val2: ((int)MathF.Round(x: (sizePx * (DesignTokens.Type.TypeMonoLine / DesignTokens.Type.TypeMonoSize))))
+            val2: ((int)MathF.Round(x: (sizePx * DesignTokens.Glyph.CellAspectRatio)))
         );
     /// <summary>The on-screen glyph cell width for a cell height, preserving the atlas' cell aspect.</summary>
     /// <param name="cellHeight">The cell height, px.</param>
@@ -478,25 +469,37 @@ public sealed class OverlayFrameBuilder {
     /// <returns>The run width, px.</returns>
     public float TextWidth(int chars, int cellHeight) => (chars * CellWidth(cellHeight: cellHeight));
     /// <summary>Packs one icon chip (the binding-bar repertoire folded in as an element kind: rounded plate with the
-    /// four chip-state tiers, a procedural action icon, and a gamepad badge — atlas letters or procedural symbols).
-    /// Word layout (12): 0..1 plate center (normalized) · 2 plate half-size (px) · 3 badge half-size (px) ·
-    /// 4 = 2 | (role &lt;&lt; 4, unused) · 5 glyph &lt;&lt; 16 | icon · 6 state (alpha byte | pressed&lt;&lt;8 |
-    /// (char0+1)&lt;&lt;9 | (char1+1)&lt;&lt;16 | accent&lt;&lt;23 | bound&lt;&lt;24) · 7..8 badge center offset from
-    /// the plate center (px floats) · 9 clip index · 10..11 reserved.</summary>
+    /// four chip-state tiers, a bound action's plate icon, and a physical-button badge — every glyph an ALREADY
+    /// RESOLVED atlas index, 1-based, 0 = none; the caller (never this builder, never the shader) turns an icon
+    /// name or a physical button into that index — see <c>Puck.World.WorldIconTable</c>). Word layout (12):
+    /// 0..1 plate center (normalized) · 2 plate half-size (px) · 3 badge half-size (px) ·
+    /// 4 = 2 | (accentRole &lt;&lt; 4; 0 selects the accent token) · 5 iconGlyph0 (low 16 bits; high 16 reserved) ·
+    /// 6 state (alpha byte | pressed&lt;&lt;8 | badgeGlyph0&lt;&lt;9 (7 bits) | badgeGlyph1&lt;&lt;16 (7 bits) |
+    /// accent&lt;&lt;23 | bound&lt;&lt;24 | toggled&lt;&lt;25) · 7..8 badge center offset from the plate center (px floats) ·
+    /// 9 clip index · 10 iconGlyph1 · 11 toggle phase (float, 0..1).</summary>
     /// <param name="centerX">The plate center x, px.</param>
     /// <param name="centerY">The plate center y, px.</param>
     /// <param name="plateHalf">The plate half-extent, px.</param>
     /// <param name="glyphHalf">The badge half-extent, px (0 = no badge).</param>
     /// <param name="glyphOffsetX">The badge center's x offset from the plate center, px.</param>
     /// <param name="glyphOffsetY">The badge center's y offset from the plate center, px.</param>
-    /// <param name="glyph">The physical-button badge glyph.</param>
-    /// <param name="icon">The bound action's icon.</param>
+    /// <param name="badgeGlyph0">The physical-button badge's first (or only) atlas glyph index, 1-based, 0 = no
+    /// badge. Capped at 7 bits (0..127) by the state word's packing.</param>
+    /// <param name="badgeGlyph1">The badge's second atlas glyph index (a 2-character label's second cell), 1-based,
+    /// 0 = a single-glyph badge. Capped at 7 bits (0..127).</param>
+    /// <param name="iconGlyph0">The bound action's first (or only) atlas glyph index, 1-based, 0 = no icon.</param>
+    /// <param name="iconGlyph1">The bound action's second atlas glyph index (a 2-character icon's second cell),
+    /// 1-based, 0 = a single-glyph icon.</param>
     /// <param name="alpha">The chip opacity.</param>
     /// <param name="pressed">The held tier-1 state.</param>
     /// <param name="accent">The accent tier-1 state (the context-primary action).</param>
     /// <param name="bound">Whether an action is bound (<see langword="false"/> = the disabled tier-0 look).</param>
+    /// <param name="accentRole">The accent tier's hue override — the role the plate fills and blooms in while
+    /// <paramref name="accent"/> is set — or <see langword="null"/> for the accent token.</param>
+    /// <param name="toggled">Whether the plate shows a latched toggle: a marching accent border circles it.</param>
+    /// <param name="togglePhase">The marching border's phase, 0..1 per cycle — the caller's presentation clock.</param>
     /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
-    public void WriteIcon(float centerX, float centerY, float plateHalf, float glyphHalf, float glyphOffsetX, float glyphOffsetY, OverlayGlyphId glyph, OverlayIconId icon, float alpha, bool pressed, bool accent, bool bound) {
+    public void WriteIcon(float centerX, float centerY, float plateHalf, float glyphHalf, float glyphOffsetX, float glyphOffsetY, ushort badgeGlyph0, ushort badgeGlyph1, ushort iconGlyph0, ushort iconGlyph1, float alpha, bool pressed, bool accent, bool bound, OverlayColorRole? accentRole = null, bool toggled = false, float togglePhase = 0f) {
         if (!TryTakeElement()) {
             return;
         }
@@ -507,8 +510,10 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
         m_scratch[(offset + 2)] = Pack(value: plateHalf);
         m_scratch[(offset + 3)] = Pack(value: glyphHalf);
-        m_scratch[(offset + 4)] = 2u;
-        m_scratch[(offset + 5)] = (((uint)glyph) << 16) | ((uint)icon);
+        // The accent tier's hue override rides the role bits (0 = the accent token): an outcome chip blooms in its
+        // own hue through the very tier a hovered chip blooms accent.
+        m_scratch[(offset + 4)] = 2u | (((uint)(accentRole ?? 0)) << 4);
+        m_scratch[(offset + 5)] = iconGlyph0;
         m_scratch[(offset + 6)] = ((uint)(Math.Clamp(
             max: 1f,
             min: 0f,
@@ -517,17 +522,23 @@ public sealed class OverlayFrameBuilder {
             | (pressed
             ? (1u << 8)
             : 0u)
-            | PackBadgeLabel(glyph: glyph)
+            | ((badgeGlyph0 & 0x7Fu) << 9)
+            | ((badgeGlyph1 & 0x7Fu) << 16)
             | (accent
             ? (1u << 23)
             : 0u)
             | (bound
             ? (1u << 24)
+            : 0u)
+            | (toggled
+            ? (1u << 25)
             : 0u
         );
         m_scratch[(offset + 7)] = Pack(value: glyphOffsetX);
         m_scratch[(offset + 8)] = Pack(value: glyphOffsetY);
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_scratch[(offset + 10)] = iconGlyph1;
+        m_scratch[(offset + 11)] = Pack(value: togglePhase);
         m_elementCount++;
     }
     /// <summary>Packs one panel-chrome record (scrim fill + hairline + optional title band + optional Tier-1
@@ -568,6 +579,58 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 8)] = Pack(value: alpha);
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_panelCount++;
+    }
+    /// <summary>Packs one sampled-frame element (a HUD picture-in-picture: a live <see cref="OverlayFrameSlots"/>
+    /// slot's content drawn into the element rect, e.g. the face-cam panel), optionally cross-faded with a second
+    /// slot. Word layout (12): 0..3 rect (normalized) · 4 = 4 | (slot &lt;&lt; 4) | (mirror &lt;&lt; 12) |
+    /// (fit &lt;&lt; 13) | ((slotB + 1) &lt;&lt; 16, 0 = no second slot) · 6 corner radius (px float) · 7 alpha ·
+    /// 8 mix (float, the weight of <paramref name="slot"/>; the shader samples both slots with the same fit/mirror
+    /// uv and blends <c>lerp(slotB, slot, mix)</c> before compositing) · 9 clip index. Word 8 is written only when
+    /// a second slot is present; it stays zero otherwise.</summary>
+    /// <param name="x">Left, px.</param>
+    /// <param name="y">Top, px.</param>
+    /// <param name="w">Width, px.</param>
+    /// <param name="h">Height, px.</param>
+    /// <param name="slot">The bound <see cref="OverlayFrameSlots"/> slot (<c>0..OverlayFrameSlots.SlotCount-1</c>)
+    /// the shader samples.</param>
+    /// <param name="fit">How the sampled content maps onto the element rect.</param>
+    /// <param name="mirror">Whether the sampled content flips horizontally.</param>
+    /// <param name="radius">The corner radius, px.</param>
+    /// <param name="alpha">The element opacity.</param>
+    /// <param name="slotB">The outgoing <see cref="OverlayFrameSlots"/> slot the shader cross-fades from, or -1 to
+    /// draw <paramref name="slot"/> alone.</param>
+    /// <param name="mix">The weight of <paramref name="slot"/> in the cross-fade, <c>[0,1]</c> (0 shows
+    /// <paramref name="slotB"/> alone, 1 shows <paramref name="slot"/> alone). Ignored when <paramref name="slotB"/>
+    /// is -1.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteFrame(float x, float y, float w, float h, int slot, OverlayHudFrameFit fit, bool mirror, float radius, float alpha, int slotB = -1, float mix = 1f) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (x * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (y * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: (w * m_inverseWidth));
+        m_scratch[(offset + 3)] = Pack(value: (h * m_inverseHeight));
+        m_scratch[(offset + 4)] = 4u
+            | (((uint)slot) << 4)
+            | (mirror
+            ? (1u << 12)
+            : 0u
+            )
+            | (((uint)fit) << 13)
+            | (((uint)(slotB + 1)) << 16);
+        m_scratch[(offset + 6)] = Pack(value: radius);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+
+        if (slotB >= 0) {
+            m_scratch[(offset + 8)] = Pack(value: mix);
+        }
+
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_elementCount++;
     }
     /// <summary>Packs one rounded-rect element (chip fill, selection fill, accent tick, state rail). Word layout
     /// (12): 0..3 rect (normalized) · 4 = 1 | (role &lt;&lt; 4) · 6 corner radius (px float) · 7 alpha ·
@@ -620,6 +683,75 @@ public sealed class OverlayFrameBuilder {
         m_scratch[(offset + 9)] = ((uint)m_activeClip);
         m_elementCount++;
     }
+    /// <summary>Packs one stroked hairline ring in a raw, caller-resolved color — the <see cref="OverlayColorRole.Custom"/>
+    /// form of <see cref="WriteRing(float, float, float, OverlayColorRole, float)"/>, for a marker ring whose color
+    /// an authored document token resolved (possibly against live state) rather than a fixed palette role. Word
+    /// layout (12): 0..1 center (normalized) · 2 radius (px float) · 4 = 3 | (Custom &lt;&lt; 4) · 5 color R (px
+    /// float) · 6 color G · 7 alpha · 8 color B · 9 clip index.</summary>
+    /// <param name="centerX">The ring center x, px.</param>
+    /// <param name="centerY">The ring center y, px.</param>
+    /// <param name="radius">The ring radius, px.</param>
+    /// <param name="color">The stroke's resolved color (alpha channel unused — <paramref name="alpha"/> carries
+    /// opacity).</param>
+    /// <param name="alpha">The element opacity.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteRing(float centerX, float centerY, float radius, RgbaColor color, float alpha) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: radius);
+        m_scratch[(offset + 4)] = 3u | (((uint)OverlayColorRole.Custom) << 4);
+        m_scratch[(offset + 5)] = Pack(value: color.R);
+        m_scratch[(offset + 6)] = Pack(value: color.G);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 8)] = Pack(value: color.B);
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_elementCount++;
+    }
+    /// <summary>Packs one filled annular sector — a radial menu's pie piece. Word layout (12): 0..1 center
+    /// (normalized) · 2 inner radius (px) · 3 outer radius (px) · 4 = 5 | (role &lt;&lt; 4) · 5 start angle ·
+    /// 6 sweep · 7 alpha · 8 gap (px) · 9 clip index · 10 glow role (0 = none). Angles are radians clockwise from
+    /// twelve o'clock, the wheel's own selection convention, so a piece and the gesture that selects it share one
+    /// transform.</summary>
+    /// <param name="centerX">The pie center x, px.</param>
+    /// <param name="centerY">The pie center y, px.</param>
+    /// <param name="innerRadius">The hole radius, px (0 for a full disc).</param>
+    /// <param name="outerRadius">The outer radius, px.</param>
+    /// <param name="startAngle">The piece's leading edge, radians clockwise from twelve.</param>
+    /// <param name="sweep">The piece's angular extent, radians (a full turn draws an unbroken ring/disc).</param>
+    /// <param name="gap">The half-width, px, trimmed off each angular edge so neighbours separate.</param>
+    /// <param name="role">The fill's color role.</param>
+    /// <param name="alpha">The element opacity (composes with the role's own alpha).</param>
+    /// <param name="glow">The glow's color role — a lit edge ring plus outward halo in that hue — or
+    /// <see langword="null"/> for no glow.</param>
+    /// <exception cref="InvalidOperationException">No channel scope is open.</exception>
+    public void WriteWedge(float centerX, float centerY, float innerRadius, float outerRadius, float startAngle, float sweep, float gap, OverlayColorRole role, float alpha, OverlayColorRole? glow = null) {
+        if (!TryTakeElement()) {
+            return;
+        }
+
+        var offset = (ElementBaseWords + (m_elementCount * ElementWords));
+
+        m_scratch[offset] = Pack(value: (centerX * m_inverseWidth));
+        m_scratch[(offset + 1)] = Pack(value: (centerY * m_inverseHeight));
+        m_scratch[(offset + 2)] = Pack(value: innerRadius);
+        m_scratch[(offset + 3)] = Pack(value: outerRadius);
+        m_scratch[(offset + 4)] = 5u | (((uint)role) << 4);
+        m_scratch[(offset + 5)] = Pack(value: startAngle);
+        m_scratch[(offset + 6)] = Pack(value: sweep);
+        m_scratch[(offset + 7)] = Pack(value: alpha);
+        m_scratch[(offset + 8)] = Pack(value: gap);
+        m_scratch[(offset + 9)] = ((uint)m_activeClip);
+        m_scratch[(offset + 10)] = ((glow is { } glowRole)
+            ? ((uint)glowRole)
+            : 0u);
+        m_elementCount++;
+    }
     /// <summary>Packs one fixed-cell text run (codes stored pre-resolved as atlas glyph indices; anything outside
     /// printable ASCII renders as the blank space cell). Word layout (12): 0..1 origin (normalized) · 2..3 one glyph
     /// cell's on-screen w/h (normalized) · 4 = 0 | (role &lt;&lt; 4) · 5 glyph start (word offset into the text
@@ -643,7 +775,7 @@ public sealed class OverlayFrameBuilder {
 
         // The CALLER'S OWN maxChars clamp, not a reservation limit — report the truncated tail on the same
         // writer's-own-cap path as NoteRefused so a silent per-character drop cannot hide behind a record-level
-        // narration. Covers the whole-run-refused edge case too (maxChars <= 0) that used to vanish silently.
+        // narration. Covers the whole-run-refused case too (maxChars <= 0), which reports rather than vanishing.
         if (count < text.Length) {
             RefuseOwnCap(
                 index: channelIndex,

@@ -8,12 +8,13 @@ namespace Puck.World;
 /// <summary>
 /// The <c>world.save</c> session-capture fold. A running world holds live session state that is
 /// not part of the loaded definition: the render levers the graphics verbs move (<see cref="WorldRenderSettings"/>), the
-/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), and the machines a
-/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>). The live census count
+/// peer-source default the population verb moves (<see cref="WorldPopulation.DefaultPeerSource"/>), the machines a
+/// runtime <c>screen.insert</c> booted onto declared screens (<see cref="WorldScreenBinder"/>), and the forced
+/// binding-bar visibility the <c>world.binding-bar</c> lever writes (<see cref="WorldBindingBarVisibility"/>). The live census count
 /// (<see cref="WorldPopulation.SimulatedCount"/>) is deliberately not folded — <c>networkPlayers</c> is a durable
 /// remote-admission cap, not the transient running count, so a save persists the authored cap and the running census is
 /// session-only. <see cref="Capture"/> composes a snapshot definition — the live definition
-/// (mutations already applied) with those three session dimensions folded into their document homes — so a save is a
+/// (mutations already applied) with those session dimensions folded into their document homes — so a save is a
 /// faithful snapshot of what is playing, and re-booting the saved file reproduces it.
 /// </summary>
 /// <remarks>Saved-bytes-only (the default policy): capture composes the snapshot the writer serializes; it never mutates
@@ -26,7 +27,7 @@ namespace Puck.World;
 /// <see cref="DescribeDrift"/> is the honest cheap witness of whether the live session has since diverged from the
 /// loaded document, reported by <c>world.status</c> at verb time; it does not (and need not) cover this dimension, since
 /// an advancing row is expected to keep moving regardless of any save.
-/// <para><b>Advancing state settles at save too.</b> A row/cell's <c>WorldStateAdvance</c>
+/// <para><b>Advancing state settles at save too.</b> A row/cell's <c>StateAdvance</c>
 /// epoch is session-relative (ticks since process start), so writing it verbatim leaves a reloaded document reading
 /// frozen until the next session's tick counter climbs back past the old epoch — the fresh session's clock restarts at
 /// 0. <see cref="CaptureState"/> folds every advancing row's slot cell and every advancing keyed cell's own base into
@@ -40,6 +41,28 @@ internal static class WorldSessionCapture {
     private static WorldAudioDefaults CaptureAudio(WorldAudioDirector audio, WorldAudioDefaults defaults) => (defaults with {
         MasterGain = audio.EffectiveMasterVolume,
     });
+    // Fold the binding-bar session lever into the world's own bar authoring. The lever is per-seat and the document
+    // has exactly one world-scoped bar row, so the PRIMARY local seat (slot 0, player 1) is the seat that folds; the
+    // other seats' overrides are live-only, having no document home to land in. An unengaged seat 0 (auto) leaves the
+    // authored value untouched, the same lever-owns-now/document-owns-boot asymmetry CaptureAudio states.
+    private static IReadOnlyList<WorldBindingOverlay>? CaptureBindingOverlays(WorldDefinition definition, WorldBindingBarVisibility visibility) {
+        var overlays = definition.BindingOverlaysRaw;
+
+        if (
+            (overlays is not { Count: > 0 }) ||
+            (overlays[0]?.BindingBar is not { } bar) ||
+            (visibility.Override(slot: 0) is not { } forced) ||
+            (bar.Enabled == forced)
+        ) {
+            return overlays;
+        }
+
+        var captured = new List<WorldBindingOverlay>(collection: overlays);
+
+        captured[0] = (overlays[0] with { BindingBar = (bar with { Enabled = forced }) });
+
+        return captured;
+    }
     /// <summary>Owns canonical document and hash capture for every persisted asset-row family.</summary>
     private static IReadOnlyList<TAsset> CaptureCanonicalAssets<TAsset, TDocument>(
         IReadOnlyList<TAsset> assets,
@@ -70,12 +93,12 @@ internal static class WorldSessionCapture {
     // The world.save hash recompute: every creation row re-crosses the ONE canonicalize pipeline so the persisted
     // doc + hash come from the SAME CanonicalCreation. Rows are already canonical at compose time, so this is exactly
     // idempotent (no drift dimension) — it exists so the SAVED file's pin can never diverge from its embedded bytes.
-    private static IReadOnlyList<WorldCreation> CaptureCreations(IReadOnlyList<WorldCreation> creations) =>
+    private static IReadOnlyList<WorldPrototype> CaptureCreations(IReadOnlyList<WorldPrototype> creations) =>
         CaptureCanonicalAssets(
             assets: creations,
             id: static creation => creation.Id,
             document: static creation => creation.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+            canonicalize: static (document, source) => Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
                 document: document,
                 source: source
             ),
@@ -85,33 +108,30 @@ internal static class WorldSessionCapture {
     // boot-only field is preserved as authored.
     private static WorldHostDefaults CaptureHost(WorldHostDefaults host, PresentPacingControl pacing) =>
         (host with { TargetHertz = pacing.TargetHertz, Timing = GpuTimingControl.Shared.Armed });
-    // Fold the live cable-link set back into the Links section (the world.save home for screen.link / world.row.set links).
-    // When the binder holds no runtime links, the document's own Links carries forward unchanged, so declared links not
-    // yet established at boot are preserved rather than dropped.
-    private static IReadOnlyList<WorldScreenLink> CaptureLinks(WorldDefinition definition, WorldScreenBinder binder) {
-        var live = binder.CaptureLinks();
+    // The cable port each screen should carry after a save, from the binder's link table — the authoritative set
+    // (declared groups reconcile into it, dormant included, and screen.link/.unlink edit it): a member screen folds
+    // its (name, position) home onto its row's machine source, and a screen in no link folds null (an unlink clears
+    // the port). A link over a screen whose folded source is not a machine is unrepresentable in the document and is
+    // left out — the runtime group simply does not survive the save.
+    private static Dictionary<int, WorldMachineCable> BuildCableMap(WorldScreenBinder binder) {
+        var map = new Dictionary<int, WorldMachineCable>();
 
-        return ((live.Count == 0)
-            ? definition.Links
-            : live
-        );
+        foreach (var group in binder.CaptureLinks()) {
+            for (var position = 0; (position < group.Screens.Count); position++) {
+                map[group.Screens[position]] = new WorldMachineCable(
+                    Name: group.Name,
+                    Position: position
+                );
+            }
+        }
+
+        return map;
     }
-    private static IReadOnlyList<WorldPatch> CapturePatches(IReadOnlyList<WorldPatch> patches) =>
-        CaptureCanonicalAssets(
-            assets: patches,
-            id: static patch => patch.Id,
-            document: static patch => patch.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.SynthPatchCanonicalizer.Canonicalize(
-                document: document,
-                source: source
-            ),
-            replace: static (patch, canonical) => (patch with { Document = canonical.Document, Hash = canonical.Hash })
-        );
     // Fold the live peer-source default; the local-seat count and the networkPlayers CAP are durable document config, not
     // live figures (R-C: networkPlayers is a remote admission cap, not the live census count — the running count is
     // transient session state that world.save does not persist), so they stay as authored. This keeps a fresh default
     // world byte-clean through a boot-and-save round-trip even though its boot census is zero.
-    private static WorldPopulationDefaults CapturePopulation(WorldPopulation population, WorldPopulationDefaults defaults) => (defaults with {
+    private static WorldBodiesDefaults CapturePopulation(WorldPopulation population, WorldBodiesDefaults defaults) => (defaults with {
         DefaultPeerSourceRaw = population.DefaultPeerSource,
     });
     // Fold the live render levers into the document's render-lever boot defaults, quantizing the continuous shadow reach
@@ -123,11 +143,12 @@ internal static class WorldSessionCapture {
         RenderScale = NearestRenderScaleTier(scale: render.RenderScale),
         UpscaleSharpness = render.UpscaleSharpness,
     });
-    // Fold a live machine insert on each declared screen back into that row's Machine source, and the live magazine
-    // selector back into that row's Magazine.Selected; a screen with no live insert / no magazine keeps its declared
-    // source / magazine untouched.
+    // Fold a live machine insert on each declared screen back into that row's Machine source, the live cable-link
+    // table back into each machine source's cable port, and the live magazine selector back into that row's
+    // Magazine.Selected; a screen with no live insert / no link / no magazine keeps its declared row untouched.
     private static IReadOnlyList<WorldScreen> CaptureScreens(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
         var captured = new List<WorldScreen>(capacity: screens.Count);
+        var cables = BuildCableMap(binder: binder);
 
         foreach (var screen in screens) {
             var row = (binder.TryReadMachineInsert(
@@ -140,11 +161,20 @@ internal static class WorldSessionCapture {
                     Source = new WorldScreenSource.Machine(
                     ContentPath: contentPath,
                     Engine: engine,
-                    Options: options
+                    Options: options,
+                    Cable: (screen.Source as WorldScreenSource.Machine)?.Cable
                 ),
                 })
                 : screen
             );
+
+            if (row.Source is WorldScreenSource.Machine machine) {
+                var cable = cables.GetValueOrDefault(key: screen.Index);
+
+                if (machine.Cable != cable) {
+                    row = (row with { Source = (machine with { Cable = cable }) });
+                }
+            }
 
             if (
                 (row.Magazine is { } magazine) &&
@@ -164,13 +194,18 @@ internal static class WorldSessionCapture {
         return captured;
     }
     // The save-time settle: a row declaring its OWN Advance (a slot-shaped row) gets its one cell rebased to the live
-    // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (WorldStateCell.Advance)
+    // computed value at `tick`, epoch projected to 0; a KEYED row's independently-advancing cells (StateCell.Advance)
     // settle the same way, one at a time, leaving any non-advancing cell in the same row untouched. Both read through
-    // WorldStateAdvance.ComputeCurrentValue — the SAME computation world.state/a rule gate/a HUD binding already read live
-    // — so the projected base is exactly what an observer would have seen this session, never a re-derived guess. A row
-    // with nothing advancing returns unchanged (no allocation), matching CaptureLinks/CaptureScreens' own "nothing
-    // drifted, hand back the original list" idiom.
-    private static IReadOnlyList<WorldStateRow> CaptureState(IReadOnlyList<WorldStateRow> rows, ulong tick) {
+    // StateAdvance.ComputeCurrentValue — the SAME computation world.state/a rule gate/a HUD binding already read live
+    // — so the projected base is exactly what an observer would have seen this session, never a re-derived guess. A
+    // Dynamics trait settles the same way but on the TRAIT alone, never the cell's own stored truth: Y0/V0 become the
+    // live eased value/velocity WorldStateReader.TryEvaluateDynamics reports at `tick`, epoch projected to 0, so a
+    // reloaded session's follower resumes exactly where this one left it rather than snapping back to rest. A row
+    // with nothing advancing or easing returns unchanged (no allocation), matching CaptureLinks/CaptureScreens' own
+    // "nothing drifted, hand back the original list" idiom.
+    private static IReadOnlyList<WorldStateRow> CaptureState(WorldDefinition definition, ulong tick) {
+        var rows = definition.State;
+
         if (rows.Count == 0) {
             return rows;
         }
@@ -180,6 +215,7 @@ internal static class WorldSessionCapture {
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
             var settledRow = SettleRow(
+                definition: definition,
                 row: row,
                 tick: tick
             );
@@ -196,66 +232,6 @@ internal static class WorldSessionCapture {
         }
 
         return (((IReadOnlyList<WorldStateRow>?)captured) ?? rows);
-    }
-    // The audio-asset twins of CaptureCreations: every tune/patch row re-crosses its ONE canonicalize pipeline so
-    // the persisted doc + hash come from the SAME canonical result — idempotent at compose time, drift-proof on disk.
-    private static IReadOnlyList<WorldTune> CaptureTunes(IReadOnlyList<WorldTune> tunes) =>
-        CaptureCanonicalAssets(
-            assets: tunes,
-            id: static tune => tune.Id,
-            document: static tune => tune.Document,
-            canonicalize: static (document, source) => Puck.Forge.Authoring.AudioCanonicalizer.Canonicalize(
-                document: document,
-                source: source
-            ),
-            replace: static (tune, canonical) => (tune with { Document = canonical.Document, Hash = canonical.Hash })
-        );
-    // Content-compare the folded live link set against the document's Links rows (name + ordered members), the same way
-    // ScreensDrifted compares machine sources: true exactly when a world.save would rewrite the Links section. The capture
-    // preserves declared-link order (ReconcileLinks establishes rows in declared order), so a save that reproduces the file
-    // reports no drift.
-    private static bool LinksDrifted(WorldDefinition definition, WorldScreenBinder binder) {
-        var captured = CaptureLinks(
-            binder: binder,
-            definition: definition
-        );
-
-        if (ReferenceEquals(
-            objA: captured,
-            objB: definition.Links
-        )) {
-            return false;
-        }
-
-        var declared = definition.Links;
-
-        if (captured.Count != declared.Count) {
-            return true;
-        }
-
-        for (var index = 0; (index < captured.Count); index++) {
-            var live = captured[index];
-            var row = declared[index];
-
-            if (
-                !string.Equals(
-                a: live.Name,
-                b: row.Name,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                (live.Screens.Count != row.Screens.Count)
-            ) {
-                return true;
-            }
-
-            for (var member = 0; (member < live.Screens.Count); member++) {
-                if (live.Screens[member] != row.Screens[member]) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
     // The nearest safe render-scale tier to a continuous live scale — the reverse of WorldRenderScaleTiers.Scale, matching
     // WorldCommandModule.RenderScaleName's tolerance so a tier round-trips exactly and a continuous override quantizes to
@@ -277,6 +253,8 @@ internal static class WorldSessionCapture {
         return best;
     }
     private static bool ScreensDrifted(IReadOnlyList<WorldScreen> screens, WorldScreenBinder binder) {
+        var cables = BuildCableMap(binder: binder);
+
         foreach (var screen in screens) {
             if (
                 binder.TryReadMachineInsert(
@@ -305,6 +283,15 @@ internal static class WorldSessionCapture {
                 return true;
             }
 
+            // Cable drift: the live link table's port for this screen differs from the declared machine source's —
+            // a runtime screen.link, an unlink, or a member/order change (the same comparison the save's fold makes).
+            if (
+                (screen.Source is WorldScreenSource.Machine declaredMachine) &&
+                (declaredMachine.Cable != cables.GetValueOrDefault(key: screen.Index))
+            ) {
+                return true;
+            }
+
             // Selector drift: the live magazine pointer moved off the row's authored Selected.
             if (
                 (screen.Magazine is { } magazine) &&
@@ -321,10 +308,15 @@ internal static class WorldSessionCapture {
 
         return false;
     }
-    private static WorldStateRow SettleRow(WorldStateRow row, ulong tick) {
+    private static WorldStateRow SettleRow(WorldDefinition definition, WorldStateRow row, ulong tick) {
+        // A declared-but-never-set slot row holds no cell yet, so there is nothing to settle and nothing to index.
+        if (row.Cells is not { Count: > 0 }) {
+            return row;
+        }
+
         // A slot-shaped row's OWN trait governs its one cell — the row-level counterpart of a keyed cell's own trait
-        // below, and never both on the SAME cell (the validator refuses a slot-shaped row from declaring Advance
-        // beside a keyed cells array in the first place).
+        // below, and never both on the SAME cell (the validator refuses a slot-shaped row from declaring Advance or
+        // Dynamics beside a keyed cells array, or the two together, in the first place).
         if (row.Advance is { } rowAdvance) {
             var slot = row.Cells![0];
             var settledValue = rowAdvance.ComputeCurrentValue(
@@ -339,28 +331,93 @@ internal static class WorldSessionCapture {
             });
         }
 
+        if (row.Dynamics is { } rowDynamics) {
+            var slot = row.Cells![0];
+
+            if (!WorldStateReader.TryEvaluateDynamics(
+                cell: slot,
+                definition: definition,
+                row: row,
+                sample: out var sample,
+                tick: tick,
+                trait: out _
+            )) {
+                return row;
+            }
+
+            return (row with {
+                Dynamics = (rowDynamics with {
+                    EpochTick = 0,
+                    V0 = StateReader.DynamicsFixedToTraitRaw(value: sample.Velocity),
+                    Y0 = StateReader.DynamicsFixedToTraitRaw(value: sample.Value),
+                }),
+            });
+        }
+
+        // A cycling slot settles to its current rotation index (or node) at epoch zero and carries its current
+        // substep remainder, so reload preserves both the value now and the tick of the next transition.
+        if (row.Cycle is { } rowCycle) {
+            var slot = row.Cells![0];
+
+            return (row with {
+                Cycle = (rowCycle with { EpochTick = 0, SubstepTicks = rowCycle.SettledSubstep(currentTick: tick) }),
+                Cells = [(slot with { Value = rowCycle.SettledPhase(baseValue: slot.Value, currentTick: tick, row: row) })],
+            });
+        }
+
         if (row.Cells is not { Count: > 0 } cells) {
             return row;
         }
 
-        List<WorldStateCell>? settledCells = null;
+        List<StateCell>? settledCells = null;
 
         for (var index = 0; (index < cells.Count); index++) {
             var cell = cells[index];
 
-            if (cell.Advance is not { } cellAdvance) {
+            if (cell.Advance is { } cellAdvance) {
+                settledCells ??= new List<StateCell>(collection: cells);
+                settledCells[index] = (cell with {
+                    Value = cellAdvance.ComputeCurrentValue(
+                    row: row,
+                    baseValue: cell.Value,
+                    currentTick: tick
+                ),
+                    Advance = (cellAdvance with { EpochTick = 0 }),
+                });
+
                 continue;
             }
 
-            settledCells ??= new List<WorldStateCell>(collection: cells);
-            settledCells[index] = (cell with {
-                Value = cellAdvance.ComputeCurrentValue(
+            if (cell.Cycle is { } cellCycle) {
+                settledCells ??= new List<StateCell>(collection: cells);
+                settledCells[index] = (cell with {
+                    Value = cellCycle.SettledPhase(baseValue: cell.Value, currentTick: tick, row: row),
+                    Cycle = (cellCycle with { EpochTick = 0, SubstepTicks = cellCycle.SettledSubstep(currentTick: tick) }),
+                });
+
+                continue;
+            }
+
+            if (
+                (cell.Dynamics is { } cellDynamics) &&
+                WorldStateReader.TryEvaluateDynamics(
+                cell: cell,
+                definition: definition,
                 row: row,
-                baseValue: cell.Value,
-                currentTick: tick
-            ),
-                Advance = (cellAdvance with { EpochTick = 0 }),
-            });
+                sample: out var cellSample,
+                tick: tick,
+                trait: out _
+            )
+            ) {
+                settledCells ??= new List<StateCell>(collection: cells);
+                settledCells[index] = (cell with {
+                    Dynamics = (cellDynamics with {
+                        EpochTick = 0,
+                        V0 = StateReader.DynamicsFixedToTraitRaw(value: cellSample.Velocity),
+                        Y0 = StateReader.DynamicsFixedToTraitRaw(value: cellSample.Value),
+                    }),
+                });
+            }
         }
 
         return ((settledCells is null)
@@ -370,9 +427,11 @@ internal static class WorldSessionCapture {
     }
 
     /// <summary>Composes the save snapshot: the live definition with the session dimensions (render levers, the
-    /// peer-source default, screen inserts, the master-volume lever) folded into <see cref="WorldDefinition.Render"/>,
+    /// peer-source default, screen inserts, the master-volume lever, the primary seat's forced binding-bar
+    /// visibility) folded into <see cref="WorldDefinition.Render"/>,
     /// <see cref="WorldDefinition.Population"/>, the <see cref="WorldDefinition.Screens"/> rows' machine sources,
-    /// <see cref="WorldDefinition.Audio"/>'s master gain, and every advancing <see cref="WorldDefinition.State"/> row/cell
+    /// <see cref="WorldDefinition.Audio"/>'s master gain, <see cref="WorldDefinition.BindingOverlays"/>'s first row,
+    /// and every advancing <see cref="WorldDefinition.State"/> row/cell
     /// settled at <paramref name="tick"/> (see this type's remarks). The transient census count is not folded.</summary>
     /// <param name="definition">The server's live definition (mutations already applied).</param>
     /// <param name="render">The live render levers.</param>
@@ -380,17 +439,23 @@ internal static class WorldSessionCapture {
     /// <param name="binder">The live screen binder (runtime machine inserts).</param>
     /// <param name="audio">The audio director (the <c>world.volume</c> session lever).</param>
     /// <param name="pacing">The live present-pacing control (the <c>world.target</c> session lever).</param>
+    /// <param name="bindingBar">The live per-seat binding-bar visibility (the <c>world.binding-bar</c> session lever).</param>
     /// <param name="tick">The server's completed tick — the instant <c>state</c>'s advancing rows/cells settle at.</param>
     /// <returns>The snapshot definition to serialize.</returns>
-    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, ulong tick) {
+    public static WorldDefinition Capture(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, WorldBindingBarVisibility bindingBar, ulong tick) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: render);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: binder);
         ArgumentNullException.ThrowIfNull(argument: audio);
         ArgumentNullException.ThrowIfNull(argument: pacing);
+        ArgumentNullException.ThrowIfNull(argument: bindingBar);
 
         return (definition with {
+            BindingOverlaysRaw = CaptureBindingOverlays(
+            definition: definition,
+            visibility: bindingBar
+        ),
             RenderRaw = CaptureRender(
             render: render,
             defaults: definition.Render
@@ -403,14 +468,7 @@ internal static class WorldSessionCapture {
             screens: definition.Screens,
             binder: binder
         ),
-            // The live cable-link set folds into the Links section (declared + runtime), so a save reproduces the groups.
-            LinksRaw = CaptureLinks(
-            binder: binder,
-            definition: definition
-        ),
             CreationsRaw = CaptureCreations(creations: definition.Creations),
-            TunesRaw = CaptureTunes(tunes: definition.Tunes),
-            PatchesRaw = CapturePatches(patches: definition.Patches),
             AudioRaw = CaptureAudio(
             audio: audio,
             defaults: definition.Audio
@@ -421,7 +479,7 @@ internal static class WorldSessionCapture {
         ),
             StateRaw = ((definition.StateRaw ?? new WorldStateSection()) with {
                 World = CaptureState(
-            rows: definition.State,
+            definition: definition,
             tick: tick
         ),
             }),
@@ -429,16 +487,17 @@ internal static class WorldSessionCapture {
     }
     /// <summary>A cheap, verb-time (never per-tick) description of which session dimensions have drifted from the loaded
     /// document's defaults: <c>none</c> when a save would reproduce the file, else a <c>+</c>-joined list of the drifted
-    /// dimensions (<c>render</c>, <c>population</c>, <c>screens</c>, <c>audio</c>) — the honest <c>world.status</c> session-drift hint.</summary>
+    /// dimensions (<c>render</c>, <c>population</c>, <c>screens</c>, <c>audio</c>, <c>host</c>, <c>bindings</c>) — the honest <c>world.status</c> session-drift hint.</summary>
     /// <param name="definition">The server's live definition.</param>
     /// <param name="render">The live render levers.</param>
     /// <param name="population">The live entity table.</param>
     /// <param name="binder">The live screen binder.</param>
     /// <param name="audio">The audio director (the master-volume lever).</param>
     /// <param name="pacing">The live present-pacing control (the <c>world.target</c> lever).</param>
+    /// <param name="bindingBar">The live per-seat binding-bar visibility (the <c>world.binding-bar</c> lever).</param>
     /// <returns>The drift hint token.</returns>
-    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing) {
-        var drifted = new List<string>(capacity: 5);
+    public static string DescribeDrift(WorldDefinition definition, WorldRenderSettings render, WorldPopulation population, WorldScreenBinder binder, WorldAudioDirector audio, PresentPacingControl pacing, WorldBindingBarVisibility bindingBar) {
+        var drifted = new List<string>(capacity: 6);
 
         if (CaptureRender(
             render: render,
@@ -461,17 +520,6 @@ internal static class WorldSessionCapture {
             drifted.Add(item: "screens");
         }
 
-        // Links drift: the folded live link set differs by content from the document's rows (a runtime screen.link, an
-        // unlink, or a member-set change). A reference compare would be a false positive — CaptureLinks returns a FRESH
-        // list whenever the binder holds any link, so a purely-declared link set (which a save reproduces byte-for-byte)
-        // would otherwise report drift forever.
-        if (LinksDrifted(
-            binder: binder,
-            definition: definition
-        )) {
-            drifted.Add(item: "links");
-        }
-
         if (
             audio.MasterVolumeLeverEngaged &&
             (audio.EffectiveMasterVolume != definition.Audio.MasterGain)
@@ -486,6 +534,18 @@ internal static class WorldSessionCapture {
             pacing: pacing
         ) != definition.Host) {
             drifted.Add(item: "host");
+        }
+
+        // Reference-compares against the raw rows: CaptureBindingOverlays hands the SAME list back whenever nothing
+        // folded, so an unforced (or already-agreeing) bar never reports drift.
+        if (!ReferenceEquals(
+            objA: CaptureBindingOverlays(
+            definition: definition,
+            visibility: bindingBar
+        ),
+            objB: definition.BindingOverlaysRaw
+        )) {
+            drifted.Add(item: "bindings");
         }
 
         return ((drifted.Count == 0)

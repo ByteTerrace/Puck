@@ -1,0 +1,6 @@
+world.state.cell.set destination scout 15
+world.wait 1
+world.state positions scout
+world.state moves scout
+world.state hand
+wire.errors

@@ -1,0 +1,6 @@
+.vs/
+.vscode/
+*.parameters.json
+Properties/launchSettings.json
+bin/
+obj/

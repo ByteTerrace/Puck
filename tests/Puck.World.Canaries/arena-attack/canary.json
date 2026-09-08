@@ -1,0 +1,56 @@
+{
+  "id": "arena-attack",
+  "title": "The arena district's hp/targeting/attack suite lands damage on a training dummy in range and refuses it out of range",
+  "binding": "The positive leg boots a minimal host that imports modules/arena.world.json under alias arena, confirms world.imports names it with its declared exports, poses the local seat 1.5 units from one training dummy (auto-target locks onto it via $nearest:body:0:enemy since it is the only body tagged in the enemy row), arms world.rule.trace on arena_manual-attack, presses the attack channel once, and reads the trace back: the gate opens (channel pressed, target set, distance 1.5 <= 2.5, cooldown clear, attacker not dead) and its addState effect on arena_hp at the targeted body's cell applies -25 — the hp fall the task proves, read from the rule's own evaluation record rather than a raw hp number, since a raw hp reading drifts by whatever the regen suite ticks in during real-time console processing (not a per-run constant) while the traced gate/effect outcome is not. The discriminating leg reruns the identical approach-and-press with the seat 20 units away instead of 1.5: auto-target still locks the same dummy (targeting has no range limit), the channel presses exactly the same way, but the trace's distance conjunct now reads false and the gate never opens, so the exact addState line the positive leg proves never appears — the same rule, the same press, only the range differs.",
+  "bootShape": "headless",
+  "requirements": [],
+  "seconds": 10,
+  "timeoutSeconds": 25,
+  "fixtures": [],
+  "positive": {
+    "world": "tests/Puck.World.Canaries/arena-attack/fixture.world.json",
+    "script": "positive.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.imports", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.rule.trace", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.rule.trace", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "arena-imported-with-exports", "stream": "stdout", "match": "contains", "text": "as arena [bodyMotionPrograms,channels,interactions,kits,navigation,placements,prototypes,rules,spawnPoints,state] exports[reads:hp,targeted,dead,elementLabel bindings:hp,targeted]", "present": true },
+      { "type": "line", "name": "auto-target-locks-dummy", "stream": "stdout", "match": "contains", "text": "'arena_targeted'.'0' value=2", "present": true },
+      { "type": "line", "name": "attack-gate-opens-in-range", "stream": "stdout", "match": "contains", "text": "gate=open: $channel:1:attack >= 1: 1 >= 1 -> true", "present": true },
+      { "type": "line", "name": "hp-falls-by-25", "stream": "stdout", "match": "contains", "text": "addState arena_hp.$cell:arena_targeted:0 = -25 = -25: applied", "present": true },
+      { "type": "line", "name": "no-mutation-rejected", "stream": "stderr", "match": "contains", "text": "world.mutation rejected", "present": false },
+      { "type": "line", "name": "no-unhandled-exception", "stream": "stderr", "match": "contains", "text": "Unhandled exception", "present": false }
+    ]
+  },
+  "discriminating": {
+    "world": "tests/Puck.World.Canaries/arena-attack/fixture.world.json",
+    "script": "discriminating.script.txt",
+    "commands": [
+      { "verb": "world.status", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.pose", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 2, "outcome": "accepted" },
+      { "verb": "world.state", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.rule.trace", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "body.press", "occurrence": 1, "outcome": "accepted" },
+      { "verb": "world.wait", "occurrence": 3, "outcome": "accepted" },
+      { "verb": "world.rule.trace", "occurrence": 2, "outcome": "accepted" }
+    ],
+    "expect": [
+      { "type": "line", "name": "auto-target-still-locks-dummy-out-of-range", "stream": "stdout", "match": "contains", "text": "'arena_targeted'.'0' value=2", "present": true },
+      { "type": "line", "name": "attack-channel-still-presses", "stream": "stdout", "match": "contains", "text": "$channel:1:attack >= 1: 1 >= 1 -> true", "present": true },
+      { "type": "line", "name": "distance-conjunct-fails", "stream": "stdout", "match": "contains", "text": "<= 2.5 -> false", "present": true },
+      { "type": "line", "name": "gate-never-opens-out-of-range", "stream": "stdout", "match": "contains", "text": "gate=open", "present": false },
+      { "type": "line", "name": "hp-never-falls-out-of-range", "stream": "stdout", "match": "contains", "text": "addState arena_hp.$cell:arena_targeted:0 = -25 = -25: applied", "present": false }
+    ]
+  }
+}

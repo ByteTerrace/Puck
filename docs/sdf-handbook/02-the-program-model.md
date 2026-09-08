@@ -163,6 +163,13 @@ mask away tiles the grown shell reaches and the surface would hole at tile seams
 Scope depth is capped at one today, which covers "hollow this one object in a full
 scene" without opening the door to arbitrary nesting.
 
+The public `SdfProgram` constructor enforces that structure even for a
+hand-assembled instruction stream: every push must have one pop, nesting may not
+exceed the one-deep interpreter slot, and a scope may not cross between the
+unmasked world stream and an instance-owned slice. A crossing scope would save
+under one mask owner and restore under another, so it is malformed program data,
+not a culling mode.
+
 The payoff is that a program stays a flat stream — no tree, no allocation, one
 running value — while still expressing "operate on just this part."
 

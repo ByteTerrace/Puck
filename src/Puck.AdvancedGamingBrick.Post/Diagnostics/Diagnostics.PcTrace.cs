@@ -1,7 +1,7 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --pctrace <rom> <steps>: print executing 0x08… instruction addresses, to diff against the cosim oracle.
-internal static partial class Diagnostics {
+internal sealed partial class Diagnostics {
     /// <summary>
     /// Traces per-instruction cycle accounting for a ROM, to diff against the cycle-exact cosim oracle. Prints
     /// (step, PC, cumulative cycles, delta) for each instruction, plus the final value the micro-ROM stored to
@@ -9,7 +9,7 @@ internal static partial class Diagnostics {
     /// </summary>
     /// <summary>Prints the executing instruction address for each game-ROM (0x08…) instruction, matching the
     /// cosim oracle's --pctrace format, so the two streams can be diffed to find the first execution divergence.</summary>
-    public static void PcTrace(string romPath, long steps) {
+    public void PcTrace(string romPath, long steps) {
         if (!TryLoad(
             romPath: romPath,
             name: Path.GetFileName(path: romPath),

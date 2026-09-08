@@ -11,6 +11,11 @@ public interface IPostStage<TContext> {
     string Name { get; }
     /// <summary>The tier this stage belongs to (drives ordering and <c>--tier</c> selection).</summary>
     PostTier Tier { get; }
+    /// <summary>Whether the battery may run this stage at the same time as its concurrent neighbours. A stage says so
+    /// when it owns every machine it builds, shares nothing through static state, and neither measures wall-clock
+    /// time nor needs a quiet processor; a stage that reports throughput or allocation, or that already saturates every
+    /// processor itself, leaves this false and runs alone.</summary>
+    bool IsConcurrent => false;
 
     /// <summary>Runs the stage's checks once and returns the outcome.</summary>
     /// <param name="context">The shared run context.</param>

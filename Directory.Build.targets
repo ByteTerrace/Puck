@@ -1,4 +1,9 @@
 <Project>
+    <ItemGroup Condition="'$(PuckKind)' == 'Test' OR '$(PuckKind)' == 'Validation' OR '$(MSBuildProjectName)' == 'Puck.Cli'">
+        <!-- Repository-only executables resolve live files from their checkout,
+             independently of deterministic compiler source-path mapping. -->
+        <Compile Include="$(MSBuildThisFileDirectory)build\RepositoryPaths.cs" Link="Properties\RepositoryPaths.cs" />
+    </ItemGroup>
     <PropertyGroup>
         <!-- Derived here rather than in Directory.Build.props: $(NuGetPackageRoot) is set by NuGet's
              generated props, which import after Directory.Build.props but before this file. Properties

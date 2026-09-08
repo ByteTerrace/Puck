@@ -19,21 +19,31 @@ namespace Puck.World;
 /// policy), a <c>$type</c>-discriminated union as <c>anyOf</c> with a <c>const</c> arm per
 /// <see cref="System.Text.Json.Serialization.JsonDerivedTypeAttribute"/>, and a named-value <c>enum</c> for every
 /// <see cref="StrictEnumConverter{TEnum}"/> member. This generator adds only what the exporter cannot infer on its
-/// own: curated hover text pulled from the assembly's XML documentation (<c>Puck.World.Schema.xml</c> beside
-/// it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
-/// introspect and that opts in via <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyStringVocabulary"/>),
-/// the document root's one deliberate strictness exception — the <see cref="WorldDefinition.Extensions"/>
+/// own: curated hover text pulled from the XML documentation of this assembly and of <c>Puck.State</c>
+/// (<c>Puck.World.Schema.xml</c> and <c>Puck.State.xml</c> beside it), a <c>type</c>/<c>enum</c> constraint for a member whose <see cref="JsonConverter{T}"/> the exporter cannot
+/// introspect and that opts in via <see cref="IJsonSchemaTypeConverter"/> or
+/// <see cref="IJsonSchemaStringConverter"/> (<see cref="ApplyConverterVocabulary"/>), a whole node — required
+/// members, kind-conditional types, exclusivity rules — for a converter that opts into
+/// <see cref="IJsonSchemaNodeConverter"/>, <c>items</c>/<c>additionalProperties</c> for a collection whose own
+/// element/value type the exporter left unconstrained, a <c>$comment</c> marking a raw <see cref="JsonElement"/>
+/// slot whose shape an id named elsewhere in the document decides, the document root's one deliberate strictness
+/// exception — the <see cref="WorldDefinition.Extensions"/>
 /// round-trip bag, which admits any <c>$</c>/<c>_</c>-prefixed key (<see cref="DocumentExtensionsPolicy"/>) and so
-/// cannot be a flat <c>additionalProperties: false</c> — and the multi-file split: a small root plus one file per
+/// cannot be a flat <c>additionalProperties: false</c> — <c>x-puck</c>/<c>properties.schema.const</c>
+/// self-identification, and the multi-file split: a small root plus one file per
 /// top-level document section under <c>schema/</c>, with every subschema that appears more than once hoisted into
 /// <c>schema/common.schema.json</c> under <c>$defs</c> so a person can open <c>kits.schema.json</c> and read the
 /// schema for the <c>kits</c> section without wading through the other 43.
 /// </summary>
-public static class WorldSchema {
+public static partial class WorldSchema {
     // Below this compact-JSON length, a repeated node is left inlined: the $ref text would cost more than the
     // duplicate content saves, and a two/three-word leaf isn't a "shape" a reader benefits from finding by name.
     private const int HoistMinimumLength = 60;
-    private const string XmlDocumentationFileName = "Puck.World.Schema.xml";
+    // Every assembly whose types the document embeds; each one's generated XML doc file rides beside the DLL.
+    private static readonly (string FileName, Type Anchor)[] XmlDocumentationFiles = [
+        ("Puck.World.Schema.xml", typeof(WorldDefinition)),
+        ("Puck.State.xml", typeof(ValueExpression)),
+    ];
 
     /// <summary>The file name shared shapes live under, inside the sections directory.</summary>
     public const string CommonDefsFileName = "common.schema.json";
@@ -44,14 +54,14 @@ public static class WorldSchema {
     public const string ProjectionSchemaId = WorldProjectionDocument.SchemaVersion;
     /// <summary>The schema's stable identity — the same tag <see cref="WorldDefinition.SchemaVersion"/> carries.</summary>
     public const string SchemaId = WorldDefinition.SchemaVersion;
-    /// <summary>The silo schema's stable identity — the same tag <see cref="WorldSiloDefinition.SchemaVersion"/> carries.</summary>
-    public const string SiloSchemaId = WorldSiloDefinition.SchemaVersion;
     /// <summary>The directory (relative to the root schema file) every section and <see cref="CommonDefsFileName"/> live in.</summary>
     public const string SectionsDirectoryName = "schema";
+    /// <summary>The silo schema's stable identity — the same tag <see cref="WorldSiloDefinition.SchemaVersion"/> carries.</summary>
+    public const string SiloSchemaId = WorldSiloDefinition.SchemaVersion;
 
     private static readonly Lazy<IReadOnlyDictionary<string, XElement>?> XmlDocIndex = new(valueFactory: LoadXmlDocIndex);
 
-    /// <summary>Gets whether the assembly's XML documentation file was found and loaded. <see langword="false"/>
+    /// <summary>Gets whether every XML documentation file the schema draws on was found and loaded. <see langword="false"/>
     /// means <see cref="Export"/> still succeeds but every node's <c>description</c> is omitted — a caller (the
     /// <c>puck schema</c> verb) reports that plainly rather than failing.</summary>
     public static bool HasXmlDocumentation =>
@@ -67,19 +77,65 @@ public static class WorldSchema {
     /// <param name="Common">The <c>common.schema.json</c> document: a single <c>$defs</c> object holding every
     /// subschema referenced from more than one place, named after the CLR type it came from where that is
     /// recoverable.</param>
-    /// <param name="DefAnchors">Per-def bundling hint, keyed by the same name <see cref="Common"/> uses: the
-    /// document-absolute JSON pointer <see cref="Bundle"/> re-inlines that def's content at (reproducing exactly
-    /// where the un-split generator originally put it) when the exporter itself recognized the shape as repeated,
-    /// or <see langword="null"/> when it did not (a polymorphic union arm regenerated fresh at every occurrence,
-    /// e.g. <c>ActionPredicate.CompareState</c>) — <see cref="Bundle"/> then fully duplicates that def's content at
-    /// every site instead of sharing one copy, matching what the un-split generator actually produced.</param>
-    public sealed record SplitSchema(JsonObject Root, IReadOnlyList<(string Name, JsonNode Node)> Sections, JsonObject Common, IReadOnlyDictionary<string, string?> DefAnchors);
+    public sealed record SplitSchema(JsonObject Root, IReadOnlyList<(string Name, JsonNode Node)> Sections, JsonObject Common);
     /// <summary>One shipped post-render extension — a shader set's id and its config JSON Schema — spliced into
     /// <c>render.extensions[]</c> so an entry's <c>config</c> validates by its <c>id</c>.</summary>
     /// <param name="Id">The extension id a document's <c>render.extensions[].id</c> names.</param>
     /// <param name="ConfigSchema">The set's config JSON Schema (<c>Puck.Shaders.ShaderSetManifest.ConfigJsonSchema</c>).</param>
     public sealed record PostRenderExtensionSchema(string Id, JsonObject ConfigSchema);
 
+    private static bool AllowsNull(JsonNode node) {
+        if (node is not JsonObject obj) {
+            return false;
+        }
+        if (
+            (obj["type"] is JsonValue scalarType) &&
+            scalarType.TryGetValue<string>(value: out var typeName) &&
+            string.Equals(
+            a: typeName,
+            b: "null",
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            return true;
+        }
+
+        foreach (var key in new[] { "type", "enum", "anyOf", "oneOf" }) {
+            if (obj[key] is not JsonArray values) {
+                continue;
+            }
+            foreach (var value in values) {
+                if (value is null) {
+                    return true;
+                }
+                if (
+                    (value is JsonValue token) &&
+                    token.TryGetValue<string>(value: out var text) &&
+                    string.Equals(
+                    a: text,
+                    b: "null",
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
+                    return true;
+                }
+                if (
+                    (value is JsonObject arm) &&
+                    (arm["type"] is JsonValue armType) &&
+                    armType.TryGetValue<string>(value: out var armTypeName) &&
+                    string.Equals(
+                    a: armTypeName,
+                    b: "null",
+                    comparisonType: StringComparison.Ordinal
+                )
+                ) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
     private static void AppendChildren(StringBuilder builder, XElement element) {
         foreach (var child in element.Nodes()) {
             AppendDocNode(
@@ -138,23 +194,114 @@ public static class WorldSchema {
                 break;
         }
     }
+    // Splices the shipped extension vocabulary into #/properties/render/properties/extensions/items: `id` becomes an
+    // enum over the shipped ids, and one `allOf` arm per id constrains `config` to that set's own schema when `id`
+    // matches. The exporter cannot know the vocabulary — it is a deploy fact (which manifests ship), not a type
+    // fact — so the caller supplies it.
+    private static void ApplyPostRenderExtensions(IReadOnlyList<PostRenderExtensionSchema> extensions, JsonObject root) {
+        if (root["properties"]?["render"]?["properties"]?["extensions"]?["items"] is not JsonObject items) {
+            return;
+        }
+        if (items["properties"]?["id"] is not JsonObject id) {
+            return;
+        }
+        // An empty catalog narrows nothing: an "enum"/"allOf" built from zero entries would validate NO document
+        // rather than every document, the opposite of "nothing shipped yet".
+        if (extensions.Count == 0) {
+            return;
+        }
+
+        var ids = new JsonArray();
+        var arms = new JsonArray();
+
+        foreach (var extension in extensions) {
+            ids.Add(item: ((JsonNode)JsonValue.Create(value: extension.Id)));
+            arms.Add(item: ((JsonNode)new JsonObject {
+                ["if"] = new JsonObject {
+                    ["properties"] = new JsonObject {
+                        ["id"] = new JsonObject { ["const"] = extension.Id },
+                    },
+                    ["required"] = new JsonArray("id"),
+                },
+                ["then"] = new JsonObject {
+                    ["properties"] = new JsonObject {
+                        ["config"] = extension.ConfigSchema.DeepClone(),
+                    },
+                },
+            }));
+        }
+
+        id["enum"] = ids;
+        items["allOf"] = arms;
+    }
     // DEFECT: the exporter emits no "type"/"enum" for a member whose JsonConverter it cannot introspect (a fully
     // custom JsonConverter<T> — the schema shows the fully permissive `true`, promoted to `{}` by AsObjectNode),
     // which means the generated schema admits a document the loader refuses (e.g. "durability":"fresh" — a string
     // the loader's own WorldDestinationDurabilityJsonConverter would reject, but an unconstrained schema accepts).
     // Fixed here by asking the RESOLVED converter (via JsonSerializerOptions.GetConverter, the same resolution the
     // loader itself uses — closed generics, [JsonConverter] attributes, and the context's own Converters array all
-    // resolve through one call) whether it opts into IJsonSchemaStringConverter; a converter that does not is a
-    // converter this generator has no mechanical way to describe (an object shape, a number, an open grammar like
-    // GrantSubject's "body:<n>" — see WorldSchema's own sweep notes) and is left exactly as the exporter produced
-    // it. Never widens an ALREADY-typed node (a $type union arm, a native enum) — only ever adds to the fully
+    // resolve through one call) whether it opts into IJsonSchemaTypeConverter or IJsonSchemaStringConverter; a
+    // converter that does not is one this generator has no mechanical way to describe (an object shape or an open
+    // grammar like GrantSubject's "body:<n>" — see WorldSchema's own sweep notes) and is left exactly as the
+    // exporter produced it. Never widens an ALREADY-typed node (a $type union arm, a native enum) — only ever adds to the fully
     // permissive `{}` AsObjectNode just promoted.
-    private static void ApplyStringVocabulary(JsonObject obj, Type propertyType) {
+    private static void ApplyConverterVocabulary(JsonObject obj, Type propertyType, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         if (
             obj.ContainsKey(propertyName: "type") ||
             obj.ContainsKey(propertyName: "enum") ||
             obj.ContainsKey(propertyName: "anyOf")
         ) {
+            return;
+        }
+
+        // A raw JsonElement slot (render.extensions[].config, probes[].config, metadata.custom's dictionary
+        // values) carries no CLR shape this generator could ever describe — its actual contract is decided by an
+        // id this document names elsewhere (a shipped shader manifest, a probe extension) that this generator has
+        // no way to resolve for an as-yet-unauthored id. Left fully permissive, with a $comment naming why, rather
+        // than narrowed to a shape that would refuse a legitimate payload.
+        if ((Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType) == typeof(JsonElement)) {
+            obj["$comment"] = "Open payload: this member's shape is decided by an id named elsewhere in the document, never by this generator.";
+
+            return;
+        }
+
+        if (TryGetNodeConverter(
+            propertyType: propertyType,
+            converter: out var nodeConverter
+        )) {
+            // The converter describes its own node; an object arm it references is exported through the same
+            // transform so its members are described and hoisted like any other shape.
+            var shape = nodeConverter.BuildSchema(exportType: type => ExportNested(
+                index: index,
+                nested: nested,
+                type: type,
+                typesByNode: typesByNode
+            ));
+
+            foreach (var (name, value) in shape.ToList()) {
+                shape.Remove(propertyName: name);
+                obj[name] = value;
+            }
+
+            return;
+        }
+
+        if (TryGetTypeVocabulary(
+            propertyType: propertyType,
+            types: out var types
+        )) {
+            var typeArray = new JsonArray();
+
+            foreach (var type in types) {
+                typeArray.Add(item: type);
+            }
+
+            if (Nullable.GetUnderlyingType(nullableType: propertyType) is not null) {
+                typeArray.Add(item: "null");
+            }
+
+            obj["type"] = typeArray;
+
             return;
         }
 
@@ -228,7 +375,9 @@ public static class WorldSchema {
         // The exporter materializes T and nullable T as distinct shapes but reports the same TypeInfo.Type for
         // both. Give that meaningful distinction a meaningful name instead of leaking traversal order through a
         // numeric suffix in the generated schema.
-        var qualifiedName = $"{baseName}{(AllowsNull(node: node) ? "Nullable" : "NonNullable")}";
+        var qualifiedName = $"{baseName}{(AllowsNull(node: node)
+            ? "Nullable"
+            : "NonNullable")}";
 
         if (state.UsedNames.Add(item: qualifiedName)) {
             return qualifiedName;
@@ -241,58 +390,6 @@ public static class WorldSchema {
                 return candidate;
             }
         }
-    }
-    private static bool AllowsNull(JsonNode node) {
-        if (node is not JsonObject obj) {
-            return false;
-        }
-        if (
-            (obj["type"] is JsonValue scalarType) &&
-            scalarType.TryGetValue<string>(value: out var typeName) &&
-            string.Equals(
-                a: typeName,
-                b: "null",
-                comparisonType: StringComparison.Ordinal
-            )
-        ) {
-            return true;
-        }
-
-        foreach (var key in new[] { "type", "enum", "anyOf", "oneOf" }) {
-            if (obj[key] is not JsonArray values) {
-                continue;
-            }
-            foreach (var value in values) {
-                if (value is null) {
-                    return true;
-                }
-                if (
-                    (value is JsonValue token) &&
-                    token.TryGetValue<string>(value: out var text) &&
-                    string.Equals(
-                        a: text,
-                        b: "null",
-                        comparisonType: StringComparison.Ordinal
-                    )
-                ) {
-                    return true;
-                }
-                if (
-                    (value is JsonObject arm) &&
-                    (arm["type"] is JsonValue armType) &&
-                    armType.TryGetValue<string>(value: out var armTypeName) &&
-                    string.Equals(
-                        a: armTypeName,
-                        b: "null",
-                        comparisonType: StringComparison.Ordinal
-                    )
-                ) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
     private static string CollapseWhitespace(string text) =>
         string.Join(
@@ -427,13 +524,16 @@ public static class WorldSchema {
         );
     // Depth-first expansion of every $ref, with cycle detection via activePaths — the FULL ancestry chain of
     // document-absolute paths currently being expanded, ordinary nesting and $ref jumps alike (every call pushes
-    // its own currentPath for its duration, not just a ref-jump target). A $ref whose target is already on that
-    // chain is genuinely recursive (its target is an ancestor of itself, reached either by nesting down to it
-    // directly or by jumping through one or more other $refs first) and is left as-is, an opaque marker for
-    // FixupCyclicMarkers to repoint later. Every other $ref — including ones the exporter emitted purely because
-    // the SAME concrete TypeInfo recurred in an unrelated branch — is fully substituted, so category-1
-    // (exporter-deduplicated) and category-2 (independently regenerated, e.g. a polymorphic union arm) duplicates
-    // both end up as plain inline text for one uniform dedup pass.
+    // its own currentPath for its duration, not just a ref-jump target) — and via activeTypes, the CLR types of
+    // the nodes on that same chain. A $ref is genuinely recursive when its target is an ancestor of itself by
+    // path, OR when its target's type is already being expanded: a polymorphic union whose arms each hold the
+    // union again is regenerated by the exporter once per recursive member before it starts emitting $refs, so
+    // every level's refs point at a DIFFERENT path of the same type, and by path alone each level multiplies the
+    // expansion by its ref count — exponential in the member count. Either way the ref is left as-is, an opaque
+    // marker for FixupCyclicMarkers to repoint later. Every other $ref — including ones the exporter emitted
+    // purely because the SAME concrete TypeInfo recurred in an unrelated branch — is fully substituted, so
+    // category-1 (exporter-deduplicated) and category-2 (independently regenerated, e.g. a polymorphic union arm)
+    // duplicates both end up as plain inline text for one uniform dedup pass.
     private static JsonNode ExpandRefs(
         JsonNode node,
         Dictionary<string, JsonNode> pathIndex,
@@ -441,6 +541,7 @@ public static class WorldSchema {
         Dictionary<JsonNode, Type> expandedTypes,
         Dictionary<JsonNode, string> originByNode,
         HashSet<string> activePaths,
+        HashSet<Type> activeTypes,
         string currentPath) {
         if (
             (node is JsonObject refObj) &&
@@ -455,7 +556,18 @@ public static class WorldSchema {
                 comparisonType: StringComparison.Ordinal
             )).ToList();
 
-            if (activePaths.Contains(item: targetPath)) {
+            var recursiveByType = (pathIndex.TryGetValue(
+                key: targetPath,
+                value: out var targetForType
+            ) && typesByNode.TryGetValue(
+                key: targetForType,
+                value: out var targetType
+            ) && activeTypes.Contains(item: targetType));
+
+            if (
+                activePaths.Contains(item: targetPath) ||
+                recursiveByType
+            ) {
                 // A genuine cycle — preserve any sibling keywords (e.g. an occurrence-specific "default") next to
                 // the still-raw marker; FixupCyclicMarkers repoints only the "$ref" value once its target has a def.
                 var marker = new JsonObject { ["$ref"] = targetPath };
@@ -472,6 +584,7 @@ public static class WorldSchema {
                             expandedTypes: expandedTypes,
                             originByNode: originByNode,
                             activePaths: activePaths,
+                activeTypes: activeTypes,
                             currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
                         )
                         : null
@@ -496,6 +609,7 @@ public static class WorldSchema {
             // already carries.
             var expandedTarget = ExpandRefs(
                 activePaths: activePaths,
+                activeTypes: activeTypes,
                 currentPath: targetPath,
                 expandedTypes: expandedTypes,
                 node: targetNode,
@@ -520,6 +634,7 @@ public static class WorldSchema {
                         expandedTypes: expandedTypes,
                         originByNode: originByNode,
                         activePaths: activePaths,
+                activeTypes: activeTypes,
                         currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
                     )
                     : null
@@ -530,6 +645,10 @@ public static class WorldSchema {
         }
 
         var pushed = activePaths.Add(item: currentPath);
+        var pushedType = (typesByNode.TryGetValue(
+            key: node,
+            value: out var ownType
+        ) && activeTypes.Add(item: ownType));
         JsonNode result;
 
         try {
@@ -545,6 +664,7 @@ public static class WorldSchema {
                             expandedTypes: expandedTypes,
                             originByNode: originByNode,
                             activePaths: activePaths,
+                activeTypes: activeTypes,
                             currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}"
                         )
                         : null
@@ -561,6 +681,7 @@ public static class WorldSchema {
                     newArr.Add(item: ((value is not null)
                         ? ExpandRefs(
                             activePaths: activePaths,
+                activeTypes: activeTypes,
                             currentPath: $"{currentPath}/{i}",
                             expandedTypes: expandedTypes,
                             node: value,
@@ -579,61 +700,28 @@ public static class WorldSchema {
             if (pushed) {
                 activePaths.Remove(item: currentPath);
             }
+            if (pushedType) {
+                activeTypes.Remove(item: ownType!);
+            }
         }
 
-        if (typesByNode.TryGetValue(
-            key: node,
-            value: out var type
-        )) {
-            expandedTypes[result] = type;
+        if (ownType is not null) {
+            expandedTypes[result] = ownType;
         }
 
         originByNode[result] = currentPath;
 
         return result;
     }
-    // Splices the shipped extension vocabulary into #/properties/render/properties/extensions/items: `id` becomes an
-    // enum over the shipped ids, and one `allOf` arm per id constrains `config` to that set's own schema when `id`
-    // matches. The exporter cannot know the vocabulary — it is a deploy fact (which manifests ship), not a type
-    // fact — so the caller supplies it.
-    private static void ApplyPostRenderExtensions(IReadOnlyList<PostRenderExtensionSchema> extensions, JsonObject root) {
-        if (root["properties"]?["render"]?["properties"]?["extensions"]?["items"] is not JsonObject items) {
-            return;
-        }
-        if (items["properties"]?["id"] is not JsonObject id) {
-            return;
-        }
-
-        var ids = new JsonArray();
-        var arms = new JsonArray();
-
-        foreach (var extension in extensions) {
-            ids.Add(item: ((JsonNode)JsonValue.Create(value: extension.Id)));
-            arms.Add(item: ((JsonNode)new JsonObject {
-                ["if"] = new JsonObject {
-                    ["properties"] = new JsonObject {
-                        ["id"] = new JsonObject { ["const"] = extension.Id },
-                    },
-                    ["required"] = new JsonArray("id"),
-                },
-                ["then"] = new JsonObject {
-                    ["properties"] = new JsonObject {
-                        ["config"] = extension.ConfigSchema.DeepClone(),
-                    },
-                },
-            }));
-        }
-
-        id["enum"] = ids;
-        items["allOf"] = arms;
-    }
     private static (JsonObject Root, Dictionary<JsonNode, Type> TypesByNode) ExportMergedWithTypes() {
         var index = XmlDocIndex.Value;
         var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+        NestedExports? nested = null;
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
             index: index,
+            nested: nested,
             node: node,
             typesByNode: typesByNode
         ),
@@ -945,6 +1033,17 @@ public static class WorldSchema {
             node: obj,
             state: state
         ));
+    // Whether a document root type declares an [JsonExtensionData] member — the root patternProperties carve-out
+    // below applies only to a family that actually has an extension bag to carve a hole for.
+    private static bool HasJsonExtensionData(Type rootType) {
+        foreach (var property in rootType.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
+            if (property.IsDefined(attributeType: typeof(JsonExtensionDataAttribute))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
     // Post-order: children are hash-consed (and possibly replaced with a $defs placeholder) before a parent that
     // is ITSELF a group member gets promoted, so a promoted def's stored content already reflects any child that
     // was itself hoisted — the standard maximal-sharing behavior (compareState's five copies collapse to one def
@@ -1106,150 +1205,6 @@ public static class WorldSchema {
             }
         }
     }
-    // Inlines every reference to a NON-recursive def at every site it appears (full duplication, undoing the
-    // split's dedup — exactly what the un-split generator would have produced). A recursive def gets exactly one
-    // physical expansion (the first the walk reaches); every other reference to it, including its own internal
-    // self-reference, is repointed at that one location's absolute path — the same shape the un-split generator's
-    // own cycle-breaking $ref already takes.
-    private static JsonNode InlineBundleRefs(JsonNode node, string currentPath, JsonObject defs, IReadOnlyDictionary<string, string?> anchors, Dictionary<string, string> liveAnchors) {
-        if (node is JsonObject obj) {
-            string? name = null;
-
-            if (IsCommonFileRef(
-                name: out var commonName,
-                obj: obj
-            )) {
-                name = commonName;
-            } else if (IsLocalDefRef(
-                name: out var localName,
-                obj: obj
-            )) {
-                name = localName;
-            }
-
-            if (name is not null) {
-                var anchored = (anchors.TryGetValue(
-                    key: name,
-                    value: out var anchorPath
-                ) && (anchorPath is not null));
-
-                // An anchored def (exporter-recognized as repeated) gets exactly one physical expansion, at its
-                // first encounter in walk order — everywhere else (including its own nested self-reference, which
-                // by then finds the live anchor set) becomes a plain pointer to that one position. An unanchored
-                // def is fully duplicated at every site instead.
-                if (
-                    anchored &&
-                    liveAnchors.TryGetValue(
-                    key: name,
-                    value: out var liveAnchor
-                )
-                ) {
-                    // A ref site carries its own re-sited occurrence annotations ("description"/"default") beside
-                    // "$ref" — exactly how the exporter's un-split output spells the same site.
-                    var refNode = new JsonObject { ["$ref"] = liveAnchor };
-
-                    foreach (var (key, value) in obj) {
-                        if (!string.Equals(
-                            a: key,
-                            b: "$ref",
-                            comparisonType: StringComparison.Ordinal
-                        )) {
-                            refNode[key] = value?.DeepClone();
-                        }
-                    }
-
-                    return refNode;
-                }
-
-                if (anchored) {
-                    liveAnchors[name] = currentPath;
-                }
-
-                var inlined = InlineBundleRefs(
-                    node: defs[name]!,
-                    currentPath: currentPath,
-                    defs: defs,
-                    anchors: anchors,
-                    liveAnchors: liveAnchors
-                );
-
-                // A fully-expanded site takes its own occurrence annotations back onto the inlined content (a site
-                // description replaces the def's type-level one, matching what the un-split exporter would have
-                // annotated in place).
-                if (inlined is JsonObject inlinedObj) {
-                    foreach (var (key, value) in obj) {
-                        if (string.Equals(
-                            a: key,
-                            b: "$ref",
-                            comparisonType: StringComparison.Ordinal
-                        )) {
-                            continue;
-                        }
-
-                        inlinedObj.Remove(propertyName: key);
-
-                        if (
-                            string.Equals(
-                            a: key,
-                            b: "description",
-                            comparisonType: StringComparison.Ordinal
-                        ) &&
-                            (value is not null)
-                        ) {
-                            Prepend(
-                                obj: inlinedObj,
-                                propertyName: "description",
-                                value: value.GetValue<string>()
-                            );
-                        } else {
-                            inlinedObj[key] = value?.DeepClone();
-                        }
-                    }
-                }
-
-                return inlined;
-            }
-
-            var newObj = new JsonObject();
-
-            foreach (var (key, value) in obj) {
-                newObj[key] = ((value is not null)
-                    ? InlineBundleRefs(
-                        node: value,
-                        currentPath: $"{currentPath}/{EscapePointerSegment(segment: key)}",
-                        defs: defs,
-                        anchors: anchors,
-                        liveAnchors: liveAnchors
-                    )
-                    : null
-                );
-            }
-
-            return newObj;
-        }
-
-        if (node is JsonArray arr) {
-            var newArr = new JsonArray();
-
-            for (var i = 0; (i < arr.Count); i++) {
-                var value = arr[i];
-
-                newArr.Add(item: ((value is not null)
-                    ? InlineBundleRefs(
-                        anchors: anchors,
-                        currentPath: $"{currentPath}/{i}",
-                        defs: defs,
-                        liveAnchors: liveAnchors,
-                        node: value
-                    )
-                    : null));
-            }
-
-            return newArr;
-        }
-
-        return node.DeepClone()!;
-    }
     private static bool IsCollectionLike(Type genericDefinition) =>
         ((genericDefinition == typeof(List<>)) ||
         (genericDefinition == typeof(IReadOnlyList<>)) ||
@@ -1258,52 +1213,13 @@ public static class WorldSchema {
         (genericDefinition == typeof(ICollection<>)) ||
         (genericDefinition == typeof(IList<>)));
     // ---- bundling --------------------------------------------------------------------------------------------
+    // Bundle() and its own titled-shape hoist live in WorldSchema.Bundle.cs.
 
-    private static bool IsCommonFileRef(JsonObject obj, out string name) {
-        const string Prefix = $"./{CommonDefsFileName}#/$defs/";
-
-        if (ContainsRefKey(obj: obj)) {
-            var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
-
-            if (value.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Prefix
-            )) {
-                name = value[Prefix.Length..];
-
-                return true;
-            }
-        }
-
-        name = string.Empty;
-
-        return false;
-    }
     // A hoist candidate is a genuine named SHAPE — an object type (has "properties"), an enum, or a $type union
     // (has "anyOf") — never a bare leaf (a plain {"type":"string"} with a coincidentally-matching description
     // isn't a shared concept worth a name), and long enough that a $ref costs fewer bytes than it saves.
     private static bool IsHoistCandidate(JsonObject obj) =>
         (obj.ContainsKey(propertyName: "properties") || obj.ContainsKey(propertyName: "enum") || obj.ContainsKey(propertyName: "anyOf"));
-    private static bool IsLocalDefRef(JsonObject obj, out string name) {
-        const string Prefix = "#/$defs/";
-
-        if (ContainsRefKey(obj: obj)) {
-            var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
-
-            if (value.StartsWith(
-                comparisonType: StringComparison.Ordinal,
-                value: Prefix
-            )) {
-                name = value[Prefix.Length..];
-
-                return true;
-            }
-        }
-
-        name = string.Empty;
-
-        return false;
-    }
     private static bool IsPlaceholderRef(JsonObject obj, out string name) {
         if (ContainsRefKey(obj: obj)) {
             var value = ((JsonValue)obj["$ref"]!).GetValue<string>();
@@ -1322,49 +1238,73 @@ public static class WorldSchema {
 
         return false;
     }
+    // The universe StampTitle draws a def-worthy name from: a document-model type this repository declares, never
+    // a collection (its element gets its own node and title), a generic instantiation, an array, or a BCL/System.Text.Json
+    // type (JsonElement, JsonNode, string, DateTime, Guid, ...) — none of which live under the Puck namespace.
+    private static bool IsTitledType(Type type) {
+        var underlying = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+        return (
+            !underlying.IsGenericType &&
+            !underlying.IsArray &&
+            (underlying.Namespace is { } ns) &&
+            ns.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "Puck"
+        ) &&
+            (underlying.IsClass || underlying.IsValueType || underlying.IsEnum)
+        );
+    }
+    // Every listed file must load: a missing one would silently drop every description its assembly owns, and
+    // the schema check would then fail on content rather than name the absent file.
     private static IReadOnlyDictionary<string, XElement>? LoadXmlDocIndex() {
-        var path = LocateXmlDocumentationFile();
+        var index = new Dictionary<string, XElement>(comparer: StringComparer.Ordinal);
 
-        if (path is null) {
-            return null;
-        }
+        foreach (var (fileName, anchor) in XmlDocumentationFiles) {
+            var path = LocateXmlDocumentationFile(
+                anchor: anchor,
+                fileName: fileName
+            );
 
-        try {
-            var document = XDocument.Load(uri: path);
-            var members = document.Root?.Element(name: "members")?.Elements(name: "member");
-
-            if (members is null) {
+            if (path is null) {
                 return null;
             }
 
-            var index = new Dictionary<string, XElement>(comparer: StringComparer.Ordinal);
+            try {
+                var document = XDocument.Load(uri: path);
+                var members = document.Root?.Element(name: "members")?.Elements(name: "member");
 
-            foreach (var member in members) {
-                if (((string?)member.Attribute(name: "name")) is { } name) {
-                    index[name] = member;
+                if (members is null) {
+                    return null;
                 }
-            }
 
-            return index;
-        } catch (Exception exception) when (((exception is IOException) || (exception is System.Xml.XmlException) || (exception is UnauthorizedAccessException))) {
-            return null;
+                foreach (var member in members) {
+                    if (((string?)member.Attribute(name: "name")) is { } name) {
+                        index[name] = member;
+                    }
+                }
+            } catch (Exception exception) when (((exception is IOException) || (exception is System.Xml.XmlException) || (exception is UnauthorizedAccessException))) {
+                return null;
+            }
         }
+
+        return index;
     }
     // Beside AppContext.BaseDirectory covers every real caller (puck.exe's own output directory, where a
     // referenced project's generated XML doc file is copied alongside its DLL — the same pattern
-    // Puck.Maths.xml already rides for this CLI); the assembly's own location is the fallback for a host that
-    // loads this assembly from elsewhere.
-    private static string? LocateXmlDocumentationFile() {
+    // Puck.Maths.xml already rides for this CLI); the owning assembly's own location is the fallback for a host
+    // that loads it from elsewhere.
+    private static string? LocateXmlDocumentationFile(Type anchor, string fileName) {
         var beside = Path.Combine(
             path1: AppContext.BaseDirectory,
-            path2: XmlDocumentationFileName
+            path2: fileName
         );
 
         if (File.Exists(path: beside)) {
             return beside;
         }
 
-        var assemblyLocation = typeof(WorldDefinition).Assembly.Location;
+        var assemblyLocation = anchor.Assembly.Location;
 
         if (string.IsNullOrEmpty(value: assemblyLocation)) {
             return null;
@@ -1372,7 +1312,7 @@ public static class WorldSchema {
 
         var besideAssembly = Path.Combine(
             path1: (Path.GetDirectoryName(path: assemblyLocation) ?? string.Empty),
-            path2: XmlDocumentationFileName
+            path2: fileName
         );
 
         return (File.Exists(path: besideAssembly)
@@ -1382,6 +1322,16 @@ public static class WorldSchema {
     }
     private static string MemberDocId(MemberInfo member) =>
         $"P:{FormatDeclaringType(type: member.DeclaringType!)}.{member.Name}";
+    // The disambiguated spelling ResolveTitleCollisions falls back to when two distinct CLR types share a
+    // FriendlyTypeName — deterministic from the type's own identity, never from where StampTitle happened to visit
+    // it first, so the same collision resolves to the same two names on every run.
+    private static string NamespacePrefixedTitle(Type type) {
+        var segment = (type.Namespace ?? string.Empty)
+            .Split(separator: '.')
+            .LastOrDefault(predicate: static part => (part.Length > 0)) ?? string.Empty;
+
+        return $"{segment}{FriendlyTypeName(type: type)}";
+    }
     // Rebuilds obj with propertyName first, for human-readable output (a description reads best leading an
     // object, ahead of its type/properties/required keywords). JsonObject preserves insertion order, and Clear()
     // detaches every child so each can be re-added to the same object without a "node already has a parent" error.
@@ -1462,7 +1412,122 @@ public static class WorldSchema {
             : null
         );
     }
-    private static void RestoreSkippedProperty(JsonObject propertyObject, Type ownerType, string jsonName, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode) {
+    // Runs once, over the whole merged document, after every node has its provisional StampTitle spelling —
+    // a bare FriendlyTypeName, blind to any other type sharing it. Groups every stamped title by the DISTINCT
+    // CLR types it names (Nullable<T> and T unwrap to the same type, so a nullable/non-nullable pair of one type
+    // never counts as a collision); a group naming more than one type gets every one of its members rewritten to
+    // NamespacePrefixedTitle, so the collision resolves the same way regardless of which occurrence the walk
+    // happened to reach first. A prefixed spelling that still collides names two types this scheme cannot tell
+    // apart — refused rather than silently handing one title to both.
+    // A derived record is emitted in two shapes: as a polymorphic arm (a site declared as the base type carries the
+    // "$type" const the discriminator adds) and bare (a site declared as the derived type itself carries none).
+    // Both are the same CLR type, so ResolveTitleCollisions sees no collision, yet the bundle cannot name two
+    // shapes with one title: the bare shape takes the suffix "Bare", and the arm keeps the type's own name.
+    private static void ResolveDiscriminatorSplits(Dictionary<JsonNode, Type> typesByNode) {
+        var nodesByTitle = new Dictionary<string, List<JsonObject>>(comparer: StringComparer.Ordinal);
+
+        foreach (var (node, _) in typesByNode) {
+            if (
+                (node is not JsonObject obj) ||
+                (obj["title"] is not JsonValue titleValue) ||
+                !titleValue.TryGetValue<string>(value: out var title)
+            ) {
+                continue;
+            }
+
+            if (!nodesByTitle.TryGetValue(
+                key: title,
+                value: out var list
+            )) {
+                list = [];
+                nodesByTitle[title] = list;
+            }
+
+            list.Add(item: obj);
+        }
+
+        foreach (var (title, nodes) in nodesByTitle) {
+            if (!nodes.Any(predicate: CarriesDiscriminator) || nodes.All(predicate: CarriesDiscriminator)) {
+                continue;
+            }
+
+            foreach (var obj in nodes) {
+                if (!CarriesDiscriminator(obj: obj)) {
+                    obj["title"] = $"{title}Bare";
+                }
+            }
+        }
+    }
+
+    private static bool CarriesDiscriminator(JsonObject obj) =>
+        ((obj["properties"] is JsonObject properties) && (properties["$type"] is JsonObject discriminator) && discriminator.ContainsKey(propertyName: "const"));
+
+    private static void ResolveTitleCollisions(Dictionary<JsonNode, Type> typesByNode) {
+        var typesByTitle = new Dictionary<string, HashSet<Type>>(comparer: StringComparer.Ordinal);
+
+        foreach (var (node, type) in typesByNode) {
+            if (
+                (node is not JsonObject obj) ||
+                (obj["title"] is not JsonValue titleValue) ||
+                !titleValue.TryGetValue<string>(value: out var title)
+            ) {
+                continue;
+            }
+
+            var underlying = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+            if (!typesByTitle.TryGetValue(
+                key: title,
+                value: out var set
+            )) {
+                set = [];
+                typesByTitle[title] = set;
+            }
+
+            set.Add(item: underlying);
+        }
+
+        var colliding = typesByTitle
+            .Where(predicate: kv => (kv.Value.Count > 1))
+            .Select(selector: kv => kv.Key)
+            .ToHashSet(comparer: StringComparer.Ordinal);
+
+        if (colliding.Count == 0) {
+            return;
+        }
+
+        var resolved = new Dictionary<Type, string>();
+
+        foreach (var (node, type) in typesByNode) {
+            if (
+                (node is not JsonObject obj) ||
+                (obj["title"] is not JsonValue titleValue) ||
+                !titleValue.TryGetValue<string>(value: out var title) ||
+                !colliding.Contains(item: title)
+            ) {
+                continue;
+            }
+
+            var underlying = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
+
+            if (!resolved.TryGetValue(
+                key: underlying,
+                value: out var newTitle
+            )) {
+                newTitle = NamespacePrefixedTitle(type: underlying);
+                resolved[underlying] = newTitle;
+            }
+
+            obj["title"] = newTitle;
+        }
+
+        foreach (var group in resolved.GroupBy(keySelector: kv => kv.Value, comparer: StringComparer.Ordinal)) {
+            if (group.Count() > 1) {
+                throw new InvalidOperationException(message: $"schema: types {string.Join(separator: ", ", values: group.Select(selector: kv => kv.Key.FullName))} all disambiguate to the same title '{group.Key}' — rename one of the CLR types.");
+            }
+        }
+    }
+    private static void RestoreSkippedProperty(JsonObject propertyObject, Type ownerType, string jsonName, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         var property = FindPropertyByJsonName(
             jsonName: jsonName,
             ownerType: ownerType
@@ -1473,10 +1538,25 @@ public static class WorldSchema {
         }
 
         typesByNode[propertyObject] = property.PropertyType;
-
-        ApplyStringVocabulary(
+        StampTitle(
             obj: propertyObject,
-            propertyType: property.PropertyType
+            type: property.PropertyType
+        );
+
+        ApplyCollectionVocabulary(
+            index: index,
+            nested: nested,
+            obj: propertyObject,
+            propertyType: property.PropertyType,
+            typesByNode: typesByNode
+        );
+
+        ApplyConverterVocabulary(
+            index: index,
+            nested: nested,
+            obj: propertyObject,
+            propertyType: property.PropertyType,
+            typesByNode: typesByNode
         );
 
         if (
@@ -1499,7 +1579,7 @@ public static class WorldSchema {
     // typesByNode carries no entry for it (Transform unconditionally records one for every node it visits, even a
     // node with no resolvable description). Every other node in typesByNode was already fully annotated by
     // Transform itself and is left alone.
-    private static void RestoreSkippedPropertyAnnotations(JsonNode node, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode) {
+    private static void RestoreSkippedPropertyAnnotations(JsonNode node, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         if (node is JsonObject obj) {
             if (
                 typesByNode.TryGetValue(
@@ -1517,6 +1597,7 @@ public static class WorldSchema {
                         RestoreSkippedProperty(
                             index: index,
                             jsonName: jsonName,
+                            nested: nested,
                             ownerType: ownerType,
                             propertyObject: propertyObject,
                             typesByNode: typesByNode
@@ -1529,6 +1610,7 @@ public static class WorldSchema {
                 if (child is not null) {
                     RestoreSkippedPropertyAnnotations(
                         index: index,
+                        nested: nested,
                         node: child,
                         typesByNode: typesByNode
                     );
@@ -1539,6 +1621,7 @@ public static class WorldSchema {
                 if (child is not null) {
                     RestoreSkippedPropertyAnnotations(
                         index: index,
+                        nested: nested,
                         node: child,
                         typesByNode: typesByNode
                     );
@@ -1565,7 +1648,7 @@ public static class WorldSchema {
             : body
         );
     }
-    private static SplitSchema Split(JsonObject reduced, JsonObject common, Dictionary<string, string?> defAnchors) {
+    private static SplitSchema Split(JsonObject reduced, JsonObject common) {
         var propsObj = ((JsonObject)reduced["properties"]!);
         var sectionNames = propsObj.Select(selector: kv => kv.Key).ToList();
         var sections = new List<(string Name, JsonNode Node)>(capacity: sectionNames.Count);
@@ -1607,26 +1690,26 @@ public static class WorldSchema {
         return new SplitSchema(
             Root: finalRoot,
             Sections: sections,
-            Common: new JsonObject { ["$defs"] = common },
-            DefAnchors: defAnchors
+            Common: new JsonObject { ["$defs"] = common }
         );
     }
-    // Whether a document root type declares an [JsonExtensionData] member — the root patternProperties carve-out
-    // below applies only to a family that actually has an extension bag to carve a hole for.
-    private static bool HasJsonExtensionData(Type rootType) {
-        foreach (var property in rootType.GetProperties(bindingAttr: BindingFlags.Public | BindingFlags.Instance)) {
-            if (property.IsDefined(attributeType: typeof(JsonExtensionDataAttribute))) {
-                return true;
-            }
-        }
+    // Names a node after the CLR type it came from, so json-schema-to-typescript (via the bundle's own $defs, see
+    // Bundle) and a person reading the schema both see WorldStateRow rather than an anonymous literal. Every
+    // occurrence of a titled type is stamped alike; ResolveTitleCollisions corrects a same-name clash across
+    // distinct types once the whole document is known. Left untouched for anything IsTitledType refuses — a
+    // collection, a primitive, or a converter-hidden shape with no CLR identity of its own worth naming.
+    private static void StampTitle(JsonObject obj, Type type) {
+        var underlying = (Nullable.GetUnderlyingType(nullableType: type) ?? type);
 
-        return false;
+        if (IsTitledType(type: underlying)) {
+            obj["title"] = FriendlyTypeName(type: underlying);
+        }
     }
     // Runs once per exported node, bottom-up (children before parents). Attaches a description resolved from the
-    // assembly's XML documentation, teaches a custom-token-converted node its own "type"/"enum" (see
-    // ApplyStringVocabulary), and — at the document root only, when the root type has one — the Extensions bag's
+    // assembly's XML documentation, teaches a custom-converted node its own "type"/"enum" (see
+    // ApplyConverterVocabulary), and — at the document root only, when the root type has one — the Extensions bag's
     // reserved-prefix carve-out.
-    private static JsonNode Transform(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement>? index, JsonNode node, Dictionary<JsonNode, Type> typesByNode) {
+    private static JsonNode Transform(JsonSchemaExporterContext context, IReadOnlyDictionary<string, XElement>? index, JsonNode node, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
         if (
             (node is JsonObject alreadyRef) &&
             alreadyRef.ContainsKey(propertyName: "$ref")
@@ -1652,9 +1735,29 @@ public static class WorldSchema {
 
         typesByNode[obj] = context.TypeInfo.Type;
 
-        ApplyStringVocabulary(
+        // The document root carries its own hand-written title ("Puck world definition (puck.world.def.v1)" and
+        // its projection/silo counterparts, added after Transform runs) — StampTitle would collide with it.
+        if (context.Path.Length > 0) {
+            StampTitle(
+                obj: obj,
+                type: context.TypeInfo.Type
+            );
+        }
+
+        ApplyCollectionVocabulary(
+            index: index,
+            nested: nested,
             obj: obj,
-            propertyType: context.TypeInfo.Type
+            typeInfo: context.TypeInfo,
+            typesByNode: typesByNode
+        );
+
+        ApplyConverterVocabulary(
+            index: index,
+            nested: nested,
+            obj: obj,
+            propertyType: context.TypeInfo.Type,
+            typesByNode: typesByNode
         );
 
         if (description is not null) {
@@ -1728,6 +1831,92 @@ public static class WorldSchema {
 
         return false;
     }
+    // A nested export's occurrences within one unsplit document: the first exports in full and every later one is
+    // a placeholder ResolveNestedRefs repoints at it by JSON pointer once the tree is final — the same device the
+    // exporter's own cache uses for a repeated type. The split export passes no cache: its hoist dedups by content.
+    private sealed class NestedExports {
+        public Dictionary<Type, JsonNode> First { get; } = [];
+        public List<(Type Type, JsonObject Placeholder)> Later { get; } = [];
+    }
+    private static JsonNode ExportNested(Type type, IReadOnlyDictionary<string, XElement>? index, Dictionary<JsonNode, Type> typesByNode, NestedExports? nested) {
+        if ((nested is not null) && nested.First.ContainsKey(key: type)) {
+            var placeholder = new JsonObject();
+
+            nested.Later.Add(item: (type, placeholder));
+
+            return placeholder;
+        }
+
+        var exporterOptions = new JsonSchemaExporterOptions {
+            TransformSchemaNode = (context, node) => Transform(
+            context: context,
+            index: index,
+            nested: nested,
+            node: node,
+            typesByNode: typesByNode
+        ),
+            TreatNullObliviousAsNonNullable = true,
+        };
+        var exported = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
+            type: type,
+            exporterOptions: exporterOptions
+        );
+
+        nested?.First.Add(
+            key: type,
+            value: exported
+        );
+
+        return exported;
+    }
+    private static void ResolveNestedRefs(JsonObject root, NestedExports nested) {
+        foreach (var (type, placeholder) in nested.Later) {
+            var pointer = JsonPointerOf(
+                node: nested.First[type],
+                root: root
+            ) ?? throw new InvalidOperationException(message: $"the first export of {type.Name} is no longer in the document");
+
+            placeholder["$ref"] = $"#{pointer}";
+        }
+    }
+    // The document-absolute JSON pointer of node under root, by parent-chain walk; null when node is not in root.
+    private static string? JsonPointerOf(JsonNode node, JsonObject root) {
+        var segments = new List<string>();
+        var cursor = node;
+
+        while (!ReferenceEquals(cursor, root)) {
+            var parent = cursor.Parent;
+
+            if (parent is null) {
+                return null;
+            }
+
+            segments.Add(item: (parent is JsonArray array)
+                ? array.IndexOf(item: cursor).ToString(provider: System.Globalization.CultureInfo.InvariantCulture)
+                : cursor.GetPropertyName().Replace(oldValue: "~", newValue: "~0", comparisonType: StringComparison.Ordinal).Replace(oldValue: "/", newValue: "~1", comparisonType: StringComparison.Ordinal));
+            cursor = parent;
+        }
+
+        segments.Reverse();
+
+        return string.Concat(values: segments.Select(selector: static segment => "/" + segment));
+    }
+    private static bool TryGetNodeConverter(Type propertyType, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IJsonSchemaNodeConverter? converter) {
+        var effectiveType = (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType);
+        JsonConverter? resolved;
+
+        try {
+            resolved = WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
+        } catch (NotSupportedException) {
+            converter = null;
+
+            return false;
+        }
+
+        converter = (resolved as IJsonSchemaNodeConverter);
+
+        return (converter is not null);
+    }
     // Resolves propertyType's OWN registered converter — unwrapping Nullable<T> first, since a value type's
     // nullable annotation is a distinct CLR type (System.Nullable<T>) the Converters array never names directly —
     // and reports its IJsonSchemaStringConverter opt-in, if any. The single mechanical lookup DEFECT 1 asks for:
@@ -1755,6 +1944,30 @@ public static class WorldSchema {
 
         return true;
     }
+    // Resolves a custom converter that accepts more than one JSON primitive representation (for example,
+    // BindableScalar's number-or-string wire form). This runs before the string-only vocabulary seam above.
+    private static bool TryGetTypeVocabulary(Type propertyType, out IReadOnlyList<string> types) {
+        var effectiveType = (Nullable.GetUnderlyingType(nullableType: propertyType) ?? propertyType);
+        JsonConverter? converter;
+
+        try {
+            converter = WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
+        } catch (NotSupportedException) {
+            types = [];
+
+            return false;
+        }
+
+        if ((converter is not IJsonSchemaTypeConverter vocabulary) || (vocabulary.SchemaTypes.Count == 0)) {
+            types = [];
+
+            return false;
+        }
+
+        types = vocabulary.SchemaTypes;
+
+        return true;
+    }
     private static bool TryGetSummary(IReadOnlyDictionary<string, XElement> index, string memberDocId, out string? text) {
         if (
             index.TryGetValue(
@@ -1775,45 +1988,6 @@ public static class WorldSchema {
     private static string TypeDocId(Type type) =>
         $"T:{FormatDeclaringType(type: type)}";
 
-    /// <summary>Re-inlines a <see cref="SplitSchema"/> into the single-file equivalent — the un-split generator's
-    /// own representation style. Every section <c>$ref</c> is substituted with its content. A shared-shape
-    /// <c>$ref</c> follows <see cref="SplitSchema.DefAnchors"/>: a def the exporter itself recognized as repeated
-    /// (its anchor entry is non-null) gets exactly one physical copy, at its first encounter in walk order, with
-    /// every other reference — including a recursive shape's own self-reference — repointed at that position by
-    /// plain JSON pointer, the same device the un-split generator's own TypeInfo cache uses; a def with no anchor
-    /// (an independently-regenerated polymorphic union arm, e.g. <c>ActionPredicate.CompareState</c>, which the
-    /// exporter's cache never catches) is fully duplicated at every site instead.</summary>
-    public static JsonObject Bundle(SplitSchema split) {
-        var root = ((JsonObject)split.Root.DeepClone()!);
-        var sectionsByName = split.Sections.ToDictionary(
-            keySelector: s => s.Name,
-            elementSelector: s => s.Node,
-            comparer: StringComparer.Ordinal
-        );
-        var propertiesObject = ((JsonObject)root["properties"]!);
-        var defs = ((JsonObject)((JsonObject)split.Common.DeepClone()!)["$defs"]!);
-        // An anchored def's single physical position is assigned LAZILY, at its first encounter in walk order, so
-        // the position is reachable by construction — one def can serve several recursion roots, and a
-        // pre-computed origin path can sit inside a subtree the walk pointer-replaces (a path that would then
-        // never materialize).
-        var liveAnchors = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
-
-        foreach (var name in propertiesObject.Select(selector: kv => kv.Key).ToList()) {
-            propertiesObject.Remove(propertyName: name);
-
-            var sectionContent = ((JsonNode)sectionsByName[name].DeepClone()!);
-
-            propertiesObject[name] = InlineBundleRefs(
-                node: sectionContent,
-                currentPath: $"#/properties/{EscapePointerSegment(segment: name)}",
-                defs: defs,
-                anchors: split.DefAnchors,
-                liveAnchors: liveAnchors
-            );
-        }
-
-        return root;
-    }
     /// <summary>Exports the split JSON Schema for <see cref="WorldDefinition"/>.</summary>
     /// <param name="postRenderExtensions">The shipped post-render extensions: <c>render.extensions[].id</c> becomes an
     /// enum over their ids and each entry's <c>config</c> validates against the schema of the set its id names.</param>
@@ -1821,6 +1995,15 @@ public static class WorldSchema {
         ArgumentNullException.ThrowIfNull(postRenderExtensions);
 
         var (merged, typesByNode) = ExportMergedWithTypes();
+
+        ResolveTitleCollisions(typesByNode: typesByNode);
+
+        ResolveDiscriminatorSplits(typesByNode: typesByNode);
+
+        ApplySelfIdentification(
+            root: merged,
+            schemaVersion: SchemaId
+        );
 
         ApplyPostRenderExtensions(
             extensions: postRenderExtensions,
@@ -1838,6 +2021,7 @@ public static class WorldSchema {
         RestoreSkippedPropertyAnnotations(
             node: merged,
             index: XmlDocIndex.Value,
+            nested: null,
             typesByNode: typesByNode
         );
 
@@ -1875,6 +2059,7 @@ public static class WorldSchema {
             expandedTypes: expandedTypes,
             originByNode: originByNode,
             activePaths: new HashSet<string>(comparer: StringComparer.Ordinal),
+            activeTypes: [],
             currentPath: "#"
         ));
 
@@ -1956,32 +2141,9 @@ public static class WorldSchema {
             insideCommon: true
         );
 
-        // Several origins can map to the same def name — every member of the group gets an entry in
-        // OriginalPathToDefName, not just the exporter's own canonical one. Prefer whichever origin the exporter
-        // ITSELF had already pointed a $ref at; fall back to null (always fully duplicate at bundle time) only
-        // when none of the group's origins qualify. When a group holds SEVERAL exporter origins (one def serving
-        // two recursion roots), the FIRST in insertion order wins — insertion follows document order, and first
-        // expansions nest consistently (a later origin's subtree is pointer-replaced at bundle time, so an anchor
-        // inside it would name a path that never materializes).
-        var defAnchors = new Dictionary<string, string?>(comparer: StringComparer.Ordinal);
-
-        foreach (var (origin, name) in state.OriginalPathToDefName) {
-            if (exporterRefTargets.Contains(item: origin)) {
-                if (!(defAnchors.TryGetValue(
-                    key: name,
-                    value: out var anchored
-                ) && (anchored is not null))) {
-                    defAnchors[name] = origin;
-                }
-            } else if (!defAnchors.ContainsKey(key: name)) {
-                defAnchors[name] = null;
-            }
-        }
-
         return Split(
             reduced: reduced,
-            common: state.CommonDefs,
-            defAnchors: defAnchors
+            common: state.CommonDefs
         );
     }
     /// <summary>Exports the JSON Schema for <see cref="WorldProjectionDocument"/> as one document. Unsplit,
@@ -1994,10 +2156,12 @@ public static class WorldSchema {
 
         var index = XmlDocIndex.Value;
         var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+        var nested = new NestedExports();
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
             index: index,
+            nested: nested,
             node: node,
             typesByNode: typesByNode
         ),
@@ -2032,11 +2196,16 @@ public static class WorldSchema {
 
         RestoreSkippedPropertyAnnotations(
             index: index,
+            nested: nested,
             node: root,
             typesByNode: typesByNode
         );
         ApplyPostRenderExtensions(
             extensions: postRenderExtensions,
+            root: root
+        );
+        ResolveNestedRefs(
+            nested: nested,
             root: root
         );
 
@@ -2049,10 +2218,12 @@ public static class WorldSchema {
     public static JsonObject ExportSilo() {
         var index = XmlDocIndex.Value;
         var typesByNode = new Dictionary<JsonNode, Type>(comparer: ReferenceEqualityComparer.Instance);
+        var nested = new NestedExports();
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
             index: index,
+            nested: nested,
             node: node,
             typesByNode: typesByNode
         ),
@@ -2087,8 +2258,17 @@ public static class WorldSchema {
 
         RestoreSkippedPropertyAnnotations(
             index: index,
+            nested: nested,
             node: root,
             typesByNode: typesByNode
+        );
+        ResolveNestedRefs(
+            nested: nested,
+            root: root
+        );
+        ApplySelfIdentification(
+            root: root,
+            schemaVersion: SiloSchemaId
         );
 
         return root;

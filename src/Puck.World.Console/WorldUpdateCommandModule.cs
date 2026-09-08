@@ -20,8 +20,8 @@ public sealed class WorldUpdateCommandModule(IWorldConsoleAuthority authority) :
             name: "world.update",
             description: "Reads the update section back: the authored channel/cacheRoot/checkIntervalSeconds/keepVersions, or 'none' when the section is absent (the app runs its own hardcoded self-update defaults). Authored data only — see update.status for the resolved, live configuration.",
             handler: (context, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: $"[world.update: unrecognized '{args[0]}' — expected no arguments]");
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.update") is { } refusal) {
+                    return refusal;
                 }
 
                 if (!authority.TryResolveServer(
@@ -50,7 +50,12 @@ public sealed class WorldUpdateCommandModule(IWorldConsoleAuthority authority) :
                     : "none"
                 );
 
-                return new CommandResult(Output: $"[world.update: channel {channel} cacheRoot {cacheRoot} checkIntervalSeconds {checkIntervalSeconds} keepVersions {keepVersions}]");
+                return new CommandResult(Output: CommandEcho.Open(verb: "world.update")
+                    .Field(key: "channel", value: channel)
+                    .Field(key: "cacheRoot", value: cacheRoot)
+                    .Field(key: "checkIntervalSeconds", value: checkIntervalSeconds)
+                    .Field(key: "keepVersions", value: keepVersions)
+                    .Close());
             }
         );
     }

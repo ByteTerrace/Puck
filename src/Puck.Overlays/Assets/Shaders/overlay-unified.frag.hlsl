@@ -5,15 +5,19 @@
 // The unified overlay pass (single-source HLSL; DXC -> SPIR-V for Vulkan AND DXIL for Direct3D 12). ONE decorator
 // draws every 2D surface from one packed storage buffer: N PANELS (token chrome — a scrim fill in a rounded rect, a
 // 1px hairline outline, an optional title band + divider, an optional Tier-1 status ring + bloom halo) plus a flat
-// list of ELEMENTS — rounded-rect cells, fixed-cell text runs into the ONE shared SDF glyph atlas, and ICON CHIPS
-// (the binding-bar repertoire folded in as an element kind: rounded plate with the four chip-state tiers, a
-// procedural action icon, and a gamepad badge — atlas letters or procedural symbols). SURFACES ARE WRITERS: the
+// list of ELEMENTS — rounded-rect cells, fixed-cell text runs into the ONE shared SDF glyph atlas, ICON CHIPS,
+// hairline rings, filled radial-menu wedges, and sampled frame slots
+// (the binding-bar repertoire folded in as an element kind: rounded plate with the four chip-state tiers, a bound
+// action's plate icon, and a physical-button badge — every glyph an authored atlas entry, none of it drawn
+// procedurally; see Puck.World.WorldIconTable for how a name becomes an atlas index). SURFACES ARE WRITERS: the
 // console panel, the per-seat binding bars, and the toast are all CPU writers into the same records — a future
 // surface is a new writer, not a new shader.
 //
 // The storage buffer (uint4-strided; word offsets — see overlay-common.hlsli's buffer-shape note):
 //   [0, tokenEnd)          the design-token slab (colors + geometry scalars; OverlayTokenBlock.cs)
-//   [atlasBase, panelBase) the shared atlas' per-glyph SDF cells (one RGBA texel per word, uploaded once)
+//   [atlasBase, panelBase) the shared atlas' per-glyph SDF cells (one RGBA texel per word, uploaded once) — indices
+//                          0..94 the printable-ASCII block, 95.. this boot's appended icon glyphs, total count
+//                          carried in the push constants (glyphCount below), never a compile-time constant
 //   [panelBase, elementBase) the panel records · [elementBase, textBase) the element records ·
 //   [textBase, clipBase)   the glyph-code words the text runs index (one pre-resolved index per word) ·
 //   [clipBase, ...)        the clip table (normalized x, y, w, h per rect; record word 9 indexes it, 0 = unclipped).
@@ -22,27 +26,82 @@
 // widths (radii, plate halves, badge offsets) are PIXELS. KEEP IN SYNC with
 // Puck.Overlays.OverlayFrameBuilder (record word layouts) and UnifiedOverlayNode (push constants).
 //
-// On Vulkan the texture+sampler fuse into one combined image sampler at set 0 binding 0 and the buffer is the
-// storage buffer at binding 1; on Direct3D 12 they are t0/s0 (static sampler) and the storage SRV packs in at t1.
+// Combined image-sampler bindings, identical numbering on both backends: binding 0 the inner world image; bindings
+// 1..FRAME_SLOT_COUNT the frame-slot table (a Frame element's sampled WorldFrameSource content, e.g. a face cam) —
+// FRAME_SLOT_COUNT separate SCALAR Texture2D+SamplerState pairs, never one array binding, since DXC's
+// vk::combinedImageSampler only ever fuses a scalar pair; the storage buffer follows immediately after at binding
+// FRAME_SLOT_COUNT+1. On Vulkan each pair fuses into its own combined image sampler at set 0, its binding number; on
+// Direct3D 12 the textures are t0..t{FRAME_SLOT_COUNT} (one static linear-clamp sampler PER register, s0..s{FRAME_SLOT_COUNT},
+// all sharing the SAME filter/address description) and the storage SRV packs in immediately after at
+// t{FRAME_SLOT_COUNT+1} — see UnifiedOverlayNode's FrameSlotFirstBinding remarks for the C# side of this layout.
 #include "overlay-common.hlsli"
+
+#define FRAME_SLOT_COUNT 8u
 
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]] Texture2D sourceTexture : register(t0);
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]] SamplerState sourceSampler : register(s0);
 
-[[vk::binding(1, 0)]] StructuredBuffer<uint4> overlayData : register(t1);
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] Texture2D frameTexture0 : register(t1);
+[[vk::combinedImageSampler]] [[vk::binding(1, 0)]] SamplerState frameSampler0 : register(s1);
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] Texture2D frameTexture1 : register(t2);
+[[vk::combinedImageSampler]] [[vk::binding(2, 0)]] SamplerState frameSampler1 : register(s2);
+[[vk::combinedImageSampler]] [[vk::binding(3, 0)]] Texture2D frameTexture2 : register(t3);
+[[vk::combinedImageSampler]] [[vk::binding(3, 0)]] SamplerState frameSampler2 : register(s3);
+[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] Texture2D frameTexture3 : register(t4);
+[[vk::combinedImageSampler]] [[vk::binding(4, 0)]] SamplerState frameSampler3 : register(s4);
+[[vk::combinedImageSampler]] [[vk::binding(5, 0)]] Texture2D frameTexture4 : register(t5);
+[[vk::combinedImageSampler]] [[vk::binding(5, 0)]] SamplerState frameSampler4 : register(s5);
+[[vk::combinedImageSampler]] [[vk::binding(6, 0)]] Texture2D frameTexture5 : register(t6);
+[[vk::combinedImageSampler]] [[vk::binding(6, 0)]] SamplerState frameSampler5 : register(s6);
+[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] Texture2D frameTexture6 : register(t7);
+[[vk::combinedImageSampler]] [[vk::binding(7, 0)]] SamplerState frameSampler6 : register(s7);
+[[vk::combinedImageSampler]] [[vk::binding(8, 0)]] Texture2D frameTexture7 : register(t8);
+[[vk::combinedImageSampler]] [[vk::binding(8, 0)]] SamplerState frameSampler7 : register(s8);
+
+[[vk::binding(9, 0)]] StructuredBuffer<uint4> overlayData : register(t9);
+
+// Dispatches to the slot's own scalar texture/sampler pair — the switch every multi-source shader in this codebase
+// uses in place of an unsupported combined-image-sampler array (see the binding comment above).
+float2 frameSlotDimensions(uint slot) {
+    uint w;
+    uint h;
+
+    switch (slot) {
+        case 0: frameTexture0.GetDimensions(w, h); break;
+        case 1: frameTexture1.GetDimensions(w, h); break;
+        case 2: frameTexture2.GetDimensions(w, h); break;
+        case 3: frameTexture3.GetDimensions(w, h); break;
+        case 4: frameTexture4.GetDimensions(w, h); break;
+        case 5: frameTexture5.GetDimensions(w, h); break;
+        case 6: frameTexture6.GetDimensions(w, h); break;
+        default: frameTexture7.GetDimensions(w, h); break;
+    }
+
+    return float2(w, h);
+}
+
+float4 sampleFrameSlot(uint slot, float2 uv) {
+    switch (slot) {
+        case 0: return frameTexture0.SampleLevel(frameSampler0, uv, 0);
+        case 1: return frameTexture1.SampleLevel(frameSampler1, uv, 0);
+        case 2: return frameTexture2.SampleLevel(frameSampler2, uv, 0);
+        case 3: return frameTexture3.SampleLevel(frameSampler3, uv, 0);
+        case 4: return frameTexture4.SampleLevel(frameSampler4, uv, 0);
+        case 5: return frameTexture5.SampleLevel(frameSampler5, uv, 0);
+        case 6: return frameTexture6.SampleLevel(frameSampler6, uv, 0);
+        default: return frameTexture7.SampleLevel(frameSampler7, uv, 0);
+    }
+}
 
 // counts: panelCount, elementCount, atlasCellW, atlasCellH (texels)
 // sdf:    distanceRange (texels), outlineBand (encoded units), panelBase (word index), elementBase (word index)
-// misc:   textBase (word index), atlasBase (word index), clipBase (word index), reserved
+// misc:   textBase (word index), atlasBase (word index), clipBase (word index), glyphCount (this boot's atlas total)
 struct OverlayPassData {
     float4 counts;
     float4 sdf;
     float4 misc;
 };
 [[vk::push_constant]] ConstantBuffer<OverlayPassData> pc;
-
-// The atlas holds printable ASCII 0x20..0x7E; codes are stored as ALREADY-RESOLVED glyph indices.
-#define GLYPH_COUNT 95
 
 // Words per record. KEEP IN SYNC with OverlayFrameBuilder.PanelWords / ElementWords.
 #define PANEL_WORDS 12u
@@ -51,6 +110,7 @@ struct OverlayPassData {
 // Icon-chip state bits — KEEP IN SYNC with OverlayFrameBuilder.WriteIcon.
 #define ICON_STATE_ACCENT_BIT 23u
 #define ICON_STATE_BOUND_BIT 24u
+#define ICON_STATE_TOGGLED_BIT 25u
 
 // ---- distance primitives -----------------------------------------------------------------------------------------
 
@@ -86,342 +146,6 @@ bool clipRejects(uint clipIndex, float2 fragXy, uint clipBase, float2 dims) {
     return ((fragXy.x < clipXy.x) || (fragXy.y < clipXy.y) || (fragXy.x >= (clipXy.x + clipWh.x)) || (fragXy.y >= (clipXy.y + clipWh.y)));
 }
 
-// ---- THE WORLD ICON GRAMMAR ---------------------------------------------------------------------------------------
-// One geometric grammar for every procedural glyph, numeral, and icon — the artwork half of the token identity
-// ("precision-tool minimalism" — the token write-up is retired; DesignTokens.cs is the record). Symbols draw in [-1, 1] glyph space, y down:
-//   GRID   — symbol content lives in the +/-0.6 box; round forms may overshoot to +/-0.66 for optical balance.
-//   STROKE — every line is the ONE hairline weight (the GlyphStroke token) with round caps: unions of capsule
-//            segments and circular arcs, never a second weight.
-//   ANGLES — verticals, horizontals, 45-degree diagonals, and circular arcs; only a numeral's skeleton may take
-//            the diagonal its letterform demands.
-//   FILL   — at most one small filled focal form per symbol (a dot, a lens, a half-disc); the strokes carry the
-//            silhouette, the fill marks the point of action.
-//   HUE    — tints come from the token block's semantic roles, never per-icon literals: navigation reads TextDim,
-//            structure TextPrimary, commit/go Positive, appearance Warning, destructive/live Danger, and the
-//            interact verb Accent (the one accent-hued icon, mirroring the accent budget).
-
-// The token palette's rgb for an icon tint.
-float3 tokenHue(uint role) {
-    return OverlayTokenColor(overlayData, role).rgb;
-}
-
-// A directional chevron pointing up: two 45-degree capsule arms; the arrows rotate it by quarter turns.
-float chevron(float2 p) {
-    float d = distanceToSegment(p, float2(-0.45, 0.22), float2(0.0, -0.23));
-
-    return min(d, distanceToSegment(p, float2(0.0, -0.23), float2(0.45, 0.22)));
-}
-
-// ---- gamepad glyph badges (ids: KEEP IN SYNC with OverlayGlyphId) -------------------------------------------------
-// Text-labeled badges (LB/RB/LT/RT/LS/RS) render from the shared atlas via the packed label bits; the d-pad arrows
-// and the neutral face-position glyphs stay procedural.
-
-// The face-position glyph — the NEUTRAL, family-invariant face-button treatment: the four-position diamond drawn
-// as abstract positions (a filled dot at the named position, hairline pips at the other three), no vendor's
-// branding. Position index: 0 north, 1 east, 2 south, 3 west (compass order, matching the physical diamond).
-float facePosition(uint position, float2 p) {
-    float d = 1e3;
-
-    [unroll]
-    for (uint i = 0u; (i < 4u); i++) {
-        // Compass point i on the badge diamond (N/E/S/W), radius 0.55.
-        float2 c = ((i == 0u) ? float2(0.0, -0.55) : ((i == 1u) ? float2(0.55, 0.0) : ((i == 2u) ? float2(0.0, 0.55) : float2(-0.55, 0.0))));
-
-        d = min(d, (length(p - c) - ((i == position) ? 0.30 : 0.06)));
-    }
-
-    return d;
-}
-
-float glyphDistance(uint glyphId, float2 p) {
-    switch (glyphId) {
-        case 1u: return chevron(p);                                    // ArrowUp
-        case 2u: return chevron(float2(p.y, -p.x));                    // ArrowRight
-        case 3u: return chevron(-p);                                   // ArrowDown
-        case 4u: return chevron(float2(-p.y, p.x));                    // ArrowLeft
-        case 5u: return facePosition(0u, p);                           // FaceNorth
-        case 6u: return facePosition(1u, p);                           // FaceEast
-        case 7u: return facePosition(2u, p);                           // FaceSouth
-        case 8u: return facePosition(3u, p);                           // FaceWest
-        default: return 1e3;
-    }
-}
-
-// ---- numerals (the generic action-slot icons) ---------------------------------------------------------------------
-// Hairline drafting digits from the grammar's own vocabulary — capsule strokes and circular arcs on a shared
-// 0.40 x 0.60 half-extent box — so a numeral and an icon read as one hand. Arcs compose as a ring cut by
-// half-plane / quadrant terms (max), the same construction the icons use.
-
-float digitDistance(uint digit, float2 p) {
-    switch (min(digit, 9u)) {
-        case 0u: return abs(sdRoundedBox(p, float2(0.38, 0.58), 0.38));
-        case 1u: {
-            float d = distanceToSegment(p, float2(-0.16, -0.34), float2(0.08, -0.58));
-
-            return min(d, distanceToSegment(p, float2(0.08, -0.58), float2(0.08, 0.58)));
-        }
-        case 2u: {
-            // The upper half-arc, the descending diagonal, the base.
-            float d = max(abs(length(p - float2(0.0, -0.26)) - 0.32), (p.y - -0.26));
-
-            d = min(d, distanceToSegment(p, float2(0.32, -0.26), float2(-0.32, 0.58)));
-
-            return min(d, distanceToSegment(p, float2(-0.32, 0.58), float2(0.36, 0.58)));
-        }
-        case 3u: {
-            // Flat-topped: the top bar, the diagonal into the waist, the lower bowl (open at its upper-left).
-            float d = distanceToSegment(p, float2(-0.30, -0.58), float2(0.30, -0.58));
-
-            d = min(d, distanceToSegment(p, float2(0.30, -0.58), float2(-0.02, -0.12)));
-
-            return min(d, max(abs(length(p - float2(0.0, 0.22)) - 0.34), min((0.0 - p.x), (0.22 - p.y))));
-        }
-        case 4u: {
-            float d = distanceToSegment(p, float2(0.12, -0.58), float2(-0.38, 0.22));
-
-            d = min(d, distanceToSegment(p, float2(-0.38, 0.22), float2(0.38, 0.22)));
-
-            return min(d, distanceToSegment(p, float2(0.12, -0.58), float2(0.12, 0.58)));
-        }
-        case 5u: {
-            float d = distanceToSegment(p, float2(-0.28, -0.58), float2(0.32, -0.58));
-
-            d = min(d, distanceToSegment(p, float2(-0.28, -0.58), float2(-0.28, -0.10)));
-            d = min(d, distanceToSegment(p, float2(-0.28, -0.10), float2(-0.02, -0.16)));
-
-            // The lower bowl: a ring open at its upper-left quadrant.
-            return min(d, max(abs(length(p - float2(-0.02, 0.20)) - 0.36), min((-0.02 - p.x), (0.20 - p.y))));
-        }
-        case 6u: {
-            float d = distanceToSegment(p, float2(0.24, -0.58), float2(-0.20, -0.02));
-
-            return min(d, abs(length(p - float2(0.0, 0.24)) - 0.33));
-        }
-        case 7u: {
-            float d = distanceToSegment(p, float2(-0.34, -0.58), float2(0.36, -0.58));
-
-            return min(d, distanceToSegment(p, float2(0.36, -0.58), float2(-0.06, 0.58)));
-        }
-        case 8u: {
-            float d = abs(length(p - float2(0.0, -0.28)) - 0.27);
-
-            return min(d, abs(length(p - float2(0.0, 0.27)) - 0.31));
-        }
-        default: {
-            // 9 — the point-mirror of 6.
-            float d = distanceToSegment(p, float2(-0.24, 0.58), float2(0.20, 0.02));
-
-            return min(d, abs(length(p - float2(0.0, -0.24)) - 0.33));
-        }
-    }
-}
-
-float numberDistance(uint number, float2 p) {
-    // Single digits draw at native grammar size; two digits (the actions run 1-12) evaluate in a scaled space and
-    // the distances scale back (x the divisor) so the stroke width the caller applies stays uniform.
-    if (number < 10u) {
-        return digitDistance(number, p);
-    }
-
-    float d = digitDistance((number / 10u), ((p - float2(-0.32, 0.0)) / 0.72));
-
-    return (min(d, digitDistance((number % 10u), ((p - float2(0.32, 0.0)) / 0.72))) * 0.72);
-}
-
-// ---- action icons (ids: KEEP IN SYNC with OverlayIconId) ----------------------------------------------------------
-// Every symbol follows the icon grammar above; an icon's identifying hue is part of its drawing, but it is fetched
-// from the token block by SEMANTIC ROLE — the artwork draws from the one token palette, never its own literals.
-
-// Returns rgb = the icon tint, a = the symbol coverage, for a point in [-1, 1] icon space.
-float4 actionIcon(uint iconId, float2 p, float stroke, float aa) {
-    if (iconId == 0u) {
-        return float4(0.0, 0.0, 0.0, 0.0);
-    }
-
-    if (iconId == 1u) {                                                // Generic: the focal dot alone
-        return float4(tokenHue(OVERLAY_ROLE_TEXT_DIM), strokeMask((length(p) - 0.16), 0.0, aa));
-    }
-
-    if (iconId == 2u) {                                                // Jump: a double up-chevron
-        float d = min(chevron(p - float2(0.0, -0.20)), chevron(p - float2(0.0, 0.24)));
-
-        return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 3u) {                                                // Interact: the diamond, focal dot at center
-        float2 q = (float2((p.x + p.y), (p.y - p.x)) * 0.7071);        // rotate 45 degrees: the box becomes a diamond
-
-        float d = abs(sdRoundedBox(q, float2(0.42, 0.42), 0.08));
-
-        d = min(d, (length(p) - 0.10));
-
-        return float4(tokenHue(OVERLAY_ROLE_ACCENT), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 4u) {                                                // Target: a reticle, focal dot at center
-        float d = abs(length(p) - 0.42);
-
-        d = min(d, distanceToSegment(p, float2(0.0, -0.72), float2(0.0, -0.52)));
-        d = min(d, distanceToSegment(p, float2(0.0, 0.52), float2(0.0, 0.72)));
-        d = min(d, distanceToSegment(p, float2(-0.72, 0.0), float2(-0.52, 0.0)));
-        d = min(d, distanceToSegment(p, float2(0.52, 0.0), float2(0.72, 0.0)));
-        d = min(d, (length(p) - 0.10));
-
-        return float4(tokenHue(OVERLAY_ROLE_DANGER), strokeMask(d, stroke, aa));
-    }
-
-    if ((iconId >= 8u) && (iconId <= 19u)) {                           // Number1..Number12: drafting digits
-        uint number = ((iconId - 8u) + 1u);
-
-        return float4(tokenHue(OVERLAY_ROLE_TEXT_PRIMARY), strokeMask(numberDistance(number, p), stroke, aa));
-    }
-
-    // ---- editing verb icons (KEEP IN SYNC with OverlayIconId.Edit*) ----
-
-    if ((iconId == 20u) || (iconId == 21u)) {                          // EditPrev / EditNext: a cycle arrow
-        // One drawing, mirrored: a ring open at its upper quadrant on the pointing side, with a 45-degree
-        // arrowhead at the side point. EditPrev points left; EditNext is its x-mirror.
-        float2 q = ((iconId == 21u) ? float2(-p.x, p.y) : p);
-        float d = max(abs(length(q) - 0.44), min(-q.x, -q.y));         // remove the upper-left quadrant
-
-        d = min(d, distanceToSegment(q, float2(-0.44, 0.0), float2(-0.61, 0.17)));
-        d = min(d, distanceToSegment(q, float2(-0.44, 0.0), float2(-0.27, 0.17)));
-
-        return float4(tokenHue(OVERLAY_ROLE_TEXT_DIM), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 22u) {                                               // EditPlace: a down-arrow onto a baseline
-        float d = distanceToSegment(p, float2(0.0, -0.52), float2(0.0, 0.22));
-
-        d = min(d, distanceToSegment(p, float2(-0.24, -0.02), float2(0.0, 0.22)));
-        d = min(d, distanceToSegment(p, float2(0.24, -0.02), float2(0.0, 0.22)));
-        d = min(d, distanceToSegment(p, float2(-0.44, 0.52), float2(0.44, 0.52)));
-
-        return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 23u) {                                               // EditDelete: an X
-        float d = distanceToSegment(p, float2(-0.38, -0.38), float2(0.38, 0.38));
-
-        d = min(d, distanceToSegment(p, float2(-0.38, 0.38), float2(0.38, -0.38)));
-
-        return float4(tokenHue(OVERLAY_ROLE_DANGER), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 24u) {                                               // EditExit: a leftward return arrow
-        float d = distanceToSegment(p, float2(0.44, 0.0), float2(-0.36, 0.0));
-
-        d = min(d, distanceToSegment(p, float2(-0.36, 0.0), float2(-0.12, -0.24)));
-        d = min(d, distanceToSegment(p, float2(-0.36, 0.0), float2(-0.12, 0.24)));
-        d = min(d, distanceToSegment(p, float2(0.44, 0.0), float2(0.44, -0.30)));  // the return riser
-
-        return float4(tokenHue(OVERLAY_ROLE_WARNING), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 25u) {                                               // EditDuplicate: two offset squares
-        float d = abs(sdRoundedBox((p - float2(0.14, 0.14)), float2(0.30, 0.30), 0.06));
-
-        d = min(d, abs(sdRoundedBox((p + float2(0.14, 0.14)), float2(0.30, 0.30), 0.06)));
-
-        return float4(tokenHue(OVERLAY_ROLE_TEXT_PRIMARY), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 26u) {                                               // EditLink: two interlocked rings
-        float d = abs(length(p - float2(0.20, 0.0)) - 0.28);
-
-        d = min(d, abs(length(p + float2(0.20, 0.0)) - 0.28));
-
-        return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 27u) {                                               // EditMaterial: a drop, focal dot inside
-        // The round body (open at its top wedge), two strokes tapering to the tip, the focal dot.
-        float d = max(abs(length(p - float2(0.0, 0.16)) - 0.34), (-0.05 - p.y));
-
-        d = min(d, distanceToSegment(p, float2(-0.27, -0.05), float2(0.0, -0.52)));
-        d = min(d, distanceToSegment(p, float2(0.27, -0.05), float2(0.0, -0.52)));
-        d = min(d, (length(p - float2(0.10, 0.22)) - 0.06));
-
-        return float4(tokenHue(OVERLAY_ROLE_WARNING), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 28u) {                                               // EditOpCycle: a two-circle boolean venn
-        float left = (length(p - float2(-0.16, 0.0)) - 0.32);
-        float right = (length(p - float2(0.16, 0.0)) - 0.32);
-        float d = min(abs(left), abs(right));
-        // The overlap lens is the focal fill — the icon reads as an OPERATION, not just two rings.
-        float lens = max(left, right);
-
-        return float4(tokenHue(OVERLAY_ROLE_WARNING), max(strokeMask(d, stroke, aa), (0.55 * strokeMask(lens, 0.0, aa))));
-    }
-
-    if (iconId == 29u) {                                               // EditStyle: a half-filled circle
-        float ring = abs(length(p) - 0.44);
-        float fill = max((length(p) - 0.44), p.x);                     // the filled left half is the focal form
-
-        return float4(tokenHue(OVERLAY_ROLE_WARNING), max(strokeMask(ring, stroke, aa), (0.7 * strokeMask(fill, 0.0, aa))));
-    }
-
-    if (iconId == 30u) {                                               // EditDeselect: a slashed circle
-        float d = abs(length(p) - 0.44);
-
-        d = min(d, distanceToSegment(p, float2(-0.31, 0.31), float2(0.31, -0.31)));
-
-        return float4(tokenHue(OVERLAY_ROLE_TEXT_DIM), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 31u) {                                               // EditRecord: the focal dot alone, live-red
-        return float4(tokenHue(OVERLAY_ROLE_DANGER), strokeMask((length(p) - 0.26), 0.0, aa));
-    }
-
-    if (iconId == 32u) {                                               // EditPlay: a play triangle
-        float d = distanceToSegment(p, float2(-0.30, -0.42), float2(-0.30, 0.42));
-
-        d = min(d, distanceToSegment(p, float2(-0.30, 0.42), float2(0.48, 0.0)));
-        d = min(d, distanceToSegment(p, float2(0.48, 0.0), float2(-0.30, -0.42)));
-
-        return float4(tokenHue(OVERLAY_ROLE_POSITIVE), strokeMask(d, stroke, aa));
-    }
-
-    if (iconId == 35u) {                                               // AudioSpeaker: cabinet + driver dot + emission arc
-        // The cabinet outline on the left, its filled driver dot (the one focal form — the point of action, where
-        // sound is made), a hairline tweeter pip above it, and one emission arc opening right.
-        float d = abs(sdRoundedBox((p + float2(0.24, 0.0)), float2(0.26, 0.46), 0.08));
-
-        d = min(d, abs(length(p - float2(-0.24, -0.20)) - 0.09));      // the tweeter pip
-        d = min(d, max(abs(length(p - float2(0.16, 0.0)) - 0.42), -(p.x - 0.16))); // the right-opening arc
-
-        float dot_ = (length(p - float2(-0.24, 0.14)) - 0.11);         // the driver — the focal fill
-
-        return float4(tokenHue(OVERLAY_ROLE_TEXT_PRIMARY), max(strokeMask(d, stroke, aa), strokeMask(dot_, 0.0, aa)));
-    }
-
-    if (iconId == 36u) {                                               // AudioBed: concentric presence rings
-        // A region, not a position: two concentric hairline rings around the focal dot — presence radiating from
-        // an extent center (the drawn twin of the bed's envelope-by-presence semantics).
-        float d = abs(length(p) - 0.30);
-
-        d = min(d, abs(length(p) - 0.56));
-
-        return float4(tokenHue(OVERLAY_ROLE_TEXT_PRIMARY), max(strokeMask(d, stroke, aa), strokeMask((length(p) - 0.10), 0.0, aa)));
-    }
-
-    if ((iconId == 33u) || (iconId == 34u)) {                          // EditUndo / EditRedo: a hook arrow over its arc
-        // One drawing, mirrored: the ring's TOP half (an arc from the left point over to the right point) with a
-        // downward arrowhead at the left end — the classic "curl back" gesture. EditUndo hooks left; EditRedo is
-        // its x-mirror. Distinct from the EditPrev/EditNext cycle rings (those open a quadrant and point sideways).
-        float2 q = ((iconId == 34u) ? float2(-p.x, p.y) : p);
-        float d = max(abs(length(q) - 0.42), q.y);                     // keep the arc's upper half only (y <= 0 up here)
-
-        d = min(d, distanceToSegment(q, float2(-0.42, 0.10), float2(-0.62, -0.10)));
-        d = min(d, distanceToSegment(q, float2(-0.42, 0.10), float2(-0.22, -0.10)));
-
-        return float4(tokenHue(OVERLAY_ROLE_ACCENT), strokeMask(d, stroke, aa));
-    }
-
-    return float4(0.0, 0.0, 0.0, 0.0);
-}
-
 // ---- the pass -----------------------------------------------------------------------------------------------------
 
 float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
@@ -439,6 +163,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
     uint textBase = (uint)pc.misc.x;
     uint atlasBase = (uint)pc.misc.y;
     uint clipBase = (uint)pc.misc.z;
+    int glyphCount = (int)pc.misc.w;
     int panelCount = (int)pc.counts.x;
     int elementCount = (int)pc.counts.y;
     int atlasCellW = (int)pc.counts.z;
@@ -512,16 +237,31 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
         }
     }
 
-    // ---- elements (rects, text runs, icon chips, rings, in submission order) -------------------------------------
-    // Element word layout (12 words) — KEEP IN SYNC with OverlayFrameBuilder.WriteRect/WriteText/WriteIcon/WriteRing:
-    //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon, 3 = ring) | colorRole << 4
-    //   text:     0..1 origin (normalized) · 2..3 one glyph cell's on-screen w/h (normalized) · 5 glyph start ·
-    //             6 glyph count · 7 alpha
-    //   rect:     0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
-    //   icon:     0..1 plate center (normalized) · 2 plate half (px) · 3 badge half (px) · 5 glyph<<16|icon ·
-    //             6 state bits · 7..8 badge offset (px)
-    //   ring:     0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle (the gizmo
-    //             radius indicator), the ONE hairline weight like every grammar stroke
+    // ---- elements (rects, text, icons, rings, wedges, sampled frames, in submission order) -------------------------
+    // Element word layout (12 words) — KEEP IN SYNC with OverlayFrameBuilder.WriteRect/WriteText/WriteIcon/WriteRing/WriteFrame:
+    //   4         kind (uint low nibble: 0 = text, 1 = rect, 2 = icon, 3 = ring, 4 = frame, 5 = wedge) | (word4 bits 4.. vary by kind)
+    //   text:     colorRole << 4 · 0..1 origin (normalized) · 2..3 one glyph cell's on-screen w/h (normalized) ·
+    //             5 glyph start · 6 glyph count · 7 alpha
+    //   rect:     colorRole << 4 · 0..3 rect (normalized) · 6 corner radius (px) · 7 alpha
+    //   icon:     (accentRole << 4, 0 = the accent token) · 0..1 plate center (normalized) · 2 plate half (px) ·
+    //             3 badge half (px) · 5 iconGlyph0 · 6 state bits · 7..8 badge offset (px) · 10 iconGlyph1 ·
+    //             11 toggle phase (0..1; the marching border's position while state bit 25, TOGGLED, is set)
+    //   ring:     colorRole << 4 · 0..1 center (normalized) · 2 radius (px) · 7 alpha — a stroked hairline circle
+    //             (the marker radius indicator), the ONE hairline weight like every grammar stroke. colorRole ==
+    //             OVERLAY_ROLE_CUSTOM (255) reads a raw RGB triple from words 5/6/8 (Pack()'d floats) instead of
+    //             indexing the token slab — a marker's authored, possibly state-bound ring color.
+    //   wedge:    colorRole << 4 · 0..1 center (normalized) · 2 inner radius (px) · 3 outer radius (px) ·
+    //             5 start angle (radians, clockwise from twelve) · 6 sweep (radians) · 7 alpha · 8 gap (px, the
+    //             half-width trimmed off each angular edge so neighbours read as separate pie pieces) · 10 glow role
+    //             (uint: 0 = none, else a token color-role index — a lit ring AT the piece's edge plus an outward
+    //             halo, the selection/outcome indicator) — a FILLED annular sector, the radial menu's piece. The
+    //             OVERLAY_ROLE_CUSTOM fill role draws NO fill: glow only (a closed wheel's local outcome).
+    //   frame:    (frameSlot << 4) | (mirror << 12) | (fit << 13, 0 = cover, 1 = contain, 2 = stretch) |
+    //             ((frameSlotB + 1) << 16, 0 = no second slot) · 0..3 rect (normalized) · 6 corner radius (px) ·
+    //             7 alpha · 8 mix (0..1, the weight of frameSlot; meaningful only with a second slot) — a live
+    //             OverlayFrameSlots slot sampled into a rounded rect (the HUD picture-in-picture, e.g. a face cam),
+    //             cross-faded from frameSlotB when present: both slots take the same fit/mirror uv and blend as
+    //             lerp(slotB, slot, mix) before the single composite; see frameSlotDimensions/sampleFrameSlot.
     for (int e = 0; (e < elementCount); e++) {
         uint o = (elementBase + ((uint)e * ELEMENT_WORDS));
 
@@ -568,7 +308,7 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             float2 cellLocal = float2((local.x - (column * cellSize.x)), local.y);
             // screenPxRange = distanceRange(texels) x screen-px-per-texel (the on-screen cell maps the atlas cell).
             float screenPxRange = (pc.sdf.x * (cellSize.y / pc.counts.w));
-            float2 sample = SampleGlyphCoverage(overlayData, atlasBase, (int)glyph, GLYPH_COUNT, cellLocal, cellSize, atlasCellW, atlasCellH, screenPxRange, pc.sdf.y);
+            float2 sample = SampleGlyphCoverage(overlayData, atlasBase, (int)glyph, glyphCount, cellLocal, cellSize, atlasCellW, atlasCellH, screenPxRange, pc.sdf.y);
 
             color = lerp(color, float3(0.0, 0.01, 0.015), (sample.y * 0.85 * alpha));
             color = lerp(color, OverlayTokenColor(overlayData, role).rgb, (sample.x * alpha));
@@ -582,23 +322,128 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             }
 
             float alpha = OverlayFloat(overlayData, (o + 7u));
-            float4 strokeColor = OverlayTokenColor(overlayData, role);
+            float4 strokeColor = ((role == OVERLAY_ROLE_CUSTOM)
+                ? float4(OverlayFloat(overlayData, (o + 5u)), OverlayFloat(overlayData, (o + 6u)), OverlayFloat(overlayData, (o + 8u)), 1.0)
+                : OverlayTokenColor(overlayData, role));
 
             color = lerp(color, strokeColor.rgb, (strokeMask(dist, 0.5, edgeAa) * strokeColor.a * alpha));
+        } else if (kind == 5u) {
+            // A WEDGE: a filled annular sector — origin the center, ab.x/ab.y the inner/outer radii in px, words 5/6
+            // the start angle and sweep (radians, clockwise from twelve o'clock, the wheel's own convention), word 8
+            // the angular gap in px. An SDF in two parts: radial (outside either radius) and angular (outside the
+            // sweep, measured as arc length at this radius so the gap is a constant pixel width, not a constant
+            // angle); the piece is the intersection, anti-aliased on both.
+            float innerR = ab.x;
+            float outerR = ab.y;
+            float r = length(local);
+
+            if ((r > (outerR + haloBlur + edgeAa)) || (r < (innerR - haloBlur - edgeAa))) {
+                continue;
+            }
+
+            float alpha = OverlayFloat(overlayData, (o + 7u));
+            float startAngle = OverlayFloat(overlayData, (o + 5u));
+            float sweep = OverlayFloat(overlayData, (o + 6u));
+            float gap = OverlayFloat(overlayData, (o + 8u));
+            // Clockwise-from-twelve: x = sin, y = -cos (y down).
+            float theta = atan2(local.x, -local.y);
+            float mid = (startAngle + (sweep * 0.5));
+            float delta = (theta - mid);
+            delta = (delta - (6.28318530718 * floor((delta + 3.14159265359) / 6.28318530718)));
+            float angularDist = ((abs(delta) - (sweep * 0.5)) * max(r, 1e-3)) + gap;
+            float radialDist = max((innerR - r), (r - outerR));
+            float dist = ((sweep >= 6.2831) ? radialDist : max(radialDist, angularDist));
+            float mask = (1.0 - smoothstep(0.0, edgeAa, dist));
+
+            if (role != OVERLAY_ROLE_CUSTOM) {
+                float4 fill = OverlayTokenColor(overlayData, role);
+
+                color = lerp(color, fill.rgb, (mask * fill.a * alpha));
+            }
+
+            uint glowRole = OverlayWord(overlayData, (o + 10u));
+
+            if (glowRole != 0u) {
+                // The piece's glow: a 1px lit ring straddling its edge plus an SDF distance-falloff halo OUTSIDE it,
+                // in the outcome's own hue — the same Tier-1 bloom the chip and the toast use, so "selected /
+                // dispatched / locally failed" reads in one vocabulary everywhere. The fill beneath is untouched:
+                // a glow indicates, it never hides what is under the piece.
+                float3 hue = OverlayTokenColor(overlayData, glowRole).rgb;
+                float ring = strokeMask(abs(dist), 0.5, edgeAa);
+                float halo = (saturate(1.0 - (max(dist, 0.0) / max(haloBlur, 1e-4))) * step(0.0, dist));
+
+                color = lerp(color, hue, (halo * halo * bloomHaloA * alpha));
+                color = lerp(color, hue, (ring * bloomRingA * alpha));
+            }
+        } else if (kind == 4u) {
+            // A SAMPLED FRAME: a live WorldFrameSource picture-in-picture (e.g. the HUD face-cam element) drawn from
+            // one of the FRAME_SLOT_COUNT frame-slot bindings — "role" (bits 4..11) is this record's slot index.
+            // Bits 16.. carry the outgoing cross-fade slot plus one (0 = none); word 8 is the incoming slot's weight.
+            uint slot = role;
+            bool mirror = (((packed >> 12u) & 0x1u) != 0u);
+            uint fit = ((packed >> 13u) & 0x3u);
+            uint slotBPlusOne = ((packed >> 16u) & 0xFFu);
+            float2 size = (ab * dims);
+
+            if ((local.x < -edgeAa) || (local.y < -edgeAa) || (local.x >= (size.x + edgeAa)) || (local.y >= (size.y + edgeAa))) {
+                continue;
+            }
+
+            float radius = OverlayFloat(overlayData, (o + 6u));
+            float alpha = OverlayFloat(overlayData, (o + 7u));
+            float2 halfSize = (size * 0.5);
+            float dist = sdRoundedBox((local - halfSize), halfSize, radius);
+            float mask = (1.0 - smoothstep(0.0, edgeAa, dist));
+
+            if (mask <= 0.0) {
+                continue;
+            }
+
+            float2 uv = (local / max(size, 1e-5));
+
+            // COVER (fit 0) crops the source's longer axis to fill the rect; CONTAIN (1) shrinks to fit inside,
+            // letterboxing the shorter axis (an out-of-[0,1] uv below, left unsampled so the world shows through);
+            // STRETCH (2) skips aspect correction entirely — uv already maps the rect directly.
+            if (fit != 2u) {
+                float2 sourceDims = max(frameSlotDimensions(slot), 1.0);
+                float2 axisScale = (size / sourceDims);
+                float scaleFactor = ((fit == 0u) ? max(axisScale.x, axisScale.y) : min(axisScale.x, axisScale.y));
+                float2 ratio = (axisScale / max(scaleFactor, 1e-5));
+
+                uv = (((uv - 0.5) * ratio) + 0.5);
+            }
+
+            if (mirror) {
+                uv.x = (1.0 - uv.x);
+            }
+
+            if (all(uv >= 0.0) && all(uv <= 1.0)) {
+                float3 sample = sampleFrameSlot(slot, uv).rgb;
+
+                if (slotBPlusOne != 0u) {
+                    float mix = OverlayFloat(overlayData, (o + 8u));
+                    float3 sampleB = sampleFrameSlot((slotBPlusOne - 1u), uv).rgb;
+
+                    sample = lerp(sampleB, sample, saturate(mix));
+                }
+
+                color = lerp(color, sample, (mask * alpha));
+            }
         } else {
             // An ICON CHIP: rounded plate with the four chip-state tiers (REST / HELD / ACCENT / DISABLED), a
-            // procedural action icon, and a gamepad badge hugging its corner — atlas letters or procedural symbols.
+            // bound action's plate icon, and a physical-button badge hugging its corner — both drawn from the SAME
+            // shared atlas, up to two stacked glyphs each (a two-character label, or a single pictogram glyph).
             float plateHalf = OverlayFloat(overlayData, (o + 2u));
             float glyphHalf = OverlayFloat(overlayData, (o + 3u));
-            uint ids = OverlayWord(overlayData, (o + 5u));
-            uint glyphId = (ids >> 16u);
-            uint iconId = (ids & 0xFFFFu);
+            uint iconGlyph0 = OverlayWord(overlayData, (o + 5u));
             uint state = OverlayWord(overlayData, (o + 6u));
             float2 glyphOffset = float2(OverlayFloat(overlayData, (o + 7u)), OverlayFloat(overlayData, (o + 8u)));
+            uint iconGlyph1 = OverlayWord(overlayData, (o + 10u));
             float alpha = (float(state & 0xFFu) / 255.0);
             bool pressed = ((state & 0x100u) != 0u);
             bool accent = ((state & (1u << ICON_STATE_ACCENT_BIT)) != 0u);
             bool bound = ((state & (1u << ICON_STATE_BOUND_BIT)) != 0u);
+            bool toggled = ((state & (1u << ICON_STATE_TOGGLED_BIT)) != 0u);
             // The four chip states (the token spec's Tier recipes). HELD wins over ACCENT (pressing the
             // context-primary chip still needs press feedback); DISABLED only shows when nothing else lights it.
             bool isHeld = pressed;
@@ -620,22 +465,25 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
             float outlineWidth = aa;
             float haloBlurPx = (haloBlur * chipScale);
             float cornerRadius = (OverlayTokenScalar(overlayData, OVERLAY_SCALAR_RADIUS_1) * chipScale);
-            float glyphStroke = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_GLYPH_STROKE);
             float glyphAa = OverlayTokenScalar(overlayData, OVERLAY_SCALAR_GLYPH_AA);
             float plateDistance = sdRoundedBox(slotLocal, float2((plateHalf * 0.92), (plateHalf * 0.92)), cornerRadius);
             float fill = (1.0 - smoothstep(0.0, aa, plateDistance));
             float outline = strokeMask(abs(plateDistance), outlineWidth, aa);
 
-            // Tier 0 REST: surface.raised + line.hair (the rest-opacity token tunes its translucency).
-            // Tier 0 DISABLED: transparent fill + line.soft (a free/unbound button, still shown so its socket reads).
+            // Tier 0 REST: surface.raised, fill only (the rest-opacity token tunes its translucency).
+            // Tier 0 DISABLED: the same fill at the quiet-dim alpha (a free/unbound button, still shown so its socket
+            // reads). No tier strokes its edge — a dense stacked layout reads as fills, never as overlapping lines.
             // Tier 1 HELD: surface.base, fully seated, + bloom.neutral. Tier 1 ACCENT: accent.quiet + bloom.accent.
             // Tier-1 chips skip the plain hairline — the bloom ring below IS their edge.
-            float3 accentRgb = OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT).rgb;
+            // The accent tier's hue: the accent token, unless the record names another role in word 4's role bits
+            // (0 = none, since no chip ever blooms text.primary by override) — an outcome chip can bloom another
+            // semantic hue through the same tier the hover accent uses.
+            float3 accentRgb = ((role != 0u) ? OverlayTokenColor(overlayData, role).rgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT).rgb);
             float3 fillColor = (isHeld
                 ? OverlayTokenColor(overlayData, OVERLAY_ROLE_SURFACE_BASE).rgb
                 : (isAccentTier ? accentRgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_SURFACE_RAISED).rgb));
             float plateOpacity = (isDisabled
-                ? 0.0
+                ? OverlayTokenScalar(overlayData, OVERLAY_SCALAR_CHIP_REST_OPACITY)
                 : (isHeld
                     ? 1.0
                     : (isAccentTier
@@ -654,23 +502,63 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
 
                 color = lerp(color, hue, (haloMask * haloA * alpha));
                 color = lerp(color, hue, (outline * ringA * alpha));
-            } else {
-                float4 outlineColor = (isDisabled ? lineSoft : lineHair);
-
-                color = lerp(color, outlineColor.rgb, (outline * alpha * outlineColor.a));
             }
 
-            // The bound action's icon, centered on the plate.
-            if (iconId != 0u) {
-                float4 icon = actionIcon(iconId, (slotLocal / max((plateHalf * 0.62), 1e-5)), glyphStroke, glyphAa);
+            if (toggled) {
+                // The latched-toggle border: three bright arcs of the accent hue marching clockwise around the plate's
+                // edge — the "autocast" grammar: a state that stays on until pressed again, as distinct from a
+                // momentary hold's static bloom. The band sits just outside the plate so it never dims the fill or
+                // the icon; its phase is the caller's presentation clock (word 11), so every latched plate on screen
+                // marches in step.
+                float phase = OverlayFloat(overlayData, (o + 11u));
+                float bandWidth = max((plateHalf * 0.10), 1.5);
+                float band = strokeMask(abs(plateDistance - (bandWidth * 0.5)), (bandWidth * 0.5), aa);
+                float angle = atan2(slotLocal.x, -slotLocal.y);
+                float march = smoothstep(0.15, 1.0, (0.5 + (0.5 * cos((angle * 3.0) - (phase * 6.28318530718)))));
+                float3 marchHue = OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT).rgb;
 
-                color = lerp(color, icon.rgb, (icon.a * fill * alpha));
+                color = lerp(color, marchHue, (band * (0.25 + (0.75 * march)) * alpha));
             }
 
-            // The gamepad badge, hugging its corner: a dark backing disc, then a light glyph — EXCEPT on the ACCENT
-            // tier, where the badge fills accent and the glyph inks accent.ink. A LETTER label (char0 != 0 in the
-            // state high bits) renders from the shared SDF atlas; the iconographic glyphs stay procedural.
+            // The bound action's icon, centered on the plate — up to two stacked atlas glyphs (a two-character
+            // placeholder like a double-digit number), the SAME reconstruction the badge below uses, just larger
+            // and centered rather than corner-hugging.
+            if (iconGlyph0 != 0u) {
+                float iconHalf = (plateHalf * 0.62);
+                float2 iconLocal = (slotLocal / max(iconHalf, 1e-5));
+
+                if (max(abs(iconLocal.x), abs(iconLocal.y)) < 1.6) {
+                    int iconLen = ((iconGlyph1 != 0u) ? 2 : 1);
+                    // The icon is centered in the plate; each glyph cell preserves the atlas aspect at a fixed height.
+                    float iconHalfH = 0.82;
+                    float iconCellW = ((2.0 * iconHalfH) * (float(atlasCellW) / float(atlasCellH)));
+                    float iconTotalW = (iconCellW * float(iconLen));
+                    float lx = (iconLocal.x + (iconTotalW * 0.5));
+                    int ci = (int)floor(lx / iconCellW);
+
+                    if ((ci >= 0) && (ci < iconLen) && (abs(iconLocal.y) <= iconHalfH)) {
+                        int glyphIndex = ((int)((ci == 0) ? iconGlyph0 : iconGlyph1) - 1);
+                        float u = ((lx - (float(ci) * iconCellW)) / iconCellW);
+                        float v = ((iconLocal.y + iconHalfH) / (2.0 * iconHalfH));
+                        // screenPxRange from the on-screen glyph height (2*iconHalfH glyph-local units x iconHalf px).
+                        float glyphPxH = ((2.0 * iconHalfH) * iconHalf);
+                        float screenPxRange = max((pc.sdf.x * (glyphPxH / float(atlasCellH))), 1.0);
+                        float2 coverage = SampleGlyphCoverage(
+                            overlayData, atlasBase, glyphIndex, glyphCount,
+                            float2(u, v), float2(1.0, 1.0), atlasCellW, atlasCellH, screenPxRange, 0.25);
+                        float3 iconHue = OverlayTokenColor(overlayData, OVERLAY_ROLE_TEXT_PRIMARY).rgb;
+
+                        color = lerp(color, (iconHue * 0.3), (coverage.y * fill * alpha * 0.85));
+                        color = lerp(color, iconHue, (coverage.x * fill * alpha));
+                    }
+                }
+            }
+
+            // The physical-button badge, hugging its corner: a dark backing disc, then a light glyph — EXCEPT on
+            // the ACCENT tier, where the badge fills accent and the glyph inks accent.ink. Up to two stacked atlas
+            // glyphs (a two-character label like "LB", or a single pictogram glyph like a d-pad arrow).
             uint char0 = ((state >> 9u) & 0x7Fu);
+            uint char1 = ((state >> 16u) & 0x7Fu);
             float3 badgeBackingColor = (isAccentTier ? accentRgb : OverlayTokenColor(overlayData, OVERLAY_ROLE_BADGE_DARK).rgb);
             float3 badgeInkColor = (isAccentTier
                 ? OverlayTokenColor(overlayData, OVERLAY_ROLE_ACCENT_INK).rgb
@@ -682,7 +570,6 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                 if (max(abs(glyphLocal.x), abs(glyphLocal.y)) < 1.6) {
                     color = lerp(color, badgeBackingColor, ((1.0 - smoothstep(1.0, (1.0 + (glyphAa * 2.0)), length(glyphLocal))) * alpha * 0.85));
 
-                    uint char1 = ((state >> 16u) & 0x7Fu);
                     int labelLen = ((char1 != 0u) ? 2 : 1);
                     // The label is centered in the badge; each char cell preserves the atlas aspect at a fixed height.
                     float labelHalfH = 0.82;
@@ -699,22 +586,12 @@ float4 PSMain(float4 fragCoord : SV_Position) : SV_Target {
                         float charPxH = ((2.0 * labelHalfH) * glyphHalf);
                         float screenPxRange = max((pc.sdf.x * (charPxH / float(atlasCellH))), 1.0);
                         float2 coverage = SampleGlyphCoverage(
-                            overlayData, atlasBase, glyphIndex, GLYPH_COUNT,
+                            overlayData, atlasBase, glyphIndex, glyphCount,
                             float2(u, v), float2(1.0, 1.0), atlasCellW, atlasCellH, screenPxRange, 0.25);
 
                         color = lerp(color, (badgeInkColor * 0.3), (coverage.y * alpha * 0.85));
                         color = lerp(color, badgeInkColor, (coverage.x * alpha));
                     }
-                }
-            } else if ((glyphId != 0u) && (glyphHalf > 0.0)) {
-                float2 glyphLocal = ((fragCoord.xy - (slotCenter + glyphOffset)) / glyphHalf);
-
-                if (max(abs(glyphLocal.x), abs(glyphLocal.y)) < 1.6) {
-                    float backing = (1.0 - smoothstep(1.0, (1.0 + (glyphAa * 2.0)), length(glyphLocal)));
-                    float glyph = strokeMask(glyphDistance(glyphId, glyphLocal), glyphStroke, glyphAa);
-
-                    color = lerp(color, badgeBackingColor, (backing * alpha * 0.85));
-                    color = lerp(color, badgeInkColor, (glyph * alpha));
                 }
             }
         }

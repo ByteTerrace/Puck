@@ -27,15 +27,18 @@ public enum SdfBlendOp : uint {
     /// <summary>Subtraction with a smooth (filleted) carve seam (blend radius = instruction Data1.x).</summary>
     SmoothSubtraction = 6,
     /// <summary>Union with a chamfered (45° beveled) seam instead of a round fillet (bevel size = instruction Data1.x)
-    /// — the mechanical/CAD look, distinct from <see cref="SmoothUnion"/>'s organic blob. Unlike smooth-min (which stays
-    /// 1-Lipschitz), the bevel plane's gradient reaches √2 at a flat/near-parallel seam, so a chamfer blend contributes a
-    /// conservative √2 factor to <c>AnalyzeLipschitz</c> (a step clamp, exactly 1 at a perpendicular seam and safe past
-    /// it); a chamfer-free program is unaffected.</summary>
+    /// — the mechanical/CAD look, distinct from <see cref="SmoothUnion"/>'s organic blob.
+    /// <para>The chamfer family is the only blend that is not 1-Lipschitz, and the only one whose Lipschitz bound can
+    /// exceed BOTH of its operands: the bevel plane's gradient is <c>(∇a ± ∇b)/√2</c>, so composing fields bounded by
+    /// <c>La</c> and <c>Lb</c> yields <c>max(La, Lb, (La + Lb)/√2)</c>. <c>AnalyzeLipschitz</c> therefore folds it once
+    /// per COMPOSITION, not once per program: the first chamfer against an empty accumulator is the identity, two reach
+    /// √2, and a longer chain approaches the recurrence's fixed point <c>1 + √2</c>. A chamfer-free program is
+    /// unaffected and bakes a step scale of exactly 1.</para></summary>
     ChamferUnion = 7,
-    /// <summary>Intersection with a chamfered (45° beveled) seam (bevel size = instruction Data1.x). Carries the same √2
-    /// Lipschitz factor as <see cref="ChamferUnion"/>.</summary>
+    /// <summary>Intersection with a chamfered (45° beveled) seam (bevel size = instruction Data1.x). Composes through
+    /// the same Lipschitz recurrence as <see cref="ChamferUnion"/>.</summary>
     ChamferIntersection = 8,
-    /// <summary>Subtraction with a chamfered (45° beveled) carve seam (bevel size = instruction Data1.x). Carries the
-    /// same √2 Lipschitz factor as <see cref="ChamferUnion"/>.</summary>
+    /// <summary>Subtraction with a chamfered (45° beveled) carve seam (bevel size = instruction Data1.x). Composes
+    /// through the same Lipschitz recurrence as <see cref="ChamferUnion"/>.</summary>
     ChamferSubtraction = 9,
 }

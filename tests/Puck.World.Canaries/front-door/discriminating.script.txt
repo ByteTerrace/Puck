@@ -1,0 +1,10 @@
+# Discriminating leg: the same identity stands on the turntable but never presses jump -- proving the region alone,
+# without the actual look-cycle action, awakens nothing and leaves the gate exactly as authored.
+identity.create amber
+player.identity amber
+world.wait 5
+body.pose 0 0 0 0 0 0 0
+world.wait 8
+world.state studio_look
+identity.facts
+world.placements

@@ -1,6 +1,11 @@
 using Puck.Assets.Documents;
+using System.Globalization;
+using System.Numerics;
+using System.Text.Json;
 using System.Text.Json.Serialization;
-using Puck.Forge.Authoring;
+using Puck.World.Authoring;
+using Puck.Maths;
+using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
@@ -18,7 +23,7 @@ namespace Puck.World;
 /// <param name="HashRaw">The SHA-256 hex64 of the document's canonical bytes (<see cref="Puck.Assets.Documents.CanonicalDocument{TDocument}.Hash"/>
 /// on the canonical result the compose boundary produces). ABSENT resolves to the hash computed from
 /// <paramref name="Document"/> at load — an author never writes a content hash by hand; see <see cref="Hash"/>.</param>
-public sealed record WorldCreation(
+public sealed record WorldPrototype(
     DocumentIdentifier Id,
     CreationDocument Document,
     [property: JsonPropertyName("hash"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? HashRaw = null
@@ -26,17 +31,17 @@ public sealed record WorldCreation(
     private CreationDocument? m_engineDocument;
 
     /// <summary>Gets <see cref="Document"/> converted once from the author frame to the engine frame
-    /// (<see cref="Puck.Forge.Authoring.CreationFrame.ToEngine"/>) — every render, collision, and anchor consumer
+    /// (<see cref="Puck.World.Authoring.CreationFrame.ToEngine"/>) — every render, collision, and anchor consumer
     /// reads this, never <see cref="Document"/>, which stays the author's own bytes (what <see cref="Hash"/> pins).
-    /// Cached on first read since <see cref="WorldCreation"/> rows are replaced, not mutated, on edit.</summary>
+    /// Cached on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
     [JsonIgnore]
-    public CreationDocument EngineDocument => (m_engineDocument ??= Puck.Forge.Authoring.CreationFrame.ToEngine(document: Document));
+    public CreationDocument EngineDocument => (m_engineDocument ??= Puck.World.Authoring.CreationFrame.ToEngine(document: Document));
     /// <summary>Gets the SHA-256 hex64 of <see cref="Document"/>'s canonical bytes — <see cref="HashRaw"/> when
     /// authored, else computed fresh through the same pipeline the validator re-verifies every hash against
-    /// (<see cref="Puck.Forge.Authoring.CreationCanonicalizer"/>), so an absent hash is trivially self-consistent
+    /// (<see cref="Puck.World.Authoring.CreationCanonicalizer"/>), so an absent hash is trivially self-consistent
     /// with no validator special case.</summary>
     [JsonIgnore]
-    public string Hash => (HashRaw ?? Puck.Forge.Authoring.CreationCanonicalizer.Canonicalize(
+    public string Hash => (HashRaw ?? Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
         document: Document,
         source: Id
     ).Hash);
@@ -51,25 +56,156 @@ public sealed record WorldPlacementMirror(DocumentVector3 Normal, float Offset);
 /// of the row's static transform; the row's position/yaw become its spawn pose. Absent (null) = decoration, the
 /// unchanged furniture behaviour.</summary>
 /// <param name="Kit">The <see cref="WorldKit.Name"/> the bodies move under. Null resolves the creation's own
-/// <see cref="Puck.Forge.Authoring.CreationBehaviorDocument.Locomotion"/> token AS a kit name — a creation declaring "swim"
+/// <see cref="Puck.World.Authoring.CreationBehaviorDocument.Locomotion"/> token AS a kit name — a creation declaring "swim"
 /// inhabits the world's kit row named "swim". Neither resolving is a loud rejection naming every kit the world
 /// declares.</param>
 /// <param name="Look">The <see cref="WorldLook.Name"/> the bodies wear, or null to wear an implicit creation look on
-/// this placement's own <c>CreationId</c>.</param>
+/// this placement's own <c>PrototypeId</c>.</param>
 /// <param name="Source">The live, idle, or named producer source the bodies wake on.</param>
-/// <param name="Count">How many bodies, bounded by the world's authored peer capacity.</param>
+/// <param name="Count">How many bodies: an authored literal, or a live cell reference naming an Int
+/// <c>state.world</c> row whose value the population admits and retires bodies to track
+/// (<c>WorldPopulation.ReconcileInhabitCounts</c>) — the spawner primitive a crawl's mob generator
+/// rides. Either way, bounded by the world's authored peer capacity; a cell reference is additionally bounded by
+/// <see cref="Distribution"/>'s own sample count, the tighter of the two winning. Absent is an authored literal of
+/// 1 — see <see cref="ResolvedCount"/>.</param>
 /// <param name="Distribution">The region and deterministic fill sequence that place the bodies relative to the
 /// placement root.</param>
 public sealed record WorldPlacementInhabit(
     string? Kit,
     string? Look,
     Puck.World.Protocol.IntentSource Source,
-    int Count = 1,
+    WorldPlacementInhabitCount? Count = null,
     WorldDistribution? Distribution = null
-);
+) {
+    /// <summary>Gets <see cref="Count"/> as authored — an absent field reads as a literal 1, exactly as before this
+    /// facet's count could name a cell.</summary>
+    [JsonIgnore]
+    public WorldPlacementInhabitCount ResolvedCount => (Count ?? new WorldPlacementInhabitCount(Literal: 1));
+
+    /// <summary>The largest live count this facet could ever admit — the document-global dynamic-instance
+    /// ceiling's own worst-case term for this row: the authored literal, or, for a cell reference whose live value
+    /// the ceiling cannot know at author time, the tighter of <paramref name="peerCapacity"/> and
+    /// <see cref="Distribution"/>'s own declared sample count (the identical two bounds
+    /// <c>WorldPopulation.ReconcileInhabitCounts</c> clamps a live cell against).</summary>
+    /// <param name="peerCapacity">The world's authored peer capacity (population capacity minus local seats).</param>
+    public int DeclaredMax(int peerCapacity) {
+        if (Count?.Row is not null) {
+            var sampleCount = ((Distribution?.Region as WorldDistributionRegion.Disc)?.SampleCount);
+
+            return Math.Clamp(value: (sampleCount ?? peerCapacity), min: 0, max: peerCapacity);
+        }
+
+        return Math.Clamp(value: (ResolvedCount.Literal ?? 1), min: 0, max: peerCapacity);
+    }
+}
+/// <summary>An inhabit facet's declared body count: an authored integer literal, or a live cell reference
+/// (<c>{"row": "&lt;row&gt;"[, "key": "&lt;key&gt;"]}</c>) naming an Int <c>state.world</c> row. Unlike
+/// <see cref="BindableScalar"/>'s single <c>state.&lt;row&gt;[.&lt;key&gt;]</c> string token, a cell reference here
+/// is its own object shape, so the reconcile path holds the parsed (row, key) pair directly rather than re-parsing
+/// a binding token on the tick path.</summary>
+/// <param name="Literal">The authored literal count, or <see langword="null"/> when <see cref="Row"/> names a cell
+/// instead.</param>
+/// <param name="Row">The bound <c>state.world</c> row's name, or <see langword="null"/> for a literal.</param>
+/// <param name="Key">The cell inside <see cref="Row"/>, or <see langword="null"/> for its slot cell. Meaningless
+/// alongside <see cref="Literal"/>.</param>
+[JsonConverter(typeof(WorldPlacementInhabitCountJsonConverter))]
+public sealed record WorldPlacementInhabitCount(int? Literal = null, string? Row = null, string? Key = null) {
+    /// <summary>The refusal every inhabit count field shares.</summary>
+    public const string Grammar = "must be an integer, or {\"row\": \"<row>\"[, \"key\": \"<key>\"]} naming an Int cell";
+
+    /// <summary>Resolves this count against the live document: the authored literal, or the referenced cell's live
+    /// raw value — <see langword="null"/> when this names an undeclared row (the validator refuses that at author
+    /// time; a live document edit that drops the row reads defensively as absent rather than throwing).</summary>
+    /// <param name="definition">The document to resolve against.</param>
+    /// <param name="tick">The tick this read answers as of.</param>
+    public long? Resolve(WorldDefinition definition, ulong tick = 0UL) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (Row is not { } row) {
+            return Literal;
+        }
+
+        return (WorldStateReader.TryRead(definition: definition, key: Key, rawValue: out var raw, row: out _, rowName: row, tick: tick, text: out _)
+            ? raw
+            : null
+        );
+    }
+    /// <inheritdoc/>
+    public override string ToString() => (Row is { } row
+        ? ((Key is { } key) ? $"{row}.{key}" : row)
+        : (Literal ?? 1).ToString(provider: CultureInfo.InvariantCulture)
+    );
+
+    /// <summary>Lets an authored literal be written as a plain <see cref="int"/> everywhere this type is
+    /// constructed from C# — every pre-existing literal-count call site keeps compiling unchanged.</summary>
+    public static implicit operator WorldPlacementInhabitCount(int literal) => new(Literal: literal);
+}
+/// <summary>Reads/writes <see cref="WorldPlacementInhabitCount"/> as a JSON integer (literal) or object
+/// (<c>{"row": ..., "key": ...}</c>, a cell reference).</summary>
+public sealed class WorldPlacementInhabitCountJsonConverter : JsonConverter<WorldPlacementInhabitCount>, IJsonSchemaTypeConverter {
+    private static readonly string[] AcceptedSchemaTypes = ["integer", "object"];
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> SchemaTypes => AcceptedSchemaTypes;
+
+    /// <inheritdoc/>
+    public override WorldPlacementInhabitCount Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
+        if (reader.TokenType == JsonTokenType.Number) {
+            return new WorldPlacementInhabitCount(Literal: reader.GetInt32());
+        }
+
+        if (reader.TokenType != JsonTokenType.StartObject) {
+            throw new JsonException(message: $"Expected {nameof(WorldPlacementInhabitCount)} to be an integer or an object ({WorldPlacementInhabitCount.Grammar}).");
+        }
+
+        string? row = null;
+        string? key = null;
+
+        while (reader.Read() && (reader.TokenType != JsonTokenType.EndObject)) {
+            if (reader.TokenType != JsonTokenType.PropertyName) {
+                throw new JsonException(message: $"Unexpected token inside {nameof(WorldPlacementInhabitCount)} ({WorldPlacementInhabitCount.Grammar}).");
+            }
+
+            var propertyName = reader.GetString();
+
+            reader.Read();
+
+            if (string.Equals(a: propertyName, b: "row", comparisonType: StringComparison.Ordinal)) {
+                row = reader.GetString();
+            } else if (string.Equals(a: propertyName, b: "key", comparisonType: StringComparison.Ordinal)) {
+                key = reader.GetString();
+            } else {
+                throw new JsonException(message: $"{nameof(WorldPlacementInhabitCount)} does not declare a '{propertyName}' member ({WorldPlacementInhabitCount.Grammar}).");
+            }
+        }
+
+        if (row is not { Length: > 0 }) {
+            throw new JsonException(message: $"{nameof(WorldPlacementInhabitCount)}'s object form must name \"row\" ({WorldPlacementInhabitCount.Grammar}).");
+        }
+
+        return new WorldPlacementInhabitCount(Row: row, Key: key);
+    }
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, WorldPlacementInhabitCount value, JsonSerializerOptions options) {
+        ArgumentNullException.ThrowIfNull(argument: value);
+
+        if (value.Row is { } row) {
+            writer.WriteStartObject();
+            writer.WriteString(propertyName: "row", value: row);
+
+            if (value.Key is { } key) {
+                writer.WriteString(propertyName: "key", value: key);
+            }
+
+            writer.WriteEndObject();
+        } else {
+            writer.WriteNumberValue(value: (value.Literal ?? 1));
+        }
+    }
+}
 /// <summary>A per-instance override of one declared creation face's feed — the face twin of the emission facet's
 /// per-instance override channel.</summary>
-/// <param name="Face">The declared <see cref="Puck.Forge.Authoring.CreationFaceDocument.Name"/> to override.</param>
+/// <param name="Face">The declared <see cref="Puck.World.Authoring.CreationFaceDocument.Name"/> to override.</param>
 /// <param name="Source">The screen source the face shows, in the existing <see cref="WorldScreenSource"/> vocabulary.</param>
 /// <param name="Portal">The face's portal facet (see <see cref="WorldPlacementPortal"/>) — absent (the default)
 /// means this face is not a door. Optional and trailing deliberately: a face authored before this facet existed
@@ -94,6 +230,48 @@ public sealed record WorldPlacementFace(
 /// sphere follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point.</summary>
 /// <param name="Radius">The sensing radius, world units. Must be finite and positive (validated).</param>
 public sealed record WorldPlacementRegion(float Radius);
+/// <summary>How a tabletop board binding treats an illegal move — the author's choice per table, engine-side and
+/// game-agnostic: the judge that computes <see cref="WorldPlacementBoard.Verdict"/> is authored per world, and this
+/// field only decides what the engine itself does once that verdict refuses.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldBoardEnforcement>))]
+public enum WorldBoardEnforcement : byte {
+    /// <summary>An illegal move is recorded; the body that moved stays where it settled.</summary>
+    Record,
+
+    /// <summary>An illegal move is recorded and the body that moved is posed back onto the move's origin cell.</summary>
+    Return,
+}
+/// <summary>A placement's board facet — the tabletop primitive. Anchors a <c>state.lattices</c> Grid topology
+/// (which already carries its own world-space <c>origin</c>/<c>cellSize</c> frame) to this placement, so a chess
+/// set, a checkers board, or a card table is one placement/body carrying one topology — carriable as a unit once an
+/// attachment primitive picks it up. A topology is carried by at most one placement (validated). <paramref
+/// name="Occupancy"/> is the only row the engine reads; <paramref name="Turn"/>/<paramref name="Verdict"/>/
+/// <paramref name="Move"/>/<paramref name="Plan"/> are author-named convenience bindings <c>world.tabletop</c>
+/// echoes together — ordinary declared rows, never engine-interpreted, so this facet stays a reusable primitive
+/// rather than a chess-specific feature.</summary>
+/// <param name="Topology">The state.lattices Grid topology this placement anchors.</param>
+/// <param name="Occupancy">The board-typed row over <paramref name="Topology"/> holding current occupant codes.</param>
+/// <param name="Turn">An optional phase row read back beside the frame.</param>
+/// <param name="Verdict">An optional row read back beside the frame (a ruling on the last recorded change). Required
+/// when <paramref name="Enforcement"/> is <see cref="WorldBoardEnforcement.Return"/> (validated).</param>
+/// <param name="Move">An optional keyed row (conventionally cells "from"/"to") read back beside the frame. Required
+/// when <paramref name="Enforcement"/> is <see cref="WorldBoardEnforcement.Return"/> (validated).</param>
+/// <param name="Plan">An optional board-typed row over <paramref name="Topology"/> a future addon paints candidate
+/// cells into for highlight rendering — the seam, not the addon.</param>
+/// <param name="Enforcement">What the engine itself does once <paramref name="Verdict"/> refuses a move.</param>
+/// <param name="Accept">The <paramref name="Verdict"/> value the judge writes to accept a move — any other value is
+/// a refusal.</param>
+public sealed record WorldPlacementBoard(string Topology, string Occupancy, string? Turn = null, string? Verdict = null,
+    string? Move = null, string? Plan = null, WorldBoardEnforcement Enforcement = WorldBoardEnforcement.Record, long Accept = 1L);
+/// <summary>A placement's grip facet — overrides the world's <see cref="WorldCollision.DefaultHold"/> hold
+/// policy for every collider this row compiles, composing as the tighter authoring layer: present, it decides;
+/// absent, the row's colliders fall back to the world default. Requires <see cref="WorldPlacement.Solid"/> (nothing
+/// else compiles a collider a grip trait could apply to). Every collider a distribution/mirror expands from one row
+/// shares the row's single grip decision — a lattice of holdable handholds is authored as one placement, not one
+/// per copy.</summary>
+/// <param name="Holdable">Whether a body's surface hold may take this row's compiled surface(s), overriding the
+/// world default.</param>
+public sealed record WorldPlacementGrip(bool Holdable);
 /// <summary>A placement's attach facet — binds the row's stamp to a live population body's transform, so the
 /// resolved world pose follows that body every tick (an avatar's hat, held item, nameplate, or aura) instead of
 /// sitting at the row's own authored <see cref="WorldPlacement.Position"/>/<see cref="WorldPlacement.YawDegrees"/>.
@@ -104,8 +282,8 @@ public sealed record WorldPlacementRegion(float Radius);
 /// <list type="bullet">
 /// <item><description>the authoritative answer is fixed point — the body's fixed-point pose composed with this
 /// facet's authored (float, quantized at resolution like every other placement field) offset, by
-/// <c>Puck.World.Server.WorldPlacementAttachment.TryResolve</c>, on demand: <c>world.attachments</c> is its only
-/// caller today, so it runs when a reader asks rather than on a schedule;</description></item>
+/// <c>Puck.World.Server.WorldPlacementAttachment.TryResolve</c>, on demand by <c>world.attachments</c> and once per
+/// tick by attached local gravity areas;</description></item>
 /// <item><description>the rendered pose is presentation float — the same composition over the client's
 /// interpolated body pose, packed every frame by <c>Client.WorldStampPool</c>, which is what makes an attached row
 /// visibly ride its body as smoothly as the body itself. An attached row draws through that reserved stamp pool and
@@ -115,6 +293,7 @@ public sealed record WorldPlacementRegion(float Radius);
 /// Region, solid (under the analytic contact provider), and emission were once refused on the same row as this one
 /// because each read the row's own static transform — all three now read the same resolved dynamic pose instead
 /// (<c>Server.WorldEventFeed.CollectRegions</c>, <c>Server.WorldColliderSet.RefreshAttached</c>,
+/// <c>Server.WorldGravityField.RefreshAttachedAreas</c>,
 /// <c>Client.WorldStampPool.TryShapePosition</c>/<c>RootPose</c>), so a region's aura, an analytic collider's
 /// hitbox, and an emission's voice all track the carrier: an equipped item's sensing sphere, hitbox, or source point
 /// rides the body it is attached to. What stays refused: distribution/mirror (static-stamp-only, the same rule an
@@ -141,15 +320,21 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// boundary, never written to the document).
 /// </summary>
 /// <param name="Id">The row's stable string id (its mutation address).</param>
-/// <param name="CreationId">The referenced <see cref="WorldCreation.Id"/> (must resolve; removal of a referenced
+/// <param name="PrototypeId">The referenced <see cref="WorldPrototype.Id"/> (must resolve; removal of a referenced
 /// creation rejects loudly).</param>
-/// <param name="Position">The stamp position, world space. Inert (still validated and stored, but read by nothing —
-/// neither the resolve nor the renderer) when <paramref name="Attach"/> is set: the row's live position is the resolved
-/// attachment, never this authored one.</param>
-/// <param name="YawDegrees">The stamp yaw about +Y, degrees. Same attach caveat as <paramref name="Position"/>.</param>
+/// <param name="Position">The stamp position — world space when <paramref name="Parent"/> is null (today's behavior,
+/// unchanged), or this row's own local frame relative to <paramref name="Parent"/>'s COMPOSED world frame otherwise
+/// (see <paramref name="Parent"/>). Inert (still validated and stored, but read by nothing — neither the resolve nor
+/// the renderer) when <paramref name="Attach"/> is set: the row's live position is the resolved attachment, never
+/// this authored one.</param>
+/// <param name="YawDegrees">The stamp yaw about +Y, degrees — world-space when <paramref name="Parent"/> is null,
+/// added to the parent's own composed yaw otherwise. Same attach caveat as <paramref name="Position"/>.</param>
 /// <param name="Scale">The uniform stamp scale (clamped to the placement policy envelope by validation).</param>
 /// <param name="Distribution">The placement distribution, or <see langword="null"/> for a single copy. Static
-/// placements currently accept a lattice region with a <c>none</c> fill. Refused together with <paramref name="Attach"/>.</param>
+/// placements accept a Lattice, Noise, or Scatter region, each with a <c>none</c> fill — Lattice materializes a
+/// regular two-axis grid (<see cref="WorldPlacementStamp.PatternFor"/>); Noise and Scatter materialize a
+/// deterministic hash-sampled instance set instead (<see cref="WorldPlacementStamp.SampledFixedOffsetsFor"/>), the
+/// placement twin of the field lattice's own Noise/Scatter fills. Refused together with <paramref name="Attach"/>.</param>
 /// <param name="Mirror">The authored local reflection plane, or <see langword="null"/> for no reflected copy. Refused
 /// together with <paramref name="Attach"/>.</param>
 /// <param name="Emission">The placement's emission facet (a synth voice the stamp itself makes — see
@@ -177,9 +362,42 @@ public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOf
 /// <param name="Attach">The placement's attach facet (see <see cref="WorldPlacementAttach"/>) — binds the row's
 /// resolved world pose to a live population body, or <see langword="null"/> for a static/authored transform (the
 /// default, unchanged behavior). Omitted from the wire when null.</param>
+/// <param name="Contribution">The placement's contribution facet (see <see cref="WorldPlacementContribution"/>) —
+/// marks the row a host-authored slot a federation partner fills, or <see langword="null"/> for an ordinary
+/// placement. Omitted from the wire when null. Composes with every other facet: the facet governs which creation the
+/// row shows and for how long, never its transform.</param>
+/// <param name="Respond">The placement's response facet (see <see cref="WorldPlacementResponse"/>) — the ordered
+/// state-driven prototype swaps a lattice-field condition can fire, or <see langword="null"/> for an ordinary
+/// placement that always shows <paramref name="PrototypeId"/>. Omitted from the wire when null. Refused together
+/// with <paramref name="Attach"/>, <paramref name="Inhabit"/>, and <paramref name="FaceSources"/>.</param>
+/// <param name="Grip">The placement's grip facet (see <see cref="WorldPlacementGrip"/>) — overrides the world's
+/// default hold policy for this row's compiled surface(s), or <see langword="null"/> to inherit the world default.
+/// Omitted from the wire when null. Requires <paramref name="Solid"/> (validated).</param>
+/// <param name="Board">The placement's board facet (see <see cref="WorldPlacementBoard"/>) — the tabletop
+/// primitive, or <see langword="null"/> for no anchored topology. Omitted from the wire when null.</param>
+/// <param name="Parent">Another placement's <see cref="Id"/> this row's frame composes over, or <see langword="null"/>
+/// for a world-space row (today's behavior, unchanged). <see cref="Position"/>/<see cref="YawDegrees"/> become this
+/// row's own LOCAL offset/heading in the parent's composed frame: the parent's resolved yaw rotates the offset before
+/// adding the parent's resolved position (the same local-offset-rotated-by-orientation convention
+/// <see cref="WorldPlacementAttach"/> already uses), and yaw adds. Resolved ONCE, statically, by
+/// <see cref="WorldPlacementFrameCompilation"/> — never per tick — into <see cref="WorldDefinition.PlacementFrames"/>,
+/// which every consumer of a placement's WORLD transform reads instead of this row's own Position/YawDegrees.
+/// Validated: must name a declared placement other than itself, must not close a cycle, and that placement must
+/// carry neither a <see cref="Distribution"/> nor a <see cref="Mirror"/> (an expanded row has no single frame to
+/// compose against). Parent scale multiplies the child's local offset and resolved scale.</param>
+/// <param name="Deal">The placement's deal facet (see <see cref="WorldPlacementDeal"/>) — the row is a template whose
+/// instances are dealt from a keyed state row as child placements over its own <see cref="Distribution"/> region, or
+/// <see langword="null"/> for an ordinary placement. A template renders nothing and collides with nothing itself.
+/// Omitted from the wire when null. Requires <see cref="Distribution"/>; refused together with <see cref="Inhabit"/>,
+/// <see cref="Attach"/>, <see cref="Respond"/>, <see cref="Mirror"/>, and <see cref="FaceSources"/>.</param>
+/// <param name="DealSlot">A dealt child's reserved distribution slot, independent of its editable transform.
+/// Absent on ordinary placements and templates.</param>
+/// <param name="Spatial">Named occupation, clearance, and influence volumes in this placement's local frame. The
+/// compiled static-query eligibility is exposed by <see cref="WorldSpatialQueryIndex.Unsupported"/>; ordinary
+/// inhabit/attach/distribution facets remain legal and are reported there when they have no single static frame.</param>
 public sealed record WorldPlacement(
     string Id,
-    string CreationId,
+    string PrototypeId,
     DocumentVector3 Position,
     float YawDegrees,
     float Scale,
@@ -190,7 +408,15 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementInhabit? Inhabit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementFace>? FaceSources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementRegion? Region = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementAttach? Attach = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementAttach? Attach = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementContribution? Contribution = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementResponse>? Respond = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementGrip? Grip = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementBoard? Board = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DealSlot = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null
 );
 /// <summary>Adapts placement document facets to the shared creation-stamp vocabulary.</summary>
 public static class WorldPlacementStamp {
@@ -212,4 +438,83 @@ public static class WorldPlacementStamp {
         )
         : null
     );
+    /// <summary>Resolves a Noise/Scatter distribution's placement-local offsets in fixed point — the deterministic,
+    /// Q48.16-only instance decision (see <see cref="CreationStampSampling"/>). <see langword="null"/> when the
+    /// placement carries no distribution or a Lattice/none region (<see cref="PatternFor"/> governs those instead).</summary>
+    /// <param name="placement">The placement row.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
+    public static IReadOnlyList<FixedVector3>? SampledFixedOffsetsFor(WorldPlacement placement, ulong worldSeed) => placement.Distribution?.Region switch {
+        WorldDistributionRegion.Noise noise => CreationStampSampling.ResolveNoise(
+            cellSize: FixedQ4816.FromDouble(value: noise.CellSize),
+            width: noise.Width,
+            depth: noise.Depth,
+            frequency: noise.Frequency,
+            threshold: FixedQ4816.FromDouble(value: noise.Threshold),
+            octaves: noise.Octaves,
+            seed: noise.Seed,
+            worldSeed: worldSeed
+        ),
+        WorldDistributionRegion.Scatter scatter => CreationStampSampling.ResolveScatter(
+            cellSize: FixedQ4816.FromDouble(value: scatter.CellSize),
+            width: scatter.Width,
+            depth: scatter.Depth,
+            spacing: scatter.Spacing,
+            radius: scatter.Radius,
+            seed: scatter.Seed,
+            worldSeed: worldSeed
+        ),
+        _ => null,
+    };
+    /// <summary>The presentation-float widening of <see cref="SampledFixedOffsetsFor"/>, for the renderer's stamp
+    /// emission — never fed back into simulation state.</summary>
+    /// <param name="placement">The placement row.</param>
+    /// <param name="worldSeed">The world's reroll seed (<c>generation.worldSeed</c>).</param>
+    public static IReadOnlyList<Vector3>? SampledOffsetsFor(WorldPlacement placement, ulong worldSeed) {
+        if (SampledFixedOffsetsFor(placement: placement, worldSeed: worldSeed) is not { } fixedOffsets) {
+            return null;
+        }
+
+        var offsets = new Vector3[fixedOffsets.Count];
+
+        for (var index = 0; (index < offsets.Length); index++) {
+            offsets[index] = fixedOffsets[index].ToVector3();
+        }
+
+        return offsets;
+    }
+    /// <summary>The worst-case, seed-independent materialized copy count a placement's distribution could ever
+    /// produce — a Lattice's exact CountA x CountB, a Scatter's exact block count, a Noise grid's worst case
+    /// (Width x Depth, since actual admission needs the world seed and is not paid for during validation), or 1 for
+    /// no distribution — mirror-doubled and saturated at <paramref name="ceiling"/>. The seed-independent ceiling
+    /// the document validator bounds an authored grid against; see <see cref="SampledFixedOffsetsFor"/> for the
+    /// actual (seed-resolved) count a booted world materializes.</summary>
+    /// <param name="placement">The placement row.</param>
+    /// <param name="ceiling">The largest returned value.</param>
+    public static long MaterializedCopyCeiling(WorldPlacement placement, long ceiling = long.MaxValue) {
+        var mirror = MirrorFor(placement: placement);
+
+        return placement.Distribution?.Region switch {
+            WorldDistributionRegion.Noise noise => WithMirror(
+                copies: Math.Min(val1: CreationStampSampling.NoiseInstanceCeiling(width: noise.Width, depth: noise.Depth), val2: ceiling),
+                mirror: mirror,
+                ceiling: ceiling
+            ),
+            WorldDistributionRegion.Scatter scatter => WithMirror(
+                copies: Math.Min(val1: CreationStampSampling.ScatterInstanceCeiling(width: scatter.Width, depth: scatter.Depth, spacing: scatter.Spacing), val2: ceiling),
+                mirror: mirror,
+                ceiling: ceiling
+            ),
+            _ => CreationStampLattice.MaterializedCopyCount(
+                pattern: PatternFor(placement: placement),
+                sampledCount: null,
+                mirror: mirror,
+                ceiling: ceiling
+            ),
+        };
+
+        static long WithMirror(long copies, CreationStampPlane? mirror, long ceiling) => ((mirror is null)
+            ? copies
+            : CreationStampLattice.MultiplySaturated(ceiling: ceiling, left: copies, right: 2L)
+        );
+    }
 }

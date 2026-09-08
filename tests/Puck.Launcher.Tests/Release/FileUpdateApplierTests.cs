@@ -7,13 +7,9 @@ namespace Puck.Launcher.Tests.Release;
 /// <summary>Laws over <see cref="FileUpdateApplier"/>: hash re-verification, the atomic <c>current</c> pointer, and
 /// <c>last-good</c> retention.</summary>
 public sealed class FileUpdateApplierTests : IDisposable {
-    private readonly string m_root = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-launcher-applier-tests-{Guid.NewGuid():n}");
+    private readonly TempStagingRoot m_root = new();
 
-    public void Dispose() {
-        if (Directory.Exists(path: m_root)) {
-            Directory.Delete(path: m_root, recursive: true);
-        }
-    }
+    public void Dispose() => m_root.Dispose();
 
     private static ReleaseManifest ManifestFor(string version, int stateGeneration, ReleasePayloadFile file) => new(
         App: "puck.world",
@@ -29,7 +25,7 @@ public sealed class FileUpdateApplierTests : IDisposable {
         Version: version
     );
     private void StageFile(string version, string relativePath, byte[] content) {
-        var stagedPath = Path.Combine(path1: m_root, path2: "versions", path3: version, path4: relativePath);
+        var stagedPath = Path.Combine(path1: m_root.RootPath, path2: "versions", path3: version, path4: relativePath);
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: stagedPath)!);
         File.WriteAllBytes(bytes: content, path: stagedPath);
@@ -40,7 +36,7 @@ public sealed class FileUpdateApplierTests : IDisposable {
         var applier = new FileUpdateApplier();
         var manifest = ManifestFor(version: "1.0.1", stateGeneration: 1, file: new ReleasePayloadFile(Path: "a.dll", Hash: $"sha256/{new string(c: '0', count: 64)}", Size: 1));
 
-        var result = applier.Apply(cacheRoot: m_root, manifest: manifest, rid: "win-x64");
+        var result = applier.Apply(cacheRoot: m_root.RootPath, manifest: manifest, rid: "win-x64");
 
         Assert.False(condition: result.Applied);
         Assert.Contains(expectedSubstring: "not staged", actualString: result.RefusalReason!, comparisonType: StringComparison.OrdinalIgnoreCase);
@@ -55,11 +51,11 @@ public sealed class FileUpdateApplierTests : IDisposable {
         var applier = new FileUpdateApplier();
         var manifest = ManifestFor(version: "1.0.1", stateGeneration: 1, file: new ReleasePayloadFile(Path: "a.dll", Hash: hash, Size: content.Length));
 
-        var result = applier.Apply(cacheRoot: m_root, manifest: manifest, rid: "win-x64");
+        var result = applier.Apply(cacheRoot: m_root.RootPath, manifest: manifest, rid: "win-x64");
 
         Assert.False(condition: result.Applied);
         Assert.Contains(expectedSubstring: "hash", actualString: result.RefusalReason!, comparisonType: StringComparison.OrdinalIgnoreCase);
-        Assert.False(condition: File.Exists(path: Path.Combine(path1: m_root, path2: "current")));
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: m_root.RootPath, path2: "current")));
     }
     [Fact]
     public void Apply_WritesCurrentAndStateGeneration_OnAFirstInstall_WithNoLastGood() {
@@ -71,13 +67,13 @@ public sealed class FileUpdateApplierTests : IDisposable {
         var applier = new FileUpdateApplier();
         var manifest = ManifestFor(version: "1.0.0", stateGeneration: 1, file: new ReleasePayloadFile(Path: "a.dll", Hash: hash, Size: content.Length));
 
-        var result = applier.Apply(cacheRoot: m_root, manifest: manifest, rid: "win-x64");
+        var result = applier.Apply(cacheRoot: m_root.RootPath, manifest: manifest, rid: "win-x64");
 
         Assert.True(condition: result.Applied, userMessage: result.RefusalReason);
         Assert.Null(@object: result.PreviousVersion);
-        Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: m_root, path2: "current")).Trim());
-        Assert.Equal(expected: "1", actual: File.ReadAllText(path: Path.Combine(path1: m_root, path2: "versions", path3: "1.0.0", path4: "state-generation")).Trim());
-        Assert.False(condition: File.Exists(path: Path.Combine(path1: m_root, path2: "last-good")));
+        Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "current")).Trim());
+        Assert.Equal(expected: "1", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "versions", path3: "1.0.0", path4: "state-generation")).Trim());
+        Assert.False(condition: File.Exists(path: Path.Combine(path1: m_root.RootPath, path2: "last-good")));
     }
     [Fact]
     public void Apply_RetainsThePreviousCurrentAsLastGood_OnASecondApply() {
@@ -91,15 +87,15 @@ public sealed class FileUpdateApplierTests : IDisposable {
 
         var applier = new FileUpdateApplier();
 
-        var first = applier.Apply(cacheRoot: m_root, manifest: ManifestFor(version: "1.0.0", stateGeneration: 1, file: new ReleasePayloadFile(Path: "a.dll", Hash: firstHash, Size: firstContent.Length)), rid: "win-x64");
+        var first = applier.Apply(cacheRoot: m_root.RootPath, manifest: ManifestFor(version: "1.0.0", stateGeneration: 1, file: new ReleasePayloadFile(Path: "a.dll", Hash: firstHash, Size: firstContent.Length)), rid: "win-x64");
 
         Assert.True(condition: first.Applied, userMessage: first.RefusalReason);
 
-        var second = applier.Apply(cacheRoot: m_root, manifest: ManifestFor(version: "1.0.1", stateGeneration: 2, file: new ReleasePayloadFile(Path: "a.dll", Hash: secondHash, Size: secondContent.Length)), rid: "win-x64");
+        var second = applier.Apply(cacheRoot: m_root.RootPath, manifest: ManifestFor(version: "1.0.1", stateGeneration: 2, file: new ReleasePayloadFile(Path: "a.dll", Hash: secondHash, Size: secondContent.Length)), rid: "win-x64");
 
         Assert.True(condition: second.Applied, userMessage: second.RefusalReason);
         Assert.Equal(expected: "1.0.0", actual: second.PreviousVersion);
-        Assert.Equal(expected: "1.0.1", actual: File.ReadAllText(path: Path.Combine(path1: m_root, path2: "current")).Trim());
-        Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: m_root, path2: "last-good")).Trim());
+        Assert.Equal(expected: "1.0.1", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "current")).Trim());
+        Assert.Equal(expected: "1.0.0", actual: File.ReadAllText(path: Path.Combine(path1: m_root.RootPath, path2: "last-good")).Trim());
     }
 }

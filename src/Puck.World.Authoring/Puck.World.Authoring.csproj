@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <!-- CreationCanonicalizer.Canonicalize calls Puck.Assets.Documents.DocumentCanonicalizer.Canonicalize<T>,
+             which carries RequiresUnreferencedCode (reflection-based JsonSerializer). -->
+        <IsAotCompatible>false</IsAotCompatible>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.SignedDistance\Puck.SignedDistance.csproj" />
+        <ProjectReference Include="..\Puck.Text\Puck.Text.csproj" />
+    </ItemGroup>
+</Project>

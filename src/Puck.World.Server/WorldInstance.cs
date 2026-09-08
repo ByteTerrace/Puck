@@ -15,6 +15,7 @@ namespace Puck.World;
 public sealed class WorldInstance : IDisposable {
     private readonly Func<string> m_origin;
     private readonly IDisposable? m_ownedAdjacencies;
+    private readonly WorldPeerNetwork? m_ownedNetwork;
 
     /// <summary>Initializes one running instance's held graph.</summary>
     /// <param name="name">The console-facing instance name, unique among running instances.</param>
@@ -32,9 +33,10 @@ public sealed class WorldInstance : IDisposable {
     /// <param name="documentOrigin">This row's document origin — where its <c>references[].document</c> locators
     /// resolve against.</param>
     /// <param name="ownedAdjacencies">The per-instance adjacency resolver this row owns, or null for boot wiring.</param>
+    /// <param name="ownedNetwork">The peer network this row owns, or null when shared and externally owned.</param>
     /// <exception cref="ArgumentException"><paramref name="name"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInstance(string name, Func<string> origin, WorldServer server, WorldMachineHost? ownedMachines, IServerLink link, WorldFederationIdentity federation, WorldDocumentOrigin documentOrigin, IDisposable? ownedAdjacencies = null) {
+    public WorldInstance(string name, Func<string> origin, WorldServer server, IWorldMachineHost? ownedMachines, IServerLink link, WorldFederationIdentity federation, WorldDocumentOrigin documentOrigin, IDisposable? ownedAdjacencies = null, WorldPeerNetwork? ownedNetwork = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         ArgumentNullException.ThrowIfNull(argument: origin);
         ArgumentNullException.ThrowIfNull(argument: server);
@@ -46,9 +48,11 @@ public sealed class WorldInstance : IDisposable {
         Server = server;
         OwnedMachines = ownedMachines;
         Link = link;
+        ListenEndpoint = server.Definition.Host.Listen;
         Federation = federation;
         Origin = documentOrigin;
         m_ownedAdjacencies = ownedAdjacencies;
+        m_ownedNetwork = ownedNetwork;
     }
 
     /// <summary>The number of fixed ticks this instance has completed since it started — derived from its own server
@@ -60,7 +64,10 @@ public sealed class WorldInstance : IDisposable {
     public ulong CompletedTicks => (Server.NextInputTick - 1UL);
     /// <summary>This row's per-activation socket door, or <see langword="null"/> for a row nothing outside its own
     /// process reaches directly (a desktop's non-boot local instance).</summary>
-    public WorldTcpHost? Door { get; set; }
+    public WorldPeerHost? Door { get; set; }
+    /// <summary>The listener configuration for this activation; defaults to the server document. A hosting
+    /// composition may supply its current endpoint independently of an older recovered checkpoint.</summary>
+    public string? ListenEndpoint { get; init; }
     /// <summary>This instance's own exact engine-tick elapsed clock, accumulated additively one step width at a
     /// time rather than re-derived as <c>(tick + 1) * stepWidth</c> — the identical
     /// discontinuity <c>Puck.Launcher.FixedStepPump</c>'s own <c>m_elapsedTicks</c> field exists to avoid: a product
@@ -99,7 +106,7 @@ public sealed class WorldInstance : IDisposable {
     public WorldDocumentOrigin Origin { get; set; }
     /// <summary>The machine host this instance owns and disposes, or <see langword="null"/> when the container
     /// owns it.</summary>
-    public WorldMachineHost? OwnedMachines { get; }
+    public IWorldMachineHost? OwnedMachines { get; }
 
     /// <summary>This instance's portal-crossing edge state, read and written by <see cref="WorldInstanceHost"/>'s
     /// diegetic boundary scan. Scoped to this instance object — a name reused after
@@ -131,5 +138,6 @@ public sealed class WorldInstance : IDisposable {
         m_ownedAdjacencies?.Dispose();
         OwnedMachines?.Dispose();
         Door?.Dispose();
+        m_ownedNetwork?.Dispose();
     }
 }

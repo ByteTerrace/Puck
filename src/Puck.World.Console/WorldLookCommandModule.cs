@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using Puck.Commands;
 using Puck.World.Protocol;
@@ -18,14 +17,25 @@ namespace Puck.World;
 /// analyzer ceilings.
 /// </summary>
 public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, IServerLink link) : ICommandModule {
-    // The world.looks census: one row per look, mirroring world.population's per-kit echo.
+    // The world.looks census: one row per look, mirroring world.population's per-kit echo. dyn= names the root
+    // dynamics row when the look authors one; partDyn= is the authored part-follower count.
     private static string DescribeLooks(WorldPopulation population) {
         var rows = population.LookRows;
         var counts = population.ActiveLookCounts();
         var builder = new StringBuilder(value: "[world.looks:");
 
         for (var index = 0; (index < rows.Count); index++) {
+            var motion = rows[index].Motion;
+
             _ = builder.Append(value: $" {rows[index].Name}={DescribeSource(source: rows[index].Source)}:{counts[index]}");
+
+            if (motion.Dynamics is { } dynamicsRow) {
+                _ = builder.Append(value: $" dyn={dynamicsRow}");
+            }
+
+            if (motion.PartDynamics is { Count: > 0 } partDynamics) {
+                _ = builder.Append(value: $" partDyn={partDynamics.Count}");
+            }
         }
 
         return builder.Append(value: ']').ToString();
@@ -33,7 +43,7 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
     private static string DescribeSource(WorldLookSource source) => source switch {
         WorldLookSource.Catalog { Index: { } catalogIndex } => $"catalog(index {catalogIndex})",
         WorldLookSource.Catalog => "catalog(index-derived)",
-        WorldLookSource.Creation creation => $"creation({creation.CreationId})",
+        WorldLookSource.Creation creation => $"creation({creation.PrototypeId})",
         _ => "unknown",
     };
     private static WorldDistribution? ParseDistribution(in WireArgs args, out string error) {
@@ -45,17 +55,13 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
         )) {
             if (
                 (args.Count != 3) ||
-                !float.TryParse(
-                s: args[1],
-                style: NumberStyles.Float,
-                provider: CultureInfo.InvariantCulture,
-                result: out var radius
+                !args.TryFloat(
+                index: 1,
+                value: out var radius
             ) ||
-                !int.TryParse(
-                s: args[2],
-                style: NumberStyles.Integer,
-                provider: CultureInfo.InvariantCulture,
-                result: out var sampleCount
+                !args.TryInt(
+                index: 2,
+                value: out var sampleCount
             )
             ) {
                 error = "disc needs a <radius> number and <sampleCount> integer";
@@ -82,11 +88,9 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
         )) {
             if (
                 (args.Count < 3) ||
-                !float.TryParse(
-                s: args[1],
-                style: NumberStyles.Float,
-                provider: CultureInfo.InvariantCulture,
-                result: out var halfExtent
+                !args.TryFloat(
+                index: 1,
+                value: out var halfExtent
             )
             ) {
                 error = "points needs a <halfExtent> number then at least one spawn-point id";
@@ -117,12 +121,6 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
 
         return null;
     }
-    private CommandResult Submit(WorldMutation mutation) {
-        link.SubmitWorldMutation(mutation: mutation);
-
-        return CommandResult.None;
-    }
-    private static CommandResult Usage(string verb, string form) => CommandResult.Error(output: $"[{verb}: expected {form}]");
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
@@ -132,7 +130,7 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
             description: "Sets the simulated-peer spawn distribution (LIVE for future activations, standing bodies unmoved): world.population.spawn disc <radius> <sampleCount> | points <halfExtent> <id> [<id>…].",
             handler: (context, args) => {
                 if (args.Count == 0) {
-                    return Usage(
+                    return CommandResult.Usage(
                         form: "disc <radius> <sampleCount> | points <halfExtent> <id> [<id>…]",
                         verb: "world.population.spawn"
                     );
@@ -154,11 +152,9 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
                     return error;
                 }
 
-                var current = server.Definition.Population;
-
-                return Submit(mutation: new WorldMutation.SetPopulationDefaults(
+                return link.Submit(mutation: new WorldMutation.SetPopulationDistribution(
                     Principal: context.ActingPrincipal(),
-                    Population: (current with { DistributionRaw = distribution })
+                    Distribution: distribution
                 ));
             },
             routing: CommandRouting.Simulation
@@ -168,8 +164,8 @@ public sealed class WorldLookCommandModule(IWorldConsoleAuthority authority, ISe
             name: "world.looks",
             description: "Reports the LOOK census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): one line per look row — name, resolved source, active entity count. A world with no looks section prints the single implicit 'catalog (index-derived)' row over the whole population.",
             handler: (context, args) => {
-                if (args.Count != 0) {
-                    return CommandResult.Error(output: $"[world.looks: unrecognized '{args[0]}' — expected no arguments]");
+                if (CommandResult.RequireNoArguments(args: args, verb: "world.looks") is { } refusal) {
+                    return refusal;
                 }
 
                 if (!authority.TryResolveServer(

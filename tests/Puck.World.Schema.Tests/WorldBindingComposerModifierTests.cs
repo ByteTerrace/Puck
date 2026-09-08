@@ -13,16 +13,16 @@ public sealed class WorldBindingComposerModifierTests {
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [new BindingModifierDefinition(Id: "tab", Sources: ["keyboard.tab"])],
             Chords: [
-                Row(group: "play", chord: [], page: "base"),
-                Row(group: "play", chord: ["tab"], page: "play-wheel"),
-                Row(group: "editor", chord: [], page: "editor-base"),
-                Row(group: "editor", chord: ["tab"], page: "editor-wheel"),
+                Row(chord: [], group: "play", page: "base"),
+                Row(chord: ["tab"], group: "play", page: "play-wheel"),
+                Row(chord: [], group: "editor", page: "editor-base"),
+                Row(chord: ["tab"], group: "editor", page: "editor-wheel"),
             ]
         );
         var overlay = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [new BindingModifierDefinition(Id: "actionWheel", Sources: ["gamepad.leftShoulder", "keyboard.tab"])],
-            Chords: [Row(group: "play", chord: ["actionWheel"], page: "actionWheel")]
+            Chords: [Row(chord: ["actionWheel"], group: "play", page: "actionWheel")]
         );
 
         var composed = WorldBindingComposer.Compose(baseDocument, overlay);
@@ -42,7 +42,7 @@ public sealed class WorldBindingComposerModifierTests {
         var baseDocument = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
             Modifiers: [new BindingModifierDefinition(Id: "tab", Sources: ["keyboard.tab"])],
-            Chords: [Row(group: "play", chord: [], page: "base"), Row(group: "play", chord: ["tab"], page: "play-wheel")]
+            Chords: [Row(chord: [], group: "play", page: "base"), Row(chord: ["tab"], group: "play", page: "play-wheel")]
         );
         var overlay = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
@@ -65,7 +65,7 @@ public sealed class WorldBindingComposerModifierTests {
                 new BindingModifierDefinition(Id: "lt", Sources: ["gamepad.leftTrigger"]),
                 new BindingModifierDefinition(Id: "rt", Sources: ["gamepad.rightTrigger"]),
             ],
-            Chords: [Row(group: "play", chord: [], page: "base"), Row(group: "play", chord: ["lt", "rt"], page: "both")]
+            Chords: [Row(chord: [], group: "play", page: "base"), Row(chord: ["lt", "rt"], group: "play", page: "both")]
         );
         var overlay = new BindingProfileDocument(
             Version: BindingProfileDocument.CurrentVersion,
@@ -73,7 +73,7 @@ public sealed class WorldBindingComposerModifierTests {
             Chords: []
         );
 
-        var exception = Assert.Throws<ArgumentException>(() => WorldBindingComposer.Compose(baseDocument, overlay));
+        var exception = Assert.Throws<ArgumentException>(testCode: () => WorldBindingComposer.Compose(baseDocument, overlay));
 
         Assert.Contains(expectedSubstring: "\"triggers\"", actualString: exception.Message);
     }

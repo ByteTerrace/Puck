@@ -1,0 +1,1590 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Sockets;
+using System.Threading.Channels;
+using Puck.Networking;
+using Puck.Networking.Peers;
+using Puck.World.Protocol;
+
+namespace Puck.World.Server;
+
+/// <summary>One admitted remote connection's read-back row — <c>world.peers</c>' one source of truth.</summary>
+/// <param name="ConnectionId">The connection id this door assigned at admission.</param>
+/// <param name="PeerIndex">The admitted population body index.</param>
+/// <param name="Generation">The admission generation.</param>
+/// <param name="RemoteEndpoint">The remote socket endpoint, as text.</param>
+/// <param name="IdentityDomain">The verified admission identity's domain (see <see cref="WorldAdmissionDoor"/>).</param>
+/// <param name="IdentitySubject">The verified admission identity's subject (empty for a Vouches root's chain-resolved subject).</param>
+/// <param name="Tier">How much of this world's document the admitting entry authorized this connection to receive.</param>
+public readonly record struct WorldPeerConnectionInfo(int ConnectionId, int PeerIndex, int Generation, string RemoteEndpoint, string IdentityDomain, string IdentitySubject, WorldDisclosureTier Tier);
+/// <summary>
+/// The World admission and application-protocol endpoint over the networking library's authenticated QUIC peers.
+/// Per connection: the raw Hello handshake (<see cref="WorldHelloDoor"/>'s protocol-version check, then
+/// <see cref="WorldAdmissionDoor"/>'s challenge-response identity check) runs off the tick thread — neither touches
+/// server state beyond a read-only snapshot of the current document's admission entries — while admission
+/// (<see cref="WorldServer.TryAdmitPeerConnection"/>) and every subsequent submission run on the tick thread —
+/// marshaled there through <see cref="m_pending"/>, drained by <see cref="DrainPending"/> at the top of every fixed
+/// step (<c>WorldServerStepShell.Step</c>), exactly where the design's §1.5 "deterministic fair merge" window sits.
+/// v1 keeps that merge to its simplest correct shape: one global FIFO (no per-connection quotas, no bounded-queue
+/// backpressure) — a trusted-LAN connection count small enough that fairness never needs more.
+/// </summary>
+/// <remarks>
+/// v1 is strictly request-then-response per connection: a connection's dedicated read loop decodes one upstream
+/// frame, awaits its tick-thread completion, writes the one downstream reply, then reads the next — so no
+/// correlation id needs to travel on the wire (see <see cref="WorldPeerWireFormat"/>). This is a deliberate
+/// simplification the design's own admission-budget/pipelining machinery is not part of; nothing here queues or
+/// retries a connection.
+/// </remarks>
+public sealed class WorldPeerHost : IDisposable {
+    /// <summary>The ceiling on concurrent in-flight unauthenticated handshakes (a socket accepted but not yet
+    /// admitted or refused). A safety representation constant, never a document knob (CLAUDE.md core rule 8's
+    /// "legitimate constants" carve-out names capacity bounds that size memory or the wire — this sizes the
+    /// pre-admission connection table, not a per-world tunable Play/Dive/Kart/Jump would ever want different).
+    /// Sized independently of <see cref="WorldBodiesLimits.CapacityCeiling"/> (4096, the admitted population
+    /// bound) — a stalled handshake never reaches the population table at all, so it needs its own,
+    /// smaller ceiling. 64 is chosen against this class's own documented design target ("a trusted-LAN connection
+    /// count small enough that fairness never needs more" — this type's remarks above): generous headroom for that
+    /// target's legitimate traffic, while still bounding the socket/thread/buffer cost a flood of half-open
+    /// connections can pin before any of them ever reaches a capacity check.</summary>
+    private const int MaxConcurrentHandshakes = 64;
+
+    /// <summary>The wall-clock deadline for the entire pre-admission handshake (Hello's version check through the
+    /// identity door's verify and the tick-thread population admit). This bounds connection lifecycle, never
+    /// simulation state — the wall-clock ban in CLAUDE.md's determinism rule governs the tick, and a socket that
+    /// never finishes proving who it is has not entered the tick at all
+    /// (<see cref="Protocol.WorldAdmissionDoor.TryAdmit"/>'s own <c>now: DateTimeOffset</c> parameter already reads
+    /// the wall clock for the identical reason). Without a deadline, a peer that completes Hello but then stalls
+    /// (or never sends) the identity frame pins a socket, a read buffer, and a slot under
+    /// <see cref="MaxConcurrentHandshakes"/> forever — the slowloris shape. 10 seconds is generous for any
+    /// legitimate LAN or WAN client (the identity frame is at most
+    /// <see cref="HandshakeWireFormat.MaxHelloIdentityBytes"/>, ~64 KiB of already-small P-256 envelopes) while still
+    /// bounding the worst case to a small, fixed number of seconds rather than never.</summary>
+    private static readonly TimeSpan HandshakeDeadline = TimeSpan.FromSeconds(value: 10);
+
+    private readonly TimeProvider m_timeProvider;
+    private readonly IAuthenticator m_authenticator;
+    private readonly WorldServer m_server;
+
+    private Task? m_acceptLoop;
+    private CancellationTokenSource? m_cts;
+    private bool m_disposed;
+
+    private readonly WorldPeerNetwork m_network;
+    private readonly bool m_ownsNetwork;
+
+    private int m_nextConnectionId;
+    private int m_pendingHandshakes;
+
+    // Indexed by WorldFederationRefusal; every federation refusal this door writes is counted here so the read-back
+    // reports refusals by name rather than by sentence.
+    private readonly int[] m_federationRefusals = new int[Enum.GetValues<WorldFederationRefusal>().Length];
+    // Federation connections are long-lived and are not admitted bodies, so they are not in m_connections. They are
+    // tracked here only so shutdown can half-close them; the value is unused.
+    private readonly ConcurrentDictionary<PeerStream, byte> m_federationConnections = new();
+    private readonly ConcurrentQueue<Action> m_pending = new();
+    private readonly List<Connection> m_connections = [];
+    private readonly Lock m_connectionsLock = new();
+
+    /// <summary>Initializes a new instance of the <see cref="WorldPeerHost"/> class over the server it admits into.</summary>
+    /// <param name="server">The authoritative server.</param>
+    /// <param name="timeProvider">The admission deadline clock; defaults to system time.</param>
+    public WorldPeerHost(WorldServer server, TimeProvider? timeProvider = null) : this(
+        server: server,
+        authenticator: new WorldAttestedAuthenticator(),
+        timeProvider: timeProvider
+    ) { }
+    /// <summary>Initializes a host with an explicit federation authentication policy.</summary>
+    /// <param name="server">The authoritative server.</param>
+    /// <param name="authenticator">The process-scoped federation authenticator; an unconfigured instance denies federation.</param>
+    /// <param name="network">The externally owned shared peer network, or null to own an ephemeral one.</param>
+    /// <param name="timeProvider">The admission deadline clock; defaults to system time.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="server"/> or <paramref name="authenticator"/> is <see langword="null"/>.</exception>
+    public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null, TimeProvider? timeProvider = null) {
+        m_timeProvider = (timeProvider ?? TimeProvider.System);
+        ArgumentNullException.ThrowIfNull(argument: server);
+        ArgumentNullException.ThrowIfNull(argument: authenticator);
+
+        m_server = server;
+        m_authenticator = authenticator;
+        m_network = (network ?? new WorldPeerNetwork());
+        m_ownsNetwork = (network is null);
+    }
+
+    /// <summary>Gets a read-back snapshot of every currently admitted connection, oldest first.</summary>
+    public IReadOnlyList<WorldPeerConnectionInfo> Connections {
+        get {
+            lock (m_connectionsLock) {
+                return [.. m_connections.Select(selector: static c => new WorldPeerConnectionInfo(
+                        ConnectionId: c.Id,
+                        PeerIndex: c.PeerIndex,
+                        Generation: c.Generation,
+                        RemoteEndpoint: c.RemoteEndpoint,
+                        IdentityDomain: c.IdentityDomain,
+                        IdentitySubject: c.IdentitySubject,
+                        Tier: c.Tier
+                    ))];
+            }
+        }
+    }
+    /// <summary>Gets every federation refusal this door has written, by name, omitting names never used.</summary>
+    public IReadOnlyList<(WorldFederationRefusal Refusal, int Count)> FederationRefusals {
+        get {
+            var counts = new List<(WorldFederationRefusal, int)>();
+
+            foreach (var refusal in Enum.GetValues<WorldFederationRefusal>()) {
+                var count = Volatile.Read(location: ref m_federationRefusals[((int)refusal)]);
+
+                if (count > 0) {
+                    counts.Add(item: (refusal, count));
+                }
+            }
+
+            return counts;
+        }
+    }
+    /// <summary>Gets a value indicating whether the listener is currently bound.</summary>
+    public bool IsListening => (ListenEndpoint is not null);
+    /// <summary>Gets the bound endpoint, or <see langword="null"/> while not listening.</summary>
+    public string? ListenEndpoint { get; private set; }
+
+    private async Task AcceptLoopAsync(CancellationToken ct) {
+        var incoming = m_network.Peer.IncomingLinks;
+
+        while (!ct.IsCancellationRequested) {
+            PeerStream client;
+
+            try {
+                client = new PeerStream(link: await incoming.ReadAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false));
+            } catch (Exception ex) when ((ex is OperationCanceledException or ObjectDisposedException or ChannelClosedException)) {
+                break;
+            }
+
+            _ = Task.Run(function: () => HandleConnectionAsync(
+                client: client,
+                ct: ct
+            ));
+        }
+    }
+    // The tier a federated peer's own authority namespace is authored at, decided once per connection through the
+    // same admission arm that decides what an arriving traveler is minted. A namespace no admission row names
+    // resolves to presentation: an authority that never authored trust for this peer never authorized a replica of
+    // its document either.
+    private WorldDisclosureTier DisclosureFor(string sourceAuthority) =>
+        (((WorldAdmissionDoor.TryAdmitArrival(
+            entries: m_server.Definition.Admission,
+            sourceAuthority: sourceAuthority,
+            verdict: out var verdict
+        ) is null) && (verdict is not null))
+            ? verdict.Tier
+            : WorldDisclosureTier.Presentation
+        );
+    // The one decode step both submission ingress paths share (the interactive frame loop and a federated peer's
+    // forwarded submission, once unwrapped): a live payload, or a named WorldCodecFailure — each caller writes its
+    // own dialect's refusal frame from it.
+    private static bool TryDecodeSubmissionFrame(ReadOnlySpan<byte> frame, out WorldSubmissionPayload payload, out WorldCodecFailure failure) {
+        if (
+            !Puck.World.Protocol.WorldFrameCodec.TryDecode(
+            failure: out failure,
+            frame: frame,
+            payload: out var decoded
+        ) ||
+            (decoded is null)
+        ) {
+            payload = null!;
+
+            return false;
+        }
+
+        payload = decoded;
+
+        return true;
+    }
+    private async Task FrameLoopAsync(Connection connection, CancellationToken ct) {
+        while (!ct.IsCancellationRequested) {
+            byte[]? frame;
+
+            try {
+                frame = await HandshakeWireFormat.TryReadLengthPrefixedFrameAsync(
+                    stream: connection.Stream,
+                    maxTotalBytes: WorldPeerWireFormat.MaxUpstreamFrameBytes,
+                    ct: ct
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (Exception ex) when ((ex is IOException or SocketException)) {
+                return;
+            }
+
+            if (frame is null) {
+                return;
+            }
+
+            if (!TryDecodeSubmissionFrame(
+                failure: out var failure,
+                frame: frame,
+                payload: out var payload
+            )) {
+                await WorldPeerWireFormat.WriteRefusalAsync(
+                    stream: connection.Stream,
+                    reason: $"{failure}",
+                    ct: ct
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                continue;
+            }
+
+            // The door stamps the connection's own admitted identity onto every kind that carries an embedded
+            // Principal (Command/Session/Mutation each read it directly rather than the envelope's copy — see
+            // ApplyEnvelope's own remarks) — a handler reads the identity the door resolved, never the one the
+            // client's bytes claimed.
+            var stamped = WorldLocalForwardedAuthority.StampPrincipal(
+                payload: payload,
+                principal: connection.Principal
+            );
+            var envelope = new SubmissionEnvelope(
+                ConnectionId: connection.Id,
+                SessionGeneration: connection.Generation,
+                Sequence: connection.NextSequence(),
+                CorrelationId: connection.NextCorrelation(),
+                Principal: connection.Principal,
+                Payload: stamped
+            );
+
+            var result = await RunOnTickThreadAsync(work: () => {
+                WorldSubmissionResult? captured = null;
+
+                m_server.Submit(
+                    envelope: envelope,
+                    completion: r => captured = r
+                );
+
+                return captured;
+            }).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (result is null) {
+                await WorldPeerWireFormat.WriteRefusalAsync(
+                    stream: connection.Stream,
+                    reason: "the envelope drained with no completion",
+                    ct: ct
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            } else {
+                await WorldPeerWireFormat.WriteResultAsync(
+                    stream: connection.Stream,
+                    result: result,
+                    ct: ct
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            }
+        }
+    }
+    private async Task HandleConnectionAsync(PeerStream client, CancellationToken ct) {
+        // Ambient for the connection's whole lifetime — every downstream await runs under the same logical call
+        // context, and Task.Run's caller (AcceptLoopAsync) never observes it (a fresh execution-context branch per
+        // accepted socket).
+        WorldNarrationScope.Current = m_server.AuthorityIdentity;
+
+        try {
+            await HandleConnectionCoreAsync(
+                client: client,
+                ct: ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        } finally {
+            WorldNarrationScope.Current = null;
+        }
+    }
+    private async Task HandleConnectionCoreAsync(PeerStream client, CancellationToken ct) {
+        var remoteEndpoint = (client.Link.RemoteEndpoint.ToString() ?? "unknown");
+        Stream stream = client;
+
+        // The concurrent-handshake ceiling is checked before any byte crosses the wire for this connection, so a
+        // flood of sockets that never speak still cannot itself grow past MaxConcurrentHandshakes. Refused cheaply
+        // (no crypto, no tick-thread hop) and observably (stderr line, never a silent drop).
+        if (Interlocked.Increment(location: ref m_pendingHandshakes) > MaxConcurrentHandshakes) {
+            Interlocked.Decrement(location: ref m_pendingHandshakes);
+            if (m_server.Output.HasNarrationSink) {
+                m_server.Output.Narrate(
+                    channel: "world.listen",
+                    text: $"[world.listen: refused connection from {remoteEndpoint} — {MaxConcurrentHandshakes} concurrent unauthenticated handshakes already in flight]"
+                );
+            }
+
+            try {
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
+                    ct: ct,
+                    reason: $"handshake-ceiling: {MaxConcurrentHandshakes} concurrent unauthenticated handshakes already in flight",
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (Exception ex) when ((ex is IOException or SocketException or ObjectDisposedException)) {
+                // The caller could not even receive the refusal — nothing more to do.
+            }
+
+            client.Dispose();
+
+            return;
+        }
+
+        // Held only for the pre-admission portion below — released the instant this connection is either admitted
+        // (it becomes an ordinary authenticated session, no longer subject to the handshake ceiling or deadline) or
+        // refused/times out/dies (the outer finally releases it).
+        var handshakeSlotHeld = true;
+
+        // The wall-clock deadline, linked to the accept loop's own cancellation so shutdown still wins.
+        using var timer = new CancellationTokenSource(delay: HandshakeDeadline, timeProvider: m_timeProvider);
+        using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(token1: ct, token2: timer.Token);
+
+        var handshakeCt = deadlineCts.Token;
+
+        try {
+            // Door 1 of 2 — protocol-version compatibility, checked first and refused with its own spelling
+            // ("version-mismatch: …"), never sharing a reason with the identity door below.
+            var helloBuffer = new byte[HandshakeWireFormat.HelloBytes];
+
+            if (!await HandshakeWireFormat.TryReadExactAsync(
+                buffer: helloBuffer,
+                ct: handshakeCt,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false)) {
+                return;
+            }
+
+            var offeredKey = System.Buffers.Binary.BinaryPrimitives.ReadUInt64LittleEndian(source: helloBuffer);
+
+            if (offeredKey == WorldFederationCodec.WireKey) {
+                if (!m_authenticator.IsConfigured) {
+                    await WriteFederationRefusal(
+                        ct: handshakeCt,
+                        detail: "this authority carries no federation credentials",
+                        refusal: WorldFederationRefusal.AuthenticationUnconfigured,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+
+                var federationChallenge = m_authenticator.NewChallenge();
+
+                await WorldFederationCodec.WriteResponseAsync(
+                    body: federationChallenge,
+                    ct: handshakeCt,
+                    kind: WorldFederationResponse.Challenge,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                var authentication = await WorldFederationCodec.ReadRequestAsync(
+                    ct: handshakeCt,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                // The authenticated identity below is DERIVED from the verified proof, never taken from anything
+                // the peer's own bytes claimed — WorldFederationCodec's authentication leaf carries no source-
+                // authority field at all for exactly this reason (see WorldAttestedAuthenticator's own remarks).
+                if (
+                    !authentication.Ok ||
+                    (authentication.Kind != ((byte)WorldFederationRequest.Authenticate)) ||
+                    !WorldFederationCodec.TryDecodeAuthentication(
+                    body: authentication.Body.Span,
+                    failure: out _,
+                    proof: out var federationProof
+                ) ||
+                    !m_authenticator.TryVerify(
+                    challenge: federationChallenge,
+                    proof: federationProof,
+                    sourceAuthority: out var federationAuthority
+                ) ||
+                    (federationAuthority is null)
+                ) {
+                    await WriteFederationRefusal(
+                        ct: handshakeCt,
+                        detail: "the presented proof did not verify",
+                        refusal: WorldFederationRefusal.AuthenticationFailed,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+
+                await WorldFederationCodec.WriteResponseAsync(
+                    body: WorldFederationCodec.EncodeAuthorityIdentity(authority: m_server.AuthorityIdentity),
+                    ct: handshakeCt,
+                    kind: WorldFederationResponse.Authenticated,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+                handshakeSlotHeld = false;
+                Interlocked.Decrement(location: ref m_pendingHandshakes);
+                _ = m_federationConnections.TryAdd(
+                    key: client,
+                    value: 0
+                );
+
+                try {
+                    await ServeFederationAsync(
+                        stream: stream,
+                        sourceAuthority: federationAuthority,
+                        tier: DisclosureFor(sourceAuthority: federationAuthority),
+                        ct: ct
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                } finally {
+                    _ = m_federationConnections.TryRemove(
+                        key: client,
+                        value: out _
+                    );
+                }
+
+                return;
+            }
+
+            if (!WorldHelloDoor.TryAccept(
+                offeredKey: offeredKey,
+                refusal: out var helloRefusal
+            )) {
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
+                    ct: handshakeCt,
+                    reason: $"version-mismatch: {helloRefusal}: wire key 0x{offeredKey:x16} != server 0x{WorldProtocol.WireProtocolKey:x16}",
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                return;
+            }
+
+            // Door 2 of 2 — the identity door: challenge, read back the peer's claim (and chain, for a Vouches
+            // identity), verify off the tick thread against a snapshot of the current document's admission entries.
+            // Every refusal path here is spelled "identity-refused: …", distinct from door 1's "version-mismatch: ".
+            // A disconnect before any length prefix declared a frame is not a refusal — the socket closes with no
+            // reply; once a prefix has declared a frame, an incomplete body is a named refusal instead.
+            var challenge = WorldAdmissionDoor.NewChallenge();
+
+            await WorldPeerWireFormat.WriteHelloChallengeAsync(
+                challenge: challenge,
+                ct: handshakeCt,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            var identityRead = await HandshakeWireFormat.TryReadHelloIdentityAsync(
+                ct: handshakeCt,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (identityRead is HandshakeWireFormat.HelloIdentityReadResult.Eof) {
+                return;
+            }
+
+            if (identityRead is not HandshakeWireFormat.HelloIdentityReadResult.Ok identity) {
+                var malformed = ((HandshakeWireFormat.HelloIdentityReadResult.Malformed)identityRead);
+
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
+                    stream: stream,
+                    reason: $"identity-refused: {malformed.Reason}",
+                    ct: handshakeCt
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                return;
+            }
+
+            WorldAdmissionDoor.AdmissionOutcome outcome;
+            // Captured alongside the exact entries TryAdmit consults below, so the tick-thread commit can prove the
+            // policy has not moved since (WorldDefinition's sections are immutable records: an unrelated
+            // mutation/rebuild that never touches Admission leaves this reference unchanged; one that does mints a
+            // new list — see WorldServer.TryAdmitPeerConnection's own remarks on this parameter).
+            var admissionEntriesAtVerify = m_server.Definition.Admission;
+
+            try {
+                var claimAttestation = WorldAdmissionDoor.DecodeAttestation(wire: identity.Claim);
+                var chainAttestations = identity.Chain.Select(selector: bytes => WorldAdmissionDoor.DecodeAttestation(wire: bytes)).ToArray();
+                // Definition is read fresh, off the tick thread — an admission decision consulting a document that
+                // moves mid-handshake (a concurrent world.reset/load/reload) is eventual-consistency the same way
+                // any other cross-thread document read here would be. This is a presentation/networking admission
+                // decision, never simulation state, so it is not a determinism concern; the commit below still
+                // proves the policy this verdict rests on is the one the tick thread ultimately sees.
+                outcome = WorldAdmissionDoor.TryAdmit(
+                    entries: admissionEntriesAtVerify,
+                    challenge: challenge,
+                    claim: claimAttestation,
+                    chain: chainAttestations,
+                    now: DateTimeOffset.UtcNow
+                );
+            } catch (FormatException exception) {
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
+                    stream: stream,
+                    reason: $"identity-refused: the presented claim or chain bytes do not decode — {exception.Message}",
+                    ct: handshakeCt
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                return;
+            }
+
+            if (!outcome.Admitted) {
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
+                    ct: handshakeCt,
+                    reason: $"identity-refused: {outcome.Refusal}: {outcome.Detail}",
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                return;
+            }
+
+            // Population/grant admission runs through the ordered-domain path, fed the verified identity's own
+            // authored grant templates. The compare-at-commit check rides along here: TryAdmitPeerConnection
+            // refuses by name if the admission policy moved since admissionEntriesAtVerify was captured above. The
+            // handshake deadline covers this queue hop too — an authored rate-0/paused world may not drain it at
+            // all — and RunOnTickThreadAsync's cancellation guard both releases the waiting socket at the deadline
+            // and prevents the orphaned item from admitting later.
+            var (admitted, admissionRefusal) = await RunOnTickThreadAsync(
+                work: () => (m_server.TryAdmitPeerConnection(
+                    verdict: outcome.Verdict,
+                    expectedAdmissionEntries: admissionEntriesAtVerify,
+                    admitted: out var entry,
+                    refusal: out var reason
+                )
+                ? (entry, ((string?)null))
+                : (default(WorldPeerEventEntry), reason)),
+                ct: handshakeCt
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (admissionRefusal is { } refusalReason) {
+                await WorldPeerWireFormat.WriteHelloRefusedAsync(
+                    ct: handshakeCt,
+                    reason: refusalReason,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                return;
+            }
+
+            var connectionId = Interlocked.Increment(location: ref m_nextConnectionId);
+            var connection = new Connection(
+                id: connectionId,
+                peerIndex: admitted.BodyIndex,
+                generation: admitted.Generation,
+                client: client,
+                stream: stream,
+                remoteEndpoint: remoteEndpoint,
+                identityDomain: (outcome.Domain ?? string.Empty),
+                identitySubject: (outcome.Subject ?? string.Empty),
+                tier: outcome.Tier
+            );
+
+            lock (m_connectionsLock) {
+                m_connections.Add(item: connection);
+            }
+
+            // The handshake is over: this connection is admitted, so it leaves both the concurrent-handshake
+            // ceiling and the handshake deadline behind — the frame loop below runs on the accept loop's own ct,
+            // unbounded by HandshakeDeadline (an ongoing authenticated session is not a handshake).
+            handshakeSlotHeld = false;
+            Interlocked.Decrement(location: ref m_pendingHandshakes);
+
+            try {
+                if (m_server.Output.HasNarrationSink) {
+                    m_server.Output.Narrate(
+                        channel: "world.listen",
+                        text: $"[world.listen: admitted connection {connectionId} as {connection.Principal.Describe()} identity domain:{connection.IdentityDomain} subject:{connection.IdentitySubject} grants:{(outcome.Grants?.Count ?? 0)} from {remoteEndpoint}]"
+                    );
+                }
+                await WorldPeerWireFormat.WriteHelloAcceptedAsync(
+                    stream: stream,
+                    peerIndex: connection.PeerIndex,
+                    generation: connection.Generation,
+                    connectionId: connectionId,
+                    ct: ct
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                await FrameLoopAsync(
+                    connection: connection,
+                    ct: ct
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            } finally {
+                lock (m_connectionsLock) {
+                    m_connections.Remove(item: connection);
+                }
+
+                await RunOnTickThreadAsync(work: () => {
+                    m_server.DisconnectPeerConnection(peer: admitted);
+
+                    return true;
+                }).ConfigureAwait(continueOnCapturedContext: false);
+                if (m_server.Output.HasNarrationSink) {
+                    m_server.Output.Narrate(
+                        channel: "world.listen",
+                        text: $"[world.listen: disconnected connection {connectionId} ({connection.Principal.Describe()})]"
+                    );
+                }
+            }
+        } catch (OperationCanceledException) when (!ct.IsCancellationRequested) {
+            // The accept loop was not cancelled — HandshakeDeadline fired on a connection that never finished the
+            // pre-admission handshake in time (slowloris, or a genuinely dead peer). Observable by name, never a
+            // silent drop.
+            if (m_server.Output.HasNarrationSink) {
+                m_server.Output.Narrate(
+                    channel: "world.listen",
+                    text: $"[world.listen: handshake from {remoteEndpoint} exceeded the {HandshakeDeadline.TotalSeconds:0}s deadline — connection refused]"
+                );
+            }
+        } catch (Exception ex) when ((ex is IOException or SocketException or ObjectDisposedException)) {
+            // Pre-admission socket death (during the hello exchange, before m_connections.Add above) admitted
+            // nothing, so there is nothing to revoke here. A post-admission death is already revoked by the
+            // connection's own teardown finally above, which runs on every exit from that block — including
+            // this exception unwinding through it.
+        } finally {
+            // A completed QUIC write only hands bytes to the transport. Immediate connection disposal can
+            // discard the final refusal before the peer reads it. Keep the handshake slot while draining, using
+            // the networking library's same bounded refusal window; process shutdown still cancels immediately.
+            using (var drain = CancellationTokenSource.CreateLinkedTokenSource(token: ct)) {
+                drain.CancelAfter(delay: PeerWireProtocol.RefusalDrainTimeout);
+                await StreamDrain.UntilClosedAsync(client, drain.Token).ConfigureAwait(continueOnCapturedContext: false);
+            }
+            if (handshakeSlotHeld) {
+                Interlocked.Decrement(location: ref m_pendingHandshakes);
+            }
+
+            client.Dispose();
+        }
+    }
+    // sourceAuthority is the namespace THIS CONNECTION authenticated as, which is what the credential table is keyed
+    // by — never the traveller's origin authority carried inside its incarnation.
+    private async Task<(WorldSubmissionResult? Result, string Reason)> ResolveForwardedSubmissionAsync(string sourceAuthority, WorldMobilityIdentity mobility, WorldSubmissionPayload payload, CancellationToken ct) {
+        if (WorldLocalForwardedAuthority.TryApplySubmission(
+            mobility: in mobility,
+            payload: payload,
+            reason: out _,
+            result: out var applied,
+            server: m_server,
+            sourceAuthority: sourceAuthority
+        )) {
+            return (applied, string.Empty);
+        }
+
+        if (m_server.TransferForwarder is not { } forwarder) {
+            return (null, string.Empty);
+        }
+
+        // Detach precedes publication of the committed onward route. A routed query/command can arrive in that small
+        // interval just like a held-stick update can; retain the one typed request at this authority until the
+        // commit path publishes its immutable credential.
+        var reason = string.Empty;
+
+        for (var attempt = 0; (attempt < 25); attempt++) {
+            if (forwarder.TryForwardSubmission(
+                mobility: in mobility,
+                payload: payload,
+                reason: out reason,
+                result: out var forwarded,
+                source: m_server
+            )) {
+                return (forwarded, reason);
+            }
+
+            if (!reason.Contains(
+                comparisonType: StringComparison.Ordinal,
+                value: "no committed onward route"
+            )) {
+                break;
+            }
+
+            await Task.Delay(
+                delay: TimeSpan.FromMilliseconds(milliseconds: 4),
+                cancellationToken: ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        }
+
+        return (null, reason);
+    }
+    // Marshals one unit of work onto the tick thread via DrainPending and awaits its result — the one hand-off point
+    // between a connection's background read loop and the single-threaded server.
+    private Task<T> RunOnTickThreadAsync<T>(Func<T> work, CancellationToken ct = default) {
+        var tcs = new TaskCompletionSource<T>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+        m_pending.Enqueue(item: () => {
+            // A canceled queue item must never execute later: the caller has already released its socket/handshake
+            // slot, so committing admission here would create a population body with no connection to own it.
+            if (ct.IsCancellationRequested) {
+                tcs.TrySetCanceled(cancellationToken: ct);
+
+                return;
+            }
+
+            try {
+                tcs.TrySetResult(result: work());
+            } catch (Exception ex) {
+                tcs.TrySetException(exception: ex);
+            }
+        });
+
+        // WaitAsync releases the caller promptly even when the tick queue is not draining. The guard above is the
+        // other half of the contract: it prevents that still-enqueued work from taking effect if draining resumes.
+        return (ct.CanBeCanceled
+            ? tcs.Task.WaitAsync(cancellationToken: ct)
+            : tcs.Task
+        );
+    }
+    private async Task<bool> ServeCommitAsync(Stream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        if (!WorldFederationCodec.TryDecodeCommit(
+            body: body.Span,
+            defaults: m_server.Definition.PlayerDefaults,
+            sourceAuthority: out var carriedAuthority,
+            transferId: out var transferId,
+            members: out var members,
+            failure: out var failure
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"commit — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (!string.Equals(
+            a: carriedAuthority,
+            b: sourceAuthority,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the commit names a source authority this connection did not authenticate as",
+                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        var accepted = m_server.CommitTransfer(
+            members: members,
+            reason: out var commitReason,
+            sourceAuthority: sourceAuthority,
+            transferId: transferId
+        );
+
+        await WorldFederationCodec.WriteResponseAsync(
+            stream: stream,
+            kind: WorldFederationResponse.Commit,
+            body: WorldFederationCodec.EncodeCommitReply(
+                accepted: accepted,
+                reason: (accepted
+            ? string.Empty
+            : commitReason)
+            ),
+            ct: ct
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
+    // A federation connection is a persistent authenticated lane. Requests ride it strictly request-then-response
+    // and in order, which is what lets the peer omit a correlation id. Observe and IntentStream take the connection
+    // over and stream on it until it closes.
+    private async Task ServeFederationAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, CancellationToken ct) {
+        while (!ct.IsCancellationRequested) {
+            var frame = await WorldFederationCodec.ReadRequestAsync(
+                ct: ct,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (!frame.Ok) {
+                if (frame.Failure.Refusal != WireRefusal.ConnectionClosed) {
+                    await WriteFederationRefusal(
+                        stream: stream,
+                        refusal: WorldFederationRefusal.FrameMalformed,
+                        detail: frame.Failure.ToString(),
+                        ct: ct
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                }
+
+                return;
+            }
+
+            if (!await ServeFederationRequestAsync(
+                stream: stream,
+                sourceAuthority: sourceAuthority,
+                tier: tier,
+                kind: ((WorldFederationRequest)frame.Kind),
+                body: frame.Body,
+                ct: ct
+            ).ConfigureAwait(continueOnCapturedContext: false)) {
+                return;
+            }
+        }
+    }
+    // Returns whether the lane stays open for another request.
+    private async Task<bool> ServeFederationRequestAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        switch (kind) {
+            case WorldFederationRequest.Reserve:
+                return await ServeReserveAsync(
+                    body: body,
+                    ct: ct,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream,
+                    tier: tier
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+            case WorldFederationRequest.Commit:
+                return await ServeCommitAsync(
+                    body: body,
+                    ct: ct,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+            case WorldFederationRequest.Abort:
+            case WorldFederationRequest.AcknowledgeTransfer:
+            case WorldFederationRequest.Status:
+                return await ServeTransferKeyAsync(
+                    body: body,
+                    ct: ct,
+                    kind: kind,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+            case WorldFederationRequest.Submission:
+                return await ServeSubmissionAsync(
+                    body: body,
+                    ct: ct,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+            case WorldFederationRequest.Route:
+                return await ServeRouteAsync(
+                    body: body,
+                    ct: ct,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream,
+                    tier: tier
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+            case WorldFederationRequest.ObserveTraveler:
+                if (!WorldFederationCodec.TryDecodeTravelerObservation(body.Span, out var observation, out var failure)) {
+                    await WriteFederationRefusal(stream, WorldFederationRefusal.FrameMalformed, failure.ToString(), ct).ConfigureAwait(continueOnCapturedContext: false);
+                    return false;
+                }
+                if (!string.Equals(a: sourceAuthority, b: observation.SourceAuthority, comparisonType: StringComparison.Ordinal)) {
+                    await WriteFederationRefusal(ct: ct, detail: "traveler observation source differs from its authenticated namespace", refusal: WorldFederationRefusal.SourceAuthorityMismatch, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
+                    return false;
+                }
+                observation = observation with { Ceiling = ((WorldDisclosureTier)Math.Min(val1: ((byte)tier), val2: ((byte)observation.Ceiling))) };
+                var refusal = await WorldTravelerProjection.StreamAsync(m_server, observation,
+                    (m_server.Definition.Host.Authority ?? m_server.AuthorityIdentity), stream, ct).ConfigureAwait(continueOnCapturedContext: false);
+                if (refusal is not null) {
+                    await WriteFederationRefusal(ct: ct, detail: refusal, refusal: WorldFederationRefusal.RouteUnknown, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
+                }
+                return false;
+
+            case WorldFederationRequest.Observe:
+                await StreamProjectionAsync(
+                    ct: ct,
+                    stream: stream,
+                    tier: tier
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                return false;
+
+            case WorldFederationRequest.IntentStream:
+                if (body.Length != 0) {
+                    await WriteFederationRefusal(
+                        ct: ct,
+                        detail: "the intent stream opening carries a payload",
+                        refusal: WorldFederationRefusal.PayloadUnexpected,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+
+                    return false;
+                }
+
+                await StreamFederatedIntentsAsync(
+                    ct: ct,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                return false;
+
+            default:
+                await WriteFederationRefusal(
+                    ct: ct,
+                    detail: $"{kind} is not accepted on an open federation lane",
+                    refusal: WorldFederationRefusal.RequestUnsupported,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                return false;
+        }
+    }
+    private async Task<bool> ServeReserveAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        if (
+            !WorldFederationCodec.TryDecodeReservation(
+            body: body.Span,
+            defaults: m_server.Definition.PlayerDefaults,
+            request: out var request,
+            failure: out var failure
+        ) ||
+            (request is null)
+        ) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"reservation — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (!string.Equals(
+            a: request.SourceAuthority,
+            b: sourceAuthority,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the reservation names a source authority this connection did not authenticate as",
+                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        // Reserve/commit/status are authority transactions, not ordinary gameplay submissions. They run on this
+        // socket worker under WorldServer's authority gate rather than through DrainPending: a destination that
+        // could only answer on its own next tick would deadlock two hosts crossing into one another at once.
+        var reply = m_server.ReserveTransfer(request: request);
+
+        await WorldFederationCodec.WriteResponseAsync(
+            stream: stream,
+            kind: WorldFederationResponse.Reservation,
+            body: WorldFederationCodec.EncodeReservationReply(
+                reply: reply,
+                tier: tier,
+                authority: m_server.AuthorityIdentity,
+                revision: m_server.Population.Revision
+            ),
+            ct: ct
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
+    private async Task<bool> ServeRouteAsync(Stream stream, string sourceAuthority, WorldDisclosureTier tier, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        if (!WorldFederationCodec.TryDecodeRouteCredential(
+            body: body.Span,
+            failure: out var failure,
+            mobility: out var mobility,
+            sourceAuthority: out var carriedAuthority
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"route credential — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (!string.Equals(
+            a: carriedAuthority,
+            b: sourceAuthority,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the route credential names a source authority this connection did not authenticate as",
+                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (!m_server.TryTransferredPrincipal(
+            mobility: in mobility,
+            principal: out var principal,
+            sourceAuthority: sourceAuthority
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the route credential names no committed transfer body",
+                refusal: WorldFederationRefusal.CredentialUnknown,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        var declaredEndpoint = (m_server.Definition.Host.Authority ?? ListenEndpoint);
+        // Read the body and its address inside the same gated operation that decided it is live.
+        var local = ((declaredEndpoint is { } localEndpoint)
+            ? m_server.ExecuteAuthorityOperation(operation: () => (WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
+                principal: principal,
+                server: m_server
+            )
+                ? WorldLocalForwardedAuthority.DescribeRoute(
+                    endpoint: localEndpoint,
+                    principal: principal,
+                    server: m_server
+                )
+                : (WorldAuthorityRouteDescription?)null))
+            : null
+        );
+
+        WorldAuthorityRouteDescription route;
+        var routeReason = string.Empty;
+
+        if (local is { } described) {
+            route = described;
+        } else if (
+            (m_server.TransferForwarder is { } forwarder) &&
+            forwarder.TryDescribeForwarding(
+            mobility: in mobility,
+            reason: out routeReason,
+            route: out route,
+            source: m_server
+        )
+        ) {
+            // The composition root recursively resolved the final authority.
+        } else {
+            await WriteFederationRefusal(
+                stream: stream,
+                refusal: WorldFederationRefusal.RouteUnknown,
+                detail: ((routeReason.Length > 0)
+                ? routeReason
+                : "the traveler has no live or forwarded route"),
+                ct: ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        await WorldFederationCodec.WriteResponseAsync(
+            stream: stream,
+            kind: WorldFederationResponse.Route,
+            body: WorldFederationCodec.EncodeRoute(
+                route: in route,
+                tier: tier,
+                authority: m_server.AuthorityIdentity,
+                revision: m_server.Population.Revision
+            ),
+            ct: ct
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
+    private async Task<bool> ServeSubmissionAsync(Stream stream, string sourceAuthority, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        if (!WorldFederationCodec.TryDecodeSubmission(
+            body: body.Span,
+            failure: out var failure,
+            frame: out var submittedFrame,
+            mobility: out var mobility,
+            sourceAuthority: out var carriedAuthority
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"submission credential — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (!string.Equals(
+            a: carriedAuthority,
+            b: sourceAuthority,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the submission names a source authority this connection did not authenticate as",
+                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (!TryDecodeSubmissionFrame(
+            failure: out var codecFailure,
+            frame: submittedFrame,
+            payload: out var payload
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"submission frame — {codecFailure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (!m_server.TryTransferredPrincipal(
+            mobility: in mobility,
+            principal: out var principal,
+            sourceAuthority: sourceAuthority
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the submission credential names no committed transfer body",
+                refusal: WorldFederationRefusal.CredentialUnknown,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        var (result, forwardReason) = await ResolveForwardedSubmissionAsync(
+            ct: ct,
+            mobility: mobility,
+            payload: payload,
+            sourceAuthority: sourceAuthority
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (result is null) {
+            await WriteFederationRefusal(
+                stream: stream,
+                refusal: WorldFederationRefusal.SubmissionRefused,
+                detail: ((forwardReason.Length > 0)
+                ? forwardReason
+                : "the submission names no live or forwarded transfer body"),
+                ct: ct
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (
+            (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
+            (result is WorldSubmissionResult.Session { Reply.Accepted: true })
+        ) {
+            m_server.RetireTransferredMobility(mobility: in mobility);
+        }
+
+        using var completion = new MemoryStream();
+
+        await WorldPeerWireFormat.WriteResultAsync(
+            ct: ct,
+            result: result,
+            stream: completion
+        ).ConfigureAwait(continueOnCapturedContext: false);
+        // The completion stream's own buffer feeds the one framed write directly; nothing keeps it past the await.
+        await WorldFederationCodec.WriteResponseAsync(
+            stream: stream,
+            kind: WorldFederationResponse.Completion,
+            body: completion.GetBuffer().AsMemory(
+                length: checked((int)completion.Length),
+                start: 0
+            ),
+            ct: ct
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
+    private async Task<bool> ServeTransferKeyAsync(Stream stream, string sourceAuthority, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        if (!WorldFederationCodec.TryDecodeTransferKey(
+            body: body.Span,
+            failure: out var failure,
+            sourceAuthority: out var carriedAuthority,
+            transferId: out var transferId
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"{kind} transfer key — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (!string.Equals(
+            a: carriedAuthority,
+            b: sourceAuthority,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"the {kind} names a transfer namespace this connection did not authenticate as",
+                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (kind == WorldFederationRequest.Status) {
+            var status = m_server.TransferStatus(
+                sourceAuthority: sourceAuthority,
+                transferId: transferId
+            );
+
+            await WorldFederationCodec.WriteResponseAsync(
+                body: new[] { ((byte)status) },
+                ct: ct,
+                kind: WorldFederationResponse.Status,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+
+        if (kind == WorldFederationRequest.Abort) {
+            m_server.AbortTransfer(
+                sourceAuthority: sourceAuthority,
+                transferId: transferId
+            );
+        } else {
+            m_server.AcknowledgeTransfer(
+                sourceAuthority: sourceAuthority,
+                transferId: transferId
+            );
+        }
+
+        await WorldFederationCodec.WriteResponseAsync(
+            body: default,
+            ct: ct,
+            kind: WorldFederationResponse.Ack,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
+    // A long-lived authenticated control lane. The socket carries state updates, not impulses: the WorldServer
+    // republishes the latest accepted image on every destination tick until another update or this connection's
+    // finally releases its lease. Request/ack remains ordered, while connection setup and challenge authentication
+    // are paid once rather than once per simulation tick.
+    private async Task StreamFederatedIntentsAsync(Stream stream, string sourceAuthority, CancellationToken ct) {
+        var leaseId = WorldFederatedIntentLease.Next();
+        var touched = new Dictionary<WorldMobilityIdentity, (WorldPrincipal Principal, IntentSubmission Submission)>();
+        var forwardRelease = true;
+
+        await WorldFederationCodec.WriteResponseAsync(
+            body: default,
+            ct: ct,
+            kind: WorldFederationResponse.Ack,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        try {
+            while (!ct.IsCancellationRequested) {
+                var frame = await WorldFederationCodec.ReadRequestAsync(
+                    ct: ct,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
+                if (!frame.Ok) {
+                    if (frame.Failure.Refusal != WireRefusal.ConnectionClosed) {
+                        await WriteFederationRefusal(
+                            stream: stream,
+                            refusal: WorldFederationRefusal.FrameMalformed,
+                            detail: frame.Failure.ToString(),
+                            ct: ct
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    }
+                    return;
+                }
+                if (frame.Kind == ((byte)WorldFederationRequest.IntentStreamHandoff)) {
+                    if (frame.Body.Length != 0) {
+                        await WriteFederationRefusal(
+                            ct: ct,
+                            detail: "the intent stream handoff carries a payload",
+                            refusal: WorldFederationRefusal.PayloadUnexpected,
+                            stream: stream
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                        return;
+                    }
+
+                    // The same client is deliberately moving this held-state lane to the newly published authority.
+                    // Its new lane immediately seeds the current state, so forwarding a synthetic neutral from this
+                    // older lane would race that seed and could cancel a still-held stick after the handoff.
+                    forwardRelease = false;
+                    await WorldFederationCodec.WriteResponseAsync(
+                        body: default,
+                        ct: ct,
+                        kind: WorldFederationResponse.Ack,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+                if (frame.Kind != ((byte)WorldFederationRequest.Intent)) {
+                    await WriteFederationRefusal(
+                        stream: stream,
+                        refusal: WorldFederationRefusal.RequestUnsupported,
+                        detail: $"{((WorldFederationRequest)frame.Kind)} is not accepted on an open intent stream",
+                        ct: ct
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+                if (!WorldFederationCodec.TryDecodeIntent(
+                    body: frame.Body.Span,
+                    sourceAuthority: out var carriedAuthority,
+                    mobility: out var mobility,
+                    submission: out var submission,
+                    failure: out var intentFailure
+                )) {
+                    await WriteFederationRefusal(
+                        ct: ct,
+                        detail: $"intent \u2014 {intentFailure}",
+                        refusal: WorldFederationRefusal.FrameMalformed,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+                if (!string.Equals(
+                    a: carriedAuthority,
+                    b: sourceAuthority,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    await WriteFederationRefusal(
+                        ct: ct,
+                        detail: "the intent names a source authority this connection did not authenticate as",
+                        refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+                if (!m_server.TryTransferredPrincipal(
+                    mobility: in mobility,
+                    principal: out var principal,
+                    sourceAuthority: sourceAuthority
+                )) {
+                    await WriteFederationRefusal(
+                        ct: ct,
+                        detail: "the intent names no committed transfer body",
+                        refusal: WorldFederationRefusal.CredentialUnknown,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+
+                var stamped = submission with { EntityIndex = principal.Index, Principal = principal };
+                var accepted = false;
+                var reason = string.Empty;
+
+                if (m_server.ExecuteAuthorityOperation(operation: () => {
+                    if (!WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
+                        principal: principal,
+                        server: m_server
+                    )) {
+                        return false;
+                    }
+
+                    m_server.PublishFederatedIntent(
+                        leaseId: leaseId,
+                        submission: in stamped
+                    );
+
+                    return true;
+                })) {
+                    accepted = true;
+                } else if (m_server.TransferForwarder is { } forwarder) {
+                    // Detach necessarily precedes publication of the committed onward route. Socket ingress can land
+                    // inside that tiny window; retain this state update and retry the route lookup rather than
+                    // turning an ordinary handoff into a visible control-lane outage.
+                    for (var attempt = 0; (attempt < 25); attempt++) {
+                        accepted = forwarder.TryForwardIntent(
+                            mobility: in mobility,
+                            reason: out reason,
+                            source: m_server,
+                            submission: in stamped
+                        );
+                        if (accepted) {
+                            break;
+                        }
+                        await Task.Delay(
+                            delay: TimeSpan.FromMilliseconds(milliseconds: 4),
+                            cancellationToken: ct
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    }
+                }
+
+                if (!accepted) {
+                    await WriteFederationRefusal(
+                        stream: stream,
+                        refusal: WorldFederationRefusal.IntentRefused,
+                        detail: ((reason.Length > 0)
+                        ? reason
+                        : "the intent names no live or forwarded transfer body"),
+                        ct: ct
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
+
+                touched[mobility] = (Principal: principal, Submission: stamped);
+                await WorldFederationCodec.WriteResponseAsync(
+                    body: default,
+                    ct: ct,
+                    kind: WorldFederationResponse.Ack,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            }
+        } finally {
+            m_server.ReleaseFederatedIntents(leaseId: leaseId);
+
+            // A stream may now terminate at an older authority in a forwarding chain. Publish an explicit neutral
+            // image through that same chain so the final writer never retains a held stick after its originating
+            // connection vanished.
+            foreach (var pair in touched) {
+                if (!forwardRelease) {
+                    break;
+                }
+                if (
+                    m_server.ExecuteAuthorityOperation(operation: () => WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
+                    server: m_server,
+                    principal: pair.Value.Principal
+                )) ||
+                    (m_server.TransferForwarder is not { } forwarder)
+                ) {
+                    continue;
+                }
+
+                var released = pair.Value.Submission with { Intent = default, HeldChannels = default };
+                var mobility = pair.Key;
+
+                if (!forwarder.TryForwardIntent(
+                    mobility: in mobility,
+                    reason: out var reason,
+                    source: m_server,
+                    submission: in released
+                )) {
+                    if (m_server.Output.HasNarrationSink) {
+                        m_server.Output.Narrate(
+                            channel: "world.authority unavailable",
+                            text: $"[world.authority unavailable: traveler {mobility.Incarnation} release could not follow its committed route ({reason})]"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    private async Task StreamProjectionAsync(Stream stream, WorldDisclosureTier tier, CancellationToken ct) {
+        var sink = new WorldFederationProjectionSink(
+            tier: tier,
+            authority: m_server.AuthorityIdentity,
+            revision: () => m_server.Population.Revision,
+            disclosure: () => new WorldSinkDisclosure(
+                Policy: m_server.Definition.Population.ObserverDisclosure,
+                ObserverBodyIndex: -1
+            )
+        );
+        // The sink resolves the live policy and redacts only a sampled frame. Attaching it unfiltered here avoids
+        // copying a 4,096-body radius view on every authority tick merely to discard seven out of eight copies.
+        var lease = m_server.ExecuteAuthorityOperation(operation: () => m_server.AttachSink(sink: sink));
+
+        try {
+            await sink.StreamAsync(ct: ct, output: stream).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException)) {
+            // Observer lifetime is the socket lifetime.
+        } finally {
+            // WorldOutputHub's subscriber list is not itself guarded, so the release must hold the same authority
+            // gate the attach did — otherwise this dispose races a tick publishing through that list.
+            m_server.ExecuteAuthorityOperation(operation: () => {
+                lease.Dispose();
+
+                return true;
+            });
+        }
+    }
+    private Task WriteFederationRefusal(Stream stream, WorldFederationRefusal refusal, string detail, CancellationToken ct) {
+        Interlocked.Increment(location: ref m_federationRefusals[((int)refusal)]);
+
+        return WorldFederationCodec.WriteRefusalAsync(
+            ct: ct,
+            detail: detail,
+            refusal: refusal,
+            stream: stream
+        );
+    }
+
+    /// <summary>Closes live ingress while retaining authoritative connection bookkeeping for final capture.</summary>
+    public void SuspendIngress() => CloseConnections();
+
+    private void CloseConnections() {
+        m_cts?.Cancel();
+        foreach (var federation in m_federationConnections.Keys) { CloseConnection(connection: federation); }
+        lock (m_connectionsLock) {
+            foreach (var connection in m_connections) { CloseConnection(connection: connection.Client); }
+        }
+    }
+    private static void CloseConnection(IDisposable connection) {
+        try { connection.Dispose(); } catch (Exception ex) when ((ex is SocketException or ObjectDisposedException or InvalidOperationException)) {
+            // The lane is already gone; there is nothing left to end politely.
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        if (m_disposed) {
+            return;
+        }
+
+        m_disposed = true;
+
+        CloseConnections();
+        if (m_ownsNetwork) { m_network.Dispose(); }
+
+        lock (m_connectionsLock) {
+            m_connections.Clear();
+        }
+
+        m_cts?.Dispose();
+    }
+
+    /// <summary>Gets the queued tick-thread work count, including admission waiting for a paused host to drain.</summary>
+    public int PendingWorkCount => m_pending.Count;
+
+    /// <summary>Drains every tick-thread work item enqueued by a connection since the last drain — admissions,
+    /// submissions, and disconnects alike. MUST run on the tick thread, before <c>WorldServer.Step</c>, so it never
+    /// races the single-threaded server/population/grant state.</summary>
+    public void DrainPending() {
+        while (m_pending.TryDequeue(result: out var action)) {
+            action();
+        }
+    }
+    /// <summary>Binds the listener and starts accepting connections in the background. The composition root calls this
+    /// only when <c>host.listen</c>/<c>--listen</c> names an endpoint; when it is absent the call is skipped entirely,
+    /// so no listener ever binds.</summary>
+    /// <param name="listen">The <c>host:port</c> endpoint to bind.</param>
+    /// <exception cref="FormatException"><paramref name="listen"/> is not a parseable IP endpoint.</exception>
+    public void Start(string listen) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: listen);
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (IsListening) { throw new InvalidOperationException(message: "The World peer endpoint is already listening."); }
+
+        if (!IPEndPoint.TryParse(
+            result: out var endpoint,
+            s: listen
+        )) {
+            throw new FormatException(message: $"host.listen '{listen}' is not a parseable \"ip:port\" endpoint (a hostname is not accepted).");
+        }
+
+        m_cts = new CancellationTokenSource();
+        var lifetime = m_cts.Token;
+
+        ListenEndpoint = m_network.Peer.ListenAsync(ct: lifetime, endpoint: endpoint).GetAwaiter().GetResult().ToString();
+        m_acceptLoop = Task.Run(function: () => AcceptLoopAsync(ct: lifetime));
+        if (m_server.Output.HasNarrationSink) {
+            m_server.Output.Narrate(
+                channel: "world.listen",
+                text: $"[world.listen: bound {ListenEndpoint} transport=quic peer={m_network.Peer.Id.Domain}]"
+            );
+        }
+    }
+
+    private sealed class Connection(int id, int peerIndex, int generation, PeerStream client, Stream stream, string remoteEndpoint, string identityDomain, string identitySubject, WorldDisclosureTier tier) {
+        private long m_correlationId;
+        private long m_sequence;
+
+        public int Id { get; } = id;
+        public int PeerIndex { get; } = peerIndex;
+        public int Generation { get; } = generation;
+        public PeerStream Client { get; } = client;
+        public Stream Stream { get; } = stream;
+        public string RemoteEndpoint { get; } = remoteEndpoint;
+        public string IdentityDomain { get; } = identityDomain;
+        public string IdentitySubject { get; } = identitySubject;
+        public WorldDisclosureTier Tier { get; } = tier;
+
+        public WorldPrincipal Principal => WorldPrincipal.Peer(
+            index: PeerIndex,
+            generation: Generation
+        );
+
+        public long NextCorrelation() => Interlocked.Increment(location: ref m_correlationId);
+        public long NextSequence() => Interlocked.Increment(location: ref m_sequence);
+    }
+}

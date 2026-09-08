@@ -18,32 +18,40 @@ public sealed partial class WorldServer {
             deniedSection: out var undoSection,
             principal: principal
         )) {
-            var denial = $"{principal.Describe()} cannot mutate every section (section:{undoSection.ToString().ToLowerInvariant()} — {undoVerdict.DescribeDenial()}) — world.undo dropped";
-
-            Console.Error.WriteLine(value: $"[world.grant denied: {denial}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: denial,
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                Denied: true,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
+            DenyGrantTable(
+                denial: $"{principal.Describe()} cannot mutate every section (section:{undoSection.ToString().ToLowerInvariant()} — {undoVerdict.DescribeDenial()}) — world.undo dropped",
+                connectionId: connectionId,
+                correlationId: correlationId,
+                echoKind: WorldEditEchoKind.Mutation
+            );
 
             return false;
         }
 
         if (m_journal.Count == 0) {
-            Console.Error.WriteLine(value: "[world.undo: nothing to undo]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: "undo refused: nothing to undo",
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                logged: "nothing to undo",
+                refusal: "undo refused: nothing to undo"
+            );
+        }
 
-            return false;
+        // A bounded journal (host.journalDepth > 0) has already folded anything past the horizon into m_base — the
+        // journal itself never holds more than that many entries (see EnforceJournalDepth), so a request past what
+        // remains cannot be satisfied by clamping to fewer without silently doing less than asked. An unbounded
+        // journal (0, today's behavior) keeps the old clamp: every entry is always still there to reach.
+        var journalDepth = m_definition.Host.JournalDepth;
+
+        if (
+            (journalDepth > 0) &&
+            (count > m_journal.Count)
+        ) {
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                refusal: $"undo refused: {count} requested, but host.journalDepth {journalDepth} bounds the horizon to the {m_journal.Count} entries still in the journal — earlier mutations have already compacted into the base"
+            );
         }
 
         var drop = Math.Clamp(
@@ -52,6 +60,7 @@ public sealed partial class WorldServer {
             max: m_journal.Count
         );
         var keep = (m_journal.Count - drop);
+
         var candidate = m_base;
         var kept = new List<JournalEntry>(capacity: keep);
 
@@ -65,27 +74,23 @@ public sealed partial class WorldServer {
                 instanceIdentity: InstanceIdentity,
                 candidate: out var next,
                 reason: out var composeReason,
-                evictedKey: out _
+                evictedKey: out _,
+                patterns: m_patterns
             )) {
                 var composeRefusal = $"undo refused: replay failed at journal entry {index} ({Describe(mutation: entry.Mutation)}) — {composeReason}";
 
-                Console.Error.WriteLine(value: $"[world.undo: {composeRefusal}]");
-                EchoTap?.Invoke(obj: new WorldEditEcho(
-                    Message: composeRefusal,
-                    Rejected: true,
-                    Kind: WorldEditEchoKind.Mutation,
-                    ConnectionId: connectionId,
-                    CorrelationId: correlationId
-                ));
-
-                return false;
+                return RefuseUndo(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    refusal: composeRefusal
+                );
             }
 
-            // An advancing row's epoch re-bases to the ORIGINAL journal tick it was set at, exactly as it did on the
-            // live apply this replays — see RebaseAdvanceEpoch's remarks. Doing this BEFORE revalidation is what lets
-            // world.undo rewind a regen row's accumulation bit-identically, same as it already does for a generator's
-            // $cursor.
-            next = RebaseAdvanceEpoch(
+            // An advancing or easing cell's trait re-bases to the ORIGINAL journal tick it was set at, exactly as it
+            // did on the live apply this replays — see RebaseCellTraits' remarks. Doing this BEFORE revalidation is
+            // what lets world.undo rewind a regen row's accumulation, or a dynamics cell's follower state,
+            // bit-identically, same as it already does for a generator's $cursor.
+            next = RebaseCellTraits(
                 original: candidate,
                 candidate: next,
                 mutation: entry.Mutation,
@@ -93,6 +98,11 @@ public sealed partial class WorldServer {
             );
 
             // Cross-document claims were proved before the journal was admitted; replay repeats only local checks.
+            // Addon preparation joins these all-or-nothing gates: an intermediate candidate this pass builds but
+            // never installs still owes proof it COULD have mounted, because a kept entry whose pinned module has
+            // since gone missing must refuse the WHOLE undo rather than silently landing on a document that would
+            // boot differently than the one it names. The probe plan is disposed immediately either way — see
+            // AddonsCanPrepare.
             if (
                 !WorldDefinitionValidator.TryValidateLocally(
                 definition: next,
@@ -106,24 +116,38 @@ public sealed partial class WorldServer {
                 definition: next,
                 reason: out reason,
                 solids: out _
+            )) ||
+                (AffectsAddons(mutation: entry.Mutation) && !AddonsCanPrepare(
+                candidate: next,
+                reason: out reason
             ))
             ) {
                 var refusal = $"undo refused: replay failed at journal entry {index} ({Describe(mutation: entry.Mutation)}) — {reason}";
 
-                Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
-                EchoTap?.Invoke(obj: new WorldEditEcho(
-                    Message: refusal,
-                    Rejected: true,
-                    Kind: WorldEditEchoKind.Mutation,
-                    ConnectionId: connectionId,
-                    CorrelationId: correlationId
-                ));
-
-                return false;
+                return RefuseUndo(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    refusal: refusal
+                );
             }
 
             candidate = next;
             kept.Add(item: entry);
+        }
+
+        // Field storage is boot allocated. Prove the final replay result can retain the live lattice before building
+        // or swapping any other derived runtime product; InstallFields is then an infallible compatible plan swap.
+        if (!m_population.CanInstallFields(
+            definition: candidate,
+            reason: out var undoFieldReason
+        )) {
+            var refusal = $"undo refused: restored field runtime is incompatible — {undoFieldReason}";
+
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                refusal: refusal
+            );
         }
 
         // The full replay validated every entry above, so this rebuild is expected to succeed; still checked and
@@ -136,28 +160,144 @@ public sealed partial class WorldServer {
         )) {
             var refusal = $"undo refused: solid field rebuild failed — {undoSolidReason}";
 
-            Console.Error.WriteLine(value: $"[world.undo: {refusal}]");
-            EchoTap?.Invoke(obj: new WorldEditEcho(
-                Message: refusal,
-                Rejected: true,
-                Kind: WorldEditEchoKind.Mutation,
-                ConnectionId: connectionId,
-                CorrelationId: correlationId
-            ));
-
-            return false;
+            return RefuseUndo(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                refusal: refusal
+            );
         }
 
-        SwapSolids(solids: undoSolids);
-        Install(
-            definition: candidate,
-            rebuildPopulation: true
-        );
+        // The final current-to-candidate reconcile: unconditional (never gated on whether the kept journal touched
+        // Addons), because TryPrepare's own structural diff against the live m_mounted set already answers "does
+        // anything about addons actually differ" cheaply on its own — a restored document whose addon rows are
+        // structurally the ones already mounted reuses every guest's memory untouched. Commits only after Install
+        // succeeds, mirroring TryApplyMutation's identical gate-then-commit shape.
+        IWorldAddonPreparedPlan? addonPlan = null;
+        int[]? newTickWrittenEntity = null;
+        WorldPrincipal[]? newTickWrittenPrincipal = null;
+        bool[]? newTickCollided = null;
+        var addonPlanCommitted = false;
+
+        // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
+        // shape for why: addonPlan starts null, so a refusal before TryPrepare ever succeeds leaves the finally a
+        // no-op, and a downstream throw from contention-array staging, Install, or Commit alike still disposes an
+        // uncommitted plan.
+        try {
+            if (m_addons is { } addonsForUndo) {
+                if (!addonsForUndo.TryPrepare(
+                    candidate: candidate,
+                    current: m_definition,
+                    plan: out addonPlan,
+                    reason: out var addonReason
+                )) {
+                    var refusal = $"undo refused: the restored document's addon {addonReason}";
+
+                    return RefuseUndo(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        refusal: refusal
+                    );
+                }
+
+                if (addonPlan is not null) {
+                    StageAddonContentionArrays(
+                        mountedCount: addonPlan.MountedCount,
+                        entity: out newTickWrittenEntity,
+                        principal: out newTickWrittenPrincipal,
+                        collided: out newTickCollided
+                    );
+                }
+            }
+
+            var previousDefinition = m_definition;
+
+            SwapSolids(solids: undoSolids);
+            Install(
+                definition: candidate,
+                rebuildPopulation: true
+            );
+            RepaintChangedLatticeDraws(
+                previous: previousDefinition,
+                current: candidate
+            );
+
+            if (addonPlan is not null) {
+                m_addons!.Commit(plan: addonPlan);
+                addonPlanCommitted = true;
+
+                if (newTickWrittenEntity is not null) {
+                    m_tickWrittenEntity = newTickWrittenEntity;
+                    m_tickWrittenPrincipal = newTickWrittenPrincipal!;
+                    m_tickCollided = newTickCollided!;
+                }
+            }
+        } finally {
+            if (!addonPlanCommitted) {
+                addonPlan?.Dispose();
+            }
+        }
+
         m_journal.Clear();
         m_journal.AddRange(collection: kept);
-        Console.Error.WriteLine(value: $"[world.undo: dropped {drop}, {m_journal.Count} remaining]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(
+                channel: "world.undo",
+                text: $"[world.undo: dropped {drop}, {m_journal.Count} remaining]"
+            );
+        }
+
+        if (addonPlanCommitted) {
+            m_addons!.Finish(plan: addonPlan!);
+        }
 
         return true;
+    }
+    // Undo's own throwaway addon-prepare probe for an INTERMEDIATE journal-replay candidate: proves the row set
+    // this candidate carries could still mount, without ever registering, disclosing, or journaling anything — the
+    // plan is disposed immediately regardless of outcome. Only the FINAL candidate's prepare (after the loop above)
+    // ever actually commits. A server with no addon runtime attached vacuously succeeds.
+    // Every ApplyUndo gate refuses identically: loud on stderr under world.undo, echoed to the same tap a rejected
+    // live mutation reaches, and false to the caller. logged overrides the stderr body for the one gate whose line
+    // predates the echo's own "undo refused:" prefix.
+    private bool RefuseUndo(string refusal, int connectionId, long correlationId, string? logged = null) {
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(
+                channel: "world.undo",
+                text: $"[world.undo: {(logged ?? refusal)}]"
+            );
+        }
+        EchoTap?.Invoke(obj: new WorldEditEcho(
+            Message: refusal,
+            Rejected: true,
+            Kind: WorldEditEchoKind.Mutation,
+            ConnectionId: connectionId,
+            CorrelationId: correlationId
+        ));
+
+        return false;
+    }
+    private bool AddonsCanPrepare(WorldDefinition candidate, out string reason) {
+        if (m_addons is not { } addons) {
+            reason = string.Empty;
+
+            return true;
+        }
+
+        if (addons.TryPrepare(
+            candidate: candidate,
+            current: m_definition,
+            plan: out var plan,
+            reason: out var addonReason
+        )) {
+            plan?.Dispose();
+            reason = string.Empty;
+
+            return true;
+        }
+
+        reason = (addonReason ?? string.Empty);
+
+        return false;
     }
 
     /// <summary>Buffers a journal undo of the last <paramref name="count"/> mutations for the next <see cref="Step"/>.
@@ -176,9 +316,61 @@ public sealed partial class WorldServer {
         ));
     }
 
+    /// <summary>Bounds the journal to at most <c>host.journalDepth</c> trailing entries (0 = unbounded, the default —
+    /// a no-op). The oldest entries past the horizon fold forward, in order, into the base the journal already
+    /// keeps — the same per-entry compose-and-rebase <see cref="ApplyUndo"/>'s own replay performs, run forward
+    /// instead of backward, so a checkpoint captured after this call restores to the identical live definition a
+    /// checkpoint captured before it would have. Called once per completed tick.</summary>
+    public void EnforceJournalDepth() {
+        lock (m_authorityGate) {
+            var depth = m_definition.Host.JournalDepth;
+
+            if (
+                (depth <= 0) ||
+                (m_journal.Count <= depth)
+            ) {
+                return;
+            }
+
+            var excess = (m_journal.Count - depth);
+            var candidate = m_base;
+
+            for (var index = 0; (index < excess); index++) {
+                var entry = m_journal[index];
+
+                // Every entry here already applied live once, against this exact base-and-prefix, so recomposing it
+                // is expected to succeed; if it somehow does not, leave the journal exactly as it stood rather than
+                // fold onto a candidate that failed to build.
+                if (!TryCompose(
+                    current: candidate,
+                    mutation: entry.Mutation,
+                    tick: entry.Tick,
+                    instanceIdentity: InstanceIdentity,
+                    candidate: out var next,
+                    reason: out _,
+                    evictedKey: out _,
+                    patterns: m_patterns
+                )) {
+                    return;
+                }
+
+                candidate = RebaseCellTraits(
+                    original: candidate,
+                    candidate: next,
+                    mutation: entry.Mutation,
+                    tick: entry.Tick
+                );
+            }
+
+            m_base = candidate;
+            m_baseOrigin = $"the journal depth horizon (host.journalDepth {depth})";
+            m_journal.RemoveRange(index: 0, count: excess);
+        }
+    }
+
     /// <summary>This server's own checkpointed fields — journal, base/definition documents, buffered pending ops,
-    /// step clock, and the rule-edge latches. Every other subsystem's own section lives beside this one on
-    /// <see cref="WorldAuthorityCheckpoint"/>.</summary>
+    /// step clock, rule-edge latches, and per-binding decisions. Every other subsystem's own section lives beside
+    /// this one on <see cref="WorldAuthorityCheckpoint"/>.</summary>
     public sealed record WorldServerCheckpoint(
         byte[] DefinitionJson,
         byte[] BaseDefinitionJson,
@@ -200,7 +392,9 @@ public sealed partial class WorldServer {
         ulong? MusicDirectorLastTransitionTick,
         string? MusicDirectorLastTransitionFromSegmentId,
         string? MusicDirectorLastTransitionToSegmentId,
-        IReadOnlyList<(int EntityIndex, string JudgeRef, string? Grade, ulong Tick)> JudgeGrades
+        string? MusicDirectorLastEmbellishmentPatchId,
+        ulong? MusicDirectorLastEmbellishmentTick,
+        IReadOnlyList<WorldDecisionCheckpoint> Decisions
     );
 
     /// <summary>The engine-tick threshold beyond which a checkpoint capture is refused rather than silently taken
@@ -220,7 +414,7 @@ public sealed partial class WorldServer {
     /// proven never stepped one.</param>
     /// <param name="instanceIdentity">This row's own running-instance identity.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, WorldMachineHost machines, string instanceIdentity) {
+    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
@@ -264,7 +458,7 @@ public sealed partial class WorldServer {
 
                 return false;
             }
-            if (m_pending.Count != 0) {
+            if (m_pending.Count != 0 || m_recordedContributions.Count != 0) {
                 checkpoint = null;
                 reason = "a checkpoint cannot capture while a buffered live-edit op is pending drain — retry at the next master boundary";
 
@@ -287,15 +481,11 @@ public sealed partial class WorldServer {
 
             var ruleGateHeld = new List<(string, bool)>(capacity: m_ruleGateHeld.Count);
 
-            foreach (var pair in m_ruleGateHeld) {
-                ruleGateHeld.Add(item: (pair.Key, pair.Value));
-            }
+            m_ruleGateHeld.Flatten(into: ruleGateHeld);
 
             var interactionGateHeld = new List<(string, bool)>(capacity: m_interactionGateHeld.Count);
 
-            foreach (var pair in m_interactionGateHeld) {
-                interactionGateHeld.Add(item: (pair.Key, pair.Value));
-            }
+            m_interactionGateHeld.Flatten(into: interactionGateHeld);
 
             var server = new WorldServerCheckpoint(
                 DefinitionJson: WorldDefinitionSerialization.Serialize(definition: m_definition),
@@ -307,6 +497,7 @@ public sealed partial class WorldServer {
                 LastStepTicks: m_lastStepTicks,
                 Intents: [.. m_intents],
                 Pending: [],
+                Decisions: CaptureDecisions(),
                 RuleGateHeld: ruleGateHeld,
                 InteractionGateHeld: interactionGateHeld,
                 LastDocumentReceipt: m_lastDocumentReceipt,
@@ -318,7 +509,8 @@ public sealed partial class WorldServer {
                 MusicDirectorLastTransitionTick: m_musicDirector?.LastTransitionTick,
                 MusicDirectorLastTransitionFromSegmentId: m_musicDirector?.LastTransitionFromSegmentId,
                 MusicDirectorLastTransitionToSegmentId: m_musicDirector?.LastTransitionToSegmentId,
-                JudgeGrades: [.. m_judgeGrades.Select(selector: pair => (pair.Key.EntityIndex, pair.Key.JudgeRef, pair.Value.Grade, pair.Value.Tick))]
+                MusicDirectorLastEmbellishmentPatchId: m_musicDirector?.LastEmbellishmentPatchId,
+                MusicDirectorLastEmbellishmentTick: m_musicDirector?.LastEmbellishmentTick
             );
 
             checkpoint = new WorldAuthorityCheckpoint(
@@ -329,7 +521,10 @@ public sealed partial class WorldServer {
                 InputHold: m_inputHold.Capture(),
                 EventFeed: m_events.Capture(),
                 OwnedWorlds: m_profiles.Capture(),
-                HostRow: hostRow
+                HostRow: hostRow,
+                Fields: m_population.Fields?.Capture(),
+                Search: m_search.Capture(),
+                BoardEnforcement: CaptureBoardEnforcement()
             );
             reason = string.Empty;
 
@@ -345,7 +540,20 @@ public sealed partial class WorldServer {
 
         var server = checkpoint.Server;
 
-        m_definition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
+        if ((m_population.Fields is null) != (checkpoint.Fields is null)) {
+            throw new InvalidOperationException(message: "the checkpoint's fields-section presence does not match its world definition.");
+        }
+
+        m_population.Fields?.ValidateCheckpoint(checkpoint: checkpoint.Fields!);
+        // Population validation is deliberately before any server field changes below. A malformed cached route
+        // must refuse the entire restore atomically, not fail after the definition, clocks, or journal were replaced.
+        m_population.ValidateCheckpoint(checkpoint: checkpoint.Population);
+
+        var restoredDefinition = WorldDefinitionSerialization.Deserialize(utf8Json: server.DefinitionJson);
+        m_events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
+        ValidateDecisionCheckpoint(server, restoredDefinition);
+
+        m_definition = restoredDefinition;
         m_base = WorldDefinitionSerialization.Deserialize(utf8Json: server.BaseDefinitionJson);
         m_baseOrigin = server.BaseOrigin;
         m_journal.Clear();
@@ -364,11 +572,17 @@ public sealed partial class WorldServer {
         }
         m_ruleGateHeld.Clear();
         foreach (var (rule, held) in server.RuleGateHeld) {
-            m_ruleGateHeld[rule] = held;
+            m_ruleGateHeld.Restore(
+                held: held,
+                key: rule
+            );
         }
         m_interactionGateHeld.Clear();
         foreach (var (interaction, held) in server.InteractionGateHeld) {
-            m_interactionGateHeld[interaction] = held;
+            m_interactionGateHeld.Restore(
+                held: held,
+                key: interaction
+            );
         }
         m_lastDocumentReceipt = server.LastDocumentReceipt;
         m_solidRevision = server.SolidRevision;
@@ -386,6 +600,8 @@ public sealed partial class WorldServer {
             m_musicDirector.Restore(
                 armed: server.MusicDirectorArmed,
                 currentSegmentId: segmentId,
+                lastEmbellishmentPatchId: server.MusicDirectorLastEmbellishmentPatchId,
+                lastEmbellishmentTick: server.MusicDirectorLastEmbellishmentTick,
                 lastTransitionFromSegmentId: server.MusicDirectorLastTransitionFromSegmentId,
                 lastTransitionTick: server.MusicDirectorLastTransitionTick,
                 lastTransitionToSegmentId: server.MusicDirectorLastTransitionToSegmentId,
@@ -393,22 +609,50 @@ public sealed partial class WorldServer {
             );
         }
 
-        m_judgeGrades.Clear();
-        foreach (var (entityIndex, judgeRef, grade, tick) in server.JudgeGrades) {
-            m_judgeGrades[(entityIndex, judgeRef)] = (grade, tick);
+        if (m_population.Fields is { } lattice) {
+            lattice.Restore(checkpoint: checkpoint.Fields!);
         }
-
         m_population.Restore(
             checkpoint: checkpoint.Population,
             defaults: m_definition.PlayerDefaults,
             tick: m_lastCompletedTick
         );
+        // Restore rebuilds every WorldBody at the constructed default (Scale == One) — bodies.scaleRow is document
+        // state, not part of WorldPopulationCheckpoint, so it needs the same catch-up every other admission door
+        // gives a freshly minted body. m_definition is already the checkpoint's own restored document (set above),
+        // so this reads the SAME cells the live server had when it captured.
+        m_population.SyncBodyScale(definition: m_definition);
         m_grants.Restore(checkpoint: checkpoint.Grants);
+
+        // A restored parked PEER generation is released right here, not at its grace deadline: the connection that
+        // occupied it did not survive the restore and peer body-resume does not exist, so — exactly as the
+        // PeerDisconnected arm argues — its rows and exclusive reservations would only refuse live acquirers while
+        // nothing could ever exercise them (forever, at rate 0). The body's own park-with-grace is untouched, and a
+        // local seat's rows are untouched (a seat can be resumed onto). Same ordinary Revoke door, same loud lines.
+        for (var index = 0; (index < m_population.Capacity); index++) {
+            if (
+                !m_population.IsParked(index: index) ||
+                !m_population.IsAdmittedPeer(bodyIndex: index)
+            ) {
+                continue;
+            }
+
+            foreach (var row in m_grants.Rows(principal: m_population.PeerPrincipal(index: index))) {
+                Revoke(
+                    grant: row,
+                    actor: WorldPrincipal.Console
+                );
+            }
+        }
+
         m_transferEscrow.Restore(checkpoint: checkpoint.Escrow);
         m_inputHold.Restore(checkpoint: checkpoint.InputHold);
         m_events.Restore(checkpoint: checkpoint.EventFeed);
         m_profiles.Restore(checkpoint: checkpoint.OwnedWorlds);
         RecompileRules(definition: m_definition);
+        RestoreDecisions(server.Decisions);
+        m_search.Restore(checkpoint: (checkpoint.Search ?? SearchCheckpoint.Empty));
+        RestoreBoardEnforcement(checkpoint: (checkpoint.BoardEnforcement ?? WorldBoardEnforcementCheckpoint.Empty));
     }
     /// <summary>Re-applies one mutation from a hosted row's persisted journal tail — the mutations recorded after
     /// the checkpoint <see cref="FromCheckpoint"/> restored from, replayed in order to bring the server current. Runs

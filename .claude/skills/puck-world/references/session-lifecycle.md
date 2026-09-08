@@ -9,7 +9,7 @@ or the `$parked:` reserved rule channel.
 
 - The two join/leave doors
 - Park-with-grace
-- Body-resume (local seats only)
+- Body-resume (seats and verified peers)
 - The `$parked:<bodyRef>` reserved rule channel
 - Read-back: `world.parked`
 - Authoring reconnect policy over the primitive
@@ -27,10 +27,10 @@ or the `$parked:` reserved rule channel.
 - **Peers** (indices `4..Capacity-1`): `WorldServer.TryAdmitPeerConnection`/
   `DisconnectPeerConnection` → the ordered-domain `WorldServerEvent.PeerAdmitted`/
   `PeerDisconnected` → `ApplyServerEvent` → `WorldPopulation.ApplyPeerAdmitted`/
-  `ApplyPeerDisconnected`. `Server.WorldTcpHost`'s Hello door is the one live
-  caller. **The Hello handshake carries NO persistent identity** — only the
-  wire-protocol key — which is exactly why peer body-resume (below) is not
-  built: there is nothing to match a reconnecting peer against.
+  `ApplyPeerDisconnected`. `Server.WorldPeerHost`'s Hello door is the one live
+  caller, and the admission door's verified attestation identity
+  (`identityDomain`/`identitySubject`) is what a reconnecting peer is matched
+  against for body-resume (below).
 
 ## Park-with-grace (deliverable: reconnect primitives)
 
@@ -58,26 +58,42 @@ pre-park immediate-teardown behavior), the SAME call instead:
 `WorldServer.ReclaimExpiredEscrows` (same tick-driven, no-wall-clock,
 replay-deterministic shape `OwnershipEscrow.DeadlineTick` already established)
 — tears down every entry where `Active && Parked && tick >= ParkedUntilTick`:
-drops the body, clears `Active`/`Parked`/`IsRemoteHuman`. **Grant revocation on
-a peer disconnect is NOT deferred** — `ApplyServerEvent`'s `PeerDisconnected`
-case still revokes the disconnected generation's grants immediately, exactly as
-before park-with-grace existed; only the body/occupancy half defers. Deferring
-the grant half too would mean reshaping `WorldServerEvent.PeerDisconnected`'s
-ordered-domain/replay-tape contract (`RevokedGrants` is computed and applied at
-dispatch time), which is out of this wave's scope — a named gap, not an
-oversight. A local seat never held generation-scoped grants to revoke, so this
-asymmetry has no seat-side counterpart.
+drops the body, clears `Active`/`Parked`/`IsRemoteHuman`. It never touches the
+grant table — by the time a park expires, its generation holds nothing.
+
+**The park defers the BODY only; a peer's AUTHORITY follows the CONNECTION.**
+`ApplyServerEvent`'s `PeerDisconnected` case revokes `RevokedGrants`
+unconditionally, whether or not the entry parked: while disconnected nothing
+can exercise the rows, yet an `Exclusive` subject the generation reserved would
+refuse every live acquirer — for the whole grace window, and forever at rate 0,
+where the compiled grace is `Never` and `ReclaimExpiredParks` never runs at
+all. A verified-identity reconnect that resumes the parked body re-mints its
+admission templates through the ordinary `PeerAdmitted` event (below), so what
+does not survive the gap is exactly a live acquisition beyond the templates.
+The release rides `ApplyServerEvent`, the same door a replay re-drives the
+recorded event through, so a re-drive reproduces it at the identical tick with
+no separate tape entry. A checkpoint restore releases a restored park's rows
+the same way, at `WorldServer.RestoreCheckpoint` itself — a restored parked
+generation's connection did not survive the restore, so its rows and exclusive
+reservations go before the first step. A local seat's park leaves its rows
+entirely alone (the one participant whose table survives intact to a resume).
+
+Proved by `tests/Puck.World.Tests/ParkedGrantReleaseLawTests.cs`: a disconnect
+releases an exclusively-held subject to a rival immediately (positive grace,
+authored-zero grace, and rate 0 alike) while the body stays parked; a local
+seat's rows survive park and resume — and the same restore untouched; a
+restored park's rows go at the restore itself; a resume-shaped `PeerAdmitted`
+event unparks the retained body and re-mints the fresh connection's rows.
 
 Park state is **population state, not a mutation** — it carries no
-`WorldMutation` ordinal (the catalog is 64/64 full; this was never a candidate
-for a 65th kind) and is never journaled. It IS replay-deterministic on its own
+`WorldMutation` ordinal and is never journaled. It IS replay-deterministic on its own
 terms: `ParkedUntilTick` is a pure function of the tick the disconnect landed
 on (itself replay-reproduced) plus the document-authored `reconnectGraceSeconds`,
 so `ReclaimExpiredParks` fires identically on replay with no separate tape
 entry, the same way `ReclaimExpiredEscrows`'s mutation-shaped reclaim needs
 none.
 
-## Body-resume (local seats only)
+## Body-resume (seats and verified peers)
 
 A re-Join to a seat that `WorldPopulation.IsSeatParked` reports parked tries
 `TryResumeParkedSeat` BEFORE falling back to `ActivateSeat`'s fresh-spawn path.
@@ -94,11 +110,18 @@ is left completely untouched (so a later, correctly-identified re-Join can
 still recover it before grace expires) and `WorldServer.ApplySession`'s `Join`
 case refuses the request by name, distinct from an authority denial.
 
-**Peer body-resume is not implemented.** See the Hello-door gap above — there
-is no identity signal at peer-admission time to resume against, so a
-reconnecting peer's TCP connection always claims a fresh slot via
-`TryAdmitRemotePeer`'s `HighestFreeSlot`, which correctly SKIPS a still-parked
-slot (its `Active` stays true) without ever reusing it.
+**Peer body-resume matches on the VERIFIED admission identity.** An ordinary
+connect (never a transfer commit) whose door verdict's
+(`identityDomain`, `identitySubject`) pair matches a parked peer resumes that
+SAME retained body and generation in place
+(`WorldPopulation.TryResumeParkedPeer`, called from
+`WorldServer.TryAdmitVerifiedParticipant`), then re-dispatches the ordinary
+`PeerAdmitted` event carrying the fresh connection's minted admission
+templates — which is also what unparks and re-mints a replayed resume
+(`ApplyPeerAdmitted`'s generation-guarded unpark). An unverified or
+non-matching reconnect claims a fresh slot via `TryAdmitRemotePeer`'s
+`HighestFreeSlot`, which SKIPS a still-parked slot (its `Active` stays true)
+without ever reusing it.
 
 ## The `$parked:<bodyRef>` reserved rule channel
 
@@ -128,16 +151,15 @@ parse (`WorldRuleRefusal.ParkedChannelMalformed` on a bad spelling).
 every currently-parked entity: `body:<n> remaining=<ticks> deadline=<tick>
 [profile=<name>] pos=(x, z) yaw=d°`. Empty when nothing is parked. This is the
 `$parked:` channel's own read-back, and the cheapest way to prove a park
-retained pose/state without fighting `player.where`'s `PlayerRoster.IsJoined`
+retained pose/state without fighting `body.where`'s `PlayerRoster.IsJoined`
 gate (see the gotcha below).
 
 ## Authoring reconnect POLICY over the primitive — "everything else is rules"
 
 Everything past park-with-grace/body-resume/`$parked:` above is an ordinary
 authored `WorldRule` — no further engine surface exists or is needed.
-`Assets/scenarios/reconnect.world.json` (the reconnect-policy wave,
-2026-08-06) is the worked forcing-function demo, mirroring
-`combat.world.json`'s role: a CC countdown (`stunRemaining`, a plain
+The retired `reconnect.world.json` scenario (git history; deleted 2026-09-06 with `combat.world.json`,
+whose rules now live in `modules/arena.world.json`) was the worked forcing-function demo: a CC countdown (`stunRemaining`, a plain
 `Level`-mode decrement rule) keeps ticking through a park because rule
 evaluation never consults occupancy (see "Park-with-grace" above); a
 periodic-attack rule gated on `$argmax:threat` resolving to the PARKED body
@@ -146,7 +168,7 @@ window; and a `$parked:body:<n>` threshold gate (`Edge` mode, paired with
 its own clear-on-resume `Edge` rule) demonstrates a rule reacting to the
 LIVE remaining-grace value, not just its parked/unparked boolean. Nothing
 here is a new predicate, effect, or reserved channel — it is the SAME
-substrate `combat.world.json`'s `mob-target-mirror`/`mob-attacks-p1` rules
+substrate the arena district's targeting and attack rules
 already exercise, aimed at `$parked:` instead of `$distance:`/`$argmax:`
 alone. `reconnectGraceSeconds: 0` is the standing break-once control: the
 SAME document with that one field zeroed tears the body down immediately on
@@ -157,16 +179,15 @@ the grace window (not merely the leave itself) is what the rules above ride.
 
 - **`player.leave` clears the CLIENT roster slot regardless of server-side
   park.** `PlayerRoster.Leave` sets `m_slots[slot] = null` unconditionally, so
-  `player.where <n>`/`player.channels <n>`/etc. (which gate on
+  `body.where <n>`/`body.channels <n>`/etc. (which gate on
   `PlayerRoster.IsJoined`) report "not joined" for a parked seat even though
   the SERVER still holds its body. Use `world.parked` to read a parked body's
-  pose/state; use `player.where` only AFTER a resuming re-Join (which
+  pose/state; use `body.where` only AFTER a resuming re-Join (which
   re-populates the client slot via `PlayerRoster.Fill`).
 - **Player 1 (slot 0) never leaves** (`PlayerRoster.Leave` refuses `slot <= 0`)
   — pick slot 2..4 for any leave/park/resume script.
-- **A shipped world's four identities are exactly its four auto-seated
-  players** (`play.world.json`: amber/cobalt/moss/violet, one per seat — every
-  shipped world authors the same four).
+- **No shipped world authors identities** — profiles come from the owned-worlds
+  catalog (`identity.create`, loaded at boot from `--state-dir`).
   `player.join <profile> <slot>` refuses BY NAME
   ("profile '<x>' is already in use") the instant `<profile>` is active
   ANYWHERE else — this fires regardless of park state, so testing a
@@ -179,25 +200,12 @@ the grace window (not merely the leave itself) is what the rules above ride.
   after a leave reliably crosses the deadline in a scripted verification run;
   `world.wait <2` plus `world.parked` reads the remaining-ticks countdown
   mid-window.
-- **Fixed 2026-08-06 (was: a `player.join` under `--headless` flooded stderr
-  with ~106 `[player.bindings] seat N recompose rejected: page "…" binds …
-  to "editor.*", which names no registered command` lines).**
-  `WorldDefaultBindings`'s editor/sculpt page groups are compiled into every
-  seat's composed document unconditionally ("always compiled in"), but
-  `AddWorldPresentation` — which registers `EditorCommandModule` and its
-  siblings — is skipped entirely on the headless boot shape
-  (`WorldBootComposition.cs`/`Program.cs`), so those pages always name
-  unregistered commands headless, on every world (this reproduced
-  byte-for-byte identically on `combat.world.json`'s own `player.join` under
-  the same recipe — no scenario document has a lever over it).
-  `WorldSeatBindings`'s recompose now SKIPS a page (or a mixed page's
-  offending entries only — the default group's base page keeps its movement
-  rows and loses just `editor.enter`) whose commands are not in the
-  registered vocabulary, keyed on `WorldAffordances.IsCommandRegistered`
-  (a registration FACT, never a headless boolean) and narrated ONCE per
-  skipped page (`[player.bindings] seat N: page "editor" (group "editor")
-  skipped 13 unregistered commands — …`) instead of once per entry. A
-  genuine vocabulary mistake surviving the skip (bindability, value kind)
-  still rejects the whole recompose exactly as before. Windowed boot
-  registers every command, so the skip predicate is always false there and
-  behavior is byte-identical to before the fix.
+- A composed document may name a command a leaner boot shape (e.g. headless)
+  never registers. `WorldSeatBindings`'s recompose SKIPS a page (or a mixed
+  page's offending entries only, keeping its registered/resolvable rows)
+  whose commands are not in the registered vocabulary, keyed on
+  `WorldAffordances.IsCommandRegistered` (a registration FACT, never a
+  headless boolean) and narrated ONCE per skipped page instead of once per
+  entry. A genuine vocabulary mistake surviving the skip (bindability, value
+  kind) still rejects the whole recompose. Windowed boot registers every
+  command, so the skip predicate is always false there.

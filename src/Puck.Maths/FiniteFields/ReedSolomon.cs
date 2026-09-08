@@ -71,12 +71,14 @@ public static class ReedSolomon {
         generator.Clear();
         generator[degree] = field.One;
 
-        for (var index = 0; (index < degree); index++) {
-            var root = field.Exponentiate(
-                exponent: ((ulong)(firstRootExponent + index)),
-                value: rootBase
-            );
+        // The roots are consecutive powers of rootBase, so one exponentiation seeds the first and a single field
+        // multiply steps to each next root.
+        var root = field.Exponentiate(
+            exponent: ((ulong)firstRootExponent),
+            value: rootBase
+        );
 
+        for (var index = 0; (index < degree); index++) {
             // Multiplying by (t + root) sends coefficient c_m to c_m·root + c_(m-1), and c_(m-1) is exactly the slot
             // being written while c_m sits one slot to its right. Sweeping left to right therefore reads each old
             // coefficient before it is overwritten, so the widening needs no second buffer. The two ends fall out of the
@@ -95,6 +97,13 @@ public static class ReedSolomon {
                     tail: fieldTail
                 );
             }
+
+            root = BinaryFieldKernels.Multiply(
+                degree: fieldDegree,
+                left: root,
+                right: rootBase,
+                tail: fieldTail
+            );
         }
     }
     /// <summary>Computes a message's check symbols — the remainder of its division by the generator.</summary>
@@ -234,11 +243,12 @@ public static class ReedSolomon {
         var fieldDegree = field.Degree;
         var fieldTail = field.ReductionTail;
 
+        var root = field.Exponentiate(
+            exponent: ((ulong)firstRootExponent),
+            value: rootBase
+        );
+
         for (var index = 0; (index < syndromes.Length); index++) {
-            var root = field.Exponentiate(
-                exponent: ((ulong)(firstRootExponent + index)),
-                value: rootBase
-            );
             var accumulator = seed;
 
             foreach (var symbol in codeword) {
@@ -251,6 +261,12 @@ public static class ReedSolomon {
             }
 
             syndromes[index] = accumulator;
+            root = BinaryFieldKernels.Multiply(
+                degree: fieldDegree,
+                left: root,
+                right: rootBase,
+                tail: fieldTail
+            );
         }
     }
 }

@@ -195,39 +195,23 @@ public sealed partial class WorldAddonRuntime {
                 // A row with no recorded budget is unreachable by construction: every principal reaching here is a
                 // mounted addon's own untrusted Principal, and TryGrant's Conflicts gate refuses an untrusted Drive
                 // hold with no budget before it can be added — so this refuses rather than dispatching unmetered.
-                if (m_server.Grants.TryGetBudget(
-                    principal: principal,
+                if (!TryChargeDispatch(
+                    addon: addon,
                     capability: WorldCapability.Drive,
+                    dispatchCounts: addon.DriveDispatchCounts,
+                    latches: ref addon.Drive,
+                    ordinal: act.Ordinal,
                     subject: subject,
-                    out var driveBudget
+                    verdict: out var chargeVerdict
                 )) {
-                    if (addon.DriveDispatchCounts[subject.Value] >= driveBudget) {
-                        QueueAnswer(
-                            addon: addon,
-                            ordinal: act.Ordinal,
-                            verdict: AddonVerdict.QuotaExhausted
-                        );
-                        driveExhaustedThisTick = true;
-
-                        if (!addon.DriveDispatchBudgetExhaustedReported) {
-                            addon.DriveDispatchBudgetExhaustedReported = true;
-                            Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} exceeded its drive/{subject.Describe()} dispatch budget ({driveBudget}/tick) — ordinal {act.Ordinal} refused QuotaExhausted]");
-                        }
-
-                        continue;
-                    }
-
-                    addon.DriveDispatchCounts[subject.Value]++;
-                } else {
                     QueueAnswer(
                         addon: addon,
                         ordinal: act.Ordinal,
-                        verdict: AddonVerdict.NoHold
+                        verdict: chargeVerdict
                     );
 
-                    if (!addon.DriveMissingBudgetReported) {
-                        addon.DriveMissingBudgetReported = true;
-                        Console.Error.WriteLine(value: $"[world.addon: {addon.Instance.Name} holds drive over {subject.Describe()} with no recorded dispatch budget — an authority-table inconsistency (unreachable by construction); ordinal {act.Ordinal} refused NoHold rather than dispatched unmetered]");
+                    if (chargeVerdict == AddonVerdict.QuotaExhausted) {
+                        driveExhaustedThisTick = true;
                     }
 
                     continue;
@@ -280,13 +264,13 @@ public sealed partial class WorldAddonRuntime {
                 }
             }
         } finally {
-            // DriveDispatchBudgetExhaustedReported is EDGE-TRIGGERED per exhaustion episode (reset here the moment a
+            // Drive.ExhaustedReported is EDGE-TRIGGERED per exhaustion episode (reset here the moment a
             // tick exhausts no drive budget), never a once-per-process-lifetime latch — the same shape as
             // MergeAnswers' QuotaDropReported, for the identical reason: a second, later saturation episode must be
             // able to say so again rather than staying silent forever after the first. The finally makes this run
             // even if the try above threw, rather than leaving the latch wherever the last successful tick left it.
             if (!driveExhaustedThisTick) {
-                addon.DriveDispatchBudgetExhaustedReported = false;
+                addon.Drive.ExhaustedReported = false;
             }
         }
     }
@@ -521,7 +505,7 @@ public sealed partial class WorldAddonRuntime {
         contribution.Outcome = AddonVerdict.None;
 
         // Nudge a granted body Live the first tick it is not, mirroring a fresh seat's own default so a newly-granted
-        // addon does not sit waiting on a wander/idle producer to yield. Applied DIRECTLY, never through the loopback:
+        // addon does not sit waiting on a steering/idle producer to yield. Applied DIRECTLY, never through the loopback:
         // this is re-derived by re-running the guest under replay's re-run posture, so it must never be recorded as
         // server input. ApplyCommand re-checks Drive itself — a handle designates, it never decides.
         //
@@ -529,7 +513,7 @@ public sealed partial class WorldAddonRuntime {
         // on a HUMAN-OCCUPIED body that says nothing about whether the fold actually accepted anything from this
         // addon: StageContribution still refuses a channel this document-mounted addon never declared Reach over,
         // silently, and a submission that clears every ordinal that way must not be allowed to cancel the seat's own
-        // Idle/Wander/Attend control. So the nudge is gated a second time, narrower than Drive authority: an
+        // Idle/producer control. So the nudge is gated a second time, narrower than Drive authority: an
         // UNOCCUPIED body is nudged exactly as before (a bot at full authority); a HUMAN-OCCUPIED body is nudged
         // only when this contribution actually reached its OWN declared Reach on at least one channel.
         if (
@@ -572,7 +556,7 @@ public sealed partial class WorldAddonRuntime {
                 // FoldActs did not run this tick, so its own bottom-of-method latch reset did not run either — clear
                 // it here so a guest disabled or faulted between an exhaustion and its next FoldActs call does not
                 // carry an armed-but-orphaned latch into a later enable and swallow the next real exhaustion.
-                addon.DriveDispatchBudgetExhaustedReported = false;
+                addon.Drive.ExhaustedReported = false;
 
                 continue;
             }
@@ -600,7 +584,7 @@ public sealed partial class WorldAddonRuntime {
                 // latch's own bottom-of-method reset ran either. Same reasoning as ApplyContributions' twin above,
                 // for both episodes this stage owns: a guest that stops being pumped has no open episode left to
                 // report on, on either axis, regardless of why it stopped.
-                addon.DispatchBudgetExhaustedReported = false;
+                addon.Observe.ExhaustedReported = false;
                 addon.QuotaDropReported = false;
 
                 continue;
@@ -634,18 +618,17 @@ public sealed partial class WorldAddonRuntime {
                 continue;
             }
 
-            // Enabled-but-unadmitted is a host sequencing state Admit runs at mount, and Reload/SetEnabled (below)
-            // re-run it immediately after re-instantiating — so this is unreachable through this runtime's own
-            // lifecycle verbs. It is kept as a defensive skip, not an armed trap, for any FUTURE caller that reaches
-            // AddonHost.Reload/SetEnabled directly rather than through this type's wrappers (ticking an unadmitted
-            // instance throws by contract).
+            // Enabled-but-unadmitted is a host sequencing state Admit closes during TryPrepare — so it is
+            // unreachable through the prepare/commit door. It is kept as a defensive skip, not an armed trap, for
+            // any FUTURE caller that reaches AddonHost directly rather than through this runtime (ticking an
+            // unadmitted instance throws by contract).
             if (!instance.Admitted) {
                 addon.LastTickFuelConsumed = 0UL;
 
                 if (!addon.DiscrepancyReported) {
                     ReportDiscrepancy(
                         addon: addon,
-                        detail: "instance is enabled but was never re-admitted after a reload/enable — skipped every tick (a caller bypassed WorldAddonRuntime.Reload/SetEnabled, which re-admit)"
+                        detail: "instance is enabled but was never admitted — skipped every tick (a caller bypassed the prepare/commit door, which admits during preparation)"
                     );
                 }
 
@@ -717,7 +700,6 @@ public sealed partial class WorldAddonRuntime {
             // in this SAME Step, before intents) applies whatever cleared the door.
             ResolveMutations(
                 addon: addon,
-                addonIndex: index,
                 tick: tick
             );
         }

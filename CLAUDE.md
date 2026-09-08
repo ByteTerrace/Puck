@@ -18,9 +18,11 @@ the file-length ledger (`FileLengths.json`, LEN001–LEN004: no source file over
 `experimental/` and out of the build, so nothing it used to gate is enforced
 today; do not cite it, run it, or write a stage for it. The engine-contract
 verification story it carried is a live gap, not a live gate — except the one
-narrow slice `puck parity` covers: cross-backend composed-frame agreement,
-checked on demand against the real windowed `Puck.World` under the relaxed
-envelope. Presentation-only float and artistic
+narrow slice `puck parity` covers: it boots the authored parity world
+(`tests/Puck.Parity/parity.world.json`) offscreen once per backend, the
+world's own tick-scheduled `captures` rows write a manifest, and each capture
+gets three verdicts — content gate, exact `stateHash`, per-tile pixels under
+the contract versioned beside the world. Presentation-only float and artistic
 work remain outside the simulation-state determinism contract.
 
 Enforcement covers **observable behavior** — pixels, hashes, parity, determinism
@@ -40,6 +42,7 @@ These are kept current — read them before deep work.
 | [docs/project-map.md](docs/project-map.md) | What each `Puck.*` project is for, how they layer, the dependency rules. Its layering block is GENERATED from per-project declarations (`puck architecture --map`) — do not hand-edit it. |
 | [docs/agent-guide.md](docs/agent-guide.md) | How to verify, env vars, hardware gotchas, conventions. **Read before touching GPU or emulator code.** |
 | [docs/vision.md](docs/vision.md) then [docs/campaign.md](docs/campaign.md) | What Puck is and refuses to be; what we are collectively building, where it stands, and what is next. Read before picking up work. |
+| [docs/world-runtime-consolidation.md](docs/world-runtime-consolidation.md) | The engine plan beneath the game: the consolidation doctrine, the folds and the facade still owed, and what is deliberately excluded. It states no status — the campaign holds what is verified. |
 
 **There is no capability catalog or register any more, deliberately.** Both
 claimed per-capability *verification status*, and with `Puck.Post` quarantined
@@ -85,9 +88,9 @@ quarantine governs *work*, not *reading*. Under `experimental/` you are
 expected to READ the source and CITE it as prior art, and to DELETE code there
 once live code has eclipsed it. You may NOT improve it, fix it, build it, run
 it, or run its tests. Expect its builds to break as deletions land — that is
-the intended outcome, not a regression to repair. The trees hold `Puck.Demo`,
-`Puck.Post`, `tools/`, both `scripts/` trees, and `Puck.BareMetal`; each
-carries a firewall pair so the root build cannot reach it either. See
+the intended outcome, not a regression to repair. The trees hold `Puck.Post`,
+`Puck.Bench`, both `scripts/` trees, `Puck.BareMetal`, and `Puck.Platform.Switch`;
+each carries a firewall pair so the root build cannot reach it either. See
 [experimental/README.md](experimental/README.md).
 
 Read it the way you read git history: evidence of how a problem was solved
@@ -100,7 +103,7 @@ landing that eclipses it, so the evidence sits beside the removal and every
 deletion line stays accounted for. "Eclipsed" is a claim that needs a
 mechanical check behind it, not an impression — bring it to the lead for a
 decision rather than deciding alone. Documents that still cite the old
-`tools/…`, `src/Puck.World/scripts/…`, or `src/Puck.Post` paths are STALE;
+`tools/…`, `src/Puck.World/scripts/…`, or the former Post location are STALE;
 correct them where they live.
 
 ## Core rules
@@ -115,12 +118,10 @@ correct them where they live.
    (pixels, hashes, parity, determinism), never internal structure.
 3. **The game is greenfield; Post gates the engine.** `Puck.World` — the
    overworld and everything under `src/Puck.World/` — is the playground: expected
-   to churn, never settled precedent. (`Puck.Demo` is **quarantined at
-   `experimental/Puck.Demo`** by owner ruling 2026-08-01 — out of the solution
-   and the root build. READ it as prior art and retire it as it is eclipsed,
-   per `experimental/` above; never build, run, fix, or revive it in place.
-   Capabilities that once lived only there are simply absent from
-   `Puck.World`, and no plan of record sequences bringing them over.) Verify
+   to churn, never settled precedent. (`Puck.Demo` was quarantined under `experimental/` on 2026-08-01 and
+   deleted on 2026-09-06 once every folder had a live home; the ledger naming
+   each folder's successor is in `experimental/README.md`. Its capabilities
+   live in `Puck.World`'s districts and the brick forges, or nowhere.) Verify
    game/overworld changes by RUNNING `Puck.World`
    (`dotnet run --project src/Puck.World -c Release -- --exit-after-seconds 2`;
    0 or less runs until the window is closed). Narrow deterministic headless
@@ -131,9 +132,11 @@ correct them where they live.
    — it is not built, not run, and not cited; the shared engine contract it
    used to gate (cross-backend render path, SDF VM ISA, document schemas,
    deterministic numerics) currently has no automated gate; the one narrow
-   on-demand check is `puck parity`, which boots the real windowed `Puck.World`
-   on both backends and compares the same fenced composed frame under the
-   relaxed envelope. Say the rest is uncovered plainly when
+   on-demand check is `puck parity`, which boots the authored parity world
+   offscreen (no window) once per backend and renders three verdicts per
+   tick-scheduled capture: content gate (a degenerate frame never reaches
+   comparison), exact `stateHash`, and per-tile pixels under
+   `tests/Puck.Parity/parity.contract.json`. Say the rest is uncovered plainly when
    it matters rather than implying coverage. Emulator changes use the
    `Puck.HumbleGamingBrick.Post`/`Puck.AdvancedGamingBrick.Post` batteries,
    which are still in the build.
@@ -202,6 +205,50 @@ correct them where they live.
    one of the places to look. A second implementation of something already
    here is a defect, not a feature; a skill that proves wrong about its own
    area is stale, and gets corrected in the same change (rule 2).
+
+9. **Line endings are LF, everywhere, and are never a topic.** `.gitattributes`
+   pins `* text=auto eol=lf`, so the object store and the working tree hold the
+   same bytes on every OS and no checkout, formatter, or editor has a
+   conversion left to make; `.editorconfig` states the same contract so
+   `dotnet format whitespace` (phase 0 of `puck format`) agrees rather than
+   fights. The only exceptions are `*.bat`/`*.cmd` (cmd.exe mis-parses
+   LF-terminated labels) and `*.slnx` (Visual Studio rewrites it), pinned CRLF
+   in both files together. Never investigate, report, "fix", or work around an
+   end-of-line difference, and never spend a reviewer's attention on one — if
+   a diff or a formatter run appears to be about newlines, the setting is
+   wrong and gets corrected here, not accommodated at the call site.
+
+## Repository automation
+
+Use Puck CLI for repository operations it already owns. When automation must run
+without a built CLI, use a C# file-based app on the pinned .NET SDK, following
+`src/Puck.Azure.Resources/bootstrap.cs`. Do not introduce PowerShell scripts or
+move script logic into inline PowerShell workflow steps. Keep workflows as
+orchestration around executable commands. This also applies when replacing or
+extending existing script-based tooling.
+
+CI's adopted CLI version is pinned in `.config/dotnet-tools.json`; the explicit
+initial bootstrap policy lives in `.config/puck-bootstrap.json`. Use
+`build/Toolchain.cs -- pin <version>` after publication to verify installation and
+prepare adoption. Never replace a failed official restore with a source build.
+Source-dependent schema, registry, and world composition commands must use the
+candidate CLI. PR formatting also uses the candidate CLI so it checks the rules
+under review. See [CI tooling](docs/ci.md#the-cli-used-by-ci).
+
+PR formatting is automated by CI, which appends a bot commit on repository
+branches and reruns validation. Do not install Git hooks or mutate Git
+configuration during builds. See [automatic PR formatting](docs/ci.md#automatic-pr-formatting).
+
+File-based apps follow `.editorconfig` and the same Puck formatter conventions
+as project code: named arguments where compiler resolution and evaluation order
+permit, declaration spacing, explicit braces, PascalCase constants, and `Async`
+suffixes for task-returning helpers. Keep their SDK/package/project directives
+intact and package versions pinned. Use the linked `Puck.RepositoryPaths` helper
+for checkout-relative paths; do not infer runtime paths from compiler source paths
+or duplicate repository walkers. Use `ProcessStartInfo.ArgumentList` and check
+child exit codes. Compile every changed app in Release without executing its
+operational body; run only its safe local verification path. See
+[file-app verification](docs/agent-guide.md#c-file-apps) for formatting and build commands.
 
 ## The game — where intent lives
 

@@ -3,6 +3,17 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    /// <summary>Gets the hub other Server-family components (a peer host, a replay tape, an instance host's row)
+    /// narrate and attach client sinks through.</summary>
+    internal WorldOutputHub Output => m_output;
+
+    /// <summary>Attaches a sink that receives this server's narration — the same lines it would otherwise write
+    /// straight to <see cref="Console.Error"/> — until the process ends or the returned lease is disposed.</summary>
+    /// <param name="sink">The sink to add.</param>
+    /// <returns>A lease that detaches <paramref name="sink"/> when disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="sink"/> is <see langword="null"/>.</exception>
+    public IDisposable AttachNarrationSink(IWorldNarrationSink sink) => m_output.AttachNarrationSink(sink: sink);
+
     // The ordinary public door intentionally remains void: callers submit an authority operation and observe its
     // attributed echo. Admission re-authorization additionally needs to know whether the row ACTUALLY reached the
     // live table so a conflict refusal is not later misclassified as an explicit revoke; it uses this identical
@@ -43,9 +54,14 @@ public sealed partial class WorldServer {
             grant: grant,
             reason: out var reason
         )) {
-            Console.Error.WriteLine(value: $"[world.grant: {label}{(grant.Exclusive
-                ? " exclusive"
-                : string.Empty)}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(
+                    channel: "world.grant",
+                    text: $"[world.grant: {label}{(grant.Exclusive
+                        ? " exclusive"
+                        : string.Empty)}]"
+                );
+            }
 
             // THE JOIN: the grant's channel mask was validated against the WORLD's channel table, and the guest's own
             // channel names were resolved against that same table at its handshake — and until now nothing compared the
@@ -58,7 +74,12 @@ public sealed partial class WorldServer {
                 reach: grant.Reach,
                 channels: m_population.Channels
             ) is { } undeclared) {
-                Console.Error.WriteLine(value: $"[world.grant: {grant.Principal.Describe()} is granted channel(s) it never declares — inert until it does: {undeclared}]");
+                if (m_output.HasNarrationSink) {
+                    m_output.Narrate(
+                        channel: "world.grant",
+                        text: $"[world.grant: {grant.Principal.Describe()} is granted channel(s) it never declares — inert until it does: {undeclared}]"
+                    );
+                }
             }
 
             EchoTap?.Invoke(obj: new WorldEditEcho(
@@ -73,7 +94,12 @@ public sealed partial class WorldServer {
 
             return true;
         } else {
-            Console.Error.WriteLine(value: $"[world.grant rejected: {label} — {reason}]");
+            if (m_output.HasNarrationSink) {
+                m_output.Narrate(
+                    channel: "world.grant rejected",
+                    text: $"[world.grant rejected: {label} — {reason}]"
+                );
+            }
             EchoTap?.Invoke(obj: new WorldEditEcho(
                 Message: $"grant {label} rejected: {reason}",
                 Rejected: true,
@@ -100,12 +126,17 @@ public sealed partial class WorldServer {
     // no additional safety, since a reach with no ceiling already folds nothing.
     //
     // The withholding is LOUD: a silently-narrowed row would read, in world.grants, as a document that never asked.
-    private static WorldGrant WithoutAuthoredConsent(WorldGrant grant) {
+    private WorldGrant WithoutAuthoredConsent(WorldGrant grant) {
         if (grant.Ceiling is null) {
             return grant;
         }
 
-        Console.Error.WriteLine(value: $"[world.grant: {grant.Principal.Describe()} drive {grant.Subject.Describe()} — the document's ceiling is WITHHELD (a pooled ceiling is consent, and consent is authored live by the seated human on its own body, never shipped in a world document); the row applies with no pool]");
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(
+                channel: "world.grant",
+                text: $"[world.grant: {grant.Principal.Describe()} drive {grant.Subject.Describe()} — the document's ceiling is WITHHELD (a pooled ceiling is consent, and consent is authored live by the seated human on its own body, never shipped in a world document); the row applies with no pool]"
+            );
+        }
 
         // The mask travels with the ceiling on a seat's own gesture and means nothing without it, so both go.
         return (grant with { Reach = null, Consent = null, Ceiling = null });
@@ -176,9 +207,14 @@ public sealed partial class WorldServer {
             subject: grant.Subject
         );
 
-        Console.Error.WriteLine(value: (removed
-            ? $"[world.revoke: {label}]"
-            : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]"));
+        if (m_output.HasNarrationSink) {
+            m_output.Narrate(
+                channel: "world.revoke",
+                text: (removed
+                    ? $"[world.revoke: {label}]"
+                    : $"[world.revoke: {grant.Principal.Describe()} held no {grant.Capability.ToString().ToLowerInvariant()} over {grant.Subject.Describe()}]")
+            );
+        }
         EchoTap?.Invoke(obj: new WorldEditEcho(
             Message: (removed
             ? $"revoke {label}"
@@ -198,12 +234,19 @@ public sealed partial class WorldServer {
     /// acting on itself (a rule's effects, a kit's generate effect), never an actor — is admitted outright as
     /// <c>WorldMutationAdmissionRule.Structural</c>, before any authority is consulted. The gates below decide every
     /// other principal.</para>
-    /// <para>Four gates, in order: (1) the coarse Mutate hold over the mutation's own document section; (2) the
+    /// <para>Four gates, in order: (1) the coarse Mutate hold over the mutation's own document section, OR — when
+    /// the mutation names one concrete creations/placements row — a Mutate hold over that row alone; (2) the
     /// deciding Mutate row's <see cref="MutationKindMask"/>; (3) for a state-row or state-cell write, the row-scoped
     /// Edit hold over the concrete <c>state:&lt;name&gt;</c> subject and, beneath it, that deciding row's own kind
     /// mask; (4) for an untrusted principal, the per-tick dispatch budget. "Deciding row" always means the rule the
-    /// verdict itself reports — <c>ConcreteHold</c> beats <c>WildcardHold</c> — never a union of a concrete and a
-    /// wildcard row's masks.</para>
+    /// verdict itself reports — <c>ConcreteHold</c> beats <c>WildcardHold</c>, and a row-scoped hold decides in
+    /// place of the section it stands in for — never a union of a concrete and a wildcard row's masks.</para>
+    /// <para><b>Gate 1 is a disjunction, not a second narrowing.</b> Unlike gate 3, which requires the section hold
+    /// AND the concrete Edit hold, a <c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c> row stands in for the
+    /// section hold the holder does not have. A section grant keeps admitting every row (the boot seed's shape), a
+    /// row grant admits its own row and nothing else — which is also what keeps the compose arms' replace-by-key
+    /// behavior safe for a row-scoped grantee: it can never name another holder's row to collide with, so no
+    /// ownership check belongs on the compose arm.</para>
     /// <para><b>An absent kind mask is full reach.</b> A mask is opt-in narrowing beneath an already deny-by-default
     /// capability, never a second authority check: Console legitimately holds maskless <c>Mutate/section:*</c> rows
     /// from the boot seed, so refuse-all-on-unmasked here would deny every trusted mutation in the engine. Untrusted
@@ -211,7 +254,7 @@ public sealed partial class WorldServer {
     /// Mutate/section row outright), which is what makes an unmasked untrusted row unreachable rather than
     /// permissive.</para>
     /// <para>Every mutating ingress passes this: <see cref="TryApplyMutation"/> for the ordered domain (loopback,
-    /// console, and the <c>WorldTcpHost</c> peer door, which converge there), and the addon mutation seam's
+    /// console, and the <c>WorldPeerHost</c> peer door, which converge there), and the addon mutation seam's
     /// pre-flight (<c>WorldAddonRuntime.ResolveMutations</c>), which keeps its own earlier call site — it refuses
     /// before decode so a guest cannot probe the decoder for free — but as a call to this rule, never a second copy
     /// of it. Call-site duplication is fine; rule reimplementation is the defect class this predicate exists to
@@ -223,11 +266,15 @@ public sealed partial class WorldServer {
     /// <param name="rowScopedEditSubject">The concrete <c>state:&lt;name&gt;</c> subject a state write names, or
     /// <see langword="null"/> when the mutation is not row-scoped — or when the caller cannot yet know it (the addon
     /// pre-flight runs before decode, so its state writes take gate (3) later, at apply).</param>
+    /// <param name="rowScopedMutateSubject">The concrete <c>creation:&lt;id&gt;</c>/<c>placement:&lt;id&gt;</c>
+    /// subject the mutation's target row addresses, or <see langword="null"/> when the mutation targets no such row
+    /// or the caller cannot yet know it (the addon pre-flight runs before decode; it holds no row-scoped rows to
+    /// begin with — the grant door refuses one to an addon as inert).</param>
     /// <param name="meter">Whether this call is the metering point for the dispatch. False only where the ingress
     /// already charged it (an addon act charged at its pre-flight, re-entering at apply).</param>
     /// <param name="admission">The decided outcome — which gate fired and the row-level evidence behind it.</param>
     /// <returns><see langword="true"/> when every gate cleared (and the dispatch was charged, when metered).</returns>
-    public bool TryAdmitMutation(WorldPrincipal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, bool meter, out WorldMutationAdmission admission) {
+    public bool TryAdmitMutation(WorldPrincipal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, GrantSubject? rowScopedMutateSubject, bool meter, out WorldMutationAdmission admission) {
         var sectionSubject = GrantSubject.Section(section: section);
 
         // THE ONE STRUCTURAL EXEMPTION, keyed on the principal KIND and decided HERE so nothing else has to know
@@ -254,24 +301,57 @@ public sealed partial class WorldServer {
             principal: principal,
             subject: sectionSubject
         );
-
-        if (!mutateVerdict.IsAllowed) {
-            admission = new WorldMutationAdmission(
-                Rule: WorldMutationAdmissionRule.SectionDenied,
-                Verdict: mutateVerdict,
-                Subject: sectionSubject,
-                DecidingSubject: sectionSubject,
-                Mask: MutationKindMask.Empty,
-                Budget: 0
-            );
-
-            return false;
-        }
-
+        // GATE 1 IS A DISJUNCTION: the coarse section hold, OR — when the mutation names one concrete row of a
+        // row-scoped section — a Mutate hold over that row alone. A section grant therefore keeps admitting every
+        // row (the boot seed's own shape), while a row grant admits its own row and nothing else, which is what
+        // makes a contribution slot expressible and what closes the replace-by-key hazard for its holder: it cannot
+        // name another row to collide with. The row subject is derived from the mutation itself, so the two can
+        // never address different sections.
         var decidingMutateSubject = ((mutateVerdict.Rule == GrantRule.WildcardHold)
             ? GrantSubject.All
             : sectionSubject
         );
+        var checkedSubject = sectionSubject;
+
+        if (!mutateVerdict.IsAllowed) {
+            if (rowScopedMutateSubject is not { } rowSubject) {
+                admission = new WorldMutationAdmission(
+                    Rule: WorldMutationAdmissionRule.SectionDenied,
+                    Verdict: mutateVerdict,
+                    Subject: sectionSubject,
+                    DecidingSubject: sectionSubject,
+                    Mask: MutationKindMask.Empty,
+                    Budget: 0
+                );
+
+                return false;
+            }
+
+            var rowVerdict = m_grants.Allows(
+                capability: WorldCapability.Mutate,
+                principal: principal,
+                subject: rowSubject
+            );
+
+            if (!rowVerdict.IsAllowed) {
+                admission = new WorldMutationAdmission(
+                    Rule: WorldMutationAdmissionRule.RowScopedDenied,
+                    Verdict: rowVerdict,
+                    Subject: rowSubject,
+                    DecidingSubject: sectionSubject,
+                    Mask: MutationKindMask.Empty,
+                    Budget: 0
+                );
+
+                return false;
+            }
+
+            // The row hold decided, so the row's own mask and budget govern from here. A WildcardHold cannot reach
+            // this branch: Mutate/all would already have carried the section check above.
+            mutateVerdict = rowVerdict;
+            decidingMutateSubject = rowSubject;
+            checkedSubject = rowSubject;
+        }
 
         if (
             m_grants.TryGetKindMask(
@@ -287,7 +367,7 @@ public sealed partial class WorldServer {
                 DecidingSubject: decidingMutateSubject,
                 Mask: mutateMask,
                 Rule: WorldMutationAdmissionRule.MaskedKind,
-                Subject: sectionSubject,
+                Subject: checkedSubject,
                 Verdict: mutateVerdict
             );
 
@@ -366,7 +446,7 @@ public sealed partial class WorldServer {
                 admission = new WorldMutationAdmission(
                     Rule: WorldMutationAdmissionRule.MissingBudget,
                     Verdict: mutateVerdict,
-                    Subject: sectionSubject,
+                    Subject: checkedSubject,
                     DecidingSubject: decidingMutateSubject,
                     Mask: MutationKindMask.Empty,
                     Budget: 0
@@ -383,7 +463,7 @@ public sealed partial class WorldServer {
                 admission = new WorldMutationAdmission(
                     Rule: WorldMutationAdmissionRule.BudgetExhausted,
                     Verdict: mutateVerdict,
-                    Subject: sectionSubject,
+                    Subject: checkedSubject,
                     DecidingSubject: decidingMutateSubject,
                     Mask: MutationKindMask.Empty,
                     Budget: budget
@@ -396,7 +476,7 @@ public sealed partial class WorldServer {
         admission = new WorldMutationAdmission(
             Rule: WorldMutationAdmissionRule.Admitted,
             Verdict: mutateVerdict,
-            Subject: sectionSubject,
+            Subject: checkedSubject,
             DecidingSubject: decidingMutateSubject,
             Mask: MutationKindMask.Empty,
             Budget: 0

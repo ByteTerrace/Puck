@@ -10,6 +10,7 @@
       "properties": {
         "travel": {
           "description": "The default travel scope (see WorldPortalTravel).",
+          "title": "WorldPortalTravel",
           "type": "string",
           "enum": [
             "party",
@@ -27,7 +28,8 @@
             "Retry",
             "Refuse"
           ],
-          "default": "Retry"
+          "default": "Retry",
+          "title": "WorldTransferFullPolicy"
         },
         "partyAllOrNothing": {
           "description": "Whether a party transfer reserves and commits as one cohort. When false, each member is a separate atomic body transfer.",
@@ -38,12 +40,14 @@
       "required": [
         "travel"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "title": "WorldPortalDefaults"
     }
   },
   "required": [
     "portalDefaults"
   ],
   "additionalProperties": false,
-  "default": null
+  "default": null,
+  "title": "WorldPortalsSection"
 }

@@ -7,34 +7,41 @@ public sealed partial class WorldInstanceHost {
     private void ReconcileInDoubtTransfers() {
         for (var index = 0; (index < m_inDoubtTransfers.Count);) {
             var pending = m_inDoubtTransfers[index];
+            if (!TryBindRecoveryDestination(ref pending)) {
+                index++;
+                continue;
+            }
+            m_inDoubtTransfers[index] = pending;
+            var targetAuthority = pending.TargetAuthority!.Value;
             var transfer = pending.Transfer;
 
             try {
                 // Every step below may answer "not yet". Leaving the entry exactly where it is and re-asking at the
                 // next drain is the whole reconciliation loop already does for an unresolved status.
-                if (!pending.TargetAuthority.TryStatus(
+                var status = WorldTransferStatus.Committed;
+                if (!pending.CommitConfirmed && !targetAuthority.TryStatus(
                     sourceAuthority: pending.SourceAuthority,
                     transferId: pending.Transfer.TransferId,
-                    status: out var status
+                    status: out status
                 )) {
                     index++;
                     continue;
                 }
 
                 if (status == WorldTransferStatus.Reserved) {
-                    if (
+                    if (pending.RollbackOnly || (
                         m_instances.TryGetValue(
                         key: pending.Transfer.SourceInstance,
                         value: out var source
                     ) &&
                         ((source.Server.NextInputTick - 1UL) >= pending.SourceDeadlineTick)
-                    ) {
-                        pending.TargetAuthority.Abort(
+                    )) {
+                        targetAuthority.Abort(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId
                         );
 
-                        if (!pending.TargetAuthority.TryStatus(
+                        if (!targetAuthority.TryStatus(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId,
                             status: out status
@@ -43,7 +50,7 @@ public sealed partial class WorldInstanceHost {
                             continue;
                         }
                     } else {
-                        var step = pending.TargetAuthority.Commit(
+                        var step = targetAuthority.PollCommit(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId,
                             members: pending.CommitMembers,
@@ -56,7 +63,7 @@ public sealed partial class WorldInstanceHost {
                             committed
                         ) {
                             status = WorldTransferStatus.Committed;
-                        } else if (!pending.TargetAuthority.TryStatus(
+                        } else if (!targetAuthority.TryStatus(
                             sourceAuthority: pending.SourceAuthority,
                             transferId: pending.Transfer.TransferId,
                             status: out status
@@ -68,16 +75,28 @@ public sealed partial class WorldInstanceHost {
                 }
 
                 if (status == WorldTransferStatus.Committed) {
+                    if (pending.RollbackOnly) {
+                        // A contradictory peer verdict cannot authorize another body or crash unrelated worlds.
+                        // Keep recovery and report once; only an eventual consistent non-commit may restore it.
+                        if (!pending.ConflictingCommitReported) {
+                            if (m_narration.HasNarrationSink) {
+                                m_narration.Narrate(
+                                    channel: "world.transfer",
+                                    text: $"[world.transfer: transfer={transfer.TransferId} inconsistent destination status — commit reported after confirmed rollback; recovery retained]"
+                                );
+                            }
+                            m_inDoubtTransfers[index] = pending with { ConflictingCommitReported = true };
+                        }
+                        index++;
+                        continue;
+                    }
+                    if (!pending.CommitConfirmed) {
+                        pending = pending with { CommitConfirmed = true };
+                        m_inDoubtTransfers[index] = pending;
+                    }
+                    if (!TryPublishCommittedTransfer(pending)) { index++; continue; }
                     m_inDoubtTransfers.RemoveAt(index: index);
-                    Console.Error.WriteLine(value: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED committed at '{pending.TargetName}' after an ambiguous acknowledgement]");
-                    FinalizeCommittedTransfer(
-                        transfer: in transfer,
-                        targetAuthority: pending.TargetAuthority,
-                        targetName: pending.TargetName,
-                        spawned: pending.Spawned,
-                        landed: pending.Landed,
-                        memberCount: pending.MemberCount
-                    );
+                    CompleteCommittedTransfer(pending);
                     continue;
                 }
 
@@ -90,15 +109,21 @@ public sealed partial class WorldInstanceHost {
                         continue;
                     }
 
-                    foreach (var member in pending.Landed) {
-                        RestoreDetachedMember(
-                            member: member,
-                            source: source
-                        );
+                    // Once any member can return, never retry the cohort commit—even after a checkpoint.
+                    pending = pending with { RollbackOnly = true };
+                    m_inDoubtTransfers[index] = pending;
+                    if (!RestoreDetachedMembers(source, pending.Landed, pending.CommitMembers)) {
+                        index++;
+                        continue;
                     }
 
                     m_inDoubtTransfers.RemoveAt(index: index);
-                    Console.Error.WriteLine(value: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED absent at '{pending.TargetName}' — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]");
+                    if (m_narration.HasNarrationSink) {
+                        m_narration.Narrate(
+                            channel: "world.transfer",
+                            text: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED absent at '{pending.TargetName}' — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]"
+                        );
+                    }
                     if (pending.Spawned) { ReapIfEmpty(name: pending.TargetName); }
                     NoteResolvedTransferOutcome(
                         transfer: in transfer,
@@ -130,7 +155,12 @@ public sealed partial class WorldInstanceHost {
                 destinations: instance.Server.Definition.Destinations,
                 name: hit.Portal.Destination
             ) is not { } destination) {
-                Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' names no destinations row)]");
+                if (instance.Server.Output.HasNarrationSink) {
+                    instance.Server.Output.Narrate(
+                        channel: "world.portal",
+                        text: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' names no destinations row)]"
+                    );
+                }
 
                 continue;
             }
@@ -139,7 +169,12 @@ public sealed partial class WorldInstanceHost {
                 references: instance.Server.Definition.References,
                 name: destination.Reference
             ) is not { } reference) {
-                Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' names references row '{destination.Reference}', which does not exist)]");
+                if (instance.Server.Output.HasNarrationSink) {
+                    instance.Server.Output.Narrate(
+                        channel: "world.portal",
+                        text: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' names references row '{destination.Reference}', which does not exist)]"
+                    );
+                }
 
                 continue;
             }
@@ -173,7 +208,12 @@ public sealed partial class WorldInstanceHost {
                 scopeKey: out var scopeKey,
                 reason: out var scopeReason
             )) {
-                Console.Error.WriteLine(value: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' — {scopeReason})]");
+                if (instance.Server.Output.HasNarrationSink) {
+                    instance.Server.Output.Narrate(
+                        channel: "world.portal",
+                        text: $"[world.portal: '{instance.Name}'/{hit.Placement.Id}/{hit.Face.Face} refused (destination '{hit.Portal.Destination}' — {scopeReason})]"
+                    );
+                }
 
                 continue;
             }
@@ -251,11 +291,11 @@ public sealed partial class WorldInstanceHost {
             // the same probe TryStart itself uses (rooted/relative/base-directory/shipped-worlds), so a
             // spelling difference alone never false-refuses.
             if (
-                !TryResolveDocumentPath(
+                !WorldFileOrigin.TryResolveCanonicalPath(
                 path: documentPath,
                 resolved: out var expectedPath
             ) ||
-                !TryResolveDocumentPath(
+                !WorldFileOrigin.TryResolveCanonicalPath(
                 path: resolved.SourcePath,
                 resolved: out var actualPath
             ) ||
@@ -381,7 +421,7 @@ public sealed partial class WorldInstanceHost {
         );
     }
     // The "return means home" origin scan: every running instance's own resolved document path against the
-    // destination's, through the same TryResolveDocumentPath probes ResolveByStableName's name-collision
+    // destination's, through the same WorldFileOrigin.TryResolveCanonicalPath probes ResolveByStableName's name-collision
     // fence already uses, so a spelling difference alone never false-refuses or false-matches. Names order
     // (ordinal) for determinism; a stopped instance is invisible by construction (removed from m_instances
     // by TryStop already). Two or more matches is reported ambiguous rather than adopting one arbitrarily.
@@ -389,7 +429,7 @@ public sealed partial class WorldInstanceHost {
         matchedName = string.Empty;
         ambiguous = null;
 
-        if (!TryResolveDocumentPath(
+        if (!WorldFileOrigin.TryResolveCanonicalPath(
             path: documentPath,
             resolved: out var targetPath
         )) {
@@ -400,7 +440,7 @@ public sealed partial class WorldInstanceHost {
 
         foreach (var name in Names) {
             if (
-                !TryResolveDocumentPath(
+                !WorldFileOrigin.TryResolveCanonicalPath(
                 path: m_instances[name].SourcePath,
                 resolved: out var candidatePath
             ) ||
@@ -506,52 +546,10 @@ public sealed partial class WorldInstanceHost {
                 return false;
         }
     }
-    private static bool TryResolveDocumentPath(string path, out string resolved) {
-        try {
-            var direct = Path.GetFullPath(path: path);
-
-            if (File.Exists(path: direct)) {
-                resolved = direct;
-
-                return true;
-            }
-
-            var fallback = Path.GetFullPath(path: Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: path
-            ));
-
-            if (File.Exists(path: fallback)) {
-                resolved = fallback;
-
-                return true;
-            }
-
-            var shippedWorlds = Path.GetFullPath(path: Path.Combine(
-                path1: AppContext.BaseDirectory,
-                path2: "Assets",
-                path3: "worlds",
-                path4: path
-            ));
-
-            if (File.Exists(path: shippedWorlds)) {
-                resolved = shippedWorlds;
-
-                return true;
-            }
-        } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
-            // A path the OS cannot even form is a path with no file at it, which is exactly what the caller refuses
-            // by name — swallowing here keeps one refusal sentence instead of two spellings of "not found".
-        }
-
-        resolved = string.Empty;
-
-        return false;
-    }
     private bool TryResolveWorldPeerCall(in PendingTransfer transfer, WorldInstance source, out WorldPeerCall authority, out string resolvedName, out bool spawned, out string reason) {
         if (
             (transfer.Destination.DocumentPath is { } documentPath) &&
-            TryResolveDocumentPath(
+            WorldFileOrigin.TryResolveCanonicalPath(
             path: documentPath,
             resolved: out var resolvedPath
         )
@@ -590,8 +588,10 @@ public sealed partial class WorldInstanceHost {
                             endpoint: endpoint,
                             placeholder: definition,
                             security: source.Federation.Authenticator,
+                            network: source.Federation.Network,
                             observerAuthority: source.Federation.Subject,
-                            applicationStopping: m_applicationStopping
+                            applicationStopping: m_applicationStopping,
+                            narrationHub: m_narration
                         );
                         m_remoteAuthorities[resolvedName] = remote;
                     }
@@ -870,7 +870,7 @@ public sealed partial class WorldInstanceHost {
             return true;
         }
 
-        if (!TryResolveDocumentPath(
+        if (!WorldFileOrigin.TryResolveCanonicalPath(
             path: referencedDocument,
             resolved: out var resolvedPath
         )) {
@@ -901,8 +901,10 @@ public sealed partial class WorldInstanceHost {
                     endpoint: endpoint,
                     placeholder: loaded,
                     security: source.Federation.Authenticator,
+                    network: source.Federation.Network,
                     observerAuthority: source.Federation.Subject,
-                    applicationStopping: m_applicationStopping
+                    applicationStopping: m_applicationStopping,
+                    narrationHub: m_narration
                 );
 
                 m_remoteAuthorities[instanceName] = remote;
@@ -937,7 +939,7 @@ public sealed partial class WorldInstanceHost {
     }
 
     // The transfer contract is authority-shaped. A local row invokes the same server escrow directly; a remote row
-    // serializes that contract over TCP. No transfer logic branches on colocation below this adapter. Fault
+    // serializes that contract over QUIC. No transfer logic branches on colocation below this adapter. Fault
     // substitutes every interface member below for a row SetPeerCallFault named — see that method's own remarks;
     // Local/Remote/Definition/IsRemote stay pointed at the real destination either way, since narration and
     // post-commit address resolution must still read the row a fault decorates, not the decorator.
@@ -1010,6 +1012,10 @@ public sealed partial class WorldInstanceHost {
                 transferId: transferId
             );
         }
+        public WorldTransferStep PollCommit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out bool accepted, out string reason) =>
+            Remote is not null && Fault is null
+                ? Remote.PollCommit(sourceAuthority, transferId, members, out accepted, out reason)
+                : Commit(sourceAuthority, transferId, members, out accepted, out reason);
         // A colocated row answers inline; a remote row answers over its persistent lane, and a lane that could not
         // deliver the step answers a named refusal rather than nothing. Every step here always answers: a caller
         // told "not yet" would leave this transfer queued while the adjacency scan minted a second crossing for the
@@ -1037,7 +1043,7 @@ public sealed partial class WorldInstanceHost {
                 return true;
             }
 
-            return Remote!.TryStatus(
+            return Remote!.PollStatus(
                 sourceAuthority: sourceAuthority,
                 status: out status,
                 transferId: transferId

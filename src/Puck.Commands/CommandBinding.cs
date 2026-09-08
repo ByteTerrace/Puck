@@ -35,4 +35,5 @@ namespace Puck.Commands;
 /// <param name="Mode">Whether a held digital destination reads the physical control's live hold or an
 /// input-side toggle latch (see <see cref="BindingEntryMode"/>). Defaults to <see cref="BindingEntryMode.Hold"/>,
 /// today's behavior.</param>
-public readonly record struct CommandBinding(string Command, CommandValue? Value = null, CommandPhase? ActivateOn = null, float? ChannelScale = null, AxisComponent? Component = null, BindingEntryMode Mode = BindingEntryMode.Hold);
+/// <param name="Text">The authored text payload a press submits as <c>&lt;Command&gt; &lt;Text&gt;</c>, or <see langword="null"/>.</param>
+public readonly record struct CommandBinding(string Command, CommandValue? Value = null, CommandPhase? ActivateOn = null, float? ChannelScale = null, AxisComponent? Component = null, BindingEntryMode Mode = BindingEntryMode.Hold, string? Text = null);

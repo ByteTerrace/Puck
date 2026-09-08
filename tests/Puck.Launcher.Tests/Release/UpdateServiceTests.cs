@@ -7,16 +7,12 @@ namespace Puck.Launcher.Tests.Release;
 /// <summary>End-to-end laws over <see cref="UpdateService.CheckAsync"/> against a <see cref="DirectoryReleaseSource"/>
 /// — the exact transport a <c>self-update</c> canary leg would point at.</summary>
 public sealed class UpdateServiceTests : IDisposable {
-    private readonly string m_root = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-launcher-update-service-tests-{Guid.NewGuid():n}");
+    private readonly TempStagingRoot m_root = new();
 
-    public void Dispose() {
-        if (Directory.Exists(path: m_root)) {
-            Directory.Delete(path: m_root, recursive: true);
-        }
-    }
+    public void Dispose() => m_root.Dispose();
 
     private void PublishManifest(ReleaseManifest signedManifest, string channel) {
-        var directory = Path.Combine(path1: m_root, path2: channel);
+        var directory = Path.Combine(path1: m_root.RootPath, path2: channel);
 
         _ = Directory.CreateDirectory(path: directory);
         File.WriteAllBytes(path: Path.Combine(path1: directory, path2: "manifest.json"), bytes: ReleaseChainFixture.ToWireBytes(manifest: signedManifest));
@@ -44,7 +40,7 @@ public sealed class UpdateServiceTests : IDisposable {
 
         var options = new UpdateOptions(
             App: "puck.world",
-            CacheRoot: m_root,
+            CacheRoot: m_root.RootPath,
             Channel: "stable",
             InstalledVersion: "1.0.0",
             TrustAnchor: fixture.TrustAnchor
@@ -53,8 +49,8 @@ public sealed class UpdateServiceTests : IDisposable {
         var service = new UpdateService(
             applier: new FileUpdateApplier(),
             options: options,
-            source: new DirectoryReleaseSource(root: m_root),
-            stager: new ContentAddressedUpdateStager(cache: new ContentAddressedStore(root: Path.Combine(path1: m_root, path2: "objects")), cacheRoot: m_root, source: new DirectoryReleaseSource(root: m_root)),
+            source: new DirectoryReleaseSource(root: m_root.RootPath),
+            stager: new ContentAddressedUpdateStager(cache: new ContentAddressedStore(root: Path.Combine(path1: m_root.RootPath, path2: "objects")), cacheRoot: m_root.RootPath, source: new DirectoryReleaseSource(root: m_root.RootPath)),
             verifier: verifier
         );
 
@@ -73,7 +69,7 @@ public sealed class UpdateServiceTests : IDisposable {
 
         var options = new UpdateOptions(
             App: "puck.world",
-            CacheRoot: m_root,
+            CacheRoot: m_root.RootPath,
             Channel: "stable",
             InstalledVersion: "1.0.0",
             TrustAnchor: fixture.TrustAnchor
@@ -82,8 +78,8 @@ public sealed class UpdateServiceTests : IDisposable {
         var service = new UpdateService(
             applier: new FileUpdateApplier(),
             options: options,
-            source: new DirectoryReleaseSource(root: m_root),
-            stager: new ContentAddressedUpdateStager(cache: new ContentAddressedStore(root: Path.Combine(path1: m_root, path2: "objects")), cacheRoot: m_root, source: new DirectoryReleaseSource(root: m_root)),
+            source: new DirectoryReleaseSource(root: m_root.RootPath),
+            stager: new ContentAddressedUpdateStager(cache: new ContentAddressedStore(root: Path.Combine(path1: m_root.RootPath, path2: "objects")), cacheRoot: m_root.RootPath, source: new DirectoryReleaseSource(root: m_root.RootPath)),
             verifier: verifier
         );
 
@@ -96,7 +92,7 @@ public sealed class UpdateServiceTests : IDisposable {
         var fixture = new ReleaseChainFixture();
         var options = new UpdateOptions(
             App: "puck.world",
-            CacheRoot: m_root,
+            CacheRoot: m_root.RootPath,
             Channel: "stable",
             InstalledVersion: "1.0.0",
             TrustAnchor: fixture.TrustAnchor
@@ -105,8 +101,8 @@ public sealed class UpdateServiceTests : IDisposable {
         var service = new UpdateService(
             applier: new FileUpdateApplier(),
             options: options,
-            source: new DirectoryReleaseSource(root: m_root),
-            stager: new ContentAddressedUpdateStager(cache: new ContentAddressedStore(root: Path.Combine(path1: m_root, path2: "objects")), cacheRoot: m_root, source: new DirectoryReleaseSource(root: m_root)),
+            source: new DirectoryReleaseSource(root: m_root.RootPath),
+            stager: new ContentAddressedUpdateStager(cache: new ContentAddressedStore(root: Path.Combine(path1: m_root.RootPath, path2: "objects")), cacheRoot: m_root.RootPath, source: new DirectoryReleaseSource(root: m_root.RootPath)),
             verifier: verifier
         );
 

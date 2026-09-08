@@ -33,12 +33,18 @@ public static class SymmetryLattice {
     /// <summary>The size of every cycle orbit — equal to <see cref="CyclicRotation.Period"/>, the order of the cycle.</summary>
     public const int RingSize = 30;
 
+    // The doubled node coordinates, row-major [node · Dimension + axis], kept so InnerProduct can read the exact
+    // integer pairing rather than re-deriving it from the reflection map.
+    private static readonly sbyte[] Coordinates;
     private static readonly int[] CycleMap;
     private static readonly FixedVector2[] Projection;
     // The only state that survives construction: baked index maps, read by the accessors with no allocation. ReflectMap
     // is row-major [node · NodeCount + mirror]; node indices fit a ushort, halving its footprint.
     private static readonly ushort[] ReflectMap;
     private static readonly int[] RingMap;
+    // Each ring's thirty nodes in cycle order, row-major [ring · RingSize + position], starting from the ring's lowest
+    // node index.
+    private static readonly ushort[] RingNodes;
 
     // The eight seed nodes (the E₈ simple roots), each scaled by two so its half-integer coordinates are integers in [-2, 2].
     private static readonly sbyte[][] SeedNodes = [
@@ -136,6 +142,36 @@ public static class SymmetryLattice {
             for (var cursor = i; (RingMap[cursor] < 0); cursor = CycleMap[cursor]) { RingMap[cursor] = nextRing; }
 
             ++nextRing;
+        }
+
+        RingNodes = new ushort[(RingCount * RingSize)];
+        var ringSeeds = new int[RingCount];
+
+        Array.Fill(
+            array: ringSeeds,
+            value: -1
+        );
+
+        for (var i = 0; (i < NodeCount); ++i) {
+            if (ringSeeds[RingMap[i]] < 0) { ringSeeds[RingMap[i]] = i; }
+        }
+
+        for (var ring = 0; (ring < RingCount); ++ring) {
+            var cursor = ringSeeds[ring];
+
+            for (var position = 0; (position < RingSize); ++position) {
+                RingNodes[((ring * RingSize) + position)] = ((ushort)cursor);
+                cursor = CycleMap[cursor];
+            }
+        }
+
+        Coordinates = new sbyte[(NodeCount * Dimension)];
+
+        for (var i = 0; (i < NodeCount); ++i) {
+            nodes[i].CopyTo(
+                array: Coordinates,
+                index: (i * Dimension)
+            );
         }
 
         // The Coxeter-plane projection: one FixedVector2 per node. The node is stored doubled, so halving folds into the
@@ -242,6 +278,70 @@ public static class SymmetryLattice {
         );
 
         return CycleMap[node];
+    }
+    /// <summary>Advances a node a whole number of steps around its ring — <see cref="Cycle(int)"/> applied
+    /// <paramref name="steps"/> times, reduced modulo <see cref="RingSize"/>, so a negative count walks backwards and
+    /// every multiple of <see cref="RingSize"/> returns the node itself.</summary>
+    /// <param name="node">The node to advance, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
+    /// <param name="steps">The number of ring steps; any value, positive or negative.</param>
+    /// <returns>The index of the node <paramref name="steps"/> positions along the same ring.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="node"/> is outside the node range.</exception>
+    public static int Cycle(int node, long steps) {
+        ValidateNode(
+            node: node,
+            paramName: nameof(node)
+        );
+
+        var count = ((int)steps.FloorModulo(modulus: ((long)RingSize)));
+
+        for (var index = 0; (index < count); ++index) {
+            node = CycleMap[node];
+        }
+
+        return node;
+    }
+    /// <summary>Returns the exact inner product of two nodes as roots: <c>2</c> for a node with itself, <c>-2</c> with
+    /// its antipode, and <c>-1</c>, <c>0</c> or <c>1</c> otherwise — <c>1</c> marks the 56 neighbours at sixty
+    /// degrees, <c>0</c> the orthogonal pairs <see cref="AreOrthogonal(int, int)"/> tests.</summary>
+    /// <param name="first">The first node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
+    /// <param name="second">The second node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>
+    /// <returns>The inner product, in <c>[-2, 2]</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="first"/> or <paramref name="second"/> is outside the node range.</exception>
+    public static int InnerProduct(int first, int second) {
+        ValidateNode(
+            node: first,
+            paramName: nameof(first)
+        );
+        ValidateNode(
+            node: second,
+            paramName: nameof(second)
+        );
+
+        var product = 0;
+        var left = (first * Dimension);
+        var right = (second * Dimension);
+
+        for (var axis = 0; (axis < Dimension); ++axis) { product += (Coordinates[(left + axis)] * Coordinates[(right + axis)]); }
+
+        // Both nodes are stored doubled, so the summed products carry a factor of four.
+        return (product / 4);
+    }
+    /// <summary>Returns a node of a ring by position around it: position zero is the ring's lowest node index and each
+    /// following position is one <see cref="Cycle(int)"/> step on, so a ring reads as thirty consecutive positions.</summary>
+    /// <param name="ring">The ring, in <c>[0, <see cref="RingCount"/>)</c>.</param>
+    /// <param name="position">The position around the ring; any value, positive or negative, reduces modulo <see cref="RingSize"/>.</param>
+    /// <returns>The node at that position of the ring.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="ring"/> is outside the ring range.</exception>
+    public static int RingNode(int ring, long position) {
+        if (((uint)ring) >= ((uint)RingCount)) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: ring,
+                message: $"the ring index must be in [0, {RingCount})",
+                paramName: nameof(ring)
+            );
+        }
+
+        return RingNodes[((ring * RingSize) + ((int)position.FloorModulo(modulus: ((long)RingSize))))];
     }
     /// <summary>Projects a node onto the plane where the 240 nodes resolve into eight concentric rings of thirty.</summary>
     /// <param name="node">The node, in <c>[0, <see cref="NodeCount"/>)</c>.</param>

@@ -1,0 +1,1096 @@
+{
+  "exports": {
+    "actions": [
+      "mancalaBoard",
+      "mancalaMoveRequest",
+      "mancalaSelectedPit"
+    ],
+    "bindings": [
+      "mancalaStatus",
+      "mancalaTurn"
+    ],
+    "reads": [
+      "mancalaBoard",
+      "mancalaMoveApplied",
+      "mancalaPitSeeds",
+      "mancalaSelectedPit",
+      "mancalaStatus",
+      "mancalaTurn"
+    ]
+  },
+  "placements": {
+    "rows": [
+      {
+        "board": {
+          "move": "mancalaSelectedPit",
+          "occupancy": "mancalaBoard",
+          "topology": "mancalaBoard",
+          "turn": "mancalaTurn",
+          "verdict": "mancalaStatus"
+        },
+        "id": "mancalaTable",
+        "position": [
+          -8.0,
+          -0.5,
+          -16.0
+        ],
+        "prototypeId": "tabletop",
+        "scale": 1.0,
+        "yawDegrees": 0.0
+      }
+    ]
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "mancalaMoveRequest",
+          "state": "mancalaMoveApplied"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "mancalaMoveApplied",
+            "comparison": "NotEqual",
+            "state": "mancalaMoveRequest"
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "comparison": "Less",
+                "state": "mancalaSelectedPit",
+                "value": 0
+              },
+              {
+                "$type": "compareState",
+                "comparison": "Greater",
+                "state": "mancalaSelectedPit",
+                "value": 12
+              },
+              {
+                "$type": "compareState",
+                "comparison": "Equal",
+                "state": "mancalaSelectedPit",
+                "value": 6
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "mancala-reject-out-of-range"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "fromState": "mancalaMoveRequest",
+          "state": "mancalaMoveApplied"
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "mancalaMoveApplied",
+            "comparison": "NotEqual",
+            "state": "mancalaMoveRequest"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "mancalaSelectedPit",
+            "value": 0
+          },
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "mancalaSelectedPit",
+            "value": 12
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "mancalaSelectedPit",
+            "value": 6
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "compareState",
+                "comparison": "NotEqual",
+                "state": "mancalaStatus",
+                "value": 0
+              },
+              {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "compareState",
+                    "comparison": "Equal",
+                    "state": "mancalaTurn",
+                    "value": 0
+                  },
+                  {
+                    "$type": "compareState",
+                    "comparison": "Greater",
+                    "state": "mancalaSelectedPit",
+                    "value": 5
+                  }
+                ]
+              },
+              {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "compareState",
+                    "comparison": "Equal",
+                    "state": "mancalaTurn",
+                    "value": 1
+                  },
+                  {
+                    "$type": "compareState",
+                    "comparison": "Less",
+                    "state": "mancalaSelectedPit",
+                    "value": 7
+                  }
+                ]
+              },
+              {
+                "$type": "compareState",
+                "comparison": "Equal",
+                "key": "$cell:mancalaSelectedPit:$value",
+                "state": "mancalaBoard",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "mancala-reject-illegal"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "(mancalaSelectedPit + 7 * mancalaTurn) % 14",
+          "kind": "Int",
+          "name": "cStart"
+        },
+        {
+          "expression": "($bind:cStart + mancalaBoard[(mancalaSelectedPit)]) % 13",
+          "kind": "Int",
+          "name": "cLast"
+        },
+        {
+          "expression": "($bind:cLast + 7 * mancalaTurn) % 14",
+          "kind": "Int",
+          "name": "pLast"
+        },
+        {
+          "expression": "$bind:cLast == 6 ? 1 : 0",
+          "kind": "Int",
+          "name": "extra"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "fromKey": "$cell:mancalaSelectedPit:$value",
+          "fromState": "mancalaBoard",
+          "state": "mancalaPitSeeds"
+        },
+        {
+          "$type": "setState",
+          "expression": "$bind:pLast",
+          "state": "mancalaLastPit"
+        },
+        {
+          "$type": "setState",
+          "expression": "$bind:extra",
+          "state": "mancalaExtraTurn"
+        },
+        {
+          "$type": "setState",
+          "fromState": "mancalaMoveRequest",
+          "state": "mancalaMoveApplied"
+        },
+        {
+          "$type": "setState",
+          "state": "mancalaStage",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparandState": "mancalaMoveApplied",
+            "comparison": "NotEqual",
+            "state": "mancalaMoveRequest"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "mancalaStatus",
+            "value": 0
+          },
+          {
+            "$type": "any",
+            "predicates": [
+              {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "compareState",
+                    "comparison": "Equal",
+                    "state": "mancalaTurn",
+                    "value": 0
+                  },
+                  {
+                    "$type": "compareState",
+                    "comparison": "GreaterOrEqual",
+                    "state": "mancalaSelectedPit",
+                    "value": 0
+                  },
+                  {
+                    "$type": "compareState",
+                    "comparison": "LessOrEqual",
+                    "state": "mancalaSelectedPit",
+                    "value": 5
+                  }
+                ]
+              },
+              {
+                "$type": "all",
+                "predicates": [
+                  {
+                    "$type": "compareState",
+                    "comparison": "Equal",
+                    "state": "mancalaTurn",
+                    "value": 1
+                  },
+                  {
+                    "$type": "compareState",
+                    "comparison": "GreaterOrEqual",
+                    "state": "mancalaSelectedPit",
+                    "value": 7
+                  },
+                  {
+                    "$type": "compareState",
+                    "comparison": "LessOrEqual",
+                    "state": "mancalaSelectedPit",
+                    "value": 12
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "key": "$cell:mancalaSelectedPit:$value",
+            "state": "mancalaBoard",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "mancala-stage-move"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "mancalaPitIndex[$each]",
+          "kind": "Int",
+          "name": "p"
+        },
+        {
+          "expression": "(mancalaSelectedPit + 7 * mancalaTurn) % 14",
+          "kind": "Int",
+          "name": "cStart"
+        },
+        {
+          "expression": "($bind:p + 7 * mancalaTurn) % 14",
+          "kind": "Int",
+          "name": "cp"
+        },
+        {
+          "expression": "($bind:cp - $bind:cStart + 26) % 13",
+          "kind": "Int",
+          "name": "dRaw"
+        },
+        {
+          "expression": "$bind:dRaw == 0 ? 13 : $bind:dRaw",
+          "kind": "Int",
+          "name": "dist"
+        },
+        {
+          "expression": "(($bind:cp == 13) | (mancalaPitSeeds < $bind:dist)) ? 0 : (1 + (mancalaPitSeeds - $bind:dist) / 13)",
+          "kind": "Int",
+          "name": "added"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "($bind:p == mancalaSelectedPit ? 0 : mancalaBoard[$each]) + $bind:added",
+          "key": "$each",
+          "state": "mancalaBoard"
+        }
+      ],
+      "forEach": "mancalaBoard",
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "mancalaStage",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "mancala-sow-board"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "mancalaStage",
+          "value": 2
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "mancalaStage",
+        "value": 1
+      },
+      "mode": "Level",
+      "name": "mancala-advance-to-capture"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "((mancalaLastPit + 7 * mancalaTurn) % 14 <= 5) ? 1 : 0",
+          "kind": "Int",
+          "name": "isOwnSide"
+        },
+        {
+          "expression": "mancalaLastPit != mancalaSelectedPit ? 1 : 0",
+          "kind": "Int",
+          "name": "isNotSelected"
+        },
+        {
+          "expression": "mancalaBoard[(mancalaLastPit)] == (1 + (mancalaPitSeeds - 1) / 13) ? 1 : 0",
+          "kind": "Int",
+          "name": "wasEmpty"
+        },
+        {
+          "expression": "mancalaBoard[(12 - mancalaLastPit)] > 0 ? 1 : 0",
+          "kind": "Int",
+          "name": "oppositeHasSeeds"
+        },
+        {
+          "expression": "$bind:isOwnSide & $bind:isNotSelected & $bind:wasEmpty & $bind:oppositeHasSeeds",
+          "kind": "Int",
+          "name": "canCapture"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "mancalaBoard[(6 + 7 * mancalaTurn)] + mancalaBoard[(mancalaLastPit)] + mancalaBoard[(12 - mancalaLastPit)]",
+          "key": "$expr:6 + 7 * mancalaTurn",
+          "state": "mancalaBoard"
+        },
+        {
+          "$type": "setState",
+          "key": "$cell:mancalaLastPit:$value",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "$expr:12 - mancalaLastPit",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "state": "mancalaStage",
+          "value": 3
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "mancalaStage",
+            "value": 2
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$bind:canCapture",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "mancala-apply-capture"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "mancalaStage",
+          "value": 3
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "mancalaStage",
+        "value": 2
+      },
+      "mode": "Level",
+      "name": "mancala-skip-capture"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "mancalaExtraTurn == 1 ? mancalaTurn : (1 - mancalaTurn)",
+          "state": "mancalaTurn"
+        },
+        {
+          "$type": "setState",
+          "state": "mancalaStage",
+          "value": 4
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "mancalaStage",
+        "value": 3
+      },
+      "mode": "Level",
+      "name": "mancala-update-turn"
+    },
+    {
+      "bindings": [
+        {
+          "expression": "mancalaBoard[0] + mancalaBoard[1] + mancalaBoard[2] + mancalaBoard[3] + mancalaBoard[4] + mancalaBoard[5]",
+          "kind": "Int",
+          "name": "p0Sum"
+        },
+        {
+          "expression": "mancalaBoard[7] + mancalaBoard[8] + mancalaBoard[9] + mancalaBoard[10] + mancalaBoard[11] + mancalaBoard[12]",
+          "kind": "Int",
+          "name": "p1Sum"
+        },
+        {
+          "expression": "($bind:p0Sum == 0) | ($bind:p1Sum == 0) ? 1 : 0",
+          "kind": "Int",
+          "name": "isGameOver"
+        },
+        {
+          "expression": "mancalaBoard[6] + $bind:p0Sum",
+          "kind": "Int",
+          "name": "final0"
+        },
+        {
+          "expression": "mancalaBoard[13] + $bind:p1Sum",
+          "kind": "Int",
+          "name": "final1"
+        },
+        {
+          "expression": "$bind:final0 > $bind:final1 ? 1 : ($bind:final1 > $bind:final0 ? 2 : 3)",
+          "kind": "Int",
+          "name": "winner"
+        }
+      ],
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "$bind:final0",
+          "key": "6",
+          "state": "mancalaBoard"
+        },
+        {
+          "$type": "setState",
+          "expression": "$bind:final1",
+          "key": "13",
+          "state": "mancalaBoard"
+        },
+        {
+          "$type": "setState",
+          "key": "0",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "1",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "2",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "3",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "4",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "5",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "7",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "8",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "9",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "10",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "11",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "key": "12",
+          "state": "mancalaBoard",
+          "value": 0
+        },
+        {
+          "$type": "setState",
+          "expression": "$bind:winner",
+          "state": "mancalaStatus"
+        },
+        {
+          "$type": "setState",
+          "state": "mancalaStage",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "mancalaStage",
+            "value": 4
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Equal",
+            "state": "$bind:isGameOver",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "mancala-check-game-over"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "mancalaStage",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "Equal",
+        "state": "mancalaStage",
+        "value": 4
+      },
+      "mode": "Level",
+      "name": "mancala-game-continues"
+    }
+  ],
+  "state": {
+    "lattices": [
+      {
+        "$type": "graph",
+        "cellSize": 0.15,
+        "cells": [
+          {
+            "centre": [
+              -0.5,
+              0.0,
+              -0.15
+            ],
+            "id": "0"
+          },
+          {
+            "centre": [
+              -0.3,
+              0.0,
+              -0.15
+            ],
+            "id": "1"
+          },
+          {
+            "centre": [
+              -0.1,
+              0.0,
+              -0.15
+            ],
+            "id": "2"
+          },
+          {
+            "centre": [
+              0.1,
+              0.0,
+              -0.15
+            ],
+            "id": "3"
+          },
+          {
+            "centre": [
+              0.3,
+              0.0,
+              -0.15
+            ],
+            "id": "4"
+          },
+          {
+            "centre": [
+              0.5,
+              0.0,
+              -0.15
+            ],
+            "id": "5"
+          },
+          {
+            "centre": [
+              0.75,
+              0.0,
+              0.0
+            ],
+            "id": "6"
+          },
+          {
+            "centre": [
+              0.5,
+              0.0,
+              0.15
+            ],
+            "id": "7"
+          },
+          {
+            "centre": [
+              0.3,
+              0.0,
+              0.15
+            ],
+            "id": "8"
+          },
+          {
+            "centre": [
+              0.1,
+              0.0,
+              0.15
+            ],
+            "id": "9"
+          },
+          {
+            "centre": [
+              -0.1,
+              0.0,
+              0.15
+            ],
+            "id": "10"
+          },
+          {
+            "centre": [
+              -0.3,
+              0.0,
+              0.15
+            ],
+            "id": "11"
+          },
+          {
+            "centre": [
+              -0.5,
+              0.0,
+              0.15
+            ],
+            "id": "12"
+          },
+          {
+            "centre": [
+              -0.75,
+              0.0,
+              0.0
+            ],
+            "id": "13"
+          }
+        ],
+        "directions": [
+          {
+            "name": "forward",
+            "opposite": "backward"
+          },
+          {
+            "name": "backward",
+            "opposite": "forward"
+          },
+          {
+            "name": "across",
+            "opposite": "across"
+          }
+        ],
+        "edges": [
+          {
+            "direction": "forward",
+            "from": "0",
+            "to": "1"
+          },
+          {
+            "direction": "forward",
+            "from": "1",
+            "to": "2"
+          },
+          {
+            "direction": "forward",
+            "from": "2",
+            "to": "3"
+          },
+          {
+            "direction": "forward",
+            "from": "3",
+            "to": "4"
+          },
+          {
+            "direction": "forward",
+            "from": "4",
+            "to": "5"
+          },
+          {
+            "direction": "forward",
+            "from": "5",
+            "to": "6"
+          },
+          {
+            "direction": "forward",
+            "from": "6",
+            "to": "7"
+          },
+          {
+            "direction": "forward",
+            "from": "7",
+            "to": "8"
+          },
+          {
+            "direction": "forward",
+            "from": "8",
+            "to": "9"
+          },
+          {
+            "direction": "forward",
+            "from": "9",
+            "to": "10"
+          },
+          {
+            "direction": "forward",
+            "from": "10",
+            "to": "11"
+          },
+          {
+            "direction": "forward",
+            "from": "11",
+            "to": "12"
+          },
+          {
+            "direction": "forward",
+            "from": "12",
+            "to": "13"
+          },
+          {
+            "direction": "forward",
+            "from": "13",
+            "to": "0"
+          },
+          {
+            "direction": "across",
+            "from": "0",
+            "to": "12"
+          },
+          {
+            "direction": "across",
+            "from": "1",
+            "to": "11"
+          },
+          {
+            "direction": "across",
+            "from": "2",
+            "to": "10"
+          },
+          {
+            "direction": "across",
+            "from": "3",
+            "to": "9"
+          },
+          {
+            "direction": "across",
+            "from": "4",
+            "to": "8"
+          },
+          {
+            "direction": "across",
+            "from": "5",
+            "to": "7"
+          }
+        ],
+        "name": "mancalaBoard",
+        "origin": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    ],
+    "world": [
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": 4
+          },
+          {
+            "key": "1",
+            "value": 4
+          },
+          {
+            "key": "2",
+            "value": 4
+          },
+          {
+            "key": "3",
+            "value": 4
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 4
+          },
+          {
+            "key": "6",
+            "value": 0
+          },
+          {
+            "key": "7",
+            "value": 4
+          },
+          {
+            "key": "8",
+            "value": 4
+          },
+          {
+            "key": "9",
+            "value": 4
+          },
+          {
+            "key": "10",
+            "value": 4
+          },
+          {
+            "key": "11",
+            "value": 4
+          },
+          {
+            "key": "12",
+            "value": 4
+          },
+          {
+            "key": "13",
+            "value": 0
+          }
+        ],
+        "capacity": 14,
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "mancalaBoard"
+        },
+        "kind": "Int",
+        "name": "mancalaBoard"
+      },
+      {
+        "cells": [
+          {
+            "key": "0",
+            "value": 0
+          },
+          {
+            "key": "1",
+            "value": 1
+          },
+          {
+            "key": "2",
+            "value": 2
+          },
+          {
+            "key": "3",
+            "value": 3
+          },
+          {
+            "key": "4",
+            "value": 4
+          },
+          {
+            "key": "5",
+            "value": 5
+          },
+          {
+            "key": "6",
+            "value": 6
+          },
+          {
+            "key": "7",
+            "value": 7
+          },
+          {
+            "key": "8",
+            "value": 8
+          },
+          {
+            "key": "9",
+            "value": 9
+          },
+          {
+            "key": "10",
+            "value": 10
+          },
+          {
+            "key": "11",
+            "value": 11
+          },
+          {
+            "key": "12",
+            "value": 12
+          },
+          {
+            "key": "13",
+            "value": 13
+          }
+        ],
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "mancalaBoard"
+        },
+        "kind": "Int",
+        "name": "mancalaPitIndex"
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "mancalaTurn",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 13,
+        "min": -1,
+        "name": "mancalaSelectedPit",
+        "value": -1
+      },
+      {
+        "kind": "Int",
+        "name": "mancalaMoveRequest",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "mancalaMoveApplied",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 3,
+        "min": 0,
+        "name": "mancalaStatus",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "name": "mancalaPitSeeds",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 13,
+        "min": -1,
+        "name": "mancalaLastPit",
+        "value": -1
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "mancalaExtraTurn",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 5,
+        "min": 0,
+        "name": "mancalaStage",
+        "value": 0
+      }
+    ]
+  }
+}

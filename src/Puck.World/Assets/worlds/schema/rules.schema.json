@@ -4,14 +4,15 @@
     "null"
   ],
   "items": {
-    "description": "One world-scoped rule: a condition over world facts and the effects that follow \u2014 the same primitive a kit\u0027s per-body actions already run on (ActionPredicate, ActionEffect, ActionTriggerMode), widened to the world\u0027s own scope rather than a sibling engine with its own vocabulary. There is no scheduler and no trigger taxonomy beside this: time is just another fact.",
+    "description": "A world rule: a state-library Rule plus the optional choice policy only a world evaluates. Compiled by WorldRuleCompiler, which composes the library\u0027s own compile pieces with the world\u0027s registered vocabulary (WorldRuleVocabulary).",
     "type": [
       "object",
       "null"
     ],
     "properties": {
       "name": {
-        "description": "The rule\u0027s stable name \u2014 unique within the section, the WorldMutation.UpsertWorldRule/WorldMutation.RemoveWorldRule key, and the world.rules read-back line. A WorldCellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name (naming the offending character) at the JSON converter before a document can hold one. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
+        "description": "The rule\u0027s stable name \u2014 unique within the section. A CellName, the same validated-identifier type a state row and a cell key ride: dot-free and free of the reserved character set, refused by name at the JSON converter. The reserved $ prefix is refused on top of that, by CompileAll \u2014 exactly as it is for a state row name, and for the same reason: $ marks what the engine mints, and nothing mints a rule.",
+        "title": "CellName",
         "type": "string"
       },
       "effects": {
@@ -22,24 +23,247 @@
         }
       },
       "gate": {
-        "$ref": "./common.schema.json#/$defs/ActionPredicate",
+        "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
         "description": "The predicate that must hold, or null for always.",
         "default": null
       },
       "mode": {
-        "description": "Whether the rule fires every tick the gate holds (Level, the default) or once per crossing (Edge). A rule that writes a row almost always wants Edge: level-firing an addState is what wrote 503 journal entries in 500 ticks.",
+        "description": "Whether the rule fires every tick the gate holds (Level, the default) or once per crossing (Edge). A rule that writes a row almost always wants Edge: level-firing an addState writes one journal entry per tick.",
         "enum": [
           "Level",
           "Edge"
         ],
-        "default": "Level"
+        "default": "Level",
+        "title": "ActionTriggerMode"
+      },
+      "forEach": {
+        "description": "A keyed state row to iterate, $zones to iterate the rule\u0027s own Zones table (its non-empty indices, each bound to $each), or null for one evaluation per tick. With a row named, the gate and effects evaluate once per cell the row holds at the top of the tick, with $each bound to that cell\u0027s key \u2014 the quantifier that lets one rule tick a status for every participant carrying it, or one rule judge every piece or card of a keyed row. An integer key also binds the each participant reference; a non-integer key binds $each alone. The latch is kept per key, by the key\u0027s value when it is an integer and by its position in the row otherwise.",
+        "type": [
+          "string",
+          "null"
+        ],
+        "default": null
+      },
+      "decision": {
+        "description": "The optional choice policy; common effects run only when entering a selected option.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "options": {
+            "description": "One to 32 uniquely named options, in deterministic tie-break order.",
+            "type": "array",
+            "items": {
+              "description": "One candidate in a decision; its score is read only when its gate holds.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "description": "The stable, non-empty option name.",
+                  "title": "CellName",
+                  "type": "string"
+                },
+                "score": {
+                  "$ref": "./common.schema.json#/$defs/ValueExpression",
+                  "description": "A numeric expression in the decision\u0027s score kind. Arithmetic failure makes this option ineligible for that reconsideration."
+                },
+                "effects": {
+                  "description": "Effects fired when entering this option; may be empty for an inspection-only choice.",
+                  "type": "array",
+                  "items": {
+                    "$ref": "./common.schema.json#/$defs/ActionEffect"
+                  }
+                },
+                "gate": {
+                  "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
+                  "description": "Eligibility predicate, or null for always eligible.",
+                  "default": null
+                },
+                "neighbors": {
+                  "description": "Optional bounded nearby-body expansion. Requires rule forEach; each and left identify the observer, right the candidate, only inside this option\u0027s gate, score, and effects. A different individual is a selection transition.",
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "range": {
+                      "description": "Inclusive spherical radius, in world units, from one Q48.16 unit through 1,000,000.",
+                      "type": "number"
+                    },
+                    "candidateBudget": {
+                      "description": "Maximum inspected points per reconsideration, including self, rejected points, and an incumbent recheck.",
+                      "type": "integer"
+                    },
+                    "maxCandidates": {
+                      "description": "Maximum candidates scored, from 1 through 32 and no greater than CandidateBudget.",
+                      "type": "integer"
+                    },
+                    "halfAngleDegrees": {
+                      "description": "Forward cone half-angle in (0,180]; coincident points are perceptible.",
+                      "type": "number",
+                      "default": 180
+                    },
+                    "requiresLineOfSight": {
+                      "description": "Whether candidates must pass the world\u0027s solid-field sight query.",
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "retainCurrent": {
+                      "description": "Spend one inspection on the current individual first. If still perceptible and eligible, reserve one retained slot for it. A budget of one can spend all attention on the incumbent.",
+                      "type": "boolean",
+                      "default": true
+                    }
+                  },
+                  "required": [
+                    "range",
+                    "candidateBudget",
+                    "maxCandidates"
+                  ],
+                  "additionalProperties": false,
+                  "default": null,
+                  "title": "WorldDecisionNeighbors"
+                }
+              },
+              "required": [
+                "name",
+                "score",
+                "effects"
+              ],
+              "additionalProperties": false,
+              "title": "WorldDecisionOption"
+            }
+          },
+          "periodSeconds": {
+            "description": "Positive exact engine-tick duration between reconsiderations. First evaluation is immediate.",
+            "type": "number"
+          },
+          "mode": {
+            "description": "Highest score or weighted choice.",
+            "enum": [
+              "HighestScore",
+              "Weighted"
+            ],
+            "default": "HighestScore",
+            "title": "WorldDecisionMode"
+          },
+          "scoreKind": {
+            "description": "The common numeric kind, Int or Fixed; operands must match it.",
+            "enum": [
+              "Int",
+              "Fixed",
+              "Bool",
+              "Text"
+            ],
+            "default": "Fixed",
+            "title": "CellKind"
+          },
+          "commitmentSeconds": {
+            "description": "Non-negative exact duration protecting a newly selected option from ordinary reconsideration.",
+            "type": "number",
+            "default": 0
+          },
+          "incumbentBonus": {
+            "description": "Non-negative score bonus for retaining the current eligible option and individual. In weighted mode it cannot revive a non-positive weight.",
+            "type": "number",
+            "default": 0
+          },
+          "seed": {
+            "description": "Authored seed combined with the world seed, rule name, binding key, and body generation.",
+            "type": "integer",
+            "default": 0
+          },
+          "interrupt": {
+            "$ref": "./common.schema.json#/$defs/ActionPredicateNullable2",
+            "description": "An optional rising-edge predicate that bypasses period and commitment. Losing eligibility also bypasses both.",
+            "default": null
+          },
+          "onNoChoice": {
+            "description": "Effects fired when an enabled decision first finds no choice, loses its choice, or its enclosing gate closes while a choice is held.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "./common.schema.json#/$defs/ActionEffect"
+            },
+            "default": null
+          }
+        },
+        "required": [
+          "options",
+          "periodSeconds"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldDecision"
+      },
+      "bindings": {
+        "description": "The values bound once per evaluation, in declared order, read as $bind:\u003Cname\u003E.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "description": "A value bound once per evaluation of the rule that declares it, after the forEach key and before the gate, in declared order \u2014 a later binding, the gate, and every effect read it as $bind:\u003Cname\u003E; an earlier binding cannot. The value is never stored: it lives on the evaluation and is recomputed at the next one.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "name": {
+              "description": "The binding\u0027s name \u2014 the token after BindPrefix.",
+              "title": "CellName",
+              "type": "string"
+            },
+            "kind": {
+              "description": "The value\u0027s cell kind, Int or Fixed.",
+              "enum": [
+                "Int",
+                "Fixed",
+                "Bool",
+                "Text"
+              ],
+              "title": "CellKind"
+            },
+            "expression": {
+              "$ref": "./common.schema.json#/$defs/ValueExpression",
+              "description": "The postfix expression, evaluated in that kind."
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "expression"
+          ],
+          "additionalProperties": false,
+          "title": "RuleBinding"
+        },
+        "default": null
+      },
+      "zones": {
+        "description": "The rule\u0027s zone table, or null: ordered zones over one token domain, in index order, an empty entry holding an index no zone answers. Every row position in the rule \u2014 a compareState\u0027s state, a $reduce:/$match: row, a $zone: endpoint\u0027s zone, a transfer\u0027s from/to, an expression\u0027s row \u2014 may spell $zones[\u003Cindex\u003E] to select an entry live, the index being an infix cell key (game[from], $each, $bind:\u003Cname\u003E, or any expression), so one rule serves every pile of a game. An evaluation applies only when every live index selects an entry \u2014 an index outside the table, or at an empty entry, reads the gate closed, so a table\u0027s gaps are the rule\u0027s own statement of which piles it is for. forEach: \u0022$zones\u0022 iterates the table\u0027s own non-empty indices with $each bound to each.",
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "default": null
       }
     },
     "required": [
       "name",
       "effects"
     ],
-    "additionalProperties": false
+    "additionalProperties": false,
+    "title": "WorldRule"
   },
   "default": null
 }

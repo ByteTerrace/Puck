@@ -6,13 +6,20 @@ description: Guides changes to Puck's deterministic GB, GBC, and GBA GamingBrick
 # Gaming Bricks
 
 Treat the GamingBricks as one deterministic machine family: a shared SM83
-compatibility core for DMG, CGB, and AGB costumes, plus the separate
-ARM7TDMI-based GBA-native core. The current implementation and its Post stages
-are authoritative; update stale skill guidance in the same change.
+compatibility core covering every DMG/MGB/SGB/CGB/AGB hardware revision, plus
+the separate ARM7TDMI-based GBA-native core. The current implementation and its
+Post stages are authoritative; update stale skill guidance in the same change.
 
 ## Core invariants
 
 - Advance emulated state only from integer clocks and explicit inputs.
+- Keep configuration in constructor parameters or CLI options, never environment
+  variables. AGB diagnostic hardware/trace overrides live in `AgbMachineOptions`;
+  preserve them across forks and include behavioral options in typed snapshot identity.
+- Preserve direct embedding through the public synchronous `AdvancedGamingBrickCore`
+  and `HumbleGamingBrickCore` APIs and default factory composition. The shared
+  `Puck.GamingBricks` README owns the host contract; both Post `embedding` stages
+  exercise it without a worker, renderer or audio device.
 - Keep floating point and host timing beyond a one-way presentation seam.
 - Express console differences through capability gates, not forked SM83 cores.
 - Preserve snapshot, replay, fork, and cross-machine link determinism.
@@ -31,8 +38,11 @@ are authoritative; update stale skill guidance in the same change.
    clock conversions exact, event ordering explicit, and snapshots complete.
 4. Add or update a self-checking stage when a durable contract changes. A
    diagnostic trace alone is not a gate.
-5. Iterate with `--filter` or `--tier`, then run the unfiltered affected Post
-   battery in Release. Run both batteries when shared hosting, snapshots,
+5. Iterate with `--filter` or `--tier`, then run the affected Post battery in
+   Release: the Humble battery's `--lane gate` for any change, and a plain run
+   (every ledger row) for one that touches accuracy; a recorded outcome that
+   moves is accepted from the run's own candidate ledger with `--accept`,
+   never re-measured. Run both batteries when shared hosting, snapshots,
    clocks, or link behavior crosses the two machines; run Tier C for serial,
    SIO, infrared, or link changes.
 6. Report exact commands, selected stages, asset-gated skips, and whether a

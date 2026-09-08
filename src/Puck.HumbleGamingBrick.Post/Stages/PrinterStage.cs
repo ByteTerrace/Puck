@@ -41,10 +41,24 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostTier Tier =>
         PostTier.A;
+    /// <inheritdoc/>
+    public bool IsConcurrent =>
+        true;
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var reference = RunScenario(churnAtStep: -1);
+        // Every scenario builds its own machine and printer, so they all run at once; only the churn run waits for the
+        // reference, whose probes name the transfer-idle boundary it severs at. Verdicts are read in the order below.
+        var referenceTask = Task.Run(function: static () => RunScenario(churnAtStep: -1));
+        var replayTask = Task.Run(function: static () => RunScenario(churnAtStep: -1));
+        var overflowTasks = OverflowBandCounts
+            .Select(selector: static bandCount => (
+                BandCount: bandCount,
+                Reference: Task.Run(function: () => RunOverflowScenario(bandCount: bandCount)),
+                Replay: Task.Run(function: () => RunOverflowScenario(bandCount: bandCount))
+            ))
+            .ToArray();
+        var reference = referenceTask.GetAwaiter().GetResult();
 
         if (Judge(result: reference) is { } failure) {
             return PostStageOutcome.Fail(detail: failure);
@@ -56,11 +70,11 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
             return PostStageOutcome.Fail(detail: "no transfer-idle budget boundary appeared mid-image; the idle gap or budget schedule is wrong");
         }
 
-        // (a) Determinism: a second fresh run on the same schedule reproduces the print, statuses, and final states.
-        var replay = RunScenario(churnAtStep: -1);
+        var churnedTask = Task.Run(function: () => RunScenario(churnAtStep: churnStep));
 
+        // (a) Determinism: a second fresh run on the same schedule reproduces the print, statuses, and final states.
         if (Difference(
-            actual: replay,
+            actual: replayTask.GetAwaiter().GetResult(),
             expected: reference,
             leg: "replay"
         ) is { } replayFailure) {
@@ -69,10 +83,8 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
 
         // (b) Churn: suspend/snapshot/restore/reconnect the machine AND the printer at a transfer-idle boundary mid-image,
         // then continue — the identical outcome proves the printer's parsing/image/countdown state all serializes.
-        var churned = RunScenario(churnAtStep: churnStep);
-
         if (Difference(
-            actual: churned,
+            actual: churnedTask.GetAwaiter().GetResult(),
             expected: reference,
             leg: "churn"
         ) is { } churnFailure) {
@@ -81,8 +93,8 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
 
         // (c) H-05: 13 valid DATA bands overflow the image buffer's ~12.5-band capacity; 14 drives one band beyond
         // that. Neither may fault, and the printed image must match the wrap-policy reference model exactly.
-        foreach (var bandCount in OverflowBandCounts) {
-            var overflowReference = RunOverflowScenario(bandCount: bandCount);
+        foreach (var (bandCount, overflowReferenceTask, overflowReplayTask) in overflowTasks) {
+            var overflowReference = overflowReferenceTask.GetAwaiter().GetResult();
 
             if (JudgeOverflow(
                 bandCount: bandCount,
@@ -91,10 +103,8 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
                 return PostStageOutcome.Fail(detail: overflowFailure);
             }
 
-            var overflowReplay = RunOverflowScenario(bandCount: bandCount);
-
             if (Difference(
-                actual: overflowReplay,
+                actual: overflowReplayTask.GetAwaiter().GetResult(),
                 expected: overflowReference,
                 leg: $"{bandCount}-band overflow replay"
             ) is { } overflowReplayFailure) {
@@ -112,7 +122,7 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
     private static PrinterScenarioResult RunScenario(int churnAtStep) {
         var rom = PrinterRom.Create();
         var machine = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
         var printer = new GamePrinterDevice();
@@ -152,7 +162,7 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
                     var machineState = machine.Machine.Snapshot();
                     var printerState = CapturePrinter(printer: printer);
                     var freshMachine = PostMachine.Build(
-                        model: ConsoleModel.Dmg,
+                        model: ConsoleModel.DmgC,
                         rom: rom
                     );
                     var freshPrinter = new GamePrinterDevice();
@@ -208,7 +218,7 @@ internal sealed class PrinterStage : IPostStage<PostContext> {
     private static PrinterScenarioResult RunOverflowScenario(int bandCount) {
         var rom = PrinterRom.CreateOverflow(bandCount: bandCount);
         var machine = PostMachine.Build(
-            model: ConsoleModel.Dmg,
+            model: ConsoleModel.DmgC,
             rom: rom
         );
         var printer = new GamePrinterDevice();

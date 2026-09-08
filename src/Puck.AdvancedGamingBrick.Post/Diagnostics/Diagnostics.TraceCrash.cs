@@ -1,8 +1,8 @@
 namespace Puck.AdvancedGamingBrick.Post;
 
 // --trace-crash <rom>: report the first branch into unmapped memory.
-internal static partial class Diagnostics {
-    public static void TraceCrash(string romPath) {
+internal sealed partial class Diagnostics {
+    public void TraceCrash(string romPath) {
         if (!TryLoad(
             romPath: romPath,
             name: Path.GetFileName(path: romPath),

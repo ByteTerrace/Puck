@@ -1,6 +1,7 @@
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Physics.Motion;
 
 namespace Puck.World;
 
@@ -19,7 +20,10 @@ public static partial class WorldDefinitionValidator {
             return false;
         }
     }
-    private static void ValidateBindingBar(WorldBindingBarAuthoring? authoring, string path, List<string> errors) {
+    // Slot-set/bank structure: names, uniqueness, and ceilings — everything checkable WITHOUT the composed binding
+    // profile. The bank PageId existence check runs separately, after ValidateBindingOverlays compiles the
+    // composed profile (a bank's page reference is checkable only against the whole overlay stack's result).
+    private static void ValidateBindingBar(WorldBindingBarAuthoring? authoring, string path, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
         if (authoring is null) {
             return;
         }
@@ -29,52 +33,469 @@ public static partial class WorldDefinitionValidator {
             path: $"{path}.visible",
             predicate: authoring.Visible
         );
+        WorldStateBindingContext.ValidatePresentationRowReference(
+            errors: errors,
+            path: $"{path}.iconRow",
+            reference: authoring.IconRow,
+            stateRows: stateRows
+        );
 
-        if (authoring.Layout is not { } layout) {
-            return;
+        RequireUnitInterval(
+            value: authoring.MultiSeatAlpha,
+            name: $"{path}.multiSeatAlpha",
+            errors: errors
+        );
+
+        if (authoring.SlotSet is null) {
+            errors.Add(item: $"{path}.slotSet is required.");
+        } else {
+            if (authoring.SlotSet.Count > WorldBindingBarCapacity.MaxSlots) {
+                errors.Add(item: $"{path}.slotSet declares {authoring.SlotSet.Count} entries, exceeding the {WorldBindingBarCapacity.MaxSlots}-slot ceiling.");
+            }
+
+            var seenSources = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < authoring.SlotSet.Count); index++) {
+                var source = authoring.SlotSet[index];
+                var slotPath = $"{path}.slotSet[{index}]";
+
+                if (
+                    RequireUniqueName(
+                    errors: errors,
+                    field: "",
+                    path: slotPath,
+                    seen: seenSources,
+                    value: source
+                ) &&
+                    (InputSourceVocabularyHook.IsKnownSourceId is { } isKnown) &&
+                    !isKnown(source)
+                ) {
+                    errors.Add(item: $"{slotPath} '{source}' is not a declared input source id.");
+                }
+            }
         }
 
-        RequirePositive(
-            value: layout.ButtonSize,
-            name: $"{path}.layout.buttonSize",
-            errors: errors
-        );
-        RequireNonNegative(
-            value: layout.CenterGap,
-            name: $"{path}.layout.centerGap",
-            errors: errors
-        );
+        void ValidateSlots(IReadOnlyList<WorldBindingBarSlotPlacement?> slots, string slotsPath) {
+            var placed = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var slotSet = new HashSet<string>(collection: (authoring.SlotSet ?? []), comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < slots.Count); index++) {
+                var placement = slots[index];
+                var slotPath = $"{slotsPath}[{index}]";
+
+                if (
+                    RequireUniqueName(
+                    value: placement?.Source,
+                    seen: placed,
+                    path: slotPath,
+                    field: "source",
+                    errors: errors
+                ) &&
+                    !slotSet.Contains(item: placement!.Source)
+                ) {
+                    errors.Add(item: $"{slotPath}.source '{placement.Source}' is not in {path}.slotSet — a placement names a control the bar shows.");
+                }
+
+                if ((placement is not null) && (!float.IsFinite(f: placement.X) || !float.IsFinite(f: placement.Y))) {
+                    errors.Add(item: $"{slotPath} needs finite x and y pitches.");
+                }
+
+                if (placement?.Badge is { } badge) {
+                    switch (ValidateBadge(badge: badge)) {
+                        case BadgeValidity.WrongCount:
+                            errors.Add(item: $"{slotPath}.badge needs exactly [x, y].");
+                            break;
+                        case BadgeValidity.OutOfRange:
+                            errors.Add(item: $"{slotPath}.badge [{badge[0]}, {badge[1]}] is outside [-1, 1] on an axis.");
+                            break;
+                    }
+                }
+            }
+        }
+
+        void ValidateAnchor(WorldBindingBarAnchor anchor, string anchorPath) {
+            RequireNonNegative(
+                value: anchor.Inset,
+                name: $"{anchorPath}.inset",
+                errors: errors
+            );
+        }
+
+        void ValidateLayout(WorldBindingBarLayout layout, string layoutPath) {
+            if (layout.Anchor is { } layoutAnchor) {
+                ValidateAnchor(
+                    anchor: layoutAnchor,
+                    anchorPath: $"{layoutPath}.anchor"
+                );
+            }
+
+            var tableNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            if (layout.Tables is { } tables) {
+                foreach (var (tableName, rows) in tables) {
+                    tableNames.Add(item: tableName);
+
+                    if (rows is null) {
+                        errors.Add(item: $"{layoutPath}.tables['{tableName}'] is required.");
+
+                        continue;
+                    }
+
+                    ValidateSlots(
+                        slots: rows,
+                        slotsPath: $"{layoutPath}.tables['{tableName}']"
+                    );
+                }
+            }
+
+            if (layout.Banks is { } bankPlacements) {
+                var bankIds = new HashSet<string>(collection: (authoring.Banks ?? []).Where(predicate: static bank => (bank?.Id is not null)).Select(selector: static bank => bank!.Id), comparer: StringComparer.Ordinal);
+
+                foreach (var (bankId, placement) in bankPlacements) {
+                    var bankPath = $"{layoutPath}.banks['{bankId}']";
+
+                    if (!bankIds.Contains(item: bankId)) {
+                        errors.Add(item: $"{bankPath} names no bank in {path}.banks.");
+                    }
+
+                    if (placement is null) {
+                        errors.Add(item: $"{bankPath} is required.");
+
+                        continue;
+                    }
+
+                    if (placement.Anchor is { } bankAnchor) {
+                        ValidateAnchor(
+                            anchor: bankAnchor,
+                            anchorPath: $"{bankPath}.anchor"
+                        );
+                    }
+
+                    if (placement.Pieces is null) {
+                        errors.Add(item: $"{bankPath}.pieces is required — a bank shows what it places.");
+
+                        continue;
+                    }
+
+                    for (var index = 0; (index < placement.Pieces.Count); index++) {
+                        var piece = placement.Pieces[index];
+                        var piecePath = $"{bankPath}.pieces[{index}]";
+
+                        if ((piece is null) || string.IsNullOrWhiteSpace(value: piece.Table)) {
+                            errors.Add(item: $"{piecePath}.table is required.");
+
+                            continue;
+                        }
+
+                        if (!tableNames.Contains(item: piece.Table)) {
+                            errors.Add(item: $"{piecePath}.table '{piece.Table}' names no entry of {layoutPath}.tables.");
+                        }
+
+                        if ((piece.At is { } at) && ((at.Count != 2) || !float.IsFinite(f: at[0]) || !float.IsFinite(f: at[1]))) {
+                            errors.Add(item: $"{piecePath}.at needs finite [x, y] pitches.");
+                        }
+
+                        if ((piece.Badge is { } badge) && (ValidateBadge(badge: badge) != BadgeValidity.Valid)) {
+                            errors.Add(item: $"{piecePath}.badge needs [x, y] within [-1, 1].");
+                        }
+                    }
+                }
+            }
+
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.buttonSize", value: layout.ButtonSize);
+            RequireOptionalNonNegative(errors: errors, name: $"{layoutPath}.glyphOffsetRatio", value: layout.GlyphOffsetRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.glyphSizeRatio", value: layout.GlyphSizeRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.modifierHalfRatio", value: layout.ModifierHalfRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.modifierSpacingRatio", value: layout.ModifierSpacingRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.modifierGlyphRatio", value: layout.ModifierGlyphRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.labelCellRatio", value: layout.LabelCellRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.labelCellMinPx", value: layout.LabelCellMinPx);
+            RequireOptionalFinite(errors: errors, name: $"{layoutPath}.labelGapRatio", value: layout.LabelGapRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.hintCellRatio", value: layout.HintCellRatio);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.hintCellMinPx", value: layout.HintCellMinPx);
+            RequireOptionalPositive(errors: errors, name: $"{layoutPath}.hintLineStepRatio", value: layout.HintLineStepRatio);
+            RequireOptionalFinite(errors: errors, name: $"{layoutPath}.hintBaseGapRatio", value: layout.HintBaseGapRatio);
+        }
+
+        if (authoring.Layouts is { } namedLayouts) {
+            foreach (var (name, named) in namedLayouts) {
+                if (named is null) {
+                    errors.Add(item: $"{path}.layouts['{name}'] is required.");
+
+                    continue;
+                }
+
+                ValidateLayout(
+                    layout: named,
+                    layoutPath: $"{path}.layouts['{name}']"
+                );
+            }
+
+            if ((authoring.Layout is { } defaultName) && !namedLayouts.ContainsKey(key: defaultName)) {
+                errors.Add(item: $"{path}.layout '{defaultName}' names no entry of {path}.layouts.");
+            }
+        } else if (authoring.Layout is { } orphanName) {
+            errors.Add(item: $"{path}.layout '{orphanName}' names no entry of {path}.layouts — none are authored.");
+        }
 
         if (
-            !float.IsFinite(f: layout.AnchorOffsetY) ||
-            (layout.AnchorOffsetY < 0f) ||
-            (layout.AnchorOffsetY > 1f)
+            (authoring.LayoutCell is { } layoutCell) &&
+            !(BindableState.TryParseBinding(
+            key: out var layoutKey,
+            row: out _,
+            value: layoutCell
+        ) && (layoutKey is not null))
         ) {
-            errors.Add(item: $"{path}.layout.anchorOffsetY {layout.AnchorOffsetY} is outside 0..1.");
+            errors.Add(item: $"{path}.layoutCell '{layoutCell}' must be spelled state.<row>.<key>.");
         }
 
-        RequireNonNegative(
-            value: layout.GlyphOffsetRatio,
-            name: $"{path}.layout.glyphOffsetRatio",
-            errors: errors
-        );
-        RequirePositive(
-            value: layout.GlyphSizeRatio,
-            name: $"{path}.layout.glyphSizeRatio",
-            errors: errors
-        );
-        RequirePositive(
-            value: layout.Scale,
-            name: $"{path}.layout.scale",
-            errors: errors
-        );
+        if (
+            (authoring.ModelCell is { } modelCell) &&
+            !(BindableState.TryParseBinding(
+            key: out var modelKey,
+            row: out _,
+            value: modelCell
+        ) && (modelKey is not null))
+        ) {
+            errors.Add(item: $"{path}.modelCell '{modelCell}' must be spelled state.<row>.<key>.");
+        }
+
+        if (authoring.Banks is null) {
+            errors.Add(item: $"{path}.banks is required.");
+        } else if (authoring.Banks.Count == 0) {
+            errors.Add(item: $"{path}.banks must declare at least one bank.");
+        } else if (authoring.Banks.Count > WorldBindingBarCapacity.MaxBanks) {
+            errors.Add(item: $"{path}.banks declares {authoring.Banks.Count} entries, exceeding the {WorldBindingBarCapacity.MaxBanks}-bank ceiling.");
+        } else {
+            var seenBanks = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < authoring.Banks.Count); index++) {
+                var bank = authoring.Banks[index];
+                var bankPath = $"{path}.banks[{index}]";
+
+                if (bank is null) {
+                    errors.Add(item: $"{bankPath} is required.");
+
+                    continue;
+                }
+
+                RequireUniqueName(
+                    value: bank.Id,
+                    seen: seenBanks,
+                    path: bankPath,
+                    field: "id",
+                    errors: errors
+                );
+
+                if (string.IsNullOrWhiteSpace(value: bank.PageId)) {
+                    errors.Add(item: $"{bankPath}.pageId is required.");
+                }
+
+                RequireUnitInterval(
+                    value: bank.Alpha,
+                    name: $"{bankPath}.alpha",
+                    errors: errors
+                );
+
+                if (bank.ActiveAlpha is { } activeAlpha) {
+                    RequireUnitInterval(
+                        errors: errors,
+                        name: $"{bankPath}.activeAlpha",
+                        value: activeAlpha
+                    );
+                }
+            }
+        }
+
     }
-    // The per-world binding overlays: non-empty unique ids, and the COMPOSED result (every overlay, in order) passes
-    // the existing binding compiler — a partial overlay page that only makes sense post-merge still gates against the
-    // real runtime artifact, and the binding validator is never reimplemented. No overlays compose to the empty
-    // document: a world with no bindings is valid. The vocabulary half resolves channel names against THIS document's
-    // own table (the `channels` parameter), never a process-global.
-    private static void ValidateBindingOverlays(IReadOnlyList<WorldBindingOverlay> overlays, WorldChannelTable? channels, IReadOnlyDictionary<string, WorldStateRow> stateRows, List<string> errors) {
+
+    // A badge's failure mode, so a caller can pick its own wording per case while sharing the underlying rule.
+    private enum BadgeValidity {
+        Valid,
+        WrongCount,
+        OutOfRange
+    }
+
+    // Shared badge rule: exactly two elements, both finite, each within [-1, 1] — the same [x, y] offset shape used
+    // by a slot placement and a bank piece.
+    private static BadgeValidity ValidateBadge(IReadOnlyList<float> badge) {
+        if (badge.Count != 2) {
+            return BadgeValidity.WrongCount;
+        }
+
+        if (!float.IsFinite(f: badge[0]) || !float.IsFinite(f: badge[1]) || (MathF.Abs(x: badge[0]) > 1f) || (MathF.Abs(x: badge[1]) > 1f)) {
+            return BadgeValidity.OutOfRange;
+        }
+
+        return BadgeValidity.Valid;
+    }
+    private static void RequireOptionalFinite(float? value, string name, List<string> errors) {
+        if (value is { } authored) {
+            RequireFinite(
+                errors: errors,
+                name: name,
+                value: authored
+            );
+        }
+    }
+    private static void RequireOptionalNonNegative(float? value, string name, List<string> errors) {
+        if (value is { } authored) {
+            RequireNonNegative(
+                errors: errors,
+                name: name,
+                value: authored
+            );
+        }
+    }
+    private static void RequireOptionalPositive(float? value, string name, List<string> errors) {
+        if (value is { } authored) {
+            RequirePositive(
+                errors: errors,
+                name: name,
+                value: authored
+            );
+        }
+    }
+    // One authored icon string, refused by name when it names no row in the composed icon table.
+    private static void CheckComposedIcon(string? icon, string door, IReadOnlySet<string> iconNames, List<string> errors) {
+        if (
+            !string.IsNullOrEmpty(value: icon) &&
+            !iconNames.Contains(item: icon)
+        ) {
+            errors.Add(item: $"bindingOverlays {door} icon '{icon}' names no row in icons.icons.");
+        }
+    }
+    // A page's own display icon — the shape a chord-row page and a wheel ring page share. An ENTRY carries no icon:
+    // a row says what it does, and what that looks like is resolved from authored state by the surface drawing it.
+    private static void CheckComposedPageIcons(BindingPageDefinition page, string door, IReadOnlySet<string> iconNames, List<string> errors) {
+        CheckComposedIcon(
+            door: door,
+            errors: errors,
+            icon: page.Icon,
+            iconNames: iconNames
+        );
+
+    }
+    // Every icon-bearing door the composed binding profile carries directly — pages, modifiers, and chord commands.
+    // Entry and sector presentation is state-backed and validated separately by WorldStateBindingContext.
+    private static void ValidateComposedIcons(BindingProfileDocument composed, IReadOnlySet<string> iconNames, List<string> errors) {
+        foreach (var modifier in composed.Modifiers) {
+            if (modifier is not null) {
+                CheckComposedIcon(
+                    door: $"modifier '{modifier.Id}'",
+                    errors: errors,
+                    icon: modifier.Icon,
+                    iconNames: iconNames
+                );
+            }
+        }
+
+        foreach (var chord in composed.Chords) {
+            if (chord is null) {
+                continue;
+            }
+
+            CheckComposedIcon(
+                door: $"group '{chord.Group}' command",
+                errors: errors,
+                icon: chord.Command?.Icon,
+                iconNames: iconNames
+            );
+
+            if (chord.Page is { } page) {
+                CheckComposedPageIcons(
+                    door: $"page '{page.Id}'",
+                    errors: errors,
+                    iconNames: iconNames,
+                    page: page
+                );
+            }
+        }
+
+        foreach (var wheel in (composed.Wheels ?? [])) {
+            if (wheel is null) {
+                continue;
+            }
+
+            foreach (var ring in wheel.Rings) {
+                if (ring is not null) {
+                    CheckComposedPageIcons(
+                        door: $"wheel '{wheel.Id}' ring '{ring.Id}'",
+                        errors: errors,
+                        iconNames: iconNames,
+                        page: ring
+                    );
+                }
+            }
+        }
+    }
+    // The player-profile-side bar preferences (BindingProfileDocument.BindingBar) — a LOOK override, presentation
+    // only. Validated to the same strictness as the world-side layout so an out-of-range scale refuses by name here
+    // rather than being silently dropped at the runtime resolver (WorldBindingBarControl reads a finite positive
+    // scale and ignores anything else). Absence (a null preferences block, or a null field within it) defers to the
+    // world-authored policy and is never a refusal.
+    private static void ValidateBindingBarPreferences(BindingBarPreferences? preferences, string path, List<string> errors) {
+        if (preferences?.Scale is { } scale) {
+            RequirePositive(
+                errors: errors,
+                name: $"{path}.scale",
+                value: scale
+            );
+        }
+
+        if (preferences?.ContrastBoost is { } contrastBoost) {
+            RequireRange(
+                value: contrastBoost,
+                min: 1f,
+                max: 2f,
+                name: $"{path}.contrastBoost",
+                errors: errors
+            );
+        }
+
+        if (preferences?.UiScale is { } uiScale) {
+            RequireRange(
+                value: uiScale,
+                min: 0.5f,
+                max: 2f,
+                name: $"{path}.uiScale",
+                errors: errors
+            );
+        }
+    }
+    // The bank PageId existence check — run AFTER the composed profile compiles successfully (a bank's page
+    // reference is only checkable against the WHOLE overlay stack's result, never one overlay's own document).
+    private static void ValidateBindingBarPageReferences(IReadOnlyList<WorldBindingOverlay> overlays, CompiledBindingProfile profile, List<string> errors) {
+        for (var index = 0; (index < overlays.Count); index++) {
+            var banks = overlays[index]?.BindingBar?.Banks;
+
+            if (banks is null) {
+                continue;
+            }
+
+            for (var bankIndex = 0; (bankIndex < banks.Count); bankIndex++) {
+                var pageId = banks[bankIndex]?.PageId;
+
+                if (
+                    !string.IsNullOrWhiteSpace(value: pageId) &&
+                    !profile.TryGetPageView(
+                    pageId: pageId,
+                    view: out _
+                )
+                ) {
+                    errors.Add(item: $"bindingOverlays[{index}].bindingBar.banks[{bankIndex}].pageId '{pageId}' names no page in the composed binding profile.");
+                }
+            }
+        }
+    }
+    // The per-world binding overlays: non-empty unique ids, and the COMPOSED result (every overlay, in order,
+    // irrespective of an authored `when` — a live seat composes only the layers whose condition currently holds, but
+    // every layer's own structure and vocabulary must be sound regardless) passes the existing binding compiler — a
+    // partial overlay page that only makes sense post-merge still gates against the real runtime artifact, and the
+    // binding validator is never reimplemented. No overlays compose to the empty document: a world with no bindings
+    // is valid. The vocabulary half resolves channel names against this document's own table (the `channels`
+    // parameter), never a process-global.
+    private static void ValidateBindingOverlays(WorldDefinition definition, IReadOnlyList<WorldBindingOverlay> overlays, WorldChannelTable? channels, IReadOnlyDictionary<string, WorldStateRow> stateRows, IReadOnlyList<WorldSeatModeFamily> seatModes, IReadOnlySet<string> iconNames, bool iconsAuthored, List<string> errors) {
         if (overlays is null) {
             errors.Add(item: "bindingOverlays is required.");
 
@@ -94,16 +515,23 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: overlay.Id)) {
-                errors.Add(item: $"{path}.id is required.");
-            } else if (!ids.Add(item: overlay.Id)) {
-                errors.Add(item: $"{path}.id '{overlay.Id}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: overlay.Id,
+                seen: ids,
+                path: path,
+                field: "id",
+                errors: errors
+            );
 
             if (overlay.Document is null) {
                 errors.Add(item: $"{path}.document is required.");
             } else {
                 layers.Add(item: overlay.Document);
+                ValidateBindingBarPreferences(
+                    errors: errors,
+                    path: $"{path}.document.bindingBar",
+                    preferences: overlay.Document.BindingBar
+                );
                 var stateContextErrors = new List<string>();
 
                 WorldStateBindingContext.Validate(
@@ -125,6 +553,7 @@ public static partial class WorldDefinitionValidator {
                     BindingVocabularyHook.VocabularyCheck?.Invoke(
                         overlay.Document,
                         table,
+                        seatModes,
                         vocabularyErrors
                     );
 
@@ -137,19 +566,47 @@ public static partial class WorldDefinitionValidator {
             ValidateBindingBar(
                 authoring: overlay.BindingBar,
                 path: $"{path}.bindingBar",
+                stateRows: stateRows,
                 errors: errors
             );
+
+            if (overlay.When is { } when) {
+                ValidateStateCondition(condition: when, definition: definition, entryPath: path, errors: errors);
+            }
         }
 
+        var composed = WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers));
+
         try {
-            _ = BindingProfile.Compile(document: WorldBindingComposer.Compose(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: layers)));
+            var compiled = BindingProfile.Compile(document: composed);
+
+            if (compiled.Modifiers.Count > WorldBindingBarCapacity.MaxModifiers) {
+                errors.Add(item: $"bindingOverlays compose {compiled.Modifiers.Count} modifiers, exceeding the {WorldBindingBarCapacity.MaxModifiers}-modifier ceiling.");
+            }
+
+            ValidateBindingBarPageReferences(
+                errors: errors,
+                overlays: overlays,
+                profile: compiled
+            );
+
+            // Every authored icon string, checked against the icon table ONLY when some document in the basis chain
+            // authored one (see ValidateIconography's Absent gate) — no authored icons.icons means every icon string
+            // draws a blank plate, never a refusal.
+            if (iconsAuthored) {
+                ValidateComposedIcons(
+                    composed: composed,
+                    errors: errors,
+                    iconNames: iconNames
+                );
+            }
         } catch (ArgumentException exception) {
             errors.Add(item: $"bindingOverlays do not compose into a valid mapping: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
         }
     }
     // The channel table (SIM-AFFECTING — the PlayerIntent vector's vocabulary): name uniqueness; exactly one
     // consumer per row (a role XOR a composition trigger); role channels are bipolar only; channel-count ceiling;
-    // threshold range on binary rows; motion-model role completeness (Grounded needs move-forward/move-strafe/turn,
+    // threshold range on binary rows; body-motion-program role completeness (Grounded needs move-forward/move-strafe/turn,
     // Free needs all six). Returns the composition-channel name set kit Actions maps resolve against; composition
     // channels carry no shape restriction.
     private static (HashSet<string> AllNames, HashSet<string> CompositionNames) ValidateChannels(WorldDefinition definition, IReadOnlyDictionary<string, CompiledBodyMotionProgram> programs, List<string> errors) {
@@ -172,11 +629,13 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            if (string.IsNullOrWhiteSpace(value: channel.Name)) {
-                errors.Add(item: $"{path} requires a non-empty name.");
-            } else if (!names.Add(item: channel.Name)) {
-                errors.Add(item: $"{path} duplicates the name '{channel.Name}'.");
-            }
+            RequireUniqueName(
+                value: channel.Name,
+                seen: names,
+                path: path,
+                field: "",
+                errors: errors
+            );
 
             if (!Enum.IsDefined(value: channel.Shape)) {
                 errors.Add(item: $"{path}.shape '{channel.Shape}' is not a defined ChannelShape.");
@@ -199,7 +658,7 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 // A role is a signed axis by construction — reverse/left/down are half the domain, not a degenerate
-                // case — so a non-bipolar shape is meaningless to the motion model, never merely unusual. Refusing it
+                // case — so a non-bipolar shape is meaningless to the body motion program, never merely unusual. Refusing it
                 // here makes WorldBody.Clamped's and SeatController.HeldIntent's hardcoded [-1,1] role range a
                 // CONSEQUENCE of this rule instead of a lucky coincidence with the fold's shape-driven range
                 // (Puck.Maths.FixedContributionFold, whose minimum/maximum WorldServer derives from this shape).
@@ -219,9 +678,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.frame '{channel.Frame}' is not a defined ChannelFrame.");
             } else if (
                 (channel.Frame != ChannelFrame.World) &&
-                (channel.Role is not (ChannelRole.MoveForward or ChannelRole.MoveStrafe))
+                (channel.Role is not (ChannelRole.MoveAdvance or ChannelRole.MoveStrafe))
             ) {
-                errors.Add(item: $"{path}.frame '{channel.Frame}' is only meaningful on the MoveForward/MoveStrafe roles.");
+                errors.Add(item: $"{path}.frame '{channel.Frame}' is only meaningful on the MoveAdvance/MoveStrafe roles.");
             }
 
             if (channel.Threshold is { } threshold) {
@@ -250,7 +709,7 @@ public static partial class WorldDefinitionValidator {
         var moveFramed = false;
 
         foreach (var channel in channels) {
-            if (channel?.Role is not (ChannelRole.MoveForward or ChannelRole.MoveStrafe)) {
+            if (channel?.Role is not (ChannelRole.MoveAdvance or ChannelRole.MoveStrafe)) {
                 continue;
             }
 
@@ -258,7 +717,7 @@ public static partial class WorldDefinitionValidator {
                 moveFrame = channel.Frame;
                 moveFramed = true;
             } else if (channel.Frame != moveFrame) {
-                errors.Add(item: $"channels claiming MoveForward and MoveStrafe must declare the same frame ('{moveFrame}' and '{channel.Frame}' differ) — the pair rotates together.");
+                errors.Add(item: $"channels claiming MoveAdvance and MoveStrafe must declare the same frame ('{moveFrame}' and '{channel.Frame}' differ) — the pair rotates together.");
 
                 break;
             }
@@ -270,12 +729,12 @@ public static partial class WorldDefinitionValidator {
             }
 
             // A Camera/Heading-framed pair is composed into world axes by the seat's client, which the sim's Heading
-            // arm would then rotate a second time by the body's own heading — refuse the double rotation.
+            // frame would then rotate a second time by the body's own heading — refuse the double rotation.
             if (
                 (moveFrame != ChannelFrame.World) &&
-                (kit.Motion.DeclaredMoveFrame != MotionMoveFrame.World)
+                (kit.Motion.MoveFrame != MotionMoveFrame.World)
             ) {
-                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.DeclaredMoveFrame}' cannot carry a '{moveFrame}'-framed MoveForward/MoveStrafe pair — a framed pair needs the kit's World frame.");
+                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.MoveFrame}' cannot carry a '{moveFrame}'-framed MoveAdvance/MoveStrafe pair — a framed pair needs the kit's World frame.");
             }
 
             if (!programs.TryGetValue(
@@ -396,20 +855,25 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path} is required.");
                 continue;
             }
-            if (string.IsNullOrWhiteSpace(value: register.Name)) {
-                errors.Add(item: $"{path}.name is required.");
-            } else if (!names.Add(item: register.Name)) {
-                errors.Add(item: $"{path}.name '{register.Name}' is duplicated.");
-            }
+            RequireUniqueName(
+                value: register.Name,
+                seen: names,
+                path: path,
+                field: "name",
+                errors: errors
+            );
             RequirePositive(
                 value: register.MaximumRange,
                 name: $"{path}.maximumRange",
                 errors: errors
             );
-            ValidateHalfAngle(
+            RequireRange(
                 value: register.MaximumHalfAngleDegrees,
+                min: 0f,
+                max: 180f,
                 name: $"{path}.maximumHalfAngleDegrees",
-                errors: errors
+                errors: errors,
+                minExclusive: true
             );
         }
 

@@ -42,7 +42,11 @@ an unbound gauge draws empty).
 
 `WorldHudCapacity` (the DOCUMENT contract): `MaxWorldPanels = 4`,
 `MaxElementsPerPanel = 24`, `MaxSeatPanels = 1`, `MaxElementsPerSeatPanel =
-12`. The render cost an authored element expands into is the WRITER's own
+12`, and `MaxFrameSources = 8` structurally unique `Frame` sources per HUD
+document (repeated elements naming the same source share one slot). World and
+identity HUD documents validate independently; if their live composition exceeds
+eight unique sources, the unified overlay omits the additional source and narrates
+that aggregate runtime episode instead of failing silently. The render cost an authored element expands into is the WRITER's own
 constant in `Puck.Overlays` (`HudWriter.GaugeElementCost = 3` records,
 `HudWriter.TextRunChars = 64` glyph words — the latter enforced as a
 `WriteText` `maxChars` clamp, the way `GaugeLabelChars` always was for a gauge
@@ -52,7 +56,7 @@ DROPPING element records). Schema declares no render cost.
 Enforced by
 `WorldDefinitionValidator.ValidateHudCore` throwing `HudValidationException`
 with an enum `HudRefusal` (`TooManyPanels`, `DuplicatePanelId`,
-`TooManyElements`, `DuplicateElementId`, `InvalidRect`, `UnknownBinding`,
+`TooManyElements`, `TooManyFrameSources`, `DuplicateElementId`, `InvalidRect`, `UnknownBinding`,
 `SeatPanelReplaceRefused`, `MalformedTemplate`, `UnknownTemplatePlaceholder`,
 `TemplateBindingConflict`, under door `hud.validate` in `world.refusals`; a blank
 id folds into the duplicate reason). `ValidateHudCore` takes an `isIdentityScope`
@@ -70,17 +74,28 @@ carrying an `Identity` section (an owned world's boot load, a sync pull, and
 `state.<row>.<key>` (one named cell in ANY row shape — see
 [documents.md](documents.md)'s `state` section). The split on the FIRST dot
 after `state.` is unambiguous because a row/cell name can never itself hold a
-dot (`WorldCellName`). Refused by name at validation (`UnknownBinding`); an
+dot (`CellName`). Refused by name at validation (`UnknownBinding`); an
 empty-string binding reads as unbound rather than refused. The SAME `TryParse`
 serves the validator and the render resolver, so a document can never carry a
-binding the renderer silently treats as unbound. The `seat.<n>.position.*`
+binding the renderer silently treats as unbound.
+
+Either `state.*` form may carry a trailing `.$target` facet —
+`state.<row>.$target` or `state.<row>.<key>.$target` — reading the addressed
+cell's stored TRUTH instead of its live eased value when the cell carries a
+`dynamics` trait (see [documents.md](documents.md)'s `dynamics` trait
+paragraph). `$` marks the engine's own namespace (the same convention
+`$value` already uses for a slot cell's key), so `target` alone — with no
+`$` — parses as an ordinary author-chosen cell key, never the facet; an empty
+row before `.$target` (`state.$target`) refuses. A cell with no `dynamics`
+trait resolves the SAME value through either spelling, since truth and the
+eased read agree when nothing is easing. The `seat.<n>.position.*`
 family resolves its body index through the per-seat PERCEPTION ANCHOR
 (`Client/WorldPerceptionAnchor.cs` — the seat's bound body, slot n-1, or the
 routed body while possessing), the same resolution point the camera anchor
 pose and the audio listener derive through, so all three follow a possession
 anchor swap together, published every tick by `WorldSeatContextSync.Publish`
 off the SAME grant-table Control-route read the `engagement` context family
-already performs (see [engagement.md](engagement.md)); `player.where` echoes
+already performs (see [engagement.md](engagement.md)); `body.where` echoes
 the anchor (`anchor=body:<n>`, 0-based) for local seats.
 
 A `state.<row>`/`state.<row>.<key>` binding's EXISTENCE — the row, and for the
@@ -98,7 +113,11 @@ distinct "cannot verify existence" scope in this codebase today;
 with no such document to check against, but nothing currently calls it that
 way. Render-side, `state.<row>`/`state.<row>.<key>` reads
 `WorldClient.Definition.State` directly (no engine fact backs it — the
-document holds the value): a bound TEXT element renders the resolved cell's
+document holds the value): a cell carrying a `dynamics` trait resolves the
+LIVE eased value (`WorldStateReader.TryReadEased`) unless the token carries
+the `.$target` facet above, in which case it resolves truth
+(`WorldStateReader.TryRead`) exactly like a cell with no trait always does. A
+bound TEXT element renders the resolved cell's
 value; a bound GAUGE element's fraction is `(value − min) / (max − min)`
 clamped to `[0, 1]` off the ROW's OWN `min`/`max` (cells carry no envelope of
 their own) when the row is `int`/`fixed` AND declares BOTH (`WorldStateRow`'s
@@ -167,12 +186,12 @@ a template with no document row behind it at all.
 
 ## The overlay reservation — what refuses at construction
 
-`OverlayChannel` has EIGHT members, value = draw priority for the first five:
-`Console = 0`, `BindingBar = 1`, `Gizmos = 2`, `EditorHud = 3`, `Toast = 4`,
-`Hud = 5`, `Cursor = 6`, `Wheel = 7`. The FIVE first-party writers are
-`ConsolePanelWriter`, `BindingBarWriter`, `EditorGizmoWriter`,
-`EditorHudWriter`, `ToastWriter` (`FirstPartyChannelCount = 5`); `HudWriter`
-is the sixth channel, banded, not one of the five; `WheelWriter` and
+`OverlayChannel` has SEVEN members, value = draw priority for the first four:
+`Console = 0`, `BindingBar = 1`, `Markers = 2`, `Toast = 3`, `Hud = 4`,
+`Cursor = 5`, `Wheel = 6`. The FOUR first-party writers are
+`ConsolePanelWriter`, `BindingBarWriter`, `MarkerWriter`, `ToastWriter`
+(`FirstPartyChannelCount = 4`); `HudWriter`
+is the fifth channel, banded, not one of the four; `WheelWriter` and
 `CursorWriter` are the frame's last two scopes (wheel drawn first, cursor on
 top), outside the replace-band suppression — see [views.md](views.md).
 
@@ -182,7 +201,7 @@ INSTANCE built from an `OverlayCapacity` — the host's declared counts
 `HudElementsPerSeatPanel`). `Puck.Overlays` restates no World number: the
 composition root (`WorldBootComposition`'s one `new UnifiedOverlayNode`)
 supplies `Puck.World.Client.WorldOverlayCapacity.FromSchema()` — `Seats =
-WorldPopulationLimits.LocalSeatCount`, the four HUD ceilings from
+WorldBodiesLimits.LocalSeatCount`, the four HUD ceilings from
 `WorldHudCapacity` (`MaxSeatPanels` is the seat-panel count). Render costs stay
 the writers' own (`HudWriter.GaugeElementCost`, `HudWriter.TextRunChars`, the
 per-seat writers' caps — the `CursorWriter` discipline). The runtime guard is
@@ -202,9 +221,16 @@ Schema-derived capacity fits is
 Runtime overflow is per-channel and attributed (a channel clips at
 its own boundary, never costs another channel), with two separately-latched
 narrations: reservation overflow vs a writer's own declared cap refusal.
-Binding-bar visibility, layout, and scale do not change this arithmetic: the
-writer still emits at most the same twelve slots, eight modifiers, one label,
-and eight hint lines per seat.
+Binding-bar visibility, layout, and scale do not change this arithmetic. The
+slot reservation DOES scale with the authored vocabulary: it is
+`WorldBindingBarCapacity.MaxBanks` (5 — the WoW-addon original's five chord
+banks: resting/LT/RT/LT>RT/RT>LT) times `MaxSlots` (32 — the declared ceiling on
+one bar's authored slot set, now that it names input source ids) slots, plus
+the fixed one label, eight modifiers, and eight hint lines every bar draws
+once regardless of bank count — `OverlayCapacity.BindingBarMaxBanks`/
+`BindingBarMaxSlotsPerBank`, composed the same way the Hud ceilings are.
+`OverlayFrameBuilder.MaxElements` was raised (1024 → 2048) to fit this
+reservation beside the others.
 
 ## Bands — what `replace` replaces
 
@@ -235,8 +261,8 @@ can open a fourth. All four charge the one Hud reservation.
   reach the render path — into a preallocated array, then both halves publish
   together in one `HudStore.Publish` call so neither can lag the other.
   `HudWriter.EmitSeatPanels` draws them, one `BeginClip` per seat viewport
-  (the `EditorHudWriter` per-seat precedent; a seat panel's own rect is LOCAL
-  to that viewport, not the whole screen), as a fourth `OverlayChannel.Hud`
+  (a seat panel's own rect is LOCAL to that viewport, not the whole screen),
+  as a fourth `OverlayChannel.Hud`
   pass after the world-scope under/base/over sequence — unbanded, since a
   panel confined to one seat has no base slot to take over
   (`WorldHudLayer.Replace` refuses there).
@@ -334,7 +360,8 @@ restart the process against the SAME `--state-dir` and re-read
 `world.hud seat:<n>` for the persistence round-trip. There is no grant to
 narrow (the door is ungated, like `identity.motion`) — the refusal control
 instead is a malformed or over-cap panel: an element count over
-`WorldHudCapacity.MaxElementsPerSeatPanel` or a `WorldHudLayer.Replace` panel
-both refuse by name (`hud.TooManyElements` / `hud.SeatPanelReplaceRefused`)
-with the document left unchanged, confirmed against an at-cap panel that
-still succeeds.
+`WorldHudCapacity.MaxElementsPerSeatPanel`, more than
+`WorldHudCapacity.MaxFrameSources` unique frame sources, or a
+`WorldHudLayer.Replace` panel refuse by name (`hud.TooManyElements` /
+`hud.TooManyFrameSources` / `hud.SeatPanelReplaceRefused`) with the document
+left unchanged, confirmed against an at-cap panel that still succeeds.

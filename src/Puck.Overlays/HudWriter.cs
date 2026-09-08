@@ -3,17 +3,19 @@ namespace Puck.Overlays;
 /// <summary>
 /// The authored-HUD writer: renders <see cref="HudStore"/>'s structural snapshot in four separate calls —
 /// <see cref="EmitUnder"/>, <see cref="EmitReplace"/>, <see cref="EmitOver"/> (the world-scope bands, one per band,
-/// so <c>UnifiedOverlayNode</c>'s banded pipeline can sequence them around the five first-party writers' base slot)
+/// so <c>UnifiedOverlayNode</c>'s banded pipeline can sequence them around the four first-party writers' base slot)
 /// and <see cref="EmitSeatPanels"/> (the player-scope per-seat panels, unbanded — see its own remarks). Each call
 /// resolves every bound element's live value through <see cref="IHudBindingResolver"/> at emission time
 /// (presentation float; resolved fresh every produced frame, never cached across frames) and draws rect/text/gauge
 /// elements confined to their owning panel's rect via <see cref="OverlayFrameBuilder.BeginClip"/>, the same
-/// clip-scope contract <see cref="EditorHudWriter"/> uses.
+/// clip-scope contract every per-seat writer uses.
 /// </summary>
-public sealed class HudWriter {
+public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
+    // The panel being emitted's presence — multiplied into its chrome and every element's alpha.
+    private float m_panelAlpha = 1f;
+
     // A gauge's label run is clipped to this many characters; TextRunChars is the wider bound the reservation takes.
     private const int GaugeLabelChars = 16;
-    private const float GaugeTrackAlpha = 0.35f;
 
     /// <summary>The render elements one authored gauge expands into — a track rect, a fill rect, and one label run —
     /// the per-element cost <see cref="OverlayChannelLeases"/> multiplies into the Hud element reservation (the
@@ -28,21 +30,35 @@ public sealed class HudWriter {
     public const int TextRunChars = 64;
 
     private readonly IHudBindingResolver m_bindings;
+    private readonly OverlayFrameSlots m_frameSlots;
     private readonly IHudSource m_source;
+    private readonly OverlayThemeStore m_theme;
 
     private OverlayHudFrame m_frame;
     private bool m_hasFrame;
 
+    // Reused across every ComposeTemplate call (single-threaded on the window-pump thread, like every writer here) so
+    // only genuine capacity growth allocates — its high-water mark stabilizes after the first few frames' widest
+    // template, rather than a fresh empty builder paying the grow-copy sequence back up on every call.
+    private readonly System.Text.StringBuilder m_templateBuilder = new();
+
     /// <summary>Initializes a new instance of the <see cref="HudWriter"/> class.</summary>
     /// <param name="source">The HUD structure source.</param>
     /// <param name="bindings">The live binding resolver.</param>
+    /// <param name="theme">The live resolved theme.</param>
+    /// <param name="frameSlots">The node-owned frame-slot table a <see cref="OverlayHudElementKind.Frame"/> element
+    /// binds against.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public HudWriter(IHudSource source, IHudBindingResolver bindings) {
+    public HudWriter(IHudSource source, IHudBindingResolver bindings, OverlayThemeStore theme, OverlayFrameSlots frameSlots) {
         ArgumentNullException.ThrowIfNull(argument: source);
         ArgumentNullException.ThrowIfNull(argument: bindings);
+        ArgumentNullException.ThrowIfNull(argument: theme);
+        ArgumentNullException.ThrowIfNull(argument: frameSlots);
 
         m_source = source;
         m_bindings = bindings;
+        m_theme = theme;
+        m_frameSlots = frameSlots;
     }
 
     // Substitution only — the brace/escape grammar is parsed once by the host's document layer and arrives here as
@@ -50,7 +66,7 @@ public sealed class HudWriter {
     // validator already refused an unknown one before it could reach a live document, so an empty substitution keeps
     // the frame drawing rather than standing in for a refusal that belongs upstream.
     private string ComposeTemplate(ReadOnlySpan<OverlayHudTemplateSegment> segments) {
-        var builder = new System.Text.StringBuilder();
+        var builder = m_templateBuilder.Clear();
 
         for (var index = 0; (index < segments.Length); index++) {
             var segment = segments[index];
@@ -114,7 +130,7 @@ public sealed class HudWriter {
                     h: h,
                     role: element.Role,
                     radius: 0f,
-                    alpha: 1f
+                    alpha: m_panelAlpha
                 );
 
                 break;
@@ -139,7 +155,59 @@ public sealed class HudWriter {
                 );
 
                 break;
+            case OverlayHudElementKind.Frame:
+                EmitFrame(
+                    builder: builder,
+                    element: in element,
+                    h: h,
+                    w: w,
+                    x: x,
+                    y: y
+                );
+
+                break;
         }
+    }
+    // A slot with no live lease this frame (an unassigned source, an unopened camera, every slot already taken)
+    // draws nothing — never a placeholder — so a face cam with no camera attached is simply an empty rect, not a
+    // stand-in graphic the writer would need to author. The outgoing side of a cross-fade degrades the same way:
+    // when its bind fails the winner draws alone at full mix, since the fade exists to soften a switch that has
+    // already happened, never to hold the picture hostage to a source that cannot show.
+    private void EmitFrame(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float w, float h) {
+        if (element.FrameSource < 0) {
+            return;
+        }
+
+        var slot = m_frameSlots.Bind(key: element.FrameSource);
+
+        if (slot < 0) {
+            return;
+        }
+
+        var slotB = -1;
+        var mix = 1f;
+
+        if (element.FrameSourceB >= 0) {
+            slotB = m_frameSlots.Bind(key: element.FrameSourceB);
+
+            if (slotB >= 0) {
+                mix = element.FrameMix;
+            }
+        }
+
+        builder.WriteFrame(
+            alpha: (element.Opacity * m_panelAlpha),
+            fit: element.Fit,
+            h: h,
+            mirror: element.Mirror,
+            mix: mix,
+            radius: element.Radius,
+            slot: slot,
+            slotB: slotB,
+            w: w,
+            x: x,
+            y: y
+        );
     }
     private void EmitGauge(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float w, float h) {
         var fraction = 0f;
@@ -164,7 +232,7 @@ public sealed class HudWriter {
         // Track (always the full extent) + fill (scaled by the resolved fraction) + a short value label — the
         // GaugeElementCost records the reservation counts per gauge.
         builder.WriteRect(
-            alpha: GaugeTrackAlpha,
+            alpha: (m_theme.Current.Chrome.DimQuietAlpha * m_panelAlpha),
             h: h,
             radius: 0f,
             role: OverlayColorRole.SurfaceInset,
@@ -179,20 +247,66 @@ public sealed class HudWriter {
             h: h,
             role: element.Role,
             radius: 0f,
-            alpha: 1f
+            alpha: m_panelAlpha
         );
 
         if (label.Length > 0) {
             var cellHeight = OverlayFrameBuilder.CellHeight(sizePx: h);
 
             builder.WriteText(
-                alpha: 1f,
+                alpha: m_panelAlpha,
                 cellHeight: cellHeight,
                 maxChars: GaugeLabelChars,
                 role: OverlayColorRole.TextPrimary,
                 text: label,
                 x: x,
                 y: y
+            );
+        }
+    }
+    // The shared panel body: chrome + elements, placed by panel.Rect's fractions within the (originX, originY,
+    // spanW, spanH) rect — the whole frame for a world-scope panel, the seat viewport for a seat-scope one. The
+    // caller owns its own clip scope (a world-scope panel clips to ITSELF; a seat-scope one clips to the whole
+    // viewport, wider than its panel, so future seat-scope content can draw past the panel's own rect).
+    private void EmitPanelInto(OverlayFrameBuilder builder, in OverlayHudPanel panel, float originX, float originY, float spanW, float spanH) {
+        var rect = panel.Rect;
+
+        if (
+            (rect.Width <= 0f) ||
+            (rect.Height <= 0f)
+        ) {
+            return;
+        }
+
+        m_panelAlpha = panel.Alpha;
+
+        var x = (originX + (rect.X * spanW));
+        var y = (originY + (rect.Y * spanH));
+        var w = (rect.Width * spanW);
+        var h = (rect.Height * spanH);
+
+        builder.WritePanel(
+            x: x,
+            y: y,
+            w: w,
+            h: h,
+            titleBand: false,
+            bandHeight: 0f,
+            style: panel.Style,
+            ringRole: null,
+            alpha: panel.Alpha
+        );
+
+        var elements = panel.Elements.Span;
+
+        for (var index = 0; (index < elements.Length); index++) {
+            EmitElement(
+                builder: builder,
+                element: in elements[index],
+                panelX: x,
+                panelY: y,
+                panelW: w,
+                panelH: h
             );
         }
     }
@@ -217,30 +331,15 @@ public sealed class HudWriter {
             x: x,
             y: y
         );
-        builder.WritePanel(
-            x: x,
-            y: y,
-            w: w,
-            h: h,
-            titleBand: false,
-            bandHeight: 0f,
-            style: panel.Style,
-            ringRole: null,
-            alpha: 1f
+
+        EmitPanelInto(
+            builder: builder,
+            originX: 0f,
+            originY: 0f,
+            panel: in panel,
+            spanH: builder.Height,
+            spanW: builder.Width
         );
-
-        var elements = panel.Elements.Span;
-
-        for (var index = 0; (index < elements.Length); index++) {
-            EmitElement(
-                builder: builder,
-                element: in elements[index],
-                panelX: x,
-                panelY: y,
-                panelW: w,
-                panelH: h
-            );
-        }
 
         builder.EndClip();
     }
@@ -267,42 +366,15 @@ public sealed class HudWriter {
         );
 
         var panel = seat.Panel;
-        var rect = panel.Rect;
 
-        if (
-            (rect.Width > 0f) &&
-            (rect.Height > 0f)
-        ) {
-            var x = (vx + (rect.X * vw));
-            var y = (vy + (rect.Y * vh));
-            var w = (rect.Width * vw);
-            var h = (rect.Height * vh);
-
-            builder.WritePanel(
-                x: x,
-                y: y,
-                w: w,
-                h: h,
-                titleBand: false,
-                bandHeight: 0f,
-                style: panel.Style,
-                ringRole: null,
-                alpha: 1f
-            );
-
-            var elements = panel.Elements.Span;
-
-            for (var index = 0; (index < elements.Length); index++) {
-                EmitElement(
-                    builder: builder,
-                    element: in elements[index],
-                    panelX: x,
-                    panelY: y,
-                    panelW: w,
-                    panelH: h
-                );
-            }
-        }
+        EmitPanelInto(
+            builder: builder,
+            originX: vx,
+            originY: vy,
+            panel: in panel,
+            spanH: vh,
+            spanW: vw
+        );
 
         builder.EndClip();
     }
@@ -351,7 +423,7 @@ public sealed class HudWriter {
         band: OverlayHudBand.Replace,
         builder: builder
     );
-    /// <summary>Emits every player-scope (per-seat) panel — the EditorHud per-seat precedent: each panel is confined
+    /// <summary>Emits every player-scope (per-seat) panel: each panel is confined
     /// to its owning seat's viewport via one <see cref="OverlayFrameBuilder.BeginClip"/> scope (clip scopes do not
     /// nest, so this does not also open the world-scope panel's own per-panel clip), with the panel positioned
     /// local to that viewport rather than the whole screen. Bands are not meaningful for a seat panel (it has no
@@ -366,20 +438,19 @@ public sealed class HudWriter {
             return;
         }
 
-        var seats = m_frame.SeatPanels.Span;
-
-        builder.Leases.EnsureSeatCapacity(
-            seatCount: seats.Length,
+        OverlaySeatLoop.Emit(
+            builder: builder,
+            seats: m_frame.SeatPanels.Span,
+            writer: this,
             writerName: nameof(HudWriter)
         );
-
-        for (var index = 0; (index < seats.Length); index++) {
-            EmitSeatPanel(
-                builder: builder,
-                seat: in seats[index]
-            );
-        }
     }
+
+    void IOverlaySeatEmitter<OverlayHudSeatPanel>.EmitSeat(OverlayFrameBuilder builder, in OverlayHudSeatPanel seat) => EmitSeatPanel(
+        builder: builder,
+        seat: in seat
+    );
+
     /// <summary>Emits every under-band panel, in document order.</summary>
     /// <param name="builder">The frame builder.</param>
     public void EmitUnder(OverlayFrameBuilder builder) => EmitBand(

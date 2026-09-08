@@ -4,11 +4,11 @@ namespace Puck.HumbleGamingBrick.Post;
 
 /// <summary>
 /// Tier-C stage that runs a scripted two-machine cross-gen-cart Cable Club trade between two
-/// <see cref="ConsoleModel.Cgb"/> machines and asserts the trade committed deterministically.
+/// <see cref="ConsoleModel.CgbE"/> machines and asserts the trade committed deterministically.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Two <see cref="ConsoleModel.Cgb"/> machines boot a real cross-gen trade cartridge, each with a distinct crafted
+/// Two <see cref="ConsoleModel.CgbE"/> machines boot a real cross-gen trade cartridge, each with a distinct crafted
 /// <see cref="TradeSaveFactory"/> battery save already in SRAM (side A leads with RATTATA 0x13, side B with PIDGEY
 /// 0x10), linked through a <see cref="SerialLinkSession"/> and driven together by <see cref="ScriptedTradeDriver"/>'s
 /// peek-gated phase machine: turn to the Trade Center receptionist, mash through the dialogue + save prompt, the
@@ -38,22 +38,14 @@ namespace Puck.HumbleGamingBrick.Post;
 /// the queue into the object structs. See <see cref="TradeSaveFactory"/>'s OffsetObjectFollowLeader note.
 /// </para>
 /// <para>
-/// The cartridge is a per-machine commercial asset, never committed: its path comes from <c>PUCK_GB_TRADEROM</c> (the same
-/// env var the <see cref="ScriptedTradeContinueStage"/> foundation gate uses, with known dev-box fallbacks), and the stage skips
-/// cleanly when it is absent. Both machines are pinned to Cgb; this cart's link code never writes rKEY1/SC_SPEED so the link
+/// The cartridge is a per-machine commercial asset, never committed: its path comes from <c>--trade-rom</c> (the same
+/// flag the <see cref="ScriptedTradeContinueStage"/> foundation gate uses), and the stage skips cleanly when it is
+/// absent. Both machines are pinned to Cgb; this cart's link code never writes rKEY1/SC_SPEED so the link
 /// runs the normal (~8192&#160;Hz) serial clock — a property of the game, not a licence to pin the emulator's serial to a
 /// real-time rate.
 /// </para>
 /// </remarks>
 internal sealed class ScriptedTradeLinkLockStage : IPostStage<PostContext> {
-    private const string RomEnvironmentVariable = "PUCK_GB_TRADEROM";
-
-    // The known dev-box copies (laptop, desktop), tried in order when the env var is unset.
-    private static readonly string[] RomFallbackPaths = [
-        @"C:\Source\ByteTerrace\Temp\ROMS\Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc",
-        @"D:\Source\ByteTerrace\Silo\ROMS\Pokemon - Gold Version (USA, Europe) (SGB Enhanced) (GB Compatible).gbc",
-    ];
-
     /// <inheritdoc/>
     public string Name =>
         "link-lock";
@@ -63,10 +55,10 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage<PostContext> {
 
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
-        var romPath = ResolveRomPath();
+        var romPath = context.TradeRomPath;
 
         if (romPath is null) {
-            return PostStageOutcome.Skip(detail: $"no trade-cart ROM (set {RomEnvironmentVariable} to the cross-gen trade cartridge)");
+            return PostStageOutcome.Skip(detail: "no trade-cart ROM (pass --trade-rom with the cross-generation trade cartridge)");
         }
 
         var rom = File.ReadAllBytes(path: romPath);
@@ -265,20 +257,5 @@ internal sealed class ScriptedTradeLinkLockStage : IPostStage<PostContext> {
         }
 
         return (traffic.TrafficHash == idle.Value);
-    }
-    private static string? ResolveRomPath() {
-        var fromEnvironment = Environment.GetEnvironmentVariable(variable: RomEnvironmentVariable);
-
-        if (
-            !string.IsNullOrEmpty(value: fromEnvironment) &&
-            File.Exists(path: fromEnvironment)
-        ) {
-            return fromEnvironment;
-        }
-
-        return Array.Find(
-            array: RomFallbackPaths,
-            match: File.Exists
-        );
     }
 }
