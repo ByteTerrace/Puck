@@ -18,6 +18,9 @@ the solution in locked mode, builds Release with warnings as errors, runs the
 solution's tests, and publishes `Puck.World` as a framework-dependent artifact.
 The download requires .NET 10 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
+SDK roll-forward is disabled: selecting a newer SDK on a hosted runner changes
+implicit linker dependencies and invalidates the locked restore. Upgrade the SDK
+and its dependency locks together.
 The solution build produces the browser AppBundle for the CLI integration tests,
 which resolve it inside the current checkout. GPU tests skip when D3D11 reports an unsupported
 device, including the video capability needed by the shared-texture cleanup test.
