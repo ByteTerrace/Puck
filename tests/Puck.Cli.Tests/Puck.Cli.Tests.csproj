@@ -17,4 +17,7 @@
         <ProjectReference Include="..\..\src\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\..\src\Puck.Cli\Puck.Cli.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Compile Include="..\..\build\FormatSubmission.cs" Link="Automation\FormatSubmission.cs" />
+    </ItemGroup>
 </Project>

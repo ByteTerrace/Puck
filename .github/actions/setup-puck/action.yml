@@ -1,0 +1,22 @@
+name: Set up Puck CLI
+description: Install the pinned official CLI, or explicitly build a candidate/initial bootstrap tool.
+inputs:
+  candidate:
+    description: Build this checkout's CLI for source-dependent commands.
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Install pinned DXC
+      shell: bash
+      run: dotnet run -c Release --file build/InstallDxc.cs
+    - name: Install Puck CLI
+      shell: bash
+      env:
+        CANDIDATE: ${{ inputs.candidate }}
+      run: |
+        if [[ "$CANDIDATE" == true ]]; then
+          dotnet run -c Release --file build/Toolchain.cs -- candidate
+        else
+          dotnet run -c Release --file build/Toolchain.cs -- setup
+        fi

@@ -121,9 +121,11 @@ never built, run, or revived in place — see
 
 ## 📦 Packages
 
-Blessed libraries pack as `ByteTerrace.Puck.*` and ship in lockstep at one shared
-prerelease version (`build/Packaging.targets`). Each library opts in with
-`IsPackable` in its project file; `build/Pack.ps1` discovers those opt-ins and
+Blessed libraries and the CLI tool pack as `ByteTerrace.Puck.*` and use one shared release
+version (`build/Packaging.targets`). A release can publish one, several, or all
+packages; packages that skip a release keep their last published version.
+Each project opts in with
+`IsPackable` in its project file; `puck nuget pack` discovers those opt-ins and
 checks that every internal package dependency is present in the output.
 Assemblies and namespaces stay `Puck.*`; each package carries its README and
 the license files. See [CI and releases](docs/ci.md) for validation, artifacts,

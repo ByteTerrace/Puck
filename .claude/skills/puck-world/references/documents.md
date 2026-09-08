@@ -185,7 +185,7 @@ mutates them in session and no grant subject names them:
   [adjacency-and-federation.md](adjacency-and-federation.md).
 - **`Metadata`** (`WorldMetadataSection`, `WorldMetadata.cs`) — free-form
   author-facing facts: `title`, `description`, `authors` (each an optional
-  Entra `oid`, checked with `WorldEntraObjectId.IsValid`), `tags`, and a
+  UUID `oid`, checked with `WorldObjectId.IsValid`), `tags`, and a
   `custom` bag (`IDictionary<string, JsonElement>`). Nothing in the engine
   reads any member here. `title`/`description` cross to a Presentation-tier
   peer as `WorldProjectedMetadata`; `authors`/`tags`/`custom` never do (see

@@ -1,0 +1,8 @@
+[
+  { "name": "ptn_network_private-dns-zones", "version": "0.0.2", "path": "avm-temp/ptn/network/private-dns-zones/main.bicep" },
+  { "name": "ptn_network_public-dns-zones", "version": "0.0.2", "path": "avm-temp/ptn/network/public-dns-zones/main.bicep" },
+  { "name": "ptn_network_basic-topology", "version": "0.0.3", "path": "avm-temp/ptn/network/basic-topology/main.bicep" },
+  { "name": "ptn_dev-ops_cicd-agents-and-runners", "version": "0.0.2", "path": "avm-temp/ptn/dev-ops/cicd-agents-and-runners/main.bicep" },
+  { "name": "ptn_platform_public-flex-api", "version": "0.0.4", "path": "avm-temp/ptn/platform/public-flex-api/main.bicep" },
+  { "name": "ptn_platform_world-silo", "version": "0.0.4", "path": "avm-temp/ptn/platform/world-silo/main.bicep" }
+]

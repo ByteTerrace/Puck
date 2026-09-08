@@ -13,12 +13,12 @@ var apexDomainName = readEnvironmentVariable('BICEPPARAM_APEX_DOMAIN_NAME', 'byt
 var partitionCount = int(readEnvironmentVariable('BICEPPARAM_PARTITION_COUNT', '1'))
 var prefix = readEnvironmentVariable('BICEPPARAM_PREFIX', 'bytrc')
 
-param deployOwnerRoleAssignments = true
 param enableCustomerManagedKey = false
 param enableZoneRedundancy = false
 param ephemeral = false
 param forcePrivateNetworking = false
 param gitHubApplicationPrivateKey = null
+param worldMcp = json(readEnvironmentVariable('BICEPPARAM_WORLD_MCP', 'null'))
 // Empty objectId = "the deploying principal" (pipeline default). For human-run deployments set
 // BICEPPARAM_OWNER_OBJECT_ID to your object id and BICEPPARAM_OWNER_PRINCIPAL_TYPE=User.
 param owner = {
@@ -29,6 +29,15 @@ param partitioning = {
   count: partitionCount
   prefix: prefix
 }
+param tags = {
+  Application: 'Puck'
+  Environment: 'Production'
+  ManagedBy: 'Bicep'
+}
+param website = {
+  hostNames: [apexDomainName, 'docs.${apexDomainName}', 'puck.${apexDomainName}']
+  officialContentBaseUrl: 'https://puck.${apexDomainName}/official'
+}
 param resources = {
   accessManagement: {
     groups: byteTerraceAccessManagementGroups()
@@ -36,9 +45,11 @@ param resources = {
   }
   actors: {
     name: '${prefix}cap001'
+    tags: { PetName: 'Puck Actors' }
     privateNetworking: false
     userAssignedIdentity: {
       name: '${prefix}idp007'
+      tags: { PetName: 'Puck Actors' }
     }
   }
   api: {
@@ -57,6 +68,7 @@ param resources = {
         }
       }
       name: '${prefix}funcp000'
+      tags: { PetName: 'Puck API' }
       servicePlan: {
         name: '${prefix}aspp000'
       }
@@ -150,6 +162,8 @@ param resources = {
     ]
     spa: {
       redirectUris: [
+        'https://puck.${apexDomainName}'
+        'https://docs.${apexDomainName}'
         'https://bytrc.com'
         'https://${apexDomainName}'
         'https://portal.${apexDomainName}'
@@ -226,8 +240,8 @@ param resources = {
         'default-src': ['\'none\'']
         'font-src': ['\'self\'']
         'form-action': ['\'self\'']
-        'frame-ancestors': ['\'none\'']
-        'frame-src': ['https://login.microsoftonline.com']
+        'frame-ancestors': ['\'self\'']
+        'frame-src': ['\'self\'', 'https://login.microsoftonline.com']
         'img-src': ['\'self\'', 'data:']
         'manifest-src': ['\'self\'']
         'media-src': ['\'none\'']
@@ -250,6 +264,7 @@ param resources = {
           'api.${apexDomainName}'
           'portal.${apexDomainName}'
           'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -266,6 +281,7 @@ param resources = {
           'blob.${apexDomainName}'
           'portal.${apexDomainName}'
           'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -289,6 +305,7 @@ param resources = {
           'blob.${apexDomainName}'
           'portal.${apexDomainName}'
           'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -296,7 +313,6 @@ param resources = {
         originGroupName: 'blob-public'
         originPath: '/'
         patternsToMatch: [
-          '/favicon.ico'
           '/official/*'
           '/public/*'
         ]
@@ -307,6 +323,8 @@ param resources = {
         customDomains: [
           apexDomainName
           'portal.${apexDomainName}'
+          'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -329,6 +347,7 @@ param resources = {
           apexDomainName
           'portal.${apexDomainName}'
           'puck.${apexDomainName}'
+          'docs.${apexDomainName}'
           'www.${apexDomainName}'
           'bytrc.com'
         ]
@@ -424,7 +443,7 @@ param resources = {
   userAssignedIdentityKubernetesKubelet: {
     name: '${prefix}idp005'
   }
-  // bytrcidpzzz: the GitHub OIDC-federated identity the Docs workflow (docs.yml) publishes with.
+  // bytrcidpzzz: the shared CI identity, federated to GitHub's Puck environment.
   userAssignedIdentityPublishing: {
     name: '${prefix}idpzzz'
   }
@@ -432,6 +451,29 @@ param resources = {
     addressPrefixes: ['10.64.0.0/20']
     name: '${prefix}vnetp000'
     subnets: {
+      worldSilo: {
+        addressPrefixes: ['10.64.3.0/24']
+        defaultOutboundAccess: false
+        name: '${prefix}snetp008'
+        natGatewayResourceId: '${prefix}ngp000'
+        privateEndpointNetworkPolicies: 'Disabled'
+        privateLinkServiceNetworkPolicies: 'Enabled'
+        securityRules: [
+          { name: 'WorldQuic', properties: { priority: 100, direction: 'Inbound', access: 'Allow', protocol: 'Udp', sourcePortRange: '*', destinationPortRange: '33333', sourceAddressPrefix: '*', destinationAddressPrefix: '*' } }
+          { name: 'WorldHealth', properties: { priority: 110, direction: 'Inbound', access: 'Allow', protocol: 'Tcp', sourcePortRange: '*', destinationPortRange: '8081', sourceAddressPrefix: 'AzureLoadBalancer', destinationAddressPrefix: '*' } }
+          { name: 'DenyOtherInbound', properties: { priority: 200, direction: 'Inbound', access: 'Deny', protocol: '*', sourcePortRange: '*', destinationPortRange: '*', sourceAddressPrefix: '*', destinationAddressPrefix: '*' } }
+        ]
+      }
+      // Existing reserved subnet; retain it when reconciling the production VNet.
+      reserved007: {
+        addressPrefixes: ['10.64.2.128/26']
+        defaultOutboundAccess: false
+        delegation: 'Microsoft.App/environments'
+        name: '${prefix}snetp007'
+        natGatewayResourceId: '${prefix}ngp000'
+        privateEndpointNetworkPolicies: 'Disabled'
+        privateLinkServiceNetworkPolicies: 'Enabled'
+      }
       containerEnvironment: {
         addressPrefixes: ['10.64.1.128/26']
         defaultOutboundAccess: false
@@ -513,5 +555,54 @@ param resources = {
       name: '${prefix}idp006'
     }
   }
+  worldSilo: {
+    authentication: {
+      type: 'azure.api-users'
+      settings: {
+        tenantId: 'e09734be-ca09-41ec-b70d-98f5536fb774'
+        audience: 'e6a7ab9f-19af-4eb0-b23f-a5bde0f90eb7'
+        groupId: '6997d638-98e6-4738-a507-7d960bc1e537' // ByteTerrace API Users are Puck users.
+        scope: 'user_impersonation'
+      }
+    }
+    container: { cpu: 2, memoryInGB: 4, name: 'main' }
+    compute: {
+      adminUsername: 'puck'
+      capacity: 1
+      automaticRepairs: true
+      repairGracePeriod: 'PT30M'
+      patchMode: 'AutomaticByPlatform'
+      patchAssessmentMode: 'AutomaticByPlatform'
+      imageReference: { publisher: 'MicrosoftCBLMariner', offer: 'azure-linux-3', sku: 'azure-linux-3-gen2', version: '3.20260809.01' }
+      osDiskSizeGB: 64
+      osDiskStorageType: 'StandardSSD_LRS'
+      sku: 'Standard_D2as_v5'
+      vmNamePrefix: '${prefix}vmp000'
+      zones: [1]
+    }
+    lifecycle: { azureScheduledEvents: true, healthPort: 8081, pollSeconds: 1, shutdownSeconds: 120, progressTimeoutSeconds: 30, checkpointTimeoutSeconds: 180, journalTimeoutSeconds: 30, journalBacklogLimit: 1024 }
+    monitoring: { alertName: '${prefix}map000', actionGroupResourceIds: [], evaluationFrequency: 'PT1M', windowSize: 'PT5M', severity: 1 }
+    network: {
+      virtualNetworkName: '${prefix}vnetp000'
+      subnetName: '${prefix}snetp008'
+      subnetPrefix: '10.64.3.0/24'
+      natGatewayName: '${prefix}ngp000'
+      securityGroupName: '${prefix}nsgp008'
+      publicIpName: '${prefix}pip000'
+      loadBalancerName: '${prefix}lbp000'
+    }
+    dns: { recordName: 'puck', ttl: 60, zoneName: 'puck.${apexDomainName}' }
+    federationKeySecretName: 'PuckWorldFederationKey'
+    releaseStateSecretName: 'PuckWorldReleaseState'
+    name: '${prefix}vmssp000'
+    port: 33333
+    repositoryName: 'world-silo'
+    roleDefinitionName: 'Puck World Store'
+    tags: { PetName: 'Puck World' }
+    userAssignedIdentity: {
+      name: '${prefix}idp008'
+      tags: { PetName: 'Puck World' }
+    }
+    worldName: 'puck'
+  }
 }
-

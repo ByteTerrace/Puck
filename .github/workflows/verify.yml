@@ -11,9 +11,6 @@ name: Verify
 # regenerating the checked-in schema or the name registry fails the build here rather than only in a manual verb run.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_call:
   schedule:
     - cron: "17 3 * * *"
@@ -41,20 +38,17 @@ env:
 jobs:
   gate:
     if: ${{ github.event_name != 'schedule' }}
-    permissions:
-      contents: read
-      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
       - name: Restore corpus cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/Puck/corpora
           key: corpora-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
@@ -77,38 +71,27 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: gb-post-${{ github.event.inputs.lane || 'gate' }}
           path: artifacts/gb-post
           if-no-files-found: error
 
-      - name: Test results
-        if: always() && github.event_name != 'pull_request'
-        uses: dorny/test-reporter@v1
-        with:
-          name: Humble GamingBrick ${{ github.event.inputs.lane || 'gate' }}
-          path: artifacts/gb-post/results.junit.xml
-          reporter: java-junit
-          fail-on-error: false
 
   advanced:
     if: ${{ github.event_name != 'schedule' }}
-    permissions:
-      contents: read
-      checks: write
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
       - name: Restore corpus cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/Puck/corpora
           key: corpora-agb-${{ hashFiles('src/Puck.AdvancedGamingBrick.Post/corpora.json') }}
@@ -131,35 +114,27 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: agb-post
           path: artifacts/agb-post
           if-no-files-found: error
 
-      - name: Test results
-        if: always() && github.event_name != 'pull_request'
-        uses: dorny/test-reporter@v1
-        with:
-          name: Advanced GamingBrick
-          path: artifacts/agb-post/results.junit.xml
-          reporter: java-junit
-          fail-on-error: false
 
   frontier:
     if: ${{ github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
       - name: Restore corpus cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/Puck/corpora
           key: corpora-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
@@ -182,7 +157,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
           name: gb-post-frontier
@@ -194,16 +169,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
       - name: Install the wasm-tools workload
         run: dotnet workload install wasm-tools
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "26.5.1"
 
@@ -227,17 +202,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
-      - name: Publish the CLI
-        run: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
+      - uses: ./.github/actions/setup-puck
+        with:
+          candidate: true
 
       - name: puck schema --check
-        run: src/Puck.Cli/publish/puck schema --check
+        run: puck schema --check
 
       - name: puck registry --check
-        run: src/Puck.Cli/publish/puck registry --check
+        run: puck registry --check

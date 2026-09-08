@@ -36,6 +36,7 @@ type dnsZoneMapType = {
 }
 
 param locations string[] = [resourceGroup().location]
+param tags { *: string } = {}
 param lockKind ('CanNotDelete' | 'None' | 'ReadOnly') = 'CanNotDelete'
 param virtualNetworkResourceIds string[] = []
 
@@ -112,6 +113,7 @@ resource privateDnsZones 'Microsoft.Network/privateDnsZones@2024-06-01' = [
   for zone in dnsZones: {
     location: 'global'
     name: zone.value
+    tags: tags
   }
 ]
 resource privateDnsZones_lock 'Microsoft.Authorization/locks@2020-05-01' = [

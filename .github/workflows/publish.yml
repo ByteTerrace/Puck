@@ -1,26 +1,21 @@
 name: Release & publish
+run-name: NuGet ${{ inputs.packages }} (${{ inputs.publish && 'publish' || 'validate only' }})
 
-# The version in build/Packaging.targets is the single source of truth. Bump
-# <Version> there and merge to main; this workflow reads it, and if no GitHub
-# Release exists for it yet, validates (build.yml + verify.yml), packs (pack.yml), pushes to
-# NuGet.org, then generates the tag + release. Unchanged version => the release
-# already exists => the run is a no-op. A failed run is safe to retry because
-# duplicate NuGet packages are skipped and the release is the completion marker.
-#
-# Everything happens in one run on purpose: a release created by the Actions
-# token does NOT trigger a separate "release" workflow, so tag/release and the
-# push cannot be split across workflows without a stored PAT — which would
-# defeat the point of Trusted Publishing.
-#
-# Authentication is NuGet Trusted Publishing (OIDC) — no stored API key. The
-# push is gated by the 'NuGet' environment the policy is bound to. This file
-# must stay named publish.yml: the trusted-publishing policy matches on it.
-
+# A version bump alone does not publish. Choose the batch explicitly; see docs/ci.md.
+# Keep this filename and the NuGet environment aligned with Trusted Publishing.
 on:
-  push:
-    branches: [main]
-    paths: [build/Packaging.targets]
   workflow_dispatch:
+    inputs:
+      packages:
+        description: 'all, or comma-separated full package IDs (ByteTerrace.Puck.Maths,ByteTerrace.Puck.Abstractions)'
+        type: string
+        required: true
+        default: all
+      publish:
+        description: Publish to NuGet.org after validation (false only prepares artifacts)
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -32,131 +27,187 @@ concurrency:
 
 jobs:
   gate:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.read.outputs.version }}
-      release: ${{ steps.read.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
 
       - id: read
+        run: dotnet run -c Release --file build/Toolchain.cs -- version
+
+      - name: Validate source and any existing version tag
         env:
-          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.read.outputs.version }}
         run: |
-          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' build/Packaging.targets | head -n1 | tr -d '\r')
-          if [ -z "$version" ]; then
-            echo "::error::No <Version> found in build/Packaging.targets" >&2
+          set -euo pipefail
+          tag="v$VERSION"
+          if [[ "$GITHUB_REF" != refs/heads/main && "$GITHUB_REF" != "refs/tags/$tag" ]]; then
+            echo '::error::Release from main, or the existing version tag for retries and additional batches.'
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          tag="v$version"
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" >release.json 2>release-error.txt; then
-            echo "Release $tag already exists — nothing to publish."
-            echo "release=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if ! grep -q 'HTTP 404' release-error.txt; then
-            cat release-error.txt >&2
-            exit 1
-          fi
-          # An unfinished tag must never label packages from another commit.
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
           if git show-ref --verify --quiet "refs/tags/$tag"; then
-            if [ "$(git rev-parse "$tag^{commit}")" != "$GITHUB_SHA" ]; then
-              echo "::error::Tag $tag points to another commit without a completed release."
+            if [[ "$(git rev-parse "$tag^{commit}")" != "$GITHUB_SHA" ]]; then
+              echo "::error::Version $VERSION is already bound to another commit. Run from $tag or bump the shared version."
               exit 1
             fi
           fi
-          echo "release=true" >> "$GITHUB_OUTPUT"
 
   pack:
     needs: gate
-    if: needs.gate.outputs.release == 'true'
     uses: ./.github/workflows/pack.yml
 
   build:
     needs: gate
-    if: needs.gate.outputs.release == 'true'
     uses: ./.github/workflows/build.yml
 
   verify:
     needs: gate
-    if: needs.gate.outputs.release == 'true'
-    permissions:
-      contents: read
-      checks: write
     uses: ./.github/workflows/verify.yml
 
-  publish:
-    needs: [gate, pack, build, verify]
-    if: needs.gate.outputs.release == 'true'
+  docs:
+    needs: gate
+    uses: ./.github/workflows/docs.yml
+
+  prepare:
+    needs: [gate, pack]
     runs-on: ubuntu-latest
-    # id-token: write lets NuGet/login exchange the run's OIDC token for a
-    # short-lived key. The environment name MUST match the trusted-publishing
-    # policy ('NuGet'); add protection rules there to gate publishes on
-    # approval.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nuget-packages
+          path: packages
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - uses: ./.github/actions/setup-puck
+
+      - name: Select and validate the release batch
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+          PACKAGES: ${{ inputs.packages }}
+        run: puck nuget prepare packages release "$PACKAGES"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nuget-release
+          path: release/
+          if-no-files-found: error
+
+  publish:
+    needs: [gate, prepare, build, verify, docs]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
-      contents: read
+      contents: write
       id-token: write
     environment:
       name: NuGet
       url: https://www.nuget.org/profiles/ByteTerrace
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: nuget-packages
-          path: packages
+          name: nuget-release
+          path: release
 
-      - name: NuGet login (Trusted Publishing)
-        id: nuget-login
-        uses: NuGet/login@v1
-        with:
-          user: ByteTerrace
+      - uses: ./.github/actions/setup-puck
 
-      - name: Push to NuGet.org
-        run: >
-          dotnet nuget push "packages/*.nupkg"
-          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
-          --source https://api.nuget.org/v3/index.json
-          --skip-duplicate
+      - name: Verify the prepared artifacts
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: puck nuget verify release
 
-  release:
-    needs: [gate, publish]
-    if: needs.gate.outputs.release == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # reuse an incomplete run's tag if one already exists
-
-      - name: Create GitHub Release
+      - name: Pin the package version to this validated commit
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
+          set -euo pipefail
           tag="v$VERSION"
-          prerelease=()
-          case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
-          gh release create "$tag" \
-            --target "$GITHUB_SHA" \
-            --title "$tag" \
-            --generate-notes \
-            "${prerelease[@]}"
-          echo "Created release $tag"
+          if git show-ref --verify --quiet "refs/tags/$tag"; then
+            test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              --raw-field "ref=refs/tags/$tag" --raw-field "sha=$GITHUB_SHA"
+          fi
 
-  docs:
-    needs: release
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/docs.yml
+      - name: NuGet login (Trusted Publishing)
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ByteTerrace
+
+      - name: Push the selected packages and symbols in dependency order
+        env:
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: puck nuget push release
+
+      - name: Record this batch on the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" >release-info.json 2>release-error.txt; then
+            if ! grep -q 'HTTP 404' release-error.txt; then
+              cat release-error.txt >&2
+              exit 1
+            fi
+            prerelease=()
+            case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+            gh release create "$tag" --verify-tag --title "$tag" --generate-notes "${prerelease[@]}"
+          fi
+          # Existing releases can receive additional batches from the same tag.
+          manifest="release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          cp release/release.json "$manifest"
+          gh release upload "$tag" "$manifest"
+
+      - name: Verify published CLI availability and prepare its CI pin
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        shell: bash
+        run: |
+          if [[ -f "release/ByteTerrace.Puck.Cli.$VERSION.nupkg" ]]; then
+            for attempt in $(seq 1 30); do
+              if dotnet run -c Release --file build/Toolchain.cs -- pin "$VERSION"; then
+                git diff -- .config/dotnet-tools.json .config/puck-bootstrap.json > puck-cli-pin.patch
+                exit 0
+              fi
+              sleep 10
+            done
+            echo '::error::CLI publication has not become installable; retry this run before adopting the pin.'
+            exit 1
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: puck-cli-pin
+          path: puck-cli-pin.patch
+          if-no-files-found: ignore

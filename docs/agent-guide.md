@@ -44,6 +44,39 @@ Prefer the cheapest correct tool:
 4. `dotnet build Puck.slnx -c Release` after a refactor or documentation edit
    that changes `cref` values.
 
+## C# file apps
+
+Standalone C# entry points use the same `.editorconfig`, compiler warnings, and
+Puck formatting conventions as the project-based code. Their file directives
+declare their dependencies; keep package versions pinned. `Directory.Build.props`
+links `build/RepositoryPaths.cs` and `build/AutomationProcess.cs` into these apps so they can locate checkout data
+at runtime without building Puck CLI. Invoke them from within the checkout.
+Compiler source paths can be remapped by CI and are not runtime file locations.
+
+Compile an app without executing its operational code:
+
+```sh
+dotnet build build/Azure.cs -c Release
+```
+
+Run a safe verification entry point separately when one exists:
+
+```sh
+dotnet run -c Release --file build/Azure.cs -- --help
+```
+
+Deployment, publishing, QUIC probes, and WASM refresh commands are operational
+actions, so a formatting check should compile them without running them.
+
+Use `puck format . -Files files.json` with a JSON array of repository-relative
+paths, such as `["build/Azure.cs"]`. The CLI converts each standalone app to a
+disposable SDK project, preserves its references and linked helpers, compiles
+and formats the copy, then copies back only the selected source with its file
+directives restored. `-WhatIf` and `-Verify` leave the original source untouched.
+Ordinary project files still need their owning projects restored and built.
+See [automatic PR formatting](ci.md#automatic-pr-formatting) for the CI bot and
+the fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
+
 ## Verification
 
 ### Engine changes — THERE IS NO ENGINE GATE TODAY

@@ -6,20 +6,22 @@ extension 'br:mcr.microsoft.com/bicep/extensions/microsoftgraph/v1.0:1.0.0'
 import {
   agentProfileType
   imageType
-} from 'br/public:avm/res/dev-ops-infrastructure/pool:0.7.0'
+} from 'br/public:avm/res/dev-ops-infrastructure/pool:0.8.0'
 import {
   diagnosticSettingFullType
 } from 'br/public:avm/utl/types/avm-common-types:0.7.0'
 
 import {
   subnetType
-} from 'ts/bvm:ptn_network_basic-topology:0.0.1'
+} from 'ts/bvm:ptn_network_basic-topology:0.0.3'
+import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.4'
 
 import {
   groupType
   roleAssignmentType
 } from './accessManagement.bicep'
 import {
+  containerRepositoryCondition
   frontDoorPublicContentReadCondition
   officialContentPublisherCondition
 } from './abacConditions.bicep'
@@ -312,6 +314,7 @@ type virtualNetworkConfigType = {
     kubernetesMachinePool: subnetType
     kubernetesServiceApi: subnetType
     privateEndpoints: subnetType
+    *: subnetType
   }
   tags: tagsType?
 }
@@ -367,6 +370,7 @@ type resourceType = {
   userAssignedIdentityPublishing: userAssignedIdentityConfigType
   virtualNetwork: virtualNetworkConfigType
   vsMarketplace: vsMarketplaceConfigType
+  worldSilo: worldSiloConfigType
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -377,7 +381,8 @@ func domainNameToResourceName(name string) string => replace(name, '.', '-')
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Parameters
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-param deployOwnerRoleAssignments bool = true
+@description('Immutable actor image reference. Supply the digest produced by CI for application releases.')
+param actorsImage string = ''
 param enableCustomerManagedKey bool = true
 param enableTelemetry bool = false
 param enableZoneRedundancy bool = false
@@ -386,6 +391,17 @@ param forcePrivateNetworking bool = true
 @secure()
 param gitHubApplicationPrivateKey string?
 param location string = resourceGroup().location
+@description('Optional remote World MCP deployment using the existing application registration and silo. Certificate secret contains a passwordless base64 PFX for the silo DNS name.')
+param worldMcp {
+  allowedSubjects: string[]
+  certificateSecretName: string
+  observations: object[]?
+}?
+param tags tagsType = {}
+param website {
+  hostNames: string[]
+  officialContentBaseUrl: string
+}
 param lockKind ('CanNotDelete' | 'None' | 'ReadOnly') = (ephemeral ? 'None' : 'CanNotDelete')
 param owner {
   objectId: string
@@ -503,6 +519,14 @@ var actorsInvokeAppRole = {
   value: 'Actors.Invoke'
 }
 var oauth2PermissionScopeMap = {
+  'puck.operator': {
+    adminConsentDescription: 'Operate the explicitly granted Puck World through MCP on behalf of the signed-in user.'
+    adminConsentDisplayName: 'Operate Puck World'
+    id: guid(tenant().tenantId, applicationRegistrationUniqueName, 'scope', 'puck.operator')
+    isEnabled: true
+    type: 'Admin'
+    value: 'puck.operator'
+  }
   user_impersonation: {
     adminConsentDescription: 'Allow the application to access ${resources.applicationRegistration.name} on behalf of the signed-in user.'
     adminConsentDisplayName: 'Access ${resources.applicationRegistration.name}'
@@ -535,6 +559,7 @@ var publicStorageAccounts = [
       subscriptionName: '${partitioning.prefix}evgsp${padLeft(string(i), 3, '0')}'
     }
     name: '${partitioning.prefix}stp${padLeft(string(i + 1), 3, '0')}'
+    tags: union(tags, resources.api.storage.public.?tags ?? {})
   }
 ]
 var storage = {
@@ -671,16 +696,25 @@ resource frontDoor_bootstrap 'Microsoft.Cdn/profiles@2025-06-01' = {
   }
 }
 
-module basicNetworkTopology 'ts/bvm:ptn_network_basic-topology:0.0.1' = {
+module basicNetworkTopology 'ts/bvm:ptn_network_basic-topology:0.0.3' = {
   params: {
     devOpsInfrastructureServicePrincipalId: devOpsInfrastructure_servicePrincipal.id
     enableTelemetry: enableTelemetry
     location: location
     lockKind: lockKind
-    natGateway: resources.natGateway
+    natGateway: {
+      ...resources.natGateway
+      tags: union(tags, resources.natGateway.?tags ?? {})
+      publicIpPrefix: {
+        ...resources.natGateway.publicIpPrefix
+        tags: union(tags, resources.natGateway.publicIpPrefix.?tags ?? {})
+      }
+    }
+    tags: tags
     publicDnsZones: frontDoorCustomDomains
     virtualNetwork: {
       ...resources.virtualNetwork
+      tags: union(tags, resources.virtualNetwork.?tags ?? {})
       subnets: {
         ...resources.virtualNetwork.subnets
         kubernetesServiceApi: {
@@ -702,7 +736,7 @@ module basicNetworkTopology 'ts/bvm:ptn_network_basic-topology:0.0.1' = {
     }
   }
 }
-module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
+module frontDoor 'br/public:avm/res/cdn/profile:0.20.0' = {
   params: {
     afdEndpoints: [
       {
@@ -1328,7 +1362,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
                   headerAction: 'Overwrite'
                   headerName: 'X-Frame-Options'
                   typeName: 'DeliveryRuleHeaderActionParameters'
-                  value: 'DENY'
+                  value: 'SAMEORIGIN'
                 }
               }
             ]
@@ -1351,7 +1385,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
               {
                 name: 'UrlFileExtension'
                 parameters: {
-                  matchValues: ['^(css|gif|html|ico|jpg|js|json|jxl|map|md|pdf|png|svg|txt|woff2)$']
+                  matchValues: ['^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml|yaml|yml)$']
                   negateCondition: false
                   operator: 'RegEx'
                   transforms: ['Lowercase']
@@ -1397,7 +1431,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
               {
                 name: 'UrlFileExtension'
                 parameters: {
-                  matchValues: ['^(css|gif|html|ico|jpg|js|json|jxl|map|md|pdf|png|svg|txt|woff2)$']
+                  matchValues: ['^(css|gif|html|ico|jpeg|jpg|js|json|jxl|map|md|mjs|pdf|png|svg|ttf|txt|wasm|webp|woff|woff2|xml|yaml|yml)$']
                   negateCondition: true
                   operator: 'RegEx'
                   transforms: ['Lowercase']
@@ -1480,10 +1514,10 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.19.2' = {
       }
     ]
     sku: frontDoorSkuMap[resources.frontDoor.sku]
-    tags: resources.frontDoor.?tags
+    tags: union(tags, resources.frontDoor.?tags ?? {})
   }
 }
-module frontDoor_dns 'br/public:avm/res/network/dns-zone:0.5.4' = [
+module frontDoor_dns 'br/public:avm/res/network/dns-zone:0.6.2' = [
   for domain in frontDoorCustomDomains: {
     params: {
       a: [
@@ -1512,7 +1546,7 @@ module frontDoor_dns 'br/public:avm/res/network/dns-zone:0.5.4' = [
     }
   }
 ]
-module frontDoor_userAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
+module frontDoor_userAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = {
   params: {
     enableTelemetry: enableTelemetry
     federatedIdentityCredentials: []
@@ -1522,7 +1556,7 @@ module frontDoor_userAssignedIdentity 'br/public:avm/res/managed-identity/user-a
     }
     name: resources.frontDoor.userAssignedIdentity.name
     roleAssignments: []
-    tags: resources.frontDoor.userAssignedIdentity.?tags
+    tags: union(tags, resources.frontDoor.userAssignedIdentity.?tags ?? {})
   }
 }
 module frontDoor_waf_rateLimit 'br/public:avm/res/network/front-door-web-application-firewall-policy:0.3.3' = {
@@ -1570,10 +1604,10 @@ module frontDoor_waf_rateLimit 'br/public:avm/res/network/front-door-web-applica
     }
     roleAssignments: []
     sku: 'Standard_AzureFrontDoor'
-    tags: resources.frontDoor.webApplicationFirewallPolicy.?tags
+    tags: union(tags, resources.frontDoor.webApplicationFirewallPolicy.?tags ?? {})
   }
 }
-module monitorPrivateLinkScope 'br/public:avm/res/insights/private-link-scope:0.7.2' = if (forcePrivateNetworking) {
+module monitorPrivateLinkScope 'br/public:avm/res/insights/private-link-scope:0.7.3' = if (forcePrivateNetworking) {
   params: {
     accessModeSettings: {
       exclusions: []
@@ -1626,23 +1660,23 @@ module monitorPrivateLinkScope 'br/public:avm/res/insights/private-link-scope:0.
         name: logAnalyticsWorkspace.outputs.logAnalyticsWorkspaceId
       }
     ]
-    tags: resources.monitorPrivateLinkScope.?tags
+    tags: union(tags, resources.monitorPrivateLinkScope.?tags ?? {})
   }
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // DevOps Resources
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-module devOpsAgents 'ts/bvm:ptn_dev-ops_cicd-agents-and-runners:0.0.1' = {
+module devOpsAgents 'ts/bvm:ptn_dev-ops_cicd-agents-and-runners:0.0.2' = {
   dependsOn: [basicNetworkTopology]
   params: {
     devCenter: {
       name: resources.devCenter.name
-      tags: resources.devCenter.?tags
+      tags: union(tags, resources.devCenter.?tags ?? {})
     }
     devCenterProject: {
       name: resources.devCenter.project.name
-      tags: resources.devCenter.project.?tags
+      tags: union(tags, resources.devCenter.project.?tags ?? {})
     }
     devOpsAgentPool: {
       agentProfile: resources.devOps.agentPool.agentProfile
@@ -1653,7 +1687,7 @@ module devOpsAgents 'ts/bvm:ptn_dev-ops_cicd-agents-and-runners:0.0.1' = {
       organizationName: resources.devOps.organizationName
       projectName: resources.devOps.projectName
       subnetResourceId: subnetResourceIdMap.devOpsAgentPool
-      tags: resources.devOps.agentPool.?tags
+      tags: union(tags, resources.devOps.agentPool.?tags ?? {})
     }
     enableTelemetry: enableTelemetry
     gitHubNetworkSettings: {
@@ -1675,7 +1709,7 @@ resource applicationRegistration 'Microsoft.Graph/applications@v1.0' = {
   api: {
     acceptMappedClaims: false
     knownClientApplications: []
-    oauth2PermissionScopes: [oauth2PermissionScopeMap.user_impersonation]
+    oauth2PermissionScopes: [oauth2PermissionScopeMap.user_impersonation, oauth2PermissionScopeMap['puck.operator']]
     preAuthorizedApplications: [
       for application in resources.applicationRegistration.preAuthorizedApplications: {
         appId: application.appId
@@ -1752,6 +1786,13 @@ resource applicationRegistration 'Microsoft.Graph/applications@v1.0' = {
     name: '${applicationRegistrationUniqueName}/${actors_userAssignedIdentity.outputs.clientId}'
     subject: actors_userAssignedIdentity.outputs.principalId
   }
+  resource applicationRegistration_federatedIdentityCredential_world 'federatedIdentityCredentials@v1.0' = if (worldMcp != null) {
+    audiences: ['api://AzureADTokenExchange']
+    description: 'The existing World silo identity authenticates delegated OAuth exchanges for the MCP API.'
+    issuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
+    name: '${applicationRegistrationUniqueName}/${worldSiloIdentity.outputs.clientId}'
+    subject: worldSiloIdentity.outputs.principalId
+  }
 }
 resource applicationRegistration_servicePrincipal 'Microsoft.Graph/servicePrincipals@v1.0' = {
   appId: applicationRegistration.appId
@@ -1761,7 +1802,7 @@ resource applicationRegistration_servicePrincipal 'Microsoft.Graph/servicePrinci
   }
 }
 
-module applicationInsightsContainers 'br/public:avm/res/insights/component:0.7.1' = {
+module applicationInsightsContainers 'br/public:avm/res/insights/component:0.8.0' = {
   params: {
     applicationType: 'web'
     diagnosticSettings: []
@@ -1780,11 +1821,11 @@ module applicationInsightsContainers 'br/public:avm/res/insights/component:0.7.1
     retentionInDays: 30
     roleAssignments: []
     samplingPercentage: 100
-    tags: resources.containerEnvironment.applicationInsights.?tags
+    tags: union(tags, resources.containerEnvironment.applicationInsights.?tags ?? {})
     workspaceResourceId: logAnalyticsWorkspace.outputs.resourceId
   }
 }
-module applicationInsightsFrontDoor 'br/public:avm/res/insights/component:0.7.1' = {
+module applicationInsightsFrontDoor 'br/public:avm/res/insights/component:0.8.0' = {
   params: {
     applicationType: 'web'
     diagnosticSettings: []
@@ -1809,11 +1850,11 @@ module applicationInsightsFrontDoor 'br/public:avm/res/insights/component:0.7.1'
       }
     ]
     samplingPercentage: 100
-    tags: resources.frontDoor.applicationInsights.?tags
+    tags: union(tags, resources.frontDoor.applicationInsights.?tags ?? {})
     workspaceResourceId: logAnalyticsWorkspace.outputs.resourceId
   }
 }
-module configurationStore 'br/public:avm/res/app-configuration/configuration-store:0.9.3' = {
+module configurationStore 'br/public:avm/res/app-configuration/configuration-store:0.10.0' = {
   params: {
     createMode: 'Default'
     customerManagedKey: defaultCustomerManagedKeySettingsWithAutoRotation
@@ -1853,15 +1894,11 @@ module configurationStore 'br/public:avm/res/app-configuration/configuration-sto
       : null)
     publicNetworkAccess: networking.publicNetworkAccess
     roleAssignments: [
-      ...(deployOwnerRoleAssignments
-        ? [
-            {
-              principalId: ownerPrincipal.objectId
-              principalType: ownerPrincipal.principalType
-              roleDefinitionIdOrName: 'App Configuration Data Owner'
-            }
-          ]
-        : [])
+      {
+        principalId: userAssignedIdentityPublishing.properties.principalId
+        principalType: 'ServicePrincipal'
+        roleDefinitionIdOrName: 'App Configuration Data Owner'
+      }
       {
         principalId: frontDoor_userAssignedIdentity.outputs.principalId
         principalType: 'ServicePrincipal'
@@ -1875,13 +1912,14 @@ module configurationStore 'br/public:avm/res/app-configuration/configuration-sto
     ]
     sku: resources.configurationStore.sku
     softDeleteRetentionInDays: 7
-    tags: resources.configurationStore.?tags
+    tags: union(tags, resources.configurationStore.?tags ?? {})
   }
 }
-module containerEnvironment 'br/public:avm/res/app/managed-environment:0.15.0' = {
+module containerEnvironment 'br/public:avm/res/app/managed-environment:0.16.0' = {
   dependsOn: [basicNetworkTopology]
   params: {
-    appInsightsConnectionString: applicationInsightsContainers.outputs.connectionString
+    // Platform logs go to Log Analytics; Actors exports OpenTelemetry directly
+    // to Azure Monitor with managed-identity authentication (see docs/ci.md).
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsWorkspaceResourceId: logAnalyticsWorkspace.outputs.resourceId
@@ -1898,19 +1936,11 @@ module containerEnvironment 'br/public:avm/res/app/managed-environment:0.15.0' =
       kind: lockKind
     }
     name: resources.containerEnvironment.name
-    openTelemetryConfiguration: {
-      logsConfiguration: {
-        destinations: ['appInsights']
-      }
-      tracesConfiguration: {
-        destinations: ['appInsights']
-      }
-    }
     peerTrafficEncryption: true
     publicNetworkAccess: (containerEnvironmentIsInternal ? 'Disabled' : networking.publicNetworkAccess)
     roleAssignments: []
     storages: []
-    tags: resources.containerEnvironment.?tags
+    tags: union(tags, resources.containerEnvironment.?tags ?? {})
     workloadProfiles: [
       {
         name: 'Consumption'
@@ -1920,7 +1950,7 @@ module containerEnvironment 'br/public:avm/res/app/managed-environment:0.15.0' =
     zoneRedundant: enableZoneRedundancy
   }
 }
-module containerEnvironment_privateEndpoint 'br/public:avm/res/network/private-endpoint:0.12.0' = if (forcePrivateNetworking) {
+module containerEnvironment_privateEndpoint 'br/public:avm/res/network/private-endpoint:0.12.1' = if (forcePrivateNetworking) {
   name: '${uniqueString(deployment().name, location)}-managedEnvironments-PrivateEndpoint-0'
   params: {
     enableTelemetry: enableTelemetry
@@ -1951,13 +1981,14 @@ module containerEnvironment_privateEndpoint 'br/public:avm/res/network/private-e
     subnetResourceId: subnetResourceIdMap.privateEndpoints
   }
 }
-module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' = if (enabled.containerRegistry) {
+module containerRegistry 'br/public:avm/res/container-registry/registry:0.13.0' = if (enabled.containerRegistry) {
   params: {
     acrAdminUserEnabled: false
     acrSku: resources.containerRegistry!.sku
     anonymousPullEnabled: false
     autoGeneratedDomainNameLabelScope: 'NoReuse'
-    azureADAuthenticationAsArmPolicyStatus: 'disabled'
+    // Container Apps managed-identity pulls require ARM-audience authentication; ABAC still controls repository access.
+    azureADAuthenticationAsArmPolicyStatus: 'enabled'
     cacheRules: [
       {
         name: 'mcr-k8se-quickstart'
@@ -2006,28 +2037,20 @@ module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' 
     roleAssignments: [
       ...[
         {
-          principalId: ownerPrincipal.objectId
-          principalType: ownerPrincipal.principalType
-          roleDefinitionIdOrName: 'Container Registry Repository Writer'
+          principalId: userAssignedIdentityPublishing.properties.principalId
+          principalType: 'ServicePrincipal'
+          roleDefinitionIdOrName: 'Container Registry Repository Contributor'
         }
         {
           principalId: vsMarketplace_userAssignedIdentity.outputs.principalId
           principalType: 'ServicePrincipal'
-          roleDefinitionIdOrName: 'Container Registry Repository Catalog Lister'
-        }
-        {
-          principalId: vsMarketplace_userAssignedIdentity.outputs.principalId
-          principalType: 'ServicePrincipal'
+          condition: containerRepositoryCondition(['mcr/vsmarketplace/vscode-private-marketplace'], false)
           roleDefinitionIdOrName: 'Container Registry Repository Reader'
         }
         {
           principalId: actors_userAssignedIdentity.outputs.principalId
           principalType: 'ServicePrincipal'
-          roleDefinitionIdOrName: 'Container Registry Repository Catalog Lister'
-        }
-        {
-          principalId: actors_userAssignedIdentity.outputs.principalId
-          principalType: 'ServicePrincipal'
+          condition: containerRepositoryCondition(['web-actors'], false)
           roleDefinitionIdOrName: 'Container Registry Repository Reader'
         }
       ]
@@ -2036,17 +2059,13 @@ module containerRegistry 'br/public:avm/res/container-registry/registry:0.12.1' 
             {
               principalId: userAssignedIdentityKubernetesKubelet!.outputs.principalId
               principalType: 'ServicePrincipal'
-              roleDefinitionIdOrName: 'Container Registry Repository Catalog Lister'
-            }
-            {
-              principalId: userAssignedIdentityKubernetesKubelet!.outputs.principalId
-              principalType: 'ServicePrincipal'
+              condition: containerRepositoryCondition(['web-actors', 'world-silo'], false)
               roleDefinitionIdOrName: 'Container Registry Repository Reader'
             }
           ]
         : [])
     ]
-    tags: resources.containerRegistry!.?tags
+    tags: union(tags, resources.containerRegistry!.?tags ?? {})
     zoneRedundancy: (enableZoneRedundancy ? 'Enabled' : 'Disabled')
   }
 }
@@ -2066,10 +2085,10 @@ module diskEncryptionSet 'br/public:avm/res/compute/disk-encryption-set:0.6.1' =
     }
     name: resources.diskEncryptionSet.name
     roleAssignments: []
-    tags: resources.diskEncryptionSet.?tags
+    tags: union(tags, resources.diskEncryptionSet.?tags ?? {})
   }
 }
-module keyVault 'br/public:avm/res/key-vault/vault:0.13.3' = {
+module keyVault 'br/public:avm/res/key-vault/vault:0.14.0' = {
   params: {
     createMode: 'default'
     diagnosticSettings: defaultAuditDiagnosticSettings
@@ -2200,15 +2219,13 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.13.3' = {
         ]
       : null)
     publicNetworkAccess: networking.publicNetworkAccess // TODO: Set to 'SecuredByPerimeter' when AVM for Key Vault is updated.
-    roleAssignments: (deployOwnerRoleAssignments
-      ? [
-          {
-            principalId: ownerPrincipal.objectId
-            principalType: ownerPrincipal.principalType
-            roleDefinitionIdOrName: 'Key Vault Administrator'
-          }
-        ]
-      : [])
+    roleAssignments: [
+      {
+        principalId: userAssignedIdentityPublishing.properties.principalId
+        principalType: 'ServicePrincipal'
+        roleDefinitionIdOrName: 'Key Vault Administrator'
+      }
+    ]
     secrets: (empty(gitHubApplicationPrivateKey)
       ? []
       : [
@@ -2228,10 +2245,10 @@ module keyVault 'br/public:avm/res/key-vault/vault:0.13.3' = {
         ])
     softDeleteRetentionInDays: 90
     sku: resources.keyVault.sku
-    tags: resources.keyVault.?tags
+    tags: union(tags, resources.keyVault.?tags ?? {})
   }
 }
-module kubernetesService 'br/public:avm/res/container-service/managed-cluster:0.13.0' = if (deployable.kubernetesService) {
+module kubernetesService 'br/public:avm/res/container-service/managed-cluster:0.14.0' = if (deployable.kubernetesService) {
   dependsOn: [containerRegistry]
   params: {
     aadProfile: {
@@ -2328,7 +2345,7 @@ module kubernetesService 'br/public:avm/res/container-service/managed-cluster:0.
     roleAssignments: []
     skuName: 'Base'
     skuTier: 'Free'
-    tags: resources.kubernetesService!.?tags
+    tags: union(tags, resources.kubernetesService!.?tags ?? {})
     webApplicationRoutingEnabled: false
   }
 }
@@ -2341,7 +2358,7 @@ module kubernetesService_containerServiceDnsZoneRoleAssignment 'br/public:avm/pt
     roleDefinitionId: az.roleDefinitions('Network Contributor').id
   }
 }
-module logAnalyticsWorkspace 'br/public:avm/res/operational-insights/workspace:0.15.0' = {
+module logAnalyticsWorkspace 'br/public:avm/res/operational-insights/workspace:0.16.1' = {
   params: {
     dataRetention: 30
     diagnosticSettings: []
@@ -2366,10 +2383,10 @@ module logAnalyticsWorkspace 'br/public:avm/res/operational-insights/workspace:0
     publicNetworkAccessForQuery: 'Enabled'
     roleAssignments: []
     skuName: 'PerGB2018'
-    tags: resources.logAnalyticsWorkspace.?tags
+    tags: union(tags, resources.logAnalyticsWorkspace.?tags ?? {})
   }
 }
-module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.15.2' = if (enabled.postgreSql) {
+module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.16.0' = if (enabled.postgreSql) {
   params: {
     administrators: resources.postgresFlexibleServer!.administrators
     authConfig: {
@@ -2421,7 +2438,7 @@ module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.15.2' 
     roleAssignments: []
     skuName: (resources.postgresFlexibleServer!.sku)
     storageSizeGB: (resources.postgresFlexibleServer!.?storageSizeGB ?? 64)
-    tags: resources.postgresFlexibleServer!.?tags
+    tags: union(tags, resources.postgresFlexibleServer!.?tags ?? {})
     tier: (startsWith(resources.postgresFlexibleServer!.sku, 'Standard_B')
       ? 'Burstable'
       : (startsWith(resources.postgresFlexibleServer!.sku, 'Standard_D')
@@ -2435,7 +2452,7 @@ module postgreSql 'br/public:avm/res/db-for-postgre-sql/flexible-server:0.15.2' 
     version: resources.postgresFlexibleServer!.version
   }
 }
-module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.3' = {
+module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.4' = {
   params: {
     customerManagedKey: defaultCustomerManagedKeySettings
     enableTelemetry: enableTelemetry
@@ -2447,7 +2464,10 @@ module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.3' = {
       userAssignedIdentityResourceId: frontDoor_userAssignedIdentity.outputs.resourceId
     }
     function: {
-      applicationInsights: resources.api.functionApplication.applicationInsights
+      applicationInsights: {
+        ...resources.api.functionApplication.applicationInsights
+        tags: union(tags, resources.api.functionApplication.applicationInsights.?tags ?? {})
+      }
       applicationSettings: {
         configurationStoreEndpoint: configurationStore.outputs.endpoint
         dataProtection: {
@@ -2473,9 +2493,13 @@ module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.3' = {
       servicePlan: {
         subnetResourceId: subnetResourceIdMap.flexConsumptionApplicationServicePlan
         ...resources.api.functionApplication.servicePlan
+        tags: union(tags, resources.api.functionApplication.servicePlan.?tags ?? {})
       }
-      tags: resources.api.functionApplication.?tags
-      userAssignedIdentity: resources.api.functionApplication.userAssignedIdentity
+      tags: union(tags, resources.api.functionApplication.?tags ?? {})
+      userAssignedIdentity: {
+        ...resources.api.functionApplication.userAssignedIdentity
+        tags: union(tags, resources.api.functionApplication.userAssignedIdentity.?tags ?? {})
+      }
     }
     location: location
     lockKind: lockKind
@@ -2490,7 +2514,10 @@ module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.3' = {
         queuePrivateDnsZoneResourceId: basicNetworkTopology.outputs.privateDnsZoneMap.storageAccount.queue
         tablePrivateDnsZoneResourceId: basicNetworkTopology.outputs.privateDnsZoneMap.storageAccount.table
       }
-      private: resources.api.storage.private
+      private: {
+        ...resources.api.storage.private
+        tags: union(tags, resources.api.storage.private.?tags ?? {})
+      }
       public: publicStorageAccounts
     }
   }
@@ -2500,36 +2527,6 @@ module publicFlexApi 'ts/bvm:ptn_platform_public-flex-api:0.0.3' = {
 // outright (the Blob.List clause has no OR branch) so this identity can never enumerate a
 // container. The host identities need no extra grants here — their conditioned "ByteTerrace
 // Storage User" assignments already cover every non-private/ path, including public/*.
-// The portal deploy (azcopy sync) writes the static site as the deploying identity, which needs
-// blob data-plane access — but only to $web. Scoped to that container so the deploy identity has
-// no standing read over users' private/ data; anything broader would bypass the ABAC conditions
-// silently, since a standing grant leaves no role-assignment entry when it is used.
-module publicFlexApi_staticSiteRoleAssignmentOwner './avm-temp/resource-role-assignment/main.bicep' = if (deployOwnerRoleAssignments) {
-  dependsOn: [publicFlexApi]
-  params: {
-    description: 'Portal deployment: static-site container only.'
-    enableTelemetry: false
-    name: guid(
-      resourceId(
-        'Microsoft.Storage/storageAccounts/blobServices/containers',
-        publicStorageAccounts[0].name,
-        'default',
-        storage.staticSiteContainerName
-      ),
-      ownerPrincipal.objectId,
-      'Storage Blob Data Contributor'
-    )
-    principalId: ownerPrincipal.objectId
-    principalType: ownerPrincipal.principalType
-    resourceId: resourceId(
-      'Microsoft.Storage/storageAccounts/blobServices/containers',
-      publicStorageAccounts[0].name,
-      'default',
-      storage.staticSiteContainerName
-    )
-    roleDefinitionId: az.roleDefinitions('Storage Blob Data Contributor').id
-  }
-}
 module publicFlexApi_publicFilesRoleAssignmentFrontDoor './avm-temp/resource-role-assignment/main.bicep' = [
   for account in publicStorageAccounts: {
     dependsOn: [publicFlexApi]
@@ -2537,11 +2534,6 @@ module publicFlexApi_publicFilesRoleAssignmentFrontDoor './avm-temp/resource-rol
       condition: frontDoorPublicContentReadCondition()
       description: 'Publishing pipeline: Front Door origin reads of public/* blobs in tenant containers; listing denied.'
       enableTelemetry: false
-      name: guid(
-        resourceId('Microsoft.Storage/storageAccounts', account.name),
-        frontDoor_userAssignedIdentity.outputs.principalId,
-        'Storage Blob Data Reader'
-      )
       principalId: frontDoor_userAssignedIdentity.outputs.principalId
       principalType: 'ServicePrincipal'
       resourceId: resourceId('Microsoft.Storage/storageAccounts', account.name)
@@ -2560,17 +2552,7 @@ module publicFlexApi_officialContentRoleAssignmentPublisher './avm-temp/resource
     condition: officialContentPublisherCondition()
     description: 'Publishing pipeline: CI writes puck.official.v1 content under public/puck/official.'
     enableTelemetry: false
-    name: guid(
-      resourceId(
-        'Microsoft.Storage/storageAccounts/blobServices/containers',
-        publicStorageAccounts[0].name,
-        'default',
-        frontDoor_userAssignedIdentity.outputs.principalId
-      ),
-      userAssignedIdentityPublishing.outputs.principalId,
-      'Storage Blob Data Contributor'
-    )
-    principalId: userAssignedIdentityPublishing.outputs.principalId
+    principalId: userAssignedIdentityPublishing.properties.principalId
     principalType: 'ServicePrincipal'
     resourceId: resourceId(
       'Microsoft.Storage/storageAccounts/blobServices/containers',
@@ -2581,25 +2563,13 @@ module publicFlexApi_officialContentRoleAssignmentPublisher './avm-temp/resource
     roleDefinitionId: az.roleDefinitions('Storage Blob Data Contributor').id
   }
 }
-// docs.yml (the Docs workflow) uploads docs/api and docs/site output straight to $web via
-// az storage blob sync/upload, authenticated as this identity over OIDC — it needs the same
-// container-scoped write access the portal deploy identity gets above, just for a different writer.
+// Azure CI publishes the website and its embedded documentation through the single CI identity.
 module publicFlexApi_staticSiteRoleAssignmentPublishing './avm-temp/resource-role-assignment/main.bicep' = {
   dependsOn: [publicFlexApi]
   params: {
-    description: 'Docs workflow: static-site container only.'
+    description: 'Azure workflow: static-site container only.'
     enableTelemetry: false
-    name: guid(
-      resourceId(
-        'Microsoft.Storage/storageAccounts/blobServices/containers',
-        publicStorageAccounts[0].name,
-        'default',
-        storage.staticSiteContainerName
-      ),
-      userAssignedIdentityPublishing.outputs.principalId,
-      'Storage Blob Data Contributor'
-    )
-    principalId: userAssignedIdentityPublishing.outputs.principalId
+    principalId: userAssignedIdentityPublishing.properties.principalId
     principalType: 'ServicePrincipal'
     resourceId: resourceId(
       'Microsoft.Storage/storageAccounts/blobServices/containers',
@@ -2666,10 +2636,10 @@ module redisCache 'br/public:avm/res/cache/redis-enterprise:0.5.1' = {
     publicNetworkAccess: networking.publicNetworkAccess
     roleAssignments: []
     skuName: (resources.redisCache.?sku ?? 'Balanced_B0')
-    tags: resources.redisCache.?tags
+    tags: union(tags, resources.redisCache.?tags ?? {})
   }
 }
-module userAssignedIdentityApplicationRegistration 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
+module userAssignedIdentityApplicationRegistration 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = {
   params: {
     enableTelemetry: enableTelemetry
     federatedIdentityCredentials: []
@@ -2679,10 +2649,10 @@ module userAssignedIdentityApplicationRegistration 'br/public:avm/res/managed-id
     }
     name: resources.userAssignedIdentityApplicationRegistration.name
     roleAssignments: []
-    tags: resources.userAssignedIdentityApplicationRegistration.?tags
+    tags: union(tags, resources.userAssignedIdentityApplicationRegistration.?tags ?? {})
   }
 }
-module userAssignedIdentityCustomerManagedEncryption 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = if (enableCustomerManagedKey) {
+module userAssignedIdentityCustomerManagedEncryption 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = if (enableCustomerManagedKey) {
   params: {
     enableTelemetry: enableTelemetry
     federatedIdentityCredentials: []
@@ -2692,10 +2662,10 @@ module userAssignedIdentityCustomerManagedEncryption 'br/public:avm/res/managed-
     }
     name: resources.userAssignedIdentityCustomerManagedEncryption.name
     roleAssignments: []
-    tags: resources.userAssignedIdentityCustomerManagedEncryption.?tags
+    tags: union(tags, resources.userAssignedIdentityCustomerManagedEncryption.?tags ?? {})
   }
 }
-module userAssignedIdentityFunctionApplication 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
+module userAssignedIdentityFunctionApplication 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = {
   params: {
     enableTelemetry: enableTelemetry
     federatedIdentityCredentials: []
@@ -2705,10 +2675,10 @@ module userAssignedIdentityFunctionApplication 'br/public:avm/res/managed-identi
     }
     name: resources.api.functionApplication.userAssignedIdentity.name
     roleAssignments: []
-    tags: resources.api.functionApplication.userAssignedIdentity.?tags
+    tags: union(tags, resources.api.functionApplication.userAssignedIdentity.?tags ?? {})
   }
 }
-module userAssignedIdentityKubernetesControlPlane 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = if (deployable.kubernetesService) {
+module userAssignedIdentityKubernetesControlPlane 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = if (deployable.kubernetesService) {
   params: {
     enableTelemetry: enableTelemetry
     federatedIdentityCredentials: []
@@ -2718,10 +2688,10 @@ module userAssignedIdentityKubernetesControlPlane 'br/public:avm/res/managed-ide
     }
     name: resources.userAssignedIdentityKubernetesControlPlane.name
     roleAssignments: []
-    tags: resources.userAssignedIdentityKubernetesControlPlane.?tags
+    tags: union(tags, resources.userAssignedIdentityKubernetesControlPlane.?tags ?? {})
   }
 }
-module userAssignedIdentityKubernetesKubelet 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = if (deployable.kubernetesService) {
+module userAssignedIdentityKubernetesKubelet 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = if (deployable.kubernetesService) {
   params: {
     enableTelemetry: enableTelemetry
     federatedIdentityCredentials: []
@@ -2737,33 +2707,13 @@ module userAssignedIdentityKubernetesKubelet 'br/public:avm/res/managed-identity
         roleDefinitionIdOrName: 'Managed Identity Operator'
       }
     ]
-    tags: resources.userAssignedIdentityKubernetesKubelet.?tags
+    tags: union(tags, resources.userAssignedIdentityKubernetesKubelet.?tags ?? {})
   }
 }
-// The GitHub OIDC-federated identity docs.yml (the Docs workflow) logs in as via azure/login,
-// publishing DocFX output and the marketing site to $web — see the federatedIdentityCredentials
-// subject below and the docs.yml workflow header for the environment name and OIDC contract this
-// mirrors. Modelled as a real resource (not a hand-provisioned principal id) because these
-// bytrc* resources are Puck's own and this template is their single source of truth.
-module userAssignedIdentityPublishing 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
-  params: {
-    enableTelemetry: enableTelemetry
-    federatedIdentityCredentials: [
-      {
-        audiences: ['api://AzureADTokenExchange']
-        issuer: 'https://token.actions.githubusercontent.com'
-        name: 'GitHubActionsDocsPublishing'
-        subject: 'repo:ByteTerrace/Puck:environment:Blobs'
-      }
-    ]
-    location: location
-    lock: {
-      kind: lockKind
-    }
-    name: resources.userAssignedIdentityPublishing.name
-    roleAssignments: []
-    tags: resources.userAssignedIdentityPublishing.?tags
-  }
+// Bootstrap owns the CI identity, federation and constrained delegation.
+// CI may reconcile its resource-level roles within that delegation.
+resource userAssignedIdentityPublishing 'Microsoft.ManagedIdentity/userAssignedIdentities@2024-11-30' existing = {
+  name: resources.userAssignedIdentityPublishing.name
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2771,13 +2721,14 @@ module userAssignedIdentityPublishing 'br/public:avm/res/managed-identity/user-a
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Internal container environments get a random default domain; VNet consumers (the Functions
 // edge) can only resolve it through a private DNS zone bearing that exact name.
-module actors_containerEnvironmentDefaultDomainDnsZone 'br/public:avm/res/network/private-dns-zone:0.8.0' = if (containerEnvironmentIsInternal) {
+// staticIp is populated for the internal VNet environments guarded by this condition.
+module actors_containerEnvironmentDefaultDomainDnsZone 'br/public:avm/res/network/private-dns-zone:0.8.1' = if (containerEnvironmentIsInternal) {
   params: {
     a: [
       {
         aRecords: [
           {
-            ipv4Address: containerEnvironment.outputs.staticIp
+            ipv4Address: containerEnvironment.outputs.staticIp!
           }
         ]
         name: '*'
@@ -2786,7 +2737,7 @@ module actors_containerEnvironmentDefaultDomainDnsZone 'br/public:avm/res/networ
       {
         aRecords: [
           {
-            ipv4Address: containerEnvironment.outputs.staticIp
+            ipv4Address: containerEnvironment.outputs.staticIp!
           }
         ]
         name: '@'
@@ -2798,7 +2749,7 @@ module actors_containerEnvironmentDefaultDomainDnsZone 'br/public:avm/res/networ
       kind: lockKind
     }
     name: containerEnvironment.outputs.defaultDomain
-    tags: resources.containerEnvironment.?tags
+    tags: union(tags, resources.containerEnvironment.?tags ?? {})
     virtualNetworkLinks: [
       {
         registrationEnabled: false
@@ -2830,7 +2781,7 @@ resource actors_graphAppRoleAssignments 'Microsoft.Graph/appRoleAssignedTo@v1.0'
     resourceId: actors_graphServicePrincipal.id
   }
 ]
-module actors_containerApplication 'br/public:avm/res/app/container-app:0.22.1' = {
+module actors_containerApplication 'br/public:avm/res/app/container-app:0.23.0' = {
   dependsOn: [containerEnvironment_privateEndpoint]
   params: {
     activeRevisionsMode: 'Single'
@@ -2894,7 +2845,7 @@ module actors_containerApplication 'br/public:avm/res/app/container-app:0.22.1' 
             value: 'https://${resources.api.storage.private.name}.table.${environment().suffixes.storage}'
           }
         ]
-        image: '${containerRegistry!.outputs.loginServer}/web-actors:latest'
+        image: empty(actorsImage) ? '${containerRegistry!.outputs.loginServer}/web-actors:latest' : actorsImage
         name: 'main'
         probes: [
           {
@@ -2939,7 +2890,7 @@ module actors_containerApplication 'br/public:avm/res/app/container-app:0.22.1' 
     ingressTargetPort: 8080
     ingressTransport: 'auto'
     // On a public environment, only the VNet's own egress (the NAT gateway prefix the Functions
-    // subnet routes through) may reach the silo; layered with X-Internal-Api-Key and the
+    // subnet routes through) may reach the silo; layered with Entra Actors.Invoke and the
     // DataProtection-bound escrow. An internal environment needs no ingress filter.
     ipSecurityRestrictions: (containerEnvironmentIsInternal
       ? []
@@ -2974,12 +2925,12 @@ module actors_containerApplication 'br/public:avm/res/app/container-app:0.22.1' 
       minReplicas: 1
     }
     secrets: []
-    tags: resources.actors.?tags
+    tags: union(tags, resources.actors.?tags ?? {})
     volumes: []
     workloadProfileName: 'Consumption'
   }
 }
-module actors_userAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
+module actors_userAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = {
   params: {
     enableTelemetry: enableTelemetry
     federatedIdentityCredentials: []
@@ -2989,14 +2940,14 @@ module actors_userAssignedIdentity 'br/public:avm/res/managed-identity/user-assi
     }
     name: resources.actors.userAssignedIdentity.name
     roleAssignments: []
-    tags: resources.actors.userAssignedIdentity.?tags
+    tags: union(tags, resources.actors.userAssignedIdentity.?tags ?? {})
   }
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // VS Marketplace Resources
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-module vsMarketplace_containerApplication 'br/public:avm/res/app/container-app:0.22.1' = {
+module vsMarketplace_containerApplication 'br/public:avm/res/app/container-app:0.23.0' = {
   dependsOn: [containerEnvironment_privateEndpoint]
   params: {
     activeRevisionsMode: 'Single'
@@ -3082,12 +3033,12 @@ module vsMarketplace_containerApplication 'br/public:avm/res/app/container-app:0
       minReplicas: 1
     }
     secrets: []
-    tags: resources.vsMarketplace!.?tags
+    tags: union(tags, resources.vsMarketplace!.?tags ?? {})
     volumes: []
     workloadProfileName: 'Consumption'
   }
 }
-module vsMarketplace_userAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.5.0' = {
+module vsMarketplace_userAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = {
   params: {
     enableTelemetry: enableTelemetry
     federatedIdentityCredentials: []
@@ -3097,7 +3048,7 @@ module vsMarketplace_userAssignedIdentity 'br/public:avm/res/managed-identity/us
     }
     name: resources.vsMarketplace.userAssignedIdentity.name
     roleAssignments: []
-    tags: resources.vsMarketplace.userAssignedIdentity.?tags
+    tags: union(tags, resources.vsMarketplace.userAssignedIdentity.?tags ?? {})
   }
 }
 
@@ -3134,23 +3085,74 @@ module accessManagement './accessManagement.bicep' = {
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// World Silo
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+module worldSiloIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = {
+  params: {
+    name: resources.worldSilo.userAssignedIdentity.name
+    location: location
+    enableTelemetry: enableTelemetry
+    lock: { kind: lockKind }
+    tags: union(tags, resources.worldSilo.userAssignedIdentity.?tags ?? {})
+  }
+}
+module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.4' = {
+  dependsOn: [publicFlexApi, containerRegistry]
+  params: {
+    configuration: resources.worldSilo
+    owner: worldSiloIdentity.outputs.principalId
+    storageAccountName: publicStorageAccounts[0].name
+    registryName: resources.containerRegistry!.name
+    publishingPrincipalId: userAssignedIdentityPublishing.properties.principalId
+  }
+}
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Outputs
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+output worldSiloIdentityResourceId string = worldSiloIdentity.outputs.resourceId
+output worldSiloClientId string = worldSiloIdentity.outputs.clientId
+output worldSiloOwner string = worldSiloIdentity.outputs.principalId
+output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
+output worldSiloConfiguration worldSiloConfigType = resources.worldSilo
+output worldMcpConfiguration object = worldMcp == null ? {} : {
+  certificateSecretName: worldMcp!.certificateSecretName
+  options: {
+    target: resources.worldSilo.worldName
+    publicUrl: 'https://${resources.worldSilo.dns.recordName}.${resources.worldSilo.dns.zoneName}/mcp'
+    listenUrl: 'https://0.0.0.0:8443'
+    issuer: '${environment().authentication.loginEndpoint}${tenant().tenantId}/v2.0'
+    audience: applicationRegistration.appId
+    scope: 'puck.operator'
+    authorizationScope: '${resources.applicationRegistration.identifierUri}/puck.operator'
+    subjectClaim: 'oid'
+    tenantId: tenant().tenantId
+    allowedSubjects: worldMcp!.allowedSubjects
+    certificatePath: '/configuration/mcp.pfx'
+    ...(empty(worldMcp!.?observations ?? []) ? {} : {
+      services: {
+        managedIdentityClientId: worldSiloIdentity.outputs.clientId
+        observations: worldMcp!.observations!
+      }
+    })
+  }
+}
+output deploymentLocation string = location
+output deploymentLockKind string = lockKind
+output deploymentTags tagsType = tags
+output deploymentResourceGroupName string = resourceGroup().name
+output actorsName string = resources.actors.name
+output deploymentKeyVaultName string = resources.keyVault.name
 output actorsEndpoint string = 'https://${actors_containerApplication.outputs.fqdn}'
 output configurationStoreEndpoint string = configurationStore.outputs.endpoint
 output containerRegistryEndpoint string = (containerRegistry.?outputs.loginServer ?? '')
 output functionApplicationEndpoint string = 'https://${publicFlexApi.outputs.function.defaultHostname}/api'
-// The literal puck.byteterrace.com host, not derived from resources.frontDoor.routes[].customDomains:
-// main.bicep has no structured "the" primary domain parameter (the .bicepparam file only ever
-// builds per-route customDomains strings), and OfficialContentRewrite is a fixed alias regardless
-// of which custom domain a request arrived on.
-output officialContentBaseUrl string = 'https://puck.byteterrace.com/official'
+output officialContentBaseUrl string = website.officialContentBaseUrl
+output websiteHostNames string[] = website.hostNames
 output officialContentContainerName string = frontDoor_userAssignedIdentity.outputs.principalId
 output postgreSqlEndpoint string = (postgreSql.?outputs.fqdn ?? '')
-// docs.yml's azure/login step consumes these two: AZURE_CLIENT_ID from clientId, plus the repo's
+// azure.yml's Azure/login step consumes these two: AZURE_CLIENT_ID from clientId, plus the repo's
 // own AZURE_TENANT_ID/AZURE_SUBSCRIPTION_ID variables — see CHECKLIST.md.
-output publishingIdentityClientId string = userAssignedIdentityPublishing.outputs.clientId
-output publishingIdentityPrincipalId string = userAssignedIdentityPublishing.outputs.principalId
+output publishingIdentityClientId string = userAssignedIdentityPublishing.properties.clientId
+output publishingIdentityPrincipalId string = userAssignedIdentityPublishing.properties.principalId
 output redisCacheEndpoint string = redisCache.outputs.endpoint
 output staticSiteEndpoint string = '${publicFlexApi.outputs.publicStorage[0].primaryBlobEndpoint}${storage.staticSiteContainerName}/index.html'
-

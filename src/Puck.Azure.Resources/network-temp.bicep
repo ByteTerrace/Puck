@@ -1,7 +1,7 @@
 param location string = resourceGroup().location
 param virtualNetworkResourceId string = '/subscriptions/fd49ea67-135b-449f-a62c-3e4b8d26d3d6/resourceGroups/byteterrace/providers/Microsoft.Network/virtualNetworks/bytrcvnetp000'
 
-module dnsResolver 'br/public:avm/res/network/dns-resolver:0.5.6' = {
+module dnsResolver 'br/public:avm/res/network/dns-resolver:0.5.8' = {
   params: {
     enableTelemetry: false
     inboundEndpoints: [
@@ -16,7 +16,7 @@ module dnsResolver 'br/public:avm/res/network/dns-resolver:0.5.6' = {
     virtualNetworkResourceId: virtualNetworkResourceId
   }
 }
-module puplicIpAddress 'br/public:avm/res/network/public-ip-address:0.12.0' = {
+module puplicIpAddress 'br/public:avm/res/network/public-ip-address:0.13.0' = {
   params: {
     availabilityZones: [
       1
@@ -35,7 +35,7 @@ module puplicIpAddress 'br/public:avm/res/network/public-ip-address:0.12.0' = {
     skuTier: 'Regional'
   }
 }
-module vpnGateway 'br/public:avm/res/network/virtual-network-gateway:0.10.1' = {
+module vpnGateway 'br/public:avm/res/network/virtual-network-gateway:0.12.0' = {
   params: {
     allowRemoteVnetTraffic: false
     allowVirtualWanTraffic: false

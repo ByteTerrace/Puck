@@ -71,8 +71,29 @@ The agent projects are an optional extension family, not members of the base wor
 | `src/Puck.World.AgentHarness` | The optional Microsoft Agent Framework adapter | `WorldAgentHarness`, `WorldAgentHarnessOptions`; constrained `puck_*` tools over the bridge, Harness approvals on mutations, caller-supplied skills and `IChatClient`, no provider credentials or lifecycle policy |
 
 `Puck.World`, its core tests, Schema, Protocol, Server, Client, Console, and Addons must not reference either agent
-project. An agent-capable composition root opts into them from above; agent lifecycle commands and an MCP adapter,
-if built, also live in that extension layer.
+project. An agent-capable composition root opts into them from above. The Operator MCP adapter lives in
+`Puck.Mcp`, referenced by CLI, never base World or the standalone silo. CLI installs `AddPuckMcp` into the public
+`WorldSiloApplication.RunAsync` composition for `puck mcp --silo <silo.json> --http <remote.json>`; the silo
+exposes only Hosting's neutral `IControlSessionHost`. World installs the `Puck.Hosting` local control endpoint only
+when the host Console issues `world.control start`; `stop` and `status` manage its live lifetime. Attach with
+`puck mcp --profile operator --attach <printed-file>` on Windows or Linux x64. The file protects a mutual-authenticated
+loopback capability for the current OS user, including its other processes/elevation levels. Each connection has
+one bounded, dedicated Console session. Exec preserves ordinary result uncertainty; capture uses the same
+session's `InvokeAsync` barrier and the exact render request's completion, with off-pump waiting and temporary
+artifact cleanup. Host deadlines remain enforced even when an injected session ignores cancellation; invalid
+host results are `unknown`. MCP results carry the same schema-backed metadata as JSON text and structured
+content; invalid tool arguments return tool errors. The adapter bounds UTF-8 input and pending replies and
+closes both stdio streams on shutdown; malformed input or stalled output exits with failure.
+Cancellation/EOF close ingress without stopping World or its recordings. Remote Operator uses
+`puck mcp --http <configuration.json>` with HTTPS, OIDC/JWT validation and explicit subject grants.
+Both transports select MCP 2026-07-28; remote HTTP is stateless with caller-bound application attachment
+handles (`puck_attach`/`puck_detach`). Four attachments and four active HTTP requests are admitted; idle
+expiry and cancellation release bindings. Entra uses exact tenant issuer, API audience, oid/tid and delegated
+scp; authorizationScope can advertise the fully qualified scope separately. Live grant removal closes attachments
+and active service requests. Optional owned-host `services` settings install delegated Azure observation reads;
+their assertions remain request-confined and their field/subject grants are separate. Participant tools and
+delegated cloud writes remain uninstalled. Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Cli.Tests` and the real-host smoke described in
+[`Puck.Mcp`](../../../src/Puck.Mcp/README.md) when changing this attachment seam.
 
 `src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core
 (`Puck.Audio.Mixing` — `AudioMixer`/`VoiceSynth`/
@@ -122,6 +143,30 @@ mutation-kind catalog), and the overlay capacity the composition root hands
 current developer reference — start there for narrative depth this skill
 deliberately does not duplicate.
 
+## Host provider boundary
+
+Cloud-specific implementations belong in extensions. The silo selects persistence
+and retirement observers through `WorldExtensionRegistry`, using opaque provider
+settings. `WorldSiloHost` consumes a supplied `ObjectStorageTarget`; its lifecycle
+service consumes `IWorldHostRetirementObserver`. Metadata polling, event types and
+credential handling stay in `Puck.World.Azure`, referenced only by composition.
+The compiled-output architecture gate denies Azure SDK API use in Schema, Protocol, Server, and Client. Neither simulation nor replay executes physical host retirement. The silo README
+owns provider-neutral configuration; the Azure README owns Azure provider keys.
+
+## Production silo verification
+
+Azure CI packages `Assets/worlds/puck.world.json` and its referenced neighbours
+with `puck world prepare`; hosted references use canonical world file
+names. The storage-neighbour resolver parses and migrates the composed document
+with state-expression binding, then reduces it to seam facts; it does not validate
+the neighbour's unrelated local settings or recursively prove its adjacencies.
+Hosted activation awaits root and neighbour storage reads before validating the
+loaded world. Failed drain saves can be retried; closed ingress stays frozen.
+`build/Azure.cs test-world-container` boots the primary Puck row, verifies a durable
+checkpoint and the expected QUIC key, then replaces the container against the
+same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
+Pinned activation waits for host startup and establishes its initial checkpoint;
+failure stops the host. `docs/ci.md` owns Azure resource and deployment policy.
 ## Cross-cutting contracts (every task)
 
 **Preserve determinism.** Use no wall clock, RNG, or float in simulation state;

@@ -4,6 +4,7 @@ type publicDnsZoneType = {
 }
 
 param lockKind ('CanNotDelete' | 'None' | 'ReadOnly') = 'CanNotDelete'
+param tags { *: string } = {}
 param zones { *: publicDnsZoneType }
 
 var digestAlgorithmType = 2
@@ -31,6 +32,7 @@ resource publicDnsZones 'Microsoft.Network/dnsZones@2018-05-01' = [
   for zone in zonesWithMetadata: {
     location: 'global'
     name: zone.value
+    tags: tags
   }
 ]
 @onlyIfNotExists()

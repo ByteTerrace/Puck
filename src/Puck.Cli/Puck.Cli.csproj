@@ -1,7 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <AssemblyName>Puck.Cli</AssemblyName>
+        <!-- Roslyn workspace loading and BenchmarkDotNet require runtime code generation. -->
         <IsAotCompatible>false</IsAotCompatible>
+        <IsPackable>true</IsPackable>
+        <PackAsTool>true</PackAsTool>
+        <ToolCommandName>puck</ToolCommandName>
+        <PackageId>ByteTerrace.Puck.Cli</PackageId>
+        <Description>Puck developer tools: source analysis, world authoring, build automation, and shared-version NuGet releases.</Description>
+        <PackageTags>puck;cli;dotnet-tool;development;nuget</PackageTags>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
         <OutputType>Exe</OutputType>
         <PuckKind>Tool</PuckKind>
@@ -18,6 +25,7 @@
         <PackageReference Include="Resharp" Version="[1.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\Puck.World.Silo\Puck.World.Silo.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <!-- The self-update canary's throwaway root/issuing/subject signing chain (CanaryCommand.cs), the same
              primitive the federation identity chain already mints for its own legs. -->
@@ -25,7 +33,7 @@
         <!-- The `puck bench world` lane's EngineTicks.PerRate — the same per-rate tick-width conversion the World
              test fixtures step by. -->
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
-        <!-- puck publish (Publish/PublishCommand.cs) and the self-update canary's stub-boot leg mode both build/read
+        <!-- puck publish (PublishRelease/PublishCommand.cs) and the self-update canary's stub-boot leg mode both build/read
              puck.release.v1 documents (ReleaseManifest/ReleaseCanonicalizer) and mint an AttestationReleaseVerifier
              — reusing the one type rather than a second hand-rolled mirror of it (rule 8). -->
         <ProjectReference Include="..\Puck.Launcher\Puck.Launcher.csproj" />
@@ -40,7 +48,9 @@
              WorldBenchServer constructs the real host, with no registered engines, exactly like
              tests/Puck.World.Tests/Fixtures.cs's FreshServer does. -->
         <ProjectReference Include="..\Puck.World.Addons\Puck.World.Addons.csproj" />
+        <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <ProjectReference Include="..\Puck.Mcp\Puck.Mcp.csproj" />
     </ItemGroup>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">
         <Copy
