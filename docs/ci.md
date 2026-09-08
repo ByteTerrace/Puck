@@ -24,8 +24,11 @@ and its dependency locks together.
 The solution build produces the browser AppBundle for the CLI integration tests,
 which resolve it inside the current checkout. GPU tests skip when D3D11 reports an unsupported
 device, including the video capability needed by the shared-texture cleanup test.
-The native timing benchmark is tagged `Category=Performance` and excluded
-from this shared-runner gate; its three-second ceiling remains available locally.
+Native and SDF culling timing benchmarks are tagged `Category=Performance` and
+excluded from this shared-runner gate; their calibrated ceilings remain available
+locally. Deterministic SDF result-equivalence laws still run in CI. CLI process
+interop fixtures run without competing Roslyn/packaging test collections in the
+same assembly; production authentication deadlines are unchanged.
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The workflow uploads the MSBuild binary log, available TRX results, and
 test diagnostics even when a later step fails.
@@ -342,6 +345,9 @@ script checks the Graph grants before changing resources. See Microsoft's
 [app-role assignment permission requirements](https://learn.microsoft.com/en-us/graph/api/serviceprincipal-post-approleassignedto?view=graph-rest-1.0).
 
 One concurrency lock covers platform reconciliation and application deployment.
+The World rollout waits up to ten minutes for an in-flight Azure automatic repair
+to finish before selecting its worker. Multiple fully provisioned workers still
+refuse deployment; a deleting VM is never silently treated as absent.
 Once admitted, a run checks that its commit is still the branch tip. It consumes
 only artifacts from its own run, verifies the exact commit, every path and hash,
 and the complete file inventory, including hidden Functions payload files. An

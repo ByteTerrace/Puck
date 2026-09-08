@@ -9,6 +9,7 @@ using Xunit;
 
 namespace Puck.Cli.Tests;
 
+[Collection("MCP process interop")]
 public sealed class McpInteropTests {
     private static CancellationToken Token => TestContext.Current.CancellationToken;
     private static string Cli => typeof(CliPaths).Assembly.Location;
@@ -144,3 +145,8 @@ public sealed class McpInteropTests {
         public void Dispose() { }
     }
 }
+
+// Real process startup and bounded loopback authentication must not compete with this
+// assembly's CPU-heavy Roslyn/packaging fixtures. The production deadlines stay unchanged.
+[CollectionDefinition("MCP process interop", DisableParallelization = true)]
+public sealed class McpProcessInteropCollection;

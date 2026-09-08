@@ -666,7 +666,7 @@ internal static class AzureAutomation {
 
             foreach (var replacement in replacements) { script = script.Replace(oldValue: replacement.Key, newValue: replacement.Value, comparisonType: StringComparison.Ordinal); }
             if (Regex.IsMatch(input: script, pattern: "__[A-Z_]+__")) { throw new InvalidDataException(message: "Unresolved VM bootstrap placeholder."); }
-            var workers = await WorkersAsync(group: group, scaleSet: Text(value: configuration["name"]));
+            var workers = await StableWorkersAsync(group: group, scaleSet: Text(value: configuration["name"]));
 
             if (workers.Length > 1) { throw new InvalidOperationException(message: "This release requires one authoritative worker; reconcile existing placement before deployment."); }
             string ssh;
@@ -837,6 +837,20 @@ internal static class AzureAutomation {
         var workers = await AzJsonAsync("vm", "list", "-g", group, "-o", "json");
 
         return workers.AsArray().Where(predicate: worker => (((string?)worker?["virtualMachineScaleSet"]?["id"])?.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ("/" + scaleSet)) == true)).ToArray();
+    }
+    private static async Task<JsonNode?[]> StableWorkersAsync(string group, string scaleSet) {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var announced = false;
+        while (true) {
+            var workers = await WorkersAsync(group, scaleSet);
+            var transitioning = workers.Any(worker => ((string?)worker?["provisioningState"]) is "Creating" or "Updating" or "Deleting");
+            if (!transitioning) { return workers; }
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(started) >= TimeSpan.FromMinutes(10)) {
+                throw new InvalidOperationException("Azure worker replacement did not settle within ten minutes; no release was applied.");
+            }
+            if (!announced) { Console.WriteLine("Waiting for Azure's existing worker replacement to settle before selecting the authoritative worker."); announced = true; }
+            await Task.Delay(TimeSpan.FromSeconds(5));
+        }
     }
     private static async Task TestWorldReleaseAsync() {
         var outputs = ((Options.ContainsKey(key: "resource-group") && Options.ContainsKey(key: "scale-set")) ? null : Outputs());
@@ -1028,6 +1042,8 @@ internal static class AzureAutomation {
                 image, "--silo", "/fixture/silo.json");
             try {
                 var checkpoint = "";
+                var ready = false;
+                var healthReason = "readiness has not answered";
 
                 for (var attempt = 0; (attempt < 90); attempt++) {
                     if (await DockerAsync("inspect", "silo-smoke", "--format", "{{.State.Running}}") != "true") { throw new InvalidOperationException(message: "Silo exited before checkpointing the primary world."); }
@@ -1035,16 +1051,15 @@ internal static class AzureAutomation {
                     if ((checkpoint.Length != 0) && (checkpoint != previous)) {
                         try {
                             using var health = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/healthz");
-
-                            if (health.IsSuccessStatusCode) { break; }
-                        } catch (HttpRequestException) { }
+                            healthReason = await health.Content.ReadAsStringAsync();
+                            if (healthReason.Length > 4096) { healthReason = healthReason[..4096]; }
+                            if (health.IsSuccessStatusCode) { ready = true; break; }
+                        } catch (HttpRequestException error) { healthReason = error.Message; }
                     }
                     await Task.Delay(delay: TimeSpan.FromSeconds(seconds: 2));
                 }
                 if ((checkpoint.Length == 0) || (checkpoint == previous)) { throw new InvalidOperationException(message: $"Silo boot {boot} did not activate and checkpoint Puck."); }
-                using var readiness = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/healthz");
-
-                readiness.EnsureSuccessStatusCode();
+                if (!ready) { throw new InvalidOperationException($"Silo boot {boot} checkpointed but did not become ready: {healthReason}"); }
                 using var liveness = await Http.GetAsync(requestUri: "http://127.0.0.1:8081/livez");
 
                 liveness.EnsureSuccessStatusCode();
