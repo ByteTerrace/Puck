@@ -38,11 +38,12 @@
              $(NuGetPackageRoot) is not yet defined when this file is imported. -->
         <WindowsSdkNetRefVersion>10.0.22621.57</WindowsSdkNetRefVersion>
 
-        <!-- The SDK synthesizes "foo.cs.csproj" for a file-based program. Keep its entry point and
-             explicit directives, linking only the BCL helpers below; repository analyzers and project
-             verification inputs apply to ordinary projects. -->
+        <!-- The SDK synthesizes "foo.cs.csproj" for a file-based program, while the IDE language server's
+             virtual project system synthesizes "foo.csproj" for standalone .cs files that have no physical
+             project on disk. Keep its entry point and explicit directives, linking only the BCL helpers
+             below; repository analyzers and project verification inputs apply to ordinary projects. -->
         <IsFileBasedProgram
-            Condition="$(MSBuildProjectFullPath.EndsWith('.cs.csproj'))"
+            Condition="$(MSBuildProjectFullPath.EndsWith('.cs.csproj')) OR (!Exists('$(MSBuildProjectFullPath)') AND Exists('$([System.IO.Path]::ChangeExtension($(MSBuildProjectFullPath), &quot;.cs&quot;))'))"
         >true</IsFileBasedProgram>
 
         <!-- A file-based program's project is synthesized, so it is the one shape in the tree that cannot
@@ -70,7 +71,7 @@
         <Compile Include="$(MSBuildThisFileDirectory)build\RepositoryPaths.cs" Link="RepositoryPaths.cs" />
         <Compile Include="$(MSBuildThisFileDirectory)build\AutomationProcess.cs" Link="AutomationProcess.cs" />
     </ItemGroup>
-    <ItemGroup Condition="'$(MSBuildProjectName)' == 'FormatSubmit.cs'">
+    <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true' AND ('$(MSBuildProjectName)' == 'FormatSubmit.cs' OR '$(MSBuildProjectName)' == 'FormatSubmit')">
         <!-- Keep the privileged GitHub submitter SDK-only, with its policy also compiled by tests. -->
         <Compile Include="$(MSBuildThisFileDirectory)build\FormatSubmission.cs" Link="FormatSubmission.cs" />
     </ItemGroup>

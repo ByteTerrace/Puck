@@ -25,10 +25,21 @@ The download requires .NET 10 and suitable graphics hardware to run. A build
 artifact is not a signed installer or a verified GPU rendering session.
 SDK roll-forward is disabled: selecting a newer SDK on a hosted runner changes
 implicit linker dependencies and invalidates the locked restore. Upgrade the SDK
-and its dependency locks together.
+and its dependency locks together. Regenerate locks across the entire solution:
+unchanged consumer locks can pass restore while retaining older assemblies than
+their project dependencies, which fails compilation. Update container SDK pins
+in the same change.
+The producer enables `PuckCaptureTestArtifacts`: MSBuild records each evaluated
+test project's output and optional run settings, and the archive carries that
+manifest alongside its source identity. Missing test outputs fail artifact production.
+The compiled archive stores SHA-256-identical files once and records their other
+destinations. Restore validates the complete path and copy map before writing,
+then recreates ordinary independent files; symbols and runtime layouts are preserved.
 **Test compiled solution** (`build.yml`) restores the compiled output archive into
-a fresh Windows checkout, verifies its commit and platform, restores dependency
-metadata, and runs tests with `--no-build`. CLI integration tests resolve the
+a fresh Windows checkout, verifies its commit and platform, and runs its test
+assembly manifest through `dotnet test <assembly.dll>`. This consumer does not
+evaluate the solution, restore project dependencies, or install WASM workloads.
+Missing, duplicate, or empty test selections fail. CLI integration tests resolve the
 producer's browser AppBundle inside that checkout. GPU tests skip when D3D11 reports an unsupported
 device, including the video capability needed by the shared-texture cleanup test.
 Native and SDF culling timing benchmarks are tagged `Category=Performance` and
@@ -41,6 +52,18 @@ assembly retain their configured concurrency; production deadlines are unchanged
 Tests stop after fifteen minutes without a test event and collect a small hang
 dump. The producer uploads the MSBuild binary log; the test consumer uploads
 available TRX results and diagnostics even when a later step fails.
+Every assembly must discover tests; hardware-dependent cases may still skip.
+Project run settings remain part of test execution, including the Maths suite's
+default tier selection. Direct assembly execution must not silently broaden that selection.
+
+Dependency caches accelerate locked NuGet restores in the producer, formatting,
+and documentation/application jobs. They use the active projects' lock files,
+SDK pin, and tool manifest as inputs. Candidate CLI installation retains its
+exclusive artifact feed and private package cache. Application assembly also
+caches npm downloads against its workspace lock file and still runs `npm ci`.
+Already-compressed package and build-log uploads disable redundant compression.
+Superseded Azure PR validation is cancelled at the parent workflow; production
+deployment retains its separate serialization and is never cancelled by that rule.
 
 **Verify runtime behavior** (`verify.yml`) runs the producer's HGB (Humble GamingBrick)
 and AGB (Advanced GamingBrick) binaries

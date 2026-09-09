@@ -30,6 +30,12 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            src/*/packages.lock.json
+            tests/*/packages.lock.json
+            global.json
+            .config/dotnet-tools.json
       - name: Install Puck CLI
         uses: ./.github/actions/setup-puck
         with:

@@ -22,6 +22,12 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            src/*/packages.lock.json
+            tests/*/packages.lock.json
+            global.json
+            .config/dotnet-tools.json
       - name: Install WebAssembly tools
         run: dotnet workload install wasm-tools
       - name: Install pinned DXC
@@ -38,7 +44,7 @@ jobs:
           dotnet build build/FormatSubmit.cs -c Release
           dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
       - name: Compile the solution once
-        run: dotnet build Puck.slnx -c Release --no-restore -bl:artifacts/build.binlog
+        run: dotnet build Puck.slnx -c Release --no-restore -p:PuckCaptureTestArtifacts=true -bl:artifacts/build.binlog
       - name: Package the compiled assemblies without rebuilding
         run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll nuget pack artifacts/packages --no-build
       - name: Publish the compiled Functions and browser payloads
@@ -60,6 +66,7 @@ jobs:
         with:
           name: nuget-packages
           path: artifacts/packages/*.*nupkg
+          compression-level: 0
           if-no-files-found: error
       - name: Upload the compiled Roslyn analyzers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -98,4 +105,5 @@ jobs:
         with:
           name: build-diagnostics
           path: artifacts/build.binlog
+          compression-level: 0
           if-no-files-found: warn

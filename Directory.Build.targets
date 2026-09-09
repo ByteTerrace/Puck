@@ -29,4 +29,15 @@
     <!-- NuGet packaging policy for blessed projects. Imported here (after each project's body) so a
          csproj's own <IsPackable>true</IsPackable> is visible to the flag-guarded groups inside. -->
     <Import Project="$(MSBuildThisFileDirectory)build\Packaging.targets" />
+
+    <!-- The artifact producer records evaluated test outputs, including any future test projects or TFMs.
+         Consumers run these assemblies directly and do not need to evaluate the solution or install workloads. -->
+    <Target Name="PuckRecordTestAssembly" AfterTargets="Build"
+            Condition="'$(PuckCaptureTestArtifacts)' == 'true' AND '$(IsTestProject)' == 'true' AND '$(TargetFramework)' != ''">
+        <WriteLinesToFile File="$(TargetDir)Puck.TestAssembly" Lines="$(TargetFileName)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <WriteLinesToFile Condition="'$(RunSettingsFilePath)' != ''" File="$(TargetDir)Puck.TestSettings"
+                          Lines="$([System.IO.Path]::GetRelativePath('$(MSBuildThisFileDirectory)', '$(RunSettingsFilePath)'))"
+                          Overwrite="true" WriteOnlyWhenDifferent="true" />
+        <Delete Condition="'$(RunSettingsFilePath)' == ''" Files="$(TargetDir)Puck.TestSettings" />
+    </Target>
 </Project>

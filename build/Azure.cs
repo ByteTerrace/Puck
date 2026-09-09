@@ -355,7 +355,9 @@ internal static class AzureAutomation {
             if (((string?)item!["key"]) == "Onboarding:ActorsBaseUrl") { item["value"] = Value(key: "actorsEndpoint", outputs: outputs).DeepClone(); }
         }
         Write(path: "artifacts/production-configuration.json", value: configuration);
-        await AzAsync("appconfig", "kv", "import", "--name", "bytrcappcsp000", "--auth-mode", "login", "--source", "file", "--path", "artifacts/production-configuration.json", "--format", "json", "--profile", "appconfig/kvset", "--yes", "-o", "none");
+        // This imports the public application configuration and returns no values. Preserve CLI errors;
+        // credential-reading commands continue to use captured output through AzAsync.
+        await RunAsync("az", ["appconfig", "kv", "import", "--name", "bytrcappcsp000", "--auth-mode", "login", "--source", "file", "--path", "artifacts/production-configuration.json", "--format", "json", "--profile", "appconfig/kvset", "--yes", "-o", "none"]);
         var group = Option(fallback: "byteterrace", key: "resource-group");
         var before = await AzJsonAsync("containerapp", "show", "--name", "bytrccap001", "-g", group, "-o", "json");
 

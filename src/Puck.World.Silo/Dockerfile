@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.400 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
 WORKDIR /source
 ADD https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2607/linux_dxc_2026_07_29.x86_x64.tar.gz /tmp/dxc.tar.gz
 RUN echo '55665c87824051ed4774ff3280a79ccbbb7d39243b9736ca5e98222134112d54  /tmp/dxc.tar.gz' | sha256sum -c - \
