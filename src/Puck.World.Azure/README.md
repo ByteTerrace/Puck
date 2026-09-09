@@ -287,6 +287,9 @@ The same `AzureDelegatedServices` adapter accepts optional
 `onboardingUrl: "https://<existing-api-host>/api/self-onboard"`, with an empty
 `observations` array when only onboarding is installed. `puck_onboard` and
 attachment admission call this Function endpoint using an OBO API token.
+Because MCP and Functions share the API registration, this exchange requests
+`<application-guid>/.default`; Entra rejects the `api://` form for this same-app
+exchange with `AADSTS90009`. The delegated `user_impersonation` permission is unchanged.
 The Function owns account provisioning, partition routing and protected user
 escrow. Responses are bounded to 4 KiB and must name `Ready`, `Migrating` or
 `Onboarding`; redirects and failed consent are refused. MCP retains no assertion

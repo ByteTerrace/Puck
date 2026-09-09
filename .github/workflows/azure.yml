@@ -1,9 +1,11 @@
-name: Release the Actors onboarding correction
-on:
+name: Release the World onboarding OBO correction
+'on':
   push:
-    branches: [codex/azure-ci]
+    branches:
+      - codex/azure-ci
 permissions:
   contents: read
+  actions: read
   id-token: write
 concurrency:
   group: azure-production-deployment
@@ -11,63 +13,110 @@ concurrency:
 env:
   CI: true
   DOTNET_NOLOGO: true
-  RELEASE_COMMIT: 574b4bf96dfe15ddbc2ade5d4be6bb99bd3c8f19
+  RELEASE_COMMIT: e38dcf1844e880b8804e49829eb3ce4b33bc0c4f
+  WORLD_COMMIT: 457491b38569680989b0832edb5ef2e89e4fd845
 jobs:
   deploy:
-    name: Build, verify and deploy the Actors correction
+    name: Verify and deploy the World OBO correction
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    environment: Puck
+    timeout-minutes: 40
+    environment:
+      name: Puck
+      url: https://puck.byteterrace.com
     steps:
-      - name: Check out the corrected source
+      - name: Check out the corrected OBO source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 574b4bf96dfe15ddbc2ade5d4be6bb99bd3c8f19
+          ref: 457491b38569680989b0832edb5ef2e89e4fd845
+      - name: Verify the original gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/ByteTerrace/Puck/actions/runs/34310894770 --jq .head_sha)" = "$RELEASE_COMMIT"
+          gh api --paginate repos/ByteTerrace/Puck/actions/runs/34310894770/jobs > "$RUNNER_TEMP/gates.json"
+          jq -e '[.jobs[] | select(.name != "Deploy and verify Azure production")] | length > 0 and all(.status == "completed" and (.conclusion == "success" or .conclusion == "skipped"))' "$RUNNER_TEMP/gates.json"
       - name: Install the pinned .NET SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
           global-json-file: global.json
-      - name: Sign in with fresh OIDC for image publication
+      - name: Download verified deployment artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          path: artifacts
+          run-id: 34310894770
+          github-token: ${{ github.token }}
+          name: azure-production-release
+      - name: Download the verified CLI package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: nuget-packages
+          path: artifacts/cli-feed
+          run-id: 34310894770
+          github-token: ${{ github.token }}
+      - name: Download the already deployed Actors digest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: actors-onboarding-correction
+          path: artifacts/actors-correction
+          run-id: 34337290946
+          github-token: ${{ github.token }}
+      - name: Install the compiled CLI and restore deployment records
+        run: |
+          dotnet run -c Release --file build/Toolchain.cs -- install-candidate artifacts/cli-feed
+          dotnet run -c Release --file build/InstallQuic.cs
+          printf '%s' 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERocTMpWvGo8zh8+mgvzE0uYU0kEJuD3OQUWrbK408tiYzBC4i8Uj33SIFjFjdYI7csx2lNlnLZSje8cQu1s9kQ==' | base64 -d > artifacts/world-silo.public-key
+
+          cp artifacts/actors-correction/web-actors.digest artifacts/web-actors.digest
+      - name: Build the World image once
+        run: docker build --file src/Puck.World.Silo/Dockerfile --tag "puck/world-silo:$WORLD_COMMIT" .
+      - name: Verify TLS execution, World activation and checkpoint recovery
+        run: dotnet run -c Release --file build/Azure.cs -- test-world-container --image "puck/world-silo:$WORLD_COMMIT"
+      - name: Sign in with fresh OIDC for World image publication
         uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Build and publish the Actors image once
-        run: dotnet run -c Release --file build/Azure.cs -- build-actors --no-restart
-      - name: Verify the built Actors image
-        run: |
-          docker run -d --name actors -p 8080:8080 "puck/web-actors:$RELEASE_COMMIT"
-          trap 'docker logs actors; docker rm -f actors' EXIT
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://localhost:8080/healthz; then exit 0; fi
-            sleep 2
+      - name: Publish the verified World image and prepared worlds
+        run: dotnet run -c Release --file build/Azure.cs -- stage-world-image --commit "$WORLD_COMMIT"
+      - name: Sign in with fresh OIDC for transactional World deployment
+        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify the Actors revision before World deployment
+        run: |-
+          for attempt in $(seq 1 30); do
+            az containerapp show -g byteterrace -n bytrccap001 -o json > artifacts/actors-current.json
+            if jq -e --arg image "$(cat artifacts/web-actors.digest)" '.properties | .provisioningState == "Succeeded" and .latestReadyRevisionName == .latestRevisionName and .template.containers[0].image == $image' artifacts/actors-current.json; then exit 0; fi
+            sleep 5
           done
           exit 1
-      - name: Sign in with fresh OIDC for deployment
+      - name: Admit the runner to the signing-key vault
+        id: vault
+        run: dotnet run -c Release --file build/Azure.cs -- vault-access
+      - name: Deploy the corrected World image transactionally
+        run: dotnet run -c Release --file build/Azure.cs -- deploy-world
+      - name: Restore signing-key vault restrictions
+        if: always() && steps.vault.outcome != 'skipped'
+        run: dotnet run -c Release --file build/Azure.cs -- vault-access --restore
+      - name: Sign in with fresh OIDC for final production verification
         uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Deploy the verified immutable Actors image
-        run: |
-          mkdir -p artifacts
-          registry=$(az acr show -n bytrccrp000 --query loginServer -o tsv)
-          digest=$(az acr repository show -n bytrccrp000 --image "web-actors:$RELEASE_COMMIT" --query digest -o tsv)
-          test -n "$digest"
-          printf '%s\n' "$registry/web-actors@$digest" > artifacts/web-actors.digest
-          az containerapp update -g byteterrace -n bytrccap001 --image "$(cat artifacts/web-actors.digest)" --revision-suffix "git-${RELEASE_COMMIT:0:12}" -o none
-          az containerapp show -g byteterrace -n bytrccap001 -o json > artifacts/actors-release.json
-          jq -e --arg image "$(cat artifacts/web-actors.digest)" '.properties | .provisioningState == "Succeeded" and .latestReadyRevisionName == .latestRevisionName and .template.containers[0].image == $image' artifacts/actors-release.json
-          curl --fail --retry 5 --retry-delay 3 --silent https://bytrccap001.purplerock-ff1b5f1a.southcentralus.azurecontainerapps.io/healthz
-          curl --fail --retry 5 --retry-delay 3 --silent https://byteterrace.com/api/health-check | jq -e '.status == "Healthy"'
-      - name: Upload the Actors deployment record
+      - name: Verify production through Front Door
+        run: dotnet run -c Release --file build/Azure.cs -- test-production --commit "$RELEASE_COMMIT"
+      - name: Upload production verification records
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: actors-onboarding-correction
+          name: azure-onboarding-correction
           path: |
-            artifacts/web-actors.digest
-            artifacts/actors-release.json
-          if-no-files-found: ignore
+            artifacts/production-*.json
+            artifacts/release-source.json
+            artifacts/*.digest
+            artifacts/functions-scm-*.json
+          if-no-files-found: error

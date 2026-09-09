@@ -17,7 +17,7 @@ public sealed class AzureDelegatedObservationTests {
     [InlineData("arm")]
     public async Task ChallengesPreserveClaimsAndNeverCompleteProtectedWork(string source) {
         using var exchange = new ExchangeHandler { Challenge = source == "exchange", ArmChallenge = source == "arm",
-            ExpectedScope = source == "arm" ? "https://management.azure.com//.default" : $"api://{Application}/.default" };
+            ExpectedScope = source == "arm" ? "https://management.azure.com//.default" : $"{Application}/.default" };
         using var http = new HttpClient(exchange);
         using var platform = new OnboardingHandler("Ready") { Challenge = source == "onboarding" };
         using var service = new AzureDelegatedServices(Tenant, Application, source == "arm" ? Settings : OnboardingSettings, new AssertionCredential(), new HttpClientTransport(http), platform);
@@ -41,7 +41,7 @@ public sealed class AzureDelegatedObservationTests {
     [InlineData("Migrating")]
     [InlineData("Onboarding")]
     public async Task OnboardingUsesExistingApiWithAnExchangedUserToken(string state) {
-        using var exchange = new ExchangeHandler { ExpectedScope = $"api://{Application}/.default" };
+        using var exchange = new ExchangeHandler { ExpectedScope = $"{Application}/.default" };
         using var http = new HttpClient(exchange);
         using var platform = new OnboardingHandler(state);
         using var service = new AzureDelegatedServices(Tenant, Application, OnboardingSettings, new AssertionCredential(), new HttpClientTransport(http), platform);
@@ -52,7 +52,7 @@ public sealed class AzureDelegatedObservationTests {
 
     [Fact]
     public async Task OnboardingRefusedConsentAndExpiredAssertionsNeverReachPlatform() {
-        using var exchange = new ExchangeHandler { ExpectedScope = $"api://{Application}/.default", Deny = true };
+        using var exchange = new ExchangeHandler { ExpectedScope = $"{Application}/.default", Deny = true };
         using var http = new HttpClient(exchange);
         using var platform = new OnboardingHandler("Ready");
         using var service = new AzureDelegatedServices(Tenant, Application, OnboardingSettings, new AssertionCredential(), new HttpClientTransport(http), platform);
@@ -152,7 +152,7 @@ public sealed class AzureDelegatedObservationTests {
                 Assert.Equal("on_behalf_of", form["requested_token_use"]);
                 Assert.Equal("validated-user-assertion", form["assertion"]);
                 Assert.Equal("federated-client-assertion", form["client_assertion"]);
-                Assert.Contains(ExpectedScope, form["scope"]);
+                Assert.Contains(ExpectedScope, form["scope"].Split(' ', StringSplitOptions.RemoveEmptyEntries));
                 Exchanges++;
                 if (Challenge) {
                     return Response(HttpStatusCode.BadRequest, JsonSerializer.Serialize(new { error = "invalid_grant", error_description = "MFA required", error_codes = new[] { 50076 }, claims = Claims }));
