@@ -1,23 +1,123 @@
-name: Diagnose Azure storage access
+name: Resume verified Azure release
 on:
   push:
     branches: [codex/azure-ci]
 permissions:
   contents: read
+  actions: read
   id-token: write
+concurrency:
+  group: azure-production-deployment
+  cancel-in-progress: false
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+  RELEASE_COMMIT: e38dcf1844e880b8804e49829eb3ce4b33bc0c4f
 jobs:
-  diagnose:
+  deploy:
+    name: Continue verified Azure deployment
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    environment: Puck
+    timeout-minutes: 60
+    environment:
+      name: Puck
+      url: https://puck.byteterrace.com
     steps:
-      - name: Sign in with the deployment identity
+      - name: Check out the verified artifact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: e38dcf1844e880b8804e49829eb3ce4b33bc0c4f
+      - name: Verify the original gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/ByteTerrace/Puck/actions/runs/34310894770 --jq .head_sha)" = "$RELEASE_COMMIT"
+          gh api --paginate repos/ByteTerrace/Puck/actions/runs/34310894770/jobs > "$RUNNER_TEMP/gates.json"
+          jq -e '[.jobs[] | select(.name != "Deploy and verify Azure production")] | length > 0 and all(.status == "completed" and (.conclusion == "success" or .conclusion == "skipped"))' "$RUNNER_TEMP/gates.json"
+      - name: Install the pinned .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          global-json-file: global.json
+      - name: Download verified deployment artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: azure-*
+          path: artifacts/source
+          run-id: 34310894770
+          github-token: ${{ github.token }}
+      - name: Download the verified CLI package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: nuget-packages
+          path: artifacts/cli-feed
+          run-id: 34310894770
+          github-token: ${{ github.token }}
+      - name: Install the compiled CLI and restore deployment records
+        run: |
+          dotnet run -c Release --file build/Toolchain.cs -- install-candidate artifacts/cli-feed
+          .tmp/puck-ci/puck bundle verify artifacts/source/azure-applications "$RELEASE_COMMIT"
+          cp artifacts/source/azure-production-release/production-*.json artifacts/
+          cp artifacts/source/azure-production-release/*.digest artifacts/
+          cp artifacts/source/azure-production-release/release-source.json artifacts/
+          cp -a artifacts/source/azure-applications artifacts/azure
+          dotnet run -c Release --file build/InstallQuic.cs
+      - name: Sign in for World deployment with fresh OIDC
         uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Reproduce the world snapshot listing without changing storage
+      - name: Check storage and Functions access before draining World
         run: |
-          az version
-          az storage blob list --account-name bytrcstp001 --container-name 5bee6ebb-db15-4fde-b283-3426d06c2d2c --auth-mode login --num-results '*' --query 'length(@)' -o json
+          az storage blob list --account-name bytrcstp001 --container-name 5bee6ebb-db15-4fde-b283-3426d06c2d2c --auth-mode login --num-results '*' --query '[].name' -o json > "$RUNNER_TEMP/world-blobs.json"
+          jq 'length' "$RUNNER_TEMP/world-blobs.json"
+          az rest --method get --url 'https://management.azure.com/subscriptions/fd49ea67-135b-449f-a62c-3e4b8d26d3d6/resourceGroups/byteterrace/providers/Microsoft.Web/sites/bytrcfuncp000/config/web?api-version=2024-04-01' -o none
+      - name: Admit the runner to the signing-key vault
+        id: vault
+        run: dotnet run -c Release --file build/Azure.cs -- vault-access
+      - name: Deploy the verified World image
+        run: dotnet run -c Release --file build/Azure.cs -- deploy-world
+      - name: Restore signing-key vault restrictions
+        if: always() && steps.vault.outcome != 'skipped'
+        run: dotnet run -c Release --file build/Azure.cs -- vault-access --restore
+      - name: Refresh OIDC for Functions deployment
+        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Admit the runner to the Functions deployment endpoint
+        id: scm
+        run: dotnet run -c Release --file build/Azure.cs -- functions-access
+      - name: Deploy the verified Functions payload
+        uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656
+        with:
+          app-name: bytrcfuncp000
+          package: artifacts/azure/functions
+          sku: flexconsumption
+          remote-build: false
+      - name: Restore Functions deployment endpoint restrictions
+        if: always() && steps.scm.outcome != 'skipped'
+        run: dotnet run -c Release --file build/Azure.cs -- functions-access --restore
+      - name: Require ready services before publishing the website
+        run: dotnet run -c Release --file build/Azure.cs -- test-production --commit "$RELEASE_COMMIT" --before-static-publication
+      - name: Refresh OIDC for website publication
+        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Publish the verified website and official content
+        run: dotnet run -c Release --file build/Azure.cs -- publish-static
+      - name: Verify production through Front Door
+        run: dotnet run -c Release --file build/Azure.cs -- test-production --commit "$RELEASE_COMMIT"
+      - name: Upload production verification records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: azure-production-release
+          path: |
+            artifacts/production-*.json
+            artifacts/release-source.json
+            artifacts/*.digest
+            artifacts/functions-scm-*.json
+          if-no-files-found: error
