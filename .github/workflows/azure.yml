@@ -1,4 +1,4 @@
-name: Finish verified Azure publication
+name: Verify the deployed Azure release
 'on':
   push:
     branches:
@@ -16,9 +16,9 @@ env:
   RELEASE_COMMIT: e38dcf1844e880b8804e49829eb3ce4b33bc0c4f
 jobs:
   deploy:
-    name: Publish and verify the existing release
+    name: Verify the deployed Azure release
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 15
     environment:
       name: Puck
       url: https://puck.byteterrace.com
@@ -26,7 +26,7 @@ jobs:
       - name: Check out the verified artifact source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 801b8fe300a9c3f9da8c9b3f195cc123b7c97167
+          ref: 9306ce77a29544d6ad5f05054300cf1243c39318
       - name: Verify the original gates
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,7 +41,7 @@ jobs:
       - name: Download verified deployment artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          pattern: azure-*
+          pattern: azure-production-release
           path: artifacts/source
           run-id: 34310894770
           github-token: ${{ github.token }}
@@ -55,11 +55,9 @@ jobs:
       - name: Install the compiled CLI and restore deployment records
         run: |
           dotnet run -c Release --file build/Toolchain.cs -- install-candidate artifacts/cli-feed
-          .tmp/puck-ci/puck bundle verify artifacts/source/azure-applications "$RELEASE_COMMIT"
           cp artifacts/source/azure-production-release/production-*.json artifacts/
           cp artifacts/source/azure-production-release/*.digest artifacts/
           cp artifacts/source/azure-production-release/release-source.json artifacts/
-          cp -a artifacts/source/azure-applications artifacts/azure
           dotnet run -c Release --file build/InstallQuic.cs
           printf '%s' 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERocTMpWvGo8zh8+mgvzE0uYU0kEJuD3OQUWrbK408tiYzBC4i8Uj33SIFjFjdYI7csx2lNlnLZSje8cQu1s9kQ==' | base64 -d > artifacts/world-silo.public-key
       - name: Sign in with fresh OIDC
@@ -68,16 +66,6 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Require ready services before publishing the website
-        run: dotnet run -c Release --file build/Azure.cs -- test-production --commit "$RELEASE_COMMIT" --before-static-publication
-      - name: Refresh OIDC for website publication
-        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Publish the verified website and official content
-        run: dotnet run -c Release --file build/Azure.cs -- publish-static
       - name: Verify production through Front Door
         run: dotnet run -c Release --file build/Azure.cs -- test-production --commit "$RELEASE_COMMIT"
       - name: Upload production verification records
