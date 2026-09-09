@@ -175,7 +175,8 @@ public sealed partial class ConfinedStorageLawTests {
         CreateDirectoryLink(stagedLink, outside);
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(Cancel);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var swaps = Task.Run(() => {
+        // This blocking race loop needs its own thread, even when other tests occupy the pool.
+        var swaps = Task.Factory.StartNew(() => {
             while (!stop.IsCancellationRequested) {
                 try { Directory.Move(slot, moved); }
                 catch (IOException) { Thread.Yield(); continue; }
@@ -185,7 +186,7 @@ public sealed partial class ConfinedStorageLawTests {
                     MoveWithRetry(moved, slot);
                 }
             }
-        }, Cancel);
+        }, Cancel, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         try {
             await started.Task.WaitAsync(TimeSpan.FromSeconds(5), Cancel);
             for (var i = 0; i < 200; i++) {
