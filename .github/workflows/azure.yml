@@ -41,10 +41,10 @@ jobs:
       - name: Download verified deployment artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          pattern: azure-production-release
-          path: artifacts/source
+          path: artifacts
           run-id: 34310894770
           github-token: ${{ github.token }}
+          name: azure-production-release
       - name: Download the verified CLI package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -55,9 +55,6 @@ jobs:
       - name: Install the compiled CLI and restore deployment records
         run: |
           dotnet run -c Release --file build/Toolchain.cs -- install-candidate artifacts/cli-feed
-          cp artifacts/source/azure-production-release/production-*.json artifacts/
-          cp artifacts/source/azure-production-release/*.digest artifacts/
-          cp artifacts/source/azure-production-release/release-source.json artifacts/
           dotnet run -c Release --file build/InstallQuic.cs
           printf '%s' 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERocTMpWvGo8zh8+mgvzE0uYU0kEJuD3OQUWrbK408tiYzBC4i8Uj33SIFjFjdYI7csx2lNlnLZSje8cQu1s9kQ==' | base64 -d > artifacts/world-silo.public-key
       - name: Sign in with fresh OIDC
