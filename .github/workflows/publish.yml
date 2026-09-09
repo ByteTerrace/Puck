@@ -28,7 +28,7 @@ concurrency:
 jobs:
   gate:
     name: Validate release source and version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       version: ${{ steps.read.outputs.version }}
@@ -102,7 +102,7 @@ jobs:
   prepare:
     name: Prepare the selected package batch
     needs: [gate, pack]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out source
@@ -121,10 +121,8 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Install Puck CLI
-        uses: ./.github/actions/setup-puck
-        with:
-          artifact: nuget-packages
+      - name: Install the CLI from the downloaded package batch
+        run: dotnet run -c Release --file build/Toolchain.cs -- install-candidate packages
 
       - name: Select and validate the release batch
         env:
@@ -143,7 +141,7 @@ jobs:
     name: Publish the verified package batch
     needs: [gate, prepare, build, verify, docs]
     if: inputs.publish
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write

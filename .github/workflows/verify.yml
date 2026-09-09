@@ -1,10 +1,10 @@
 name: Verify runtime behavior
 run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'frontier' || inputs.lane || 'gate' }} — ${{ github.ref_name }}
 
-# The emulator gates. `hgb` runs on every change: the Humble GamingBrick battery's self-contained stages plus every
+# The emulator matrix. HGB runs on every change: the Humble GamingBrick battery's self-contained stages plus every
 # ledger row recorded as passing, against the corpora pinned in src/Puck.HumbleGamingBrick.Post/corpora.json, and
-# fails the build on any regression. `agb` runs the Advanced GamingBrick battery the same way against its own
-# corpora; its BIOS-dependent stages skip here. `hgb-frontier` runs nightly and on request: the rows recorded as failing
+# fails the build on any regression. AGB runs the Advanced GamingBrick battery the same way against its own
+# corpora; its BIOS-dependent stages skip here. The frontier runs nightly and through the manual lane: rows recorded as failing
 # or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded so a
 # ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries are
 # pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check` and
@@ -44,112 +44,69 @@ jobs:
     name: Build .NET artifacts
     if: ${{ !inputs.prebuilt && github.event_name != 'schedule' }}
     uses: ./.github/workflows/artifacts.yml
-  hgb:
-    name: Verify HGB emulation
+  gaming-bricks:
+    name: Verify ${{ matrix.name }} emulation
     needs: artifacts
     if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: HGB
+            brick: hgb
+            project: Puck.HumbleGamingBrick.Post
+            timeout: 30
+            arguments: --lane ${{ github.event.inputs.lane || 'gate' }} --require-assets
+            artifact: hgb-post-${{ github.event.inputs.lane || 'gate' }}
+          - name: AGB
+            brick: agb
+            project: Puck.AdvancedGamingBrick.Post
+            timeout: 20
+            arguments: ''
+            artifact: agb-post
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: Install the pinned .NET SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-
       - name: Restore corpus cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.local/share/Puck/corpora
-          key: corpora-hgb-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
-
+          key: corpora-${{ matrix.brick }}-${{ hashFiles(format('src/{0}/corpora.json', matrix.project)) }}
       - name: Download HGB and AGB binaries
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: emulator-batteries
           path: artifacts/batteries
-
-      - name: Fetch pinned HGB corpora
-        run: dotnet artifacts/batteries/hgb/Puck.HumbleGamingBrick.Post.dll --fetch-corpora
-
-      - name: Run the selected HGB evidence lane
-        run: dotnet artifacts/batteries/hgb/Puck.HumbleGamingBrick.Post.dll --lane ${{ github.event.inputs.lane || 'gate' }} --require-assets --artifacts artifacts/hgb-post
-
-      - name: Summarize HGB results
+      - name: Fetch pinned ${{ matrix.name }} corpora
+        run: dotnet artifacts/batteries/${{ matrix.brick }}/${{ matrix.project }}.dll --fetch-corpora
+      - name: Run the ${{ matrix.name }} battery
+        run: dotnet artifacts/batteries/${{ matrix.brick }}/${{ matrix.project }}.dll ${{ matrix.arguments }} --artifacts artifacts/${{ matrix.brick }}-post
+      - name: Summarize ${{ matrix.name }} results
         if: always()
         run: |
           {
             echo '```'
-            cat artifacts/hgb-post/post-report.txt
+            cat artifacts/${{ matrix.brick }}-post/post-report.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload HGB results
+      - name: Upload ${{ matrix.name }} results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: hgb-post-${{ github.event.inputs.lane || 'gate' }}
-          path: artifacts/hgb-post
+          name: ${{ matrix.artifact }}
+          path: artifacts/${{ matrix.brick }}-post
           if-no-files-found: error
-
-
-  agb:
-    name: Verify AGB emulation
-    needs: artifacts
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
-
-      - name: Restore corpus cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.local/share/Puck/corpora
-          key: corpora-agb-${{ hashFiles('src/Puck.AdvancedGamingBrick.Post/corpora.json') }}
-
-      - name: Download HGB and AGB binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: emulator-batteries
-          path: artifacts/batteries
-
-      - name: Fetch pinned AGB corpora
-        run: dotnet artifacts/batteries/agb/Puck.AdvancedGamingBrick.Post.dll --fetch-corpora
-
-      - name: Run the battery
-        run: dotnet artifacts/batteries/agb/Puck.AdvancedGamingBrick.Post.dll --artifacts artifacts/agb-post
-
-      - name: Summarize AGB results
-        if: always()
-        run: |
-          {
-            echo '```'
-            cat artifacts/agb-post/post-report.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload AGB results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: agb-post
-          path: artifacts/agb-post
-          if-no-files-found: error
-
 
   hgb-frontier:
     name: Measure unresolved HGB cases
     if: ${{ github.event_name == 'schedule' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - name: Check out source
@@ -196,7 +153,7 @@ jobs:
     name: Verify the deployed WebAssembly payload
     needs: artifacts
     if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out source
@@ -253,7 +210,7 @@ jobs:
     name: Verify generated schema and registry
     needs: artifacts
     if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out source

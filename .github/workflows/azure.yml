@@ -130,6 +130,9 @@ jobs:
         if: steps.current.outputs.deploy == 'true'
         shell: bash
         run: puck bundle verify artifacts/source/azure-applications "$GITHUB_SHA"
+      - name: Check the runner's AzCopy
+        if: steps.current.outputs.deploy == 'true'
+        run: azcopy --version
       - name: Sign in to Azure with OIDC
         uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
         if: steps.current.outputs.deploy == 'true'
@@ -219,6 +222,12 @@ jobs:
       - name: Publish the website and stable official content
         if: steps.current.outputs.deploy == 'true'
         shell: bash
+        env:
+          AZCOPY_AUTO_LOGIN_TYPE: AZCLI
+          AZCOPY_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZCOPY_CONCURRENCY_VALUE: AUTO
+          AZCOPY_LOG_LOCATION: ${{ github.workspace }}/artifacts/azcopy
+          AZCOPY_JOB_PLAN_LOCATION: ${{ github.workspace }}/artifacts/azcopy
         run: dotnet run -c Release --file build/Azure.cs -- publish-static
       - name: Verify production through Front Door
         if: steps.current.outputs.deploy == 'true'
@@ -235,6 +244,7 @@ jobs:
             artifacts/*.digest
             artifacts/previous-actor-release.json
             artifacts/functions-scm-*.json
+            artifacts/azcopy/*.log
           if-no-files-found: error
 
   applications:
@@ -342,11 +352,8 @@ jobs:
         run: |
           docker run -d --name actors -p 8080:8080 "puck/web-actors:$GITHUB_SHA"
           trap 'docker logs actors; docker rm -f actors' EXIT
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent http://localhost:8080/healthz; then exit 0; fi
-            sleep 2
-          done
-          exit 1
+          curl --fail --silent --show-error --retry 60 --retry-all-errors \
+            --retry-delay 2 --retry-max-time 120 --max-time 5 http://localhost:8080/healthz
       - name: Install the pinned .NET SDK
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         if: matrix.image == 'world-silo'

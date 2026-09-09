@@ -12,10 +12,16 @@ try {
     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(scheme: "Bearer", parameter: Required(name: "GH_TOKEN"));
     client.DefaultRequestHeaders.UserAgent.ParseAdd(input: "Puck-Formatter/1.0");
     client.DefaultRequestHeaders.Add(name: "X-GitHub-Api-Version", value: "2022-11-28");
-    await new Puck.FormatSubmission(client: client).RunAsync(repository: Required(name: "GITHUB_REPOSITORY"), runId: long.Parse(s: Required(name: "FORMAT_RUN_ID"), provider: System.Globalization.CultureInfo.InvariantCulture), graphUrl: Required(name: "GITHUB_GRAPHQL_URL"));
+    await new Puck.FormatSubmission(client: client, report: Report).RunAsync(repository: Required(name: "GITHUB_REPOSITORY"), runId: long.Parse(s: Required(name: "FORMAT_RUN_ID"), provider: System.Globalization.CultureInfo.InvariantCulture), graphUrl: Required(name: "GITHUB_GRAPHQL_URL"));
     return 0;
 } catch (Exception error) {
     Console.Error.WriteLine(value: $"format submit: {error.Message}");
     return 1;
 }
 static string Required(string name) => (Environment.GetEnvironmentVariable(variable: name) ?? throw new InvalidOperationException(message: $"Missing {name}."));
+static void Report(string message) {
+    Console.WriteLine(value: message);
+    if (Environment.GetEnvironmentVariable(variable: "GITHUB_STEP_SUMMARY") is { Length: > 0 } summary) {
+        File.AppendAllText(contents: (message + "\n\n"), path: summary);
+    }
+}

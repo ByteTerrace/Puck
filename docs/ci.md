@@ -61,6 +61,9 @@ and documentation/application jobs. They use the active projects' lock files,
 SDK pin, and tool manifest as inputs. Candidate CLI installation retains its
 exclusive artifact feed and private package cache. Application assembly also
 caches npm downloads against its workspace lock file and still runs `npm ci`.
+Application assembly fails on high or critical npm advisories before building
+the dashboard. Vite bundles packages declared as development dependencies, so
+the audit covers every dependency; moderate advisories remain visible in its output.
 Already-compressed package and build-log uploads disable redundant compression.
 Superseded Azure PR validation is cancelled at the parent workflow; production
 deployment retains its separate serialization and is never cancelled by that rule.
@@ -74,8 +77,9 @@ known failing or inconclusive HGB cases separately from release gates.
 The nightly frontier builds its own battery for that scheduled run. Test reports
 are retained as artifacts and job summaries on every event, including
 fork pull requests. Verification needs only a read-only repository token.
-HGB and AGB payload directories and report artifacts retain their `hgb` and `agb`
-names. Linux world verification invokes each compiled assembly's portable xUnit
+HGB and AGB share a job matrix while retaining their separate lanes, timeouts,
+corpus caches, and `hgb` and `agb` report artifacts.
+Linux world verification invokes each compiled assembly's portable xUnit
 runner directly, retains XML results, and refuses a filter that executes no tests.
 It does not require a Linux apphost or recompile the Windows-produced assemblies.
 
@@ -88,6 +92,8 @@ image. Artifact consumers download immutable artifacts from their own workflow
 run, and missing artifacts fail rather than starting a fallback build.
 The dashboard's schema generator and schema-driven tests share the installed
 candidate CLI; neither requires a second publish into `src/Puck.Cli/publish`.
+Studio integration tests consume the stable official tree in the release bundle
+through `PUCK_TEST_OFFICIAL_MANIFEST`, avoiding a second development content build.
 The `compiler-analyzers` artifact supplies DocFX's Roslyn dependency to both
 application assembly and documentation generation. A standalone documentation
 run invokes the artifact producer first; a release reuses its existing producer.
@@ -115,7 +121,8 @@ flowchart LR
 
 `format.yml` runs on every pull request. It builds the candidate Puck CLI and
 the solution, formats only the PR's added or modified C# files, verifies that a
-second pass would make no further changes, and compiles the result. Renamed
+second pass would make no further changes, and recompiles only when formatting
+changed files. Renamed
 files use their new paths. Generated source and `experimental/` are excluded.
 An unchanged file is never swept into the formatting commit. Standalone C# apps
 are formatted in disposable SDK projects with their declared references and
@@ -128,6 +135,8 @@ continuing work locally. A stale formatting run cannot overwrite a newer push:
 the submission checks the PR's base and head and uses GitHub's atomic
 `expectedHeadOid` commit operation. Protected, default, base, and deployment
 branches are not bypassed. A branch shared by multiple open PRs is left alone.
+Only the trusted submission entry point writes GitHub's job summary; unit tests
+capture reports locally so simulated PR actions cannot appear as real CI actions.
 
 The formatter runs with a read-only token. A separate `workflow_run` job runs
 the SDK-only `build/FormatSubmit.cs` from the default branch and reads the
@@ -287,7 +296,8 @@ gh workflow run publish.yml --ref main -f packages=all -F publish=true
 ```
 
 Every run builds, tests, packs, and validates documentation for its own commit.
-Packing still checks the full opted-in package set. `puck nuget prepare`
+Preparation installs the candidate CLI from the package batch it already
+downloaded. Packing still checks the full opted-in package set. `puck nuget prepare`
 then selects exactly the requested IDs from those artifacts. An omitted internal
 dependency must already be available on NuGet.org at the shared version; otherwise
 preparation fails with the missing ID. Include it and its dependencies, or use
@@ -457,12 +467,39 @@ The website owns `$web/index.html`. `/docs` selects its documentation page;
 World Studio. DocFX and the documentation overview occupy `/reference/`, with
 shared styles under `/_theme/`. They ship inside the application bundle, never
 from a competing Docs publisher. The dashboard staging script supplies Brotli
-host files. Official objects retain their manifest media types and immutable
-hash paths; the publisher uploads objects before the stable manifest, website
-dependencies before its entry point, and the release marker last. Existing
-hashed assets remain available to open clients. Transient upload failures retry
-within a bound. Services must pass readiness checks before website publication;
-publishing finishes with a Front Door purge and live checks.
+host files. The publisher refuses a staged site missing an entry point, the
+shell, or a hashed asset directory before it uploads anything. Official objects
+keep their manifest media types and immutable hash paths through AzCopy `copy`
+batched by media type, objects before the stable manifest, existing blobs
+skipped. The website is mirrored with AzCopy `sync` on `--compare-hash=MD5
+--put-md5`, so artifact timestamps decide nothing and only changed bytes
+transfer: the hashed directories `assets/` and `portal/assets/` first, then the
+whole tree without deletion so the new shell is live, then a deletion pass, then
+the release marker. The deletion pass keeps the hashed files listed by the
+public `release.json` and `release-previous.json`; the publisher writes the
+latter from the marker it replaces and leaves it alone when rerunning the same
+release, so the protected set is always the last distinct release. A session
+that loaded those files, its workers included, keeps working across one
+release; a session two releases old reloads itself once through Vite's
+`vite:preloadError` event when a chunk is gone. Media types come from AzCopy's extension table. Front Door's `portal`
+rule set owns the caching contract: hashed directories are cached for a year
+and marked `immutable`, every other website path is `no-cache` and never cached
+at the edge, and `release.json` is `no-store`. Nothing is ever purged. A hashed
+blob must not carry a non-cacheable `Cache-Control` of its own: Front Door's
+cache override applies only to responses the origin marks cacheable, and sync
+never rewrites an unchanged blob's headers. Blob versioning on the public account keeps
+overwritten and deleted website and official-manifest bytes; a lifecycle rule
+expires those versions with the soft-delete window. AzCopy owns transfer
+concurrency and retries, with automatic concurrency tuning in CI.
+`AZCOPY_AUTO_LOGIN_TYPE=AZCLI` and `AZCOPY_TENANT_ID` reuse the current
+OIDC-backed Azure CLI session without storage keys or SAS tokens; set them when
+invoking `publish-static` locally, with AzCopy on `PATH`. Transfer error logs
+join the release artifacts. Services must pass readiness checks before website
+publication. Live checks then request the release marker, the shell, an entry
+point, the federation manifest, and every hashed script the shell references
+twice each through Front Door, asserting media type, `Cache-Control`, and an
+`X-Cache` edge hit for hashed scripts only, on every host the portal route
+serves.
 
 The primary Puck world uses a Flexible VM scale set, `bytrcvmssp000`, at
 `play.puck.byteterrace.com:7825` (PUCK on a telephone keypad). A static public IP and UDP load balancer preserve

@@ -44,10 +44,12 @@ function repositoryRoot() {
 const root = repositoryRoot();
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const mainMjs = path.join(appBundleDir, 'main.mjs');
-const officialDir = path.join(root, 'artifacts', 'official');
-const officialManifest = path.join(officialDir, 'dev', 'manifest.json');
+const officialManifest = process.env.PUCK_TEST_OFFICIAL_MANIFEST || path.join(root, 'artifacts', 'official', 'dev', 'manifest.json');
+const officialDir = path.dirname(path.dirname(officialManifest));
+const officialChannel = path.basename(path.dirname(officialManifest));
 
 const HAS_FIXTURES = fs.existsSync(mainMjs) && fs.existsSync(officialManifest);
+assert.ok(!process.env.PUCK_TEST_OFFICIAL_MANIFEST || HAS_FIXTURES, 'Explicit release fixtures must exist');
 
 if (!HAS_FIXTURES) {
   test(`StudioShell (SKIPPED: no local AppBundle/official fixtures under ${appBundleDir} / ${officialDir} — ` +
@@ -78,7 +80,7 @@ if (!HAS_FIXTURES) {
   function resolvedOfficial() {
     return resolveOfficial({
       VITE_PUCK_OFFICIAL_BASE: pathToFileURL(officialDir + path.sep).href,
-      VITE_PUCK_OFFICIAL_CHANNEL: 'dev',
+      VITE_PUCK_OFFICIAL_CHANNEL: officialChannel,
     });
   }
 

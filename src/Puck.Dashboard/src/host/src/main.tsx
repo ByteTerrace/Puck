@@ -44,6 +44,29 @@ window.addEventListener("hashchange", () => {
     window.dispatchEvent(new CustomEvent("byteterrace-share"));
   }
 });
+// A session that outlives its release asks for hashed chunks the publisher has
+// since deleted (the portal's chunks raise this event on the same window).
+// Reload once per location within a minute; a repeat is a genuine build defect
+// and surfaces as the original error.
+window.addEventListener("vite:preloadError", (event) => {
+  const key = "byteterrace.preloadRecovery";
+  const now = Date.now();
+
+  try {
+    const previous = JSON.parse(sessionStorage.getItem(key) ?? "null");
+
+    if (previous?.href === location.href && now - previous.at < 60_000) {
+      return;
+    }
+
+    sessionStorage.setItem(key, JSON.stringify({ at: now, href: location.href }));
+  } catch {
+    return;
+  }
+
+  event.preventDefault();
+  location.reload();
+});
 
 const urlSearchParams = new URLSearchParams(location.search);
 const msalConfiguration = {

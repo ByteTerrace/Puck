@@ -10,8 +10,9 @@ internal sealed class FormatSubmission {
     private const int MaximumBytes = ((16 * 1024) * 1024);
 
     private readonly HttpClient m_client;
+    private readonly Action<string> m_report;
 
-    internal FormatSubmission(HttpClient client) { m_client = client; }
+    internal FormatSubmission(HttpClient client, Action<string> report) { m_client = client; m_report = report; }
 
     internal async Task RunAsync(string repository, long runId, string graphUrl) {
         var prefix = $"repos/{repository}";
@@ -196,10 +197,5 @@ internal sealed class FormatSubmission {
             return output.ToArray();
         }
     }
-    private static void Report(string message) {
-        Console.WriteLine(value: message);
-        if (Environment.GetEnvironmentVariable(variable: "GITHUB_STEP_SUMMARY") is { Length: > 0 } summary) {
-            File.AppendAllText(contents: (message + "\n\n"), path: summary);
-        }
-    }
+    private void Report(string message) => m_report(message);
 }

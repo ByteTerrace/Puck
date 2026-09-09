@@ -20,6 +20,9 @@ try {
 internal static class AzureAutomation {
     private static readonly HttpClient Http = new(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = TimeSpan.FromMinutes(minutes: 5) };
     private static readonly Dictionary<string, string> Options = new(comparer: StringComparer.Ordinal);
+    // KEEP IN SYNC with the `SpaCacheHashed` rule in src/Puck.Azure.Resources/main.bicep.
+    private static readonly string[] HashedWebsiteDirectories = ["assets", "portal/assets"];
+    private static readonly string[] WebsiteEntrypoints = ["host-entry.js", "sw.js", "portal/portal-entry.js", "portal/mf-manifest.json"];
 
     internal static async Task<int> ExecuteAsync(string[] args) {
         if (args is [] or ["-h" or "--help"]) {
@@ -178,13 +181,13 @@ internal static class AzureAutomation {
         }
         await PuckAsync("official", "build", "--out", Path.Combine(path1: output, path2: "official"), "--channel", "stable", "--engine", "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
         await PuckAsync("official", "verify", "--base", Path.Combine(path1: output, path2: "official"), "--channel", "stable", "--expect-commit", commit);
-        await PuckAsync("official", "build", "--out", "artifacts/official", "--channel", "dev", "--engine", "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
         await PuckAsync("world", "prepare", "src/Puck.World/Assets/worlds", Path.Combine(path1: output, path2: "silo-worlds"));
         var dashboard = Path.GetFullPath(path: "src/Puck.Dashboard/src");
 
         Environment.SetEnvironmentVariable(value: "stable", variable: "VITE_PUCK_OFFICIAL_CHANNEL");
         Environment.SetEnvironmentVariable(value: "https://puck.byteterrace.com/official", variable: "VITE_PUCK_OFFICIAL_BASE");
-        foreach (var command in new string[][] { ["ci"], ["--workspace", "portal", "run", "check:types"], ["run", "build"], ["--workspace", "portal", "run", "test"], ["run", "stage"] }) {
+        Environment.SetEnvironmentVariable(value: Path.GetFullPath(path: Path.Combine(path1: output, path2: "official", path3: "stable", path4: "manifest.json")), variable: "PUCK_TEST_OFFICIAL_MANIFEST");
+        foreach (var command in new string[][] { ["ci"], ["audit", "--audit-level=high"], ["--workspace", "portal", "run", "check:types"], ["run", "build"], ["--workspace", "portal", "run", "test"], ["run", "stage"] }) {
             await RunAsync(executable: "npm", arguments: command, directory: dashboard);
         }
         CopyDirectory(source: "src/Puck.Dashboard/dist-deploy", destination: Path.Combine(path1: output, path2: "dashboard-storage"));
@@ -501,12 +504,22 @@ internal static class AzureAutomation {
         var release = Read(path: $"{bundle}/release.json");
 
         if (((string?)release["channel"]) != "stable") { throw new InvalidDataException(message: "Production requires the stable content channel."); }
+        var site = LocalPath(path: $"{bundle}/dashboard-storage");
+        var missing = WebsiteEntrypoints.Append(element: "index.html").Where(predicate: name => !File.Exists(path: $"{site}/{name}"))
+            .Concat(second: HashedWebsiteDirectories.Where(predicate: name => !Directory.Exists(path: $"{site}/{name}"))).ToArray();
+
+        if (missing.Length != 0) { throw new InvalidDataException(message: $"The staged website is missing {string.Join(separator: ", ", values: missing)}."); }
         var outputs = Outputs();
         var container = Text(value: Value(key: "officialContentContainerName", outputs: outputs));
 
         if (!Regex.IsMatch(input: container, pattern: "\\A[a-f0-9-]{36}\\z")) { throw new InvalidDataException(message: "Missing official-content container."); }
-        var endpoint = new Uri(uriString: Text(value: Value(key: "staticSiteEndpoint", outputs: outputs))).GetLeftPart(part: UriPartial.Authority);
-        var token = await TokenAsync(resource: "https://storage.azure.com/");
+        var staticSite = new Uri(uriString: Text(value: Value(key: "staticSiteEndpoint", outputs: outputs)));
+        var endpoint = staticSite.GetLeftPart(part: UriPartial.Authority);
+        var website = $"{endpoint}/{(staticSite.AbsolutePath.Split(separator: '/') is [_, { Length: > 0 } name, ..] ? name : throw new InvalidDataException(message: "Missing static-site container."))}";
+        var address = WebsiteAddress(outputs: outputs);
+        var marker = await ReleaseMarkerAsync(uri: (address + "/release.json"));
+        var previousMarker = await ReleaseMarkerAsync(uri: (address + "/release-previous.json"));
+        var retained = HashedWebsiteFiles(marker: marker).Concat(second: HashedWebsiteFiles(marker: previousMarker)).Distinct(comparer: StringComparer.Ordinal).ToArray();
         var manifest = Read(path: $"{bundle}/official/stable/manifest.json");
         var types = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
         var objects = new[] { manifest["worldSchemaBundle"] }.Concat(second: manifest["documents"]!.AsArray()).Concat(second: manifest["composed"]!.AsArray()).Concat(second: manifest["assets"]!.AsArray()).Concat(second: manifest["engine"]!["files"]!.AsArray());
@@ -516,47 +529,95 @@ internal static class AzureAutomation {
             var type = Text(value: item["contentType"]);
 
             if (!Regex.IsMatch(input: path, pattern: "\\Aobjects/sha256/[a-f0-9]{2}/[a-f0-9]{64}\\z")) { throw new InvalidDataException(message: "Invalid official object path."); }
-            if (types.TryGetValue(key: path, value: out var previous) && (previous != type)) { throw new InvalidDataException(message: "Conflicting official media types."); }
+            if (types.TryGetValue(key: path, value: out var previousType) && (previousType != type)) { throw new InvalidDataException(message: "Conflicting official media types."); }
             types[path] = type;
         }
         var commit = Text(value: release["commit"]);
+        var official = $"{endpoint}/{container}/public/puck/official";
+        var staging = Directory.CreateTempSubdirectory(prefix: "puck-official-");
 
-        foreach (var item in types) {
-            await SendBlobAsync(endpoint: endpoint, container: container, name: $"public/puck/official/{item.Key}", file: $"{bundle}/official/{item.Key}", token: token, contentType: item.Value, cache: "public,max-age=31536000,immutable", commit: commit);
+        try {
+            // A copy shares one media type, and hash paths carry none, so each type is staged as its own tree.
+            foreach (var (group, index) in types.GroupBy(keySelector: item => item.Value).Select(selector: (group, index) => (group, index))) {
+                var tree = $"{LocalPath(path: staging.FullName)}/{index}";
+
+                foreach (var path in group.Select(selector: item => item.Key)) {
+                    var target = $"{tree}/{path}";
+
+                    Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
+                    File.Copy(sourceFileName: $"{bundle}/official/{path}", destFileName: target);
+                }
+                await CopyBlobsAsync(tree, official, group.Key, commit, immutable: true);
+            }
+        } finally { staging.Delete(recursive: true); }
+        await CopyBlobsAsync($"{bundle}/official/stable/manifest.json", $"{official}/stable/manifest.json", "application/json", commit);
+        // Front Door's `portal` rule set owns the website's caching and encoding headers
+        // (src/Puck.Azure.Resources/main.bicep); sync only carries bytes and inferred media types,
+        // and a hashed blob must not carry a non-cacheable Cache-Control or the edge override is skipped.
+        // Hash-named directories land first, the whole tree is mirrored so the new shell is live,
+        // and only then are retired files deleted. The hashed files of the release being replaced
+        // survive one more release: a session that loaded them, workers included, keeps working,
+        // and an older session recovers through the shell's reload on a failed chunk load. The
+        // replaced marker is kept as release-previous.json, unchanged by a rerun of the same
+        // release, so the protected set is always the last distinct release.
+        foreach (var directory in HashedWebsiteDirectories) {
+            await SyncBlobsAsync(source: $"{site}/{directory}", destination: $"{website}/{directory}", delete: false);
         }
-        await SendBlobAsync(endpoint: endpoint, container: container, name: "public/puck/official/stable/manifest.json", file: $"{bundle}/official/stable/manifest.json", token: token, contentType: "application/json", commit: commit);
-        var site = Path.GetFullPath(path: $"{bundle}/dashboard-storage");
+        await SyncBlobsAsync(source: site, destination: website, delete: false);
+        await SyncBlobsAsync(source: site, destination: website, delete: true, exclude: ["release.json", "release-previous.json", .. retained]);
+        if ((marker is not null) && (Text(value: marker["commit"]) != commit)) {
+            var replaced = Path.GetTempFileName();
 
-        foreach (var file in Directory.EnumerateFiles(path: site, searchOption: SearchOption.AllDirectories, searchPattern: "*").OrderBy(keySelector: file => (file == Path.Combine(path1: site, path2: "index.html"))).ThenBy(file => file, StringComparer.Ordinal)) {
-            var name = Path.GetRelativePath(path: file, relativeTo: site).Replace(newChar: '/', oldChar: '\\');
-            var encoding = (((name == "index.html") || name.StartsWith(comparisonType: StringComparison.Ordinal, value: "assets/")) ? "br" : "");
-
-            await SendBlobAsync(endpoint: endpoint, container: "$web", name: name, file: file, token: token, contentType: MediaType(path: file), encoding: encoding, commit: commit);
+            try {
+                File.WriteAllText(path: replaced, contents: marker.ToJsonString());
+                await CopyBlobsAsync(replaced, $"{website}/release-previous.json", "application/json", commit, cache: "no-store");
+            } finally { File.Delete(path: replaced); }
         }
-        await SendBlobAsync(endpoint: endpoint, container: "$web", name: "release.json", file: $"{bundle}/release.json", token: token, contentType: "application/json", cache: "no-store", commit: commit);
-        await AzAsync("afd", "endpoint", "purge", "-g", Option(fallback: "byteterrace", key: "resource-group"), "--profile-name", "bytrcfdp000", "--endpoint-name", "default", "--content-paths", "/*", "-o", "none");
+        await CopyBlobsAsync($"{bundle}/release.json", $"{website}/release.json", "application/json", commit, cache: "no-store");
     }
-    private static string MediaType(string path) => Path.GetExtension(path: path).ToLowerInvariant() switch {
-        ".html" => "text/html",
-        ".js" or ".mjs" => "application/javascript",
-        ".css" => "text/css",
-        ".json" or ".map" => "application/json",
-        ".svg" => "image/svg+xml",
-        ".png" => "image/png",
-        ".ico" => "image/x-icon",
-        ".woff" => "font/woff",
-        ".woff2" => "font/woff2",
-        ".ttf" => "font/ttf",
-        ".jpg" or ".jpeg" => "image/jpeg",
-        ".webp" => "image/webp",
-        ".gif" => "image/gif",
-        ".pdf" => "application/pdf",
-        ".xml" => "application/xml",
-        ".yml" or ".yaml" => "application/yaml",
-        ".wasm" => "application/wasm",
-        ".txt" => "text/plain",
-        _ => "application/octet-stream",
-    };
+    private static async Task<JsonNode?> ReleaseMarkerAsync(string uri) {
+        using var response = await Http.GetAsync(requestUri: uri);
+
+        if (response.StatusCode == HttpStatusCode.NotFound) { return null; }
+        response.EnsureSuccessStatusCode();
+        return (JsonNode.Parse(json: await response.Content.ReadAsStringAsync()) ?? throw new InvalidDataException(message: $"Empty release marker at {uri}."));
+    }
+    private static IEnumerable<string> HashedWebsiteFiles(JsonNode? marker) {
+        const string Prefix = "dashboard-storage/";
+
+        return (marker?["files"]?.AsArray() ?? [])
+            .Select(selector: file => Text(value: file!["path"]))
+            .Where(predicate: path => path.StartsWith(comparisonType: StringComparison.Ordinal, value: Prefix))
+            .Select(selector: path => path[Prefix.Length..])
+            .Where(predicate: path => HashedWebsiteDirectories.Any(predicate: directory => path.StartsWith(comparisonType: StringComparison.Ordinal, value: (directory + "/"))));
+    }
+    private static async Task SyncBlobsAsync(string source, string destination, bool delete, IEnumerable<string>? exclude = null) {
+        var hashes = Directory.CreateTempSubdirectory(prefix: "puck-azcopy-hashes-");
+
+        try {
+            // MD5 comparison: artifact extraction timestamps identify neither a release nor a rollback.
+            var arguments = new List<string> {
+                "sync", LocalPath(path: source), destination, "--from-to=LocalBlob", "--recursive=true", "--compare-hash=MD5", "--put-md5",
+                $"--delete-destination={(delete ? "true" : "false")}", "--local-hash-storage-mode=HiddenFiles",
+                $"--hash-meta-dir={hashes.FullName}", "--log-level=ERROR", "--output-level=essential",
+            };
+
+            // Excluded paths are neither uploaded nor deleted; the match is a relative-path prefix.
+            if (exclude is not null) { arguments.Add(item: $"--exclude-path={string.Join(separator: ';', values: exclude)}"); }
+            await RunAsync("azcopy", arguments);
+        } finally { hashes.Delete(recursive: true); }
+    }
+    private static Task CopyBlobsAsync(string source, string destination, string contentType, string commit, string cache = "no-cache", bool immutable = false) =>
+        // AzCopy owns concurrency, retries and transfer validation. Mutable paths always
+        // overwrite: extraction timestamps do not identify releases or safe rollbacks.
+        RunAsync("azcopy", [
+            "copy", LocalPath(path: source), destination, "--from-to=LocalBlob", "--as-subdir=false", "--recursive=true",
+            $"--overwrite={(immutable ? "false" : "true")}", $"--content-type={contentType}",
+            $"--cache-control={(immutable ? "public,max-age=31536000,immutable" : cache)}",
+            $"--metadata=commit={commit}", "--log-level=ERROR", "--output-level=essential",
+        ]);
+    // AzCopy refuses a local path that mixes separators.
+    private static string LocalPath(string path) => Path.GetFullPath(path: path).Replace(newChar: '/', oldChar: '\\');
     private static JsonObject SiloDocument(string owner, string world, string keyFile, JsonObject store, JsonNode? lifecycle = null) {
         var result = new JsonObject {
             ["schema"] = "puck.silo.def.v1",
@@ -1010,7 +1071,7 @@ internal static class AzureAutomation {
         var outputs = Outputs();
         var configuration = Value(key: "worldSiloConfiguration", outputs: outputs);
         var group = Text(value: Value(key: "deploymentResourceGroupName", outputs: outputs));
-        var address = Regex.Replace(input: Text(value: Value(key: "officialContentBaseUrl", outputs: outputs)), pattern: "/official/?$", replacement: "");
+        var address = WebsiteAddress(outputs: outputs);
 
         await RetryAsync(action: async () => {
             var app = await AzJsonAsync("containerapp", "show", "--name", Text(value: Value(key: "actorsName", outputs: outputs)), "-g", group, "-o", "json");
@@ -1023,6 +1084,16 @@ internal static class AzureAutomation {
             if (((string?)(await GetJsonAsync(uri: (address + "/api/health-check")))["status"]) != "Healthy") { throw new InvalidOperationException(message: "Production API dependency health is not Healthy."); }
             if (Options.ContainsKey(key: "before-static-publication")) { return; }
             if (((string?)(await GetJsonAsync(uri: (address + "/release.json")))["commit"]) != commit) { throw new InvalidDataException(message: "Front Door dashboard release commit differs."); }
+            await ExpectRepresentationAsync(uri: (address + "/release.json"), mediaTypes: ["application/json"], cache: control => control.NoStore, cached: false);
+            await ExpectRepresentationAsync(uri: (address + "/"), mediaTypes: ["text/html"], cache: control => control.NoCache, cached: false);
+            await ExpectRepresentationAsync(uri: (address + "/host-entry.js"), mediaTypes: ["text/javascript", "application/javascript"], cache: control => control.NoCache, cached: false);
+            await ExpectRepresentationAsync(uri: (address + "/portal/mf-manifest.json"), mediaTypes: ["application/json"], cache: control => control.NoCache, cached: false);
+            var chunks = Regex.Matches(input: await Http.GetStringAsync(requestUri: (address + "/")), pattern: "\"(/assets/[^\"]+\\.js)\"").Select(selector: match => match.Groups[1].Value).Distinct(comparer: StringComparer.Ordinal).ToArray();
+
+            if (chunks.Length == 0) { throw new InvalidDataException(message: "The website shell references no hashed script."); }
+            foreach (var chunk in chunks) {
+                await ExpectRepresentationAsync(uri: (address + chunk), mediaTypes: ["text/javascript", "application/javascript"], cache: control => (control.Public && (control.MaxAge == TimeSpan.FromDays(days: 365)) && control.Extensions.Any(predicate: extension => (extension.Name == "immutable"))), cached: true);
+            }
             foreach (var host in Value(key: "websiteHostNames", outputs: outputs).AsArray()) {
                 using var home = await Http.GetAsync(requestUri: $"https://{host}/"); home.EnsureSuccessStatusCode();
                 if (!(await home.Content.ReadAsStringAsync()).Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "<html")) { throw new InvalidDataException(message: $"Website entry point is missing at {host}."); }
@@ -1042,6 +1113,17 @@ internal static class AzureAutomation {
             }
         }, attempts: 30, seconds: 10);
         Console.WriteLine(value: $"PASS: production readiness for {commit}.");
+    }
+    private static string WebsiteAddress(JsonNode outputs) => Regex.Replace(input: Text(value: Value(key: "officialContentBaseUrl", outputs: outputs)), pattern: "/official/?$", replacement: "");
+    private static async Task ExpectRepresentationAsync(string uri, string[] mediaTypes, Func<CacheControlHeaderValue, bool> cache, bool cached) {
+        // The second request shows whether Front Door served it from the edge: X-Cache ends in HIT.
+        using var first = await Http.GetAsync(requestUri: uri); first.EnsureSuccessStatusCode();
+        using var response = await Http.GetAsync(requestUri: uri); response.EnsureSuccessStatusCode();
+        var edge = (response.Headers.TryGetValues(name: "X-Cache", values: out var values) ? string.Join(separator: ',', values: values) : "");
+
+        if (!mediaTypes.Contains(value: (response.Content.Headers.ContentType?.MediaType ?? "")) || (response.Headers.CacheControl is not { } control) || !cache(control) || (edge.EndsWith(value: "HIT", comparisonType: StringComparison.Ordinal) != cached)) {
+            throw new InvalidDataException(message: $"Unexpected representation at {uri}: {response.Content.Headers.ContentType} with Cache-Control {response.Headers.CacheControl} and X-Cache {edge}.");
+        }
     }
     private static async Task TestWorldContainerAsync() {
         var image = Required(key: "image");
