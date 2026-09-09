@@ -370,7 +370,9 @@ layout with its documentation page, the stable official browser engine/content,
 and Linux images for Actors and World.Silo. Dashboard tests use the real engine.
 Actors must answer `/healthz`; the silo must activate the primary Puck world,
 checkpoint it, accept a QUIC connection with the expected key, and repeat those
-checks after container replacement using the same store.
+checks after container replacement using the same store. The gate also executes
+Caddy as its production UID with all Linux capabilities removed. The image strips
+Caddy's upstream low-port file capability because TLS binds port 8443.
 The candidate CLI and browser build use pinned DXC. Both official manifests
 check clean source provenance; a build that changes tracked shader artifacts
 must reconcile those generated files before a release can claim a clean checkout.

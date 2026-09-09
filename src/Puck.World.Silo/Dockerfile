@@ -11,8 +11,12 @@ RUN dotnet restore src/Puck.World.Silo --locked-mode \
     && dotnet publish src/Puck.Cli -c Release -o /puck-cli \
     && dotnet /puck-cli/Puck.Cli.dll world prepare src/Puck.World/Assets/worlds /app/worlds
 
+FROM caddy:2.11.4 AS tls
+# TLS binds 8443; the upstream low-port file capability prevents execution with --cap-drop ALL.
+RUN setcap -r /usr/bin/caddy
+
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
-COPY --from=caddy:2.11.4 /usr/bin/caddy /usr/bin/caddy
+COPY --from=tls /usr/bin/caddy /usr/bin/caddy
 ADD https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb /tmp/packages-microsoft-prod.deb
 RUN echo 'c13f01ac7c3001b51a9281d40dde666db5e037e05512840c319832f7852bfec4  /tmp/packages-microsoft-prod.deb' | sha256sum -c - \
     && dpkg -i /tmp/packages-microsoft-prod.deb \

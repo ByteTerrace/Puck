@@ -1041,6 +1041,8 @@ internal static class AzureAutomation {
     }
     private static async Task TestWorldContainerAsync() {
         var image = Required(key: "image");
+        await DockerAsync("run", "--rm", "--user", "1655:1655", "--read-only", "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges", "--entrypoint", "/usr/bin/caddy", image, "version");
         var fixture = Path.GetFullPath(path: "artifacts/silo-smoke");
 
         if (Directory.Exists(path: fixture)) { throw new IOException(message: "Use a fresh silo smoke-test directory."); }
