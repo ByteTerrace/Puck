@@ -24,8 +24,10 @@ public static class WorldDefinitionFileSource {
     // a file that has since vanished or turned unreadable does the same. Identity is the resolved path, freshness
     // is content: no clock takes part in either.
     private static readonly ConcurrentDictionary<string, ComposedDocument> s_composedDocuments = new(comparer: StringComparer.OrdinalIgnoreCase);
+
     private static long s_documentsComposed;
     private static long s_documentCompositionsShared;
+
     // One file a composition read, with the bytes it read from it.
     private readonly record struct ComposedDocumentLink(string Path, byte[] Bytes);
     // A held image: the chain it composed from, its final tree as UTF-8 JSON (parsed on every reuse, so no reader
@@ -112,6 +114,7 @@ public static class WorldDefinitionFileSource {
             value: 0L
         );
     }
+
     // Whether a held image still answers for a reader whose own bytes are `ownBytes`: every file the image read
     // must still hold the bytes it read. The image's own document is the chain's first link and the reader has
     // already read it, so that link is compared against what the reader holds rather than read a second time.
@@ -228,6 +231,7 @@ public static class WorldDefinitionFileSource {
             Reach: reach
         );
     }
+
     // The directory-backed IWorldDocumentSource every local load walks over — the one place Path.Combine/
     // Path.GetFullPath/File.Exists/File.ReadAllBytes for a basis reference live, so TryLoad's directory behavior and
     // TryResolveChainFiles' push-side walk can never drift apart.
@@ -290,11 +294,11 @@ public static class WorldDefinitionFileSource {
     /// <param name="name">The authored reference, exactly as the document spells it.</param>
     /// <returns>The resolved, normalized document name.</returns>
     public static string CombineRelativeDocumentName(string referrerName, string name) {
-        var directory = referrerName.Replace(oldChar: '\\', newChar: '/');
+        var directory = referrerName.Replace(newChar: '/', oldChar: '\\');
         var slash = directory.LastIndexOf(value: '/');
         var combined = ((slash >= 0)
-            ? $"{directory[..slash]}/{name.Replace(oldChar: '\\', newChar: '/')}"
-            : name.Replace(oldChar: '\\', newChar: '/')
+            ? $"{directory[..slash]}/{name.Replace(newChar: '/', oldChar: '\\')}"
+            : name.Replace(newChar: '/', oldChar: '\\')
         );
 
         return NormalizeRelativeDocumentName(path: combined);
@@ -323,12 +327,13 @@ public static class WorldDefinitionFileSource {
 
         return string.Join(separator: "/", values: segments);
     }
+
     // The IWorldDocumentSource backing the resolver-taking TryComposeDocumentTree overload: resolves a reference
     // exactly like DirectoryDocumentSource (relative combination against the referrer, normalized), then hands the
     // final resolved name to the caller's own resolver instead of touching a real filesystem.
     private sealed class ResolverDocumentSource(WorldDocumentResolver resolver) : IWorldDocumentSource {
         public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-            resolvedName = CombineRelativeDocumentName(referrerName: referrerName, name: name);
+            resolvedName = CombineRelativeDocumentName(name: name, referrerName: referrerName);
 
             if (!resolver(resolvedName, out var bytes)) {
                 content = null;
@@ -484,6 +489,38 @@ public static class WorldDefinitionFileSource {
     /// <returns><see langword="true"/> when the document parsed, migrated, and validated.</returns>
     public static bool TryParseComposed(string json, string sourceName, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, out WorldDefinition? definition, out string reason) {
         definition = null;
+        if (!TryParseDocument(definition: out var parsed, json: json, reason: out reason, sourceName: sourceName)) { return false; }
+        var validated = (validateAdjacencyClaims
+            ? WorldDefinitionValidator.TryValidate(
+            definition: parsed!,
+            neighbours: neighbours,
+            reason: out var refusal
+        )
+            : WorldDefinitionValidator.TryValidateLocally(
+            definition: parsed!,
+            reason: out refusal
+        )
+        );
+
+        if (!validated) {
+            reason = $"{sourceName} document validation refused: {refusal.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        definition = parsed;
+        reason = "";
+
+        return true;
+    }
+    /// <summary>Parses an already composed document, binds authored state expressions and applies migrations.</summary>
+    /// <param name="json">The composed JSON text.</param>
+    /// <param name="sourceName">The source name echoed in failures.</param>
+    /// <param name="definition">The parsed document; its full validity is still the caller's responsibility.</param>
+    /// <param name="reason">The named parse or schema failure.</param>
+    /// <returns>Whether parsing and schema checks succeeded. No adjacency or local-world validation runs here.</returns>
+    public static bool TryParseDocument(string json, string sourceName, out WorldDefinition? definition, out string reason) {
+        definition = null;
 
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
@@ -511,27 +548,8 @@ public static class WorldDefinitionFileSource {
 
         parsed = WorldDefinitionMigrations.Apply(definition: parsed);
 
-        var validated = (validateAdjacencyClaims
-            ? WorldDefinitionValidator.TryValidate(
-            definition: parsed,
-            neighbours: neighbours,
-            reason: out var refusal
-        )
-            : WorldDefinitionValidator.TryValidateLocally(
-            definition: parsed,
-            reason: out refusal
-        )
-        );
-
-        if (!validated) {
-            reason = $"{sourceName} document validation refused: {refusal.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
         definition = parsed;
-        reason = "";
-
+        reason = string.Empty;
         return true;
     }
 
@@ -559,7 +577,7 @@ public static class WorldDefinitionFileSource {
         }
 
         if (
-            !entryObject.TryGetPropertyValue(propertyName: WorldImport.DocumentMemberName, jsonNode: out var documentNode) ||
+            !entryObject.TryGetPropertyValue(jsonNode: out var documentNode, propertyName: WorldImport.DocumentMemberName) ||
             (documentNode is not JsonValue documentValue) ||
             !documentValue.TryGetValue<string>(value: out var documentText) ||
             (documentText.Length == 0)
@@ -571,7 +589,7 @@ public static class WorldDefinitionFileSource {
 
         document = documentText;
 
-        if (entryObject.TryGetPropertyValue(propertyName: WorldImport.AsMemberName, jsonNode: out var aliasNode) && (aliasNode is not null)) {
+        if (entryObject.TryGetPropertyValue(jsonNode: out var aliasNode, propertyName: WorldImport.AsMemberName) && (aliasNode is not null)) {
             if ((aliasNode is not JsonValue aliasValue) || !aliasValue.TryGetValue<string>(value: out var aliasText)) {
                 reason = $"'{WorldDocumentBasis.ImportsMemberName}' entry {document} in {referrerPath}: '{WorldImport.AsMemberName}' must be a string.";
 
@@ -843,6 +861,7 @@ public static class WorldDefinitionFileSource {
 
         return true;
     }
+
     // The one recursive whole-file composer: resolves `resolvedPath`'s basis (recursively, through this same core)
     // and its own `imports` (each recursively resolved through this same core, then folded left to right by
     // WorldDocumentBasis.TryMergeImports), then layers basis -> imports -> this file's own body via ordinary
@@ -863,7 +882,7 @@ public static class WorldDefinitionFileSource {
         )) {
             reason = $"composition cycles back to {resolvedPath} (chain: {string.Join(
                 separator: " -> ",
-                values: ancestors.Append(resolvedPath)
+                values: ancestors.Append(element: resolvedPath)
             )}).";
 
             return false;
@@ -1146,6 +1165,7 @@ public static class WorldDefinitionFileSource {
 
         return true;
     }
+
     /// <summary>Composes <paramref name="rootBytes"/>' whole basis-and-imports graph over <paramref name="source"/>
     /// — the generalization of <see cref="TryComposeChain"/> that additionally resolves the root's (and every
     /// ancestor's) own <c>imports</c> list (see <see cref="WorldDocumentBasis"/>'s remarks). The caller has already
@@ -1302,6 +1322,7 @@ public static class WorldDefinitionFileSource {
             tree: out tree
         );
     }
+
     // The shared core both TryComposeDocumentTree overloads call: compose the graph over whichever
     // IWorldDocumentSource the caller supplied (disk-backed or resolver-backed), never duplicating
     // TryComposeLayers' walk itself.
@@ -1341,7 +1362,7 @@ public static class WorldDefinitionFileSource {
         )) {
             reason = $"composition cycles back to {resolvedPath} (chain: {string.Join(
                 separator: " -> ",
-                values: ancestors.Append(resolvedPath)
+                values: ancestors.Append(element: resolvedPath)
             )}).";
 
             return false;
@@ -1453,7 +1474,7 @@ public static class WorldDefinitionFileSource {
 
         WorldExports? exports = null;
 
-        if (root.TryGetPropertyValue(propertyName: WorldExports.MemberName, jsonNode: out var exportsNode) && (exportsNode is not null)) {
+        if (root.TryGetPropertyValue(jsonNode: out var exportsNode, propertyName: WorldExports.MemberName) && (exportsNode is not null)) {
             try {
                 exports = JsonSerializer.Deserialize<WorldExports>(node: exportsNode, options: WorldJsonContext.Default.Options);
             } catch (JsonException exception) {
@@ -1468,6 +1489,7 @@ public static class WorldDefinitionFileSource {
 
         return true;
     }
+
     /// <summary>Describes <paramref name="path"/>'s whole basis-and-imports graph in merge order — the read-back
     /// <c>world.imports</c> prints: each resolved file path paired with the top-level keys ITS OWN JSON declares
     /// (basis/imports members excluded), from the deepest basis ancestor through every import to the file's own
@@ -1562,6 +1584,7 @@ public static class WorldDefinitionFileSource {
             reason: out reason,
             validateAdjacencyClaims: false
         );
+
     // A fully in-memory IWorldDocumentSource for TryComposeFragmentBytes: the two names the synthetic root below
     // ever names ("host", "fragment") resolve to caller-supplied bytes, never a file. Any other name is a fragment
     // or host that itself declares basis/imports of its own — refused by name, since neither this entry point nor
@@ -1589,6 +1612,7 @@ public static class WorldDefinitionFileSource {
             }
         }
     }
+
     /// <summary>Composes <paramref name="fragmentBytes"/> under <paramref name="hostBytes"/> entirely in memory —
     /// no file system read — the way a directory load composes an aliased <c>imports</c> entry
     /// (<see cref="WorldModuleNamespace.TryApply"/> renames the fragment's own rows under
@@ -1630,7 +1654,7 @@ public static class WorldDefinitionFileSource {
             reason: out reason,
             resolvedPath: "(in-memory fragment composition)",
             serveHeldImage: true,
-            source: new InMemoryDocumentSource(host: hostBytes, fragment: fragmentBytes),
+            source: new InMemoryDocumentSource(fragment: fragmentBytes, host: hostBytes),
             stack: out _,
             touched: out _,
             touchedPaths: out _

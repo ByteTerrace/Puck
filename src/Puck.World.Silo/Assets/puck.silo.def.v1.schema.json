@@ -23,7 +23,7 @@
         ],
         "properties": {
           "owner": {
-            "description": "The owning identity\u0027s Entra oid.",
+            "description": "The owning identity\u0027s stable UUID.",
             "type": "string",
             "format": "uuid"
           },
@@ -39,6 +39,29 @@
               "keyFile": {
                 "description": "The path to the PKCS#8 private-key file this row signs its outbound federation claims and its own door\u0027s admission challenges with.",
                 "type": "string"
+              },
+              "authentication": {
+                "description": "Optional installed connection-identity provider, layered over this world\u0027s own federation credentials.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "type": {
+                    "description": "The case-sensitive key in the composition root\u0027s extension registry.",
+                    "type": "string"
+                  },
+                  "settings": {
+                    "description": "An object validated by the selected extension before host startup.",
+                    "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+                  }
+                },
+                "required": [
+                  "type",
+                  "settings"
+                ],
+                "additionalProperties": false,
+                "title": "WorldSiloExtension"
               }
             },
             "required": [
@@ -81,36 +104,21 @@
       "description": "The checkpoint/journal/definition backend.",
       "type": "object",
       "properties": {
-        "kind": {
-          "description": "Which backend.",
-          "enum": [
-            "Directory",
-            "Azure"
-          ],
-          "title": "WorldSiloStoreKind"
+        "type": {
+          "description": "The case-sensitive key in the composition root\u0027s extension registry.",
+          "type": "string"
         },
-        "directoryPath": {
-          "description": "The root directory \u2014 required when Kind is Directory, otherwise absent.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "accountUrl": {
-          "description": "The Azure Blob account endpoint (e.g. https://bytrcstp001.blob.core.windows.net) \u2014 required when Kind is Azure, otherwise absent.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
+        "settings": {
+          "description": "An object validated by the selected extension before host startup.",
+          "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
         }
       },
       "required": [
-        "kind"
+        "type",
+        "settings"
       ],
       "additionalProperties": false,
-      "title": "WorldSiloStore"
+      "title": "WorldSiloExtension"
     },
     "stateDir": {
       "description": "The root every activated row\u0027s container-ephemeral owned-world store resolves its own directory under \u2014 the --state-dir counterpart.",
@@ -121,20 +129,8 @@
       "type": "object",
       "properties": {
         "kind": {
-          "description": "Which provider.",
-          "enum": [
-            "Localhost",
-            "Table"
-          ],
-          "title": "WorldSiloClusteringKind"
-        },
-        "tableName": {
-          "description": "The Storage Table name \u2014 required when Kind is Table, otherwise absent (a local run names no table).",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
+          "description": "The membership implementation selected at composition; this distribution supports Localhost.",
+          "type": "string"
         }
       },
       "required": [
@@ -142,6 +138,74 @@
       ],
       "additionalProperties": false,
       "title": "WorldSiloClustering"
+    },
+    "lifecycle": {
+      "description": "Optional deployment-owned host lifecycle adapter.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "shutdownSeconds": {
+          "description": "Maximum time allowed for operator or deployment retirement.",
+          "type": "integer"
+        },
+        "healthPort": {
+          "description": "HTTP health port; retirement requests are accepted only from loopback.",
+          "type": "integer"
+        },
+        "observer": {
+          "description": "Optional installed extension supplying host retirement deadlines; absent means no external observation.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "type": {
+              "description": "The case-sensitive key in the composition root\u0027s extension registry.",
+              "type": "string"
+            },
+            "settings": {
+              "description": "An object validated by the selected extension before host startup.",
+              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+            }
+          },
+          "required": [
+            "type",
+            "settings"
+          ],
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldSiloExtension"
+        },
+        "progressTimeoutSeconds": {
+          "description": "Maximum wall-clock age of a completed simulation step before liveness fails.",
+          "type": "integer",
+          "default": 30
+        },
+        "checkpointTimeoutSeconds": {
+          "description": "Maximum wall-clock age of a successful checkpoint before readiness fails.",
+          "type": "integer",
+          "default": 180
+        },
+        "journalTimeoutSeconds": {
+          "description": "Maximum wall-clock interval without journal progress while appends are pending.",
+          "type": "integer",
+          "default": 30
+        },
+        "journalBacklogLimit": {
+          "description": "Maximum outstanding journal appends admitted as healthy.",
+          "type": "integer",
+          "default": 1024
+        }
+      },
+      "required": [
+        "shutdownSeconds",
+        "healthPort"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldSiloLifecycle"
     },
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",

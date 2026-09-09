@@ -21,8 +21,9 @@ public static class WorldSiloDefinitionSerialization {
     /// <param name="path">The document path.</param>
     /// <param name="definition">The loaded, validated document, on success.</param>
     /// <param name="reason">Why the load failed, on failure.</param>
+    /// <param name="clusteringKinds">Installed clustering keys from the host registry; absent for structural validation only.</param>
     /// <returns><see langword="true"/> when the document parsed and validated.</returns>
-    public static bool TryLoadFile(string path, out WorldSiloDefinition? definition, out string reason) {
+    public static bool TryLoadFile(string path, out WorldSiloDefinition? definition, out string reason, IReadOnlyCollection<string>? clusteringKinds = null) {
         if (string.IsNullOrWhiteSpace(value: path)) {
             definition = null;
             reason = "a silo document path is required";
@@ -52,6 +53,7 @@ public static class WorldSiloDefinitionSerialization {
         }
 
         if (!WorldSiloDefinitionValidator.TryValidate(
+            clusteringKinds: clusteringKinds,
             definition: parsed,
             reason: out reason
         )) {

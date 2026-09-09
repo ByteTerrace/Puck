@@ -13,8 +13,8 @@ namespace Puck.World.Client;
 /// derived from it re-enters the simulation.
 /// </summary>
 /// <remarks>An integrating driver's phase advances on its signal's delta, so an idle body holds its pose and travel
-/// (or elapsed time) sets the rate; the weight eases on wall time so a facet returns to rest over
-/// <see cref="CreationDriverDocument.WeightSeconds"/> instead of freezing mid-stride when the gate flips.</remarks>
+/// (or elapsed time) sets the rate; the weight eases on wall time using the driver's authored blend times
+/// (default <see cref="CreationDriverDocument.WeightSeconds"/>) instead of freezing mid-stride when the gate flips.</remarks>
 public static class WorldGaitDrivers {
     /// <summary>The travel one frame may charge to an integrating phase, world units — clamps a teleport or an
     /// authority snap so it cannot spin a limb through dozens of cycles in one frame. Shared with the procedural
@@ -119,9 +119,11 @@ public static class WorldGaitDrivers {
                 moving: moving
             );
 
+            var seconds = holds ? driver.BlendInSeconds : driver.BlendOutSeconds;
+            var driverBlend = seconds is { } authoredSeconds ? WeightBlend(deltaSeconds, authoredSeconds) : blend;
             var weight = (weights[index] + (((holds
                 ? 1f
-                : 0f) - weights[index]) * blend));
+                : 0f) - weights[index]) * driverBlend));
 
             weights[index] = ((!holds && (weight < RestWeight))
                 ? 0f
@@ -529,9 +531,10 @@ public static class WorldGaitDrivers {
     /// <summary>Returns the fraction of the remaining error a weight closes in one frame — the frame-rate independent
     /// exponential approach over <see cref="CreationDriverDocument.WeightSeconds"/>.</summary>
     /// <param name="deltaSeconds">The frame delta; a non-positive delta closes nothing.</param>
+    /// <param name="seconds">The non-negative exponential time constant. Zero closes the full error on a positive delta.</param>
     /// <returns>The blend factor in [0, 1].</returns>
-    public static float WeightBlend(float deltaSeconds) => ((deltaSeconds > 0f)
-        ? (1f - MathF.Exp(x: (-deltaSeconds / CreationDriverDocument.WeightSeconds)))
+    public static float WeightBlend(float deltaSeconds, float seconds = CreationDriverDocument.WeightSeconds) => ((deltaSeconds > 0f)
+        ? (seconds == 0f ? 1f : (1f - MathF.Exp(x: (-deltaSeconds / seconds))))
         : 0f
     );
 

@@ -262,6 +262,21 @@
         "seatCount": 0,
         "transitionRenderScale": 1,
         "transitionSeconds": 0.25
+      },
+      {
+        "name": "head",
+        "slots": [
+          {
+            "height": 1,
+            "camera": "head",
+            "y": 0,
+            "width": 1,
+            "x": 0
+          }
+        ],
+        "seatCount": 0,
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
       }
     ],
     "seatRig": {
@@ -368,14 +383,14 @@
         "name": "moth",
         "palette": [
           {
-            "specular": 0.08,
-            "color": "#E9E0CE",
+            "specular": 0.05,
+            "color": "#EEE5D2",
             "emissive": 0,
             "shininess": 32
           },
           {
-            "specular": 0.1,
-            "color": "#9A7CC4",
+            "specular": 0.055,
+            "color": "#A88ACD",
             "emissive": 0,
             "shininess": 32
           },
@@ -398,7 +413,7 @@
             "shininess": 24
           },
           {
-            "specular": 0.12,
+            "specular": 0.02,
             "color": "#FFF5DE",
             "emissive": 0,
             "shininess": 24
@@ -420,27 +435,27 @@
           {
             "id": 2,
             "name": "pelvis",
-            "type": "Box",
+            "type": "Prism",
             "position": [
               0,
-              0.932,
+              0.937,
               0
             ],
             "rotation": [
               0,
               0,
-              0.0,
-              1.0
+              1.0,
+              6.123233995736766E-17
             ],
             "scale": [
-              0.172,
-              0.057,
-              0.105
+              0.207,
+              0.077,
+              0.128
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
-            "dilate": 0.038,
+            "dilate": 0.012,
             "swings": [
               {
                 "phase": 0.0,
@@ -461,17 +476,6 @@
             ],
             "slides": [
               {
-                "wave": "sine",
-                "amplitude": 0.022,
-                "driver": "step",
-                "phase": 1.5708,
-                "axis": [
-                  0,
-                  1,
-                  0
-                ]
-              },
-              {
                 "wave": "halfSine",
                 "amplitude": -0.025,
                 "driver": "sink",
@@ -481,33 +485,56 @@
                   1,
                   0
                 ]
+              },
+              {
+                "wave": "halfSine",
+                "driver": "stride",
+                "phase": 0,
+                "amplitude": -0.014,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ]
+              },
+              {
+                "wave": "halfSine",
+                "driver": "stride",
+                "phase": 3.141592653589793,
+                "amplitude": -0.014,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ]
               }
-            ]
+            ],
+            "taper": 0.72
           },
           {
             "id": 0,
             "name": "chest",
-            "type": "Box",
+            "type": "Prism",
             "position": [
               0,
-              1.317,
-              -0.014
+              1.305,
+              -0.01
             ],
             "rotation": [
               0,
               0,
-              0.0,
-              1.0
+              1.0,
+              6.123233995736766E-17
             ],
             "scale": [
-              0.185,
-              0.119,
-              0.091
+              0.23,
+              0.18,
+              0.139
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
-            "dilate": 0.066,
+            "dilate": 0.016,
             "slides": [
               {
                 "wave": "sine",
@@ -598,7 +625,8 @@
                   0
                 ]
               }
-            ]
+            ],
+            "taper": 0.68
           },
           {
             "id": 1,
@@ -642,24 +670,24 @@
               0.9876883405951378
             ],
             "scale": [
-              0.099,
-              0.043,
-              0.038
+              0.111,
+              0.055,
+              0.05
             ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "parent": "chest",
-            "dilate": 0.024
+            "dilate": 0.012
           },
           {
             "id": 4,
             "name": "hood",
-            "type": "RoundCone",
+            "type": "Prism",
             "position": [
               0,
-              1.81,
-              0.015
+              1.89,
+              0.035
             ],
             "rotation": [
               0,
@@ -668,15 +696,15 @@
               1.0
             ],
             "scale": [
-              0.4,
-              0.3,
-              0.335
+              0.375,
+              0.414,
+              0.18
             ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "parent": "chest",
-            "dilate": 0,
+            "dilate": 0.018,
             "group": 1,
             "swings": [
               {
@@ -727,16 +755,21 @@
                   0
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
           },
           {
             "id": 5,
             "name": "hoodInset",
-            "type": "Ellipsoid",
+            "type": "Prism",
             "position": [
               0,
-              1.86,
-              0.215
+              1.868,
+              0.244
             ],
             "rotation": [
               0,
@@ -745,16 +778,21 @@
               1.0
             ],
             "scale": [
-              0.293,
-              0.303,
-              0.278
+              0.277,
+              0.267,
+              0.31
             ],
             "material": 1,
             "blend": "Subtraction",
             "smooth": 0,
             "parent": "hood",
             "dilate": 0,
-            "group": 1
+            "group": 1,
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.95,
+              "sides": 6
+            }
           },
           {
             "id": 6,
@@ -762,8 +800,8 @@
             "type": "Ellipsoid",
             "position": [
               0,
-              1.88,
-              0.173
+              1.877,
+              0.181
             ],
             "rotation": [
               0,
@@ -772,9 +810,9 @@
               1.0
             ],
             "scale": [
-              0.26,
-              0.224,
-              0.171
+              0.246,
+              0.221,
+              0.151
             ],
             "material": 3,
             "blend": "Union",
@@ -789,8 +827,8 @@
             "type": "Ellipsoid",
             "position": [
               0,
-              1.714,
-              0.181
+              1.735,
+              0.189
             ],
             "rotation": [
               0,
@@ -799,9 +837,9 @@
               1.0
             ],
             "scale": [
-              0.18,
-              0.098,
-              0.126
+              0.166,
+              0.105,
+              0.129
             ],
             "material": 3,
             "blend": "SmoothUnion",
@@ -813,22 +851,22 @@
           {
             "id": 7,
             "name": "hair",
-            "type": "Ellipsoid",
+            "type": "RoundCone",
             "position": [
-              -0.037,
-              2.048,
-              0.21
+              -0.13,
+              2.066,
+              0.251
             ],
             "rotation": [
               0,
               0,
-              -0.13917310096006544,
-              0.9902680687415704
+              -0.754709580222772,
+              0.6560590289905073
             ],
             "scale": [
-              0.238,
-              0.076,
-              0.112
+              0.067,
+              0.2,
+              0.074
             ],
             "material": 4,
             "blend": "Union",
@@ -839,11 +877,11 @@
           {
             "id": 9,
             "name": "nose",
-            "type": "Sphere",
+            "type": "Ellipsoid",
             "position": [
               0,
               1.818,
-              0.342
+              0.341
             ],
             "rotation": [
               0,
@@ -852,9 +890,9 @@
               1.0
             ],
             "scale": [
-              0.019,
-              0.019,
-              0.019
+              0.014,
+              0.016,
+              0.012
             ],
             "material": 3,
             "blend": "Union",
@@ -868,19 +906,19 @@
             "type": "Capsule",
             "position": [
               0.006,
-              1.76,
-              0.347
+              1.765,
+              0.34
             ],
             "rotation": [
               0,
               0,
-              0.6626200482157375,
-              0.7489557207890021
+              0.6819983600624985,
+              0.7313537016191706
             ],
             "scale": [
-              0.007,
-              0.056,
-              0.007
+              0.006,
+              0.065,
+              0.006
             ],
             "material": 7,
             "blend": "Union",
@@ -891,11 +929,11 @@
           {
             "id": 11,
             "name": "eyeL",
-            "type": "Ellipsoid",
+            "type": "Prism",
             "position": [
-              0.103,
-              1.895,
-              0.327
+              0.102,
+              1.897,
+              0.328
             ],
             "rotation": [
               0,
@@ -904,24 +942,29 @@
               0.9981347984218669
             ],
             "scale": [
-              0.066,
-              0.051,
-              0.018
+              0.058,
+              0.04,
+              0.006
             ],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
             "parent": "hood",
-            "dilate": 0
+            "dilate": 0,
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.95,
+              "sides": 6
+            }
           },
           {
             "id": 12,
             "name": "irisL",
-            "type": "Ellipsoid",
+            "type": "Prism",
             "position": [
-              0.109,
-              1.892,
-              0.347
+              0.105,
+              1.894,
+              0.337
             ],
             "rotation": [
               0,
@@ -930,24 +973,29 @@
               1.0
             ],
             "scale": [
-              0.029,
-              0.035,
-              0.01
+              0.026,
+              0.033,
+              0.005
             ],
             "material": 4,
             "blend": "Union",
             "smooth": 0,
             "parent": "hood",
-            "dilate": 0
+            "dilate": 0,
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 1,
+              "sides": 6
+            }
           },
           {
             "id": 13,
             "name": "glintL",
-            "type": "Sphere",
+            "type": "Ellipsoid",
             "position": [
-              0.10099999999999999,
-              1.905,
-              0.359
+              0.09699999999999999,
+              1.907,
+              0.345
             ],
             "rotation": [
               0,
@@ -957,7 +1005,7 @@
             ],
             "scale": [
               0.007,
-              0.007,
+              0.008,
               0.004
             ],
             "material": 5,
@@ -971,9 +1019,9 @@
             "name": "browL",
             "type": "Capsule",
             "position": [
-              0.103,
-              1.963,
-              0.355
+              0.102,
+              1.962,
+              0.322
             ],
             "rotation": [
               0,
@@ -982,9 +1030,9 @@
               0.7771459614569709
             ],
             "scale": [
-              0.009,
-              0.075,
-              0.009
+              0.006,
+              0.065,
+              0.006
             ],
             "material": 4,
             "blend": "Union",
@@ -995,11 +1043,11 @@
           {
             "id": 15,
             "name": "eyeR",
-            "type": "Ellipsoid",
+            "type": "Prism",
             "position": [
-              -0.103,
-              1.895,
-              0.327
+              -0.102,
+              1.897,
+              0.328
             ],
             "rotation": [
               0,
@@ -1008,24 +1056,29 @@
               0.9981347984218669
             ],
             "scale": [
-              0.066,
-              0.051,
-              0.018
+              0.058,
+              0.04,
+              0.006
             ],
             "material": 5,
             "blend": "Union",
             "smooth": 0,
             "parent": "hood",
-            "dilate": 0
+            "dilate": 0,
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.95,
+              "sides": 6
+            }
           },
           {
             "id": 16,
             "name": "irisR",
-            "type": "Ellipsoid",
+            "type": "Prism",
             "position": [
-              -0.09699999999999999,
-              1.892,
-              0.347
+              -0.09899999999999999,
+              1.894,
+              0.337
             ],
             "rotation": [
               0,
@@ -1034,24 +1087,29 @@
               1.0
             ],
             "scale": [
-              0.029,
-              0.035,
-              0.01
+              0.026,
+              0.033,
+              0.005
             ],
             "material": 4,
             "blend": "Union",
             "smooth": 0,
             "parent": "hood",
-            "dilate": 0
+            "dilate": 0,
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 1,
+              "sides": 6
+            }
           },
           {
             "id": 17,
             "name": "glintR",
-            "type": "Sphere",
+            "type": "Ellipsoid",
             "position": [
-              -0.105,
-              1.905,
-              0.359
+              -0.107,
+              1.907,
+              0.345
             ],
             "rotation": [
               0,
@@ -1061,7 +1119,7 @@
             ],
             "scale": [
               0.007,
-              0.007,
+              0.008,
               0.004
             ],
             "material": 5,
@@ -1075,9 +1133,9 @@
             "name": "browR",
             "type": "Capsule",
             "position": [
-              -0.103,
-              1.963,
-              0.355
+              -0.102,
+              1.962,
+              0.322
             ],
             "rotation": [
               0,
@@ -1086,9 +1144,9 @@
               0.7771459614569709
             ],
             "scale": [
-              0.009,
-              0.075,
-              0.009
+              0.006,
+              0.065,
+              0.006
             ],
             "material": 4,
             "blend": "Union",
@@ -1322,37 +1380,42 @@
           {
             "id": 23,
             "name": "shoulderL",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              0.386,
-              1.446,
-              -0.014
+              0.403,
+              1.442,
+              -0.005
             ],
             "rotation": [
               0,
               0,
-              0.14780941112961063,
-              0.9890158633619168
+              0.17364817766693033,
+              0.984807753012208
             ],
             "scale": [
-              0.145,
-              0.064,
-              0.123
+              0.221,
+              0.14,
+              0.147
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "armL",
-            "dilate": 0.042
+            "dilate": 0.018,
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 6
+            }
           },
           {
             "id": 24,
             "name": "forearmL",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              0.47,
-              1.017,
-              0.057
+              0.467,
+              1.024,
+              0.046
             ],
             "rotation": [
               0,
@@ -1361,15 +1424,15 @@
               0.9935718556765875
             ],
             "scale": [
-              0.085,
-              0.117,
-              0.094
+              0.133,
+              0.171,
+              0.117
             ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "parent": "armL",
-            "dilate": 0.028,
+            "dilate": 0.014,
             "swings": [
               {
                 "phase": 3.141592653589793,
@@ -1403,7 +1466,12 @@
                   0.03
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 6
+            }
           },
           {
             "id": 25,
@@ -1525,22 +1593,22 @@
           {
             "id": 27,
             "name": "shinL",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              0.188,
-              0.362,
-              -0.017
+              0.19,
+              0.36,
+              -0.009
             ],
             "rotation": [
               0,
               0,
-              -0.07845909572784494,
-              0.996917333733128
+              -0.06104853953485687,
+              0.9981347984218669
             ],
             "scale": [
-              0.096,
-              0.169,
-              0.09
+              0.136,
+              0.209,
+              0.125
             ],
             "material": 0,
             "blend": "Union",
@@ -1612,59 +1680,65 @@
                 ]
               }
             ],
-            "dilate": 0.052
+            "dilate": 0.016,
+            "taper": 0.64
           },
           {
             "id": 28,
             "name": "kneeL",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              0.181,
-              0.545,
-              0.12
+              0.185,
+              0.547,
+              0.139
             ],
             "rotation": [
               0,
               0,
-              0.24192189559966773,
-              0.9702957262759965
+              1.0,
+              6.123233995736766E-17
             ],
             "scale": [
-              0.058,
-              0.063,
-              0.023
+              0.087,
+              0.092,
+              0.035
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "shinL",
-            "dilate": 0.022
+            "dilate": 0.01,
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
           },
           {
             "id": 29,
             "name": "bootL",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              0.213,
-              0.128,
-              0.093
+              0.214,
+              0.127,
+              0.096
             ],
             "rotation": [
-              0.0015980644636750987,
-              -0.06102761972507957,
-              -0.026128123022578595,
-              0.9977927625554206
+              0,
+              0,
+              -0.02617694830787315,
+              0.9996573249755573
             ],
             "scale": [
-              0.123,
-              0.074,
-              0.19
+              0.15,
+              0.087,
+              0.207
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "shinL",
-            "dilate": 0.047,
+            "dilate": 0.019,
             "swings": [
               {
                 "phase": 3.141592653589793,
@@ -1698,7 +1772,12 @@
                   0.015
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.45,
+              "sides": 6
+            }
           },
           {
             "id": 31,
@@ -1794,37 +1873,42 @@
           {
             "id": 32,
             "name": "shoulderR",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              -0.386,
-              1.446,
-              -0.014
+              -0.403,
+              1.442,
+              -0.005
             ],
             "rotation": [
               0,
               0,
-              -0.14780941112961063,
-              0.9890158633619168
+              -0.17364817766693033,
+              0.984807753012208
             ],
             "scale": [
-              0.145,
-              0.064,
-              0.123
+              0.221,
+              0.14,
+              0.147
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "armR",
-            "dilate": 0.042
+            "dilate": 0.018,
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 6
+            }
           },
           {
             "id": 33,
             "name": "forearmR",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              -0.47,
-              1.017,
-              0.057
+              -0.467,
+              1.024,
+              0.046
             ],
             "rotation": [
               0,
@@ -1833,15 +1917,15 @@
               0.9935718556765875
             ],
             "scale": [
-              0.085,
-              0.117,
-              0.094
+              0.133,
+              0.171,
+              0.117
             ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "parent": "armR",
-            "dilate": 0.028,
+            "dilate": 0.014,
             "swings": [
               {
                 "phase": 6.283185307179586,
@@ -1875,7 +1959,12 @@
                   0.03
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 6
+            }
           },
           {
             "id": 34,
@@ -1997,22 +2086,22 @@
           {
             "id": 36,
             "name": "shinR",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              -0.188,
-              0.362,
-              -0.017
+              -0.19,
+              0.36,
+              -0.009
             ],
             "rotation": [
               0,
               0,
-              0.07845909572784494,
-              0.996917333733128
+              0.06104853953485687,
+              0.9981347984218669
             ],
             "scale": [
-              0.096,
-              0.169,
-              0.09
+              0.136,
+              0.209,
+              0.125
             ],
             "material": 0,
             "blend": "Union",
@@ -2084,59 +2173,65 @@
                 ]
               }
             ],
-            "dilate": 0.052
+            "dilate": 0.016,
+            "taper": 0.64
           },
           {
             "id": 37,
             "name": "kneeR",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              -0.181,
-              0.545,
-              0.12
+              -0.185,
+              0.547,
+              0.139
             ],
             "rotation": [
               0,
               0,
-              -0.24192189559966773,
-              0.9702957262759965
+              1.0,
+              6.123233995736766E-17
             ],
             "scale": [
-              0.058,
-              0.063,
-              0.023
+              0.087,
+              0.092,
+              0.035
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "shinR",
-            "dilate": 0.022
+            "dilate": 0.01,
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
           },
           {
             "id": 38,
             "name": "bootR",
-            "type": "Box",
+            "type": "Prism",
             "position": [
-              -0.213,
-              0.128,
-              0.093
+              -0.214,
+              0.127,
+              0.096
             ],
             "rotation": [
-              0.0015980644636750987,
-              0.06102761972507957,
-              0.026128123022578595,
-              0.9977927625554206
+              0,
+              0,
+              0.02617694830787315,
+              0.9996573249755573
             ],
             "scale": [
-              0.123,
-              0.074,
-              0.19
+              0.15,
+              0.087,
+              0.207
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "shinR",
-            "dilate": 0.047,
+            "dilate": 0.019,
             "swings": [
               {
                 "phase": 6.283185307179586,
@@ -2170,12 +2265,17 @@
                   0.015
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.45,
+              "sides": 6
+            }
           },
           {
             "id": 40,
             "name": "vaneL",
-            "type": "Box",
+            "type": "Prism",
             "position": [
               0.255,
               1.355,
@@ -2188,9 +2288,9 @@
               0.9945218953682733
             ],
             "scale": [
-              0.1,
-              0.368,
-              0.049
+              0.143,
+              0.407,
+              0.055
             ],
             "material": 0,
             "blend": "Union",
@@ -2206,7 +2306,7 @@
                 ],
                 "wave": "constant",
                 "amplitude": -0.78,
-                "driver": "flight",
+                "driver": "wings",
                 "pivot": [
                   0.16,
                   1.05,
@@ -2237,7 +2337,7 @@
                   0
                 ],
                 "wave": "sine",
-                "amplitude": 0.2,
+                "amplitude": 0.4,
                 "driver": "cruise",
                 "pivot": [
                   0.16,
@@ -2246,12 +2346,17 @@
                 ]
               }
             ],
-            "dilate": 0.035
+            "dilate": 0.014,
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
           },
           {
             "id": 41,
             "name": "vaneInsetL",
-            "type": "Box",
+            "type": "Prism",
             "position": [
               0.407,
               1.375,
@@ -2264,15 +2369,15 @@
               0.9743700647852352
             ],
             "scale": [
-              0.08,
-              0.325,
-              0.05
+              0.106,
+              0.345,
+              0.052
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "vaneL",
-            "dilate": 0.028,
+            "dilate": 0.012,
             "swings": [
               {
                 "phase": 0.0,
@@ -2283,14 +2388,19 @@
                 ],
                 "wave": "constant",
                 "amplitude": -0.09,
-                "driver": "flight",
+                "driver": "wings",
                 "pivot": [
                   0.16,
                   1.05,
                   -0.25
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.9,
+              "sides": 6
+            }
           },
           {
             "id": 42,
@@ -2321,7 +2431,7 @@
           {
             "id": 43,
             "name": "vaneR",
-            "type": "Box",
+            "type": "Prism",
             "position": [
               -0.255,
               1.355,
@@ -2334,9 +2444,9 @@
               0.9945218953682733
             ],
             "scale": [
-              0.1,
-              0.368,
-              0.049
+              0.143,
+              0.407,
+              0.055
             ],
             "material": 0,
             "blend": "Union",
@@ -2352,7 +2462,7 @@
                 ],
                 "wave": "constant",
                 "amplitude": 0.78,
-                "driver": "flight",
+                "driver": "wings",
                 "pivot": [
                   -0.16,
                   1.05,
@@ -2383,7 +2493,7 @@
                   0
                 ],
                 "wave": "sine",
-                "amplitude": 0.2,
+                "amplitude": 0.4,
                 "driver": "cruise",
                 "pivot": [
                   -0.16,
@@ -2392,12 +2502,17 @@
                 ]
               }
             ],
-            "dilate": 0.035
+            "dilate": 0.014,
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
           },
           {
             "id": 44,
             "name": "vaneInsetR",
-            "type": "Box",
+            "type": "Prism",
             "position": [
               -0.407,
               1.375,
@@ -2410,15 +2525,15 @@
               0.9743700647852352
             ],
             "scale": [
-              0.08,
-              0.325,
-              0.05
+              0.106,
+              0.345,
+              0.052
             ],
             "material": 1,
             "blend": "Union",
             "smooth": 0,
             "parent": "vaneR",
-            "dilate": 0.028,
+            "dilate": 0.012,
             "swings": [
               {
                 "phase": 0.0,
@@ -2429,14 +2544,19 @@
                 ],
                 "wave": "constant",
                 "amplitude": 0.09,
-                "driver": "flight",
+                "driver": "wings",
                 "pivot": [
                   -0.16,
                   1.05,
                   -0.25
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.9,
+              "sides": 6
+            }
           },
           {
             "id": 45,
@@ -2480,15 +2600,15 @@
               0.9876883405951378
             ],
             "scale": [
-              0.099,
-              0.043,
-              0.038
+              0.111,
+              0.055,
+              0.05
             ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "parent": "chest",
-            "dilate": 0.024
+            "dilate": 0.012
           },
           {
             "id": 47,
@@ -2519,7 +2639,7 @@
           {
             "id": 30,
             "name": "vaneOuterL",
-            "type": "Box",
+            "type": "Prism",
             "position": [
               0.536,
               1.432,
@@ -2532,15 +2652,15 @@
               0.9335804264972017
             ],
             "scale": [
-              0.066,
-              0.252,
-              0.044
+              0.109,
+              0.285,
+              0.051
             ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "parent": "vaneL",
-            "dilate": 0.025,
+            "dilate": 0.012,
             "swings": [
               {
                 "phase": 0.0,
@@ -2551,19 +2671,24 @@
                 ],
                 "wave": "constant",
                 "amplitude": -0.18,
-                "driver": "flight",
+                "driver": "wings",
                 "pivot": [
                   0.16,
                   1.05,
                   -0.25
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
           },
           {
             "id": 39,
             "name": "vaneOuterR",
-            "type": "Box",
+            "type": "Prism",
             "position": [
               -0.536,
               1.432,
@@ -2576,15 +2701,15 @@
               0.9335804264972017
             ],
             "scale": [
-              0.066,
-              0.252,
-              0.044
+              0.109,
+              0.285,
+              0.051
             ],
             "material": 0,
             "blend": "Union",
             "smooth": 0,
             "parent": "vaneR",
-            "dilate": 0.025,
+            "dilate": 0.012,
             "swings": [
               {
                 "phase": 0.0,
@@ -2595,14 +2720,840 @@
                 ],
                 "wave": "constant",
                 "amplitude": 0.18,
-                "driver": "flight",
+                "driver": "wings",
                 "pivot": [
                   -0.16,
                   1.05,
                   -0.25
                 ]
               }
-            ]
+            ],
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
+          },
+          {
+            "id": 49,
+            "name": "crownInlay",
+            "type": "Prism",
+            "position": [
+              0,
+              2.157,
+              0.229
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.144,
+              0.059,
+              0.009
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.01,
+            "parent": "hood",
+            "taper": 0.35
+          },
+          {
+            "id": 50,
+            "name": "fringe",
+            "type": "RoundCone",
+            "position": [
+              0.075,
+              2.039,
+              0.272
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.9455185755993167,
+              0.32556815445715676
+            ],
+            "scale": [
+              0.041,
+              0.11,
+              0.055
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "parent": "hood"
+          },
+          {
+            "id": 51,
+            "name": "hairTemple",
+            "type": "Ellipsoid",
+            "position": [
+              -0.224,
+              1.926,
+              0.23
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.0697564737441253,
+              0.9975640502598242
+            ],
+            "scale": [
+              0.035,
+              0.117,
+              0.055
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "parent": "hood"
+          },
+          {
+            "id": 52,
+            "name": "shoulderEdgeL",
+            "type": "Prism",
+            "position": [
+              0.416,
+              1.47,
+              0.163
+            ],
+            "rotation": [
+              0,
+              0,
+              0.17364817766693033,
+              0.984807753012208
+            ],
+            "scale": [
+              0.152,
+              0.043,
+              0.017
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.008,
+            "parent": "shoulderL",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.45,
+              "sides": 6
+            }
+          },
+          {
+            "id": 53,
+            "name": "shoulderUnderL",
+            "type": "Prism",
+            "position": [
+              0.423,
+              1.329,
+              0.019
+            ],
+            "rotation": [
+              0,
+              0,
+              0.17364817766693033,
+              0.984807753012208
+            ],
+            "scale": [
+              0.121,
+              0.055,
+              0.124
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.012,
+            "parent": "armL",
+            "taper": 0.68
+          },
+          {
+            "id": 54,
+            "name": "bracerInsetL",
+            "type": "Prism",
+            "position": [
+              0.473,
+              1.042,
+              0.176
+            ],
+            "rotation": [
+              0,
+              0,
+              0.11320321376790672,
+              0.9935718556765875
+            ],
+            "scale": [
+              0.067,
+              0.101,
+              0.012
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.007,
+            "parent": "forearmL",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.4,
+              "sides": 6
+            }
+          },
+          {
+            "id": 55,
+            "name": "wristCuffL",
+            "type": "Prism",
+            "position": [
+              0.496,
+              0.875,
+              0.069
+            ],
+            "rotation": [
+              0,
+              0,
+              0.11320321376790672,
+              0.9935718556765875
+            ],
+            "scale": [
+              0.093,
+              0.024,
+              0.091
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.006,
+            "parent": "forearmL",
+            "taper": 0.95
+          },
+          {
+            "id": 56,
+            "name": "thumbL",
+            "type": "Ellipsoid",
+            "position": [
+              0.419,
+              0.803,
+              0.108
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.17364817766693033,
+              0.984807753012208
+            ],
+            "scale": [
+              0.034,
+              0.048,
+              0.036
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "parent": "handL"
+          },
+          {
+            "id": 57,
+            "name": "hipPlateL",
+            "type": "Prism",
+            "position": [
+              0.202,
+              0.88,
+              0.09
+            ],
+            "rotation": [
+              0,
+              0,
+              0.9914448613738104,
+              0.1305261922200517
+            ],
+            "scale": [
+              0.074,
+              0.099,
+              0.053
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.01,
+            "parent": "pelvis",
+            "taper": 0.62
+          },
+          {
+            "id": 58,
+            "name": "thighPlateL",
+            "type": "Prism",
+            "position": [
+              0.163,
+              0.722,
+              0.105
+            ],
+            "rotation": [
+              0,
+              0,
+              1.0,
+              6.123233995736766E-17
+            ],
+            "scale": [
+              0.087,
+              0.11,
+              0.036
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.012,
+            "parent": "thighL",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.6,
+              "sides": 6
+            }
+          },
+          {
+            "id": 59,
+            "name": "shinInlayL",
+            "type": "Prism",
+            "position": [
+              0.196,
+              0.32,
+              0.126
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.06104853953485687,
+              0.9981347984218669
+            ],
+            "scale": [
+              0.052,
+              0.105,
+              0.011
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.006,
+            "parent": "shinL",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.55,
+              "sides": 6
+            }
+          },
+          {
+            "id": 60,
+            "name": "toeCapL",
+            "type": "Prism",
+            "position": [
+              0.221,
+              0.154,
+              0.322
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.02617694830787315,
+              0.9996573249755573
+            ],
+            "scale": [
+              0.123,
+              0.054,
+              0.017
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.009,
+            "parent": "bootL",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.5,
+              "sides": 6
+            }
+          },
+          {
+            "id": 61,
+            "name": "soleL",
+            "type": "Box",
+            "position": [
+              0.214,
+              0.041,
+              0.1
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.02617694830787315,
+              0.9996573249755573
+            ],
+            "scale": [
+              0.15,
+              0.015,
+              0.212
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.006,
+            "parent": "bootL"
+          },
+          {
+            "id": 62,
+            "name": "templeGuardL",
+            "type": "Prism",
+            "position": [
+              0.282,
+              1.775,
+              0.229
+            ],
+            "rotation": [
+              0,
+              0,
+              0.9945218953682734,
+              -0.10452846326765333
+            ],
+            "scale": [
+              0.061,
+              0.118,
+              0.045
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.008,
+            "parent": "hood",
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
+          },
+          {
+            "id": 63,
+            "name": "templeStudL",
+            "type": "Ellipsoid",
+            "position": [
+              0.303,
+              1.825,
+              0.279
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.029,
+              0.034,
+              0.013
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "parent": "hood"
+          },
+          {
+            "id": 64,
+            "name": "eyeRimL",
+            "type": "Capsule",
+            "position": [
+              0.102,
+              1.934,
+              0.334
+            ],
+            "rotation": [
+              0,
+              0,
+              0.6626200482157375,
+              0.7489557207890021
+            ],
+            "scale": [
+              0.006,
+              0.096,
+              0.006
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "parent": "hood"
+          },
+          {
+            "id": 65,
+            "name": "shoulderEdgeR",
+            "type": "Prism",
+            "position": [
+              -0.416,
+              1.47,
+              0.163
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.17364817766693033,
+              0.984807753012208
+            ],
+            "scale": [
+              0.152,
+              0.043,
+              0.017
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.008,
+            "parent": "shoulderR",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.45,
+              "sides": 6
+            }
+          },
+          {
+            "id": 66,
+            "name": "shoulderUnderR",
+            "type": "Prism",
+            "position": [
+              -0.423,
+              1.329,
+              0.019
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.17364817766693033,
+              0.984807753012208
+            ],
+            "scale": [
+              0.121,
+              0.055,
+              0.124
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.012,
+            "parent": "armR",
+            "taper": 0.68
+          },
+          {
+            "id": 67,
+            "name": "bracerInsetR",
+            "type": "Prism",
+            "position": [
+              -0.473,
+              1.042,
+              0.176
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.11320321376790672,
+              0.9935718556765875
+            ],
+            "scale": [
+              0.067,
+              0.101,
+              0.012
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.007,
+            "parent": "forearmR",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.4,
+              "sides": 6
+            }
+          },
+          {
+            "id": 68,
+            "name": "wristCuffR",
+            "type": "Prism",
+            "position": [
+              -0.496,
+              0.875,
+              0.069
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.11320321376790672,
+              0.9935718556765875
+            ],
+            "scale": [
+              0.093,
+              0.024,
+              0.091
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.006,
+            "parent": "forearmR",
+            "taper": 0.95
+          },
+          {
+            "id": 69,
+            "name": "thumbR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.419,
+              0.803,
+              0.108
+            ],
+            "rotation": [
+              0,
+              0,
+              0.17364817766693033,
+              0.984807753012208
+            ],
+            "scale": [
+              0.034,
+              0.048,
+              0.036
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "parent": "handR"
+          },
+          {
+            "id": 70,
+            "name": "hipPlateR",
+            "type": "Prism",
+            "position": [
+              -0.202,
+              0.88,
+              0.09
+            ],
+            "rotation": [
+              0,
+              0,
+              -0.9914448613738104,
+              0.1305261922200517
+            ],
+            "scale": [
+              0.074,
+              0.099,
+              0.053
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.01,
+            "parent": "pelvis",
+            "taper": 0.62
+          },
+          {
+            "id": 71,
+            "name": "thighPlateR",
+            "type": "Prism",
+            "position": [
+              -0.163,
+              0.722,
+              0.105
+            ],
+            "rotation": [
+              0,
+              0,
+              1.0,
+              6.123233995736766E-17
+            ],
+            "scale": [
+              0.087,
+              0.11,
+              0.036
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.012,
+            "parent": "thighR",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.6,
+              "sides": 6
+            }
+          },
+          {
+            "id": 72,
+            "name": "shinInlayR",
+            "type": "Prism",
+            "position": [
+              -0.196,
+              0.32,
+              0.126
+            ],
+            "rotation": [
+              0,
+              0,
+              0.06104853953485687,
+              0.9981347984218669
+            ],
+            "scale": [
+              0.052,
+              0.105,
+              0.011
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.006,
+            "parent": "shinR",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.55,
+              "sides": 6
+            }
+          },
+          {
+            "id": 73,
+            "name": "toeCapR",
+            "type": "Prism",
+            "position": [
+              -0.221,
+              0.154,
+              0.322
+            ],
+            "rotation": [
+              0,
+              0,
+              0.02617694830787315,
+              0.9996573249755573
+            ],
+            "scale": [
+              0.123,
+              0.054,
+              0.017
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.009,
+            "parent": "bootR",
+            "profile": {
+              "kind": "RoundedRectangle",
+              "cornerRadius": 0.5,
+              "sides": 6
+            }
+          },
+          {
+            "id": 74,
+            "name": "soleR",
+            "type": "Box",
+            "position": [
+              -0.214,
+              0.041,
+              0.1
+            ],
+            "rotation": [
+              0,
+              0,
+              0.02617694830787315,
+              0.9996573249755573
+            ],
+            "scale": [
+              0.15,
+              0.015,
+              0.212
+            ],
+            "material": 2,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.006,
+            "parent": "bootR"
+          },
+          {
+            "id": 75,
+            "name": "templeGuardR",
+            "type": "Prism",
+            "position": [
+              -0.282,
+              1.775,
+              0.229
+            ],
+            "rotation": [
+              0,
+              0,
+              0.9945218953682733,
+              0.10452846326765346
+            ],
+            "scale": [
+              0.061,
+              0.118,
+              0.045
+            ],
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0.008,
+            "parent": "hood",
+            "profile": {
+              "kind": "Polygon",
+              "cornerRadius": 0.4,
+              "sides": 5
+            }
+          },
+          {
+            "id": 76,
+            "name": "templeStudR",
+            "type": "Ellipsoid",
+            "position": [
+              -0.303,
+              1.825,
+              0.279
+            ],
+            "rotation": [
+              0,
+              0,
+              0.0,
+              1.0
+            ],
+            "scale": [
+              0.029,
+              0.034,
+              0.013
+            ],
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "parent": "hood"
+          },
+          {
+            "id": 77,
+            "name": "eyeRimR",
+            "type": "Capsule",
+            "position": [
+              -0.102,
+              1.934,
+              0.334
+            ],
+            "rotation": [
+              0,
+              0,
+              0.7489557207890021,
+              0.6626200482157375
+            ],
+            "scale": [
+              0.006,
+              0.096,
+              0.006
+            ],
+            "material": 4,
+            "blend": "Union",
+            "smooth": 0,
+            "dilate": 0,
+            "parent": "hood"
           }
         ],
         "drivers": [
@@ -2629,16 +3580,9 @@
             "cadence": 0,
             "when": [
               "Airborne"
-            ]
-          },
-          {
-            "name": "step",
-            "signal": "planarTravel",
-            "cadence": 11.6,
-            "when": [
-              "Grounded",
-              "moving"
-            ]
+            ],
+            "blendInSeconds": 0.07,
+            "blendOutSeconds": 0.1
           },
           {
             "name": "bank",
@@ -2672,6 +3616,16 @@
             "when": [
               "Airborne"
             ]
+          },
+          {
+            "when": [
+              "Airborne"
+            ],
+            "blendOutSeconds": 0.34,
+            "blendInSeconds": 0.22,
+            "cadence": 0,
+            "signal": "time",
+            "name": "wings"
           }
         ],
         "frames": [
@@ -2686,14 +3640,14 @@
                   0.9981347984218669
                 ],
                 "position": [
-                  0.103,
-                  1.895,
-                  0.327
+                  0.102,
+                  1.897,
+                  0.328
                 ],
                 "scale": [
-                  0.066,
+                  0.058,
                   0.003,
-                  0.018
+                  0.006
                 ]
               },
               {
@@ -2705,14 +3659,14 @@
                   1.0
                 ],
                 "position": [
-                  0.109,
-                  1.892,
-                  0.347
+                  0.105,
+                  1.894,
+                  0.337
                 ],
                 "scale": [
-                  0.029,
+                  0.026,
                   0.003,
-                  0.01
+                  0.005
                 ]
               },
               {
@@ -2724,9 +3678,9 @@
                   1.0
                 ],
                 "position": [
-                  0.10099999999999999,
-                  1.905,
-                  0.359
+                  0.09699999999999999,
+                  1.907,
+                  0.345
                 ],
                 "scale": [
                   0.007,
@@ -2743,14 +3697,14 @@
                   0.9981347984218669
                 ],
                 "position": [
-                  -0.103,
-                  1.895,
-                  0.327
+                  -0.102,
+                  1.897,
+                  0.328
                 ],
                 "scale": [
-                  0.066,
+                  0.058,
                   0.003,
-                  0.018
+                  0.006
                 ]
               },
               {
@@ -2762,14 +3716,14 @@
                   1.0
                 ],
                 "position": [
-                  -0.09699999999999999,
-                  1.892,
-                  0.347
+                  -0.09899999999999999,
+                  1.894,
+                  0.337
                 ],
                 "scale": [
-                  0.029,
+                  0.026,
                   0.003,
-                  0.01
+                  0.005
                 ]
               },
               {
@@ -2781,9 +3735,9 @@
                   1.0
                 ],
                 "position": [
-                  -0.105,
-                  1.905,
-                  0.359
+                  -0.107,
+                  1.907,
+                  0.345
                 ],
                 "scale": [
                   0.007,
@@ -3267,6 +4221,44 @@
           {
             "$type": "fov",
             "fieldOfViewRadians": 0.65
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "name": "head",
+      "anchor": null,
+      "renderHeight": 900,
+      "renderWidth": 1280,
+      "rig": {
+        "name": "head",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0.9,
+                2.0,
+                -2.05
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.84,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.54
           }
         ],
         "version": "puck.camera.v1"

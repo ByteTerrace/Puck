@@ -1001,7 +1001,8 @@ export type CreationDocument = {
     | ({
         id: number;
         name?: unknown;
-        type: "Sphere" | "Box" | "Torus" | "Cylinder" | "Capsule" | "Ellipsoid" | "RoundCone" | "Plane" | "Cone";
+        type:
+          "Sphere" | "Box" | "Torus" | "Cylinder" | "Capsule" | "Ellipsoid" | "RoundCone" | "Plane" | "Cone" | "Prism";
         position: unknown;
         rotation: unknown;
         scale: unknown;
@@ -1203,6 +1204,12 @@ export type CreationDocument = {
         joint?: {
           [k: string]: unknown;
         };
+        taper?: number | null;
+        profile?: {
+          kind: "Trapezoid" | "RoundedRectangle" | "Polygon" | "Ellipse";
+          cornerRadius?: number;
+          sides?: number;
+        } | null;
       } | null)[]
     | null;
   frames?:
@@ -1269,6 +1276,8 @@ export type CreationDocument = {
         signal: string;
         cadence: unknown;
         when?: (string | null)[] | null;
+        blendInSeconds?: number | null;
+        blendOutSeconds?: number | null;
       } | null)[]
     | null;
   effectors?:
@@ -1634,7 +1643,7 @@ export type WorldGroupSelector = (WorldGroupSelectorNamed | null) | (WorldGroupS
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldAdmissionTrustMode".
  */
-export type WorldAdmissionTrustMode = "SignsDirectly" | "Vouches" | "FederatedAuthority";
+export type WorldAdmissionTrustMode = "SignsDirectly" | "Vouches" | "FederatedAuthority" | "OAuth";
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "WorldDisclosureTier".
@@ -7852,11 +7861,11 @@ export interface WorldStorageDefaults {
    */
   endpoint?: string | null;
   /**
-   * An explicit user-id override (an Entra oid Guid string for a dev box or agent), or null to decline identity (local-only). Fed to the identity resolver's explicit-override source.
+   * An explicit user-id override (a UUID string for a dev box or agent), or null to decline identity (local-only). Fed to the identity resolver's explicit-override source.
    */
   userId?: string | null;
   /**
-   * The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target — the platform edge cannot serve List at all (see AzureBlobObjectStorageTarget.DirectEndpoint's remarks), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).
+   * The direct-to-account connection container listing uses when Endpoint resolves to an edge-shaped target — the platform edge cannot serve List at all (see the storage extension documentation), so an edge-shaped target with this null refuses discovery by name instead of a request the edge cannot answer. Validated as an absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator shape. Ignored when Endpoint is raw-shaped (a raw target lists directly, like it reads and writes).
    */
   discoveryEndpoint?: string | null;
 }
@@ -11138,7 +11147,7 @@ export interface WorldReference {
    */
   document?: string | null;
   /**
-   * The remote world's owning platform user id (an Entra oid) — worlds ARE users, so naming the owner names the world's account. Required together with World; refused alone.
+   * The remote world's owning platform user id (a UUID) — worlds ARE users, so naming the owner names the world's account. Required together with World; refused alone.
    */
   owner?: string | null;
   /**
@@ -11242,23 +11251,23 @@ export interface WorldGroupSelectorTagged {
  */
 export interface WorldAdmissionEntry {
   /**
-   * The trusted key's own id domain — a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey's own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key's hash. For FederatedAuthority it is not a key id at all: it names the authenticated source-authority namespace, or AnyAuthority for any authority that completes the federation handshake.
+   * The trusted key's own id domain — a lowercase-hex SHA-256 fingerprint (64 characters). For Vouches this must be PublicKey's own fingerprint (a root is self-certifying). For SignsDirectly it names the domain namespace this individual is pinned under, which need not equal their own key's hash. For FederatedAuthority it is not a key id at all: it names the authenticated source-authority namespace, or AnyAuthority for any authority that completes the federation handshake. For OAuth it is the exact HTTPS issuer.
    */
   domain: string;
   /**
-   * The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here).
+   * The platform user id this entry pins, required for SignsDirectly and refused for Vouches (a root vouches for every subject its two-hop chain resolves, never one named here). OAuth requires an exact subject within its issuer, never a wildcard.
    */
   subject: string | null;
   /**
-   * Whether this entry signs directly or vouches for a chain.
+   * The trusted identity proof this row accepts.
    */
   mode: WorldAdmissionTrustMode;
   /**
-   * Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door's mandatory attestation-v1-base profile. Sealing algorithms and optional signing extensions are refused by document validation.
+   * Exactly ecdsa-p256-sha256, the only signing algorithm enabled by the admission door's mandatory attestation-v1-base profile. Sealing algorithms and optional signing extensions are refused by document validation. OAuth and federated-authority rows require an empty string.
    */
   algorithm: string;
   /**
-   * The pinned key's actual SubjectPublicKeyInfo bytes, base64-encoded — carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed attestation": consulting the issuer at verification time is a ruled-out design).
+   * The pinned key's actual SubjectPublicKeyInfo bytes, base64-encoded — carried alongside the id because offline verification needs the real bytes, never a fetch (docs/vision.md, "Signed attestation": consulting the issuer at verification time is a ruled-out design). Empty for OAuth and federated-authority rows.
    */
   publicKey: string;
   /**
@@ -11430,7 +11439,7 @@ export interface WorldMetadataAuthor {
    */
   name: string;
   /**
-   * The author's Entra object id, when the author chooses to attach one — see WorldEntraObjectId. Authored, not authenticated: nothing here proves the name behind the id.
+   * The author's object id, when the author chooses to attach one — see WorldObjectId. Authored, not authenticated: nothing here proves the name behind the id.
    */
   oid?: string | null;
 }

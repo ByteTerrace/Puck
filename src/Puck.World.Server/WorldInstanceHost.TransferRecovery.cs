@@ -56,7 +56,7 @@ public sealed partial class WorldInstanceHost {
                 (pending.RollbackOnly ? pending.Landed.Count > pending.MemberCount : pending.Landed.Count != pending.MemberCount)) {
                 Refuse("commit member count does not match the retained cohort");
             }
-            if (pending.TargetEndpoint is { } endpoint && !System.Net.IPEndPoint.TryParse(endpoint, out _)) {
+            if (pending.TargetEndpoint is { } endpoint && !Puck.Networking.PeerEndpoint.TryParse(endpoint, out _)) {
                 Refuse("target endpoint is invalid");
             }
             if (string.IsNullOrEmpty(pending.TargetAuthority)) {

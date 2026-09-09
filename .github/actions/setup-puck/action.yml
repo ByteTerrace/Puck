@@ -1,0 +1,37 @@
+name: Install Puck CLI
+description: Install this run's candidate artifact, the pinned official tool, or an explicitly requested source bootstrap.
+inputs:
+  artifact:
+    description: Install the candidate package from this run's producer artifact; never compile.
+    default: ''
+  candidate:
+    description: Build this checkout's CLI for source-dependent commands.
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Install pinned DXC
+      if: inputs.artifact == ''
+      shell: bash
+      run: dotnet run -c Release --file build/InstallDxc.cs
+    - name: Install Puck CLI
+      if: inputs.artifact == ''
+      shell: bash
+      env:
+        CANDIDATE: ${{ inputs.candidate }}
+      run: |
+        if [[ "$CANDIDATE" == true ]]; then
+          dotnet run -c Release --file build/Toolchain.cs -- candidate
+        else
+          dotnet run -c Release --file build/Toolchain.cs -- setup
+        fi
+    - name: Download the candidate CLI package
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      if: inputs.artifact != ''
+      with:
+        name: ${{ inputs.artifact }}
+        path: artifacts/cli-feed
+    - name: Install the already-built candidate CLI
+      if: inputs.artifact != ''
+      shell: bash
+      run: dotnet run -c Release --file build/Toolchain.cs -- install-candidate artifacts/cli-feed

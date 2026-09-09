@@ -10,8 +10,6 @@ namespace Puck.Cli.Packaging;
 // regeneration shape `puck schema --check`/`puck schema` establishes for the checked-in JSON Schema files.
 // docs/site/index.html carries the one checked-in GENERATED instance today; a hand-maintained list next to
 // a generated one is the same second source docs/project-map.md's layering block exists to avoid.
-// src/Web.Functions is excluded from the walk for the reason Architecture.props' PuckArchitectureGateEnabled
-// predicate states beside its own matching exclusion.
 // Exit 0 listed/wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 internal static class PackagesCommand {
     private const string GeneratedBegin = "<!-- GENERATED: puck packages -->";
@@ -108,45 +106,9 @@ internal static class PackagesCommand {
         return 1;
     }
     private static IReadOnlyList<PackageEntry> Discover(string repositoryRoot) {
-        var directory = Path.Combine(
-            path1: repositoryRoot,
-            path2: "src"
-        );
         var packages = new List<PackageEntry>();
 
-        if (!Directory.Exists(path: directory)) {
-            return packages;
-        }
-
-        foreach (var file in Directory.EnumerateFiles(
-            path: directory,
-            searchOption: SearchOption.AllDirectories,
-            searchPattern: "*.csproj"
-        )) {
-            if (
-                file.Contains(value: $"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") ||
-                file.Contains(value: $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") ||
-                file.Contains(
-                comparisonType: StringComparison.OrdinalIgnoreCase,
-                value: $"{Path.DirectorySeparatorChar}src{Path.DirectorySeparatorChar}Puck.Azure.Functions{Path.DirectorySeparatorChar}"
-            )
-            ) {
-                continue;
-            }
-
-            var document = XDocument.Load(uri: file);
-
-            if (!string.Equals(
-                a: Element(
-                    document: document,
-                    name: "IsPackable"
-                ),
-                b: "true",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                continue;
-            }
-
+        foreach (var (file, document) in PackableProjects.Discover(root: repositoryRoot)) {
             var tags = (Element(
                 document: document,
                 name: "PackageTags"
@@ -178,7 +140,7 @@ internal static class PackagesCommand {
         return packages;
     }
     private static string? Element(XDocument document, string name) =>
-        document.Descendants().FirstOrDefault(predicate: e => (e.Name.LocalName == name))?.Value.Trim();
+        PackableProjects.Property(document: document, name: name);
     private static string Indent(string text) =>
         string.Join(
             separator: '\n',
@@ -201,7 +163,7 @@ internal static class PackagesCommand {
 
         _ = builder.Append(value: GeneratedBegin).Append(value: '\n');
         _ = builder.Append(value: indent).Append(value: "<p class=\"libs\">\n");
-        _ = builder.Append(value: indent).Append(value: "  Published libraries:\n");
+        _ = builder.Append(value: indent).Append(value: "  NuGet packages:\n");
 
         for (var index = 0; (index < packages.Count); index++) {
             var suffix = ((index == (packages.Count - 1))

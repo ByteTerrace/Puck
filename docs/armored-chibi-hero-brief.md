@@ -13,6 +13,13 @@ choices supersede the island-ranger palette and helmet defaults below. The
 [Moth studio guide](../src/Puck.World/Assets/worlds/moth.md) owns the current authored
 model, controls, and live iteration recipe; the quality priorities here still apply.
 
+The selected movement personality is nimble, with visible weight and function in
+the wings. Prioritize a convincing idle → run → takeoff → bank → land sequence.
+Design the articulation and clearance for the refined armor as the motion is
+developed: fast body response, deliberate wing deployment, useful vane adjustment
+in flight, and controlled stow after landing. Geometry refinement must preserve
+those working joints and clearances.
+
 ## 1. What success looks like
 
 At normal gameplay size, the character reads immediately as a compact, capable adventurer in substantial powered armor. The head has personality; the armor has structure; the joints visibly explain how the body moves. From behind, the character is as recognizable as from the front. Walking feels agile, stopping feels controlled, and landing communicates weight.

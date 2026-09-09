@@ -7,7 +7,7 @@
 //
 // and passes <path> here with --bundle. package.json's "types:generate" script documents this
 // two-step call; "check:types" (this same script with --check) is the one exception that DOES
-// shell out to the published CLI itself, purely to regenerate a fresh comparison copy.
+// invoke the installed CLI artifact in CI (or a local CLI), purely to regenerate a fresh comparison copy.
 //
 // Usage:
 //   node scripts/generateWorldTypes.mjs --bundle <path> [--out <path>]
@@ -19,25 +19,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compile } from "json-schema-to-typescript";
+import { findRepositoryRoot, puckCommand } from "./puckCli.cjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PORTAL_DIR = path.join(HERE, "..");
 const DEFAULT_OUT = path.join(PORTAL_DIR, "src", "document", "worldDefinition.generated.ts");
 const ROOT_TYPE_NAME = "WorldDefinition";
-
-function findRepositoryRoot(start) {
-  let dir = start;
-  for (;;) {
-    if (fs.existsSync(path.join(dir, "Puck.slnx"))) {
-      return dir;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      throw new Error(`could not find Puck.slnx walking up from ${start}`);
-    }
-    dir = parent;
-  }
-}
 
 function parseArgs(argv) {
   const args = { bundle: null, out: null, check: false };
@@ -94,14 +81,7 @@ async function runGenerate(bundlePath, outPath) {
 
 async function runCheck() {
   const repoRoot = findRepositoryRoot(PORTAL_DIR);
-  const puckExe = path.join(repoRoot, "src", "Puck.Cli", "publish", "puck.exe");
-
-  if (!fs.existsSync(puckExe)) {
-    console.error(`check:types needs a published puck CLI at ${puckExe}.`);
-    console.error("Produce it with: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish");
-    process.exitCode = 1;
-    return;
-  }
+  const puckExe = puckCommand(repoRoot);
 
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "puck-world-types-"));
   try {

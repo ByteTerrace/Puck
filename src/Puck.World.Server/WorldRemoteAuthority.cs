@@ -172,29 +172,32 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     private WorldDefinition m_definition;
     private long m_lastObservedTickBits;
     private WorldAuthorityRouteDescription? m_observedRoute;
+
     // The physical entry stays fixed even when a traveler's logical destination changes.
     private readonly PublishedRoute m_route;
+
     private int m_unconfiguredNoted;
+
     // The local instance's own hub, so this lane's narration reaches whatever sink is attached to it — null for a
     // caller with no local server (leaves this lane's narration undelivered, never a fallback to Console.Error).
     private readonly WorldOutputHub? m_narrationHub;
 
     public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, string? expectedAuthority = null, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null) {
-        m_narrationHub = narrationHub ?? submissionAuthority?.m_narrationHub;
-        if (!IPEndPoint.TryParse(
-            result: out var parsed,
-            s: endpoint
+        m_narrationHub = (narrationHub ?? submissionAuthority?.m_narrationHub);
+        if (!PeerEndpoint.TryParse(
+            endpoint: out var parsed,
+            value: endpoint
         )) {
-            throw new FormatException(message: $"host.authority '{endpoint}' is not a parseable IP endpoint");
+            throw new FormatException(message: $"host.authority '{endpoint}' is not a valid peer host and port");
         }
 
         m_route = new PublishedRoute(endpoint: parsed);
         m_definition = placeholder;
         m_security = (security ?? throw new ArgumentNullException(paramName: nameof(security)));
-        m_network = network ?? submissionAuthority?.m_network ?? new WorldPeerNetwork();
-        m_ownsNetwork = network is null && submissionAuthority is null;
+        m_network = (network ?? (submissionAuthority?.m_network ?? new WorldPeerNetwork()));
+        m_ownsNetwork = ((network is null) && (submissionAuthority is null));
         m_observerAuthority = observerAuthority;
-        m_peerAuthority = expectedAuthority ?? string.Empty;
+        m_peerAuthority = (expectedAuthority ?? string.Empty);
         m_submissionAuthority = submissionAuthority;
         m_submissionCredential = submissionCredential;
         if ((submissionAuthority is null) != (submissionCredential is null)) {
@@ -218,10 +221,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     /// too, rather than carrying a second hub reference.</summary>
     internal WorldOutputHub? NarrationHub => m_narrationHub;
 
-    public string Authority => Volatile.Read(ref m_authority) is { Length: > 0 } observed ? observed : PeerAuthority;
+    public string Authority => ((Volatile.Read(location: ref m_authority) is { Length: > 0 } observed) ? observed : PeerAuthority);
     /// <summary>Gets the pinned first-hop transaction namespace, or an empty string before the first handshake.
     /// Reconnection checks this namespace before sending a request. It is distinct from a traveler's onward route.</summary>
-    public string PeerAuthority => Volatile.Read(ref m_peerAuthority);
+    public string PeerAuthority => Volatile.Read(location: ref m_peerAuthority);
     /// <summary>Gets a value indicating whether every established lane is outside its unreachable-peer backoff
     /// window. WALL-CLOCK transport lifecycle state (<see cref="PersistentRequestLane{TRequestKind,TResponseKind}.IsAvailable"/>),
     /// legitimate for a read-back to print and never for simulation to read — link liveness the sim acts on is
@@ -617,10 +620,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             : WorldFederationLane.Transaction
         );
     private async Task<bool> ObserveSessionAsync(IClientSink sink, CancellationToken ct) {
-        var upstream = m_submissionAuthority ?? this;
+        var upstream = (m_submissionAuthority ?? this);
         var observedEndpoint = upstream.m_route.Endpoint;
 
-        await using var stream = await m_network.ConnectAsync(observedEndpoint, ct).ConfigureAwait(false);
+        await using var stream = await m_network.ConnectAsync(ct: ct, endpoint: observedEndpoint).ConfigureAwait(continueOnCapturedContext: false);
 
         await HandshakeWireFormat.WriteHelloAsync(
             ct: ct,
@@ -632,10 +635,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
         await WorldFederationCodec.WriteRequestAsync(
-            body: m_submissionCredential is { } credential
-                ? WorldFederationCodec.EncodeTravelerObservation(new(credential.SourceAuthority, credential.Mobility)) : default,
+            body: ((m_submissionCredential is { } credential)
+                ? WorldFederationCodec.EncodeTravelerObservation(request: new(credential.SourceAuthority, credential.Mobility)) : default),
             ct: ct,
-            kind: m_submissionCredential.HasValue ? WorldFederationRequest.ObserveTraveler : WorldFederationRequest.Observe,
+            kind: (m_submissionCredential.HasValue ? WorldFederationRequest.ObserveTraveler : WorldFederationRequest.Observe),
             stream: stream
         ).ConfigureAwait(continueOnCapturedContext: false);
 
@@ -657,7 +660,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                     // every other site here — the sink check comes first and the decode happens only behind it,
                     // rather than being captured into Narrate's own deferred formatter.
                     if (m_narrationHub is { } hub) {
-                        var refusalReason = Encoding.UTF8.GetString(frame.Body.Span);
+                        var refusalReason = Encoding.UTF8.GetString(bytes: frame.Body.Span);
 
                         if (hub.HasNarrationSink) {
                             hub.Narrate(
@@ -671,7 +674,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
                     if (!m_submissionCredential.HasValue || !WorldFederationCodec.TryDecodeRoute(frame.Body.Span, out var route, out _)) {
                         return false;
                     }
-                    PublishObservedRoute(route);
+                    PublishObservedRoute(route: route);
                     break;
                 case WorldFederationResponse.Definition: {
                         if (
@@ -812,9 +815,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
         }
     }
     private void PublishObservedRoute(WorldAuthorityRouteDescription route) {
-        var changed = m_observedRoute is not { } observed || observed.Entity != route.Entity;
+        var changed = ((m_observedRoute is not { } observed) || (observed.Entity != route.Entity));
+
         m_observedRoute = route;
-        if (changed && m_submissionCredential is { } credential) { InvalidateAcknowledgement(credential: in credential); }
+        if (changed && (m_submissionCredential is { } credential)) { InvalidateAcknowledgement(credential: in credential); }
         Volatile.Write(
             location: ref m_definition,
             value: route.Definition
@@ -956,7 +960,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     }
     public IDisposable AttachSink(IClientSink sink) {
         ArgumentNullException.ThrowIfNull(sink);
-        var lease = new ObservationLease(m_lifetime.Token);
+        var lease = new ObservationLease(parent: m_lifetime.Token);
 
         _ = Task.Run(function: () => ObserveUntilCancelledAsync(
             sink: sink,
@@ -976,6 +980,10 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     /// is thrown as this same exception and recorded, so every later gate closes on it without another
     /// socket.</exception>
     public async Task AuthenticateAsync(Stream stream, CancellationToken ct) {
+        if (m_security is IRemoteIdentityVerifier verifier &&
+            (stream is not Puck.Networking.Peers.PeerStream peer || !verifier.AcceptsRemoteIdentity(peer.Link.RemoteId.KeyHash))) {
+            throw new IOException("The remote transport identity does not match this connection's credential policy.");
+        }
         if (LacksSigningIdentity()) {
             throw new IOException(message: $"federation authentication — {UnconfiguredDetail}");
         }
@@ -1034,14 +1042,15 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             ));
         }
         if (!WorldFederationCodec.TryDecodeAuthorityIdentity(verdict.Body.Span, out var peerAuthority, out var identityFailure)) {
-            throw new IOException($"federation authentication — invalid destination identity ({identityFailure})");
+            throw new IOException(message: $"federation authentication — invalid destination identity ({identityFailure})");
         }
         // Routed observations use their transaction authority's authenticated entry connection too, so private
         // onward world names never become socket endpoints or weaken the original peer namespace pin.
         if (m_submissionAuthority is null) {
-            var expected = Interlocked.CompareExchange(ref m_peerAuthority, peerAuthority, string.Empty);
-            if (expected.Length != 0 && !string.Equals(expected, peerAuthority, StringComparison.Ordinal)) {
-                throw new IOException($"federation destination authority mismatch: expected '{expected}', received '{peerAuthority}'");
+            var expected = Interlocked.CompareExchange(comparand: string.Empty, location1: ref m_peerAuthority, value: peerAuthority);
+
+            if ((expected.Length != 0) && !string.Equals(a: expected, b: peerAuthority, comparisonType: StringComparison.Ordinal)) {
+                throw new IOException(message: $"federation destination authority mismatch: expected '{expected}', received '{peerAuthority}'");
             }
         }
     }
@@ -1062,7 +1071,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             answer: out var answer
         );
 
-        return DecodeCommitAnswer(answer, out accepted, out reason);
+        return DecodeCommitAnswer(accepted: out accepted, answer: answer, reason: out reason);
     }
     public void Dispose() {
         m_lifetime.Cancel();
@@ -1148,9 +1157,9 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
     private readonly record struct TransferStepKey(string SourceAuthority, ulong TransferId, WorldFederationRequest Kind);
     // One route republish generation: the endpoint to dial and its description, formatted once here so no attempt,
     // narration, or comparison formats it again, and held as one reference so a swap is atomic.
-    private sealed class PublishedRoute(IPEndPoint endpoint) {
-        public string Description { get; } = endpoint.ToString();
-        public IPEndPoint Endpoint { get; } = endpoint;
+    private sealed class PublishedRoute(EndPoint endpoint) {
+        public string Description { get; } = PeerEndpoint.Format(endpoint);
+        public EndPoint Endpoint { get; } = endpoint;
 
         public LaneRoute Lane => new(
             Description: Description,
@@ -1290,7 +1299,7 @@ public sealed partial class WorldRemoteAuthority : IDisposable {
             var route = m_owner.CurrentRoute();
 
             var connectedEndpoint = route.Description;
-            await using var stream = await m_owner.m_network.ConnectAsync(route.Endpoint, ct).ConfigureAwait(false);
+            await using var stream = await m_owner.m_network.ConnectAsync(route.Endpoint, ct).ConfigureAwait(continueOnCapturedContext: false);
 
             await HandshakeWireFormat.WriteHelloAsync(
                 ct: ct,

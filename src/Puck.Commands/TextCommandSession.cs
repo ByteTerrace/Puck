@@ -29,7 +29,8 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         CommandInjectionSink? simulationSink,
         Action<string, CommandResult>? onResult,
         Func<bool>? hold = null,
-        Func<IDisposable>? scope = null
+        Func<IDisposable>? scope = null,
+        Func<CommandMetadata, bool>? authorize = null
     ) {
         m_onResult = onResult;
         m_source = source;
@@ -38,6 +39,7 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         Scope = scope;
         SimulationSink = simulationSink;
         Slot = slot;
+        Authorize = authorize;
     }
 
     internal TextSubmissionBarrier Barrier => m_barrier;
@@ -51,6 +53,7 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     // label (which row a hosted session belongs to) available to whatever the handler calls synchronously, without
     // this project knowing what the label is for. Null for a session nothing ambient-labels (the ordinary case).
     internal Func<IDisposable>? Scope { get; }
+    internal Func<CommandMetadata, bool>? Authorize { get; }
     internal CommandInjectionSink? SimulationSink { get; }
 
     /// <summary>Gets the identity this ingress stamps on every submitted command.</summary>

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 using Puck.Attestation;
 
 namespace Puck.World;
@@ -7,36 +8,8 @@ namespace Puck.World;
 /// <remarks>This validator proves everything a silo document alone can prove: key files parse and exist, no two
 /// rows share one, no two rows name the same world, and the declared door budget is not exceeded. It cannot prove a
 /// row's loaded world definition carries <c>host.authority</c> — that fact depends on the referenced document, not
-/// this one, and is refused by name at activation instead.</remarks>
+/// this one, and is refused by name at activation instead. Extension settings are opaque here; the selected installed provider validates them before startup.</remarks>
 public static class WorldSiloDefinitionValidator {
-    private static bool TryValidateClustering(WorldSiloClustering clustering, out string reason) {
-        switch (clustering.Kind) {
-            case WorldSiloClusteringKind.Localhost:
-                if (clustering.TableName is { Length: > 0 }) {
-                    reason = "clustering.kind is 'localhost' but clustering.tableName is set";
-
-                    return false;
-                }
-
-                break;
-            case WorldSiloClusteringKind.Table:
-                if (string.IsNullOrWhiteSpace(value: clustering.TableName)) {
-                    reason = "clustering.kind is 'table' but clustering.tableName is missing";
-
-                    return false;
-                }
-
-                break;
-            default:
-                reason = $"clustering.kind '{clustering.Kind}' is not recognized";
-
-                return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
     private static bool TryValidateFederationKey(SafeName world, WorldSiloFederation federation, out string reason) {
         if (string.IsNullOrWhiteSpace(value: federation.KeyFile)) {
             reason = $"world '{world}' names no federation.keyFile";
@@ -68,53 +41,14 @@ public static class WorldSiloDefinitionValidator {
 
         return true;
     }
-    private static bool TryValidateStore(WorldSiloStore store, out string reason) {
-        switch (store.Kind) {
-            case WorldSiloStoreKind.Directory:
-                if (string.IsNullOrWhiteSpace(value: store.DirectoryPath)) {
-                    reason = "store.kind is 'directory' but store.directoryPath is missing";
-
-                    return false;
-                }
-
-                if (store.AccountUrl is { Length: > 0 }) {
-                    reason = "store.kind is 'directory' but store.accountUrl is set";
-
-                    return false;
-                }
-
-                break;
-            case WorldSiloStoreKind.Azure:
-                if (string.IsNullOrWhiteSpace(value: store.AccountUrl)) {
-                    reason = "store.kind is 'azure' but store.accountUrl is missing";
-
-                    return false;
-                }
-
-                if (store.DirectoryPath is { Length: > 0 }) {
-                    reason = "store.kind is 'azure' but store.directoryPath is set";
-
-                    return false;
-                }
-
-                break;
-            default:
-                reason = $"store.kind '{store.Kind}' is not recognized";
-
-                return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
 
     /// <summary>Validates a silo document.</summary>
     /// <param name="definition">The document to validate.</param>
     /// <param name="reason">Why validation failed, naming the offending row, or empty on success.</param>
+    /// <param name="clusteringKinds">Installed clustering keys from the host registry; absent for structural validation only.</param>
     /// <returns><see langword="true"/> when every check holds.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static bool TryValidate(WorldSiloDefinition definition, out string reason) {
+    public static bool TryValidate(WorldSiloDefinition definition, out string reason, IReadOnlyCollection<string>? clusteringKinds = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         if (!string.Equals(
@@ -139,20 +73,32 @@ public static class WorldSiloDefinitionValidator {
             return false;
         }
 
-        if (!TryValidateStore(
-            store: definition.Store,
-            reason: out reason
-        )) {
+        if (string.IsNullOrWhiteSpace(value: definition.Store.Type) || (definition.Store.Settings.ValueKind != JsonValueKind.Object)) {
+            reason = "store requires an extension type and object settings";
             return false;
         }
-
-        if (!TryValidateClustering(
-            clustering: definition.Clustering,
-            reason: out reason
-        )) {
+        if (string.IsNullOrWhiteSpace(value: definition.Clustering.Kind)) {
+            reason = "clustering.kind is required";
             return false;
         }
-
+        if ((clusteringKinds is not null) && !clusteringKinds.Contains(definition.Clustering.Kind, StringComparer.Ordinal)) {
+            reason = $"clustering.kind '{definition.Clustering.Kind}' is not installed; name one of: {string.Join(separator: ", ", values: clusteringKinds)}";
+            return false;
+        }
+        if (definition.Lifecycle is { } lifecycle) {
+            if ((lifecycle.ProgressTimeoutSeconds < 1) || (lifecycle.CheckpointTimeoutSeconds < 1) || (lifecycle.JournalTimeoutSeconds < 1) || (lifecycle.JournalBacklogLimit < 1)) {
+                reason = "lifecycle health deadlines and journalBacklogLimit must be positive";
+                return false;
+            }
+            if ((lifecycle.ShutdownSeconds < 1) || (lifecycle.HealthPort is < 1 or > 65535)) {
+                reason = "lifecycle requires a positive shutdownSeconds and valid healthPort";
+                return false;
+            }
+            if ((lifecycle.Observer is { } observer) && (string.IsNullOrWhiteSpace(value: observer.Type) || (observer.Settings.ValueKind != JsonValueKind.Object))) {
+                reason = "lifecycle.observer requires an extension type and object settings";
+                return false;
+            }
+        }
         var worldIds = new HashSet<string>(comparer: StringComparer.Ordinal);
         var keyFiles = new Dictionary<string, SafeName>(comparer: StringComparer.OrdinalIgnoreCase);
         var pinnedCount = 0;
@@ -167,6 +113,11 @@ public static class WorldSiloDefinitionValidator {
             if (!worldIds.Add(item: world.World.Value)) {
                 reason = $"world id '{world.World}' is declared more than once";
 
+                return false;
+            }
+            if (world.Federation.Authentication is { } authentication &&
+                (string.IsNullOrWhiteSpace(authentication.Type) || authentication.Settings.ValueKind != JsonValueKind.Object)) {
+                reason = $"world '{world.World}' authentication requires an extension type and object settings";
                 return false;
             }
 

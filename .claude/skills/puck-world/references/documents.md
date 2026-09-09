@@ -185,7 +185,7 @@ mutates them in session and no grant subject names them:
   [adjacency-and-federation.md](adjacency-and-federation.md).
 - **`Metadata`** (`WorldMetadataSection`, `WorldMetadata.cs`) — free-form
   author-facing facts: `title`, `description`, `authors` (each an optional
-  Entra `oid`, checked with `WorldEntraObjectId.IsValid`), `tags`, and a
+  UUID `oid`, checked with `WorldObjectId.IsValid`), `tags`, and a
   `custom` bag (`IDictionary<string, JsonElement>`). Nothing in the engine
   reads any member here. `title`/`description` cross to a Presentation-tier
   peer as `WorldProjectedMetadata`; `authors`/`tags`/`custom` never do (see
@@ -2510,7 +2510,7 @@ zone, and neutral-grace duration.
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`,
   the document-global CPU/instance-grid admission ceiling. The recorded
   GPU-bound measurement is 0 but does not govern admission.
-- `WorldPlacementPolicy`: `MaxShapesPerStamp = 48`,
+- `WorldPlacementPolicy`: `MaxShapesPerStamp = 128`,
   `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128),
   `TimelineSecondsPerFrame = 8f/60f`, and the reserved derived-face screen
   band.

@@ -22,6 +22,10 @@ public sealed class TextCommandSource : ITextCommandSink {
     // session therefore cannot move that session's oldest line behind a concurrently appended later line.
     private readonly ConcurrentQueue<TextCommandSession> m_pending = new();
     private readonly CommandRegistry m_registry;
+    /// <summary>Describes registered commands selected by a trusted host policy, without exposing handlers.</summary>
+    /// <param name="include">The disclosure filter, evaluated on the command pump.</param>
+    /// <returns>Registered names and descriptions in ordinal order.</returns>
+    public string DescribeCommands(Func<CommandMetadata, bool> include) => m_registry.BuildHelpText(include);
 
     // See HoldGate's remarks: volatile because a host may arm the gate from a thread other than the one that drains.
     private volatile Func<bool>? m_holdGate;
@@ -197,7 +201,9 @@ public sealed class TextCommandSource : ITextCommandSink {
     /// <c>Immediate</c> line or a host operation and disposed once the result is computed — see <see cref="TextCommandSession.Scope"/>.
     /// <see langword="null"/> (the default) enters nothing.</param>
     /// <returns>A text sink permanently stamped with <paramref name="principal"/>.</returns>
-    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null) {
+    /// <param name="authorize">Optional command-metadata predicate checked before session dispatch; false refuses
+    /// the command. Null adds no session-specific authorization predicate.</param>
+    public TextCommandSession CreateSession(CommandPrincipal principal, Func<bool>? hold = null, Action<string, CommandResult>? onResult = null, int slot = 0, CommandInjectionSink? simulationSink = null, Func<IDisposable>? scope = null, Func<CommandMetadata, bool>? authorize = null) {
         return new TextCommandSession(
             hold: hold,
             onResult: onResult,
@@ -205,7 +211,8 @@ public sealed class TextCommandSource : ITextCommandSink {
             scope: scope,
             simulationSink: simulationSink,
             slot: slot,
-            source: this
+            source: this,
+            authorize: authorize
         );
     }
     /// <summary>Queues a command line to be submitted on the next <see cref="Collect"/>.</summary>

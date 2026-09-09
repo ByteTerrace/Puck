@@ -12,6 +12,73 @@ declared door budget, checkpoint/journal/definition store target, state
 directory, and clustering. The generated schema is
 `Assets/puck.silo.def.v1.schema.json`.
 
+Optional host services are supplied by an outer composition through
+`WorldSiloApplication.RunAsync`. The silo exposes fixed-row Console sessions as
+`IControlSessionHost`; it has no MCP project or package dependency. The host admits the validated issuer/subject through explicit OAuth admission and stamps the resulting Peer generation on commands. Replica disclosure authorizes text reads; writes require ordinary row grants. Remote sessions cannot use local administrative verbs. The CLI can
+install [Puck.Mcp](../Puck.Mcp/README.md#host-extension) with
+`puck mcp --silo <path> --http <remote.json>`. Row retirement closes all of its
+attached Console sessions, including queued commands and waits.
+Discovery runs on the ordinary command pump and filters registered help through
+the same remote command guard. It requires Replica admission and advertises no
+framebuffer on this headless host.
+
+## Hosted test world
+
+The silo selects Orleans membership through the composition root's registry.
+`clustering.kind` is case-sensitive: this distribution registers `Localhost`.
+The document loader validates against that same registry before host construction.
+Other providers are refused until eligible world placement and exclusive ownership are implemented.
+See [deployment](../../docs/ci.md) for the production endpoint and release process.
+
+The schema selects installed extensions by `type` and opaque object `settings`.
+The composition root's `WorldSiloExtensions` catalog uses `WorldExtensionRegistry`;
+world documents cannot install code. For a local host:
+
+```json
+"store": { "type": "directory", "settings": { "path": "/world-store" } },
+"lifecycle": {
+  "shutdownSeconds": 120, "healthPort": 8081,
+  "progressTimeoutSeconds": 30, "checkpointTimeoutSeconds": 180,
+  "journalTimeoutSeconds": 30, "journalBacklogLimit": 1024
+}
+```
+
+Persistence enters `WorldSiloHost` as an `ObjectStorageTarget`. An optional
+`lifecycle.observer` selects an `IWorldHostRetirementObserver`, which supplies a
+UTC deadline to the same `WorldSiloHost.DrainAsync` operation used by shutdown and
+loopback-only `POST /drain`. Provider settings and metadata protocols belong to
+the extension; the silo schema and lifecycle service do not interpret them.
+The [Azure extension](../Puck.World.Azure/README.md#silo-hosting) owns its provider keys.
+
+`GET /healthz` returns 200 only after all pinned worlds have activated, reconciled
+their published definitions, and checkpointed. It also checks ongoing simulation
+progress, checkpoint age, journal failures and backlog, and pending release saves.
+`GET /livez` checks simulation progress independently of storage health, so a
+storage outage does not trigger VM replacement. Both refuse during retirement.
+`GET /livez/azure` reports the same liveness as Azure's v2 Application Health
+JSON contract, returning HTTP 200 with `Healthy` or `Unhealthy`. The generic
+`/livez` retains its HTTP 200/503 contract.
+Loopback-only `POST /reload` reconciles published content through the existing
+reload submission, saves a checkpoint, and records the accepted content hash.
+Unchanged releases preserve recovered state; failed saves can retry without
+applying the same accepted rebuild twice. Readiness stays closed while a release
+is uncommitted. Changing the world's network binding requires a fresh activation.
+Activation takes its signing subject and listener from the published definition,
+even when the recovered checkpoint contains the previous endpoint. Reconciliation
+then updates the saved definition through ordinary reload. A live reload still
+refuses a binding different from the one established by that activation.
+`silo.status` reports readiness, retirement,
+and selected provider keys without exposing settings. The drain settles accepted
+reload submissions before freezing every row
+at one pump boundary, closes ingress, waits for earlier checkpoint uploads and
+journal appends, then saves final checkpoints. Failure is reported; deployment
+does not replace a running process after a refused drain. A failed attempt may be
+retried with a fresh deadline; once ingress has closed, worlds stay frozen while
+saving is retried. Concurrent callers observe their own deadlines. Earlier failed
+persistence tasks are observed and reported, and the final frozen checkpoint
+supersedes them. A successful `POST /drain` completes its response and stops the
+host. Physical retirement is a live host operation, outside gameplay and replay.
+
 ## Types
 
 - `WorldSiloHost : IWorldAuthorityHost` — one boot-free `WorldInstanceHost`
@@ -33,7 +100,7 @@ directory, and clustering. The generated schema is
 - `IWorldGrain`/`WorldGrain` — the grain interface (`IGrainWithGuidCompoundKey`:
   owner oid + world id extension) and its thin adapter over `WorldSiloHost`.
   Activation allows three minutes for composition and checkpoint recovery;
-  synchronous composition runs outside Orleans' cooperative scheduler.
+  root and neighbour storage reads are awaited without a `Task.Run` wrapper.
 - `WorldGrainStatus` — the Orleans-serializable read-back payload
   `IWorldGrain.StatusAsync` and `silo.grains` both answer with.
 - `WorldNoAddonHost : IWorldAddonHost` — the inert host every row's replay
@@ -108,7 +175,7 @@ refuses a row that pumps one), so a validated key never actually runs here.
 ## Production deployment
 
 The [Azure workflow](../../docs/ci.md#azure-production-deployment) deploys the primary
-Puck world as a pinned row in a single Azure Container Instance. QUIC requires
+Puck world as a pinned row on a single regular VMSS worker. QUIC requires
 UDP ingress and Linux `libmsquic`; Container Apps does not expose UDP. The silo
 uses its own managed identity, private blob container, and persistent federation
 key. The container test boots Puck, verifies its QUIC key and checkpoint, replaces
@@ -116,13 +183,13 @@ the container, and verifies recovery against the same store. The deployment
 contract above owns resource names, grants, and operator setup.
 
 Hosted neighbour definitions must already be composed and use canonical world
-file names. `build/Prepare-WorldSilo.cs` prepares Puck and its references with the
+file names. `puck world prepare` prepares Puck and its references with the
 engine composer. Checkpoint recovery preserves the running world's state and
 embedded definition; CI does not erase checkpoints to apply authored changes.
 
 ## Not built here
 
-Storage Table clustering. Console verbs whose module takes a
+Distributed clustering. Console verbs whose module takes a
 process-wide `IServerLink`/similar singleton rather than resolving it
 through the row `IWorldConsoleAuthority` returns (`WorldGrantCommandModule`,
 `WorldGroupCommandModule`, `WorldLookCommandModule`,

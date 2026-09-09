@@ -36,7 +36,7 @@ public readonly record struct LaneResponse<TResponseKind>(TResponseKind Kind, Re
 /// mid-connect can never record a socket connected to one endpoint under a different endpoint's description.</summary>
 /// <param name="Endpoint">The endpoint to dial.</param>
 /// <param name="Description">The endpoint's textual identity, compared to detect a republished route.</param>
-public readonly record struct LaneRoute(IPEndPoint Endpoint, string Description);
+public readonly record struct LaneRoute(EndPoint Endpoint, string Description);
 /// <summary>The wire behavior a <see cref="PersistentRequestLane{TRequestKind,TResponseKind}"/> needs from its
 /// concrete dialect: a Hello, a challenge/proof authentication paid once per connection, then strictly ordered
 /// request/response frames, plus the one fact about each request kind the lane cannot know for itself — whether
@@ -104,7 +104,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     private readonly record struct PendingRequest(TRequestKind Kind, byte[] Body, TaskCompletionSource<LaneResponse<TResponseKind>> Completion);
 
     private readonly TimeSpan m_connectRetryDelay;
-    private readonly Func<IPEndPoint, CancellationToken, ValueTask<Stream>> m_connect;
+    private readonly Func<EndPoint, CancellationToken, ValueTask<Stream>> m_connect;
     private readonly CancellationTokenSource m_lifetime;
     private readonly Action<Exception>? m_onUnavailable;
     private readonly ILaneProtocol<TRequestKind, TResponseKind> m_protocol;
@@ -153,7 +153,7 @@ public sealed class PersistentRequestLane<TRequestKind, TResponseKind> : IDispos
     /// <exception cref="ArgumentException"><paramref name="sourceAuthority"/> is null or whitespace.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="connectRetryDelay"/> or
     /// <paramref name="requestTimeout"/> is negative or exceeds one day.</exception>
-    public PersistentRequestLane(Func<LaneRoute> route, string sourceAuthority, ILaneProtocol<TRequestKind, TResponseKind> protocol, Func<IPEndPoint, CancellationToken, ValueTask<Stream>> connect, CancellationToken lifetime, TimeSpan connectRetryDelay, TimeSpan unavailableBackoff, TimeSpan requestTimeout, Action<Exception>? onUnavailable = null) {
+    public PersistentRequestLane(Func<LaneRoute> route, string sourceAuthority, ILaneProtocol<TRequestKind, TResponseKind> protocol, Func<EndPoint, CancellationToken, ValueTask<Stream>> connect, CancellationToken lifetime, TimeSpan connectRetryDelay, TimeSpan unavailableBackoff, TimeSpan requestTimeout, Action<Exception>? onUnavailable = null) {
         ArgumentNullException.ThrowIfNull(argument: route);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourceAuthority);
         ArgumentNullException.ThrowIfNull(argument: protocol);

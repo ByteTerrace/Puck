@@ -5,6 +5,12 @@ with hand-rolled first-positional verb dispatch:
 
 | Verb | What it is |
 |---|---|
+| [`puck nuget`](../../docs/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches. |
+| [`puck docs`](#automation-commands) | build and stage the website documentation. |
+| [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
+| [`puck world`](#automation-commands) | prepare hosted world documents or probe a QUIC endpoint. |
+| [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
+| [`puck mcp`](../Puck.Mcp/README.md) | Puck Console tools over local stdio or OAuth-protected HTTP. `--silo <silo.json> --http <remote.json>` installs the optional host extension; standalone silo and World have no MCP dependency. MCP 2026-07-28. |
 | [`puck canary`](#puck-canary--real-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck citations`](#puck-citations--cited-verb-token-check) | checks every verb-shaped token skills and XML docs cite against vocabularies swept from the code, including a live `Puck.World` console boot. |
 | [`puck search`](#puck-search--content-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
@@ -45,6 +51,15 @@ other verbs print working-directory-relative paths.
 
 ## Publishing
 
+The installable package is `ByteTerrace.Puck.Cli`, a .NET tool whose command is
+`puck`. Its version comes from the same `build/Packaging.targets` as the libraries.
+`puck --version` reports the running CLI's version and source revision;
+`puck nuget version` reads the release version from the current checkout.
+See [CI tool installation and first-release bootstrap](../../docs/ci.md#the-cli-used-by-ci)
+for official pins, package installation checks, and release adoption.
+
+To build the candidate directly for local development:
+
 ```sh
 dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish
 ```
@@ -64,6 +79,32 @@ sibling) beside the executable. That is the out-of-process build host
 remove it and break every `references` run.
 
 ---
+
+## Automation commands
+
+```sh
+puck nuget --help
+puck docs build [output-directory]
+puck bundle create <directory> <commit>
+puck bundle verify <directory> <commit>
+puck world prepare <worlds-directory> <output-directory>
+puck world probe <host> <port> <public-key-file>
+puck wasm build
+```
+
+`docs build` runs the pinned DocFX tool and stages `/reference/` and `/_theme/`;
+use an output directory without those prefixes. `bundle create` writes a stable
+deployment manifest containing the source commit and every file's SHA-256.
+`bundle verify` checks provenance, containment, hashes, and the complete inventory,
+including hidden files.
+
+`world prepare` uses the engine's composer and validator to package Puck and its
+referenced neighbours under canonical hosted file names. `world probe` checks
+QUIC reachability and the endpoint's expected public key; it requires QUIC support
+and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
+committed default addon, printing the content hash needed by its document rows.
+Azure credentials, deployment ordering, and access restoration remain in the
+[C# deployment app](../../build/Azure.cs).
 
 ## `puck official` — the local official tree producer
 
@@ -476,7 +517,7 @@ puck bench world
 ```
 
 Regenerate the fixture document only when
-`tests/Puck.World.Tests/Fixtures.BuildDocument`'s shape or
+`Fixtures.BuildDocument` in [Fixtures.cs](../../tests/Puck.World.Tests/Fixtures.cs) or
 `src/Puck.World/Assets/worlds/games/klondike.world.json` changes underneath
 it — it is a checked-in snapshot, not derived at run time.
 
@@ -634,10 +675,27 @@ parse-and-write per file.
 
 ```
 puck format [<root=src>] [-WhatIf] [-Verify] [-h]
+            [-Files <json-array-of-relative-paths>]
             [-Only attr-order,member-groups,member-spacing,member-order,null-pattern,
                    string-merge,paren-clarity,logical-lines,arg-lines,ternary-lines,
                    init-order,trailing-comma,decl-spacing,literal-var,named-args]
+puck format ci <base-sha> <head-sha> <empty-output-directory>
 ```
+
+`-Files` limits every phase, including SDK whitespace formatting, to the given
+JSON array of paths relative to the root. An empty array selects nothing.
+Missing paths, parent traversal, and symbolic links are errors. The full owning
+project still supplies semantic context. Standalone C# files use disposable,
+built SDK projects; their original directives survive and their operational
+bodies are never run. A semantic phase that cannot analyze an owning project
+fails rather than reporting unchecked source as clean.
+
+`format ci` requires a clean tracked checkout at the specified head. It selects
+added, modified, and renamed C# files from the PR comparison, excluding generated
+and quarantined code, applies the defaults, verifies convergence, and writes
+format.json plus format.patch. It never commits or pushes. The
+[CI formatting workflow](../../docs/ci.md#automatic-pr-formatting) compiles that
+result before its separate trusted submitter can append a bot commit.
 
 **Phase 0 always runs first**, for every mode and every `-Only` selection:
 `dotnet format whitespace` over the projects that own corpus files (so the
@@ -893,9 +951,8 @@ entry lowers or disappears. Raising the ceiling itself is a deliberate edit to `
 
 Enumerates every csproj under `src/` declaring `<IsPackable>true</IsPackable>`
 (see `build/Packaging.targets`) and reads the same fields `dotnet pack` reads:
-`<PackageId>`, `<Description>`, `<PackageTags>`. `src/Web.Functions` is
-excluded, for the reason `Architecture.props`' `PuckArchitectureGateEnabled`
-predicate states beside its own matching exclusion.
+`<PackageId>`, `<Description>`, `<PackageTags>`. Projects without an explicit
+packing opt-in are omitted.
 
 ```
 puck packages                list every packable project: id, description, tags

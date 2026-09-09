@@ -24,7 +24,7 @@
         "default": null
       },
       "owner": {
-        "description": "The remote world\u0027s owning platform user id (an Entra oid) \u2014 worlds ARE users, so naming the owner names the world\u0027s account. Required together with World; refused alone.",
+        "description": "The remote world\u0027s owning platform user id (a UUID) \u2014 worlds ARE users, so naming the owner names the world\u0027s account. Required together with World; refused alone.",
         "type": [
           "string",
           "null"

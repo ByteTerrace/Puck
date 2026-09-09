@@ -8,8 +8,10 @@ namespace Puck.Cli.Format;
 // passes. Passes run in sequence with a re-parse between them, so chaining is identical to running them
 // back to back — except each file is written once.
 internal static class SourceRewrite {
-    public static int Run(string label, string rootArgument, bool whatIf, bool verify, IReadOnlyList<FormatPass> passes) {
-        if (!SourceFiles.TryEnumerate(files: out var files, rootArgument: rootArgument, scanRoot: out _)) {
+    public static int Run(string label, string rootArgument, bool whatIf, bool verify, IReadOnlyList<FormatPass> passes, string[]? targets = null) {
+        var files = targets;
+
+        if ((files is null) && !SourceFiles.TryEnumerate(files: out files, rootArgument: rootArgument, scanRoot: out _)) {
             return 2;
         }
 

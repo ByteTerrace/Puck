@@ -12,6 +12,19 @@ public sealed class CommandRegistryTests {
     private const int BuiltInCommandCount = 3;
 
     [Fact]
+    public void FilteredHelpDisclosesRegisteredSyntaxWithoutChangingLocalDispatch() {
+        var registry = new CommandRegistry(modules: [new CoreModule()]);
+        var help = registry.BuildHelpText(command => command.Name == "sum");
+
+        Assert.Contains("sum", help);
+        Assert.DoesNotContain("wire.errors", help);
+        Assert.DoesNotContain("alpha", help);
+        Assert.Equal("5", registry.Submit("sum 2 3").Output);
+        Assert.Contains("wire.errors", registry.BuildHelpText());
+        Assert.Equal("", registry.BuildHelpText(_ => false));
+    }
+
+    [Fact]
     public void WireNativeFastPathParsesTrailingArguments() {
         var registry = new CommandRegistry(modules: [new CoreModule()]);
 

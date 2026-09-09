@@ -2,6 +2,7 @@
 .agents
 .codex
 .worktrees
+.claude
 .vs
 artifacts
 experimental

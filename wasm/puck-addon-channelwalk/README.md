@@ -34,7 +34,7 @@ Three build-time variants (Cargo features — see `Cargo.toml`; exactly one sele
 
 Build: `cargo build --release --target wasm32-unknown-unknown -p puck-addon-channelwalk [--no-default-features
 --features bound64|bound65]`, then copy `target/wasm32-unknown-unknown/release/puck_addon_channelwalk.wasm` to
-`dist/<name>.wasm`. There is no build script (unlike `puck-addon-default`'s `wasm/build.cs`) — this crate is
+`dist/<name>.wasm`. There is no build script (unlike `puck-addon-default`'s `puck wasm build` command) — this crate is
 never shipped, so nothing refreshes a committed copy automatically; re-run the three builds by hand after any
 source change and re-learn each hash (see below).
 

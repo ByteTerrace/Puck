@@ -14,6 +14,54 @@ namespace Puck.World.Tests;
 /// <para>Each arm pairs a denial with a control differing in exactly one authored number.</para>
 /// </summary>
 public sealed class AuthoredShapeAdmissionLawTests {
+    [Fact]
+    public void RoundedProfileIsAdmittedForFieldContact() => AssertWorldValidates(
+        Shape(SdfSolidPrimitive.Prism, new Vector3(.4f, .2f, .1f)) with { Profile = new(SdfPrismProfileKind.RoundedRectangle, .3f) }, requiresField: true);
+
+    [Theory]
+    [InlineData(SdfPrismProfileKind.Polygon)]
+    [InlineData(SdfPrismProfileKind.Ellipse)]
+    public void RenderOnlyProfilesRefuseUnsupportedFieldContact(SdfPrismProfileKind kind) {
+        var shape = Shape(SdfSolidPrimitive.Prism, new Vector3(.4f, .2f, .1f)) with { Profile = new(kind) };
+        AssertWorldValidates(shape);
+        Assert.False(WorldDefinitionValidator.TryValidateLocally(World(shape, canonicalize: true, requiresField: true), out var reason));
+        Assert.False(string.IsNullOrWhiteSpace(reason));
+    }
+
+    [Fact]
+    public void InvalidProfileControlsAreRefusedBeforeEmission() {
+        foreach (var profile in new[] { new SdfPrismProfile((SdfPrismProfileKind)99), new(SdfPrismProfileKind.Polygon, Sides: 2),
+            new(SdfPrismProfileKind.RoundedRectangle, float.NaN), new(SdfPrismProfileKind.RoundedRectangle, 1.1f) }) {
+            Assert.Contains(CreationCanonicalizer.Validate(Document(Shape(SdfSolidPrimitive.Prism, Vector3.One) with { Profile = profile })),
+                error => error.Path == "shapes[0].profile");
+        }
+    }
+
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(0.35f)]
+    [InlineData(1f)]
+    public void PrismProfileSurvivesCanonicalizationAndBothContactProviders(float taper) {
+        var shape = Shape(SdfSolidPrimitive.Prism, new Vector3(.4f, .2f, .1f)) with { Taper = taper };
+        var canonical = CreationCanonicalizer.Canonicalize(Document(shape), PrototypeId);
+        Assert.Equal(taper, canonical.Document.Shapes![0].Taper);
+        AssertWorldValidates(shape);
+        AssertWorldValidates(shape, requiresField: true);
+    }
+
+    [Theory]
+    [InlineData(-0.1f)]
+    [InlineData(1.1f)]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    public void InvalidPrismTaperNamesTheDocumentField(float taper) =>
+        Assert.Contains(CreationCanonicalizer.Validate(Document(Shape(SdfSolidPrimitive.Prism, Vector3.One) with { Taper = taper })),
+            error => error.Path == "shapes[0].taper");
+
+    [Fact]
+    public void TaperOnAnUnrelatedPrimitiveIsRefused() =>
+        AssertCanonicalizerRefusesNaming(Shape(SdfSolidPrimitive.Box, Vector3.One) with { Taper = .5f }, "taper");
+
     private const string PrototypeId = "probe";
 
     private static ShapeDocument Shape(SdfSolidPrimitive type, Vector3 scale, IReadOnlyList<ShapeDomainOp>? domain = null) =>

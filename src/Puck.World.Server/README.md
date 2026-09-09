@@ -1,5 +1,11 @@
 # Puck.World.Server — the authoritative world runtime
 
+Cloud credentials and host metadata are extension concerns. Server consumes the
+provider-neutral storage, neighbour, publication, and retirement contracts.
+`Puck.World.Azure` owns the Azure implementations; composition roots explicitly
+install them. The existing architecture gate rejects direct Azure SDK API use
+from Schema, Protocol, Server, and Client.
+
 This project is the server half of the world game: the entity table, the tick
 step, the capability-grant authority model, the QUIC peer transport,
 the addon host seam, player profiles and their storage, and the deterministic
@@ -992,7 +998,9 @@ for the full contract.
 
 `WorldPeerHost` binds the networking library's QUIC peer listener from `host.listen`
 (a document field the composition root also lets `--listen` reflect for one
-run). `WorldPeerNetwork` owns a shared, lazily created `Puck.Networking.Peers.Peer`.
+run). Each `WorldInstance.ListenEndpoint` captures its activation's binding;
+the silo supplies the published endpoint when a recovered checkpoint still
+contains an old address. `WorldPeerNetwork` owns a shared, lazily created `Puck.Networking.Peers.Peer`.
 The desktop persists its key under the state directory's `Network/peer.pk8`, or
 uses the explicitly supplied federation key; a silo activation uses its configured
 key. Local-only worlds initialize neither QUIC nor a certificate. There is no TCP
@@ -1626,17 +1634,20 @@ capture request a caller honours at its own next boundary; it never decides
 whether a capture may proceed and never takes a row's own gate itself.
 
 `WorldHostedOrigin` (a `WorldDocumentOrigin` arm beside `WorldFileOrigin`)
-loads a hosted definition through `WorldDefinitionLoader`'s bytes entry — a
+awaits hosted definition and neighbour reads through `LoadAsync` and
+`WorldDefinitionLoader.LoadAsync`. The synchronous `TryLoad` entry delegates to
+that same path. A
 hosted definition is always stored already composed, so this load never
 resolves a basis chain — and resolves its own `references[]` through
 `WorldStorageNeighbourResolver`'s hosted-namespace arm
 (`WorldStorageNamespace.Hosted`), the same resolver the owned-worlds catalog
 uses with its default namespace.
 
-Stored neighbours use the same composed-document parser and state-binding context
-as local files. This resolves creation expressions such as `state.strideCadence`
-before producing seam attestations. Adjacency claims are not recursively validated
-while resolving a neighbour.
+Stored neighbours use `WorldDefinitionFileSource.TryParseDocument` to bind
+creation expressions such as `state.strideCadence`, check the schema, and apply
+migrations before producing seam attestations. Neither unrelated local settings
+nor recursive adjacency claims are validated while resolving a neighbour. The
+loading world's own full validation still runs before activation.
 
 ## Deterministic replay (`WorldReplayTape.cs`, `WorldReplayTape.Drive.cs`, `WorldReplaySnapshot.cs`)
 

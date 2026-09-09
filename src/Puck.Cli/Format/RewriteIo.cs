@@ -18,8 +18,19 @@ internal static class RewriteIo {
     // Roslyn preserves the source's existing newline trivia. Write that text verbatim: normalizing the
     // whole string would also rewrite newlines INSIDE verbatim/raw literals and change runtime values.
     // Phase 0 owns ordinary whitespace and line-ending policy.
-    public static void WriteText(string file, string text) =>
-        File.WriteAllText(contents: text, path: file);
+    public static void WriteText(string file, string text) {
+        // Replace the directory entry instead of truncating a file Roslyn or an editor may have mapped.
+        // Keep the temporary file beside its destination so replacement stays on the same volume.
+        var temporary = $"{file}.{Guid.NewGuid():N}.tmp";
+
+        try {
+            File.WriteAllText(contents: text, path: temporary);
+            if (!OperatingSystem.IsWindows() && File.Exists(path: file)) {
+                File.SetUnixFileMode(path: temporary, mode: File.GetUnixFileMode(path: file));
+            }
+            if (File.Exists(path: file)) { File.Replace(destinationBackupFileName: null, destinationFileName: file, sourceFileName: temporary); } else { File.Move(destFileName: file, sourceFileName: temporary); }
+        } finally { File.Delete(path: temporary); }
+    }
     // The shared drift/normalize summary plus any number of labelled problem buckets (corruption,
     // non-convergence, ...). Exit code is 1 on any problem or on drift in check mode, else 0.
     public static int Report(string label, int fileCount, IReadOnlyList<string> drifted, bool whatIf, params ReadOnlySpan<(string Reason, IReadOnlyList<string> Files)> problems) {

@@ -103,7 +103,7 @@ landing that eclipses it, so the evidence sits beside the removal and every
 deletion line stays accounted for. "Eclipsed" is a claim that needs a
 mechanical check behind it, not an impression — bring it to the lead for a
 decision rather than deciding alone. Documents that still cite the old
-`tools/…`, `src/Puck.World/scripts/…`, or `src/Puck.Post` paths are STALE;
+`tools/…`, `src/Puck.World/scripts/…`, or the former Post location are STALE;
 correct them where they live.
 
 ## Core rules
@@ -217,6 +217,41 @@ correct them where they live.
    end-of-line difference, and never spend a reviewer's attention on one — if
    a diff or a formatter run appears to be about newlines, the setting is
    wrong and gets corrected here, not accommodated at the call site.
+
+## Repository automation
+
+Use Puck CLI for repository operations it already owns. When automation must run
+without a built CLI, use a C# file-based app on the pinned .NET SDK, following
+`src/Puck.Azure.Resources/bootstrap.cs`. Do not introduce PowerShell scripts or
+move script logic into inline PowerShell workflow steps. Keep workflows as
+orchestration around executable commands. This also applies when replacing or
+extending existing script-based tooling.
+
+CI's adopted CLI version is pinned in `.config/dotnet-tools.json`; the explicit
+initial bootstrap policy lives in `.config/puck-bootstrap.json`. Use
+`build/Toolchain.cs -- pin <version>` after publication to verify installation and
+prepare adoption. Never replace a failed official restore with a source build.
+Source-dependent schema, registry, and world composition commands must use the
+candidate CLI. Release workflows build that candidate once in `artifacts.yml`;
+consumers install its immutable package artifact and must not bootstrap or
+recompile it. Runtime payloads and container images likewise pass from producers
+to verification and deployment without rebuilding. PR formatting also uses the candidate CLI so it checks the rules
+under review. See [CI tooling](docs/ci.md#the-cli-used-by-ci).
+
+PR formatting is automated by CI, which appends a bot commit on repository
+branches and reruns validation. Do not install Git hooks or mutate Git
+configuration during builds. See [automatic PR formatting](docs/ci.md#automatic-pr-formatting).
+
+File-based apps follow `.editorconfig` and the same Puck formatter conventions
+as project code: named arguments where compiler resolution and evaluation order
+permit, declaration spacing, explicit braces, PascalCase constants, and `Async`
+suffixes for task-returning helpers. Keep their SDK/package/project directives
+intact and package versions pinned. Use the linked `Puck.RepositoryPaths` helper
+for checkout-relative paths; do not infer runtime paths from compiler source paths
+or duplicate repository walkers. Use `ProcessStartInfo.ArgumentList` and check
+child exit codes. Compile every changed app in Release without executing its
+operational body; run only its safe local verification path. See
+[file-app verification](docs/agent-guide.md#c-file-apps) for formatting and build commands.
 
 ## The game — where intent lives
 

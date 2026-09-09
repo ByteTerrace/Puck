@@ -1216,7 +1216,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         if (
             (row.Door is { } door) &&
-            (row.Server.Definition.Host.Listen is { Length: > 0 } listen)
+            (row.ListenEndpoint is { Length: > 0 } listen)
         ) {
             door.Start(listen: listen);
         }

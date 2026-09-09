@@ -166,7 +166,7 @@ public sealed class ProbeKernelTests {
             KernelSource: File.ReadAllText(path: KernelPath(name: "faerie")),
             AccumulateEntry: "accumulate",
             FinalizeEntry: "finalize",
-            Constants: FaerieDefaults(),
+            Constants: FaerieRelightingConstants(),
             ChannelCount: 4,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.Sensor(Kind: CameraSensor.Color), new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared)],
@@ -224,7 +224,7 @@ public sealed class ProbeKernelTests {
             KernelSource: File.ReadAllText(path: KernelPath(name: "faerie")),
             AccumulateEntry: "accumulate",
             FinalizeEntry: "finalize",
-            Constants: FaerieDefaults(),
+            Constants: FaerieRelightingConstants(),
             ChannelCount: FaerieChannelCount,
             RateHz: 240U,
             Inputs: [new ProbeKernelInput.Sensor(Kind: CameraSensor.Color), new ProbeKernelInput.StrobePair(Kind: CameraSensor.Infrared), new ProbeKernelInput.Unbound()],
@@ -540,7 +540,8 @@ public sealed class ProbeKernelTests {
 
         return pixels;
     }
-    private static byte[] FaerieDefaults() => FaerieConstants();
+    // Keep the orbit fixed so compilation and scheduling delays cannot move the light away from the test square.
+    private static byte[] FaerieRelightingConstants() => FaerieConstants(orbitSpeed: 0f);
     // The faerie manifest's config, packed in declaration order (scalar floats pack sequentially) and padded to the
     // 16-byte constant-buffer granule; defaults match the manifest, and a caller overrides only the fields a test
     // needs.

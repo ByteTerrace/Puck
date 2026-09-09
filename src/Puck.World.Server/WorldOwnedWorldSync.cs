@@ -167,7 +167,7 @@ public sealed class WorldOwnedWorldSync {
             return;
         } catch (InvalidOperationException exception) {
             // NOT a transport failure — the store declined to send the request at all (an edge-shaped target with no
-            // DirectEndpoint authored; see AzureBlobObjectBlobStoreBackend.GetListServiceClient). Calling that a
+            // a discovery endpoint authored in the selected storage extension). Calling that a
             // transport error would send an operator to the network for a configuration answer, so it gets its own
             // word. Uncapped on purpose: this message is authored, and its TAIL is the remedy.
             refusals.Add(item: new WorldSyncOutcome(

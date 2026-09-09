@@ -69,6 +69,30 @@ file sealed class ServeThenBlockStream(byte[] bytes) : Stream {
 /// body is read.
 /// </summary>
 public sealed class FrameLawTests {
+    /// <summary>Two coalesced frames still decode separately when the stream returns one byte at a time.</summary>
+    [Fact]
+    public async Task FragmentedCoalescedFramesRetainKindsAndExactPayloads() {
+        var token = TestContext.Current.CancellationToken;
+        using var encoded = new MemoryStream();
+        await WireFrame.WriteAsync(encoded, 1, "{\"text\":\"a\\nb\\tç\"}"u8.ToArray(), token);
+        await WireFrame.WriteAsync(encoded, 2, "{}"u8.ToArray(), token);
+        using var fragmented = new FragmentStream(encoded.ToArray());
+        var first = await WireFrame.ReadAsync(fragmented, 100, token);
+        Assert.True(first.Ok);
+        Assert.Equal(1, first.Kind);
+        Assert.Equal("{\"text\":\"a\\nb\\tç\"}"u8.ToArray(), first.Body.ToArray());
+        var second = await WireFrame.ReadAsync(fragmented, 100, token);
+        Assert.True(second.Ok);
+        Assert.Equal(2, second.Kind);
+        Assert.Equal("{}"u8.ToArray(), second.Body.ToArray());
+        Assert.Equal(WireRefusal.ConnectionClosed, (await WireFrame.ReadAsync(fragmented, 100, token)).Failure.Refusal);
+    }
+
+    private sealed class FragmentStream(byte[] bytes) : MemoryStream(bytes) {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            base.ReadAsync(buffer[..Math.Min(1, buffer.Length)], cancellationToken);
+    }
+
     private const byte Kind = 0x2A;
 
     /// <summary>Builds <c>[u32 declared][rest…]</c> with a prefix that need not agree with what follows it.</summary>

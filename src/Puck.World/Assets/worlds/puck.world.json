@@ -130,6 +130,8 @@
   ],
   "bodies": {
     "capacity": 144,
+    "networkPlayers": 16,
+    "reconnectGraceSeconds": 60,
     "localSeats": 2,
     "scaleRow": "scale",
     "seatSpawns": [

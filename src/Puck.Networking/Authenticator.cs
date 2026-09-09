@@ -34,3 +34,11 @@ public interface IAuthenticator {
     /// <returns><see langword="true"/> only when the proof verifies.</returns>
     bool TryVerify(ReadOnlySpan<byte> challenge, ReadOnlySpan<byte> proof, out string? sourceAuthority);
 }
+
+/// <summary>Requires an authenticated transport identity to be pinned before disclosing a credential.</summary>
+public interface IRemoteIdentityVerifier {
+    /// <summary>Checks the remote transport's authenticated public-key fingerprint.</summary>
+    /// <param name="keyHash">The SHA-256 fingerprint established by the peer handshake.</param>
+    /// <returns>Whether this credential may be presented to that peer.</returns>
+    bool AcceptsRemoteIdentity(string keyHash);
+}

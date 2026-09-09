@@ -964,8 +964,8 @@ same future extension seam. Neither is inferred from placement geometry today.
 ## The `metadata` section — free-form author-facing facts
 
 `WorldMetadata.cs` holds the optional `metadata` section (`WorldMetadataSection`):
-`title`, `description`, `authors` (each an optional Entra `oid`, checked with
-`WorldEntraObjectId.IsValid`), `tags`, and a `custom` bag typed
+`title`, `description`, `authors` (each an optional UUID `oid`, checked with
+`WorldObjectId.IsValid`), `tags`, and a `custom` bag typed
 `IDictionary<string, JsonElement>` — an author scratch space nothing here reads
 or dispatches on. This is deliberately NOT `Extensions` (below): `Extensions`
 is a typo catcher — any unrecognized top-level key is a hard load failure —

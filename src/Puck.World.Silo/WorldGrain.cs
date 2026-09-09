@@ -26,9 +26,8 @@ internal sealed class WorldGrain(WorldSiloHost host) : Grain, IWorldGrain {
     /// <inheritdoc/>
     public Task<bool> ActivateAsync() {
         var identity = Identity();
-        // Definition composition and neighbour reads precede the host's async mailbox work; keep them off
-        // Orleans' cooperative scheduler. The host still admits the world on its own simulation thread.
-        return Task.Run(() => host.ActivateAsync(ct: CancellationToken.None, identity: identity));
+        // Root and neighbour reads are asynchronous; admission still crosses the simulation mailbox.
+        return host.ActivateAsync(ct: CancellationToken.None, identity: identity);
     }
     /// <inheritdoc/>
     public Task<bool> CheckpointNowAsync() => host.CheckpointNowAsync(

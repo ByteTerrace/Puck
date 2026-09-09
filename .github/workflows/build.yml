@@ -1,73 +1,52 @@
-name: Build
+name: Test compiled solution
+run-name: Solution tests — ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      prebuilt:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
-
-concurrency:
-  group: build-${{ github.run_id }}
-  cancel-in-progress: false
 
 env:
   CI: true
   DOTNET_NOLOGO: true
 
 jobs:
+  artifacts:
+    name: Build .NET artifacts
+    if: ${{ !inputs.prebuilt }}
+    uses: ./.github/workflows/artifacts.yml
   build:
+    name: Run .NET tests (Windows)
+    needs: artifacts
+    if: ${{ !cancelled() && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json
-
-      - name: Install the wasm-tools workload
-        run: dotnet workload install wasm-tools
-
-      - name: Install pinned DXC
-        shell: pwsh
-        run: |
-          $archive = Join-Path $env:RUNNER_TEMP 'dxc.zip'
-          $destination = Join-Path $env:RUNNER_TEMP 'dxc'
-          Invoke-WebRequest 'https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2607/dxc_2026_07_29.zip' -OutFile $archive
-          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367cd241') {
-            throw 'DXC archive checksum mismatch.'
-          }
-          Expand-Archive -LiteralPath $archive -DestinationPath $destination
-          Join-Path $destination 'bin/x64' >> $env:GITHUB_PATH
-
-      - name: Restore locked dependencies
-        run: dotnet restore Puck.slnx --locked-mode
-
-      - name: Build the solution
-        run: dotnet build Puck.slnx --configuration Release --no-restore -bl:artifacts/build.binlog
-
-      - name: Test the solution
-        run: >-
-          dotnet test Puck.slnx --configuration Release --no-build --no-restore
-          --logger trx --results-directory artifacts/test-results
-          --filter Category!=Performance
-          --blame-hang-timeout 15m --blame-hang-dump-type mini
-
-      - name: Publish the Windows world artifact
-        run: dotnet publish src/Puck.World --configuration Release --no-build --no-restore --output artifacts/world
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Download compiled Windows assemblies
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: world-windows-framework-dependent
-          path: artifacts/world
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+          name: compiled-windows
+          path: artifacts
+      - name: Restore this commit's compiled outputs
+        run: dotnet run -c Release --file build/BuildArtifacts.cs -- restore
+      - name: Test the producer's assembly manifest
+        run: dotnet run -c Release --file build/BuildArtifacts.cs -- test-windows
+      - name: Upload test diagnostics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: build-diagnostics
-          path: |
-            artifacts/build.binlog
-            artifacts/test-results
+          name: test-diagnostics
+          path: artifacts/test-results
           if-no-files-found: warn

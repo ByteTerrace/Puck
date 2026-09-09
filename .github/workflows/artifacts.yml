@@ -1,0 +1,109 @@
+name: Build release artifacts
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  windows:
+    name: Compile and package .NET payloads (Windows)
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned .NET SDK
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            src/*/packages.lock.json
+            tests/*/packages.lock.json
+            global.json
+            .config/dotnet-tools.json
+      - name: Install WebAssembly tools
+        run: dotnet workload install wasm-tools
+      - name: Install pinned DXC
+        run: dotnet run -c Release --file build/InstallDxc.cs
+      - name: Restore locked dependencies
+        run: dotnet restore Puck.slnx --locked-mode
+      - name: Compile standalone automation without running its operations
+        run: |
+          dotnet build build/Azure.cs -c Release
+          dotnet build build/Toolchain.cs -c Release
+          dotnet build build/BuildArtifacts.cs -c Release
+          dotnet build build/InstallQuic.cs -c Release
+          dotnet build build/InstallDxc.cs -c Release
+          dotnet build build/FormatSubmit.cs -c Release
+          dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
+      - name: Compile the solution once
+        run: dotnet build Puck.slnx -c Release --no-restore -p:PuckCaptureTestArtifacts=true -bl:artifacts/build.binlog
+      - name: Package the compiled assemblies without rebuilding
+        run: dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll nuget pack artifacts/packages --no-build
+      - name: Publish the compiled Functions and browser payloads
+        run: |
+          dotnet publish src/Puck.Azure.Functions -c Release --no-build --no-restore -o artifacts/runtime/functions
+          dotnet publish src/Puck.World.Browser -c Release --no-build --no-restore
+          dotnet publish src/Puck.World -c Release --no-build --no-restore -o artifacts/world
+      - name: Capture compiled outputs and their source identity
+        run: dotnet run -c Release --file build/BuildArtifacts.cs -- capture
+      - name: Upload compiled Windows assemblies
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: compiled-windows
+          path: artifacts/compiled-windows.zip
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nuget-packages
+          path: artifacts/packages/*.*nupkg
+          compression-level: 0
+          if-no-files-found: error
+      - name: Upload the compiled Roslyn analyzers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: compiler-analyzers
+          path: src/Puck.Analyzers/bin/Release/netstandard2.0
+          if-no-files-found: error
+      - name: Upload Functions and browser payloads
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-payloads
+          path: artifacts/runtime
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Upload HGB and AGB binaries
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: emulator-batteries
+          path: artifacts/batteries
+          if-no-files-found: error
+      - name: Upload World test assemblies
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: world-verification
+          path: artifacts/world-tests
+          if-no-files-found: error
+      - name: Upload the World desktop build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: world-windows-framework-dependent
+          path: artifacts/world
+          if-no-files-found: error
+      - name: Upload build diagnostics
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: build-diagnostics
+          path: artifacts/build.binlog
+          compression-level: 0
+          if-no-files-found: warn

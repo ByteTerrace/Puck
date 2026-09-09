@@ -38,7 +38,7 @@
             "type": "string"
           },
           "oid": {
-            "description": "The author\u0027s Entra object id, when the author chooses to attach one \u2014 see WorldEntraObjectId. Authored, not authenticated: nothing here proves the name behind the id.",
+            "description": "The author\u0027s object id, when the author chooses to attach one \u2014 see WorldObjectId. Authored, not authenticated: nothing here proves the name behind the id.",
             "type": [
               "string",
               "null"

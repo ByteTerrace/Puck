@@ -442,7 +442,8 @@ public sealed class SdfFieldEvaluatorCullLawTests {
     }
 
     [Fact]
-    public void CullSkipsFarInstancesInsteadOfEvaluatingEveryShapeInThem() {
+    [Trait("Category", "Performance")]
+    public void FarInstanceCullMeetsTheCalibratedTimingBudget() {
         const int InstanceCount = 4000;
         const int ShapesPerInstance = 8;
 
@@ -477,7 +478,7 @@ public sealed class SdfFieldEvaluatorCullLawTests {
 
         Assert.True(
             condition: (elapsed.Elapsed < TimeSpan.FromMilliseconds(value: 100.0)),
-            userMessage: $"20 queries over {InstanceCount} far instances of {ShapesPerInstance} shapes each took {elapsed.Elapsed}, long enough to indicate every shape in every far instance was evaluated instead of each instance's bound being tested once."
+            userMessage: $"20 queries over {InstanceCount} far instances of {ShapesPerInstance} shapes each took {elapsed.Elapsed}, exceeding this benchmark's 100 ms budget. Run on an idle machine; elapsed time alone does not establish which instructions executed."
         );
     }
 }

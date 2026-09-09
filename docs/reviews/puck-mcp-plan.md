@@ -2,16 +2,142 @@
 
 Initially reviewed after technical rebuttal on 2026-09-07 against checkout base
 `621127f0b67a`; the engine prerequisites were reviewed again at `5f63f7a533c4`.
-This is a future
-implementation handoff, not a claim that an MCP server is implemented. Source
-links are repository-relative so the plan survives another machine or checkout.
+Local Operator MCP and delegated remote MCP are separate authority surfaces.
+Remote ingress accepts the validated issuer/subject, admits that identity through
+the World's existing peer lifecycle, and carries its generation through commands.
+No HTTP mode publishes a local Console capability. Source links are relative.
 
-**Decision: deliver live local pairing first, with explicit Operator and Participant
-profiles.** A trusted co-developer gets the same console control plane as the
-human at the terminal. An embodied participant gets the scoped bridge. Remote
-cloud deployment has additional boundaries and is a later, independent release.
-Body grants do not authorize host files, composed images, or Azure resources;
-that fact must not become a reason to restrict an explicitly trusted operator.
+`Puck.Mcp` remains an optional extension over `Puck.Hosting`, without a World
+dependency. CLI installs it in the existing silo. The Function App owns onboarding:
+`puck_onboard` and attachment admission call its existing `/api/self-onboard`
+through OBO. Inventory/metrics reads also exchange the current user's assertion
+with a federated managed identity client assertion. Failed delegation never falls
+back to workload credentials.
+
+Unified deployment uses the existing single-worker load balancer and stock Caddy
+for automatic HTTPS issuance and renewal on 443. Certificate state survives
+releases outside the World container. Azure availability checks monitor readiness
+and impending certificate expiry through the existing hosting action group.
+One explicit participant list generates gateway access and World OAuth admission.
+Replica disclosure permits text reads; writes require ordinary World row grants
+and mutation masks. See the [hosting contract](../../src/Puck.Mcp/README.md).
+
+Remaining release evidence is live deployment: DNS/ACME, real Entra consent,
+first-party and external sign-in, Function onboarding and ARM OBO. Local tests
+cannot certify those external systems. Distributed placement and portable handles
+remain future work: the current release supports one authoritative worker and a
+fixed World target. Arbitrary discovery of each user's private Worlds, durable
+delegated cloud jobs and richer participant tools remain later slices under the
+authority and recovery gates below.
+
+The readiness corrections preserve downstream claims challenges as HTTP 401,
+derive admitted command help from the registry, hide headless capture, disclose
+granted observation names and bound each caller to two requests and attachments
+within the host's four-slot limits. Local validation passed 46 remote MCP tests,
+93 Azure adapter tests, 35 Hosting tests and 455 command tests; an additional
+filtered-help regression also passed. These results establish local contracts.
+Production deployment and user-flow validation remain pending until the Azure
+workflow and signed-in operator checks succeed.
+## Local Operator implementation, 2026-09-08
+
+Implemented from corrected prerequisite base `b1066e2973e0`: neutral
+[Hosting console attachment](../../src/Puck.Hosting/README.md#local-console-attachment)
+over [Networking capabilities and framing](../../src/Puck.Networking/README.md#local-endpoint-capabilities), optional official-SDK
+[Puck.Mcp](../../src/Puck.Mcp/README.md), live
+`world.control start|stop|status`, `puck_exec`, and `puck_capture_frame`.
+The launch recipe and exact limits now live in those project READMEs.
+
+The initial transport was Windows authenticated loopback, the alternative this
+plan allowed: user-only held-open discovery, mutual challenge-response, four
+connections, one admitted operation each, bounded framing, deadlines and no
+implicit retries. It does not implement pipes or a separate elevation boundary;
+it trusts the OS user. The attachment argument is a capability **file path**,
+not a pipe name. Local control now supports Windows and Linux x64; the remote
+gateway accepts clients from other platforms.
+
+Official Core 2.2.0 builds under AOT/trim analysis. Resolved architecture builds
+pass. CLI adds Core 2.2.0 and AI.Abstractions 10.8.3; existing package versions do
+not change. Console and capture policy belong to Hosting; capability authentication
+and the shared frame grammar belong to Networking. Hosting now references
+Networking, so its consumers inherit Networking and Attestation. The exact
+profiles must include those transitive dependencies while preserving the absence
+of MCP packages from the engine. There is no separate control assembly.
+
+Earlier assembly-size and startup observations predate this consolidation and
+are not measurements of the resulting build. Focused contracts are owned by
+Hosting and Networking tests; official SDK client interop against the real CLI
+belongs to CLI tests, now targeting only 2026-07-28, authentication
+failures, malformed framing, duplicate IDs, cancellation, timeout, EOF and reconnect.
+Real Direct3D offscreen and windowed hosts accepted a parameter edit and returned
+completed PNGs through the producer and unified overlay respectively. Human
+console status answered in 15 ms during the windowed agent wait; adapter restart
+preserved World and captured again. No specific IDE installation or physical
+GPU-loss event was tested. Participant, document/recording conveniences, parity/ingress
+and downstream services remain milestones 2–5. The acceptance table below remains the release checklist,
+with pipe-specific checks superseded by the selected transport's trust contract.
+
+## Implementation adversarial review, 2026-09-08
+
+The initial happy-path checks missed failures at the asynchronous boundaries.
+The correction keeps the official SDK as the MCP parser and the existing Console
+as the operator's authority; it changes failure handling and resource bounds:
+
+- Host deadlines now stop waiting on an injected session that ignores its token.
+  Disconnect and timeout dispose the ingress once and observe abandoned work.
+  Direct Console-session disposal also ends an accepted capture wait while its
+  temporary path remains owned until the actual writer completes.
+- Private JSON rejects duplicate/missing fields and invalid nulls. Both peers
+  validate result identity and semantics. Invalid host results and unexpected
+  execution failures report `unknown`, rather than crashing or claiming success.
+- Stdio shutdown closes the underlying streams. Invalid UTF-8, oversized input
+  and read failures propagate to a controlled nonzero CLI exit. Split Unicode
+  scalars remain valid. Input admission and SDK output sends both have bounds;
+  stalled stdout cannot retain an unlimited queue of replies.
+- Tool validation failures are tool errors; unknown tools remain protocol errors.
+  Malformed JSON string escapes are rejected as invalid protocol parameters
+  before typed dispatch, rather than becoming an internal SDK error. This is
+  tested through raw JSON because the official client rejects them before transmission.
+  Structured metadata has an advertised output schema and identical JSON text.
+  A missing reliable host reply uses a null request ID and preserves uncertainty;
+  local admission refusals cannot borrow the next host sequence number.
+  These choices follow the [tool-result contract](https://modelcontextprotocol.io/specification/2026-07-28/server/tools).
+
+The regressions reproduced ten host failures, three stdio failures and the raw
+Unicode error-classification failure before
+correction. Additional tests exercise blocked writes, reply flooding, fragmented
+UTF-8 and I/O faults. The Windows null-DACL attack was rejected by the existing
+authentication implementation; its test records a successful defense, not a
+fixed vulnerability. Inspection also confirmed that cancellation cannot lose a
+capture request once its pump delegate has begun: the existing operation state
+machine preserves that ownership until the delegate returns.
+
+Verification on the corrected tree includes the Hosting and Networking suites,
+official-client and adversarial CLI tests, a clean World Release build, and a real
+Direct3D offscreen edit/capture/wait/disconnect/reconnect smoke. World reported the
+dynamics edit applied, PNGs decoded, and human console input answered during the
+agent wait. This review does not establish remote, multi-user or physical
+device-loss behavior; those limits remain explicit above.
+
+The final focused runs passed 35 Hosting tests, 152 Networking tests (one Unix-only
+skip), and 14 MCP tests. CLI publish, documentation links and the length ledger
+passed. The broader CLI attempt also exposed seven schema/official-build failures
+from concurrent identity-refactor changes with stale generated schemas; those
+other-session files were left to their owner. This is a verified MCP change,
+not a claim that the entire shared checkout is green.
+
+A .NET 10 ergonomics/performance pass used SDK 10.0.400 and runtime 10.0.11,
+the newest installed versions, plus Puck's content and compiler-backed reference
+queries. The SDK already owns a channel; layering a second queue would add
+another admission/lifetime boundary. Single-result completion sources, `Lock`,
+`Interlocked`, cancellation-aware stream I/O and `Task.WaitAsync` retain their
+specific roles. Metadata now uses source-generated `SerializeToElement` over a
+typed value instead of a mutable JSON tree followed by serialization, parsing
+and cloning. Schema parsing uses the standalone .NET 10 `JsonElement.Parse` API.
+A warmed Release file-app probe on this runtime measured 2,288 versus 952 allocated
+bytes per metadata-plus-text result with 128 output characters, across two runs.
+This is a component allocation result; timing varied and establishes no
+end-to-end latency improvement. Existing MCP interop tests verify the unchanged
+wire results, including equality of structured metadata and JSON text.
 
 ## Engine prerequisites implemented on 2026-09-07
 
@@ -31,7 +157,7 @@ for local pairing:
 
 The engine prerequisites are integrated. The original verification below
 describes the earlier implementation worktree; it is not a new gate run against
-the landed commit. No MCP server or attachment endpoint has been implemented.
+the landed commit. Current attachment verification is recorded above.
 
 Adversarial review of the landed commit found three lifecycle defects:
 `FrameCaptureRequest.Write` swallowed the host's `DeviceLostException`
@@ -43,8 +169,7 @@ as a row refusal. Clock reset invalidates all previous deadlines.
 Regression tests exercise the real request, routing, and wait APIs.
 These review corrections must accompany the prerequisites into the MCP work.
 
-Proceed to milestone 0: bounded authenticated local IPC and actual
-SDK/client interop. Reuse these engine APIs instead of inventing a
+The local implementation reuses these engine APIs instead of inventing a
 `WorldRenderProbe` success event. Authoritative per-mutation receipts remain
 separate work: a submission callback or a completed capture does not prove an
 edit was accepted. Capture waiting needs an adapter deadline and unique-path
@@ -134,21 +259,17 @@ Choose **attachment to the human's running world** as the first usable workflow:
 human-visible Puck.World
   -> opt-in local control endpoint -> dedicated TextCommandSession -> ordinary pump
 IDE MCP client
-  -> puck mcp --profile operator --attach <pipe> -> local control endpoint
+  -> puck mcp --profile operator --attach <file> -> local control endpoint
 ```
 
-The example is proposed CLI syntax. An optional `--control-pipe <name>` deployment
-override is reasonable, but must not be the only way to enable attachment: provide
-live start/stop/status control through the ordinary console so an already-running
-world can opt in. Keep durable settings in host configuration; avoid a second
-ambiguous `--control` alias unless the normal CLI convention needs it. All these
-names are proposed, not existing flags or verbs. No mandatory headless boot or
-restart of the world for an IDE reconnect. MCP stdin/stdout belong to the CLI
-adapter, while World retains its human console and window. The adapter's EOF or
-crash does not terminate World. An owned-host launch recipe can be added for
-automation, with explicit ownership and shutdown behavior; it is not required to
-make live pairing work.
+This is implemented CLI syntax. `world.control start|stop|status` supplies live
+opt-in without a deployment flag or a World restart. MCP stdin/stdout belong to
+the CLI adapter, while World retains its human console and window. Adapter EOF
+or crash does not terminate World. An owned-host launch recipe can be added
+later with explicit ownership and shutdown behavior.
 
+The following pipe criteria remain guidance for any future pipe transport; the
+initial implementation selects authenticated loopback as described above.
 On Windows, prefer a named pipe scoped to the current OS user, rejecting remote
 clients, with a host-instance identifier and protocol revision handshake. Use
 the supported .NET pipe options/ACLs and verify both ends: `CurrentUserOnly` on
@@ -189,7 +310,7 @@ do not accidentally interpret them as several IPC requests.
 
 Proposed ownership:
 
-- `Puck.World.Mcp`: optional protocol adapter, schemas, result mapping, binding
+- `Puck.Mcp`: optional protocol adapter, schemas, result mapping, binding
   validation, and adapters over injected authorized services. Keep Azure SDK,
   native GPU types, and model frameworks out of its core dependency closure.
 - World owns the transport-neutral local console/capture endpoint and its ordinary
@@ -210,8 +331,8 @@ seams only where participant composition or owned-host automation needs them;
 that extraction is not a prerequisite for attaching the operator console.
 
 Evaluate the [official C# SDK](https://github.com/modelcontextprotocol/csharp-sdk)
-in milestone 0, beginning with `ModelContextProtocol.Core` (2.2.0 is the inspected
-candidate, not a requirement to use that version regardless of later evidence).
+in milestone 0. The implementation selected `ModelContextProtocol.Core` 2.2.0
+after restore, resolved builds, client interop and footprint measurement.
 Measure the actual
 dependency delta, startup/working set, publish size, target-client interoperability,
 and resolved architecture build. HTTP's ASP.NET Core package is separately
@@ -468,13 +589,28 @@ do not promise H.264 as standards-conforming WebM. Do not fabricate provenance.
 
 ## 8. Remote hosting and Azure delegation
 
-This is a separate deployment milestone, not a prerequisite for local pairing.
-Add Streamable HTTP only after the local authority and lifecycle gates pass.
-Follow the selected revision's [authorization requirements](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization),
-including protected-resource discovery, audience validation, and authentication
-on every request. Validate signature, issuer, tenant, expiry, audience, and
-required delegated scopes. Enforce TLS, appropriate Origin/Host checks, bounded
-requests, and caller-specific caches. Never trust protocol clientInfo as identity.
+Remote MCP uses official ASP.NET Core SDK 2.2.0 and .NET 10 JWT bearer authentication.
+Both transports select MCP 2026-07-28. The executable configuration, trust boundaries,
+limits and verification recipes live in the [MCP README](../../src/Puck.Mcp/README.md#remote-http-and-oauth).
+The deployed Entra API retains its existing `user_impersonation` scope. Gateway
+access, World admission/disclosure, World grants and downstream consent remain
+separate decisions, evaluated against the authenticated caller. Remote text does
+not confer full Console authority. Richer participant tools and durable delegated
+cloud mutations remain future work.
+Keep the remaining integration on the existing platform. The unified
+[Bicep entry point](../../src/Puck.Azure.Resources/main.bicep) already owns Entra
+application registration, delegated scopes, federated credentials, ingress,
+configuration and monitoring; MCP now extends that deployment and the existing host
+lifecycle. The API and Actors also implement federated OBO through
+[IdentityUtilities](../../src/Puck.Azure.Functions/Utilities/IdentityUtilities.cs);
+the API also has a request-scoped
+[credential context](../../src/Puck.Azure.Functions/UserCredentialContext.cs).
+The Azure operation provider accepts a TokenCredential, while WorldExtensionClient
+already owns granted discovery, durable invocation/status and revocation. Connect
+authenticated MCP callers to those durable-operation seams; preserve caller identity
+across durable work and reauthentication. Existing silo health/drain and
+configuration-refresh mechanisms remain the operating foundation.
+Live Entra/client acceptance remains verification.
 
 Resolve a tenant-qualified subject such as `(tid, oid)` through trusted admission
 and host policy. Bind it to the world principal/index/generation and approved
@@ -515,11 +651,12 @@ only after all requested slices land; a local release does not claim Azure suppo
 |---|---|---|
 | Engine prerequisites: before milestone 0 | Landed in `5f63f7a533c4`: session waits, ordered host operations, and correlated capture completion. Include the review corrections for device-loss propagation, row retirement, and clock reset. | Pass the affected builds and tests on the tree used for MCP work. Prior verification is not evidence for a new merged tree. |
 | 0: local transport and protocol spike | Select SDK or owned implementation from measured evidence; pin actual client/protocol matrix; build a user-scoped IPC endpoint feeding a dedicated Console session. | Resolved architecture build and client interop; reviewed lock delta; correct host/profile identity; escaped multiline replies, fragmented/coalesced reads, blank/comment handling, bounded input/queueing, and no stdout contamination. No MCP package in base World. |
-| 1: live operator pairing | `--profile operator --attach <pipe>`, full `puck_exec`, session-scoped waits, and one-call frame capture ordered behind prior edits. | Human enables attachment in a running world; agent changes a parameter and receives a fresh PNG. Human console responds during an MCP wait. Deferred rejection is not reported as success; overlay, shader-pass, and bare-producer captures all complete or fail explicitly. Adapter restart preserves world. Busy/timeout/device-loss, wrong-user/elevation, and remote pipe access checks pass. |
+| 1: live operator pairing | `--profile operator --attach <file>`, full `puck_exec`, session-scoped waits, and one-call frame capture ordered behind prior edits. | Human enables attachment in a running world; agent changes a parameter and receives a fresh PNG. Human console responds during an MCP wait. Deferred rejection is not reported as success; overlay, shader-pass, and bare-producer captures all complete or fail explicitly. Adapter restart preserves world. Busy/timeout/device-loss and the selected transport's user/host authentication and local-only binding checks pass; pipe-specific elevation/remote checks apply only to a future pipe transport. |
 | 2: participant tools | Explicit participant composition, three bridge tools, binding lifecycle, bounded admission, honest receipts and retry semantics. | Participant cannot reach exec/files/frame/tape even by guessing tool names or changing profile arguments. Grant/revoke, channel reorder, body reuse, observe denial, cancellation, and saturation tests run against the real host. |
 | 3: authoring and recording conveniences | `puck_doc` with live/save distinction and replacement preconditions, honest cost reports, recording/replay controls, and long verification handles where needed. | Concurrent document edits and malformed candidates; disk failures; codec declines, drops, stale recording handles, timeout after dispatch, replay arming refusal/mismatch. Existing console operations remain available throughout. |
 | 4: parity and ingress | Existing parity runner as isolated job; approved device handles with revocation. | All parity verdicts retained; invalid schedule/unsupported backend; source access denial/revocation; device disappearance; no unauthorized audio/desktop disclosure. |
-| 5: remote and services | HTTP auth, owner routing, tenant-qualified bindings, OBO and scoped external operations. | Wrong tenant/audience, expired token, cross-user handle reuse, replica routing, SDK interop, consent/reauthentication failures, durable-job restart, lost ARM response, binding revocation, and replay cannot resend cloud effects. |
+| 5a: remote Operator | Implemented: OAuth-protected HTTP, explicit subject grants and caller-bound gateway attachments. Latest MCP only. | Real Kestrel/SDK, signed JWT/OIDC/JWKS, TLS, wrong tenant/audience/scope/subject, active expiry, cross-user handles, cancellation, bounds and shutdown. Live Entra consent/deployment still requires deployment configuration and verification. |
+| 5b: delegated services | Implemented: scoped inventory/metrics reads through OBO. Remaining: participant authority bindings and durable delegated mutations. | Request identity, grant refusal, token exchange and no fallback are tested. Remaining gates cover owner routing, live consent, reauthentication, durable-job restart, lost ARM response, binding revocation, and replay suppression. |
 
 Use existing focused gates where applicable:
 
@@ -579,13 +716,13 @@ separates low-level Core, hosting, and ASP.NET Core. Puck itself has package-bea
 [Harness](../../src/Puck.World.AgentHarness/Puck.World.AgentHarness.csproj) projects.
 The [architecture gate](../../build/PuckArchitectureGate.cs) checks the resolved
 Puck graph and refuses Puck assemblies smuggled around project references; this
-is not a blanket ban on third-party dependencies. No MCP package restore/build
-spike was performed here, so package cost and compatibility remain unmeasured.
+is not a blanket ban on third-party dependencies. This original review did not
+run an SDK spike; the implementation evidence above now supplies it.
 
 The earlier rebuttal revisions were documentation-only. Their 15-test result
 belongs to the initial review. The later engine-prerequisite implementation and
-real rendering checks are recorded below; no MCP server, cross-backend parity
-job, or live Azure operation has been run. Concurrent shader and world-asset
+real rendering checks are recorded below; those earlier runs did not exercise
+MCP, cross-backend parity or live Azure operations. Concurrent shader and world-asset
 changes in the primary checkout were left alone.
 
 The second volley was checked against current source, including compiler-backed
@@ -600,10 +737,9 @@ lists a native net10.0 dependency group with AI.Abstractions >=10.8.3 and
 Logging.Abstractions >=10.0.10. Current CLI locks Logging.Abstractions 10.0.11;
 Harness locks AI.Abstractions 10.9.0 and Logging.Abstractions 10.0.11. Those
 minimums show no obvious version-floor conflict with these existing choices,
-but the CLI does not thereby already contain the whole SDK graph. This is
-preflight evidence only; actual restore, resolved build, footprint measurement,
-and target-client interoperability remain milestone 0 work. A release plan
-should state that uncertainty instead of declaring either implementation chosen.
+but those metadata minimums alone did not establish compatibility. They were
+preflight evidence; the implementation results above now record the actual graph
+and chosen SDK/client matrix.
 
 Original engine prerequisite verification in the implementation worktree: World and Silo Release builds
 passed with zero warnings, and 516 tests passed across Commands (454),
