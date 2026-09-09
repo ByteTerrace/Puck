@@ -18,7 +18,7 @@ try {
 // Deployment orchestration deliberately remains usable before Puck CLI is released.
 // Artifact composition, hashing, and validation are CLI commands; this app owns Azure calls.
 internal static class AzureAutomation {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(minutes: 5) };
+    private static readonly HttpClient Http = new(new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All }) { Timeout = TimeSpan.FromMinutes(minutes: 5) };
     private static readonly Dictionary<string, string> Options = new(comparer: StringComparer.Ordinal);
 
     internal static async Task<int> ExecuteAsync(string[] args) {
@@ -132,7 +132,10 @@ internal static class AzureAutomation {
     }
     private static async Task RetryAsync(Func<Task> action, int attempts = 12, int seconds = 5) {
         for (var attempt = 0; ; attempt++) {
-            try { await action(); return; } catch (Exception) when (((attempt + 1) < attempts)) { await Task.Delay(delay: TimeSpan.FromSeconds(seconds: seconds)); }
+            try { await action(); return; } catch (Exception error) when (((attempt + 1) < attempts)) {
+                Console.Error.WriteLine($"Attempt {attempt + 1}/{attempts} failed: {error.Message}");
+                await Task.Delay(delay: TimeSpan.FromSeconds(seconds: seconds));
+            }
         }
     }
     private static async Task<JsonNode> GetJsonAsync(string uri) => (JsonNode.Parse(json: await Http.GetStringAsync(requestUri: uri)) ?? throw new InvalidDataException(message: $"Empty response: {uri}"));
@@ -1025,7 +1028,8 @@ internal static class AzureAutomation {
                 if (!(await home.Content.ReadAsStringAsync()).Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "<html")) { throw new InvalidDataException(message: $"Website entry point is missing at {host}."); }
                 using var docs = await Http.GetAsync(requestUri: $"https://{host}/reference/index.html"); docs.EnsureSuccessStatusCode();
                 if (!(await docs.Content.ReadAsStringAsync()).Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "<html") || (docs.Headers.TryGetValues(name: "X-Frame-Options", values: out var frames) && frames.Any(predicate: value => value.Equals(comparisonType: StringComparison.OrdinalIgnoreCase, value: "DENY")))) { throw new InvalidDataException(message: $"Embedded documentation is unavailable at {host}."); }
-                using var config = await Http.GetAsync(requestUri: $"https://{host}/configuration"); config.EnsureSuccessStatusCode();
+                // Front Door only admits configuration requests explicitly limited to the public label.
+                using var config = await Http.GetAsync(requestUri: $"https://{host}/configuration?api-version=1.0&key=*&label=public"); config.EnsureSuccessStatusCode();
                 if (config.Content.Headers.ContentType?.MediaType?.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "json") != true) { throw new InvalidDataException(message: $"Configuration route is missing at {host}."); }
             }
             var manifest = await GetJsonAsync(uri: (address + "/official/stable/manifest.json"));

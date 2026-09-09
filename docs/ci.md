@@ -393,6 +393,9 @@ It refreshes OIDC login before application publication, World deployment,
 Functions deployment, and website publication. Cached Azure access tokens do
 not extend the GitHub assertion's lifetime; a later resource-token request
 otherwise fails with `AADSTS700024` after a long deployment phase.
+Public-route verification decodes the site's compressed responses and requests
+configuration with the required public-label filter. Retry failures report their
+reason immediately instead of remaining silent until the retry budget expires.
 
 The `Puck` environment's optional `WORLD_MCP` variable supplies the JSON policy
 document described by [remote MCP deployment](../src/Puck.Azure.Resources/README.md#remote-mcp).
