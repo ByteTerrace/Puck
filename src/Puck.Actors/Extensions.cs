@@ -29,7 +29,8 @@ public static class Extensions
             : !Uri.TryCreate(
                 result: out var endpointUri,
                 uriKind: UriKind.Absolute,
-                uriString: $"{endpoint}/{userObjectId}"
+                // Uri.ToString() includes a trailing slash; a doubled separator loses the SDK's container name.
+                uriString: $"{endpoint?.TrimEnd('/')}/{userObjectId}"
             )
             ? throw new InvalidOperationException(message: "Blob storage endpoint must be a valid URI.")
             : new(
