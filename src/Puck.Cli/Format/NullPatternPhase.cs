@@ -10,10 +10,8 @@ namespace Puck.Cli.Format;
 // equality from an overloaded operator, dynamic binding, or a pointer comparison; the semantic model
 // supplies that boundary before any source is changed.
 internal static class NullPatternPhase {
-    public static int Run(string rootArgument, bool whatIf, bool verify, string[]? targets = null) {
-        var targetFiles = targets;
-
-        if ((targetFiles is null) && !SourceFiles.TryEnumerate(files: out targetFiles, rootArgument: rootArgument, scanRoot: out _)) {
+    public static int Run(string rootArgument, bool whatIf, bool verify) {
+        if (!SourceFiles.TryEnumerate(files: out var targetFiles, rootArgument: rootArgument, scanRoot: out _)) {
             return 2;
         }
 
@@ -54,10 +52,10 @@ internal static class NullPatternPhase {
 
         if (degradedProjects.Count > 0) {
             Console.Error.WriteLine(
-                value: $"null-pattern: {degradedProjects.Count} project(s) not built ({string.Join(separator: ", ", values: degradedProjects)}) — their source was skipped. Build before formatting.");
+                value: $"null-pattern: {degradedProjects.Count} project(s) not built ({string.Join(separator: ", ", values: degradedProjects)}) — unresolved comparisons stay unchanged. Build for full coverage.");
         }
 
-        return Math.Max(val1: (((ungrouped > 0) || (degradedProjects.Count > 0)) ? 1 : 0), val2: RewriteIo.Report(
+        return RewriteIo.Report(
             label: "null-pattern",
             fileCount: targetFiles.Length,
             drifted: drifted,
@@ -65,7 +63,7 @@ internal static class NullPatternPhase {
             problems: [
                 ("have syntax errors before or after rewriting — SKIPPED", corrupted),
                 ("do not converge — SKIPPED", nonConvergent),
-            ]));
+            ]);
     }
 
     private static void ProcessProject(
@@ -94,8 +92,6 @@ internal static class NullPatternPhase {
 
         if (degraded) {
             degradedProjects.Add(item: Path.GetFileName(path: projectRoot));
-
-            return;
         }
 
         foreach (var file in targets) {

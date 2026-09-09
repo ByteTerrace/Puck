@@ -1648,10 +1648,6 @@ public static partial class WorldDefinitionValidator {
                         var variantColliders = 0L;
 
                         foreach (var solidShape in (variantCreation.Document.Shapes ?? [])) {
-                            if (requiresField && solidShape.Profile?.Kind is SdfPrismProfileKind.Polygon or SdfPrismProfileKind.Ellipse) {
-                                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} uses profile {solidShape.Profile.Kind}; this profile has no deterministic field-contact evaluator. Use an analytic contact provider or a supported contact shape.");
-                            }
-
                             if (!ShapeDomainOps.TryExpand(
                                 domain: solidShape.Domain,
                                 frames: out var solidFrames,

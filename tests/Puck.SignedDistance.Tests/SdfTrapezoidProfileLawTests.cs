@@ -15,64 +15,6 @@ namespace Puck.SignedDistance.Tests;
 /// <para>Each arm pairs a denial with a control differing in one authored dimension.</para>
 /// </summary>
 public sealed class SdfTrapezoidProfileLawTests {
-    [Fact]
-    public void RoundedProfileControlsCornersWithoutBulgingTheCaps() {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
-        _ = SdfSolidGeometry.AppendScaledPrimitive(builder, SdfSolidPrimitive.Prism, new Vector3(1f, .5f, .1f), material,
-            profile: new(SdfPrismProfileKind.RoundedRectangle, CornerRadius: .5f));
-        var evaluator = new SdfFieldEvaluator(builder.Build());
-        Assert.True(evaluator.TryDistance(Position(0, 0, .1), out var cap, out _));
-        Assert.InRange((double)cap, -.0001, .0001);
-        Assert.True(evaluator.TryDistance(Position(1, .5, 0), out var corner, out _));
-        Assert.True(corner > FixedQ4816.Zero);
-        Assert.True(evaluator.TryDistance(Position(.9, 0, 0), out var face, out _));
-        Assert.True(face < FixedQ4816.Zero);
-    }
-
-    [Theory]
-    [InlineData(SdfPrismProfileKind.Polygon, SdfShapeType.RegularPolygon)]
-    [InlineData(SdfPrismProfileKind.Ellipse, SdfShapeType.Ellipse)]
-    public void ProfileUsesTheExistingRendererInstruction(SdfPrismProfileKind kind, SdfShapeType expected) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
-        _ = SdfSolidGeometry.AppendScaledPrimitive(builder, SdfSolidPrimitive.Prism, new Vector3(.3f, .2f, .05f), material,
-            profile: new(kind, Sides: 8));
-        Assert.Contains(builder.Build().Instructions, instruction => instruction.Shape == (uint)expected);
-    }
-
-    [Theory]
-    [InlineData(0f)]
-    [InlineData(0.35f)]
-    [InlineData(1f)]
-    public void PrismTaperAndExtrusionHaveTheAuthoredSurface(float taper) {
-        var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
-        _ = SdfSolidGeometry.AppendScaledPrimitive(builder, SdfSolidPrimitive.Prism,
-            new Vector3(2f, 1f, 0.4f), material, taper: taper);
-        var evaluator = new SdfFieldEvaluator(builder.Build());
-        // Halfway up the profile, the width interpolates linearly between its bottom and top widths.
-        var middleWidth = 1d + taper;
-        Assert.True(evaluator.TryDistance(Position(middleWidth, 0, 0), out var side, out _));
-        Assert.InRange((double)side, -0.0001, 0.0001);
-        Assert.True(evaluator.TryDistance(Position(0, 0, 0.4), out var cap, out _));
-        Assert.InRange((double)cap, -0.0001, 0.0001);
-        Assert.True(evaluator.TryDistance(Position(middleWidth + 0.1, 0, 0), out var outside, out _));
-        Assert.True(outside > FixedQ4816.Zero);
-        Assert.True(SdfSolidGeometry.Reach(SdfSolidPrimitive.Prism, new Vector3(2f, 1f, .4f)) >= new Vector3(2f, -1f, .4f).Length());
-    }
-
-    [Theory]
-    [InlineData(-0.1f)]
-    [InlineData(1.1f)]
-    [InlineData(float.NaN)]
-    [InlineData(float.PositiveInfinity)]
-    public void InvalidPrismTaperIsRefusedAtBothDoors(float taper) {
-        Assert.False(SdfSolidGeometry.TryValidateScaledPrimitive(SdfSolidPrimitive.Prism, Vector3.One, out _, taper));
-        Assert.Throws<ArgumentOutOfRangeException>(() => SdfSolidGeometry.AppendScaledPrimitive(
-            new SdfProgramBuilder(), SdfSolidPrimitive.Prism, Vector3.One, 0, taper: taper));
-    }
-
     private static FixedPosition Position(double x, double y, double z) =>
         FixedPosition.FromLocal(local: new FixedVector3(
             X: FixedQ4816.FromDouble(value: x),

@@ -10,7 +10,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
-const { findRepositoryRoot, puckCommand } = require('../scripts/puckCli.cjs');
 const ts = require('typescript');
 
 require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule(fs.readFileSync(file, 'utf8'), {
@@ -24,17 +23,26 @@ const { OfficialRefusal } = require('../src/official/verify.ts');
 const { bootEngineFromOfficial, bootEngineFromLocalBundle } = require('../src/native/engineBoot.ts');
 const { bootEngineFromOfficialFiles } = require('../src/native/workerBoot.ts');
 
-const root = findRepositoryRoot(__dirname);
+function repositoryRoot() {
+  let dir = __dirname;
+  while (true) {
+    if (fs.existsSync(path.join(dir, 'Puck.slnx'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) throw new Error('could not find Puck.slnx walking up from ' + __dirname);
+    dir = parent;
+  }
+}
+
+const root = repositoryRoot();
 const officialTreeDir = path.join(root, 'artifacts', 'official');
-const pckExe = puckCommand(root);
+const pckExe = path.join(root, 'src', 'Puck.Cli', 'publish', 'puck.exe');
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
 const CHANNEL = 'dev';
 
-const ready = fs.existsSync(path.join(officialTreeDir, CHANNEL, 'manifest.json'));
-if (!ready && process.env.GITHUB_ACTIONS === 'true') throw new Error(`CI requires the official tree at ${officialTreeDir}.`);
+const ready = fs.existsSync(path.join(officialTreeDir, CHANNEL, 'manifest.json')) && fs.existsSync(pckExe);
 
 if (!ready) {
-  test(`engineBoot (SKIPPED: no official tree at ${officialTreeDir} — run 'puck official build')`, { skip: true }, () => {});
+  test(`engineBoot (SKIPPED: no official tree at ${officialTreeDir} or no puck.exe at ${pckExe} — run 'puck.exe official build' and publish Puck.Cli)`, { skip: true }, () => {});
 } else {
   const servers = [];
 

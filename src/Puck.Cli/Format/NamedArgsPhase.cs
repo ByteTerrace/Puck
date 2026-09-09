@@ -28,10 +28,8 @@ internal static class NamedArgsPhase {
         global using System.Threading.Tasks;
         """;
 
-    public static int Run(string rootArgument, bool whatIf, bool verify, string[]? targets = null) {
-        var targetFiles = targets;
-
-        if ((targetFiles is null) && !SourceFiles.TryEnumerate(files: out targetFiles, rootArgument: rootArgument, scanRoot: out _)) {
+    public static int Run(string rootArgument, bool whatIf, bool verify) {
+        if (!SourceFiles.TryEnumerate(files: out var targetFiles, rootArgument: rootArgument, scanRoot: out _)) {
             return 2;
         }
 
@@ -89,7 +87,7 @@ internal static class NamedArgsPhase {
             Console.Error.WriteLine(value: $"named-args: {unresolved} call(s) could not be resolved and were left positional (check the owning project's references).");
         }
 
-        return Math.Max(val1: ((ungrouped > 0) ? 1 : 0), val2: RewriteIo.Report(
+        return RewriteIo.Report(
             label: "named-args",
             fileCount: targetFiles.Length,
             drifted: drifted,
@@ -97,7 +95,7 @@ internal static class NamedArgsPhase {
             problems: [
                 ("have syntax errors before or after rewriting — SKIPPED", corrupted),
                 ("belong to a project that is not built — SKIPPED", notBuilt),
-            ]));
+            ]);
     }
 
     // Names the target files of ONE project against a compilation of that project's trees and its real

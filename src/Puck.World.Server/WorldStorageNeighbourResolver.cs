@@ -61,8 +61,34 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
 
     /// <inheritdoc/>
     public WorldNeighbourResolution Resolve(string document) {
-        if (m_namespace == WorldStorageNamespace.Hosted) { return ResolveHostedAsync(document, CancellationToken.None).AsTask().GetAwaiter().GetResult(); }
-        if (!TryWorldId(document: document, id: out var id, reason: out var reason)) { return WorldNeighbourResolution.Unavailable(reason: reason); }
+        if (string.IsNullOrWhiteSpace(value: document)) {
+            return WorldNeighbourResolution.Unavailable(reason: "the reference names no document");
+        }
+
+        if (!document.EndsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: WorldOwnedWorldFileName.Suffix
+        )) {
+            return WorldNeighbourResolution.Unavailable(reason: $"document '{document}' is not a canonical owned-world file name ending in '{WorldOwnedWorldFileName.Suffix}'");
+        }
+
+        var candidateId = document[..^WorldOwnedWorldFileName.Suffix.Length];
+
+        if (
+            !SafeName.TryParse(
+            candidate: candidateId,
+            name: out var id,
+            reason: out var nameReason
+        ) ||
+            !string.Equals(
+            a: document,
+            b: WorldOwnedWorldFileName.For(id: id),
+            comparisonType: StringComparison.Ordinal
+        )
+        ) {
+            return WorldNeighbourResolution.Unavailable(reason: $"document '{document}' is not a canonical owned-world file name — {nameReason}");
+        }
+
         var address = ((m_namespace == WorldStorageNamespace.Hosted)
             ? WorldOwnedWorldSync.HostedAddressFor(
                 containerId: m_containerId,
@@ -134,65 +160,20 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             }
         }
 
-        return ParseAttestation(json, address.Key, document);
-    }
-
-    private static bool TryWorldId(string document, out SafeName id, out string reason) {
-        id = default;
-        if (string.IsNullOrWhiteSpace(value: document)) {
-            reason = "the reference names no document"; return false;
-        }
-
-        if (!document.EndsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: WorldOwnedWorldFileName.Suffix
+        // Parse with the world's state-binding context, as a file-backed neighbour does. Raw JSON parsing
+        // cannot resolve creation expressions such as state.strideCadence in the shipped Puck world.
+        if (!WorldDefinitionFileSource.TryParseComposed(
+            definition: out var parsed,
+            json: json,
+            neighbours: null,
+            reason: out var parseError,
+            sourceName: address.Key,
+            validateAdjacencyClaims: false
         )) {
-            reason = $"document '{document}' is not a canonical owned-world file name ending in '{WorldOwnedWorldFileName.Suffix}'"; return false;
+            return WorldNeighbourResolution.Unavailable(reason: $"'{address.Key}' does not parse as {WorldDefinition.SchemaVersion} — {parseError}");
         }
 
-        var candidateId = document[..^WorldOwnedWorldFileName.Suffix.Length];
-
-        if (
-            !SafeName.TryParse(
-            candidate: candidateId,
-            name: out id,
-            reason: out var nameReason
-        ) ||
-            !string.Equals(
-            a: document,
-            b: WorldOwnedWorldFileName.For(id: id),
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            reason = $"document '{document}' is not a canonical owned-world file name — {nameReason}"; return false;
-        }
-
-        reason = string.Empty;
-        return true;
-    }
-
-    // Hosted definitions are published fully composed; boot must never turn a basis into blocking storage reads.
-    internal async ValueTask<WorldNeighbourResolution> ResolveHostedAsync(string document, CancellationToken cancellationToken) {
-        if (!TryWorldId(document: document, id: out var id, reason: out var reason)) { return WorldNeighbourResolution.Unavailable(reason: reason); }
-        var address = WorldOwnedWorldSync.HostedAddressFor(containerId: m_containerId, leaf: "definition.json", world: id);
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
-
-        timeout.CancelAfter(delay: OperationTimeout);
-        try {
-            var content = await m_store.ReadAsync(m_target, address, timeout.Token).ConfigureAwait(continueOnCapturedContext: false);
-
-            cancellationToken.ThrowIfCancellationRequested();
-            if (content is not { } found) { return WorldNeighbourResolution.Unavailable(reason: $"no cloud copy at '{address.Key}'"); }
-            return ParseAttestation(Encoding.UTF8.GetString(bytes: found.Content.Span), address.Key, document);
-        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; } catch (Exception error) { return WorldNeighbourResolution.Unavailable(reason: $"could not read '{address.Key}' — {error.Message.ReplaceLineEndings(replacementText: " ")}"); }
-    }
-
-    private static WorldNeighbourResolution ParseAttestation(string json, string sourceName, string document) {
-        // Bind creation expressions and migrate, but prove only the seam facts needed by this world.
-        if (!WorldDefinitionFileSource.TryParseDocument(json, sourceName, out var parsed, out var parseError)) {
-            return WorldNeighbourResolution.Unavailable(reason: $"'{sourceName}' does not parse as {WorldDefinition.SchemaVersion} — {parseError}");
-        }
-
+        // Do not recursively validate adjacency claims: reduce this independently parsed neighbour to seam facts.
         return ((WorldCounterpartAttestation.TryCompose(
             definition: parsed!,
             document: document,
@@ -200,7 +181,7 @@ public sealed class WorldStorageNeighbourResolver : IWorldNeighbourResolver {
             reason: out var attestReason
         ) && (attestation is not null))
             ? WorldNeighbourResolution.Attested(attestation: attestation)
-            : WorldNeighbourResolution.Unavailable(reason: $"'{sourceName}' declares no attestable seam — {attestReason}")
+            : WorldNeighbourResolution.Unavailable(reason: $"'{address.Key}' declares no attestable seam — {attestReason}")
         );
     }
 }

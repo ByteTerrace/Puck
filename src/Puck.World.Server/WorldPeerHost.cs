@@ -68,10 +68,8 @@ public sealed class WorldPeerHost : IDisposable {
     private Task? m_acceptLoop;
     private CancellationTokenSource? m_cts;
     private bool m_disposed;
-
     private readonly WorldPeerNetwork m_network;
     private readonly bool m_ownsNetwork;
-
     private int m_nextConnectionId;
     private int m_pendingHandshakes;
 
@@ -100,14 +98,14 @@ public sealed class WorldPeerHost : IDisposable {
     /// <param name="timeProvider">The admission deadline clock; defaults to system time.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> or <paramref name="authenticator"/> is <see langword="null"/>.</exception>
     public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null, TimeProvider? timeProvider = null) {
-        m_timeProvider = (timeProvider ?? TimeProvider.System);
+        m_timeProvider = timeProvider ?? TimeProvider.System;
         ArgumentNullException.ThrowIfNull(argument: server);
         ArgumentNullException.ThrowIfNull(argument: authenticator);
 
         m_server = server;
         m_authenticator = authenticator;
-        m_network = (network ?? new WorldPeerNetwork());
-        m_ownsNetwork = (network is null);
+        m_network = network ?? new WorldPeerNetwork();
+        m_ownsNetwork = network is null;
     }
 
     /// <summary>Gets a read-back snapshot of every currently admitted connection, oldest first.</summary>
@@ -143,7 +141,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
     }
     /// <summary>Gets a value indicating whether the listener is currently bound.</summary>
-    public bool IsListening => (ListenEndpoint is not null);
+    public bool IsListening => ListenEndpoint is not null;
     /// <summary>Gets the bound endpoint, or <see langword="null"/> while not listening.</summary>
     public string? ListenEndpoint { get; private set; }
 
@@ -154,7 +152,7 @@ public sealed class WorldPeerHost : IDisposable {
             PeerStream client;
 
             try {
-                client = new PeerStream(link: await incoming.ReadAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false));
+                client = new PeerStream(await incoming.ReadAsync(ct).ConfigureAwait(false));
             } catch (Exception ex) when ((ex is OperationCanceledException or ObjectDisposedException or ChannelClosedException)) {
                 break;
             }
@@ -290,7 +288,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
     }
     private async Task HandleConnectionCoreAsync(PeerStream client, CancellationToken ct) {
-        var remoteEndpoint = (client.Link.RemoteEndpoint.ToString() ?? "unknown");
+        var remoteEndpoint = client.Link.RemoteEndpoint.ToString() ?? "unknown";
         Stream stream = client;
 
         // The concurrent-handshake ceiling is checked before any byte crosses the wire for this connection, so a
@@ -326,8 +324,8 @@ public sealed class WorldPeerHost : IDisposable {
         var handshakeSlotHeld = true;
 
         // The wall-clock deadline, linked to the accept loop's own cancellation so shutdown still wins.
-        using var timer = new CancellationTokenSource(delay: HandshakeDeadline, timeProvider: m_timeProvider);
-        using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(token1: ct, token2: timer.Token);
+        using var timer = new CancellationTokenSource(HandshakeDeadline, m_timeProvider);
+        using var deadlineCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
 
         var handshakeCt = deadlineCts.Token;
 
@@ -398,7 +396,7 @@ public sealed class WorldPeerHost : IDisposable {
                 }
 
                 await WorldFederationCodec.WriteResponseAsync(
-                    body: WorldFederationCodec.EncodeAuthorityIdentity(authority: m_server.AuthorityIdentity),
+                    body: WorldFederationCodec.EncodeAuthorityIdentity(m_server.AuthorityIdentity),
                     ct: handshakeCt,
                     kind: WorldFederationResponse.Authenticated,
                     stream: stream
@@ -622,9 +620,9 @@ public sealed class WorldPeerHost : IDisposable {
             // A completed QUIC write only hands bytes to the transport. Immediate connection disposal can
             // discard the final refusal before the peer reads it. Keep the handshake slot while draining, using
             // the networking library's same bounded refusal window; process shutdown still cancels immediately.
-            using (var drain = CancellationTokenSource.CreateLinkedTokenSource(token: ct)) {
-                drain.CancelAfter(delay: PeerWireProtocol.RefusalDrainTimeout);
-                await StreamDrain.UntilClosedAsync(client, drain.Token).ConfigureAwait(continueOnCapturedContext: false);
+            using (var drain = CancellationTokenSource.CreateLinkedTokenSource(ct)) {
+                drain.CancelAfter(PeerWireProtocol.RefusalDrainTimeout);
+                await StreamDrain.UntilClosedAsync(client, drain.Token).ConfigureAwait(false);
             }
             if (handshakeSlotHeld) {
                 Interlocked.Decrement(location: ref m_pendingHandshakes);
@@ -850,18 +848,18 @@ public sealed class WorldPeerHost : IDisposable {
 
             case WorldFederationRequest.ObserveTraveler:
                 if (!WorldFederationCodec.TryDecodeTravelerObservation(body.Span, out var observation, out var failure)) {
-                    await WriteFederationRefusal(stream, WorldFederationRefusal.FrameMalformed, failure.ToString(), ct).ConfigureAwait(continueOnCapturedContext: false);
+                    await WriteFederationRefusal(stream, WorldFederationRefusal.FrameMalformed, failure.ToString(), ct).ConfigureAwait(false);
                     return false;
                 }
-                if (!string.Equals(a: sourceAuthority, b: observation.SourceAuthority, comparisonType: StringComparison.Ordinal)) {
-                    await WriteFederationRefusal(ct: ct, detail: "traveler observation source differs from its authenticated namespace", refusal: WorldFederationRefusal.SourceAuthorityMismatch, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
+                if (!string.Equals(sourceAuthority, observation.SourceAuthority, StringComparison.Ordinal)) {
+                    await WriteFederationRefusal(stream, WorldFederationRefusal.SourceAuthorityMismatch, "traveler observation source differs from its authenticated namespace", ct).ConfigureAwait(false);
                     return false;
                 }
-                observation = observation with { Ceiling = ((WorldDisclosureTier)Math.Min(val1: ((byte)tier), val2: ((byte)observation.Ceiling))) };
+                observation = observation with { Ceiling = (WorldDisclosureTier)Math.Min((byte)tier, (byte)observation.Ceiling) };
                 var refusal = await WorldTravelerProjection.StreamAsync(m_server, observation,
-                    (m_server.Definition.Host.Authority ?? m_server.AuthorityIdentity), stream, ct).ConfigureAwait(continueOnCapturedContext: false);
+                    m_server.Definition.Host.Authority ?? m_server.AuthorityIdentity, stream, ct).ConfigureAwait(false);
                 if (refusal is not null) {
-                    await WriteFederationRefusal(ct: ct, detail: refusal, refusal: WorldFederationRefusal.RouteUnknown, stream: stream).ConfigureAwait(continueOnCapturedContext: false);
+                    await WriteFederationRefusal(stream, WorldFederationRefusal.RouteUnknown, refusal, ct).ConfigureAwait(false);
                 }
                 return false;
 
@@ -1466,7 +1464,7 @@ public sealed class WorldPeerHost : IDisposable {
         var lease = m_server.ExecuteAuthorityOperation(operation: () => m_server.AttachSink(sink: sink));
 
         try {
-            await sink.StreamAsync(ct: ct, output: stream).ConfigureAwait(continueOnCapturedContext: false);
+            await sink.StreamAsync(stream, ct).ConfigureAwait(false);
         } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException)) {
             // Observer lifetime is the socket lifetime.
         } finally {
@@ -1490,22 +1488,6 @@ public sealed class WorldPeerHost : IDisposable {
         );
     }
 
-    /// <summary>Closes live ingress while retaining authoritative connection bookkeeping for final capture.</summary>
-    public void SuspendIngress() => CloseConnections();
-
-    private void CloseConnections() {
-        m_cts?.Cancel();
-        foreach (var federation in m_federationConnections.Keys) { CloseConnection(connection: federation); }
-        lock (m_connectionsLock) {
-            foreach (var connection in m_connections) { CloseConnection(connection: connection.Client); }
-        }
-    }
-    private static void CloseConnection(IDisposable connection) {
-        try { connection.Dispose(); } catch (Exception ex) when ((ex is SocketException or ObjectDisposedException or InvalidOperationException)) {
-            // The lane is already gone; there is nothing left to end politely.
-        }
-    }
-
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {
@@ -1514,16 +1496,28 @@ public sealed class WorldPeerHost : IDisposable {
 
         m_disposed = true;
 
-        CloseConnections();
+        // Closing a peer link cancels pending reads and bounded event publication through the networking library.
+        foreach (var federation in m_federationConnections.Keys) {
+            try {
+                federation.Dispose();
+            } catch (Exception ex) when ((ex is SocketException or ObjectDisposedException or InvalidOperationException)) {
+                // The lane is already gone; there is nothing left to end politely.
+            }
+        }
+
+        m_cts?.Cancel();
         if (m_ownsNetwork) { m_network.Dispose(); }
 
         lock (m_connectionsLock) {
+            foreach (var connection in m_connections) {
+                connection.Client.Dispose();
+            }
+
             m_connections.Clear();
         }
 
         m_cts?.Dispose();
     }
-
     /// <summary>Gets the queued tick-thread work count, including admission waiting for a paused host to drain.</summary>
     public int PendingWorkCount => m_pending.Count;
 
@@ -1542,8 +1536,8 @@ public sealed class WorldPeerHost : IDisposable {
     /// <exception cref="FormatException"><paramref name="listen"/> is not a parseable IP endpoint.</exception>
     public void Start(string listen) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: listen);
-        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        if (IsListening) { throw new InvalidOperationException(message: "The World peer endpoint is already listening."); }
+        ObjectDisposedException.ThrowIf(m_disposed, this);
+        if (IsListening) { throw new InvalidOperationException("The World peer endpoint is already listening."); }
 
         if (!IPEndPoint.TryParse(
             result: out var endpoint,
@@ -1554,8 +1548,7 @@ public sealed class WorldPeerHost : IDisposable {
 
         m_cts = new CancellationTokenSource();
         var lifetime = m_cts.Token;
-
-        ListenEndpoint = m_network.Peer.ListenAsync(ct: lifetime, endpoint: endpoint).GetAwaiter().GetResult().ToString();
+        ListenEndpoint = m_network.Peer.ListenAsync(endpoint, lifetime).GetAwaiter().GetResult().ToString();
         m_acceptLoop = Task.Run(function: () => AcceptLoopAsync(ct: lifetime));
         if (m_server.Output.HasNarrationSink) {
             m_server.Output.Narrate(

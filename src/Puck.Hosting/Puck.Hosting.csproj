@@ -12,6 +12,5 @@
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Commands\Puck.Commands.csproj" />
-        <ProjectReference Include="..\Puck.Networking\Puck.Networking.csproj" />
     </ItemGroup>
 </Project>

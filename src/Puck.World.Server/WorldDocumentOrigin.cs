@@ -179,30 +179,49 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
         target: m_target
     );
 
-    /// <summary>Reads a hosted definition and its neighbours without blocking on storage I/O.</summary>
-    /// <param name="instanceIdentity">The running instance's identity for boot draws.</param>
-    /// <param name="cancellationToken">Cancels root and neighbour reads.</param>
-    /// <returns>The fully validated document, or a named load refusal.</returns>
-    public async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(string instanceIdentity, CancellationToken cancellationToken) {
-        var address = WorldOwnedWorldSync.HostedAddressFor(containerId: m_owner, leaf: "definition.json", world: m_world);
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+    /// <inheritdoc/>
+    public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason) {
+        definition = null;
 
-        timeout.CancelAfter(delay: OperationTimeout);
+        var address = WorldOwnedWorldSync.HostedAddressFor(
+            containerId: m_owner,
+            leaf: "definition.json",
+            world: m_world
+        );
         ObjectBlobContent? content;
 
         try {
-            content = await m_store.ReadAsync(m_target, address, timeout.Token).ConfigureAwait(continueOnCapturedContext: false);
-        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; } catch (Exception error) { return (null, $"could not read '{address.Key}' — {error.Message.ReplaceLineEndings(replacementText: " ")}"); }
-        cancellationToken.ThrowIfCancellationRequested();
-        if (content is not { } found) { return (null, $"no cloud copy at '{address.Key}'"); }
-        var neighbours = new WorldStorageNeighbourResolver(containerId: m_owner, @namespace: WorldStorageNamespace.Hosted, store: m_store, target: m_target);
+            using var timeout = new CancellationTokenSource(delay: OperationTimeout);
 
-        return await WorldDefinitionLoader.LoadAsync(found.Content, address.Key, instanceIdentity, neighbours.ResolveHostedAsync, cancellationToken).ConfigureAwait(false);
-    }
-    /// <inheritdoc/>
-    public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason) {
-        (definition, reason) = LoadAsync(instanceIdentity, CancellationToken.None).AsTask().GetAwaiter().GetResult();
-        return (definition is not null);
+            content = m_store.ReadAsync(
+                address: address,
+                cancellationToken: timeout.Token,
+                target: m_target
+            ).AsTask().GetAwaiter().GetResult();
+        } catch (OperationCanceledException) {
+            reason = $"timed out after {OperationTimeout.TotalSeconds:0}s reading '{address.Key}'";
+
+            return false;
+        } catch (Exception exception) {
+            reason = $"transport error reading '{address.Key}' — {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        if (content is not { } found) {
+            reason = $"no cloud copy at '{address.Key}'";
+
+            return false;
+        }
+
+        return WorldDefinitionLoader.TryLoad(
+            definition: out definition,
+            instanceIdentity: instanceIdentity,
+            neighbours: Neighbours,
+            reason: out reason,
+            sourceName: address.Key,
+            utf8: found.Content
+        );
     }
     /// <inheritdoc/>
     public override bool TryResolveReference(string document, out WorldDocumentOrigin? sibling, out string reason) {

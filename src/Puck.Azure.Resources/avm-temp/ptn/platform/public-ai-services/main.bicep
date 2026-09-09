@@ -1,6 +1,6 @@
 import {
   deploymentType
-} from 'br/public:avm/res/cognitive-services/account:0.19.0'
+} from 'br/public:avm/res/cognitive-services/account:0.14.2'
 
 param applicationInsights {
   name: string
@@ -46,7 +46,7 @@ var customerManagedKeyUserAssignedResourceIds = (enableCustomerManagedKey
 var enableCustomerManagedKey = !empty(customerManagedKey)
 var publicNetworkAccess = (forcePrivateNetworking ? 'Disabled' : 'Enabled')
 
-module cognitiveServicesAccount 'br/public:avm/res/cognitive-services/account:0.19.0' = {
+module cognitiveServicesAccount 'br/public:avm/res/cognitive-services/account:0.14.2' = {
   params: {
     allowedFqdnList: []
     allowProjectManagement: true
@@ -113,7 +113,7 @@ module cognitiveServicesAccount 'br/public:avm/res/cognitive-services/account:0.
     sku: 'S0'
   }
 }
-module cognitiveServicesAccount_applicationInsights 'br/public:avm/res/insights/component:0.8.0' = {
+module cognitiveServicesAccount_applicationInsights 'br/public:avm/res/insights/component:0.7.1' = {
   params: {
     applicationType: 'web'
     diagnosticSettings: []
@@ -135,9 +135,9 @@ module cognitiveServicesAccount_applicationInsights 'br/public:avm/res/insights/
     workspaceResourceId: logAnalyticsWorkspaceResourceId
   }
 }
-module cognitiveServicesAccount_cosmosDb 'br/public:avm/res/document-db/database-account:0.21.1' = {
+module cognitiveServicesAccount_cosmosDb 'br/public:avm/res/document-db/database-account:0.19.0' = {
   params: {
-    capacityMode: 'Serverless'
+    capabilitiesToAdd: ['EnableServerless']
     customerManagedKey: customerManagedKey
     defaultConsistencyLevel: 'Session'
     defaultIdentity: (enableCustomerManagedKey

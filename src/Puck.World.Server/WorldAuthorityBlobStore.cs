@@ -21,7 +21,7 @@ public sealed class WorldAuthorityBlobStore : IWorldAuthorityStore {
 
     /// <summary>Initializes the store.</summary>
     /// <param name="store">The blob store.</param>
-    /// <param name="target">The extension-supplied storage target — persistent storage in deployment, a directory for local runs and the
+    /// <param name="target">The storage target — the Azure account in deployment, a directory for local runs and the
     /// canary.</param>
     /// <exception cref="ArgumentNullException"><paramref name="store"/> or <paramref name="target"/> is <see langword="null"/>.</exception>
     public WorldAuthorityBlobStore(IObjectBlobStore store, ObjectStorageTarget target) {

@@ -7,19 +7,16 @@ an initial procedural interpretation; facial construction, armor paneling, and
 flight effects still need art refinement before it represents the concept's final quality.
 
 The current refinement follows the selected Moth collage: warm brown skin and a
-side braid, a five-sided ivory cowl framing the face, lilac shoulder plates, a split ivory
+side braid, a tapered ivory cowl framing the face, lilac shoulder plates, a split ivory
 chest collar, and a small cyan clasp. Broad boots and dark joints keep the stance
 readable. Three overlapping blades on each flight vane fan out from a lower back
 hinge during flight and fold upright on landing. The creation stays within the
-128-shape stamp budget. The current 77 shapes include separate toe caps, soles,
-temple guards, shoulder layers, bracer insets, and thigh plates.
+existing 48-shape budget; the former separate toe caps now supply the outer blades.
 
 The author frame is +Y up and +Z forward, with the soles at Y=0 and the hood crown
 near Y=2.31. Parent pivots and dimensions are authored in that same frame. The
-hood's pentagonal extrusion and rounded-rectangle subtractive opening share
-composition group 1, so the opening cuts only the hood. Tapered and polygonal
-armor shells mix straight edges with rounded profile corners. These remain
-procedural art studies rather than a finished production model. The cheek and chin ellipsoids blend within group 2;
+hood's rounded cone and subtractive opening share composition group 1, so the
+opening cuts only the hood. The cheek and chin ellipsoids blend within group 2;
 eyes, brows, hair, and braid remain separate moving parts. Lower armor highlights
 and slightly turned-out boots keep the stance from looking rigidly mirrored.
 Armor and vane edits change appearance only; movement speeds and collision stay
@@ -45,14 +42,6 @@ process can have a native window that the user cannot see. Confirm visibility
 through the desktop window list and bring **Puck: World** to the foreground.
 
 ## Controls
-
-The selected movement direction is nimble, with visible weight and function in
-the wing assembly. Body flight pose transitions use 0.07 s in / 0.10 s out time
-constants; the separate wing driver uses 0.22 s in / 0.34 s out. Wings therefore
-continue deploying after the body responds and stow after the grounded body has
-settled. These are damped pose transitions, not a physical wing-inertia solver.
-Turn and speed still articulate the vanes around their authored hinges. Keep
-those hinges and shoulder clearance when replacing the current armor geometry.
 
 | Input | Action |
 |---|---|
@@ -88,8 +77,7 @@ lean. Positive and negative vertical-speed lobes add ascent and descent poses.
 These read rendered motion: the powered lift hold does not publish `Rising` and
 `Falling` during every vertical movement. Three named second-order position
 followers add progressively softer braid follow-through, while armor stays rigid.
-The rig uses eight drivers and two effectors. The shape budget leaves room for
-further refinement without removing facial or armor details to make space.
+The rig uses eight drivers, two effectors, and the same 48 shapes.
 
 This is still a motion prototype. It has no contact-normal sole alignment, authored
 directional ground gait, impact/recovery sequence, climbing transition, or hurt
@@ -98,9 +86,6 @@ directional acceleration model. Braid followers do not enforce strand length or
 collision. These limits remain visible acceptance work, not finished animation.
 
 ## Iterate in the running window
-
-`view.override layout head` opens a close-up inspection camera for the face and
-helmet. The front, three-quarter, rear, and flight-stage layouts remain available.
 
 Edit the world document and issue `world.reload` through the process stdin console.
 It reloads model geometry, palette, rig, cameras, and controls without restarting

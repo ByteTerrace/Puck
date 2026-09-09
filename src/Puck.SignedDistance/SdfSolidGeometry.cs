@@ -10,8 +10,7 @@ namespace Puck.SignedDistance;
 /// reads as a direct multiple of it. Sphere r=1; Box half-extents (1,1,1); Capsule r=1, endpoint (0, 0.5, 0) —
 /// <c>scale.y</c> is the cylindrical section's length and <c>scale.x</c>/<c>z</c> the radius, so total height is
 /// 2·radius + length; Cylinder r=1, half-height 1; Cone base r=1, half-height 1 (apex radius 0); Ellipsoid radii
-/// (1,1,1); RoundCone lower r=1, upper r=0.5, height 1; Torus major 1, minor 0.4; Prism bottom half-width,
-/// half-height and extrusion half-depth 1, top half-width given by taper (default 0.5). Changing a value here changes the
+/// (1,1,1); RoundCone lower r=1, upper r=0.5, height 1; Torus major 1, minor 0.4. Changing a value here changes the
 /// meaning of every persisted document that names the vocabulary.</remarks>
 public static class SdfSolidGeometry {
     /// <summary>The smallest magnitude any per-axis scale component emits at: a component nearer zero than this is
@@ -62,22 +61,10 @@ public static class SdfSolidGeometry {
     /// <param name="material">The material id for the shape.</param>
     /// <param name="blend">How the shape combines with the field before it (default plain union).</param>
     /// <param name="smooth">The blend radius for the smooth variants (0 for the hard ops).</param>
-    /// <param name="taper">Prism top width divided by bottom width, finite in [0, 1]; ignored by other primitives.</param>
     /// <returns>The builder, for chaining.</returns>
-    /// <param name="profile">Optional Prism cross-section; null is the trapezoid.</param>
-    public static SdfProgramBuilder AppendPrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float taper = 0.5f, SdfPrismProfile? profile = null) {
+    public static SdfProgramBuilder AppendPrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         ArgumentNullException.ThrowIfNull(chain);
-        if (profile is not null && (type != SdfSolidPrimitive.Prism || !profile.IsValid())) { throw new ArgumentOutOfRangeException(nameof(profile)); }
 
-        if (type == SdfSolidPrimitive.Prism && profile is { Kind: not SdfPrismProfileKind.Trapezoid }) {
-            return AppendProfile(chain, Vector3.One, profile, material, blend, smooth);
-        }
-        if (type == SdfSolidPrimitive.Prism) {
-            ArgumentOutOfRangeException.ThrowIfLessThan(taper, 0f);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(taper, 1f);
-            if (!float.IsFinite(taper)) { throw new ArgumentOutOfRangeException(nameof(taper)); }
-            return chain.Trapezoid(1f, taper, 1f, SdfLift.Extrude, 1f, material, blend, smooth);
-        }
         return type switch {
             SdfSolidPrimitive.Box => chain.Box(
             blend: blend,
@@ -163,18 +150,11 @@ public static class SdfSolidGeometry {
     /// <param name="blend">How the shape combines with the field before it.</param>
     /// <param name="smooth">The blend radius for smooth composition.</param>
     /// <returns>The builder, for chaining.</returns>
-    /// <param name="taper">Prism top width divided by bottom width, finite in [0, 1]; ignored by other primitives.</param>
-    /// <param name="profile">Optional Prism cross-section; null uses the trapezoid.</param>
     public static SdfProgramBuilder AppendScaledPrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 scale,
-        int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float taper = 0.5f, SdfPrismProfile? profile = null) {
+        int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f) {
         ArgumentNullException.ThrowIfNull(chain);
-        if (profile is not null && (type != SdfSolidPrimitive.Prism || !profile.IsValid())) { throw new ArgumentOutOfRangeException(nameof(profile)); }
 
         var effectiveScale = EffectiveScale(scale: scale);
-
-        if (type == SdfSolidPrimitive.Prism && profile is { Kind: not SdfPrismProfileKind.Trapezoid }) {
-            return AppendProfile(chain, effectiveScale, profile, material, blend, smooth);
-        }
 
         if (IsUniform(scale: effectiveScale)) {
             return AppendPrimitive(
@@ -182,9 +162,7 @@ public static class SdfSolidGeometry {
                 type: type,
                 material: material,
                 blend: blend,
-                smooth: smooth,
-                taper: taper,
-                profile: profile
+                smooth: smooth
             );
         }
 
@@ -197,13 +175,6 @@ public static class SdfSolidGeometry {
         );
         var boxRound = (BoxRound * minimumScale);
 
-        if (type == SdfSolidPrimitive.Prism) {
-            ArgumentOutOfRangeException.ThrowIfLessThan(taper, 0f);
-            ArgumentOutOfRangeException.ThrowIfGreaterThan(taper, 1f);
-            if (!float.IsFinite(taper)) { throw new ArgumentOutOfRangeException(nameof(taper)); }
-            return chain.Trapezoid(effectiveScale.X, effectiveScale.X * taper, effectiveScale.Y,
-                SdfLift.Extrude, effectiveScale.Z, material, blend, smooth);
-        }
         return type switch {
             SdfSolidPrimitive.Box => chain.Box(
                 // Preserve the transformed box's axial zero-set extents, but use one conventional world-space
@@ -280,24 +251,10 @@ public static class SdfSolidGeometry {
     /// read rather than throwing out of an emission the caller cannot recover from. KEEP IN SYNC with
     /// <see cref="AppendScaledPrimitive"/>'s branch structure — every arm that bakes an authored dimension into a
     /// shape rather than riding a <c>Scale</c> transform needs its shape's own admission rule answered here.</remarks>
-    /// <param name="taper">Prism top-to-bottom width ratio; ignored by other primitives.</param>
-    /// <param name="profile">Optional Prism cross-section; null uses the trapezoid.</param>
-    public static bool TryValidateScaledPrimitive(SdfSolidPrimitive type, Vector3 scale, out string refusal, float taper = 0.5f, SdfPrismProfile? profile = null) {
+    public static bool TryValidateScaledPrimitive(SdfSolidPrimitive type, Vector3 scale, out string refusal) {
         refusal = string.Empty;
 
         var effectiveScale = EffectiveScale(scale: scale);
-
-        if (profile is not null && (type != SdfSolidPrimitive.Prism || !profile.IsValid())) {
-            refusal = "an invalid prism profile";
-            return false;
-        }
-
-        if (type == SdfSolidPrimitive.Prism && (!float.IsFinite(taper) || taper < 0f || taper > 1f)) {
-            refusal = "a prism taper outside the finite [0, 1] interval";
-            return false;
-        }
-
-        if (profile is { Kind: not SdfPrismProfileKind.Trapezoid }) { return true; }
 
         // A uniform scale rides one Scale transform over the unit primitive, so no authored dimension reaches a
         // shape's own admission rule; only the baked arms below can author a degenerate shape.
@@ -306,21 +263,19 @@ public static class SdfSolidGeometry {
         }
 
         if (
-            (type != SdfSolidPrimitive.Prism) &&
-            ((type != SdfSolidPrimitive.Cone) || (effectiveScale.X != effectiveScale.Z))
+            (type != SdfSolidPrimitive.Cone) ||
+            (effectiveScale.X != effectiveScale.Z)
         ) {
             return true;
         }
 
         var slant = new Vector2(
-            x: ((type == SdfSolidPrimitive.Prism ? 1f - taper : ConeRadius) * effectiveScale.X),
+            x: (ConeRadius * effectiveScale.X),
             y: ((2f * ConeHalfHeight) * effectiveScale.Y)
         );
 
         if (slant.LengthSquared() < (SdfProgramBuilder.MinTrapezoidProfileSlant * SdfProgramBuilder.MinTrapezoidProfileSlant)) {
-            refusal = type == SdfSolidPrimitive.Cone
-                ? $"a cone whose radial scale {effectiveScale.X} and axial scale {effectiveScale.Y} give it a {slant.Length()}-unit profile slant, under the {SdfProgramBuilder.MinTrapezoidProfileSlant} the deterministic fixed-point field evaluator can distinguish from a point"
-                : $"a prism whose width scale {effectiveScale.X} and height scale {effectiveScale.Y} give it a {slant.Length()}-unit profile slant, under the {SdfProgramBuilder.MinTrapezoidProfileSlant} the deterministic fixed-point field evaluator can distinguish from a point";
+            refusal = $"a cone whose radial scale {effectiveScale.X} and axial scale {effectiveScale.Y} give it a {slant.Length()}-unit profile slant, under the {SdfProgramBuilder.MinTrapezoidProfileSlant} the deterministic fixed-point field evaluator can distinguish from a point";
 
             return false;
         }
@@ -332,8 +287,6 @@ public static class SdfSolidGeometry {
     /// <returns>The finite local bounds, or the unbounded marker for <see cref="SdfSolidPrimitive.Plane"/>.</returns>
     public static SdfSolidBounds GetLocalBounds(SdfSolidPrimitive type) {
         return type switch {
-            // The exact ellipse builder nudges a unit circle's Y radius by 1e-4 to avoid its degeneracy.
-            SdfSolidPrimitive.Prism => new(Center: Vector3.Zero, HalfExtents: new Vector3(1.0001f)),
             SdfSolidPrimitive.Box => new(
             Center: Vector3.Zero,
             HalfExtents: (BoxHalfExtents + new Vector3(value: BoxRound))
@@ -472,7 +425,6 @@ public static class SdfSolidGeometry {
             )
         );
         var reach = type switch {
-            SdfSolidPrimitive.Prism => MathF.Sqrt(3f) * 1.0001f,
             SdfSolidPrimitive.Box => (BoxHalfExtents.Length() + BoxRound),
             SdfSolidPrimitive.Torus => (TorusMajor + TorusMinor),
             SdfSolidPrimitive.Cylinder => MathF.Sqrt(x: ((CylinderRadius * CylinderRadius) + (CylinderHalfHeight * CylinderHalfHeight))),
@@ -499,16 +451,5 @@ public static class SdfSolidGeometry {
         };
 
         return (reach * maxScale);
-    }
-    private static SdfProgramBuilder AppendProfile(SdfProgramBuilder chain, Vector3 scale, SdfPrismProfile profile,
-        int material, SdfBlendOp blend, float smooth) {
-        if (!profile.IsValid()) { throw new ArgumentOutOfRangeException(nameof(profile)); }
-        return profile.Kind switch {
-            SdfPrismProfileKind.RoundedRectangle => chain.RoundedRectangle(scale.X, scale.Y,
-                profile.CornerRadius * MathF.Min(scale.X, scale.Y), SdfLift.Extrude, scale.Z, material, blend, smooth),
-            SdfPrismProfileKind.Polygon => chain.Scale(scale).RegularPolygon(profile.Sides, 1f, SdfLift.Extrude, 1f, material, blend, smooth),
-            SdfPrismProfileKind.Ellipse => chain.Scale(scale).Ellipse(1f, 1f, SdfLift.Extrude, 1f, material, blend, smooth),
-            _ => throw new ArgumentOutOfRangeException(nameof(profile)),
-        };
     }
 }

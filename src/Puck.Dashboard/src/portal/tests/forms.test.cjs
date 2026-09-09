@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const fs = require('node:fs');
-const { readSchemaBundle } = require('../scripts/puckCli.cjs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 const ts = require('typescript');
 
 // Exercise the shipped TypeScript/TSX through Node's test runner, without a second bundler
@@ -22,7 +24,29 @@ const { getAt, setAt, deleteAt } = require('../src/document/jsonPath.ts');
 const { parseDocumentText } = require('../src/document/jsonText.ts');
 
 // See schemaWalk.test.cjs for why this is generated fresh rather than committed.
-const bundle = readSchemaBundle(__dirname);
+function findRepoRoot(start) {
+  let dir = start;
+  while (!fs.existsSync(path.join(dir, 'CLAUDE.md'))) {
+    const parent = path.dirname(dir);
+    if (parent === dir) throw new Error(`Could not locate the repository root above ${start}.`);
+    dir = parent;
+  }
+  return dir;
+}
+
+function loadSchemaBundle() {
+  const repoRoot = findRepoRoot(__dirname);
+  const cli = path.join(repoRoot, 'src', 'Puck.Cli', 'publish', 'puck.exe');
+  if (!fs.existsSync(cli)) {
+    throw new Error(`puck.exe is not published at ${cli}. Run: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish`);
+  }
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puck-schema-'));
+  const outFile = path.join(outDir, 'bundle.json');
+  execFileSync(cli, ['schema', '--bundle', outFile], { stdio: 'pipe' });
+  return JSON.parse(fs.readFileSync(outFile, 'utf8'));
+}
+
+const bundle = loadSchemaBundle();
 
 // A small document, walkable end-to-end: one Int row with an authored cell, and a Fixed row
 // with no cells, under an otherwise-empty world.

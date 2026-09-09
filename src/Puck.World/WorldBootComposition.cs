@@ -614,8 +614,6 @@ internal static class WorldBootComposition {
         // windowed compositions retain one vocabulary; the handler refuses by name when no presentation exists.
         // The seat console is terminal-owned and registered beside quit, outside this world module.
         services.AddSingleton<ICommandModule, WorldUiCommandModule>();
-        services.AddSingleton<ICommandModule>(static sp => new WorldControlCommandModule(
-            () => sp.GetRequiredService<TextCommandSource>(), sp.GetService<WorldRenderProbe>()));
 
         // The radial action menu's verb surface (player.wheel.ring/.select/.commit/.cancel + world.view.wheel) — see
         // AddWorldPresentation below for WorldWheelFeed/WheelStore, the genuinely presentation-only pointer/viewport

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.400 AS build
 WORKDIR /source
 # Build from the repository root: shared targets, analyzers, and Puck.Maths are required.
 COPY . .

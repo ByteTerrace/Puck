@@ -79,7 +79,7 @@ internal interface IPlayerStorageIdentityResolver {
 }
 /// <summary>The explicit-override resolver: the authored storage-section <c>userId</c> or its <c>--user-id</c> reflection —
 /// the only identity source today (see <see cref="IPlayerStorageIdentityResolver"/>'s remarks). The value must pass
-/// <see cref="WorldObjectId.IsValid"/> (a valid container name); a non-Guid override declines loudly rather than
+/// <see cref="WorldEntraObjectId.IsValid"/> (a valid container name); a non-Guid override declines loudly rather than
 /// inventing a container.</summary>
 internal sealed class ExplicitOverridePlayerStorageIdentityResolver(string userId) : IPlayerStorageIdentityResolver {
     private readonly string m_userId = (userId ?? throw new ArgumentNullException(paramName: nameof(userId)));
@@ -87,7 +87,7 @@ internal sealed class ExplicitOverridePlayerStorageIdentityResolver(string userI
     /// <inheritdoc/>
     public bool TryResolve(out Guid containerId, out string reason) {
         if (
-            WorldObjectId.IsValid(value: m_userId) &&
+            WorldEntraObjectId.IsValid(value: m_userId) &&
             Guid.TryParse(
             input: m_userId,
             result: out containerId

@@ -1,7 +1,7 @@
 import {
   agentProfileType
   imageType
-} from 'br/public:avm/res/dev-ops-infrastructure/pool:0.8.0'
+} from 'br/public:avm/res/dev-ops-infrastructure/pool:0.7.0'
 
 type tagsType = { *: string }
 
@@ -34,7 +34,7 @@ param location string = resourceGroup().location
 param lockKind string = 'CanNotDelete'
 param logAnalyticsWorkspaceResourceId string
 
-module devCenter_mod 'br/public:avm/res/dev-center/devcenter:0.2.0' = {
+module devCenter_mod 'br/public:avm/res/dev-center/devcenter:0.1.1' = {
   params: {
     diagnosticSettings: [
       {
@@ -56,7 +56,7 @@ module devCenter_mod 'br/public:avm/res/dev-center/devcenter:0.2.0' = {
     tags: devCenter.?tags
   }
 }
-module devCenter_project_mod 'br/public:avm/res/dev-center/project:0.1.2' = {
+module devCenter_project_mod 'br/public:avm/res/dev-center/project:0.1.1' = {
   params: {
     devCenterResourceId: devCenter_mod.outputs.resourceId
     enableTelemetry: enableTelemetry
@@ -69,7 +69,7 @@ module devCenter_project_mod 'br/public:avm/res/dev-center/project:0.1.2' = {
     tags: devCenterProject.?tags
   }
 }
-module devOpsAgentPool_mod 'br/public:avm/res/dev-ops-infrastructure/pool:0.8.0' = {
+module devOpsAgentPool_mod 'br/public:avm/res/dev-ops-infrastructure/pool:0.7.0' = {
   params: {
     agentProfile: devOpsAgentPool.agentProfile
     concurrency: devOpsAgentPool.concurrency

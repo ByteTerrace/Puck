@@ -43,44 +43,6 @@ public static class WorldDefinitionLoader {
         path3: "puck.world.json"
     );
 
-    /// <summary>Loads composed bytes while asynchronously resolving the document's declared neighbours.</summary>
-    /// <param name="utf8">The already composed document bytes.</param>
-    /// <param name="sourceName">The source echoed in refusals.</param>
-    /// <param name="instanceIdentity">The running instance's draw identity.</param>
-    /// <param name="resolve">Reads each neighbour without blocking a scheduler thread.</param>
-    /// <param name="cancellationToken">Cancels the load and neighbour reads.</param>
-    /// <returns>The validated, draw-resolved document or its named refusal.</returns>
-    public static async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(
-        ReadOnlyMemory<byte> utf8, string sourceName, string instanceIdentity,
-        Func<string, CancellationToken, ValueTask<WorldNeighbourResolution>> resolve, CancellationToken cancellationToken
-    ) {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!TryDecode(json: out var json, reason: out var reason, sourceName: sourceName, utf8: utf8) ||
-            !WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, json: json, reason: out reason, sourceName: sourceName)) { return (null, reason); }
-        var neighbours = new ResolvedNeighbours();
-
-        foreach (var reference in (parsed!.References ?? [])) {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (reference is null) { continue; } // Full validation below names malformed reference rows.
-            var key = reference.NeighbourKey;
-
-            if ((key is not null) && !neighbours.Values.ContainsKey(key: key)) {
-                neighbours.Values.Add(key: key, value: await resolve(key, cancellationToken).ConfigureAwait(continueOnCapturedContext: false));
-            }
-        }
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!WorldDefinitionValidator.TryValidate(definition: parsed, neighbours: neighbours, reason: out reason)) { return (null, $"{sourceName} document validation refused: {reason}"); }
-        return (TryResolveDrawsAndRevalidate(definition: parsed, instanceIdentity: instanceIdentity, neighbours: neighbours, reason: out reason, resolved: out var definition, sourceName: sourceName)
-            ? (definition, string.Empty) : (null, reason));
-    }
-
-    private sealed class ResolvedNeighbours : IWorldNeighbourResolver {
-        internal Dictionary<string, WorldNeighbourResolution> Values { get; } = new(comparer: StringComparer.Ordinal);
-
-        public WorldNeighbourResolution Resolve(string document) => (Values.TryGetValue(key: document, value: out var value)
-            ? value : WorldNeighbourResolution.Unavailable(reason: $"'{document}' was not declared by the loaded world"));
-    }
-
     // The step every load path shares after its own parse+first-validate: resolve first-fill draws, then re-validate
     // the drawn result. A resolved draw writes a value the validator has already been told the site's domain admits,
     // so a post-draw refusal can only fire if a domain narrowing went soft — loud rather than a silent bad boot. The
@@ -144,31 +106,7 @@ public static class WorldDefinitionLoader {
     public static bool TryLoad(ReadOnlyMemory<byte> utf8, string sourceName, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null) {
         definition = null;
 
-        if (!TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8)) { return false; }
-
-        if (!WorldDefinitionFileSource.TryParseComposed(
-            definition: out var parsed,
-            json: json,
-            neighbours: neighbours,
-            reason: out reason,
-            sourceName: sourceName,
-            validateAdjacencyClaims: true
-        )) {
-            return false;
-        }
-
-        return TryResolveDrawsAndRevalidate(
-            definition: parsed!,
-            instanceIdentity: instanceIdentity,
-            neighbours: neighbours,
-            reason: out reason,
-            resolved: out definition,
-            sourceName: sourceName
-        );
-    }
-
-    private static bool TryDecode(ReadOnlyMemory<byte> utf8, string sourceName, out string json, out string reason) {
-        json = string.Empty;
+        string json;
 
         try {
             using var reader = new StreamReader(
@@ -193,10 +131,26 @@ public static class WorldDefinitionLoader {
             return false;
         }
 
-        reason = string.Empty;
-        return true;
-    }
+        if (!WorldDefinitionFileSource.TryParseComposed(
+            definition: out var parsed,
+            json: json,
+            neighbours: neighbours,
+            reason: out reason,
+            sourceName: sourceName,
+            validateAdjacencyClaims: true
+        )) {
+            return false;
+        }
 
+        return TryResolveDrawsAndRevalidate(
+            definition: parsed!,
+            instanceIdentity: instanceIdentity,
+            neighbours: neighbours,
+            reason: out reason,
+            resolved: out definition,
+            sourceName: sourceName
+        );
+    }
     /// <summary>Loads and validates a world document from a file — the public seam the runtime <c>world.load</c> verb
     /// reuses so it never reimplements the deserialize → schema-check → validate path. Any failure yields a one-line
     /// reason (line endings collapsed) and <see langword="false"/>, and the three failure classes are named apart:

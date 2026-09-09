@@ -12,7 +12,6 @@ public sealed class WorldSiloSimulation(WorldSiloHost host) : IFixedStepSimulati
     /// <inheritdoc/>
     public void Step(in FixedStepContext context, in CommandSnapshot commands) {
         host.DrainActivationMailbox();
-        if (host.IsDraining) { return; }
         host.Instances.DrainPendingTransfers();
         host.Instances.StepInstances(masterDeltaTicks: context.StepTicks);
         host.NoteMasterStep(stepTicks: context.StepTicks);

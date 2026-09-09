@@ -1,12 +1,39 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const fs = require('node:fs');
-const { readSchemaBundle } = require('../scripts/puckCli.cjs');
+const os = require('node:os');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
+function findRepoRoot(start) {
+  let dir = start;
+  while (!fs.existsSync(path.join(dir, 'CLAUDE.md'))) {
+    const parent = path.dirname(dir);
+    if (parent === dir) throw new Error(`Could not locate the repository root above ${start}.`);
+    dir = parent;
+  }
+  return dir;
+}
+
+function loadSchemaBundle() {
+  const puckExe = path.join(repoRoot, 'src', 'Puck.Cli', 'publish', 'puck.exe');
+  if (!fs.existsSync(puckExe)) {
+    throw new Error(`puck.exe is not published at ${puckExe}. Run: dotnet publish src/Puck.Cli -c Release -o src/Puck.Cli/publish`);
+  }
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puck-types-defs-'));
+  try {
+    const bundlePath = path.join(tmpDir, 'bundle.json');
+    execFileSync(puckExe, ['schema', '--bundle', bundlePath], { stdio: 'pipe' });
+    return JSON.parse(fs.readFileSync(bundlePath, 'utf8'));
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+const repoRoot = findRepoRoot(__dirname);
 const generatedPath = path.join(__dirname, '..', 'src', 'document', 'worldDefinition.generated.ts');
 const generated = fs.readFileSync(generatedPath, 'utf8');
-const bundle = readSchemaBundle(__dirname);
+const bundle = loadSchemaBundle();
 const bundleDefNames = new Set(Object.keys(bundle['$defs'] ?? {}));
 const topLevelExportNames = (generated.match(/^export (?:type|interface) (\w+)/gm) ?? []).map(line => line.replace(/^export (?:type|interface) /, ''));
 

@@ -9276,8 +9276,7 @@
                         "Ellipsoid",
                         "RoundCone",
                         "Plane",
-                        "Cone",
-                        "Prism"
+                        "Cone"
                       ]
                     },
                     "position": true,
@@ -9575,42 +9574,6 @@
                       "default": null
                     },
                     "joint": {
-                      "default": null
-                    },
-                    "taper": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "profile": {
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "properties": {
-                        "kind": {
-                          "enum": [
-                            "Trapezoid",
-                            "RoundedRectangle",
-                            "Polygon",
-                            "Ellipse"
-                          ]
-                        },
-                        "cornerRadius": {
-                          "type": "number",
-                          "default": 0.15
-                        },
-                        "sides": {
-                          "type": "integer",
-                          "default": 6
-                        }
-                      },
-                      "required": [
-                        "kind"
-                      ],
-                      "additionalProperties": false,
                       "default": null
                     }
                   },
@@ -10154,20 +10117,6 @@
                           "null"
                         ]
                       },
-                      "default": null
-                    },
-                    "blendInSeconds": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "blendOutSeconds": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
                       "default": null
                     }
                   },
@@ -16614,7 +16563,7 @@
             "default": null
           },
           "owner": {
-            "description": "The remote world\u0027s owning platform user id (a UUID) \u2014 worlds ARE users, so naming the owner names the world\u0027s account. Required together with World; refused alone.",
+            "description": "The remote world\u0027s owning platform user id (an Entra oid) \u2014 worlds ARE users, so naming the owner names the world\u0027s account. Required together with World; refused alone.",
             "type": [
               "string",
               "null"

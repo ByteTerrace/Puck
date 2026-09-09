@@ -1,10 +1,5 @@
 # Puck.World — the world game host
 
-For AI pairing, `world.control start|stop|status` manages an authenticated
-Operator attachment without restarting World. CLI serves console exec and
-completed PNG tools over local stdio or OAuth-protected remote HTTP; see
-[setup and trust](../Puck.Mcp/README.md).
-
 `Puck.World` is the live game: a document-driven, network-shaped local
 multiplayer world of up to 4096 simulated bodies (four local seats plus
 autonomous stand-ins), rendered through the SDF engine and scripted end to end
@@ -98,23 +93,6 @@ observe, reserve, commit, status, intent, or submission operation is accepted;
 omitting the key disables federation by name while leaving ordinary admitted
 peer listening available. `puck canary` creates a run-scoped key for every
 runner-owned authority pair.
-
-**Hosted Puck.** Sign in with a ByteTerrace API Users account and use the
-generated authentication configuration from the deployed [Puck world release](../../build/Azure.cs):
-
-```text
-dotnet run --project src/Puck.World -c Release -- --connect play.puck.byteterrace.com:7825 --authentication-config-file /path/to/world-authentication.json
-```
-
-The installed authentication extension acquires the API token and checks the
-server's pinned key before sending it. Do not combine this client configuration
-with a federation private key. The primary world admits sixteen network players
-and gives disconnected seats sixty seconds of reconnect grace. Connections in
-one process share a session namespace; starting a new process creates a fresh
-traveller namespace. Cross-process body recovery is a separate travel concern.
-The [Azure authentication provider](../Puck.World.Azure/README.md#silo-hosting)
-owns token validation and group membership policy; those concepts stay outside
-the engine.
 
 **Headless.** `--headless` (or the document's `host.presentation: none`) boots
 with no window, no GPU device, no swapchain, and no audio device — the

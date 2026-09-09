@@ -44,39 +44,6 @@ Prefer the cheapest correct tool:
 4. `dotnet build Puck.slnx -c Release` after a refactor or documentation edit
    that changes `cref` values.
 
-## C# file apps
-
-Standalone C# entry points use the same `.editorconfig`, compiler warnings, and
-Puck formatting conventions as the project-based code. Their file directives
-declare their dependencies; keep package versions pinned. `Directory.Build.props`
-links `build/RepositoryPaths.cs` and `build/AutomationProcess.cs` into these apps so they can locate checkout data
-at runtime without building Puck CLI. Invoke them from within the checkout.
-Compiler source paths can be remapped by CI and are not runtime file locations.
-
-Compile an app without executing its operational code:
-
-```sh
-dotnet build build/Azure.cs -c Release
-```
-
-Run a safe verification entry point separately when one exists:
-
-```sh
-dotnet run -c Release --file build/Azure.cs -- --help
-```
-
-Deployment, publishing, QUIC probes, and WASM refresh commands are operational
-actions, so a formatting check should compile them without running them.
-
-Use `puck format . -Files files.json` with a JSON array of repository-relative
-paths, such as `["build/Azure.cs"]`. The CLI converts each standalone app to a
-disposable SDK project, preserves its references and linked helpers, compiles
-and formats the copy, then copies back only the selected source with its file
-directives restored. `-WhatIf` and `-Verify` leave the original source untouched.
-Ordinary project files still need their owning projects restored and built.
-See [automatic PR formatting](ci.md#automatic-pr-formatting) for the CI bot and
-the fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
-
 ## Verification
 
 ### Engine changes — THERE IS NO ENGINE GATE TODAY
@@ -157,7 +124,7 @@ pending one.
 
 ```powershell
 dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --fetch-corpora
-dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate --artifacts artifacts/hgb-post
+dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --lane gate
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --fetch-corpora
 dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
 ```
@@ -166,9 +133,9 @@ The Humble battery's reference corpora are declared in its `corpora.json`
 (pinned archive, version, SHA-256); `--fetch-corpora` fills the local cache
 once and the stages resolve it without configuration. `--lane gate` measures
 every row recorded as passing and must stay green; `--lane frontier` measures
-the recorded fails and inconclusives; a plain run measures both. The recipe above
-matches CI's `artifacts/hgb-post` directory for `summary.json`, `results.junit.xml`,
-and the candidate ledger; `--accept` promotes the candidate under the refusal rules
+the recorded fails and inconclusives; a plain run measures both. Every run
+writes `summary.json`, `results.junit.xml`, and a candidate ledger under
+`artifacts/gb-post`; `--accept` promotes the candidate under the refusal rules
 in the project README. Iterate with `--filter`; never chain runs to record.
 The Advanced battery works the same way: its corpora are pinned in its own
 `corpora.json`, the BIOS and commercial cartridges are command-line flags, and

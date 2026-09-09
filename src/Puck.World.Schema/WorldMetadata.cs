@@ -5,8 +5,8 @@ namespace Puck.World;
 
 /// <summary>One credited author on a <see cref="WorldMetadataSection"/>.</summary>
 /// <param name="Name">The author's display name.</param>
-/// <param name="Oid">The author's object id, when the author chooses to attach one — see
-/// <see cref="WorldObjectId"/>. Authored, not authenticated: nothing here proves the name behind the id.</param>
+/// <param name="Oid">The author's Entra object id, when the author chooses to attach one — see
+/// <see cref="WorldEntraObjectId"/>. Authored, not authenticated: nothing here proves the name behind the id.</param>
 public sealed record WorldMetadataAuthor(string Name, string? Oid = null);
 /// <summary>
 /// The <c>metadata</c> document section — an optional, boot-authored-only bag of author-facing facts. Nothing in

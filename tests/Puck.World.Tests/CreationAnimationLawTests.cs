@@ -21,49 +21,6 @@ namespace Puck.World.Tests;
 public sealed class CreationAnimationLawTests {
     private const float Tolerance = 1e-4f;
 
-    /// <summary>One body can react quickly while a mechanism deploys and stows more slowly, independently of frame rate.</summary>
-    [Fact]
-    public void AuthoredTransitionTimesSeparateBodyAndMechanismResponse() {
-        var fast = Transition(30, 0.07f, 0.10f);
-        var slow = Transition(30, 0.22f, 0.34f);
-        var smooth = Transition(120, 0.22f, 0.34f);
-        Assert.True(fast.Open > 0.9f && slow.Open < 0.65f);
-        Assert.True(fast.Closed < slow.Closed);
-        Assert.InRange(MathF.Abs(slow.Open - smooth.Open), 0f, Tolerance);
-        Assert.InRange(MathF.Abs(slow.Closed - smooth.Closed), 0f, Tolerance);
-        var immediate = Transition(30, 0f, 0f);
-        Assert.Equal(1f, immediate.Open);
-        Assert.Equal(0f, immediate.Closed);
-        Assert.Equal(0f, WorldGaitDrivers.WeightBlend(0f, 0f));
-
-        static (float Open, float Closed) Transition(int rate, float enter, float leave) {
-            CreationDriverDocument[] drivers = [new("mechanism", "time", 0f, ["Airborne"], enter, leave)];
-            float[] phases = [0f], weights = [0f];
-            var position = Vector3.Zero;
-            var orientation = Quaternion.Identity;
-            var seeded = false;
-            var speed = 0f;
-            var address = FirstBody;
-            void Step(BodyFacts facts) => WorldGaitDrivers.Advance(drivers, phases, weights, 1f / rate, facts,
-                Vector3.Zero, Quaternion.Identity, ref position, ref orientation, ref seeded, ref address, ref speed, FirstBody);
-            Step(BodyFacts.Airborne);
-            for (var i = 0; i < rate / 5; i++) { Step(BodyFacts.Airborne); }
-            var open = weights[0];
-            for (var i = 0; i < rate / 5; i++) { Step(BodyFacts.Grounded); }
-            return (open, weights[0]);
-        }
-    }
-
-    /// <summary>Invalid transition times are rejected by document admission before they can poison a pose.</summary>
-    [Theory]
-    [InlineData(-0.1f)]
-    [InlineData(float.NaN)]
-    [InlineData(float.PositiveInfinity)]
-    public void InvalidTransitionTimesAreRefused(float seconds) {
-        Assert.Contains("blendInSeconds", Refusal(Rig(Limb(), [Stride() with { BlendInSeconds = seconds }])), StringComparison.Ordinal);
-        Assert.Contains("blendOutSeconds", Refusal(Rig(Limb(), [Stride() with { BlendOutSeconds = seconds }])), StringComparison.Ordinal);
-    }
-
     private static readonly WorldEntityAddress FirstBody = new(Authority: "a", Index: 0, Generation: 1);
     private static readonly FixedQ4816 SurfaceTolerance = FixedQ4816.FromDouble(value: 0.01);
 

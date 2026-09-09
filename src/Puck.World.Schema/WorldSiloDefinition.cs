@@ -1,20 +1,36 @@
-using System.Text.Json;
+using System.Text.Json.Serialization;
+using Puck.Abstractions.Documents;
 
 namespace Puck.World;
 
+/// <summary>Which backend a silo document's <see cref="WorldSiloStore"/> addresses.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldSiloStoreKind>))]
+public enum WorldSiloStoreKind {
+    /// <summary>A local filesystem directory — local runs and the canary, never a deployment target.</summary>
+    Directory,
+
+    /// <summary>Azure Blob Storage, addressed under the silo's own identity container.</summary>
+    Azure,
+}
+/// <summary>Which clustering provider a silo document's <see cref="WorldSiloClustering"/> selects.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldSiloClusteringKind>))]
+public enum WorldSiloClusteringKind {
+    /// <summary>Single-process membership, including a single production silo; no table is named or touched.</summary>
+    Localhost,
+
+    /// <summary>Azure Storage Table clustering.</summary>
+    Table,
+}
 /// <summary>One world row's federation signing material — a P-256 PKCS#8 private-key file, host state, never
 /// published inside a document. One key file per world row: a silo is a placement for many independently signed
 /// world authorities, never a shared signing namespace, so two rows naming the same file recreate the single-key
 /// shape this design refuses — the validator names that collision.</summary>
 /// <param name="KeyFile">The path to the PKCS#8 private-key file this row signs its outbound federation claims and
 /// its own door's admission challenges with.</param>
-public sealed record WorldSiloFederation(string KeyFile) {
-    /// <summary>Optional installed connection-identity provider, layered over this world's own federation credentials.</summary>
-    public WorldSiloExtension? Authentication { get; init; }
-}
+public sealed record WorldSiloFederation(string KeyFile);
 /// <summary>One world this silo activates. Its own <c>host.authority</c> (read from its definition after load) is
 /// the subject its federation key signs as — never this silo's own identity.</summary>
-/// <param name="Owner">The owning identity's stable UUID.</param>
+/// <param name="Owner">The owning identity's Entra oid.</param>
 /// <param name="World">The world id under that owner's container — the grain key's own extension.</param>
 /// <param name="Federation">This row's own signing key.</param>
 /// <param name="Pinned">Whether this row activates at silo start and never idle-deactivates.</param>
@@ -29,29 +45,24 @@ public sealed record WorldSiloWorldRow(
 /// <param name="Budget">The maximum number of <see cref="WorldSiloWorldRow.Pinned"/> rows this silo may activate at
 /// start.</param>
 public sealed record WorldSiloDoors(int Budget);
-/// <summary>Selects an installed host extension. Only that extension interprets its settings.</summary>
-/// <param name="Type">The case-sensitive key in the composition root's extension registry.</param>
-/// <param name="Settings">An object validated by the selected extension before host startup.</param>
-public sealed record WorldSiloExtension(string Type, JsonElement Settings);
+/// <summary>Where this silo's checkpoints, journals, and published definitions live.</summary>
+/// <param name="Kind">Which backend.</param>
+/// <param name="DirectoryPath">The root directory — required when <paramref name="Kind"/> is
+/// <see cref="WorldSiloStoreKind.Directory"/>, otherwise absent.</param>
+/// <param name="AccountUrl">The Azure Blob account endpoint (e.g. <c>https://bytrcstp001.blob.core.windows.net</c>)
+/// — required when <paramref name="Kind"/> is <see cref="WorldSiloStoreKind.Azure"/>, otherwise absent.</param>
+public sealed record WorldSiloStore(
+    WorldSiloStoreKind Kind,
+    string? DirectoryPath = null,
+    string? AccountUrl = null
+);
 /// <summary>Orleans cluster membership for this silo.</summary>
-/// <param name="Kind">The membership implementation selected at composition; this distribution supports Localhost.</param>
-public sealed record WorldSiloClustering(string Kind);
-/// <summary>Deployment-owned lifecycle observation and local health configuration.</summary>
-/// <param name="ShutdownSeconds">Maximum time allowed for operator or deployment retirement.</param>
-/// <param name="HealthPort">HTTP health port; retirement requests are accepted only from loopback.</param>
-/// <param name="Observer">Optional installed extension supplying host retirement deadlines; absent means no external observation.</param>
-/// <param name="ProgressTimeoutSeconds">Maximum wall-clock age of a completed simulation step before liveness fails.</param>
-/// <param name="CheckpointTimeoutSeconds">Maximum wall-clock age of a successful checkpoint before readiness fails.</param>
-/// <param name="JournalTimeoutSeconds">Maximum wall-clock interval without journal progress while appends are pending.</param>
-/// <param name="JournalBacklogLimit">Maximum outstanding journal appends admitted as healthy.</param>
-public sealed record WorldSiloLifecycle(
-    int ShutdownSeconds,
-    int HealthPort,
-    WorldSiloExtension? Observer = null,
-    int ProgressTimeoutSeconds = 30,
-    int CheckpointTimeoutSeconds = 180,
-    int JournalTimeoutSeconds = 30,
-    int JournalBacklogLimit = 1024
+/// <param name="Kind">Which provider.</param>
+/// <param name="TableName">The Storage Table name — required when <paramref name="Kind"/> is
+/// <see cref="WorldSiloClusteringKind.Table"/>, otherwise absent (a local run names no table).</param>
+public sealed record WorldSiloClustering(
+    WorldSiloClusteringKind Kind,
+    string? TableName = null
 );
 /// <summary>
 /// The silo document (<c>puck.silo.def.v1</c>) — durable configuration for one <c>Puck.World.Silo</c> process: which
@@ -66,14 +77,12 @@ public sealed record WorldSiloLifecycle(
 /// <param name="StateDir">The root every activated row's container-ephemeral owned-world store resolves its own
 /// directory under — the <c>--state-dir</c> counterpart.</param>
 /// <param name="Clustering">Orleans cluster membership.</param>
-/// <param name="Lifecycle">Optional deployment-owned host lifecycle adapter.</param>
 public sealed record WorldSiloDefinition(
     IReadOnlyList<WorldSiloWorldRow> Worlds,
     WorldSiloDoors Doors,
-    WorldSiloExtension Store,
+    WorldSiloStore Store,
     string StateDir,
-    WorldSiloClustering Clustering,
-    WorldSiloLifecycle? Lifecycle = null
+    WorldSiloClustering Clustering
 ) {
     /// <summary>The document schema tag every well-formed <c>puck.silo.def.v1</c> document carries.</summary>
     public const string SchemaVersion = "puck.silo.def.v1";

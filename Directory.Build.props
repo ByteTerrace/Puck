@@ -38,19 +38,20 @@
              $(NuGetPackageRoot) is not yet defined when this file is imported. -->
         <WindowsSdkNetRefVersion>10.0.22621.57</WindowsSdkNetRefVersion>
 
-        <!-- The SDK synthesizes "foo.cs.csproj" for a file-based program, while the IDE language server's
-             virtual project system synthesizes "foo.csproj" for standalone .cs files that have no physical
-             project on disk. Keep its entry point and explicit directives, linking only the BCL helpers
-             below; repository analyzers and project verification inputs apply to ordinary projects. -->
+        <!-- `dotnet run foo.cs` synthesizes a project at "foo.cs.csproj", which is the only signal that
+             separates a file-based program from a real one. It matters because a file-based program is a
+             single compilation unit by definition: injecting a second Compile item into it displaces the
+             top-level-statement entry point and the SDK rejects the build with CA2266. Every item below
+             that adds source or an analyzer to "every project" means every real project. -->
         <IsFileBasedProgram
-            Condition="$(MSBuildProjectFullPath.EndsWith('.cs.csproj')) OR (!Exists('$(MSBuildProjectFullPath)') AND Exists('$([System.IO.Path]::ChangeExtension($(MSBuildProjectFullPath), &quot;.cs&quot;))'))"
+            Condition="$(MSBuildProjectFullPath.EndsWith('.cs.csproj'))"
         >true</IsFileBasedProgram>
 
         <!-- A file-based program's project is synthesized, so it is the one shape in the tree that cannot
              carry its own <PuckKind>. Classifying it here rather than leaving it undeclared is the whole
              point: these are the projects an analyzer-hosted architecture gate could not have seen at all
-             (see the ItemGroups below, which exclude them by this same condition).
-             A terminal kind declares no <PuckLayer>. -->
+             (see the ItemGroups below, which exclude them by this same condition), and two of them hold
+             InternalsVisibleTo grants into Puck.World. A terminal kind declares no <PuckLayer>. -->
         <PuckKind Condition="'$(IsFileBasedProgram)' == 'true'">FileApp</PuckKind>
 
         <!-- A file-based program's synthesized project sits beside the .cs file rather than in its own
@@ -64,17 +65,6 @@
             Condition="'$(IsFileBasedProgram)' == 'true'"
         >false</RestorePackagesWithLockFile>
     </PropertyGroup>
-
-    <!-- File apps use the same runtime repository lookup as project-based tools.
-         Linking source keeps bootstrap programs independent of the CLI build. -->
-    <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true'">
-        <Compile Include="$(MSBuildThisFileDirectory)build\RepositoryPaths.cs" Link="RepositoryPaths.cs" />
-        <Compile Include="$(MSBuildThisFileDirectory)build\AutomationProcess.cs" Link="AutomationProcess.cs" />
-    </ItemGroup>
-    <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true' AND ('$(MSBuildProjectName)' == 'FormatSubmit.cs' OR '$(MSBuildProjectName)' == 'FormatSubmit')">
-        <!-- Keep the privileged GitHub submitter SDK-only, with its policy also compiled by tests. -->
-        <Compile Include="$(MSBuildThisFileDirectory)build\FormatSubmission.cs" Link="FormatSubmission.cs" />
-    </ItemGroup>
 
     <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('VerifiedCodeAttribute.cs')))">
         <!-- Puck.Maths carries zero ProjectReferences by design (see Puck.Maths.csproj), so the [VerifiedCode]

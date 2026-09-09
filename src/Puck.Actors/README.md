@@ -80,7 +80,7 @@ For an operator-driven deployment from a clean, committed checkout, with
 Docker running and Azure CLI signed in, run from the repository root:
 
 ```powershell
-dotnet run -c Release --file build/Azure.cs -- build-actors
+./src/Puck.Actors/build-image.ps1
 ```
 
 This builds and pushes a commit-tagged image and updates `bytrccap001` to its

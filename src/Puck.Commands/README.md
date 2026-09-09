@@ -7,11 +7,6 @@ gamepad, console text, authored interface controls, and replayed input can
 therefore reach the same handler without teaching that handler where the action
 came from.
 
-`CommandRegistry.BuildHelpText` and `TextCommandSource.DescribeCommands` can
-filter help by registered command metadata. A remote host can disclose its
-admitted vocabulary from the same registry used for dispatch; filtering help
-does not itself authorize execution.
-
 Each simulation step receives one `CommandSnapshot`: an ordered collection of
 commands grouped by logical player slot. Given the same ordered captured input,
 `InputRouter` produces the same snapshot. The host is still responsible for
@@ -733,5 +728,3 @@ Their deadlines are failure bounds, with cancellation shared by the producers.
 
 See the [generated API reference](https://byteterrace.com/reference/) for full
 member docs.
-
-A host may supply `authorize` when creating a text session. The registry checks the canonical command metadata on the pump before parsing or dispatch, using current policy rather than enqueue-time policy. This guard bounds the session's verb surface; mutation handlers must still enforce the stamped principal's domain grants.

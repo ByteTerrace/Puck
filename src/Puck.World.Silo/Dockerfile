@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.400 AS build
 WORKDIR /source
 ADD https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2607/linux_dxc_2026_07_29.x86_x64.tar.gz /tmp/dxc.tar.gz
 RUN echo '55665c87824051ed4774ff3280a79ccbbb7d39243b9736ca5e98222134112d54  /tmp/dxc.tar.gz' | sha256sum -c - \
@@ -8,15 +8,9 @@ COPY . .
 ENV CI=true
 RUN dotnet restore src/Puck.World.Silo --locked-mode \
     && dotnet publish src/Puck.World.Silo -c Release --no-restore -o /app \
-    && dotnet publish src/Puck.Cli -c Release -o /puck-cli \
-    && dotnet /puck-cli/Puck.Cli.dll world prepare src/Puck.World/Assets/worlds /app/worlds
-
-FROM caddy:2.11.4 AS tls
-# TLS binds 8443; the upstream low-port file capability prevents execution with --cap-drop ALL.
-RUN setcap -r /usr/bin/caddy
+    && dotnet run build/Prepare-WorldSilo.cs -c Release -- src/Puck.World/Assets/worlds /app/worlds
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
-COPY --from=tls /usr/bin/caddy /usr/bin/caddy
 ADD https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb /tmp/packages-microsoft-prod.deb
 RUN echo 'c13f01ac7c3001b51a9281d40dde666db5e037e05512840c319832f7852bfec4  /tmp/packages-microsoft-prod.deb' | sha256sum -c - \
     && dpkg -i /tmp/packages-microsoft-prod.deb \
@@ -25,8 +19,6 @@ RUN echo 'c13f01ac7c3001b51a9281d40dde666db5e037e05512840c319832f7852bfec4  /tmp
     && rm -rf /var/lib/apt/lists/* /tmp/packages-microsoft-prod.deb
 WORKDIR /app
 COPY --from=build /app .
-# The optional distribution entry point composes host extensions; the silo assembly does not depend on them.
-COPY --from=build /puck-cli /puck-cli
 # The deployment supplies its silo document and federation keys as mounted files.
 ENTRYPOINT ["dotnet", "Puck.World.Silo.dll"]
 CMD ["--silo", "/configuration/silo.json"]

@@ -50,22 +50,6 @@ public enum WorldAdmissionRefusal : byte {
 /// claims, issuer re-attestation).</para>
 /// </summary>
 public static class WorldAdmissionDoor {
-    /// <summary>Matches a trusted host's already validated OAuth identity against this World's explicit policy. Performs no token validation.</summary>
-    /// <param name="entries">The current immutable admission rows.</param>
-    /// <param name="issuer">The exact validated HTTPS issuer.</param>
-    /// <param name="subject">The validated subject within that issuer.</param>
-    /// <param name="verdict">The World's own grants and disclosure tier.</param>
-    /// <returns>Whether an exact OAuth row admits this identity; no wildcard or attestation row can authorize it.</returns>
-    public static bool TryMatchOAuthEntry(IReadOnlyList<WorldAdmissionEntry>? entries, string issuer, string subject, out WorldAdmissionVerdict verdict) {
-        foreach (var row in entries ?? []) {
-            if (row.Mode == WorldAdmissionTrustMode.OAuth && row.Domain == issuer && row.Subject == subject) {
-                verdict = new(issuer, subject, row.Grants, row.Tier);
-                return true;
-            }
-        }
-        verdict = null!;
-        return false;
-    }
     private static readonly IAttestationCodec Codec = new CborAttestationCodec();
     private static readonly AttestationProfile Profile = AttestationProfile.Base;
     // Reach is deliberately empty for every entry: this door never consults Puck.Attestation's own slot-reach
@@ -126,7 +110,7 @@ public static class WorldAdmissionDoor {
         var list = new List<TrustListEntry>(capacity: entries.Count);
 
         foreach (var entry in entries) {
-            if (entry.Mode is WorldAdmissionTrustMode.FederatedAuthority or WorldAdmissionTrustMode.OAuth) {
+            if (entry.Mode == WorldAdmissionTrustMode.FederatedAuthority) {
                 // Keyless by construction: an arrival row authorizes a namespace the federation handshake already
                 // authenticated, so it can never verify a attestation claim.
                 continue;
@@ -194,7 +178,7 @@ public static class WorldAdmissionDoor {
 
         if (
             (entries is not { Count: > 0 } rows) ||
-            !rows.Any(predicate: static entry => (entry.Mode is WorldAdmissionTrustMode.SignsDirectly or WorldAdmissionTrustMode.Vouches))
+            !rows.Any(predicate: static entry => (entry.Mode != WorldAdmissionTrustMode.FederatedAuthority))
         ) {
             return AdmissionOutcome.Refuse(
                 detail: "this world authors no key-bearing admission entries; no remote peer can ever verify",
@@ -379,7 +363,7 @@ public static class WorldAdmissionDoor {
     public static bool TryMatchEntry(IReadOnlyList<WorldAdmissionEntry>? entries, string? domain, string? subject, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAdmissionVerdict? verdict) {
         if (entries is { Count: > 0 } rows) {
             foreach (var entry in rows) {
-                var matchesDirect = ((entry.Mode is WorldAdmissionTrustMode.SignsDirectly or WorldAdmissionTrustMode.OAuth) && string.Equals(
+                var matchesDirect = ((entry.Mode == WorldAdmissionTrustMode.SignsDirectly) && string.Equals(
                     a: entry.Domain,
                     b: domain,
                     comparisonType: StringComparison.Ordinal

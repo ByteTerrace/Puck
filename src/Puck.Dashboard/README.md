@@ -42,9 +42,6 @@ type-checks (`tsc -b`) and builds both the host and portal, and generates the
 module federation declarations. `npm --workspace portal run check:types`
 regenerates the schema-derived `WorldDefinition` TypeScript and fails if the
 checked-in file has drifted from the schema bundle.
-In CI, schema generation and schema-driven tests use the producer's CLI artifact
-installed by `setup-puck`. Local runs use a published CLI, the repository's
-installed CLI, or `puck` on `PATH`; these checks never compile another CLI.
 
 ## The official content model
 

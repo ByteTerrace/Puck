@@ -160,8 +160,7 @@
              half of Puck.World.Forge; the SM83 forge half moved to Puck.HumbleGamingBrick.Forge, taking the
              Puck.HumbleGamingBrick edge — and its Puck.GamingBricks tail — out of this closure, an
              absence this profile now enforces: the document row no longer links an emulator). Puck.Hosting is a
-             direct edge for exactly one symbol, EngineTicks.PerRate (its local attachment support also
-             brings Networking transitively): ValidateProfile refuses a refresh rate with
+             direct edge for exactly one symbol, EngineTicks.PerRate: ValidateProfile refuses a refresh rate with
              the same arithmetic the host will later derive the step width with — one arithmetic, no drift.
              Puck.Attestation: the admission handshake's identity door (WorldAdmissionDoor.cs) verifies a
              connecting peer's signed-attestation claim through it — Leaf contracts and data, same row as
@@ -179,7 +178,7 @@
              reference. Puck.Scripting is absent: WorldAddonRow carries no AddonLane, so nothing in this project
              names a Puck.Scripting type — Puck.World.Server (below) is the one row that still needs it, for the
              addon host itself. -->
-        <PuckArchitectureProfile Include="Puck.World.Schema" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring" />
+        <PuckArchitectureProfile Include="Puck.World.Schema" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring" />
         <!-- The world-agnostic wire substrate (docs/project-map.md's Puck.Networking row) — the socketless frame
              grammar and the bounded reader/writer pair every World socket frames its bytes through, plus the
              symmetric peer substrate (Puck.Networking.Peers: QUIC transport, identity-bound handshake, attested
@@ -195,7 +194,7 @@
              equality is what actually enforces the property that matters: Puck.Audio owns no world-document parser
              (and has no Puck.World.Authoring edge) and holds no presentation/backend row. Puck.Assets is inherited from
              Puck.Commands because binding group identifiers use the shared document-identifier contract. -->
-        <PuckArchitectureProfile Include="Puck.Audio" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking" />
+        <PuckArchitectureProfile Include="Puck.Audio" Closure="Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Hosting;Puck.Maths" />
         <!-- The headless P1 split's wire-vocabulary row (docs/project-map.md's Puck.World.Protocol row; the residue
              of the former Puck.World.Data after Puck.World.Schema and Puck.Networking split out of it). Everything
              Puck.World.Schema's profile carries (Protocol references Schema) plus Schema itself and Puck.Networking
@@ -206,10 +205,6 @@
              top-row classification prevents the base Puck.World composition root from referencing them; these exact
              profiles prevent the reverse shortcut through Puck.World, Server, Client, Console, or Addons. -->
         <PuckArchitectureProfile Include="Puck.World.AgentBridge" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
-        <!-- Local Console attachment is neutral substrate; only the optional adapter carries MCP packages.
-             Hosting owns the console/capture policy and Networking owns local capability authentication.
-             Neither depends on the optional MCP adapter. -->
-        <PuckArchitectureProfile Include="Puck.Mcp" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking" />
         <PuckArchitectureProfile Include="Puck.World.AgentHarness" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.AgentBridge;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema" />
         <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
              Puck.World.Protocol's profile carries (Server references both Schema and Protocol), plus Puck.Storage
@@ -278,7 +273,7 @@
              asks `puck architecture` to show directly, rather than by absence of a build error.
              Puck.Launcher.Windows gets no equivalent profile for the same reason Puck.Platform.Windows does not:
              it legitimately carries the full Windows surface. -->
-        <PuckArchitectureProfile Include="Puck.Launcher.Linux" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Maths;Puck.Networking;Puck.Platform;Puck.Platform.Linux;Puck.Shaders;Puck.Vulkan;Puck.Vulkan.Presentation" />
+        <PuckArchitectureProfile Include="Puck.Launcher.Linux" Closure="Puck.Abstractions;Puck.Assets;Puck.Commands;Puck.Hosting;Puck.Input;Puck.Maths;Puck.Platform;Puck.Platform.Linux;Puck.Shaders;Puck.Vulkan;Puck.Vulkan.Presentation" />
         <!-- The self-update stub (docs/project-map.md's Puck.Launcher.Stub row): its whole point is the ABSENCE of
              every Puck.* project, including Puck.Launcher itself — it references nothing but the BCL, so a bricked
              stub is unrecoverable in-band by construction rather than by policy, and this empty closure is what
@@ -290,7 +285,7 @@
              a browser tab instead of a desktop process. Exact equality is what proves this project never grows a
              Presentation, Backends, or Puck.World.Server edge just because it happens to sit at Composition roots'
              rank: nothing here renders, hosts a network peer, or runs authoritative mutation. -->
-        <PuckArchitectureProfile Include="Puck.World.Browser" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
+        <PuckArchitectureProfile Include="Puck.World.Browser" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Physics;Puck.SignedDistance;Puck.State;Puck.Text;Puck.World.Authoring;Puck.World.Schema" />
     </ItemGroup>
 
     <!--
@@ -365,12 +360,6 @@
     </PropertyGroup>
     <ItemGroup>
         <PuckArchitectureDeniedApi Include="Puck.World.Server" Type="System.Console" Enabled="$(PuckArchitectureDenyConsoleEnabled)" />
-        <!-- Cloud SDK calls belong in installed adapters. The existing compiled-output gate catches direct API
-             use even when the SDK is transitively available through a storage implementation. -->
-        <PuckArchitectureDeniedApi Include="Puck.World.Schema;Puck.World.Protocol;Puck.World.Server;Puck.World.Client" Type="Azure.Core" Enabled="true" />
-        <PuckArchitectureDeniedApi Include="Puck.World.Schema;Puck.World.Protocol;Puck.World.Server;Puck.World.Client" Type="Azure.Identity" Enabled="true" />
-        <PuckArchitectureDeniedApi Include="Puck.World.Schema;Puck.World.Protocol;Puck.World.Server;Puck.World.Client" Type="Azure.Storage.Blobs" Enabled="true" />
-        <PuckArchitectureDeniedApi Include="Puck.World.Schema;Puck.World.Protocol;Puck.World.Server;Puck.World.Client" Type="Azure.ResourceManager" Enabled="true" />
     </ItemGroup>
 
 </Project>

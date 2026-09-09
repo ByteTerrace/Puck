@@ -13,13 +13,13 @@ namespace Puck.World;
 /// family, per-seat live presentation state).
 /// </summary>
 /// <remarks><c>world.screenshot</c> arms work; it does not do it. The file appears when a frame composes, which is
-/// after this handler has returned and may be never — the run can end first. A second request while one remains
-/// pending is refused. The echo therefore says pending and names the path as a request, never as a file
+/// after this handler has returned and may be never — the run can end first, and a second request armed inside the
+/// same frame replaces the first. The echo therefore says pending and names the path as a request, never as a file
 /// that exists; the render chain prints the resolved path when the frame lands, named by whichever node served it
 /// (<c>[capture] unified overlay -&gt; …</c> from the overlay decorator, <c>[capture] &lt;shader-set id&gt; -&gt;
 /// …</c> from a composed <c>render.extensions</c> pass, <c>[debug] captured frame N -&gt; …</c> from the engine node
 /// at the bottom); a
-/// request refused while another is pending is reported out loud; and
+/// request replaced before it was served is refused out loud, naming the path that will never be written; and
 /// <see cref="WorldPostBuildWiring"/> reports anything still outstanding when the run ends. A caller reading either
 /// stream can always tell "written" from "never happened" — which is the whole point, since a scripted caller that
 /// cannot is a caller being lied to.

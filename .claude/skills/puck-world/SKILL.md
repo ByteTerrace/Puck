@@ -5,25 +5,6 @@ description: Guides work on Puck.World across its document and Protocol model, a
 
 # Puck.World: the game of many games
 
-Creation shapes support `type: "Prism"`: an XY profile extruded along Z.
-`scale` gives bottom half-width, half-height and extrusion half-depth; optional
-`taper` gives top/bottom width in [0, 1] (default 0.5). Zero makes a triangle,
-one a rectangle. It uses the existing Trapezoid/Extrude VM path in both static
-and animated emission and the deterministic contact field. Optional `profile`
-selects RoundedRectangle (cornerRadius fraction), Polygon (3–32 sides), or
-Ellipse; null uses Trapezoid. Polygon/Ellipse are renderable but refused by the
-deterministic field; RoundedRectangle is supported there. Other types refuse
-`taper` and `profile`. The stamp budget is 128 shapes, including expanded glyphs; the matched
-CPU/HLSL instance ceiling is 32768. Verify profile admission and surfaces with
-`AuthoredShapeAdmissionLawTests` / `SdfTrapezoidProfileLawTests`, and capacity with
-`WorldRenderEnvelopeLawTests` plus a real rendered world.
-
-Creation-driver transitions: `blendInSeconds`/`blendOutSeconds` are optional,
-finite non-negative exponential time constants (null = 0.15 s; zero = immediate
-on a positive render delta). They control gate weights independently of phase
-cadence and the shared movement-speed filter. `CreationAnimationLawTests` checks
-asymmetric response, frame-rate independence, zero time, and invalid values.
-
 Creation contact tuning: `CreationPlantDocument.SwingWeight` (`plant.swingWeight`,
 nullable float in [0, 1]) controls target influence outside the plant window while
 its driver is active. Zero releases to the authored swing; omission keeps target
@@ -90,36 +71,8 @@ The agent projects are an optional extension family, not members of the base wor
 | `src/Puck.World.AgentHarness` | The optional Microsoft Agent Framework adapter | `WorldAgentHarness`, `WorldAgentHarnessOptions`; constrained `puck_*` tools over the bridge, Harness approvals on mutations, caller-supplied skills and `IChatClient`, no provider credentials or lifecycle policy |
 
 `Puck.World`, its core tests, Schema, Protocol, Server, Client, Console, and Addons must not reference either agent
-project. An agent-capable composition root opts into them from above. The Operator MCP adapter lives in
-`Puck.Mcp`, referenced by CLI, never base World or the standalone silo. CLI installs `AddPuckMcp` into the public
-`WorldSiloApplication.RunAsync` composition for `puck mcp --silo <silo.json> --http <remote.json>`; the silo
-exposes only Hosting's neutral `IControlSessionHost`. World installs the `Puck.Hosting` local control endpoint only
-when the host Console issues `world.control start`; `stop` and `status` manage its live lifetime. Attach with
-`puck mcp --profile operator --attach <printed-file>` on Windows or Linux x64. The file protects a mutual-authenticated
-loopback capability for the current OS user, including its other processes/elevation levels. Each connection has
-one bounded, dedicated Console session. Exec preserves ordinary result uncertainty; capture uses the same
-session's `InvokeAsync` barrier and the exact render request's completion, with off-pump waiting and temporary
-artifact cleanup. Host deadlines remain enforced even when an injected session ignores cancellation; invalid
-host results are `unknown`. MCP results carry the same schema-backed metadata as JSON text and structured
-content; invalid tool arguments return tool errors. The adapter bounds UTF-8 input and pending replies and
-closes both stdio streams on shutdown; malformed input or stalled output exits with failure.
-Cancellation/EOF close ingress without stopping World or its recordings. Remote MCP is an in-process silo
-extension, never a gateway to a local Console capability. Reuse the existing `user_impersonation` scope.
-The host matches validated issuer/subject to explicit OAuth admission and stamps a generation-bound Peer.
-Replica disclosure authorizes text reads; ordinary World grants authorize state-cell writes. The remote
-command allowlist must remain fail-closed for local admin verbs. Current target/owner binding is fixed;
-distributed placement and portable handles are not implemented. Both transports select MCP 2026-07-28.
-Remote HTTP uses caller-bound application handles, four attachments and four concurrent HTTP requests,
-with two of each per subject and no waiting queue. Discovery uses admitted registry help, hides headless
-capture and discloses only granted observation names. Downstream user-interaction challenges return
-bounded claims in an HTTP 401 bearer challenge; clients obtain fresh authorization before retrying.
-Revocation closes attachments and active requests. Optional Azure services reuse Function self-onboarding
-and observation providers through request-confined OBO with federated managed identity client assertions;
-never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer,
-persistent certificate state outside World mounts, and Azure expiry/readiness alerts. Durable delegated
-cloud writes and richer participant tools remain uninstalled.
-Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Cli.Tests` and the real-host smoke described in
-[`Puck.Mcp`](../../../src/Puck.Mcp/README.md) when changing this attachment seam.
+project. An agent-capable composition root opts into them from above; agent lifecycle commands and an MCP adapter,
+if built, also live in that extension layer.
 
 `src/Puck.Audio` is a sibling engine-services project: the deterministic fixed-point mixer/voice-synth core
 (`Puck.Audio.Mixing` — `AudioMixer`/`VoiceSynth`/
@@ -169,48 +122,6 @@ mutation-kind catalog), and the overlay capacity the composition root hands
 current developer reference — start there for narrative depth this skill
 deliberately does not duplicate.
 
-## Host provider boundary
-
-Cloud-specific implementations belong in extensions. The silo selects persistence,
-connection authentication, and retirement observers through `WorldExtensionRegistry`, using opaque provider
-settings. `WorldSiloHost` consumes a supplied `ObjectStorageTarget`; its lifecycle
-service consumes `IWorldHostRetirementObserver`. Metadata polling, event types and
-credential handling stay in `Puck.World.Azure`, referenced only by composition.
-The compiled-output architecture gate denies Azure SDK API use in Schema, Protocol, Server, and Client. Neither simulation nor replay executes physical host retirement. The silo README
-owns provider-neutral configuration; the Azure README owns Azure provider keys.
-
-## Production silo verification
-
-Endpoint naming and world/host alias conventions are owned by
-[CI and releases](../../../docs/ci.md); deployment values belong in `main.bicepparam`.
-
-Azure CI packages `Assets/worlds/puck.world.json` and its referenced neighbours
-with `puck world prepare`; hosted references use canonical world file
-names. The storage-neighbour resolver parses and migrates the composed document
-with state-expression binding, then reduces it to seam facts; it does not validate
-the neighbour's unrelated local settings or recursively prove its adjacencies.
-Hosted activation awaits root and neighbour storage reads before validating the
-loaded world. Failed drain saves can be retried; closed ingress stays frozen.
-An activation's federation subject and `WorldInstance.ListenEndpoint` come from
-the published definition, independently of checkpoint network fields. Reload
-checks that activation binding; moving an endpoint requires a fresh activation.
-`build/Azure.cs test-world-container` boots the primary Puck row, verifies a durable
-checkpoint and the expected QUIC key, then replaces the container against the
-same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
-Pinned activation waits for host startup, establishes its initial checkpoint,
-and reconciles changed published content through `WorldSiloHost.ReloadAsync` and
-the ordinary rebuild submission. A release marker advances only after its
-checkpoint; retrying failed persistence must not rebuild twice. Drain waits for
-accepted reloads before freezing the pump. `/healthz` includes persistence health;
-`/livez` checks simulation progress independently. `WorldSiloLifecycleLawTests`
-owns reload and drain failure controls. `WorldSiloDefinitionLawTests` checks
-serialized health defaults. Failure during startup stops the host.
-`--authentication-config-file` selects an installed client provider and server
-key pin; no token belongs in world content or checkpoints. Azure's provider
-validates ByteTerrace API membership, while generic protocol code sees only the
-verified session namespace. Run the real client against the deployed endpoint
-for admission, authoritative interaction, and reconnect evidence; a QUIC key
-probe alone does not prove these. `docs/ci.md` owns Azure deployment policy.
 ## Cross-cutting contracts (every task)
 
 **Preserve determinism.** Use no wall clock, RNG, or float in simulation state;

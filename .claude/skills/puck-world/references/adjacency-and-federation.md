@@ -89,8 +89,8 @@ same attestation shape, reached through `WorldCounterpartAttestationProtocol.Try
 which verifies a signed claim against the reading world's own `admission` keys
 and returns both what it attests and the verified chain's own subject — a
 resolver must still bind that subject to the neighbour key it was resolving
-before trusting the result: `WorldApiCounterpartResolver` (`Puck.World.Azure`)
-provides the extension resolver for an owner-named `WorldReference`, and refuses
+before trusting the result: `WorldApiCounterpartResolver` (`Puck.World.Server`)
+is the production resolver for an owner-named `WorldReference`, and refuses
 unless the verified subject parses as the same `Guid` as the reference's own
 `Owner`), or `Unavailable`. Both attested arms prove the same four per-fact
 refusals the document arm does for an ordinary two-document adjacency: missing

@@ -397,12 +397,6 @@ public static class CreationCanonicalizer {
                     Path: $"drivers[{i}].signal"
                 ));
             }
-            if (driver.BlendInSeconds is { } blendIn && (!float.IsFinite(blendIn) || blendIn < 0f)) {
-                errors.Add(item: new(Message: "blendInSeconds must be finite and non-negative.", Path: $"drivers[{i}].blendInSeconds"));
-            }
-            if (driver.BlendOutSeconds is { } blendOut && (!float.IsFinite(blendOut) || blendOut < 0f)) {
-                errors.Add(item: new(Message: "blendOutSeconds must be finite and non-negative.", Path: $"drivers[{i}].blendOutSeconds"));
-            }
             if (
                 (driver.Cadence.Reference is null) &&
                 (!float.IsFinite(f: driver.Cadence.Value) ||
@@ -1940,12 +1934,6 @@ public static class CreationCanonicalizer {
                     Message: $"primitive '{shape.Type}' is not recognized."
                 ));
             }
-            if (shape.Taper is { } taper && (shape.Type != SdfSolidPrimitive.Prism || !float.IsFinite(taper) || taper < 0f || taper > 1f)) {
-                errors.Add(new(Path: $"shapes[{i}].taper", Message: "taper requires Prism and a finite value in [0, 1]."));
-            }
-            if (shape.Profile is { } profile && (shape.Type != SdfSolidPrimitive.Prism || !profile.IsValid())) {
-                errors.Add(new(Path: $"shapes[{i}].profile", Message: "profile requires Prism, a defined kind, cornerRadius in [0, 1], and sides in [3, 32]."));
-            }
             if (
                 (shape.Blend is { } blend) &&
                 !Enum.IsDefined(value: blend)
@@ -1986,9 +1974,7 @@ public static class CreationCanonicalizer {
                     !SdfSolidGeometry.TryValidateScaledPrimitive(
                     refusal: out var scaleRefusal,
                     scale: shape.Scale,
-                    type: shape.Type,
-                    taper: shape.Taper ?? 0.5f,
-                    profile: shape.Profile
+                    type: shape.Type
                 )
                 ) {
                     errors.Add(item: new(

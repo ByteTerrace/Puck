@@ -169,9 +169,6 @@ public static partial class WorldDefinitionValidator {
             if (!seen.Add(item: (row.Domain, row.Subject, row.Mode))) {
                 errors.Add(item: $"{path} duplicates an earlier row naming the same domain, subject, and mode.");
             }
-            if (row.Mode == WorldAdmissionTrustMode.OAuth && row.Domain is { } boundedIssuer && Encoding.UTF8.GetByteCount(boundedIssuer) > AttestationResourceLimits.TextStringUtf8Bytes) {
-                errors.Add($"{path}.domain exceeds the verified-identity limit of {AttestationResourceLimits.TextStringUtf8Bytes} UTF-8 bytes.");
-            }
 
             if (
                 (row.Subject is not null) &&
@@ -183,7 +180,7 @@ public static partial class WorldDefinitionValidator {
             // The attestation-profile crypto shape governs rows that verify attestation claims. A 'federatedAuthority'
             // row is keyless by rule (below) and its domain is an authority namespace or the any-authority
             // wildcard, never a key fingerprint — the profile's algorithm/domain constraints cannot apply to it.
-            if (row.Mode is not (WorldAdmissionTrustMode.FederatedAuthority or WorldAdmissionTrustMode.OAuth)) {
+            if (row.Mode != WorldAdmissionTrustMode.FederatedAuthority) {
                 if (!AttestationProfile.Base.AllowsAlgorithm(algorithm: row.Algorithm)) {
                     errors.Add(item: $"{path}.algorithm must be '{AttestationAlgorithms.EcdsaP256Sha256}' because the world admission door uses the mandatory attestation-v1-base profile.");
                 }
@@ -208,16 +205,16 @@ public static partial class WorldDefinitionValidator {
 
             byte[]? spki = null;
 
-            if (row.Mode is WorldAdmissionTrustMode.FederatedAuthority or WorldAdmissionTrustMode.OAuth) {
+            if (row.Mode == WorldAdmissionTrustMode.FederatedAuthority) {
                 if (string.IsNullOrWhiteSpace(value: row.Domain)) {
-                    errors.Add(item: $"{path}.domain is required for keyless admission.");
+                    errors.Add(item: $"{path}.domain is required for mode 'federatedAuthority' — it names the authenticated source-authority namespace, or '{WorldAdmissionEntry.AnyAuthority}' for any of them.");
                 }
 
                 if (
                     !string.IsNullOrEmpty(value: row.Algorithm) ||
                     !string.IsNullOrEmpty(value: row.PublicKey)
                 ) {
-                    errors.Add(item: $"{path} is a keyless admission mode; leave algorithm and publicKey empty.");
+                    errors.Add(item: $"{path} carries a key for mode 'federatedAuthority' — an arrival row authorizes a namespace the federation handshake already authenticated and can never verify a claim; leave algorithm and publicKey empty.");
                 }
             } else {
                 try {
@@ -274,13 +271,6 @@ public static partial class WorldDefinitionValidator {
                 string.IsNullOrWhiteSpace(value: row.Subject)
             ) {
                 errors.Add(item: $"{path}.subject is required for mode 'signsDirectly'.");
-            }
-
-            if (row.Mode == WorldAdmissionTrustMode.OAuth &&
-                (!Uri.TryCreate(row.Domain, UriKind.Absolute, out var issuer) || issuer.Scheme != "https" ||
-                 !string.IsNullOrEmpty(issuer.UserInfo) || !string.IsNullOrEmpty(issuer.Query) || !string.IsNullOrEmpty(issuer.Fragment) ||
-                 string.IsNullOrWhiteSpace(row.Subject) || row.Subject == "*")) {
-                errors.Add($"{path}: OAuth admission requires an exact HTTPS issuer and a non-wildcard subject.");
             }
 
             if (

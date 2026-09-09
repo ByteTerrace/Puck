@@ -16,11 +16,11 @@ namespace Puck.World;
 /// <see langword="null"/> for none. Validated as an absolute URI when present. Feeds
 /// <c>WorldStorageSyncHandle</c>'s target construction; a URI here is edge-shaped (platform-managed containers), a
 /// connection-string override (CLI-only — see the validator) is raw-shaped.</param>
-/// <param name="UserId">An explicit user-id override (a UUID string for a dev box or agent), or
+/// <param name="UserId">An explicit user-id override (an Entra <c>oid</c> Guid string for a dev box or agent), or
 /// <see langword="null"/> to decline identity (local-only). Fed to the identity resolver's explicit-override source.</param>
 /// <param name="DiscoveryEndpoint">The direct-to-account connection container listing uses when <see cref="Endpoint"/>
 /// resolves to an edge-shaped target — the platform edge cannot serve List at all (see
-/// the storage extension documentation), so an edge-shaped target with this
+/// <c>AzureBlobObjectStorageTarget.DirectEndpoint</c>'s remarks), so an edge-shaped target with this
 /// <see langword="null"/> refuses discovery by name instead of a request the edge cannot answer. Validated as an
 /// absolute URI when present; a connection-string override (CLI-only — see the validator) is for the dev/emulator
 /// shape. Ignored when <see cref="Endpoint"/> is raw-shaped (a raw target lists directly, like it reads and

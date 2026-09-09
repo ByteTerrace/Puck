@@ -12,51 +12,6 @@ namespace Puck.World.Tests;
 /// hosted arm, and each one loads and validates its own adjacency claims through
 /// <see cref="WorldHostedOrigin.TryLoad"/> against that same resolver.</summary>
 public sealed class WorldHostedOriginLawTests {
-    [Fact]
-    public async Task NeighbourSeamReadsDoNotRequireUnrelatedHostSettingsToValidate() {
-        using var directory = new TempWorldDirectory();
-        var target = new DirectoryObjectStorageTarget(directory.RootPath);
-        var store = PuckStorageTestComposition.BuildStore();
-        var owner = Guid.NewGuid();
-        var definition = BuildQuilt()["quilt-island"] with { HostRaw = Fixtures.StandardHost with { Width = -1 } };
-
-        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out _));
-        var address = WorldOwnedWorldSync.HostedAddressFor(owner, SafeName.Parse(candidate: "quilt-island"), "definition.json");
-
-        await store.WriteAsync(target, address, WorldDefinitionSerialization.Serialize(definition: definition), ObjectBlobWriteMode.Overwrite, cancellationToken: TestContext.Current.CancellationToken);
-        var resolver = new WorldStorageNeighbourResolver(containerId: owner, @namespace: WorldStorageNamespace.Hosted, store: store, target: target);
-
-        Assert.Equal(WorldNeighbourResolutionKind.Attested, resolver.Resolve(document: "quilt-island.world.json").Kind);
-        var origin = new WorldHostedOrigin(owner, SafeName.Parse(candidate: "quilt-island"), store, target);
-        var loaded = await origin.LoadAsync("quilt-island", TestContext.Current.CancellationToken);
-
-        Assert.Null(loaded.Definition);
-        Assert.Contains("host.width", loaded.Reason, StringComparison.Ordinal);
-    }
-    [Fact]
-    public async Task AsyncLoaderYieldsWhileNeighbourReadsArePendingAndStillProvesAdjacency() {
-        var quilt = BuildQuilt();
-        var gate = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
-        var reads = 0;
-
-        async ValueTask<WorldNeighbourResolution> Resolve(string document, CancellationToken token) {
-            reads++;
-            await gate.Task.WaitAsync(cancellationToken: token);
-            Assert.True(condition: WorldCounterpartAttestation.TryCompose(quilt[document[..^WorldOwnedWorldFileName.Suffix.Length]], document, out var attestation, out var reason), userMessage: reason);
-            return WorldNeighbourResolution.Attested(attestation: attestation!);
-        }
-        var load = WorldDefinitionLoader.LoadAsync(WorldDefinitionSerialization.Serialize(definition: quilt["quilt-nw"]), "quilt-nw", "quilt-nw", Resolve, TestContext.Current.CancellationToken);
-
-        Assert.False(load.IsCompleted);
-        Assert.Equal(actual: reads, expected: 1);
-        gate.SetResult();
-        var result = await load;
-
-        Assert.NotNull(result.Definition);
-        Assert.Empty(result.Reason);
-        Assert.Equal(actual: reads, expected: 3);
-    }
-
     private static WorldAdjacencyBoundary Boundary(float yaw) => new(
         Center: Vector3.Zero,
         Height: 8f,

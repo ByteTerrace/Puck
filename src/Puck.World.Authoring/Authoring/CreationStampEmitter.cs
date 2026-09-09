@@ -279,7 +279,7 @@ public static class CreationStampEmitter {
                         compose: blend,
                         smooth: smooth
                     ),
-                    type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
+                    type: shape.Type,
                     scale: shapeScale,
                     material: material
                 ).PopField();
@@ -289,7 +289,7 @@ public static class CreationStampEmitter {
 
             _ = SdfSolidGeometry.AppendScaledPrimitive(
                 chain: chain,
-                type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
+                type: shape.Type,
                 scale: shapeScale,
                 material: material,
                 blend: blend,
@@ -304,7 +304,7 @@ public static class CreationStampEmitter {
                 compose: blend,
                 smooth: smooth
             ),
-            type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
+            type: shape.Type,
             scale: shapeScale,
             material: material
         ).Dilate(radius: margin);
@@ -505,7 +505,7 @@ public static class CreationStampEmitter {
                 ) {
                     _ = SdfSolidGeometry.AppendScaledPrimitive(
                         chain: chain,
-                        type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
+                        type: shape.Type,
                         scale: shapeScale,
                         material: materialFor(arg: shape),
                         blend: blend,
@@ -520,7 +520,7 @@ public static class CreationStampEmitter {
                         compose: blend,
                         smooth: smooth
                     ),
-                    type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
+                    type: shape.Type,
                     scale: shapeScale,
                     material: materialFor(arg: shape)
                 ).Dilate(radius: margin);

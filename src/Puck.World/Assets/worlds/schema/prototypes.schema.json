@@ -94,8 +94,7 @@
                     "Ellipsoid",
                     "RoundCone",
                     "Plane",
-                    "Cone",
-                    "Prism"
+                    "Cone"
                   ]
                 },
                 "position": true,
@@ -393,42 +392,6 @@
                   "default": null
                 },
                 "joint": {
-                  "default": null
-                },
-                "taper": {
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "profile": {
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "properties": {
-                    "kind": {
-                      "enum": [
-                        "Trapezoid",
-                        "RoundedRectangle",
-                        "Polygon",
-                        "Ellipse"
-                      ]
-                    },
-                    "cornerRadius": {
-                      "type": "number",
-                      "default": 0.15
-                    },
-                    "sides": {
-                      "type": "integer",
-                      "default": 6
-                    }
-                  },
-                  "required": [
-                    "kind"
-                  ],
-                  "additionalProperties": false,
                   "default": null
                 }
               },
@@ -972,20 +935,6 @@
                       "null"
                     ]
                   },
-                  "default": null
-                },
-                "blendInSeconds": {
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "blendOutSeconds": {
-                  "type": [
-                    "number",
-                    "null"
-                  ],
                   "default": null
                 }
               },

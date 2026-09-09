@@ -1,24 +1,5 @@
 {
     "chat.tools.terminal.autoApprove": {
         "dotnet build": true
-    },
-    "files.exclude": {
-        "**/.claude": true,
-        "**/.worktrees": true,
-        "**/.tmp": true,
-        "**/artifacts": true
-    },
-    "files.watcherExclude": {
-        "**/.git/objects/**": true,
-        "**/.git/subtree-cache/**": true,
-        "**/node_modules/*/**": true,
-        "**/.claude/**": true,
-        "**/.worktrees/**": true,
-        "**/.tmp/**": true,
-        "**/artifacts/**": true
-    },
-    "search.exclude": {
-        "**/.claude": true,
-        "**/.worktrees": true
     }
 }

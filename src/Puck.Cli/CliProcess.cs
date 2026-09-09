@@ -7,35 +7,8 @@ namespace Puck.Cli;
 // both streams without merging them. The captured shape owns the pipe lifecycle because waiting for a child before
 // draining both streams can deadlock, and returning before the pumps finish loses the tail that often names a crash.
 internal static class CliProcess {
-    internal static async Task<string> RunCheckedAsync(string root, string executable, IEnumerable<string> arguments, bool capture = false) {
-        var info = new ProcessStartInfo(fileName: executable) {
-            RedirectStandardError = capture,
-            RedirectStandardOutput = capture,
-            UseShellExecute = false,
-            WorkingDirectory = root,
-        };
-
-        foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
-        using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {executable}."));
-        var output = (capture ? process.StandardOutput.ReadToEndAsync() : Task.FromResult(result: ""));
-        var errors = (capture ? process.StandardError.ReadToEndAsync() : Task.FromResult(result: ""));
-
-        await process.WaitForExitAsync();
-        var text = await output;
-        var errorText = await errors;
-
-        if (process.ExitCode != 0) {
-            throw new InvalidOperationException(message: $"{executable} exited with code {process.ExitCode}. {text}{errorText}");
-        }
-        return text;
-    }
-
     public static int RunStreamed(string fileName, params string[] arguments) {
-        return RunStreamedInDirectory(fileName: fileName, workingDirectory: Environment.CurrentDirectory, arguments: arguments);
-    }
-
-    internal static int RunStreamedInDirectory(string fileName, string workingDirectory, params string[] arguments) {
-        var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false, WorkingDirectory = workingDirectory };
+        var startInfo = new ProcessStartInfo { FileName = fileName, UseShellExecute = false };
 
         foreach (var argument in arguments) {
             startInfo.ArgumentList.Add(item: argument);

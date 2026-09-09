@@ -5,7 +5,7 @@ import {
 
 import {
   dnsZoneMapType
-} from 'ts/bvm:ptn_network_private-dns-zones:0.0.2'
+} from 'ts/bvm:ptn_network_private-dns-zones:0.0.1'
 
 @export()
 type subnetType = {
@@ -18,7 +18,6 @@ type subnetType = {
   privateLinkServiceNetworkPolicies: ('Disabled' | 'Enabled')?
   roleAssignments: roleAssignmentType[]?
   serviceEndpoints: string[]?
-  securityRules: array?
 }
 type tagsType = { *: string }
 @export()
@@ -52,10 +51,9 @@ param natGateway {
   tags: tagsType?
 }
 param publicDnsZones string[]
-param tags tagsType = {}
 param virtualNetwork virtualNetworkType
 
-module natGateway_mod 'br/public:avm/res/network/nat-gateway:2.1.1' = {
+module natGateway_mod 'br/public:avm/res/network/nat-gateway:2.0.1' = {
   params: {
     availabilityZone: -1
     enableTelemetry: enableTelemetry
@@ -103,26 +101,23 @@ module networkSecurityGroups_mod 'br/public:avm/res/network/network-security-gro
       }
       name: replace(subnet.value.name, 'snet', 'nsg')
       roleAssignments: []
-      securityRules: subnet.value.?securityRules ?? []
-      tags: tags
+      securityRules: []
     }
   }
 ]
-module privateEndpointDnsZones_mod 'ts/bvm:ptn_network_private-dns-zones:0.0.2' = {
+module privateEndpointDnsZones_mod 'ts/bvm:ptn_network_private-dns-zones:0.0.1' = {
   params: {
-    tags: tags
     lockKind: lockKind
     virtualNetworkResourceIds: [virtualNetwork_mod.outputs.resourceId]
   }
 }
-module publicDnsZones_mod 'ts/bvm:ptn_network_public-dns-zones:0.0.2' = {
+module publicDnsZones_mod 'ts/bvm:ptn_network_public-dns-zones:0.0.1' = {
   params: {
-    tags: tags
     lockKind: lockKind
     zones: toObject(publicDnsZones, zone => zone, zone => {})
   }
 }
-module virtualNetwork_mod 'br/public:avm/res/network/virtual-network:0.10.2' = {
+module virtualNetwork_mod 'br/public:avm/res/network/virtual-network:0.7.2' = {
   params: {
     addressPrefixes: virtualNetwork.addressPrefixes
     diagnosticSettings: virtualNetwork.?diagnosticSettings

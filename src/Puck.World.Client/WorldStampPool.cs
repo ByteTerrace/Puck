@@ -233,8 +233,7 @@ public sealed partial class WorldStampPool {
                 slot: ((rootSlot + 1) + member),
                 smooth: (shape.Smooth ?? 0f),
                 twist: (shape.Twist ?? 0f),
-                type: shape.Type,
-                taper: shape.Taper ?? 0.5f, profile: shape.Profile
+                type: shape.Type
             );
         }
 
@@ -265,7 +264,7 @@ public sealed partial class WorldStampPool {
             : (live?.Scale ?? 1f)
         );
         // Text stays inside the probed envelope by trading capacity the validator already reserved: glyphs charge the
-        // same stamp budget the boxes do (CreationDocument.StampShapeCount), each glyph chain is shorter than
+        // same 48-shape stamp budget the boxes do (CreationDocument.StampShapeCount), each glyph chain is shorter than
         // the probe's full-modifier shape chain, and the one text instance takes the place of the last parked
         // placeholder (guaranteed parked, because a text-carrying creation has at most 47 shapes).
         var hasText = (!probeWorstCase && (textCatalog is not null) &&
@@ -362,8 +361,7 @@ public sealed partial class WorldStampPool {
                 shapeRotation: (placed?.Rotation.Value ?? default),
                 slot: slot,
                 twist: (placed?.Twist ?? 0f),
-                type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
-                taper: placed?.Taper ?? 0.5f, profile: placed?.Profile
+                type: (placed?.Type ?? SdfSolidPrimitive.Sphere)
             );
             _ = builder.EndInstance();
         }
@@ -464,7 +462,7 @@ public sealed partial class WorldStampPool {
     // CreationStampEmitter.EmitTextDynamic already uses for a creation's text runs. A domain-bearing shape therefore
     // does not replay a per-shape animation-frame pose (PackTransforms still writes root*shape into its own slot for
     // part/anchor resolution — TryBodyPartPose and friends — but nothing reads it for this shape's GEOMETRY).
-    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null) {
+    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false) {
         var chain = builder.ResetPoint();
 
         if (domain is { Count: > 0 }) {
@@ -522,8 +520,7 @@ public sealed partial class WorldStampPool {
                 material: material,
                 scale: scale,
                 smooth: 0f,
-                type: type,
-                taper: taper, profile: profile
+                type: type
             );
 
             if (wantsDilate) {
@@ -549,8 +546,7 @@ public sealed partial class WorldStampPool {
             material: material,
             scale: scale,
             smooth: smooth,
-            type: type,
-            taper: taper, profile: profile
+            type: type
         );
 
         if (wantsDilate) {

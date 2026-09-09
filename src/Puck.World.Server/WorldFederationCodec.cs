@@ -136,7 +136,7 @@ public static partial class WorldFederationCodec {
     /// <summary>The hard cap on one authenticated proof block — sized for a wrapped claim plus a two-hop chain
     /// (<see cref="AttestationChainEnvelope"/> around three ecdsa-p256-sha256 attestations) with comfortable
     /// headroom, never for one HMAC tag.</summary>
-    public const int MaxProofBytes = (32 * 1024);
+    public const int MaxProofBytes = (8 * 1024);
     /// <summary>The protocol discriminator, distinct from the interactive peer wire key so one listener can route
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange

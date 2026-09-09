@@ -93,8 +93,8 @@ file sealed class FakeLaneProtocol : ILaneProtocol<FakeRequestKind, FakeResponse
 public sealed class PersistentRequestLaneLawTests {
     // The lane is transport-neutral. This fixture deliberately injects a socket stream to isolate retry and
     // deadline behavior; production World callers inject the shared authenticated QUIC peer network.
-    private static async ValueTask<Stream> ConnectTestStreamAsync(EndPoint endpoint, CancellationToken ct) {
-        if (endpoint is IPEndPoint { Port: 0 }) { throw new SocketException((int)SocketError.ConnectionRefused); }
+    private static async ValueTask<Stream> ConnectTestStreamAsync(IPEndPoint endpoint, CancellationToken ct) {
+        if (endpoint.Port == 0) { throw new SocketException((int)SocketError.ConnectionRefused); }
         var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
         try {
             await socket.ConnectAsync(endpoint, ct);

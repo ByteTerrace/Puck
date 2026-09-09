@@ -21,60 +21,6 @@ refresh, cloud selection, and HTTP transport remain Azure SDK responsibilities.
 See Microsoft's [generic resource API](https://learn.microsoft.com/en-us/dotnet/api/azure.resourcemanager.resources.genericresource)
 and [ARM resource pipeline](https://learn.microsoft.com/en-us/dotnet/api/azure.resourcemanager.armresource.pipeline).
 
-## Silo hosting
-
-`AzureSiloExtensions` registers opt-in storage, retirement, and API-user authentication providers:
-
-```json
-"store": { "type": "azure.blob", "settings": { "accountUrl": "https://<account>.blob.core.windows.net" } },
-"lifecycle": {
-  "shutdownSeconds": 120, "healthPort": 8081,
-  "progressTimeoutSeconds": 30, "checkpointTimeoutSeconds": 180,
-  "journalTimeoutSeconds": 30, "journalBacklogLimit": 1024,
-  "observer": { "type": "azure.scheduled-events", "settings": { "pollSeconds": 1 } }
-}
-```
-
-This extension validates those settings. Blob persistence uses the deployed
-identity's restricted storage access. `AzureScheduledEvents` polls local metadata
-for maintenance affecting this VM and supplies a retirement deadline through the
-provider-neutral `IWorldHostRetirementObserver` contract. It ignores temporary
-freezes, never acknowledges events on behalf of other processes, and propagates
-retirement failures. No metadata access occurs unless this observer is selected.
-The [silo lifecycle](../Puck.World.Silo/README.md#hosted-test-world) owns drain behavior;
-[deployment](../../docs/ci.md) owns VMSS policy and Spot qualification.
-
-`AzureApplicationHealth` formats the v2 Application Health extension's rich
-health JSON. The silo serves it at `/livez/azure` with HTTP 200 for both
-`Healthy` and `Unhealthy`; missing JSON or a non-success response means `Unknown`
-to Azure. This uses simulation liveness, independently of storage readiness.
-See the [Azure health extension contract](https://learn.microsoft.com/en-us/azure/virtual-machines/extensions/health-extension).
-
-`azure.api-users` wraps the world's federation authenticator at the connection
-boundary. Its deployment-owned settings are `tenantId`, `audience` (the API
-application ID), `groupId`, and `scope`. A user needs a signed, unexpired delegated
-API token from that tenant, with the required scope and group claim. ByteTerrace
-API Users is the Puck user group. App-only tokens and group-overage tokens without
-the required group claim are refused. Explicitly trusted world peers retain the
-existing attestation path.
-
-The desktop opts into this provider with `--authentication-config-file <path>`
-alongside `--connect <host:port>`. The file contains `type` and `settings`; clients
-also require `remoteKeyHash`, the lowercase SHA-256 fingerprint of the host's
-public peer key. Deployment writes this public authentication configuration beside the world artifacts.
-The provider uses the existing ambient Azure sign-in with the API's `/.default`
-scope; the server independently checks `user_impersonation`. The client verifies
-the peer key before sending its token. Tokens stay outside world documents,
-checkpoints, logs, and simulation. The verified user ID supplies the client's
-local instance namespace together with a per-process session ID, while the public
-world's authority remains its endpoint. Reconnecting transport lanes retain that
-namespace. A fresh process gets a new one, preventing stale transfer epochs from
-the previous process from blocking entry; restoring a previous process's body is
-a separate durable travel-recovery operation.
-
-The extension also owns `WorldApiCounterpartResolver` and `HttpCounterpartPublisher`,
-which implement the engine's neighbour-resolution and counterpart-publication seams
-using Azure credentials. The engine interfaces carry no Azure credential types.
 ## Host composition
 
 The normal world executable registers `azure.resource` as an installed provider
@@ -93,7 +39,7 @@ See the SDK's [managed identity selection](https://learn.microsoft.com/en-us/dot
 Custom C# hosts may also reference this project directly. They supply a
 `TokenCredential`, using their chosen managed
 identity, workload identity, or other Azure authentication arrangement.
-The resource-operation provider never searches for credentials or selects a subscription implicitly.
+This library never searches for credentials or selects a subscription implicitly.
 
 Create a binding for each permitted resource operation. Bindings fix the resource
 ID, its incarnation, the method, the API version, and an optional action path or
@@ -233,67 +179,6 @@ extension to update gameplay. A successful Azure operation and an accepted
 gameplay projection are separate outcomes. Follow the shared contract's recovery,
 replay suppression, and journal namespace rules before reopening live bindings.
 
-## Delegated observations
-
-`AzureDelegatedServices` binds the existing inventory and metrics readers to
-an authenticated Entra caller. The trusted ingress validates the tenant, API
-audience, `oid`, scope and expiration before supplying a request-confined user
-assertion. Azure Identity performs OBO with the configured managed identity's
-federated client assertion. The ARM token is used only for the downstream read;
-neither assertion is forwarded to ARM or persisted. There is no fallback to host
-authority when consent or authentication fails.
-
-Token exchange, onboarding and ARM responses preserve user-interaction challenges
-as `AzureDelegatedAuthenticationException`. Its optional JSON claims request is
-limited to 4096 UTF-8 bytes; raw authentication headers, downstream authority and
-scope overrides never leave this adapter. The HTTP transport detects challenges
-before the Azure SDK can silently retry them. The ingress translates the exception
-into its own authentication challenge and lets the caller obtain fresh authorization.
-An ordinary permission-denied response remains a refusal.
-
-The optional [MCP host composition](../Puck.Mcp/README.md#host-extension) installs
-`puck_service_observe` when its remote configuration contains, for example:
-
-```json
-"services": {
-  "managedIdentityClientId": "<silo-managed-identity-client-id>",
-  "observations": [{
-    "name": "storage",
-    "kind": "inventory",
-    "subjects": ["<allowed-user-oid>"],
-    "maximumItems": 64,
-    "settings": {
-      "resourceGroup": "/subscriptions/<subscription-id>/resourceGroups/<group>",
-      "apiVersion": "2021-04-01",
-      "resourceType": "Microsoft.Storage/storageAccounts",
-      "fields": { "name": "/name", "location": "/location" }
-    }
-  }]
-}
-```
-
-Observation subjects need both MCP gateway access and this separate read
-grant. `NamesFor` discloses only a subject's granted names for tool discovery;
-provider settings remain private and retain the existing scope and scalar-field validation.
-Reads are limited to 64 KiB per response page, eight inventory pages, 128 items,
-4096 characters per field and 65536 disclosed characters overall. An incomplete
-or oversized read fails rather than returning a partial snapshot. The adapter
-currently uses Entra and ARM public-cloud endpoints. API permission and downstream
-consent remain required; the unified Bicep already declares Azure Service
-Management `user_impersonation` and adds the World identity's federated credential.
-These request-scoped reads do not introduce durable jobs or cloud writes.
-
-The same `AzureDelegatedServices` adapter accepts optional
-`onboardingUrl: "https://<existing-api-host>/api/self-onboard"`, with an empty
-`observations` array when only onboarding is installed. `puck_onboard` and
-attachment admission call this Function endpoint using an OBO API token.
-Because MCP and Functions share the API registration, this exchange requests
-`<application-guid>/.default`; Entra rejects the `api://` form for this same-app
-exchange with `AADSTS90009`. The delegated `user_impersonation` permission is unchanged.
-The Function owns account provisioning, partition routing and protected user
-escrow. Responses are bounded to 4 KiB and must name `Ready`, `Migrating` or
-`Onboarding`; redirects and failed consent are refused. MCP retains no assertion
-after the request; the existing Function owns its accepted escrow and expiration.
 ## Verification and scope
 
 ```text

@@ -43,7 +43,7 @@ public sealed class WorldPeerNetwork : IDisposable {
     /// <param name="endpoint">The remote QUIC endpoint.</param>
     /// <param name="ct">The connection deadline or cancellation.</param>
     /// <returns>A stream owning its peer link.</returns>
-    public async ValueTask<Stream> ConnectAsync(EndPoint endpoint, CancellationToken ct) =>
+    public async ValueTask<Stream> ConnectAsync(IPEndPoint endpoint, CancellationToken ct) =>
         new PeerStream(await Peer.DialAsync(endpoint, ct).ConfigureAwait(false));
 
     /// <inheritdoc/>

@@ -29,7 +29,7 @@ internal static class WhitespacePhase {
         if (
             Path.IsPathRooted(path: relative) ||
             (relative == "..") ||
-            relative.StartsWith(comparisonType: StringComparison.Ordinal, value: "../")
+            relative.StartsWith(value: "../", comparisonType: StringComparison.Ordinal)
         ) {
             return null;
         }
@@ -39,11 +39,8 @@ internal static class WhitespacePhase {
             : $"{relative}/");
     }
 
-    public static int Run(string rootArgument, bool verifyOnly, string[]? targets = null) {
-        var files = targets;
-        var scanRoot = ((targets is null) ? string.Empty : Path.GetFullPath(path: rootArgument));
-
-        if ((files is null) && !SourceFiles.TryEnumerate(files: out files, rootArgument: rootArgument, scanRoot: out scanRoot)) {
+    public static int Run(string rootArgument, bool verifyOnly) {
+        if (!SourceFiles.TryEnumerate(files: out var files, rootArgument: rootArgument, scanRoot: out var scanRoot)) {
             return 2;
         }
 
@@ -72,28 +69,14 @@ internal static class WhitespacePhase {
         );
         var result = 0;
 
-        if ((targets is null) && (include is null) && (projects.Count > 0)) {
+        if ((include is null) && (projects.Count > 0)) {
             Console.Error.WriteLine(value: $"dotnet format whitespace: {CliPaths.ToDisplay(fullPath: scanRoot)} does not sit under the working directory — phase 0 runs UNSCOPED and may format compile items linked in from outside it.");
         }
 
         foreach (var project in projects) {
             Console.Error.WriteLine(value: $"dotnet format whitespace: {CliPaths.ToDisplay(fullPath: project)}");
 
-            if (targets is not null) {
-                var arguments = new List<string> { "format", "whitespace", project, "--no-restore" };
-
-                if (verifyOnly) { arguments.Add(item: "--verify-no-changes"); }
-                arguments.Add(item: "--include");
-                arguments.AddRange(collection: targets
-                    .Where(predicate: file => (SourceFiles.FindOwningProjectDirectory(start: Path.GetDirectoryName(path: file)!) == Path.GetDirectoryName(path: project)))
-                    .Select(selector: file => Path.GetRelativePath(path: file, relativeTo: scanRoot).Replace(newChar: '/', oldChar: '\\')));
-                var selectedCode = CliProcess.RunStreamedInDirectory(fileName: "dotnet", workingDirectory: scanRoot, arguments: [.. arguments]);
-
-                if (selectedCode != 0) { result = Math.Max(val1: result, val2: (verifyOnly ? 1 : 2)); }
-                continue;
-            }
-
-            var code = ((include is null)
+            var code = (include is null
                 ? (verifyOnly
                     ? CliProcess.RunStreamed(fileName: "dotnet", "format", "whitespace", project, "--no-restore", "--verify-no-changes")
                     : CliProcess.RunStreamed(fileName: "dotnet", "format", "whitespace", project, "--no-restore"))

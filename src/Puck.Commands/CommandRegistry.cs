@@ -364,11 +364,6 @@ public sealed class CommandRegistry {
         ArgumentNullException.ThrowIfNull(line);
         ArgumentNullException.ThrowIfNull(session);
 
-        if (session.Authorize is { } authorize &&
-            (!m_byNameAlt.TryGetValue(LeadingVerb(line), out var definition) || !authorize(definition.Metadata))) {
-            return CommandResult.Error("This session is not authorized for that command.");
-        }
-
         return SubmitStamped(
             line: line,
             session: session
@@ -651,12 +646,11 @@ public sealed class CommandRegistry {
     /// <summary>Builds the help listing of every registered command and its description, ordinal-ordered by name — the
     /// same order <see cref="Definitions"/> and the interned id assignment use, so a listing verb and the help text
     /// never disagree about where a command sits.</summary>
-    /// <param name="include">Optional host policy selecting which command metadata may be disclosed.</param>
     /// <returns>A newline-separated list of <c>name - description</c> entries.</returns>
-    public string BuildHelpText(Func<CommandMetadata, bool>? include = null) {
+    private string BuildHelpText() {
         return string.Join(
             separator: '\n',
-            values: m_root.Subcommands.Where(command => include is null || include(m_byTextCommand[command].Metadata))
+            values: m_root.Subcommands
                 .OrderBy(
                 comparer: StringComparer.Ordinal,
                 keySelector: command => command.Name

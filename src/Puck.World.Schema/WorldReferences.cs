@@ -15,7 +15,7 @@ namespace Puck.World;
 /// <param name="Name">The reference's own name — <see cref="SafeName"/>-shaped, unique within the section.</param>
 /// <param name="Document">The referenced world's document path (e.g. <c>"dive.world.json"</c>), authored verbatim.
 /// Mutually exclusive with <see cref="Owner"/>/<see cref="World"/>.</param>
-/// <param name="Owner">The remote world's owning platform user id (a UUID) — worlds ARE users, so naming the
+/// <param name="Owner">The remote world's owning platform user id (an Entra oid) — worlds ARE users, so naming the
 /// owner names the world's account. Required together with <see cref="World"/>; refused alone.</param>
 /// <param name="World">The remote world's own <see cref="SafeName"/>-shaped id within its owner's account.
 /// Required together with <see cref="Owner"/>; refused alone.</param>

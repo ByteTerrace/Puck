@@ -137,11 +137,10 @@ A finding recorded nowhere was not left deliberately; it was dropped.
   sweep procedure in `documentation`; a hit that merely contains the string is
   left alone.
 - **A formatting sweep is its own change, never incidental.** `puck format`
-  rewrites the requested directory scope before applying the selected passes.
-  For touched files, use `-Files <json>` with an explicit array of paths relative
-  to that root; every phase stays within that selection, including whitespace
-  and standalone-app formatting. Use `-WhatIf` to inspect drift and land broad
-  baseline sweeps separately. CI applies the same selection discipline to PRs.
+  rewrites whitespace across every project owning a corpus file before any
+  selected pass runs, so invoking it to tidy one touched file produces a diff no
+  reviewer can read as one change. Use `-WhatIf` to see the drift and land the
+  sweep separately.
 - **The scope test, before any fix outside tier one:** would the reviewer of
   the primary change wonder why this edit is here? If yes, it is a separate
   commit or a recorded finding.
