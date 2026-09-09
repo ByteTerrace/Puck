@@ -1,78 +1,254 @@
-name: Verify the deployed Azure release
-'on':
+name: Azure
+
+on:
   push:
-    branches:
-      - codex/azure-ci
+    branches: [main, codex/azure-ci]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy this commit and its infrastructure to production
+        type: boolean
+        default: true
+
 permissions:
   contents: read
-  actions: read
-  id-token: write
-concurrency:
-  group: azure-production-deployment
-  cancel-in-progress: false
+
 env:
   CI: true
   DOTNET_NOLOGO: true
-  RELEASE_COMMIT: e38dcf1844e880b8804e49829eb3ce4b33bc0c4f
+
 jobs:
-  deploy:
-    name: Verify the deployed Azure release
+  build:
+    uses: ./.github/workflows/build.yml
+  verify:
+    uses: ./.github/workflows/verify.yml
+  infrastructure:
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    environment:
-      name: Puck
-      url: https://puck.byteterrace.com
+    environment: Puck
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - name: Check out the verified artifact source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: 9306ce77a29544d6ad5f05054300cf1243c39318
-      - name: Verify the original gates
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$(gh api repos/ByteTerrace/Puck/actions/runs/34310894770 --jq .head_sha)" = "$RELEASE_COMMIT"
-          gh api --paginate repos/ByteTerrace/Puck/actions/runs/34310894770/jobs > "$RUNNER_TEMP/gates.json"
-          jq -e '[.jobs[] | select(.name != "Deploy and verify Azure production")] | length > 0 and all(.status == "completed" and (.conclusion == "success" or .conclusion == "skipped"))' "$RUNNER_TEMP/gates.json"
-      - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
-        with:
-          global-json-file: global.json
-      - name: Download verified deployment artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          path: artifacts
-          run-id: 34310894770
-          github-token: ${{ github.token }}
-          name: azure-production-release
-      - name: Download the verified CLI package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: nuget-packages
-          path: artifacts/cli-feed
-          run-id: 34310894770
-          github-token: ${{ github.token }}
-      - name: Install the compiled CLI and restore deployment records
-        run: |
-          dotnet run -c Release --file build/Toolchain.cs -- install-candidate artifacts/cli-feed
-          dotnet run -c Release --file build/InstallQuic.cs
-          printf '%s' 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERocTMpWvGo8zh8+mgvzE0uYU0kEJuD3OQUWrbK408tiYzBC4i8Uj33SIFjFjdYI7csx2lNlnLZSje8cQu1s9kQ==' | base64 -d > artifacts/world-silo.public-key
-      - name: Sign in with fresh OIDC
-        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test deployment scripts
+        shell: pwsh
+        run: ./build/Test-AzureDeployment.ps1
+      - uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Install pinned Bicep
+        run: az bicep install --version v0.46.1
+      - name: Restore pinned bvm Template Specs and compile infrastructure
+        run: |
+          mkdir -p artifacts
+          az bicep build --file src/Puck.Azure.Resources/main.bicep --outfile artifacts/infrastructure.json
+          az bicep build-params --file src/Puck.Azure.Resources/main.bicepparam --outfile artifacts/parameters.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: azure-infrastructure
+          path: |
+            artifacts/infrastructure.json
+            artifacts/parameters.json
+          if-no-files-found: error
+
+  deploy:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci'))
+    needs: [build, verify, infrastructure, applications, containers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment:
+      name: Puck
+      url: https://puck.byteterrace.com
+    concurrency:
+      group: azure-production-deployment
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Skip a superseded commit
+        id: current
+        shell: pwsh
+        run: |
+          $tip = (git ls-remote origin $env:GITHUB_REF).Split()[0]
+          if ($LASTEXITCODE -ne 0 -or !$tip) { throw 'Could not resolve the deployment branch.' }
+          "deploy=$($tip -eq $env:GITHUB_SHA)" >> $env:GITHUB_OUTPUT
+          if ($tip -ne $env:GITHUB_SHA) { Write-Output 'A newer commit exists; its workflow owns deployment.' }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: steps.current.outputs.deploy == 'True'
+        with:
+          pattern: azure-*
+          path: artifacts/source
+      - name: Verify this run's deployment bundle
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Test-AzureBundle.ps1 -BundleDirectory artifacts/source/azure-applications -Commit $env:GITHUB_SHA
+      - uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        if: steps.current.outputs.deploy == 'True'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Install pinned Bicep
+        if: steps.current.outputs.deploy == 'True'
+        run: az bicep install --version v0.46.1
+      - name: Reconcile the production platform
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Deploy-AzureInfrastructure.ps1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: steps.current.outputs.deploy == 'True'
+        with:
+          global-json-file: global.json
+      - name: Install QUIC for production verification
+        if: steps.current.outputs.deploy == 'True'
+        run: bash build/Install-Quic.sh
+      - name: Publish containers and apply application configuration
+        id: release
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Deploy-AzureProduction.ps1 -ArtifactsDirectory artifacts/source -Commit $env:GITHUB_SHA
+      - name: Admit the runner to the signing-key vault
+        id: vault
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Set-AzureKeyVaultDeploymentAccess.ps1
+      - name: Deploy the primary Puck world
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Deploy-WorldSilo.ps1
+      - name: Restore signing-key vault restrictions
+        if: always() && steps.vault.outcome != 'skipped'
+        shell: pwsh
+        run: ./build/Set-AzureKeyVaultDeploymentAccess.ps1 -Restore
+      - name: Admit the runner to the Functions deployment endpoint
+        id: scm
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Set-AzureFunctionsDeploymentAccess.ps1
+      - name: Deploy the prebuilt Functions payload
+        if: steps.current.outputs.deploy == 'True'
+        uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1.5.7
+        with:
+          app-name: ${{ steps.release.outputs.function-app-name }}
+          package: artifacts/azure/functions
+          sku: flexconsumption
+          remote-build: false
+      - name: Restore Functions deployment endpoint restrictions
+        if: always() && steps.scm.outcome != 'skipped'
+        shell: pwsh
+        run: ./build/Set-AzureFunctionsDeploymentAccess.ps1 -Restore
+      - name: Require ready services before publishing the website
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Test-AzureProduction.ps1 -Commit $env:GITHUB_SHA -BeforeStaticPublication
+      - name: Publish the website and stable official content
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Publish-AzureStatic.ps1
       - name: Verify production through Front Door
-        run: dotnet run -c Release --file build/Azure.cs -- test-production --commit "$RELEASE_COMMIT"
-      - name: Upload production verification records
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: steps.current.outputs.deploy == 'True'
+        shell: pwsh
+        run: ./build/Test-AzureProduction.ps1 -Commit $env:GITHUB_SHA
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && steps.current.outputs.deploy == 'True'
         with:
           name: azure-production-release
           path: |
             artifacts/production-*.json
             artifacts/release-source.json
             artifacts/*.digest
+            artifacts/previous-actor-release.json
             artifacts/functions-scm-*.json
+          if-no-files-found: error
+
+  applications:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Install WebAssembly tools
+        run: dotnet workload install wasm-tools
+      - name: Install pinned DXC
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'dxc.zip'
+          $destination = Join-Path $env:RUNNER_TEMP 'dxc'
+          Invoke-WebRequest 'https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2607/dxc_2026_07_29.zip' -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash -ne 'a1dfb116ba3eeae6a1582291b53a8e7bf65ad760676bd3194685c8f7367cd241') { throw 'DXC checksum mismatch.' }
+          Expand-Archive $archive $destination
+          Join-Path $destination 'bin/x64' >> $env:GITHUB_PATH
+      - name: Build and verify deployment bundle
+        shell: pwsh
+        run: ./build/Build-Azure.ps1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: azure-applications
+          path: artifacts/azure
+          if-no-files-found: error
+          include-hidden-files: true
+
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: Puck.Actors
+            image: web-actors
+          - project: Puck.World.Silo
+            image: world-silo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build Linux container from the repository root
+        env:
+          PROJECT: ${{ matrix.project }}
+          IMAGE: ${{ matrix.image }}
+        run: docker build --file "src/$PROJECT/Dockerfile" --tag "puck/$IMAGE:$GITHUB_SHA" .
+      - name: Smoke-test actor startup
+        if: matrix.image == 'web-actors'
+        run: |
+          docker run -d --name actors -p 8080:8080 "puck/web-actors:$GITHUB_SHA"
+          trap 'docker logs actors; docker rm -f actors' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://localhost:8080/healthz; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: matrix.image == 'world-silo'
+        with:
+          global-json-file: global.json
+      - name: Install QUIC for silo verification
+        if: matrix.image == 'world-silo'
+        run: bash build/Install-Quic.sh
+      - name: Verify primary Puck activation, QUIC, and checkpoint recovery
+        if: matrix.image == 'world-silo'
+        shell: pwsh
+        run: ./build/Test-WorldSiloContainer.ps1 -Image "puck/world-silo:$env:GITHUB_SHA"
+      - name: Save the tested image
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: docker save "puck/$IMAGE:$GITHUB_SHA" | gzip > image.tar.gz
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: azure-${{ matrix.image }}
+          path: image.tar.gz
+          compression-level: 0
           if-no-files-found: error
