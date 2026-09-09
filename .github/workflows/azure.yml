@@ -147,11 +147,27 @@ jobs:
       - name: Install QUIC for production verification
         if: steps.current.outputs.deploy == 'true'
         run: dotnet run -c Release --file build/InstallQuic.cs
+      # GitHub's OIDC assertion expires independently of cached Azure access tokens.
+      # Refresh before each deployment phase can request a different resource token.
+      - name: Refresh OIDC for application publication
+        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Publish containers and apply application configuration
         id: release
         if: steps.current.outputs.deploy == 'true'
         shell: bash
         run: dotnet run -c Release --file build/Azure.cs -- deploy-applications --artifacts-directory artifacts/source --commit $GITHUB_SHA
+      - name: Refresh OIDC for World deployment
+        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Admit the runner to the signing-key vault
         id: vault
         if: steps.current.outputs.deploy == 'true'
@@ -165,6 +181,13 @@ jobs:
         if: always() && steps.vault.outcome != 'skipped'
         shell: bash
         run: dotnet run -c Release --file build/Azure.cs -- vault-access --restore
+      - name: Refresh OIDC for Functions deployment
+        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Admit the runner to the Functions deployment endpoint
         id: scm
         if: steps.current.outputs.deploy == 'true'
@@ -186,6 +209,13 @@ jobs:
         if: steps.current.outputs.deploy == 'true'
         shell: bash
         run: dotnet run -c Release --file build/Azure.cs -- test-production --commit $GITHUB_SHA --before-static-publication
+      - name: Refresh OIDC for website publication
+        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+        if: steps.current.outputs.deploy == 'true'
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - name: Publish the website and stable official content
         if: steps.current.outputs.deploy == 'true'
         shell: bash

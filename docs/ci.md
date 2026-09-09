@@ -389,6 +389,10 @@ The `Puck` GitHub environment supplies `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
 `7508a16b-0f9b-4322-9bb9-481ad836c052`). Its federated subject is
 `repo:ByteTerrace@18753984/Puck@1271519029:environment:Puck`.
 The workflow targets production; it creates no staging environment.
+It refreshes OIDC login before application publication, World deployment,
+Functions deployment, and website publication. Cached Azure access tokens do
+not extend the GitHub assertion's lifetime; a later resource-token request
+otherwise fails with `AADSTS700024` after a long deployment phase.
 
 The `Puck` environment's optional `WORLD_MCP` variable supplies the JSON policy
 document described by [remote MCP deployment](../src/Puck.Azure.Resources/README.md#remote-mcp).
