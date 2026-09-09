@@ -128,7 +128,8 @@ public sealed class AzureDelegatedServices : IDisposable {
         deadline.CancelAfter(remaining < TimeSpan.FromSeconds(120) ? remaining : TimeSpan.FromSeconds(120));
         var credential = CreateCredential(userAssertion);
         try {
-            var access = await credential.GetTokenAsync(new([$"api://{m_application}/.default"]), deadline.Token).ConfigureAwait(false);
+            // Entra requires the GUID resource when the confidential client and API share an application (AADSTS90009).
+            var access = await credential.GetTokenAsync(new([$"{m_application}/.default"]), deadline.Token).ConfigureAwait(false);
             using var request = new HttpRequestMessage(HttpMethod.Post, m_onboarding);
             request.Headers.Authorization = new("Bearer", access.Token);
             using var response = await m_http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
