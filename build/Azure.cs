@@ -1017,7 +1017,7 @@ internal static class AzureAutomation {
             if (Text(value: properties["template"]!["containers"]![0]!["image"]) != File.ReadAllText(path: "artifacts/web-actors.digest").Trim()) { throw new InvalidDataException(message: "Actors image digest differs from the release."); }
             await TestWorldReleaseAsync();
             await PuckAsync("world", "probe", $"{configuration["dns"]!["recordName"]}.{configuration["dns"]!["zoneName"]}", Text(value: configuration["port"]), "artifacts/world-silo.public-key");
-            if (((string?)(await GetJsonAsync(uri: (address + "/api/health-check")))["Status"]) != "Healthy") { throw new InvalidOperationException(message: "Production API dependency health is not Healthy."); }
+            if (((string?)(await GetJsonAsync(uri: (address + "/api/health-check")))["status"]) != "Healthy") { throw new InvalidOperationException(message: "Production API dependency health is not Healthy."); }
             if (Options.ContainsKey(key: "before-static-publication")) { return; }
             if (((string?)(await GetJsonAsync(uri: (address + "/release.json")))["commit"]) != commit) { throw new InvalidDataException(message: "Front Door dashboard release commit differs."); }
             foreach (var host in Value(key: "websiteHostNames", outputs: outputs).AsArray()) {
