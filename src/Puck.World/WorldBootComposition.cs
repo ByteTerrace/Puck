@@ -368,7 +368,12 @@ internal static class WorldBootComposition {
         // the module registers each minted correlation id, and WorldPostBuildWiring's EchoTap subscriber prints the
         // per-verb refusal line.
         services.AddSingleton<WorldDeferredVerbEchoes>();
+        // ONE read-modify-whole-row window guard, shared by the row door and the sculpt door: a sculpt's whole-row
+        // resubmission of a row a literal/list/step edit already buffered this tick window is refused by name, not
+        // silently reverted.
+        services.AddSingleton<WorldRowStepWindowGuard>();
         services.AddSingleton<ICommandModule, WorldRowCommandModule>();
+        services.AddSingleton<ICommandModule, WorldSculptCommandModule>();
         // The contact/solidity verb surface — world.collision.probe/.status and the world.contacts read. Authoring
         // the field or a kit's collider goes through world.row.set collision/world.row.set kits.
         services.AddSingleton<ICommandModule, WorldCollisionCommandModule>();
@@ -381,6 +386,9 @@ internal static class WorldBootComposition {
         // The CURVES section's census read-back — world.curves. Rows are authored through
         // world.row.set curves/world.row.remove curves.
         services.AddSingleton<ICommandModule, WorldCurveCommandModule>();
+        // The render.lighting read-back — world.lighting. The fields themselves are authored through
+        // world.row.set render.
+        services.AddSingleton<ICommandModule, WorldLightingCommandModule>();
         // The inhabitation + creation-facet READ-BACK surface — world.inhabitants, world.faces,
         // world.attachments, world.portals. The facets themselves are authored through
         // world.row.set placements <json>.

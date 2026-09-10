@@ -18,7 +18,7 @@
     "case-material-albedo.sdf.json",
     "case-material-emissive.sdf.json",
     "case-material-specular.sdf.json",
-    "case-material-shininess.sdf.json",
+    "case-material-roughness.sdf.json",
     "valid-control.sdf.json"
   ],
   "positive": {
@@ -52,7 +52,7 @@
       { "type": "line", "name": "material-albedo-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].albedo: [-1, 0, 0] every component must be non-negative.]" },
       { "type": "line", "name": "material-emissive-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].emissive: -1 must be non-negative.]" },
       { "type": "line", "name": "material-specular-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].specular: -1 must be non-negative.]" },
-      { "type": "line", "name": "material-shininess-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].shininess: -1 must be non-negative.]" },
+      { "type": "line", "name": "material-roughness-refused", "stream": "stderr", "match": "exact", "text": "[world.sdf.load: materials[1].roughness: -1 must be non-negative.]" },
       { "type": "line", "name": "valid-control-loaded", "stream": "stdout", "match": "contains", "text": "1 op(s), 1 material(s), fnv1a" },
       { "type": "line", "name": "refusals-catalog-declares-numbernegative", "stream": "stdout", "match": "contains", "text": "sdf.decode/NumberNegative" }
     ]

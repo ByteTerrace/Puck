@@ -217,7 +217,8 @@ public readonly record struct SdfMaterial(
     Vector3 Albedo,
     float Emissive = 0f,
     float Specular = 0f,
-    float Shininess = 32f
+    float Roughness = SdfMaterial.DefaultRoughness,
+    float Sheen = 0f
 );
 ```
 

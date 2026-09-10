@@ -41,9 +41,10 @@ public sealed partial class SdfProgram {
     // The depth-0 chain with the largest factor: the chain that binds the global step scale below 1 (a scoped chain's
     // factor is clamped to 1 at its pop, see AnalyzeLipschitz). Null when no unscoped chain carries a factor above 1,
     // which is every isometric program. A diagnostic, never an input to the packed words.
-    private static SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances) {
+    private static SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles) {
         var chainFactors = AnalyzeChainLipschitz(
             chainHasShape: out _,
+            convexPolygonProfiles: convexPolygonProfiles,
             instructions: instructions
         );
         SdfStepScaleBinder? best = null;
@@ -110,9 +111,10 @@ public sealed partial class SdfProgram {
 
         return -1;
     }
-    private static float AnalyzeLipschitz(SdfInstruction[] instructions) {
+    private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles) {
         var chainFactors = AnalyzeChainLipschitz(
             chainHasShape: out var chainHasShape,
+            convexPolygonProfiles: convexPolygonProfiles,
             instructions: instructions
         );
         // mapCore's seed is the SDF_FAR_DISTANCE CONSTANT — a zero-gradient function, hence L = 0, which is what makes
@@ -238,7 +240,7 @@ public sealed partial class SdfProgram {
     //
     // A blend's own factor is deliberately ABSENT here: composition is not a property of the chain a candidate was
     // built in, and folding chamfer in at this level is precisely the latch AnalyzeLipschitz's remarks retire.
-    private static List<float> AnalyzeChainLipschitz(IReadOnlyList<SdfInstruction> instructions, out List<bool> chainHasShape) {
+    private static List<float> AnalyzeChainLipschitz(IReadOnlyList<SdfInstruction> instructions, out List<bool> chainHasShape, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles) {
         var chainFactors = new List<float>();
         var hasShapeByChain = new List<bool>();
         var chainHasShapeBlend = false;
@@ -250,6 +252,7 @@ public sealed partial class SdfProgram {
         var chainLogSphereProduct = 1.0f; // product of the chain's log-spherical shell-fold factors exp(w/2) (1 = none)
         var chainDisplaceWarpProduct = 1.0f; // product of the chain's Displace/DomainWarp metric-stretch factors (1 + amp*max|freq_i|); reach-independent, like the log-sphere product (1 = none)
         var chainCellJitters = new List<(float MinSpacing, float Jitter)>(); // each CellJitter's (min spacing, jitter), folded at chain-close against the FINAL chainShapeReach
+        var chainFlares = new List<(float Amount, float Bulge, float InverseSpan, float DistanceScale)>(); // each FlareY's warp params, folded at chain-close against the FINAL chain reach
 
         for (var index = 0; (index < instructions.Count); index++) {
             var instruction = instructions[index];
@@ -261,6 +264,7 @@ public sealed partial class SdfProgram {
                 (index != 0)
             ) {
                 chainFactors.Add(item: (((FoldChainLipschitz(
+                    flares: chainFlares,
                     reach: (chainTranslateReach + chainShapeReach),
                     shapeApproxMax: chainShapeApproxMax,
                     warpRates: chainWarpRates
@@ -277,6 +281,7 @@ public sealed partial class SdfProgram {
                 chainLogSphereProduct = 1.0f;
                 chainDisplaceWarpProduct = 1.0f;
                 chainCellJitters.Clear();
+                chainFlares.Clear();
             }
 
             switch (instruction.Op) {
@@ -305,7 +310,7 @@ public sealed partial class SdfProgram {
                         chainHasShapeBlend = true;
                         chainShapeReach = MathF.Max(
                             x: chainShapeReach,
-                            y: ShapeReachRadius(instruction: instruction)
+                            y: ShapeReachRadius(convexPolygonProfiles: convexPolygonProfiles, instruction: instruction, instructionIndex: index)
                         );
 
                         if (((SdfShapeType)instruction.Shape) == SdfShapeType.Ellipsoid) {
@@ -375,6 +380,13 @@ public sealed partial class SdfProgram {
                         chainDisplaceWarpProduct *= NoiseDisplaceLipschitz(instruction: instruction);
                         break;
                     }
+                case SdfOp.FlareY: {
+                        // Reach-DEPENDENT like Bend/Twist (its shear term scales with the chain's XZ reach), unlike
+                        // LogSphere/Displace/NoiseDisplace's reach-independent products — so it is stashed here and
+                        // folded at chain-close against the FINAL reach, exactly like CellJitter's boundary factor.
+                        chainFlares.Add(item: (instruction.Data0.X, instruction.Data0.Y, instruction.Data0.W, instruction.Data1.X));
+                        break;
+                    }
                 default: {
                         // ResetPoint/Rotate/Scale/TransformDynamic/SymmetryPlane/Repeat/RepeatLimited/WallpaperFold/RepeatPolar/
                         // Elongate/Onion/Dilate/PushField/PopField: factor 1 (isometry, non-expansive projection, field op,
@@ -389,6 +401,7 @@ public sealed partial class SdfProgram {
 
         // Fold the final (or only) chain.
         chainFactors.Add(item: (((FoldChainLipschitz(
+            flares: chainFlares,
             reach: (chainTranslateReach + chainShapeReach),
             shapeApproxMax: chainShapeApproxMax,
             warpRates: chainWarpRates
@@ -400,5 +413,86 @@ public sealed partial class SdfProgram {
         chainHasShape = hasShapeByChain;
 
         return chainFactors;
+    }
+    /// <summary>Returns the exact extrema of <see cref="SdfOp.FlareY"/>'s scale profile
+    /// <c>s(t) = 1 + amount·t + bulge·sin(π·t)</c> over <c>t ∈ [0, 1]</c> — exposed so an authoring door can
+    /// budget-check a flare declaration against the ONE formula <see cref="SdfProgramBuilder.FlareY"/> bakes and
+    /// <see cref="AnalyzeLipschitz"/> reads, instead of mirroring it. s(0) = 1 and s(1) = 1 + amount are always
+    /// candidates; ds/dt = amount + bulge·π·cos(π·t) has at most one zero in [0, 1] (cos is monotonic there), at
+    /// t = acos(−amount / (bulge·π)) / π when bulge ≠ 0 and |amount| ≤ π·|bulge| — a third candidate where that
+    /// critical point falls in range. Exact, not a loose sum-of-maxes bound.</summary>
+    /// <param name="amount">The linear flare rate at t = 1.</param>
+    /// <param name="bulge">The mid-span sinusoidal bulge amplitude.</param>
+    /// <returns>The minimum and maximum of s(t) over t ∈ [0, 1] (MaxS ≥ 1 always, since s(0) = 1 is always a
+    /// candidate).</returns>
+    public static (float MinS, float MaxS) FlareExtrema(float amount, float bulge) {
+        var s0 = 1.0f;
+        var s1 = (1.0f + amount);
+        var min = MathF.Min(
+            x: s0,
+            y: s1
+        );
+        var max = MathF.Max(
+            x: s0,
+            y: s1
+        );
+
+        if (bulge != 0.0f) {
+            var cosine = (-amount / (bulge * MathF.PI));
+
+            if (MathF.Abs(x: cosine) <= 1.0f) {
+                var criticalT = (MathF.Acos(x: cosine) / MathF.PI);
+                var criticalS = ((1.0f + (amount * criticalT)) + (bulge * MathF.Sin(x: (MathF.PI * criticalT))));
+
+                min = MathF.Min(
+                    x: min,
+                    y: criticalS
+                );
+                max = MathF.Max(
+                    x: max,
+                    y: criticalS
+                );
+            }
+        }
+
+        return (min, max);
+    }
+    // FlareY's conservative operator-norm bound over the chain's reach rho (see SdfOp.FlareY): the warp's Jacobian is
+    // diag(1/s, 1, 1/s) plus a rank-1 shear from ds/dy (moving along y rescales x and z), so the triangle inequality
+    // bounds its operator norm by max(1/s, 1) + rho_flared*|ds/dy|/s^2. The shear scales with the radial distance of
+    // the EVALUATED point (the warp's input, world-local x/z), and the flared surface reaches maxS times the
+    // un-flared chain reach — every emitter widens the instance bound by the same factor
+    // (ShapeFlareDocument.ReachFactor) — so rho_flared = maxS * rho, never the bare rho (which understates the shear
+    // by maxS wherever amount > 0). ds/dy = (ds/dt)/span inside the active band, and
+    // |ds/dt| = |amount + bulge*pi*cos(pi*t)| <= |amount| + pi*|bulge| (|cos| <= 1) — reach-independent. s is floored
+    // at SdfProgramBuilder.FlareMinScale, matching the shader's runtime clamp, so this stays finite for every admitted
+    // amount/bulge/span. distanceScale is the SAME 1/maxS constant SdfProgramBuilder.FlareY bakes into the candidate:
+    // this factor bounds the RESIDUAL after that correction, exactly as LogSphere's exp(w/2) sits alongside its own
+    // shellScale distanceScale factor. amount == 0 and bulge == 0 (s == 1 identically) returns exactly 1.
+    private static float FlareOperatorNorm(float amount, float bulge, float inverseSpan, float distanceScale, float reach) {
+        if (
+            (amount == 0.0f) &&
+            (bulge == 0.0f)
+        ) {
+            return 1.0f;
+        }
+
+        var (minS, maxS) = FlareExtrema(
+            amount: amount,
+            bulge: bulge
+        );
+        var minSClamped = MathF.Max(
+            x: minS,
+            y: SdfProgramBuilder.FlareMinScale
+        );
+        var dsdtBound = (MathF.Abs(x: amount) + (MathF.PI * MathF.Abs(x: bulge)));
+        var dsdyBound = (dsdtBound * MathF.Abs(x: inverseSpan));
+        var diagonalNorm = MathF.Max(
+            x: (1.0f / minSClamped),
+            y: 1.0f
+        );
+        var shearNorm = (((reach * maxS) * dsdyBound) / (minSClamped * minSClamped));
+
+        return (distanceScale * (diagonalNorm + shearNorm));
     }
 }

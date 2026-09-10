@@ -6,97 +6,97 @@
       "color": "#F5E6C2",
       "emissive": 0.06,
       "specular": 0.16,
-      "shininess": 26
+      "roughness": 0.693
     },
     {
       "color": "#6B6673",
       "emissive": 0.04,
       "specular": 0.14,
-      "shininess": 22
+      "roughness": 0.719
     },
     {
       "color": "#FA7A24",
       "emissive": 0.22,
       "specular": 0.24,
-      "shininess": 32
+      "roughness": 0.656
     },
     {
       "color": "#0F171F",
       "emissive": 0,
       "specular": 0.4,
-      "shininess": 72
+      "roughness": 0.475
     },
     {
       "color": "#FF8F33",
       "emissive": 1.15,
       "specular": 0.15,
-      "shininess": 28
+      "roughness": 0.68
     },
     {
       "color": "#FCFAF0",
       "emissive": 0.62,
       "specular": 0.22,
-      "shininess": 44
+      "roughness": 0.593
     },
     {
       "color": "#0D0F17",
       "emissive": 0,
       "specular": 0.45,
-      "shininess": 64
+      "roughness": 0.506
     },
     {
       "color": "#47454C",
       "emissive": 0,
       "specular": 0.1,
-      "shininess": 18
+      "roughness": 0.749
     },
     {
       "color": "#D95984",
       "emissive": 0,
       "specular": 0,
-      "shininess": 32
+      "roughness": 0.656
     },
     {
       "color": "#59A9D9",
       "emissive": 0,
       "specular": 0,
-      "shininess": 32
+      "roughness": 0.656
     },
     {
       "color": "#CED959",
       "emissive": 0,
       "specular": 0,
-      "shininess": 32
+      "roughness": 0.656
     },
     {
       "color": "#BE59D9",
       "emissive": 0,
       "specular": 0,
-      "shininess": 32
+      "roughness": 0.656
     },
     {
       "color": "#59D999",
       "emissive": 0,
       "specular": 0,
-      "shininess": 32
+      "roughness": 0.656
     },
     {
       "color": "#D97459",
       "emissive": 0,
       "specular": 0,
-      "shininess": 32
+      "roughness": 0.656
     },
     {
       "color": "#5964D9",
       "emissive": 0,
       "specular": 0,
-      "shininess": 32
+      "roughness": 0.656
     },
     {
       "color": "#89D959",
       "emissive": 0,
       "specular": 0,
-      "shininess": 32
+      "roughness": 0.656
     }
   ],
   "shapes": [

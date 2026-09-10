@@ -60,8 +60,11 @@ public static class WorldPlacementStamper {
             ids[index] = builder.AddMaterial(material: new SdfMaterial(
                 Albedo: albedo,
                 Emissive: (entry?.Emissive ?? 0f),
-                Shininess: (entry?.Shininess ?? 32f),
-                Specular: (entry?.Specular ?? 0f)
+                Roughness: (entry?.Roughness ?? SdfMaterial.DefaultRoughness),
+                Sheen: (entry?.Sheen ?? 0f),
+                Specular: (entry?.Specular ?? 0f),
+                Metal: (entry?.Metal ?? 0f),
+                Coat: (entry?.Coat ?? 0f)
             ));
         }
 
@@ -174,7 +177,8 @@ public static class WorldPlacementStamper {
                                 value: (shape.Material ?? 0),
                                 max: (paletteIds.Length - 1),
                                 min: 0
-                            )]
+                            )],
+                            paletteIds: paletteIds
                         );
                         _ = builder.EndInstance();
                     }
@@ -268,7 +272,8 @@ public static class WorldPlacementStamper {
     /// <param name="reservedCount">The reserved SCOPED stamp count (scoped/text-carrying boot placements + the
     /// authoring headroom).</param>
     /// <param name="reservedShapeInstances">The reserved per-SHAPE instance count (scope-free boot placements'
-    /// copies × shapes, plus MaxShapesPerStamp for each authoring-headroom copy — see <see cref="StaticStampReservation"/>).</param>
+    /// copies × <see cref="CreationStampEmitter.PerCopyInstanceCount"/> — a panelled shape charges two chains for its
+    /// one instance — plus MaxShapesPerStamp for each authoring-headroom copy; see <see cref="StaticStampReservation"/>).</param>
     public static void EmitProbe(SdfProgramBuilder builder, int reservedCount, int reservedShapeInstances = 0) {
         for (var index = 0; (index < reservedCount); index++) {
             // Worst-case distinct materials: every reserved stamp references a DISTINCT creation with a full palette
@@ -290,6 +295,9 @@ public static class WorldPlacementStamper {
                 boundRadius: 12f
             );
 
+            // Each shape charge reserves the chain a text-carrying, scope-free creation's shape emits with its own
+            // field scope (CreationStampEmitter.EmitShapeChain: an eccentric primitive, or a panelled shape whose
+            // two charges together cover its plate chain, copy chain, and shape pair).
             for (var shape = 0; (shape < WorldPlacementPolicy.MaxShapesPerStamp); shape++) {
                 _ = SdfSolidGeometry.AppendPrimitive(
                     chain: builder.ResetPoint()
@@ -298,10 +306,11 @@ public static class WorldPlacementStamper {
                         .Scale(scale: Vector3.One)
                         .Translate(offset: Vector3.Zero)
                         .Rotate(rotation: Quaternion.Identity)
+                        .PushField(compose: SdfBlendOp.Union)
                         .Scale(scale: Vector3.One),
                     type: SdfSolidPrimitive.Sphere,
                     material: paletteIds[(shape % CreationDocument.PaletteSize)]
-                );
+                ).PopField();
             }
 
             _ = builder.EndInstance();

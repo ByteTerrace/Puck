@@ -65,30 +65,15 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int MaxBrickBakeVoxelsPerSlice = (256 * 1024); // <= 256K voxels per brick per produced frame: ~1-2 ms background-budget
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
-    private const int PushConstantByteLength = (((sizeof(uint) * 4) * 2) + (sizeof(uint) * 2)); // 40-byte CompositeParams; word 6 = screenMask, word 7 = instanceMaskWordCount, word 8 = sampleIndex (the shadow estimator's deterministic net index), word 9 = the shadow accumulator's epoch + enable bit. Vulkan guarantees 128 bytes of push range, so this stays well inside the floor.
-    // The area-light shadow estimator's host-baked sampler table (SdfShadowSamplerTables): the digital net's direction
-    // numbers plus the sun disc's quantized polar map. Stage 1 ONLY — it is the only kernel that shades. Binding 48;
-    // its Direct3D 12 register is POSITIONAL (views append it LAST, after the frame instance grid t42, so it resolves
-    // to t43). KEEP IN SYNC with sdf-world.hlsli's sdfSamplerTable.
-    private const uint SamplerTableBindingIndex = 48;
+    private const int PushConstantByteLength = (((sizeof(uint) * 4) * 2) + sizeof(uint)); // 36-byte CompositeParams; word 6 = screenMask, word 7 = instanceMaskWordCount, word 8 = sampleIndex (the deterministic tick clock the sky reads). KEEP IN SYNC with sdf-world.hlsli's CompositeParams.
     private const uint ScreenLightBindingIndex = 11; // sdf-world-views.comp (Stage 1 ONLY): sdfScreenLights, register t38 (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
-    private const int ScreenLightByteLength = ((sizeof(float) * 4) * (MaxScreenSurfaces + 22)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4: world grid, object origin+pitchX, object frame quat, object pitchZ+patchRadius) + ONE engine-bench params row (+5: soft-shadow/AO/shadow-distance/screen-light levers) + ONE shadow-policy row (+6: carve proxy/camera-tile mask/fast march) + ONE F1 far-field row (+7: far-bound disable / F2 shadow-exit disable) + FIVE lighting rows (+8..+12: sun direction+weight, sun tangent+ambient base, sun bitangent+ambient hemisphere, sun color, ambient color) + NINE procedural-sky rows (+13..+21: zenith+fogDensity, horizon+skyEnabled, ground+sunDiscIntensity, sunDiscExponent+starDensity+starBrightness+starSeed, twinkleShare+twinkleDepth+twinklePeriodTicks, cloudColor+cloudCoverage, cloudSoftness+cloudScale+cloudSeed, cloudOffset+shearOffset, cloudSpinAngle+cloudCurl) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfSkyCloudsD
+    private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfEnvBase
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     // The FIRST screen-source binding index; screenSource{i} binds at ScreenSourceBindingBase + i (sdf-world.hlsli's
     // vk::binding). The glyph atlas follows the whole run, so ScreenSourceBindingBase + MaxScreenSurfaces is its binding.
     private const uint ScreenSourceBindingBase = 12;
     private const uint ScreenSurfaceBindingIndex = 10; // sdf-world-views.comp (Stage 1 ONLY): screenSurfaces, register t4
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli)
-    // The shadow accumulator's history lives in the per-view source texture's alpha lane, which is undefined until
-    // Stage 1 has written the pixel at least once. These force the recurrence to seed from the raw estimate for the
-    // first frames after construction — the textures are allocated once and never reallocated, so that is the only
-    // window in which the lane holds whatever the allocator left behind.
-    private const int ShadowAccumulationResetFrames = 2;
-    // The sun disc's angular radius in radians — the half-aperture the shadow estimator samples. tan(0.11) = 0.11045
-    // reproduces the retired parabola's 1/9 = 0.1111 penumbra half-slope to within 0.7%, so the shipped look is the
-    // same shadows sampled correctly rather than a jolt in penumbra width. KEEP IN SYNC with sdf-world.hlsli's
-    // SunAngularRadius, which is documentation on the GPU side: only the host evaluates tan().
-    private const double SunAngularRadius = 0.11d;
     private const uint TileBindingIndex = 3; // matches sdf-world.hlsli's [[vk::binding(3, 0)]]
     // The tile cull buffer carries FOUR planes per (viewport, tile), each of stride
     // (tileGrid.x * tileGrid.y * viewportCount): plane 0 = the march-start lower bound (the classic beam
@@ -215,7 +200,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly nint m_pool;
     private readonly IGpuStorageBuffer m_programBuffer;
     private readonly int m_programWordCapacity;
-    private readonly IGpuStorageBuffer m_samplerTableBuffer;
     private readonly nint m_screenSampler;
     private readonly IGpuStorageImage m_screenSourceFiller;
     // Shares Stage 1's exact bindings array (viewsBindings) and push/sampler shape, so its descriptor-set layout is
@@ -397,7 +381,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuStorageBuffer[] m_viewportBuffers = new IGpuStorageBuffer[FrameRingSize];
     private readonly nint[] m_viewsSets = new nint[FrameRingSize];
     private SdfProgram m_liveProgram = null!;
-    private int m_shadowAccumulationResetFrames = ShadowAccumulationResetFrames;
 
     /// <summary>Gets or sets the debug-group label wrapping this engine's whole recorded frame — the outer scope a GPU
     /// capture (RenderDoc / PIX / Nsight) shows around this engine's per-pass groups (so a nested view engine reads as
@@ -563,22 +546,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             deviceContext: device,
             sizeBytes: (((ulong)m_programWordCapacity) * sizeof(uint))
         );
-        // The shadow sampler table is built ONCE here and uploaded ONCE — it is a pure function of the sun's angular
-        // radius, not of the frame or the program, so it never enters the per-frame ring. Rebuilding it per frame
-        // would be 65.8 KB of pointless traffic; that it can be built once is the whole reason the transcendentals
-        // live on the host.
-        m_samplerTableBuffer = gpu.StorageBufferFactory.Create(
-            deviceContext: device,
-            sizeBytes: (((ulong)SdfShadowSamplerTables.WordCount) * sizeof(uint))
-        );
-
-        var samplerTable = new uint[SdfShadowSamplerTables.WordCount];
-
-        SdfShadowSamplerTables.Build(
-            destination: samplerTable,
-            sunAngularRadius: SunAngularRadius
-        );
-        m_samplerTableBuffer.Write<uint>(data: samplerTable);
         // The HOST-VISIBLE per-frame buffers are duplicated per ring slot (see FrameRingSize): slot k's copies are
         // only rewritten after slot k's fence proves frame k − FrameRingSize retired, so a frame's in-place upload
         // can never race the previous frame's in-flight reads.
@@ -886,12 +853,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             // The frame-local instance grid resolves to t42, after the brick pool's t41.
             new GpuComputeBinding(
                 Binding: FrameInstanceGridBindingIndex,
-                Kind: GpuComputeBindingKind.StorageBufferRead
-            ),
-            // The shadow sampler table, APPENDED LAST so its SRV resolves to register t43 (after the frame instance
-            // grid t42). Immutable and shared across ring slots — bound once per slot at construction, never rewritten.
-            new GpuComputeBinding(
-                Binding: SamplerTableBindingIndex,
                 Kind: GpuComputeBindingKind.StorageBufferRead
             ),
         ];
@@ -1286,11 +1247,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 binding: FrameInstanceGridBindingIndex,
                 buffer: m_instanceGridDeviceBuffer
             );
-            WriteStorageBufferReadOnly(
-                binding: SamplerTableBindingIndex,
-                buffer: m_samplerTableBuffer,
-                set: viewsSet
-            );
 
             var compositeSet = m_descriptorAllocator.AllocateSet(
                 descriptorSetLayoutHandle: m_compositePipeline.DescriptorSetLayoutHandle,
@@ -1563,7 +1519,6 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_tileBuffer.Dispose();
         m_instanceMaskBuffer.Dispose();
         m_programBuffer.Dispose();
-        m_samplerTableBuffer.Dispose();
 
         foreach (var requestBuffer in m_brickRequestBuffers) {
             requestBuffer?.Dispose();

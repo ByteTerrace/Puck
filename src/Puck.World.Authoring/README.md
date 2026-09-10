@@ -38,6 +38,7 @@ half — the reach a whole creation implies, shapes and text runs together.
 | RoundCone | lower r = 1, upper r = 0.5, height 1 | scaled per axis |
 | Torus | major 1, minor 0.4 | scaled per axis |
 | Prism | XY profile extruded along Z | profile X/Y half-extents, extrusion half-depth |
+| Superellipsoid | radii (1,1,1), `exponent` (default 2) | radius per axis |
 
 A `Prism` shape's optional `taper` is its top width divided by its bottom width:
 0 gives a triangle, 1 a rectangle, and omission uses 0.5. Rotate the shape to
@@ -45,19 +46,50 @@ reverse or redirect the taper. This makes tapered armor plates and roof sections
 without assembling them from overlapping boxes. `dilate` adds a rounded edge;
 its radius expands the authored profile rather than cutting a flat chamfer.
 An optional `profile` selects `RoundedRectangle` (`cornerRadius` is a fraction
-of the smaller half-extent), `Polygon` (`sides`, 3–32), or `Ellipse`. Omission
-uses `Trapezoid`. Extrusion caps stay flat; corner rounding shapes the outline,
+of the smaller half-extent), `Polygon` (`sides`, 3–32), `Ellipse`,
+`ChamferedRectangle` (`cornerRadius` maps to a 45-degree bevel radius instead
+of a fillet), or `Convex` (`vertices`, 3–8 clockwise points in local XY
+inside the unit square — each coordinate in [-1, 1], the frame every profile
+is scaled from and the frame the prism's cull reach covers — convex and
+non-degenerate; `cornerRadius` is a fraction of the raw vertices' own
+inradius, the profile's one rounding control). Omission uses `Trapezoid`.
+Extrusion caps stay flat; corner rounding or chamfering shapes the outline,
 while `dilate` rounds the depth edges too. Polygon and ellipse profiles scale
-their canonical outline in X/Y. These are existing VM instructions, not meshes
-or additional shader opcodes.
+their canonical outline in X/Y; a convex profile's vertices carry their own
+shape and ride the shape's scale the same way. These are existing VM
+instructions (a convex profile's vertices live in a side table the packed
+program's own word stream carries), not meshes or additional shader opcodes.
+
+A shape's optional `chamfer` (Box, Cylinder, and an extruded Prism only) cuts a
+flat 45-degree bevel — the edge treatment `dilate` explicitly does not — by a
+world-unit radius, refused by name past `SdfSolidGeometry.MaxChamfer` and
+refused by name alongside a nonzero `rounding` on the same shape. A Box emits
+as an extruded `ChamferedRectangle` at the plain Box's own outer extent and
+with its conventional edge fillet on top of the chamfer (so its collider and
+its `chamfer: 0` limit are the plain Box), a Cylinder as a revolved one; a
+Prism's chamfer instead bevels its existing profile's cap rims
+(RoundedRectangle, Trapezoid, or Ellipse profiles — a Polygon or Convex
+profile's lanes are already spoken for and reads a zero ceiling). A cap
+chamfer never erodes the profile, so its ceiling is the profile's true
+inradius and the extrude half-depth: a triangular prism admits a chamfer
+where it admits no rounding.
+
+A shape authored `type: "Superellipsoid"` generalizes `Ellipsoid` with an
+`exponent` field (finite in [2, 8]; null = 2, the ellipsoid limit — the two
+spellings then agree bit-for-bit). Larger exponents round the solid toward a
+box. Exact and 1-Lipschitz for the whole admitted range, so — unlike
+`Ellipsoid` — it earns no separate march correction.
 
 Animated and static stamps use the same profile. The deterministic field
-supports trapezoids and rounded rectangles; polygon and ellipse profiles are
-refused for field contact until that interpreter supports them. The analytic
-contact provider retains conservative primitive bounds. Character looks do not
-replace the body's authored collision kit.
-World stamps admit up to 128 shapes, including expanded text glyphs. This is
-headroom for authored detail, not a requirement to fill every slot.
+supports trapezoids, rounded rectangles, chamfered rectangles, convex
+profiles, and superellipsoids; polygon and ellipse profiles are refused for
+field contact until that interpreter supports them. The analytic contact
+provider retains conservative primitive bounds.
+Character looks do not replace the body's authored collision kit.
+World stamps admit up to `WorldPlacementPolicy.MaxShapesPerStamp` shapes
+(367), including expanded text glyphs, with a panelled shape charged as 2 and
+each of a shape's trims charged 2 more. This is headroom for authored detail,
+not a requirement to fill every slot.
 
 ## Animation: drivers, waveforms, joints
 
@@ -164,9 +196,19 @@ solid field, and simulation state are all blind to them. `CreationFrame` carries
 a swing's `pivot` and both facets' `axis` across the author frame; a half turn
 about +Y is a proper rotation, so a rotation axis takes the same
 `(−x, y, −z)` flip a direction does and the amplitude, phase, and waveform are
-unchanged. A shape carrying `domain` operators rides the placement root's
-transform rather than its own, leaving nowhere for either facet to compose, so
-the combination is refused by name.
+unchanged. A shape carrying `domain` operators admits a `parent` but never a
+facet of its own: the animated pool packs its slot with the rigid delta its
+parent's chain imparts to creation space (identity with no parent) and applies
+the domain ops against that carried frame before the shape's own static
+rest pose, so the fold plane travels with the parent — a fold rides its
+parent's frame, never its own swing, and the combination with an own
+`swings`/`slides`, a named `frames` entry, an effector-chain bone, or a look's
+`partDynamics` follower is refused by name. Only driver/effector motion reaches
+it through the chain: a `frames` pose replaces the parent's BASE pose, which is
+not part of the delta chain, so a frame-posed parent moves without its fold
+(exactly as it moves without any other child the frame does not itself name).
+The static stamper ignores `parent` entirely — a static placement carries no
+dynamic-transform buffer for a delta to ride.
 
 ## Effectors: chains, targets, planting
 
@@ -264,12 +306,222 @@ draws. An op with no expansion is refused by name on a solid placement.
 | `$type` | Builder call | Contact |
 |---|---|---|
 | `symmetry` | `SymmetryPlane(normal, offset)` | 2 copies |
-| `repeat` | `RepeatLimited(spacing, limit)` | one copy per lattice cell; needs a whole-number `limit` (an absent one is unbounded and refuses) |
-| `polar` | `RepeatPolar(count, axis, mirror, materialStride)` | `count` copies, doubled when `mirror` is set |
+| `repeat` | `RepeatLimited(spacing, limit)`, sandwiched between a translate to and from `origin` | one copy per lattice cell; needs a whole-number `limit` (an absent one is unbounded and refuses) |
+| `polar` | `RepeatPolar(count, axis, mirror, materialStride)`, sandwiched between a translate to and from `origin` | `count` copies, doubled when `mirror` is set |
 | `wallpaper` | `WallpaperFold(group, cell, limit, plane, materialStride, lodDistance)` | none — refused on a solid placement |
+
+`repeat`/`polar` carry an optional `origin` (creation units; null = the creation
+root, unchanged behaviour) — the point their fold centres on instead of the
+root, so an off-centre lattice or pivot does not saturate its cell/sector
+clamp against the wrong boundary. A repeat's physical copies sit at the same
+offsets from the fold regardless of `origin` (a translation's copies are
+origin-invariant); a polar's pivot moves with it, and its render-bound reach
+widens by twice the origin's distance from the root (`ShapeDomainOps.Reach`).
+`SdfDomainExpansion` applies the same origin to the rigid copies it derives,
+so a solid placement's colliders land where the render's fold does.
 
 Copies compose across the list, capped by `SdfDomainExpansion.DefaultCopyBudget`.
 Expansion is exact only for a prototype inside the fold's fundamental domain:
 on a symmetry plane's positive side, inside a repeat's centre cell, between a
 polar sector's walls. A prototype straddling a wall renders clipped and
 collides whole.
+
+## Field ops: Dilate, Onion, and the blend radius
+
+`ShapeDocument.Dilate`/`Onion` (an inflation radius, a shell thickness) and
+`Smooth` (the blend radius against the field accumulated before the shape) are
+creation units, but unlike `Rounding`/`Chamfer` they are never baked into the
+primitive's own local geometry — `SdfOp.Dilate`/`Onion` act on the running
+WORLD-space accumulator directly, and a `ShapeBlend` instruction's blend
+radius composes the shape's already-world-scaled candidate into it, so
+neither is reached by a preceding `Scale` chain op the way a baked-local
+modifier is. Both emission paths therefore multiply them by the placement
+scale explicitly before emission (`CreationStampEmitter.EmitShapeChain` for a
+static placement, `Client.WorldStampPool.EmitShape`/`EmitGroup` for the
+animated pool) rather than relying on the chain's own `Scale` op. `Dilate`/
+`Onion` on an otherwise scope-free shape open the same one-deep field scope a
+panel or an eccentric primitive would (below) — unscoped, they would inflate
+or hollow every shape emitted before them in the whole program, not just this
+one.
+
+## Shape panel (second-material inset)
+
+`ShapeDocument.Panel` (`ShapePanelDocument`) is a second-material inset face
+region: an eroded copy of the same primitive, offset along a local `face`
+(a direction, normalized at canonicalization; null = `+Z`; zero-length or
+non-finite refused by name) and composed with its own `material` — positive
+`depth` recesses it (Subtraction, the floor exactly `depth` below the plate's
+face) and negative raises it proud by exactly `|depth|` (Union). `inset` and
+`depth` are creation units, scaling with the placement on both emission paths
+(the static stamper's own `Scale(transform.Scale)` chain op reaches them
+automatically; the animated pool multiplies them by the placement scale
+explicitly before resolving). `inset` erodes the copy on every local axis
+(`shape scale − inset`,
+floored above zero — a sharp-cornered shrink, not a rounded Minkowski erosion,
+since nothing can isolate a `Dilate` field op to the copy alone inside the
+shared scope below), clamped to the shape's smallest local half-extent
+(`SdfSolidGeometry.HalfExtent` over X/Y/Z); `depth` clamps to `±2·h′`, `h′`
+being the ERODED copy's half-extent along `face` — deeper, a recess is an
+enclosed void and a raise a detached slab. `ShapePanelDocument.Resolve` is the
+one derivation both paths emit from: with `h` the plate's half-extent, a recess
+translates the copy by `h + h′ − depth` and a raise by `|depth| + (h − h′)`.
+`CreationDocument.StampShapeCount` charges a panelled shape as 2, and so does
+`CreationStampEmitter.PerCopyInstanceCount` (the static per-shape probe
+reservation: the copy's own transform chain and shape need a second probe
+chain's words).
+
+Both emission paths open a one-deep field scope
+(`SdfProgramBuilder.PushField`/`PopField`) around `[plate, panel]` so the
+panel's compose bites only this shape, never a sibling occupying the same
+space — `CreationStampEmitter.EmitShapeChain` (static placements) and
+`Client.WorldStampPool.EmitShape` (the animated stamp pool) — and emit the copy
+from its own `ResetPoint` chain rather than after the plate's shape
+instruction, whose emission may leave a persistent `Scale` op behind. Because
+a field scope nests no deeper than 1, a panel is refused by name wherever that
+scope would already be spent: a `Plane` (no meaningful face), a domain-folded
+shape, a grouped shape (the pool's own group scope), and a creation whose OTHER
+shapes force `CreationStampEmitter.RequiresScope` (a non-Union blend, an
+engraved text run, or a noise facet) — the static path then shares one scope
+across the whole creation, leaving a panel nowhere of its own to nest.
+
+Render-only, like `Domain`: `CreationStampEmitter.EmitFixed`/
+`VisitFixedPrimitiveCopies` never read it, so a panelled solid placement's
+collider is identical to the same shape with no panel. Verified by
+`ShapePanelLawTests`.
+
+## Shape trim (second-material band against a reference)
+
+`ShapeDocument.Trims` (`ShapeTrimDocument[]`, at most `ShapeTrimDocument.MaxTrims`
+= 4) paint a second-material band onto a shape's own surface wherever it sits
+near another, EARLIER-declared shape in the same creation — `Shape` names it
+by `ShapeDocument.Name`, mirroring `Parent`'s own "declared before" rule. A
+Subtraction cutter riding the host's own `Group` is the common case (the
+carve's own edge becomes the trim's guide); a plain plane-like Box with blend
+Union works too. Only the reference's own primitive geometry (type, scale,
+taper, profile, lift, rounding, chamfer) and pose are re-read — its own
+blend, panel, and trims play no part, and a reference carrying `Domain` ops
+or a non-zero `Group` is refused by name (its copy is re-emitted from its own
+slot and authored pose alone, so a fold's images or a group's chain could not
+be followed). `Width` (creation units, finite
+and positive) is how far outward from the reference's own surface the band
+reaches; `Material` is the band's own palette slot; `Inset` (creation units,
+`[0, ShapeTrimDocument.MaxInset]`, default `0.003`) is described below.
+`CreationDocument.StampShapeCount` charges each trim as 2 (the host's own
+copy plus the reference's own copy), matching `Panel`'s own convention.
+
+Each trim opens a scope of its own (`SdfProgramBuilder.PushField`/`PopField`)
+AFTER the host's own emission — sequential per trim, never nested (a shape
+carrying several trims opens and closes one scope per trim in turn). The
+scope composes two candidates against the host's own already-present, plain
+instance: the host's own copy, nudged narrowly CLOSER than the plain surface
+by `Inset` — a real `Dilate` field op at a POSITIVE radius, exact and
+isolated since nothing else has joined the scope's accumulator yet — then
+the reference's own copy, its own scale grown by `Width`
+(`ShapeTrimDocument.DilatedScale`, the mirror image of a panel's own eroded
+scale — a sharp-cornered growth, not a rounded Minkowski dilation), composed
+with blend Intersection. The scope pops via Union into the SAME accumulator
+the host's own plain shape already folded into: since `max(a, b) >= a`, a
+genuine EROSION of the host copy (a negative `Dilate` radius) is provably
+always beaten by that already-present plain surface and would never render —
+`Inset` growing the copy outward instead is what lets it win narrowly, and
+only near the reference (Intersection with the reference's dilated copy does
+not additionally push the candidate past the plain surface there); away from
+the reference it loses by default, since `Inset` is small.
+
+Refused by name for the same reasons `Panel` is: a shape carrying `Domain`
+ops or a non-zero `Group` (both leave the trim's scope nowhere of its own to
+open), and a creation whose OTHER shapes force
+`CreationStampEmitter.RequiresScope`. Render-only, like `Panel`:
+`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` never read it, so
+a trimmed solid placement's collider is unchanged. Verified by
+`ShapeTrimLawTests`.
+
+## Shape detail (shading-only geometry)
+
+`ShapeDocument.Detail` (bool, null = false) marks a shape SHADING-ONLY: the
+SDF VM's march (the beam, the fine march, shadow, AO) skips it entirely — it
+never carves the silhouette — and includes it only in the shading evaluation
+at an already-found hit, where its own material and its perturbation of the
+surface normal paint its footprint. A thin subtraction against a plate reads
+as a seam; a small union carrying its own material reads as a rivet; either
+stays a crisp mark at any distance instead of the dots a march-carved groove
+thinner than the footprint-relative acceptance produces.
+
+Both emission paths (`CreationStampEmitter.EmitShapeChain`,
+`Client.WorldStampPool.EmitShape`) thread `Detail` into
+`SdfSolidGeometry.AppendScaledPrimitive`'s emission of the shape's OWN
+instruction only — never into a panel's or a trim's second copy, so `Detail`
+is refused by name alongside `Panel` or `Trims` on the same shape rather than
+leaving those copies' own detail visibility undescribed.
+`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip a detail
+shape outright (no collider, not even a plain one — unlike Panel/Trims, which
+emit their host shape's own collider unchanged and only skip their second
+copy), and `WorldDefinitionValidator`'s solid-placement collider count does
+the same. Verified by `ShapeDetailLawTests`.
+
+## Sculpting: authoring creations in code (`Sculpting/`)
+
+A creation may be authored in code instead of by hand — the document stays
+the source of truth either way, since a sculpt only ever produces a patch
+over it. `CreationBuilder` is a fluent, allocation-light builder over
+`CreationDocument`: `Shape(...)` authors one shape (every `ShapeDocument`
+field, including `Chamfer`/`Panel`), enforcing the topological invariant
+(a `parent` must already be declared, ids are unique) at author time rather
+than deferring to a final pass; `Mirror(side => ...)` runs `side` once for
+`Left` (sign +1, suffix "L") then once for `Right` (sign -1, suffix "R");
+`Chain(...)` authors a parent-chained bead sequence (a braid, a tail);
+`AxisAngleDegrees`/`Multiply`/`Identity` build quaternions that INTERN by
+value — two shapes authoring the same rotation share one instance, named by
+axis letter and magnitude (`"z90"`, `"zm90"` for -90) or, for a product, by
+its two operands' names joined with `-` (`"z4-z180"`); `FixedId` pins a
+shape's id for a world's looks/parts to reference; `CarryRig` copies a
+shape's `swings`/`slides` forward by name from an existing document (the
+rig-preservation primitive every re-generation needs) and is a no-op on an
+already-referenced facet, so applying it twice changes nothing the second
+time.
+
+`StateHoisting.Apply` is the generator's post-pass, generalized: every
+interned rotation (or only ones two or more shapes share, by policy) becomes
+a shared `Text` state cell; every scale two or more shapes share becomes one
+too, its name derived from the first sharing shape's own name (trailing
+digits, then a lone trailing "L"/"R", stripped); a swing's LITERAL pivot
+equal to a named joint, or LITERAL amplitude equal to a named tuning value
+(under a caller-supplied `(driver, shapeName) -> cell` selector), binds to
+it. A value that is ALREADY a `state.<row>.<name>` reference — carried
+forward by `CarryRig` — is left untouched, which is what makes hoisting
+idempotent: applying a sculpt to its own settled output changes nothing.
+
+`SculptPatch` is the world-document patch primitive: an ordered list of
+`UpsertRow`/`RemoveRow` (by an id/name key — never an array index) and
+`SetMember`/`RemoveMember` (a dotted path whose segments may carry ONE
+`[field=value]` selector each, e.g. `looks.rows[name=moth].motion.poses`)
+operations over a raw `JsonObject`/`JsonArray` tree. It understands JSON
+only — no `Puck.World.Schema` type, since that project depends on this one
+(the reverse reference would cycle) — so a sculpt builds the sections it
+does not own a Schema type for (`render`, `rules`, `state`, `dynamics`,
+`cameras`, `views.layouts`, a look row) as raw JSON matching the document's
+own wire spelling, and its caller (the `creation.sculpt` console verb, or
+`puck creation sculpt`) is the one that serializes a `CreationDocument` row
+through `DocumentJsonOptions.Shared` and validates the patched WHOLE
+document through `WorldDefinitionSerialization`/`WorldDefinitionValidator`.
+
+`ICreationSculpt` is one registered generator: `Sculpt(SculptContext)`
+returns the `SculptPatch` it would apply, where `SculptContext.Document` is
+the world document as it stands right now (live or on disk) — a sculpt reads
+it to carry rig data forward by name; it never writes to it directly.
+`CreationSculptRegistry` ships empty — a sculpt is registered by a
+composition root or a test through `CreationSculptRegistry.Register`. Apply
+a registered sculpt live through `creation.sculpt <name>`
+(`Puck.World.Console`), or offline against a file through
+`puck creation sculpt <name> --world <path>` (`Puck.Cli`) — see that
+project's README.
+
+`SculptPatch.TouchedRows` groups a patch's results by row for a caller that
+resubmits whole rows: a `RemoveMember` is a modification of the row it
+descends into (re-upsert from the patched tree), and only a `RemoveRow` that
+found its row marks it `Removed`. `UpsertRow` into an absent section creates
+object intermediates and the array itself only at the final segment
+(`state.world` on `{}` yields `{"state":{"world":[…]}}`). A patch fault (a
+path descending through a non-object, a malformed selector) throws
+`InvalidOperationException`/`FormatException`; both callers turn it into a
+named refusal that writes and submits nothing. Laws: `SculptPatchLawTests`.

@@ -9,6 +9,7 @@ using Puck.Cli.Azure;
 using Puck.Cli.Bench;
 using Puck.Cli.Canary;
 using Puck.Cli.Citations;
+using Puck.Cli.Creation;
 using Puck.Cli.DocLinks;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Format;
@@ -43,6 +44,7 @@ internal static class PuckRootCommand {
             BundleCommand.Create(),
             CanaryCommand.Create(),
             CitationsCommand.Create(),
+            CreationCommand.Create(),
             DeclarationsCommand.Create(),
             DocLinksCommand.Create(),
             DocsBuildCommand.Create(),

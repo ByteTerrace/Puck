@@ -80,8 +80,6 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.FarBound,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.RenderScale,
-            WorldSessionLevers.ShadowAccumulation,
-            WorldSessionLevers.ShadowFarExit,
             WorldSessionLevers.ShadowMarch,
             WorldSessionLevers.ShadowMask,
             WorldSessionLevers.Shadows,

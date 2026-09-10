@@ -68,13 +68,18 @@ public sealed record WorldLookCue(
 /// resolved transform with its own personality, layered ON TOP of <see cref="Dynamics"/>. Legitimate only on a
 /// creation source (a catalog rig exports no parts); each key must name a part the creation's own part table
 /// declares.</param>
+/// <param name="Poses">A creation frame name to <c>state.&lt;row&gt;[.&lt;key&gt;]</c> map (<c>$body</c> in the key
+/// is the wearing body's index): the frame holds while its cell's stored value is nonzero, and the first holding
+/// frame in declaration order overrides the cue and replay cursor — a blink, a wince, a mouth shape the simulation
+/// schedules. Legitimate only on a creation source.</param>
 public readonly record struct WorldLookMotion(
     float GaitAmplitude,
     bool ReplayFrames,
     float SecondsPerFrame,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldLookCue>? Cues = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Dynamics = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? PartDynamics = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? PartDynamics = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, string>? Poses = null
 ) {
     /// <summary>Gets the implicit look motion — full gait, no timeline replay — every body wore before this arc.</summary>
     public static WorldLookMotion Default { get; } = new WorldLookMotion(

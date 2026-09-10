@@ -190,6 +190,67 @@ public sealed partial class SdfProgramBuilder {
             op: SdfOp.DomainWarp
         );
     }
+    /// <summary>Radial flare warp: scales the point's local XZ by <c>s(t) = 1 + amount·t + bulge·sin(π·t)</c>,
+    /// <c>t = clamp((top − y) / span, 0, 1)</c> — the study's <c>shinRadii</c>/<c>curvedSection</c> silhouette (a
+    /// limb that flares toward the hip, tapers toward the ankle, with a mid-span bulge). s(t) floors at
+    /// <see cref="FlareMinScale"/> at evaluation time, so an authored combination that drives it non-positive still
+    /// yields a finite warp. The returned distance takes the conservative <c>1/max(s)</c> size correction over the
+    /// whole span (the same channel <see cref="Scale"/>/<see cref="LogSphere"/> use); the residual shear from the
+    /// y-varying scale is a SEPARATE, reach-dependent factor <c>SdfProgram.AnalyzeLipschitz</c> folds into the
+    /// program's step clamp (see <c>SdfProgram.FlareOperatorNorm</c>), exactly as <see cref="BendY"/>/<see cref="TwistY"/>
+    /// fold their own warp rates. KEEP IN SYNC with SDF_OP_FLARE_Y in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="amount">The linear flare rate at t = 1 (s(1) = 1 + amount).</param>
+    /// <param name="bulge">The mid-span sinusoidal bulge amplitude (peaks at t = 0.5).</param>
+    /// <param name="top">The local Y where the profile begins (t = 0).</param>
+    /// <param name="span">The Y distance the profile runs over (t reaches 1 a full <paramref name="span"/> below
+    /// <paramref name="top"/>); must be finite and strictly positive.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/>, <paramref name="bulge"/> or
+    /// <paramref name="top"/> is not finite, or <paramref name="span"/> is not finite and greater than zero.</exception>
+    public SdfProgramBuilder FlareY(float amount, float bulge, float top, float span) {
+        RequireFinite(
+            value: amount,
+            paramName: nameof(amount),
+            subject: "A flare amount"
+        );
+        RequireFinite(
+            value: bulge,
+            paramName: nameof(bulge),
+            subject: "A flare bulge"
+        );
+        RequireFinite(
+            value: top,
+            paramName: nameof(top),
+            subject: "A flare top"
+        );
+        RequirePositive(
+            value: span,
+            paramName: nameof(span),
+            subject: "A flare span"
+        );
+
+        // maxS is HOST-BAKED and always >= 1 (s(0) == 1 is always a candidate for the maximum), so 1/maxS is a
+        // legitimate <= 1 conservative size correction — never a divide-by-a-near-zero.
+        var (_, maxS) = SdfProgram.FlareExtrema(
+            amount: amount,
+            bulge: bulge
+        );
+
+        return Transform(
+            data0: new Vector4(
+                w: (1f / span),
+                x: amount,
+                y: bulge,
+                z: top
+            ),
+            data1: new Vector4(
+                w: 0f,
+                x: (1f / maxS),
+                y: 0f,
+                z: 0f
+            ),
+            op: SdfOp.FlareY
+        );
+    }
     /// <summary>Elongates the shape that follows: the point clamps into a box of the given extents, sweeping the
     /// shape's cross-section over ±extents (the classic capsule-from-sphere operator).</summary>
     /// <param name="extents">The per-axis elongation half-extents (0 on an axis = no stretch there).</param>

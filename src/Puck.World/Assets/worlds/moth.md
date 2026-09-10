@@ -11,8 +11,10 @@ side braid, a five-sided ivory cowl framing the face, lilac shoulder plates, a s
 chest collar, and a small cyan clasp. Broad boots and dark joints keep the stance
 readable. Three overlapping blades on each flight vane fan out from a lower back
 hinge during flight and fold upright on landing. The creation stays within the
-128-shape stamp budget. The current 77 shapes include separate toe caps, soles,
-temple guards, shoulder layers, bracer insets, and thigh plates.
+`WorldPlacementPolicy.MaxShapesPerStamp` stamp budget (`puck creation stats
+--world src/Puck.World/Assets/worlds/moth.world.json --prototype moth` reports
+the live count against it). The shapes include separate toe caps, soles, temple
+guards, shoulder layers, bracer insets, and thigh plates.
 
 The author frame is +Y up and +Z forward, with the soles at Y=0 and the hood crown
 near Y=2.31. Parent pivots and dimensions are authored in that same frame. The
@@ -84,12 +86,23 @@ clears the contact latch so landing acquires a fresh world point.
 
 Flight opens the three blades of each vane by different amounts. Turn rate drives
 body banking and differential vane rotation; speed supplies a restrained forward
-lean. Positive and negative vertical-speed lobes add ascent and descent poses.
-These read rendered motion: the powered lift hold does not publish `Rising` and
-`Falling` during every vertical movement. Three named second-order position
-followers add progressively softer braid follow-through, while armor stays rigid.
-The rig uses eight drivers and two effectors. The shape budget leaves room for
-further refinement without removing facial or armor details to make space.
+lean. One `vertical` driver adds the ascent and descent poses: its ascending
+consumers take `halfSine` at phase 0, the descending ones the same wave a half
+turn later. These read rendered motion: the powered lift hold does not publish
+`Rising` and `Falling` during every vertical movement. The flight pose and the wing
+deployment are simulation state: the `airborne-on`/`airborne-off` rules copy the
+body's `$fact:each:Airborne` bit into the `airPose` and `airWings` cells, each
+eased through its own `dynamics` row (`flight-pose`, `wing-deploy`), and the
+`flight`/`wings` drivers read those cells through `$body` with `linear` waves, so
+every client shows the same pose at the same tick. The blink is scheduled the
+same way: `blink-close`/`blink-open` flip the `blink` cell against a `$tick`
+deadline in `blinkAt`, redrawing the rest from the `blinkRest` uniform site, and
+the look's `motion.poses` selects the `blink` frame while the cell is nonzero.
+Three named second-order position followers add progressively softer braid
+follow-through, while armor stays rigid. Every rotation, every shared scale, every
+joint pivot, and the stride/breath tuning are state cells (`mothRot`, `mothScale`,
+`mothJoints`, `mothTuning`); `world.state.cell.set mothTuning strideCadence 6.5`
+retunes the rig live. The shape budget leaves room for further refinement.
 
 This is still a motion prototype. It has no contact-normal sole alignment, authored
 directional ground gait, impact/recovery sequence, climbing transition, or hurt
@@ -122,6 +135,38 @@ The `looks` section assigns that creation to the player. The floor explicitly
 allows surface holds through `grip.holdable`, so the grounded hold wins over free
 hover on landing.
 
+The rig's shapes are authored as document data, not generated: live edits go
+through `world.row.set`/`world.row.step`, and the document is saved with
+`world.save`. No generator is shipped for this rig.
+
+### Live edits
+
+`world.row.set`/`.add`/`.remove` reach one field or one list element inside the
+`moth` row directly — no reload, no journal, applied at the next tick boundary —
+through the console path `creations` (the document's own JSON member is spelled
+`prototypes`; the console path stays `creations`, its C# section name). A shape
+is addressed by `document.shapes[name=<shapeName>]`, a palette entry by its
+0-based index:
+
+```text
+world.row.set creations moth document.shapes[name=forearmL].rounding 0.03
+world.row.set creations moth document.palette[1].specular 0.25
+world.row.add creations moth document.shapes {"id":900,"type":"Sphere","name":"probe","position":[0,2,0],"rotation":[0,0,0,1],"scale":[0.05,0.05,0.05]}
+```
+
+A field that reads a state cell (most of the rig's rotations bind
+`state.mothRot.*`) keeps its binding across an edit, and a binding can be
+written the same way: `world.row.set creations moth
+document.shapes[name=forearmL].rotation "state.mothRot.identity"`.
+
+Read a field or list back with `world.row creations moth <fieldPath>`; a bare
+list field (`document.shapes`) lists every element as `[world.row <index>:
+<name> <json>]`, and `world.row creations moth` echoes the whole row without
+its `hash`, ready to paste back through the whole-row `world.row.set creations
+<json>` (the key rides inside the JSON) with a field changed. Two edits to the
+`moth` row in the same tick window collide — fence with `world.wait` between
+them, or paste one edited whole row instead.
+
 For a repeatable takeoff, hover, and landing check, enter:
 
 ```text
@@ -151,8 +196,7 @@ and `world.ao-quality fast` expose the cheaper approximations for comparison.
 The exact shadow mask covers reserved instance pools; exact AO includes all live
 instances rather than the camera tile's candidate set.
 
-The existing shadow estimator remains stochastic. Its accumulation retains the
-previous screen pixel's value without motion reprojection, so movement can leave
-brief history trails. `world.shadow.accumulate off` isolates that behavior but
-exposes raw sample noise. Correcting the candidate masks does not fix that history
-limitation or complete the model's art refinement.
+The soft shadow is one deterministic penumbra march per lit pixel, keyed on the
+shadowing light's `angularRadius`; there is no frame history, so a moving body
+leaves no trail. `render.lighting.lights` and `render.sky.layers` are the lighting
+rig; `world.lighting` echoes them.

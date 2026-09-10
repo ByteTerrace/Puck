@@ -462,80 +462,209 @@
             "null"
           ],
           "properties": {
-            "sun": {
-              "description": "The directional sun.",
+            "lights": {
+              "description": "The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
               "type": [
-                "object",
+                "array",
                 "null"
               ],
-              "properties": {
-                "direction": {
-                  "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).",
-                  "default": null,
-                  "title": "DocumentVector3",
-                  "anyOf": [
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "number"
+              "items": {
+                "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "$type"
+                ],
+                "anyOf": [
+                  {
+                    "description": "A Lambert directional light.",
+                    "properties": {
+                      "$type": {
+                        "const": "directional"
                       },
-                      "minItems": 3,
-                      "maxItems": 3
+                      "direction": {
+                        "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
+                        "default": null,
+                        "title": "DocumentVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      },
+                      "color": {
+                        "description": "The light\u0027s linear colour.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "weight": {
+                        "description": "The diffuse weight. Absent is the pinned sun weight.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "angularRadius": {
+                        "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "shadows": {
+                        "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
+                        "type": [
+                          "boolean",
+                          "null"
+                        ],
+                        "default": null
+                      }
                     },
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                    }
-                  ]
-                },
-                "weight": {
-                  "description": "The sun\u0027s diffuse weight.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "color": {
-                  "description": "The sun\u0027s linear color \u2014 a #RRGGBB/#RRGGBBAA literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).",
-                  "default": null,
-                  "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightDirectional"
+                  },
+                  {
+                    "description": "A hemisphere ambient: a floor plus a gradient on the surface normal\u0027s Y (sky above, darker below), scaled by ambient occlusion.",
+                    "properties": {
+                      "$type": {
+                        "const": "hemisphere"
+                      },
+                      "color": {
+                        "description": "The ambient\u0027s linear colour.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "base": {
+                        "description": "The floor. Absent is the pinned ambient floor.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "gradient": {
+                        "description": "The hemisphere gradient. Absent is the pinned gradient.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightHemisphere"
+                  },
+                  {
+                    "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+                    "properties": {
+                      "$type": {
+                        "const": "rim"
+                      },
+                      "color": {
+                        "description": "The rim\u0027s linear colour.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "weight": {
+                        "description": "The strength. Absent is zero, which adds nothing.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "power": {
+                        "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightRim"
+                  }
+                ],
+                "title": "WorldRenderLight"
               },
-              "additionalProperties": false,
-              "default": null,
-              "title": "WorldRenderSun"
+              "default": null
             },
-            "ambient": {
-              "description": "The ambient (hemisphere) term.",
+            "curvature": {
+              "description": "The stylized curvature enrichment \u2014 cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.",
               "type": [
                 "object",
                 "null"
               ],
               "properties": {
-                "base": {
-                  "description": "The ambient floor.",
+                "cavity": {
+                  "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
                   "type": [
                     "number",
                     "null"
                   ],
                   "default": null
                 },
-                "hemisphere": {
-                  "description": "The hemisphere gradient, scaling surface normal Y.",
+                "rim": {
+                  "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
                   "type": [
                     "number",
                     "null"
                   ],
                   "default": null
                 },
-                "color": {
-                  "description": "The ambient linear color \u2014 BindableColor\u0027s grammar, on the same terms as Color.",
+                "ink": {
+                  "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "inkLow": {
+                  "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "inkHigh": {
+                  "description": "The curvature magnitude at which the outline saturates.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "inkColor": {
+                  "description": "BindableColor\u0027s grammar: the outline colour.",
                   "default": null,
                   "title": "BindableColor",
                   "type": [
@@ -546,7 +675,7 @@
               },
               "additionalProperties": false,
               "default": null,
-              "title": "WorldRenderAmbient"
+              "title": "WorldRenderCurvature"
             }
           },
           "additionalProperties": false,
@@ -560,221 +689,301 @@
             "null"
           ],
           "properties": {
-            "zenith": {
-              "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
-              "default": null,
-              "title": "BindableColor",
+            "layers": {
+              "description": "The layers.",
               "type": [
-                "string",
-                "null"
-              ]
-            },
-            "horizon": {
-              "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "ground": {
-              "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "fogDensity": {
-              "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
-              "type": [
-                "number",
+                "array",
                 "null"
               ],
-              "default": null
-            },
-            "sun": {
-              "description": "The visible sun disc, drawn about the lighting sun\u0027s direction. Optional; absent draws no disc.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "discRadians": {
-                  "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Controls the falloff sharpness: a smaller disc reads sharper.",
-                  "type": "number"
-                },
-                "intensity": {
-                  "description": "The disc\u0027s peak additive brightness.",
-                  "type": "number"
-                }
-              },
-              "required": [
-                "discRadians",
-                "intensity"
-              ],
-              "additionalProperties": false,
-              "default": null,
-              "title": "WorldRenderSkySun"
-            },
-            "stars": {
-              "description": "The procedural star field. Optional; absent draws no stars.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "density": {
-                  "description": "The star grid\u0027s cell count per octahedral axis. A higher value packs more, smaller stars.",
-                  "type": "number"
-                },
-                "brightness": {
-                  "description": "The peak per-star brightness.",
-                  "type": "number"
-                },
-                "seed": {
-                  "description": "The hash seed folded into every cell \u2014 a different seed reshuffles the field.",
-                  "type": "integer"
-                },
-                "twinkle": {
-                  "description": "Scintillation for a share of the stars. Optional; absent twinkles none.",
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "properties": {
-                    "share": {
-                      "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
-                      "type": "number"
+              "items": {
+                "description": "One sky layer. The $type string is the JSON discriminator.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "$type"
+                ],
+                "anyOf": [
+                  {
+                    "description": "The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.",
+                    "properties": {
+                      "$type": {
+                        "const": "gradient"
+                      },
+                      "stops": {
+                        "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "description": "One gradient stop.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "elevation": {
+                              "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
+                              "type": [
+                                "number",
+                                "null"
+                              ],
+                              "default": null
+                            },
+                            "color": {
+                              "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key\u0027s colour.",
+                              "default": null,
+                              "title": "BindableColor",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false,
+                          "title": "WorldRenderSkyStop"
+                        },
+                        "default": null
+                      }
                     },
-                    "depth": {
-                      "description": "How far a twinkling star dips below its steady brightness, in [0, 1]: 0 holds steady, 1 dips to black.",
-                      "type": "number"
-                    },
-                    "rate": {
-                      "description": "The fundamental scintillation rate in hertz; each star twinkles at a small harmonic of it.",
-                      "type": "number"
-                    }
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerGradient"
                   },
-                  "required": [
-                    "share",
-                    "depth",
-                    "rate"
-                  ],
-                  "additionalProperties": false,
-                  "default": null,
-                  "title": "WorldRenderSkyTwinkle"
-                }
-              },
-              "required": [
-                "density",
-                "brightness",
-                "seed"
-              ],
-              "additionalProperties": false,
-              "default": null,
-              "title": "WorldRenderSkyStars"
-            },
-            "clouds": {
-              "description": "The procedural cloud layer. Optional; absent draws no clouds.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "coverage": {
-                  "description": "The fraction of the sky the layer covers, in [0, 1]. Zero draws none.",
-                  "type": "number"
-                },
-                "softness": {
-                  "description": "The width of a cloud\u0027s edge, in (0, 1]: small is hard-edged cumulus, large is a diffuse haze.",
-                  "type": "number"
-                },
-                "scale": {
-                  "description": "The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1 spans about 45\u00B0 overhead). Larger is broader clouds.",
-                  "type": "number"
-                },
-                "seed": {
-                  "description": "The hash seed folded into the lattice \u2014 a different seed reshapes the layer.",
-                  "type": "integer"
-                },
-                "color": {
-                  "description": "BindableColor\u0027s grammar: the cloud colour. Optional; absent is white.",
-                  "default": null,
-                  "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "drift": {
-                  "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
-                  "default": null,
-                  "title": "DocumentVector2",
-                  "anyOf": [
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "number"
+                  {
+                    "description": "The exponential distance fog fading toward the sky gradient.",
+                    "properties": {
+                      "$type": {
+                        "const": "fog"
                       },
-                      "minItems": 2,
-                      "maxItems": 2
+                      "density": {
+                        "description": "The density per world unit. Absent is the pinned density.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
                     },
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                    }
-                  ]
-                },
-                "spin": {
-                  "description": "The layer\u0027s rotation about the zenith in radians per second \u2014 the planetary-scale turning a rotating frame gives a broad flow; positive is counter-clockwise seen from below. Optional; absent is none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "curl": {
-                  "description": "The Coriolis twist: how far, in radians, the layer is wound about the zenith at 45\u00B0 elevation, the winding falling off toward the horizon and the zenith so bands spiral in rather than shear apart. Positive winds counter-clockwise. Optional; absent is none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "shear": {
-                  "description": "The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.",
-                  "default": null,
-                  "title": "DocumentVector2",
-                  "anyOf": [
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "number"
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerFog"
+                  },
+                  {
+                    "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
+                    "properties": {
+                      "$type": {
+                        "const": "sunDisc"
                       },
-                      "minItems": 2,
-                      "maxItems": 2
+                      "light": {
+                        "description": "The Lights slot of a directional light. Absent is the shadow light, or the first directional when none shadows.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "radius": {
+                        "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "intensity": {
+                        "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
                     },
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                    }
-                  ]
-                }
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerSunDisc"
+                  },
+                  {
+                    "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection.",
+                    "properties": {
+                      "$type": {
+                        "const": "stars"
+                      },
+                      "density": {
+                        "description": "The star grid\u0027s cell count per octahedral axis. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "brightness": {
+                        "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "seed": {
+                        "description": "The hash seed folded into every cell.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "twinkle": {
+                        "description": "Scintillation for a share of the stars. Optional; absent twinkles none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "share": {
+                            "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "depth": {
+                            "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "rate": {
+                            "description": "The fundamental scintillation rate in hertz.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "default": null,
+                        "title": "WorldRenderSkyTwinkle"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerStars"
+                  },
+                  {
+                    "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.",
+                    "properties": {
+                      "$type": {
+                        "const": "clouds"
+                      },
+                      "coverage": {
+                        "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "softness": {
+                        "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "scale": {
+                        "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "seed": {
+                        "description": "The hash seed folded into the lattice.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "color": {
+                        "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "drift": {
+                        "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
+                        "default": null,
+                        "title": "DocumentVector2",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      },
+                      "spin": {
+                        "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "curl": {
+                        "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "shear": {
+                        "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
+                        "default": null,
+                        "title": "DocumentVector2",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerClouds"
+                  }
+                ],
+                "title": "WorldRenderSkyLayer"
               },
-              "required": [
-                "coverage",
-                "softness",
-                "scale",
-                "seed"
-              ],
-              "additionalProperties": false,
-              "default": null,
-              "title": "WorldRenderSkyClouds"
+              "default": null
             }
           },
           "additionalProperties": false,
@@ -813,12 +1022,12 @@
                       "null"
                     ],
                     "properties": {
-                      "sun": {
-                        "$ref": "#/properties/render/properties/lighting/properties/sun",
+                      "lights": {
+                        "$ref": "#/properties/render/properties/lighting/properties/lights",
                         "default": null
                       },
-                      "ambient": {
-                        "$ref": "#/properties/render/properties/lighting/properties/ambient",
+                      "curvature": {
+                        "$ref": "#/properties/render/properties/lighting/properties/curvature",
                         "default": null
                       }
                     },
@@ -833,51 +1042,8 @@
                       "null"
                     ],
                     "properties": {
-                      "zenith": {
-                        "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
-                        "default": null,
-                        "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "horizon": {
-                        "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
-                        "default": null,
-                        "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "ground": {
-                        "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
-                        "default": null,
-                        "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "fogDensity": {
-                        "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "sun": {
-                        "$ref": "#/properties/render/properties/sky/properties/sun",
-                        "default": null
-                      },
-                      "stars": {
-                        "$ref": "#/properties/render/properties/sky/properties/stars",
-                        "default": null
-                      },
-                      "clouds": {
-                        "$ref": "#/properties/render/properties/sky/properties/clouds",
+                      "layers": {
+                        "$ref": "#/properties/render/properties/sky/properties/layers",
                         "default": null
                       }
                     },
@@ -901,6 +1067,144 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldRenderCycle"
+        },
+        "environment": {
+          "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "softboxes": {
+              "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "description": "One analytic studio-reflection softbox: a soft, angularly-extended highlight a GGX lobe catches in its mirror direction, widened by the surface\u0027s own roughness.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "direction": {
+                    "description": "From a reflecting surface toward the softbox, any nonzero length (normalized before upload).",
+                    "title": "DocumentVector3",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
+                  },
+                  "size": {
+                    "description": "The angular half-extent (width, height) the falloff widens by, both strictly positive.",
+                    "title": "DocumentVector2",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
+                  },
+                  "color": {
+                    "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
+                    "default": null,
+                    "title": "BindableColor",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "weight": {
+                    "description": "The strength. Absent is 1.",
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "blur": {
+                    "description": "Additional falloff softening, in the same units as Size. Absent is 0.",
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "direction",
+                  "size"
+                ],
+                "additionalProperties": false,
+                "title": "WorldRenderSoftbox"
+              },
+              "default": null
+            },
+            "horizon": {
+              "description": "The reflection horizon gradient. Absent is black \u2014 contributes nothing.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "low": {
+                  "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
+                  "default": null,
+                  "title": "BindableColor",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "high": {
+                  "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
+                  "default": null,
+                  "title": "BindableColor",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderHorizon"
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderEnvironment"
+        },
+        "tonemap": {
+          "description": "The tonemap applied to the frame\u0027s final color. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
+          "enum": [
+            "None",
+            "Filmic",
+            null
+          ],
+          "default": null,
+          "title": "WorldTonemap"
         },
         "farDistance": {
           "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
@@ -9238,11 +9542,32 @@
                         "null"
                       ]
                     },
-                    "shininess": {
+                    "roughness": {
                       "type": [
                         "number",
                         "null"
                       ]
+                    },
+                    "sheen": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "metal": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "coat": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
                     }
                   },
                   "required": [
@@ -9277,7 +9602,8 @@
                         "RoundCone",
                         "Plane",
                         "Cone",
-                        "Prism"
+                        "Prism",
+                        "Superellipsoid"
                       ]
                     },
                     "position": true,
@@ -9385,6 +9711,9 @@
                               "spacing": true,
                               "limit": {
                                 "default": null
+                              },
+                              "origin": {
+                                "default": null
                               }
                             },
                             "required": [
@@ -9421,6 +9750,9 @@
                                   "integer",
                                   "null"
                                 ],
+                                "default": null
+                              },
+                              "origin": {
                                 "default": null
                               }
                             },
@@ -9595,7 +9927,9 @@
                             "Trapezoid",
                             "RoundedRectangle",
                             "Polygon",
-                            "Ellipse"
+                            "Ellipse",
+                            "ChamferedRectangle",
+                            "Convex"
                           ]
                         },
                         "cornerRadius": {
@@ -9605,12 +9939,147 @@
                         "sides": {
                           "type": "integer",
                           "default": 6
+                        },
+                        "vertices": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [
                         "kind"
                       ],
                       "additionalProperties": false,
+                      "default": null
+                    },
+                    "lift": {
+                      "enum": [
+                        "Revolve",
+                        "Extrude",
+                        null
+                      ],
+                      "default": null
+                    },
+                    "rounding": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "panel": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "inset": {
+                          "type": "number"
+                        },
+                        "depth": {
+                          "type": "number"
+                        },
+                        "material": {
+                          "type": "integer"
+                        },
+                        "face": {
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "inset",
+                        "depth",
+                        "material"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "chamfer": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "trims": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "shape": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "material": {
+                            "type": "integer"
+                          },
+                          "inset": {
+                            "type": "number",
+                            "default": 0.003
+                          }
+                        },
+                        "required": [
+                          "shape",
+                          "width",
+                          "material"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": null
+                    },
+                    "detail": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "flare": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "amount": {
+                          "type": "number"
+                        },
+                        "bulge": {
+                          "type": "number"
+                        },
+                        "span": {
+                          "type": "number"
+                        },
+                        "top": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "amount",
+                        "bulge",
+                        "span"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "exponent": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
                       "default": null
                     }
                   },
@@ -12768,6 +13237,19 @@
               },
               "partDynamics": {
                 "description": "A creation part id to dynamics row map \u2014 each named part follows the root\u0027s own resolved transform with its own personality, layered ON TOP of Dynamics. Legitimate only on a creation source (a catalog rig exports no parts); each key must name a part the creation\u0027s own part table declares.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "poses": {
+                "description": "A creation frame name to state.\u003Crow\u003E[.\u003Ckey\u003E] map ($body in the key is the wearing body\u0027s index): the frame holds while its cell\u0027s stored value is nonzero, and the first holding frame in declaration order overrides the cue and replay cursor \u2014 a blink, a wince, a mouth shape the simulation schedules. Legitimate only on a creation source.",
                 "type": [
                   "object",
                   "null"

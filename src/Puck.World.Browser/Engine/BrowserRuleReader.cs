@@ -140,6 +140,7 @@ public sealed class BrowserRuleReader : IRuleHost, IWorldRuleReader {
     RuleFact IWorldRuleReader.Read(LineOfSightOperand operand) => Record(operand: nameof(LineOfSightOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Bool));
     RuleFact IWorldRuleReader.Read(ParkedOperand operand) => Record(operand: nameof(ParkedOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
     RuleFact IWorldRuleReader.Read(UprightOperand operand) => Record(operand: nameof(UprightOperand), fact: RuleFact.Finite(value: FixedQ4816.One.Value, kind: CellKind.Fixed));
+    RuleFact IWorldRuleReader.Read(BodyFactOperand operand) => Record(operand: nameof(BodyFactOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
     RuleFact IWorldRuleReader.Read(LinkStalenessOperand operand) => Record(operand: nameof(LinkStalenessOperand), fact: RuleFact.Finite(value: 0L, kind: CellKind.Int));
     RuleFact IWorldRuleReader.Read(ChannelOperand operand) => Record(operand: nameof(ChannelOperand), fact: RuleFact.Finite(value: FixedQ4816.Zero.Value, kind: CellKind.Fixed));
     RuleFact IWorldRuleReader.Read(NearestOperand operand) => Record(operand: nameof(NearestOperand), fact: RuleFact.Finite(value: -1L, kind: CellKind.Int));

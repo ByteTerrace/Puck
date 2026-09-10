@@ -57,64 +57,204 @@
       "additionalProperties": false,
       "title": "WorldQualityPreset"
     },
-    "WorldRenderSun": {
-      "description": "One directional sun. Every field is optional individually \u2014 absent resolves to SdfFrame\u0027s pinned default for that field.",
-      "type": [
-        "object",
-        "null"
-      ],
+    "WorldRenderLightDirectional": {
+      "description": "A Lambert directional light.",
       "properties": {
+        "$type": {
+          "const": "directional"
+        },
         "direction": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).",
+          "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
           "default": null
+        },
+        "color": {
+          "description": "The light\u0027s linear colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "weight": {
-          "description": "The sun\u0027s diffuse weight.",
+          "description": "The diffuse weight. Absent is the pinned sun weight.",
           "type": [
             "number",
             "null"
           ],
           "default": null
         },
+        "angularRadius": {
+          "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "shadows": {
+          "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightDirectional"
+    },
+    "WorldRenderLightHemisphere": {
+      "description": "A hemisphere ambient: a floor plus a gradient on the surface normal\u0027s Y (sky above, darker below), scaled by ambient occlusion.",
+      "properties": {
+        "$type": {
+          "const": "hemisphere"
+        },
         "color": {
-          "description": "The sun\u0027s linear color \u2014 a #RRGGBB/#RRGGBBAA literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).",
+          "description": "The ambient\u0027s linear colour.",
           "default": null,
           "title": "BindableColor",
           "type": [
             "string",
             "null"
           ]
+        },
+        "base": {
+          "description": "The floor. Absent is the pinned ambient floor.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "gradient": {
+          "description": "The hemisphere gradient. Absent is the pinned gradient.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false,
-      "title": "WorldRenderSun"
+      "title": "WorldRenderLightHemisphere"
     },
-    "WorldRenderAmbient": {
-      "description": "The ambient (hemisphere) term. Every field is optional individually \u2014 absent resolves to SdfFrame\u0027s pinned default for that field.",
+    "WorldRenderLightRim": {
+      "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+      "properties": {
+        "$type": {
+          "const": "rim"
+        },
+        "color": {
+          "description": "The rim\u0027s linear colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "description": "The strength. Absent is zero, which adds nothing.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "power": {
+          "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightRim"
+    },
+    "WorldRenderLight": {
+      "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldRenderLightDirectional"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightHemisphere"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightRim"
+        }
+      ],
+      "title": "WorldRenderLight"
+    },
+    "WorldRenderLightList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldRenderLight"
+      }
+    },
+    "WorldRenderCurvature": {
+      "description": "The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures at each hit. Every field is optional individually \u2014 absent resolves to the engine\u0027s pinned default. The three gains share one runtime gate: while all of them are zero the renderer skips the extra field tap the curvature normal needs, so an unauthored world pays nothing.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "base": {
-          "description": "The ambient floor.",
+        "cavity": {
+          "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
           "type": [
             "number",
             "null"
           ],
           "default": null
         },
-        "hemisphere": {
-          "description": "The hemisphere gradient, scaling surface normal Y.",
+        "rim": {
+          "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
           "type": [
             "number",
             "null"
           ],
           "default": null
         },
-        "color": {
-          "description": "The ambient linear color \u2014 BindableColor\u0027s grammar, on the same terms as Color.",
+        "ink": {
+          "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "inkLow": {
+          "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "inkHigh": {
+          "description": "The curvature magnitude at which the outline saturates.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "inkColor": {
+          "description": "BindableColor\u0027s grammar: the outline colour.",
           "default": null,
           "title": "BindableColor",
           "type": [
@@ -124,51 +264,129 @@
         }
       },
       "additionalProperties": false,
-      "title": "WorldRenderAmbient"
+      "title": "WorldRenderCurvature"
     },
     "WorldRenderLighting": {
-      "description": "The scene\u0027s directional sun and ambient term \u2014 threads unchanged into the engine\u0027s existing per-frame lighting fields (SdfFrame.SunDirection/SunWeight/SunColor/AmbientBase/ AmbientHemisphere/AmbientColor). Every field, at every level, is optional individually \u2014 an absent one resolves to SdfFrame\u0027s pinned default for that field, so an unauthored section, or a partially authored one, renders exactly as a world that declares neither.",
+      "description": "The lit path\u0027s lights and stylization as world data. Absent renders the pinned sun and hemisphere an unauthored world always had; present, the list IS the lights \u2014 an authored list without a hemisphere has no ambient. Every field of every light is optional individually and resolves to the engine\u0027s pinned default for its kind.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "sun": {
-          "$ref": "#/$defs/WorldRenderSun",
-          "description": "The directional sun.",
+        "lights": {
+          "$ref": "#/$defs/WorldRenderLightList",
+          "description": "The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
           "default": null
         },
-        "ambient": {
-          "$ref": "#/$defs/WorldRenderAmbient",
-          "description": "The ambient (hemisphere) term.",
+        "curvature": {
+          "$ref": "#/$defs/WorldRenderCurvature",
+          "description": "The stylized curvature enrichment \u2014 cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.",
           "default": null
         }
       },
       "additionalProperties": false,
       "title": "WorldRenderLighting"
     },
-    "WorldRenderSkySun": {
-      "description": "The visible sun disc \u2014 an additive highlight about the lighting sun\u0027s direction.",
+    "WorldRenderSkyStop": {
+      "description": "One gradient stop.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "discRadians": {
-          "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Controls the falloff sharpness: a smaller disc reads sharper.",
-          "type": "number"
+        "elevation": {
+          "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
-        "intensity": {
-          "description": "The disc\u0027s peak additive brightness.",
-          "type": "number"
+        "color": {
+          "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key\u0027s colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
-      "required": [
-        "discRadians",
-        "intensity"
-      ],
       "additionalProperties": false,
-      "title": "WorldRenderSkySun"
+      "title": "WorldRenderSkyStop"
+    },
+    "WorldRenderSkyLayerGradient": {
+      "description": "The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.",
+      "properties": {
+        "$type": {
+          "const": "gradient"
+        },
+        "stops": {
+          "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldRenderSkyStop"
+          },
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerGradient"
+    },
+    "WorldRenderSkyLayerFog": {
+      "description": "The exponential distance fog fading toward the sky gradient.",
+      "properties": {
+        "$type": {
+          "const": "fog"
+        },
+        "density": {
+          "description": "The density per world unit. Absent is the pinned density.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerFog"
+    },
+    "WorldRenderSkyLayerSunDisc": {
+      "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
+      "properties": {
+        "$type": {
+          "const": "sunDisc"
+        },
+        "light": {
+          "description": "The Lights slot of a directional light. Absent is the shadow light, or the first directional when none shadows.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "radius": {
+          "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "intensity": {
+          "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderSkyLayerSunDisc"
     },
     "WorldRenderSkyTwinkle": {
       "description": "Scintillation: a hash-chosen share of the stars dip and recover on the simulation clock, each at its own harmonic and phase of one authored rate, so no two twinkle in step. Presentation-only, keyed on the tick.",
@@ -179,43 +397,61 @@
       "properties": {
         "share": {
           "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "depth": {
-          "description": "How far a twinkling star dips below its steady brightness, in [0, 1]: 0 holds steady, 1 dips to black.",
-          "type": "number"
+          "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "rate": {
-          "description": "The fundamental scintillation rate in hertz; each star twinkles at a small harmonic of it.",
-          "type": "number"
+          "description": "The fundamental scintillation rate in hertz.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         }
       },
-      "required": [
-        "share",
-        "depth",
-        "rate"
-      ],
       "additionalProperties": false,
       "title": "WorldRenderSkyTwinkle"
     },
-    "WorldRenderSkyStars": {
-      "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection. No texture, no session state \u2014 the identical density/seed always draws the identical field.",
-      "type": [
-        "object",
-        "null"
-      ],
+    "WorldRenderSkyLayerStars": {
+      "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection.",
       "properties": {
+        "$type": {
+          "const": "stars"
+        },
         "density": {
-          "description": "The star grid\u0027s cell count per octahedral axis. A higher value packs more, smaller stars.",
-          "type": "number"
+          "description": "The star grid\u0027s cell count per octahedral axis. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "brightness": {
-          "description": "The peak per-star brightness.",
-          "type": "number"
+          "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "seed": {
-          "description": "The hash seed folded into every cell \u2014 a different seed reshuffles the field.",
-          "type": "integer"
+          "description": "The hash seed folded into every cell.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
         },
         "twinkle": {
           "$ref": "#/$defs/WorldRenderSkyTwinkle",
@@ -223,13 +459,8 @@
           "default": null
         }
       },
-      "required": [
-        "density",
-        "brightness",
-        "seed"
-      ],
       "additionalProperties": false,
-      "title": "WorldRenderSkyStars"
+      "title": "WorldRenderSkyLayerStars"
     },
     "DocumentVector2": {
       "title": "DocumentVector2",
@@ -249,31 +480,46 @@
         }
       ]
     },
-    "WorldRenderSkyClouds": {
-      "description": "The procedural cloud layer: a deterministic hashed-lattice noise (warped, four octaves) on a plane above the camera, thresholded by coverage, drawn over the gradient, sun disc and stars and fading into the horizon. No texture, no session state \u2014 the identical settings and seed always draw the identical layer at the identical tick.",
-      "type": [
-        "object",
-        "null"
-      ],
+    "WorldRenderSkyLayerClouds": {
+      "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.",
       "properties": {
+        "$type": {
+          "const": "clouds"
+        },
         "coverage": {
-          "description": "The fraction of the sky the layer covers, in [0, 1]. Zero draws none.",
-          "type": "number"
+          "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "softness": {
-          "description": "The width of a cloud\u0027s edge, in (0, 1]: small is hard-edged cumulus, large is a diffuse haze.",
-          "type": "number"
+          "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "scale": {
-          "description": "The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1 spans about 45\u00B0 overhead). Larger is broader clouds.",
-          "type": "number"
+          "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
         },
         "seed": {
-          "description": "The hash seed folded into the lattice \u2014 a different seed reshapes the layer.",
-          "type": "integer"
+          "description": "The hash seed folded into the lattice.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
         },
         "color": {
-          "description": "BindableColor\u0027s grammar: the cloud colour. Optional; absent is white.",
+          "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
           "default": null,
           "title": "BindableColor",
           "type": [
@@ -283,11 +529,11 @@
         },
         "drift": {
           "$ref": "#/$defs/DocumentVector2",
-          "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
+          "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
           "default": null
         },
         "spin": {
-          "description": "The layer\u0027s rotation about the zenith in radians per second \u2014 the planetary-scale turning a rotating frame gives a broad flow; positive is counter-clockwise seen from below. Optional; absent is none.",
+          "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
           "type": [
             "number",
             "null"
@@ -295,7 +541,7 @@
           "default": null
         },
         "curl": {
-          "description": "The Coriolis twist: how far, in radians, the layer is wound about the zenith at 45\u00B0 elevation, the winding falling off toward the horizon and the zenith so bands spiral in rather than shear apart. Positive winds counter-clockwise. Optional; absent is none.",
+          "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
           "type": [
             "number",
             "null"
@@ -304,74 +550,60 @@
         },
         "shear": {
           "$ref": "#/$defs/DocumentVector2",
-          "description": "The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.",
+          "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
           "default": null
         }
       },
-      "required": [
-        "coverage",
-        "softness",
-        "scale",
-        "seed"
-      ],
       "additionalProperties": false,
-      "title": "WorldRenderSkyClouds"
+      "title": "WorldRenderSkyLayerClouds"
+    },
+    "WorldRenderSkyLayer": {
+      "description": "One sky layer. The $type string is the JSON discriminator.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerGradient"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerFog"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerSunDisc"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerStars"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderSkyLayerClouds"
+        }
+      ],
+      "title": "WorldRenderSkyLayer"
+    },
+    "WorldRenderSkyLayerList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/WorldRenderSkyLayer"
+      }
     },
     "WorldRenderSky": {
-      "description": "The procedural sky \u2014 a three-stop gradient, sun disc, star field, and distance fog, authored as world data. Absent is a hard gate: every existing world renders the pinned two-stop gradient and 0.015 fog density bit-exactly, as before this section existed, until it authors one.",
+      "description": "The procedural sky as an ordered stack of layers. Absent is a hard gate: the world renders the pinned two-stop gradient and fog density, as before this section existed. The layers composite in a fixed order \u2014 gradient, stars, sun disc, clouds \u2014 whatever order they are authored in; fog is read every frame on its own. A layer kind appears at most once.",
       "type": [
         "object",
         "null"
       ],
       "properties": {
-        "zenith": {
-          "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "horizon": {
-          "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "ground": {
-          "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
-          "default": null,
-          "title": "BindableColor",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "fogDensity": {
-          "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "sun": {
-          "$ref": "#/$defs/WorldRenderSkySun",
-          "description": "The visible sun disc, drawn about the lighting sun\u0027s direction. Optional; absent draws no disc.",
-          "default": null
-        },
-        "stars": {
-          "$ref": "#/$defs/WorldRenderSkyStars",
-          "description": "The procedural star field. Optional; absent draws no stars.",
-          "default": null
-        },
-        "clouds": {
-          "$ref": "#/$defs/WorldRenderSkyClouds",
-          "description": "The procedural cloud layer. Optional; absent draws no clouds.",
+        "layers": {
+          "$ref": "#/$defs/WorldRenderSkyLayerList",
+          "description": "The layers.",
           "default": null
         }
       },

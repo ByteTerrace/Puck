@@ -513,6 +513,45 @@ public static class WorldStateDocumentValues {
 
         return true;
     }
+    /// <summary>
+    /// Resolves every document-value reference in <paramref name="graph"/> against <paramref name="source"/>'s
+    /// state cells in place, retaining each reference for canonical write-back — the resolve-only sibling of
+    /// <see cref="TryFlatten"/>, for a row a mutation submits before it joins a definition: the compose boundary
+    /// resolves the submitted row against the current document's state so a validator or canonicalizer reading a
+    /// bound value ahead of the whole-candidate rehydration reads the live cell rather than throwing on an
+    /// unresolved holder.
+    /// </summary>
+    /// <remarks>The caller owns <paramref name="graph"/> exclusively, for the reason <see cref="TryRehydrate"/> copies
+    /// a whole definition: a submitted row can share value holders with the installed document, and resolving those
+    /// in place against a candidate that is then rejected would leak that candidate's state into the live
+    /// world.</remarks>
+    /// <param name="source">The document whose state answers the references.</param>
+    /// <param name="graph">The exclusively-owned graph to resolve.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when every reference resolved.</returns>
+    public static bool TryResolveGraph(WorldDefinition source, object graph, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: graph);
+        ArgumentNullException.ThrowIfNull(argument: source);
+
+        var seen = RentSeen();
+
+        try {
+            return TryVisit(
+                value: graph,
+                path: "document",
+                definition: source,
+                walk: Walk.Resolve,
+                soughtRow: null,
+                collected: null,
+                seen: seen,
+                deferDrawSites: false,
+                found: out _,
+                reason: out reason
+            );
+        } finally {
+            ReturnSeen(seen: seen);
+        }
+    }
     /// <summary>Resolves every document-value reference in <paramref name="definition"/> in place.</summary>
     /// <param name="definition">The document to resolve.</param>
     /// <param name="reason">Why a reference could not be resolved, on failure.</param>

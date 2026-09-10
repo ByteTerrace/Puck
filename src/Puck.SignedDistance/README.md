@@ -115,12 +115,24 @@ every op/shape is in the supported rigid subset — it throws naming the first
 excluded one rather than silently approximating. Excluded: `TransformDynamic`
 (no per-frame transform table in this evaluator's signature), the runtime-trig
 warps (`BendX/Y/Z`, `TwistY`, `LogSphere`, `CellJitter`, `RepeatPolar`,
-`Displace`, `DomainWarp`, `NoiseDisplace`), `WallpaperFold`, and the shapes needing runtime
+`Displace`, `DomainWarp`, `NoiseDisplace`, `FlareY`), `WallpaperFold`, and the shapes needing runtime
 transcendentals or texture sampling (`RegularPolygon`, `Star`, `Ellipse`,
 `Glyph`), plus `SampledRegion` (its brick pool is an engine resource unavailable
-to the headless evaluator). `RoundedRectangle`, `Repeat`/`RepeatLimited`/
-`SymmetryPlane`/`Elongate`/`Onion`/`Dilate` and isotropic `Scale` interpret
-directly as 1-Lipschitz operations.
+to the headless evaluator). `RoundedRectangle`, `ChamferedRectangle`,
+`Superellipsoid`, `ConvexPolygon`,
+`Repeat`/`RepeatLimited`/`SymmetryPlane`/`Elongate`/`Onion`/`Dilate` and
+isotropic `Scale` interpret directly as 1-Lipschitz operations.
+
+A `ShapeBlend` instruction carrying `SdfInstruction.Detail` composes nothing —
+this evaluator has no shade-mode counterpart to the GPU's hit-only
+re-evaluation, so a detail shape (a shading-only seam or rivet) is simply
+absent from every field it walks; a program whose only shape is flagged
+`Detail` reads exactly as shape-free.
+
+`SdfInstruction.Secondary` is the opposite exclusion set (false marks a shape
+that skips only the GPU's soft-shadow/AO field walks) and has no counterpart
+here either — this evaluator has no shadow/AO concept, so it composes a
+non-secondary shape exactly like an ordinary one.
 
 `TryDistance` culls an instance (`SdfProgram.Instances`) whose whole compose
 chain is a plain `SdfBlendOp.Union`: its authored world-space bound proves the

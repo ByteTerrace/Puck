@@ -56,30 +56,30 @@ public sealed class PresentationReadsStateLawTests {
     [Fact]
     public void SkyZenith_BoundToStateTextCell_RecolorsOnTheNextEmit_WithNoRebake() {
         var track = new WorldRenderCycleTrack();
-        var sky = new WorldRenderSky(Zenith: new BindableColor(Raw: "state.colors.zenith"));
+        var sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(Elevation: -1f, Color: new BindableColor(Raw: "#000000")), new WorldRenderSkyStop(Elevation: 1f, Color: new BindableColor(Raw: "state.colors.zenith"))])]);
         var colorsRow = new WorldStateRow(Name: CellName.Parse(candidate: "colors"), Kind: CellKind.Text, Cells: [new StateCell(Key: CellName.Parse(candidate: "zenith"), Text: "#112233")]);
         var first = track.Resolve(definition: (Fixtures.BuildDocument().WithWorldState(rows: [colorsRow]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } }), revision: 1, tick: 0UL);
 
-        Assert.Equal(expected: new Vector3(x: (0x11 / 255f), y: (0x22 / 255f), z: (0x33 / 255f)), actual: first.SkyZenithColor);
+        Assert.Equal(expected: new Vector3(x: (0x11 / 255f), y: (0x22 / 255f), z: (0x33 / 255f)), actual: first.GetSkyStop(index: 1).Color);
 
         var moved = new WorldStateRow(Name: CellName.Parse(candidate: "colors"), Kind: CellKind.Text, Cells: [new StateCell(Key: CellName.Parse(candidate: "zenith"), Text: "#AABBCC")]);
         var second = track.Resolve(definition: (Fixtures.BuildDocument().WithWorldState(rows: [moved]) with { RenderRaw = WorldRenderDefaults.Absent with { Sky = sky } }), revision: 2, tick: 0UL);
 
         // No re-bake: the same track instance, told only that the revision moved, reads the new cell straight through.
-        Assert.Equal(expected: new Vector3(x: (0xAA / 255f), y: (0xBB / 255f), z: (0xCC / 255f)), actual: second.SkyZenithColor);
+        Assert.Equal(expected: new Vector3(x: (0xAA / 255f), y: (0xBB / 255f), z: (0xCC / 255f)), actual: second.GetSkyStop(index: 1).Color);
     }
     // BindableColor's grammar carries an accepted alpha suffix WorldColor's own #RRGGBB-only dialect refused —
     // resolved as opaque (alpha ignored) here, matching every other opaque render-path color.
     [Fact]
     public void SkyZenith_AcceptsAnAlphaSuffixLiteral_IgnoringAlpha() {
         var track = new WorldRenderCycleTrack();
-        var definition = Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Sky = new WorldRenderSky(Zenith: new BindableColor(Raw: "#1B2350FF")) } };
+        var definition = Fixtures.BuildDocument() with { RenderRaw = WorldRenderDefaults.Absent with { Sky = new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [new WorldRenderSkyStop(Elevation: -1f, Color: new BindableColor(Raw: "#000000")), new WorldRenderSkyStop(Elevation: 1f, Color: new BindableColor(Raw: "#1B2350FF"))])]) } };
 
         Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: definition, reason: out var reason), userMessage: reason);
 
         var settings = track.Resolve(definition: definition, revision: 1, tick: 0UL);
 
-        Assert.Equal(expected: new Vector3(x: (0x1B / 255f), y: (0x23 / 255f), z: (0x50 / 255f)), actual: settings.SkyZenithColor);
+        Assert.Equal(expected: new Vector3(x: (0x1B / 255f), y: (0x23 / 255f), z: (0x50 / 255f)), actual: settings.GetSkyStop(index: 1).Color);
     }
 
     // --- The binding overlay swapped on a fact ---

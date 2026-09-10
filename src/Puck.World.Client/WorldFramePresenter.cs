@@ -1493,51 +1493,17 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             DisableAmbientOcclusion = !m_settings.AmbientOcclusion,
             DisableSoftShadows = (m_settings.ShadowReach <= 0f),
             // Ambient occlusion — the world.ao toggle rides the DisableAmbientOcclusion lane.
-            // Far-field isolators (world.far-field): both features ship ON, so the frame's flags are the negated
-            // "disable" side of each toggle.
+            // The far-field isolator (world.far-field) ships ON, so the frame's flag is the negated "disable" side.
             DisableFarBound = !m_settings.FarBound,
-            DisableShadowEscapeExit = !m_settings.ShadowFarExit,
-            // Temporal accumulation ships ON — the raw two-sample estimate is a three-level quantity and reads as
-            // stipple on its own. The flag is the negated "disable" side, exactly like the far-field isolators.
-            DisableShadowAccumulation = !m_settings.ShadowAccumulation,
             DynamicTransforms = transforms,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
-            // Lighting/sky: the static render.lighting/render.sky values (WorldRenderSettings resolves every absent
-            // field to SdfFrame's own pinned default, so an unauthored world uploads exactly what the frame already
-            // defaulted to), or this frame's point along render.cycle when the world authors one.
-            SunDirection = lighting.SunDirection,
-            SunWeight = lighting.SunWeight,
-            SunColor = lighting.SunColor,
-            AmbientBase = lighting.AmbientBase,
-            AmbientHemisphere = lighting.AmbientHemisphere,
-            AmbientColor = lighting.AmbientColor,
-            SkyEnabled = lighting.SkyEnabled,
-            SkyZenithColor = lighting.SkyZenithColor,
-            SkyHorizonColor = lighting.SkyHorizonColor,
-            SkyGroundColor = lighting.SkyGroundColor,
-            SkyFogDensity = lighting.SkyFogDensity,
-            SkySunDiscRadians = lighting.SkySunDiscRadians,
-            SkySunDiscIntensity = lighting.SkySunDiscIntensity,
-            SkyStarDensity = lighting.SkyStarDensity,
-            SkyStarBrightness = lighting.SkyStarBrightness,
-            SkyStarSeed = lighting.SkyStarSeed,
-            SkyStarTwinkleShare = lighting.SkyStarTwinkleShare,
-            SkyStarTwinkleDepth = lighting.SkyStarTwinkleDepth,
-            SkyStarTwinkleRate = lighting.SkyStarTwinkleRate,
-            SkyCloudColor = lighting.SkyCloudColor,
-            SkyCloudCoverage = lighting.SkyCloudCoverage,
-            SkyCloudSoftness = lighting.SkyCloudSoftness,
-            SkyCloudScale = lighting.SkyCloudScale,
-            SkyCloudSeed = lighting.SkyCloudSeed,
-            SkyCloudDrift = lighting.SkyCloudDrift,
-            SkyCloudSpin = lighting.SkyCloudSpin,
-            SkyCloudCurl = lighting.SkyCloudCurl,
-            SkyCloudShear = lighting.SkyCloudShear,
-            // The area-light shadow estimator's net index, taken from the DETERMINISTIC 240 Hz tick counter and never
-            // from m_elapsedSeconds — the sampler is seekable so that a replay at tick N draws the identical sun-disc
-            // directions, which a wall-clock accumulation would destroy.
+            // The environment: the static render.lighting/render.sky lanes, or this frame's point along
+            // render.cycle when the world authors one (a world.row.set render lands on the next frame).
+            Environment = lighting,
+            // The sky's clock (twinkle, cloud motion), taken from the deterministic tick counter and never from
+            // m_elapsedSeconds so a replay at tick N draws the identical sky.
             SampleIndex = ((uint)m_simulation.ElapsedTicks),
             ShadowDistanceScale = ((m_settings.ShadowReach >= 1f)
             ? 0f

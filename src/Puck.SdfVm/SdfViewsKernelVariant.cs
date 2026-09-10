@@ -55,6 +55,9 @@ public static class SdfViewsKernelVariants {
                         case SdfShapeType.Sphere:
                         case SdfShapeType.Plane:
                         case SdfShapeType.RoundedRectangle:
+                        // ChamferedRectangle's evaluateShape case sits outside both strip guards in sdf-vm.hlsli (a CORE
+                        // shape beside RoundedRectangle), so a chamfered program stays on the core-ops interpreter.
+                        case SdfShapeType.ChamferedRectangle:
                         case SdfShapeType.ScreenSlab:
                         case SdfShapeType.Glyph:
                         // A SampledRegion (baked carve brick) is compiled into BOTH views variants (its evaluateShape
@@ -93,6 +96,7 @@ public static class SdfViewsKernelVariants {
                 case SdfOp.Displace:
                 case SdfOp.DomainWarp:
                 case SdfOp.NoiseDisplace:
+                case SdfOp.FlareY:
                     return $"op {instruction.Op}";
                 case SdfOp.ShapeBlend:
                     switch ((SdfShapeType)instruction.Shape) {
@@ -100,6 +104,8 @@ public static class SdfViewsKernelVariants {
                         case SdfShapeType.Star:
                         case SdfShapeType.Trapezoid:
                         case SdfShapeType.Ellipse:
+                        case SdfShapeType.Superellipsoid:
+                        case SdfShapeType.ConvexPolygon:
                             return $"shape {((SdfShapeType)instruction.Shape)}";
                         default:
                             break;

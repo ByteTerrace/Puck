@@ -40,6 +40,19 @@ never a Vulkan or DirectX type by name.
   (`mapGradCore`) replaces the classic four-tap finite-difference probe,
   cutting the hottest kernel's per-pixel cost while improving cross-backend
   parity.
+- *Shading-only detail shapes:* a shape instruction flagged
+  `SdfInstruction.Detail` is invisible to every march (beam, fine, shadow, AO)
+  and appears only in the hit-only normal/material re-evaluation `renderView`
+  runs at an already-found surface point — a seam or rivet too thin for the
+  footprint-relative march to resolve at distance stays a crisp mark instead
+  of dotting out.
+- *Non-secondary shapes and gradient-scaled shadow/AO:* `SdfInstruction.Secondary`
+  is Detail's opposite exclusion set — false drops a shape from ONLY the
+  soft-shadow and ambient-occlusion marches, while it still marches for the
+  camera and still collides. Both marches also de-scale by the hit's own local
+  field gradient magnitude, on top of the program's Lipschitz `stepScale`
+  clamp, so a non-unit-gradient shape (an eccentric ellipsoid, a `FlareY` warp)
+  does not fatten its own penumbra or AO term.
 
 ## 🎬 The render pipeline
 

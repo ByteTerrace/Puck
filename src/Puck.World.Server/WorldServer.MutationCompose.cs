@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
+
 using Puck.World.Protocol;
 
 namespace Puck.World.Server;
@@ -518,6 +521,54 @@ public sealed partial class WorldServer {
         message: $"no WorldSection arm for mutation kind '{mutation.GetType().Name}' — every kind must map to its authorizing section."
     ),
     };
+    // A submitted row whose document carries `state.` references, resolved against the current definition's state
+    // before anything in its compose arm reads a bound value. The copy is private (the row's own JSON round trip
+    // through the same JsonTypeInfo the console and the wire parse it with): a submitter's row can share value
+    // holders with the installed document — a sculpt carries unchanged shapes forward by reference — and resolving
+    // those in place against a candidate that is then rejected would leak the rejected state into the live world,
+    // the same reason WorldStateDocumentValues.TryRehydrate copies a whole definition. A row carrying no reference
+    // is handed back untouched.
+    private static bool TryResolveSubmittedRow<TRow>(WorldDefinition current, TRow row, JsonTypeInfo<TRow> typeInfo, string kind, string id, out TRow resolved, out string reason) where TRow : class {
+        if (!WorldStateDocumentValues.HasReference(graph: row)) {
+            resolved = row;
+            reason = string.Empty;
+
+            return true;
+        }
+
+        TRow copy;
+
+        try {
+            copy = (JsonSerializer.Deserialize(
+                jsonTypeInfo: typeInfo,
+                utf8Json: JsonSerializer.SerializeToUtf8Bytes(
+                    jsonTypeInfo: typeInfo,
+                    value: row
+                )
+            ) ?? throw new InvalidOperationException(message: $"{kind} '{id}' deserialized to null."));
+        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            resolved = row;
+            reason = $"{kind} '{id}': {exception.Message.ReplaceLineEndings(replacementText: " ")}";
+
+            return false;
+        }
+
+        if (!WorldStateDocumentValues.TryResolveGraph(
+            graph: copy,
+            reason: out var resolveReason,
+            source: current
+        )) {
+            resolved = row;
+            reason = $"{kind} '{id}': {resolveReason}";
+
+            return false;
+        }
+
+        resolved = copy;
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Owns canonical document validation and authored-hash matching at the mutation composition boundary.</summary>
     // `hash` is the row's AUTHORED hash lane (a creation's HashRaw, a tune/patch's stored Hash) — never a computed
     // property, whose canonicalize-on-read would throw on a hostile document in the caller's own argument list,
@@ -642,13 +693,26 @@ public sealed partial class WorldServer {
 
         var stateRow = StateRowOf(mutation: mutation);
 
-        if (
-            (stateRow is not null) &&
-            !WorldStateDocumentValues.TryRefresh(
+        if (stateRow is not null) {
+            if (!WorldStateDocumentValues.TryRefresh(
                 definition: candidate,
                 reason: out reason,
                 refreshed: out candidate,
                 rowName: stateRow
+            )) {
+                return false;
+            }
+        } else if (
+            // The mirror of the state-write refresh above: a row write that introduces a bound value (a creation
+            // whose shapes read `state.` cells, a placement whose position names one) resolves it against the
+            // candidate's own state through the same whole-candidate rehydration, so validation and every derived
+            // rebuild read a resolved holder. A mutation carrying no reference pays one cached-shape walk over its
+            // own payload and nothing more.
+            WorldStateDocumentValues.HasReference(graph: mutation) &&
+            !WorldStateDocumentValues.TryRehydrate(
+                definition: candidate,
+                reason: out reason,
+                refreshed: out candidate
             )
         ) {
             return false;
@@ -911,10 +975,27 @@ public sealed partial class WorldServer {
 
                 return true;
             case WorldMutation.UpsertCreation m: {
-                    if (!TryCanonicalizeDocument(
-                        document: m.Creation.Document,
+                    // The canonicalizer reads bound values (a shape's pose, a driver's cadence) ahead of the
+                    // whole-candidate rehydration TryCompose runs after this arm, so a submitted document carrying
+                    // `state.` references resolves against the current definition's state here, on a private copy.
+                    if (!TryResolveSubmittedRow(
+                        current: current,
                         id: m.Creation.Id,
-                        hash: m.Creation.HashRaw,
+                        kind: "creation",
+                        reason: out reason,
+                        resolved: out var creation,
+                        row: m.Creation,
+                        typeInfo: WorldJsonContext.Default.WorldPrototype
+                    )) {
+                        candidate = current;
+
+                        return false;
+                    }
+
+                    if (!TryCanonicalizeDocument(
+                        document: creation.Document,
+                        id: creation.Id,
+                        hash: creation.HashRaw,
                         kind: "creation",
                         canonicalize: static (document, source) => Puck.World.Authoring.CreationCanonicalizer.Canonicalize(
                             document: document,
@@ -931,7 +1012,7 @@ public sealed partial class WorldServer {
                     candidate = (current with {
                         CreationsRaw = Upsert(
                         list: current.Creations,
-                        item: (m.Creation with { Document = canonicalDocument }),
+                        item: (creation with { Document = canonicalDocument }),
                         keyOf: static creation => creation.Id.Value
                     ),
                     });

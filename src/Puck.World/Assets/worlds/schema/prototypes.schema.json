@@ -56,11 +56,32 @@
                     "null"
                   ]
                 },
-                "shininess": {
+                "roughness": {
                   "type": [
                     "number",
                     "null"
                   ]
+                },
+                "sheen": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "metal": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "coat": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
                 }
               },
               "required": [
@@ -95,7 +116,8 @@
                     "RoundCone",
                     "Plane",
                     "Cone",
-                    "Prism"
+                    "Prism",
+                    "Superellipsoid"
                   ]
                 },
                 "position": true,
@@ -203,6 +225,9 @@
                           "spacing": true,
                           "limit": {
                             "default": null
+                          },
+                          "origin": {
+                            "default": null
                           }
                         },
                         "required": [
@@ -239,6 +264,9 @@
                               "integer",
                               "null"
                             ],
+                            "default": null
+                          },
+                          "origin": {
                             "default": null
                           }
                         },
@@ -413,7 +441,9 @@
                         "Trapezoid",
                         "RoundedRectangle",
                         "Polygon",
-                        "Ellipse"
+                        "Ellipse",
+                        "ChamferedRectangle",
+                        "Convex"
                       ]
                     },
                     "cornerRadius": {
@@ -423,12 +453,147 @@
                     "sides": {
                       "type": "integer",
                       "default": 6
+                    },
+                    "vertices": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "default": null
                     }
                   },
                   "required": [
                     "kind"
                   ],
                   "additionalProperties": false,
+                  "default": null
+                },
+                "lift": {
+                  "enum": [
+                    "Revolve",
+                    "Extrude",
+                    null
+                  ],
+                  "default": null
+                },
+                "rounding": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "panel": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "inset": {
+                      "type": "number"
+                    },
+                    "depth": {
+                      "type": "number"
+                    },
+                    "material": {
+                      "type": "integer"
+                    },
+                    "face": {
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "inset",
+                    "depth",
+                    "material"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "chamfer": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "trims": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "shape": {
+                        "type": "string"
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "material": {
+                        "type": "integer"
+                      },
+                      "inset": {
+                        "type": "number",
+                        "default": 0.003
+                      }
+                    },
+                    "required": [
+                      "shape",
+                      "width",
+                      "material"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": null
+                },
+                "detail": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "flare": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "amount": {
+                      "type": "number"
+                    },
+                    "bulge": {
+                      "type": "number"
+                    },
+                    "span": {
+                      "type": "number"
+                    },
+                    "top": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "amount",
+                    "bulge",
+                    "span"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "exponent": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
                   "default": null
                 }
               },

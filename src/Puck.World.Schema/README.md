@@ -1500,9 +1500,9 @@ against the hosting world: creation palette entries, a screen text source's
 names no declared text cell, or one whose text is not a hex color; the
 `CreationCanonicalizer` admits only the binding's syntax (a creation on its own
 has no world to resolve against — the world validator resolves it at the
-placement). `render.lighting`/`render.sky` colors and every `render.cycle`
-key's speak `BindableColor` instead — the theme vocabulary's generalized form
-of the identical binding grammar (an accepted `#RRGGBBAA` alpha is ignored;
+placement). `render.lighting`/`render.sky`/`render.environment` colors and
+every `render.cycle` key's speak `BindableColor` instead — the theme
+vocabulary's generalized form of the identical binding grammar (an accepted `#RRGGBBAA` alpha is ignored;
 the render path is opaque), resolved at emit by `WorldRenderCycleTrack`
 against the routed definition with no re-bake, so a cell write recolors the
 sky on the next frame. Identity, profile, and `seatDefaults` neutral colors

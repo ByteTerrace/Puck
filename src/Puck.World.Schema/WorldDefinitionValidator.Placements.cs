@@ -516,6 +516,13 @@ public static partial class WorldDefinitionValidator {
                     if (shapes[index].Type == SdfSolidPrimitive.Plane) {
                         errors.Add(item: $"{path} creation '{fromCreation.PrototypeId}' shape {index} is an unbounded plane, not a finite body volume.");
                     }
+
+                    // The body collider reads each copy's per-axis-scaled local box; a revolve reads scale.z as a
+                    // radial offset, so that box would sit inside the solid a body must stop at (the same refusal a
+                    // solid placement row carries).
+                    if (shapes[index].Lift is SdfLift.Revolve) {
+                        errors.Add(item: $"{path} creation '{fromCreation.PrototypeId}' shape {index} lifts by revolve; a revolve reads scale.z as a radial offset, which the body collider's per-axis local box does not describe. Use the extrude lift on a body-collider creation.");
+                    }
                 }
                 break;
             default:
@@ -535,6 +542,7 @@ public static partial class WorldDefinitionValidator {
 
         for (var index = 0; (index < drivers.Count); index++) {
             RequireGateTokens(
+                definition: definition,
                 errors: errors,
                 gate: drivers[index].When,
                 path: $"{path}.drivers[{index}].when"
@@ -542,23 +550,14 @@ public static partial class WorldDefinitionValidator {
 
             var signal = drivers[index].Signal;
 
-            if (!Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: signal)) {
-                continue;
-            }
-            if (
-                !WorldColor.TryParseBinding(
-                key: out _,
-                row: out var rowName,
-                value: signal!
-            ) ||
-                (WorldDefinitionRows.FindStateRow(
-                rows: definition.State,
-                name: rowName
-            ) is not { } row)
-            ) {
-                errors.Add(item: $"{path}.drivers[{index}].signal '{signal}' names no declared state row.");
-            } else if (row.Kind is not (CellKind.Int or CellKind.Fixed)) {
-                errors.Add(item: $"{path}.drivers[{index}].signal '{signal}' names a {StateSpelling.Kind(kind: row.Kind)} row; a signal reads an int or fixed cell.");
+            if (Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: signal)) {
+                RequireNumericStateReference(
+                    definition: definition,
+                    errors: errors,
+                    path: $"{path}.drivers[{index}].signal",
+                    reference: signal!,
+                    subject: "a signal"
+                );
             }
         }
 
@@ -566,6 +565,7 @@ public static partial class WorldDefinitionValidator {
 
         for (var index = 0; (index < effectors.Count); index++) {
             RequireGateTokens(
+                definition: definition,
                 errors: errors,
                 gate: effectors[index].When,
                 path: $"{path}.effectors[{index}].when"
@@ -618,13 +618,44 @@ public static partial class WorldDefinitionValidator {
     // The gate vocabulary is split across two assemblies on purpose — the fact names are the simulation's — so the
     // creation's own canonicalizer can only judge a gate's shape. This validator sees both, and a token naming no
     // fact is refused here by name rather than left to gate its driver off silently at the consumer.
-    private static void RequireGateTokens(IReadOnlyList<string>? gate, List<string> errors, string path) {
+    // A state reference a presentation consumer reads as a number: the row must exist and be numeric; the key is not
+    // checked against the row's cells, since '$body' resolves per reading body and an absent cell reads zero.
+    private static void RequireNumericStateReference(WorldDefinition definition, string reference, List<string> errors, string path, string subject) {
+        if (
+            !WorldColor.TryParseBinding(
+            key: out _,
+            row: out var rowName,
+            value: reference
+        ) ||
+            (WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: rowName
+        ) is not { } row)
+        ) {
+            errors.Add(item: $"{path} '{reference}' names no declared state row.");
+        } else if (row.Kind is not (CellKind.Int or CellKind.Fixed)) {
+            errors.Add(item: $"{path} '{reference}' names a {StateSpelling.Kind(kind: row.Kind)} row; {subject} reads an int or fixed cell.");
+        }
+    }
+    private static void RequireGateTokens(WorldDefinition definition, IReadOnlyList<string>? gate, List<string> errors, string path) {
         if (gate is null) {
             return;
         }
 
         for (var index = 0; (index < gate.Count); index++) {
             var token = gate[index];
+
+            if (Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: token)) {
+                RequireNumericStateReference(
+                    definition: definition,
+                    errors: errors,
+                    path: $"{path}[{index}]",
+                    reference: token,
+                    subject: "a gate token"
+                );
+
+                continue;
+            }
 
             if (
                 string.Equals(
@@ -650,7 +681,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            errors.Add(item: $"{path}[{index}] '{token}' names no body fact; a gate token is a BodyFacts name, \"{CreationDriverDocument.TokenMoving}\", \"{CreationDriverDocument.TokenStill}\", or \"{CreationDriverDocument.WhenAlways}\".");
+            errors.Add(item: $"{path}[{index}] '{token}' names no body fact; a gate token is a BodyFacts name, \"{CreationDriverDocument.TokenMoving}\", \"{CreationDriverDocument.TokenStill}\", \"{CreationDriverDocument.WhenAlways}\", or a state.<row>[.<key>] reference.");
         }
     }
     private static void RequireCurveRow(WorldDefinition definition, List<string> errors, string path, string? wave) {
@@ -1192,7 +1223,7 @@ public static partial class WorldDefinitionValidator {
     // the GPU-safety MaxLookScale ceiling, and non-negative motion values — rejecting a zero-hold replay (an infinite
     // loop) and a timeline replay on a catalog source (no timeline to replay) LOUDLY, never silently. Returns the
     // resolved look-name set (a future Inhabit facet resolves its Look against it).
-    private static HashSet<string> ValidateLooks(IReadOnlyList<WorldLook> looks, HashSet<string> prototypeIds, IReadOnlyList<WorldPrototype> creations, ISet<string> dynamicsNames, List<string> errors) {
+    private static HashSet<string> ValidateLooks(WorldDefinition definition, IReadOnlyList<WorldLook> looks, HashSet<string> prototypeIds, IReadOnlyList<WorldPrototype> creations, ISet<string> dynamicsNames, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < looks.Count); index++) {
@@ -1293,6 +1324,37 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.motion.replayFrames requires a positive secondsPerFrame (a zero-hold replay is an infinite loop).");
             }
 
+            if (look.Motion.Poses is { } poses) {
+                var poseFrames = ((!isCatalog && (look.Source is WorldLookSource.Creation poseCreation))
+                    ? WorldDefinitionRows.FindCreation(creations: creations, id: poseCreation.PrototypeId)?.Document.Frames
+                    : null
+                );
+
+                if (isCatalog) {
+                    errors.Add(item: $"{path}.motion.poses cannot be set on a catalog source — there is no timeline to select from.");
+                }
+
+                foreach (var (frame, reference) in poses) {
+                    var posePath = $"{path}.motion.poses['{frame}']";
+
+                    if (!isCatalog && !(poseFrames ?? []).Any(predicate: candidate => string.Equals(a: candidate?.Name, b: frame, comparisonType: StringComparison.Ordinal))) {
+                        errors.Add(item: $"{posePath} names no frame of the look's creation timeline.");
+                    }
+
+                    if (!Puck.World.Authoring.CreationDriverDocument.IsStateSignal(signal: reference)) {
+                        errors.Add(item: $"{posePath} '{reference}' must be a state.<row>[.<key>] reference.");
+                    } else {
+                        RequireNumericStateReference(
+                            definition: definition,
+                            errors: errors,
+                            path: posePath,
+                            reference: reference,
+                            subject: "a pose selector"
+                        );
+                    }
+                }
+            }
+
             if (look.Motion.Cues is { } cues) {
                 var frames = ((!isCatalog && (look.Source is WorldLookSource.Creation cueCreation))
                     ? WorldDefinitionRows.FindCreation(creations: creations, id: cueCreation.PrototypeId)?.Document.Frames
@@ -1360,10 +1422,18 @@ public static partial class WorldDefinitionValidator {
 
                     if (
                         !isCatalog &&
-                        (resolvedCreation is { } partCreation) &&
-                        !(partCreation.Document.Parts ?? []).Any(predicate: part => string.Equals(a: part.Id, b: partId, comparisonType: StringComparison.Ordinal))
+                        (resolvedCreation is { } partCreation)
                     ) {
-                        errors.Add(item: $"{path}.motion.partDynamics['{partId}'] names no part of creation '{partCreation.Id}'.");
+                        var part = (partCreation.Document.Parts ?? []).FirstOrDefault(predicate: part => string.Equals(a: part.Id, b: partId, comparisonType: StringComparison.Ordinal));
+
+                        if (part is null) {
+                            errors.Add(item: $"{path}.motion.partDynamics['{partId}'] names no part of creation '{partCreation.Id}'.");
+                        } else if ((partCreation.Document.Shapes ?? []).Any(predicate: shape => (shape.Id == part.ShapeId) && (shape.Domain is { Count: > 0 }))) {
+                            // A domain-bearing shape's slot carries its parent's delta frame, not a pose of its own
+                            // (Client.WorldStampPool.PackTransforms), so a follower has no pose to ease — the same
+                            // reason such a shape refuses its own swing/slide and a frame pose.
+                            errors.Add(item: $"{path}.motion.partDynamics['{partId}'] names part '{partId}' of creation '{partCreation.Id}', whose shape {part.ShapeId} carries domain operators — a fold rides its parent's frame and has no pose of its own to ease.");
+                        }
                     }
 
                     RequireDeclared(
@@ -1648,8 +1718,21 @@ public static partial class WorldDefinitionValidator {
                         var variantColliders = 0L;
 
                         foreach (var solidShape in (variantCreation.Document.Shapes ?? [])) {
+                            // A detail shape is shading-only — it never reaches either contact compiler, so it
+                            // contributes no collider and none of this shape's own admission rules apply to it.
+                            if (solidShape.Detail == true) {
+                                continue;
+                            }
+
                             if (requiresField && solidShape.Profile?.Kind is SdfPrismProfileKind.Polygon or SdfPrismProfileKind.Ellipse) {
                                 errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} uses profile {solidShape.Profile.Kind}; this profile has no deterministic field-contact evaluator. Use an analytic contact provider or a supported contact shape.");
+                            }
+
+                            // Both contact compilers read a per-axis-scaled local box off SdfSolidGeometry.GetLocalBounds.
+                            // A revolve reads scale.z as a radial offset rather than an extent, so that box would not
+                            // describe the solid a body stands on. Renderable everywhere; refused where contact is owed.
+                            if (solidShape.Lift is SdfLift.Revolve) {
+                                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} lifts by revolve; a revolve reads scale.z as a radial offset, which no contact compiler's per-axis local box describes. Use the extrude lift on a solid row.");
                             }
 
                             if (!ShapeDomainOps.TryExpand(

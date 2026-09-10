@@ -247,7 +247,7 @@ public sealed class AbsentDerivationLawTests {
                   "document": {
                     "schema": "puck.creation.v1",
                     "name": "pip",
-                    "palette": [{ "color": "#CCCCCC", "emissive": 0, "specular": 0, "shininess": 0 }],
+                    "palette": [{ "color": "#CCCCCC", "emissive": 0, "specular": 0, "roughness": 0 }],
                     "shapes": [
                       {
                         "id": 0, "name": "pip", "type": "Sphere",
@@ -273,7 +273,7 @@ public sealed class AbsentDerivationLawTests {
         var document = new CreationDocument(
             Schema: CreationDocument.CurrentSchema,
             Name: "quat-round-trip",
-            Palette: [new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 0, Shininess: 0, Specular: 0)],
+            Palette: [new PaletteEntryDocument(Color: "#CCCCCC", Emissive: 0, Specular: 0, Roughness: 0)],
             Shapes: [
                 new ShapeDocument(
                     Id: 0,

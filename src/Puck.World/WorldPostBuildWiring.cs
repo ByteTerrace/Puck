@@ -428,10 +428,17 @@ internal static class WorldPostBuildWiring {
         // before that frame writes nothing at all. Left alone, the caller's only evidence is the arming echo, which
         // is indistinguishable from a capture that succeeded — the silent-success shape this repository has already
         // been bitten by. Say it out loud instead, at ApplicationStopped (every hosted service has stopped, so the
-        // render loop is provably finished and an outstanding request provably never will be served). Presentation-
-        // only: a headless boot has no render probe and world.screenshot refuses there anyway.
+        // render loop is provably finished and an outstanding request provably never will be served). The scheduled
+        // `captures` rows drain FIRST, at the same instant: a station whose readback landed on the run's last
+        // composed frame has no later tick-complete hook to manifest it, so WorldCaptureScheduler.Drain finalizes it
+        // here — otherwise the PNG exists, stderr says it was captured, and manifest.json silently lacks the row.
+        // Presentation-only: a headless boot has no render probe and world.screenshot refuses there anyway.
         if (services.GetService<WorldRenderProbe>() is { } renderProbe) {
+            var captureScheduler = services.GetRequiredService<WorldCaptureScheduler>();
+
             services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: () => {
+                captureScheduler.Drain();
+
                 if (renderProbe.Render?.PendingCapturePath is { } pending) {
                     Console.Error.WriteLine(value: $"[world.screenshot] WARNING: a capture of {pending} was still pending when the run ended — no frame composed after it was armed, so NO FILE WAS WRITTEN.");
                 }

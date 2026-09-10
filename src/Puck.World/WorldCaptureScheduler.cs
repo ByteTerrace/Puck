@@ -25,9 +25,10 @@ internal sealed record WorldCaptureManifest(string Schema, string Backend, strin
 }
 /// <summary>
 /// Arms captures at the document's scheduled authority ticks. The inside-check and state hash describe the arming
-/// tick; rendering happens later and may observe subsequent simulation work. On a later tick-complete hook, the
-/// exact request's completion permits PNG decoding, census calculation and manifest writing, or reports failure.
-/// This schedule does not make a composed frame an exact-tick simulation snapshot.
+/// tick; rendering happens later and may observe subsequent simulation work. On a later tick-complete hook — or at
+/// <see cref="Drain"/>, once the run has ended — the exact request's completion permits PNG decoding, census
+/// calculation and manifest writing, or reports failure. This schedule does not make a composed frame an exact-tick
+/// simulation snapshot.
 /// </summary>
 /// <remarks>
 /// The camera-inside check reads <see cref="WorldServer.SolidField"/> — the same field <c>world.collision.probe</c>
@@ -115,6 +116,27 @@ internal sealed class WorldCaptureScheduler {
                 tick: tick
             );
         }
+    }
+
+    /// <summary>The run-end drain. A capture whose readback lands on the LAST composed frame before the host stops
+    /// has no later tick-complete hook to finalize it — the parity leg's <c>quit</c> is consumed at the top of the
+    /// host loop, before the pump would publish another tick — so the scheduler finalizes it here instead. Called
+    /// at <c>ApplicationStopped</c>, when every hosted service has stopped and the render chain is disposed: a
+    /// completed request is manifested exactly as a tick-complete hook would; an unserved one is reported by name,
+    /// since no frame will ever serve it.</summary>
+    public void Drain() {
+        if (m_pending is not { } pending) {
+            return;
+        }
+
+        if (pending.Request.Completion.IsCompleted) {
+            FinalizePending();
+
+            return;
+        }
+
+        m_pending = null;
+        Console.Error.WriteLine(value: $"[captures] {pending.Station} tick {pending.Tick}: the capture was still pending when the run ended — no frame composed after it was armed, so the manifest omits it.");
     }
 
     private void Arm(WorldCaptureRow row, ulong tick) {

@@ -20,13 +20,22 @@ public abstract record SdfDomainOp {
     /// <summary>Bounded linear domain repeat — <see cref="SdfProgramBuilder.RepeatLimited"/>.</summary>
     /// <param name="Spacing">The per-axis cell spacing.</param>
     /// <param name="Limit">The per-axis repeat-cell limit; the lattice spans cell indices -limit..+limit.</param>
-    public sealed record Repeat(Vector3 Spacing, Vector3 Limit) : SdfDomainOp;
+    /// <param name="Origin">The point the lattice folds around, in the frame this op evaluates in (zero = the
+    /// creation origin, the pre-existing fold centre). A nonzero origin sandwiches the fold between a translate to
+    /// and from the origin, so cell selection is centred on it instead of the creation root — the lattice of
+    /// physical copies itself (their spacing, count) is unchanged; only which point resolves to which copy moves.
+    /// Zero is byte-identical to the origin-free fold.</param>
+    public sealed record Repeat(Vector3 Spacing, Vector3 Limit, Vector3 Origin = default) : SdfDomainOp;
     /// <summary>Angular domain repeat — <see cref="SdfProgramBuilder.RepeatPolar"/>.</summary>
     /// <param name="Count">The sector count around the axis.</param>
     /// <param name="Axis">The rotation axis; the fold acts in the plane perpendicular to it.</param>
     /// <param name="Mirror">Whether adjacent sectors mirror across their shared bisector.</param>
     /// <param name="MaterialStride">The per-sector palette stride (0 = geometric only).</param>
-    public sealed record Polar(int Count, SdfPolarAxis Axis = SdfPolarAxis.Y, bool Mirror = false, int MaterialStride = 0) : SdfDomainOp;
+    /// <param name="Origin">The point the sector fold pivots around, in the frame this op evaluates in (zero = the
+    /// creation origin, the pre-existing pivot). A nonzero origin sandwiches the fold between a translate to and
+    /// from the origin, so sectors fan out around it instead of the creation root. Zero is byte-identical to the
+    /// origin-free fold.</param>
+    public sealed record Polar(int Count, SdfPolarAxis Axis = SdfPolarAxis.Y, bool Mirror = false, int MaterialStride = 0, Vector3 Origin = default) : SdfDomainOp;
     /// <summary>Wallpaper-group lattice fold — <see cref="SdfProgramBuilder.WallpaperFold"/>.</summary>
     /// <param name="Group">The wallpaper group.</param>
     /// <param name="Cell">The lattice cell extents in the fold plane.</param>
@@ -74,16 +83,20 @@ public static class SdfDomainOps {
                 normal: symmetry.Normal,
                 offset: symmetry.Offset
             ),
-            SdfDomainOp.Repeat repeat => chain.RepeatLimited(
-                limit: repeat.Limit,
-                spacing: repeat.Spacing
-            ),
-            SdfDomainOp.Polar polar => chain.RepeatPolar(
-                axis: polar.Axis,
-                count: polar.Count,
-                materialStride: polar.MaterialStride,
-                mirror: polar.Mirror
-            ),
+            SdfDomainOp.Repeat repeat => chain.Translate(offset: repeat.Origin)
+                .RepeatLimited(
+                    limit: repeat.Limit,
+                    spacing: repeat.Spacing
+                )
+                .Translate(offset: -repeat.Origin),
+            SdfDomainOp.Polar polar => chain.Translate(offset: polar.Origin)
+                .RepeatPolar(
+                    axis: polar.Axis,
+                    count: polar.Count,
+                    materialStride: polar.MaterialStride,
+                    mirror: polar.Mirror
+                )
+                .Translate(offset: -polar.Origin),
             SdfDomainOp.Wallpaper wallpaper => chain.WallpaperFold(
                 cell: wallpaper.Cell,
                 group: wallpaper.Group,

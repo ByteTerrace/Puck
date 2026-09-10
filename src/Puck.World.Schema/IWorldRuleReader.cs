@@ -16,6 +16,7 @@ public interface IWorldRuleReader : IRuleReader {
     RuleFact Read(LineOfSightOperand operand);
     RuleFact Read(ParkedOperand operand);
     RuleFact Read(UprightOperand operand);
+    RuleFact Read(BodyFactOperand operand);
     RuleFact Read(LinkStalenessOperand operand);
     RuleFact Read(ChannelOperand operand);
     RuleFact Read(NearestOperand operand);

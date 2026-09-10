@@ -26,10 +26,6 @@ public static class WorldSessionLevers {
     public const string MasterVolume = "volume";
     /// <summary>The render scale (<c>world.render-scale</c>).</summary>
     public const string RenderScale = "render-scale";
-    /// <summary>The shadow accumulation toggle (<c>world.shadow.accumulate</c>).</summary>
-    public const string ShadowAccumulation = "shadow.accumulate";
-    /// <summary>The soft-shadow light-side early exit (<c>world.far-field shadow</c>).</summary>
-    public const string ShadowFarExit = "far-field.shadow";
     /// <summary>The shadow march tier ordinal (<c>world.shadow-march</c>).</summary>
     public const string ShadowMarch = "shadow-march";
     /// <summary>The shadow mask tier ordinal (<c>world.shadow-mask</c>).</summary>
@@ -82,14 +78,6 @@ public static class WorldSessionLevers {
         sink.Register(
             name: FarBound,
             setter: lever => settings.FarBound = Flag(lever: lever)
-        );
-        sink.Register(
-            name: ShadowFarExit,
-            setter: lever => settings.ShadowFarExit = Flag(lever: lever)
-        );
-        sink.Register(
-            name: ShadowAccumulation,
-            setter: lever => settings.ShadowAccumulation = Flag(lever: lever)
         );
         sink.Register(
             name: ShadowMask,

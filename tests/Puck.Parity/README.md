@@ -6,7 +6,10 @@ row advanced by rules on `$tick` thresholds, a `select` camera program
 dispatching one authored pose per station, and tick-scheduled `captures` rows
 that land the frames and write the `puck.parity.manifest.v1` the comparator
 consumes. `parity.sdf.json` is its companion `puck.sdf.v1` document
-(`world.sdf.load`), carrying the SDF-program stations.
+(`world.sdf.load`), carrying the SDF-program stations. `parity.world.json`'s
+own `prototypes`/`placements` sections carry the `vocabulary` station's
+creation content directly (a `puck.creation.v1` document, not a raw SDF op
+stream).
 
 | Station | Stresses |
 |---|---|
@@ -14,6 +17,7 @@ consumes. `parity.sdf.json` is its companion `puck.sdf.v1` document
 | `materials` | Two SDF primitives with distinct materials — silhouette edges and specular. |
 | `lattice` | A `state.lattices` height-field — the fields-to-pixels path. |
 | `noise` | `noiseDisplace` + `cellJitter` — `sdfPcg3d` agreement on SPIR-V and DXIL. |
+| `vocabulary` | The `vocabRig` creation (`prototypes`/`placements`): a chamfered Box, a Prism with a `ChamferedRectangle` profile and a recessed panel, a Cylinder with a chamfer and a raised panel, a `symmetry`-folded pair riding a `parent`'s swing, and a `repeat` (with an `origin`) plate — placed twice, at placement scale 1 and 2. The panels and the fold's swing are driver-fed presentation facets; `WorldStampPool` only advances a driver's phase for a body-rooted registration (`live.BodyIndex`), so this row-rooted placement's swing composes the identity every tick — the two scheduled ticks render byte-identical frames. |
 
 `parity.contract.json` is the per-station comparison contract (tile size,
 per-tile mean/max delta ceilings, census floors). It is versioned beside the

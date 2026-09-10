@@ -11,10 +11,14 @@ public sealed partial class SdfProgram {
     // The operand lanes a shape carries as reinterpreted integer BITS rather than a float value, as a bit per lane over
     // (Data0.xyzw, Data1.xyzw). A bit pattern there reads as NaN or an infinity as often as it reads as a number, so the
     // finiteness sweep must skip exactly these and no others. KEEP IN SYNC with the asuint() reads in
-    // Assets/Shaders/Sdf/sdf-vm.hlsli: sdfGlyphUnpackUv(data0.x)/sdfGlyphUnpackUv(data0.y) and sdfSampledRegion's
-    // asuint(data1.y) packedDims / asuint(data1.z) brickWordOffset.
+    // Assets/Shaders/Sdf/sdf-vm.hlsli: sdfGlyphUnpackUv(data0.x)/sdfGlyphUnpackUv(data0.y), sdfSampledRegion's
+    // asuint(data1.y) packedDims / asuint(data1.z) brickWordOffset, and sdfConvexPolygonSolid's asuint(data0.x)
+    // (table offset, vertex count) — patched from a finite 0f placeholder to its real packed value AFTER this sweep
+    // runs (see PatchConvexPolygonProfileOffsets), so registering the lane here is a defense against a future caller
+    // re-running this check post-patch, not a fix for today's ordering.
     private const uint GlyphReinterpretedLanes = 0b0000_0011u;
     private const uint SampledRegionReinterpretedLanes = 0b0110_0000u;
+    private const uint ConvexPolygonReinterpretedLanes = 0b0000_0001u;
 
     private static readonly string[] OperandLaneNames = ["Data0.x", "Data0.y", "Data0.z", "Data0.w", "Data1.x", "Data1.y", "Data1.z", "Data1.w"];
 
@@ -41,6 +45,7 @@ public sealed partial class SdfProgram {
             ? (((SdfShapeType)instruction.Shape) switch {
                 SdfShapeType.Glyph => GlyphReinterpretedLanes,
                 SdfShapeType.SampledRegion => SampledRegionReinterpretedLanes,
+                SdfShapeType.ConvexPolygon => ConvexPolygonReinterpretedLanes,
                 _ => 0u,
             })
             : 0u
@@ -70,6 +75,70 @@ public sealed partial class SdfProgram {
             );
         }
     }
+    // Every ConvexPolygon shape instruction must have exactly one matching vertex-list profile (PatchConvexPolygonProfileOffsets
+    // has nowhere else to read the table offset it patches into Data0.x from), every claimed instruction index must
+    // be a real ConvexPolygon instruction and claimed at most once, and every profile's vertex count must sit in the
+    // supported range. Run early (before AnalyzeBounds/packing touch m_instructions) so a caller mistake fails with
+    // a message naming the instruction, not a confusing crash deep in the packer.
+    private void ValidateConvexPolygonProfiles(string paramName) {
+        var claimed = new HashSet<int>();
+
+        foreach (var (instructionIndex, vertices) in m_convexPolygonProfiles) {
+            if (
+                (instructionIndex < 0) ||
+                (instructionIndex >= m_instructions.Length)
+            ) {
+                throw new ArgumentException(
+                    message: $"A convex-polygon profile names instruction index {instructionIndex}, outside this program's {m_instructions.Length} instructions.",
+                    paramName: paramName
+                );
+            }
+
+            var instruction = m_instructions[instructionIndex];
+
+            if (
+                (instruction.Op != SdfOp.ShapeBlend) ||
+                (((SdfShapeType)instruction.Shape) != SdfShapeType.ConvexPolygon)
+            ) {
+                throw new ArgumentException(
+                    message: $"A convex-polygon profile names instruction {instructionIndex}, which is not a ConvexPolygon shape.",
+                    paramName: paramName
+                );
+            }
+
+            if (!claimed.Add(item: instructionIndex)) {
+                throw new ArgumentException(
+                    message: $"Instruction {instructionIndex} is claimed by more than one convex-polygon profile.",
+                    paramName: paramName
+                );
+            }
+
+            if (
+                (vertices.Length < SdfPrismProfile.MinConvexVertices) ||
+                (vertices.Length > SdfPrismProfile.MaxConvexVertices)
+            ) {
+                throw new ArgumentException(
+                    message: $"A convex-polygon profile at instruction {instructionIndex} must carry {SdfPrismProfile.MinConvexVertices}..{SdfPrismProfile.MaxConvexVertices} vertices; got {vertices.Length}.",
+                    paramName: paramName
+                );
+            }
+        }
+
+        for (var index = 0; (index < m_instructions.Length); index++) {
+            var instruction = m_instructions[index];
+
+            if (
+                (instruction.Op == SdfOp.ShapeBlend) &&
+                (((SdfShapeType)instruction.Shape) == SdfShapeType.ConvexPolygon) &&
+                !claimed.Contains(item: index)
+            ) {
+                throw new ArgumentException(
+                    message: $"Instruction {index} is a ConvexPolygon shape with no matching convex-polygon profile.",
+                    paramName: paramName
+                );
+            }
+        }
+    }
     private static void RequirePackedBlend(uint blend, int index, string paramName) {
         if (!Enum.IsDefined(value: ((SdfBlendOp)blend))) {
             throw new ArgumentException(
@@ -93,11 +162,21 @@ public sealed partial class SdfProgram {
                 (material.Emissive < 0f) ||
                 !float.IsFinite(f: material.Specular) ||
                 (material.Specular < 0f) ||
-                !float.IsFinite(f: material.Shininess) ||
-                (material.Shininess < 0f)
+                !float.IsFinite(f: material.Roughness) ||
+                (material.Roughness < 0f) ||
+                (material.Roughness > 1f) ||
+                !float.IsFinite(f: material.Sheen) ||
+                (material.Sheen < 0f) ||
+                (material.Sheen > 1f) ||
+                !float.IsFinite(f: material.Metal) ||
+                (material.Metal < 0f) ||
+                (material.Metal > 1f) ||
+                !float.IsFinite(f: material.Coat) ||
+                (material.Coat < 0f) ||
+                (material.Coat > 1f)
             ) {
                 throw new ArgumentOutOfRangeException(
-                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, and shininess values; got {material}.",
+                    message: $"Material {index} must carry finite, non-negative albedo, emissive, and specular, with roughness/sheen/metal/coat finite in [0, 1]; got {material}.",
                     paramName: paramName
                 );
             }
@@ -307,6 +386,13 @@ public sealed partial class SdfProgram {
             }
 
             if (instruction.Op != SdfOp.ShapeBlend) {
+                if (instruction.Detail) {
+                    throw new ArgumentException(
+                        message: $"Instruction {index} carries Detail but is not a ShapeBlend instruction; Detail marks a shape as shading-only and is meaningful only on SdfOp.ShapeBlend.",
+                        paramName: instructionsParamName
+                    );
+                }
+
                 continue;   // Every other op's Shape/Blend/Material lanes carry op-specific data (a fold's axis, a jitter's noise flavor and variant count), not these domains.
             }
 

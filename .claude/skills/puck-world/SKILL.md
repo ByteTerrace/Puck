@@ -10,13 +10,89 @@ Creation shapes support `type: "Prism"`: an XY profile extruded along Z.
 `taper` gives top/bottom width in [0, 1] (default 0.5). Zero makes a triangle,
 one a rectangle. It uses the existing Trapezoid/Extrude VM path in both static
 and animated emission and the deterministic contact field. Optional `profile`
-selects RoundedRectangle (cornerRadius fraction), Polygon (3–32 sides), or
-Ellipse; null uses Trapezoid. Polygon/Ellipse are renderable but refused by the
-deterministic field; RoundedRectangle is supported there. Other types refuse
-`taper` and `profile`. The stamp budget is 128 shapes, including expanded glyphs; the matched
-CPU/HLSL instance ceiling is 32768. Verify profile admission and surfaces with
+selects RoundedRectangle (cornerRadius fraction), Polygon (3–32 sides),
+Ellipse, ChamferedRectangle (cornerRadius fraction, mapped to a 45-degree
+chamfer instead of a fillet), or Convex (3–8 clockwise `vertices` inside the unit square — the frame every profile is scaled from, and the frame the Prism's cull reach covers — `cornerRadius`
+reused as a uniform corner-rounding fraction of the raw profile's own inradius —
+the exact iq polygon SDF, refused by name when the vertices are not a
+well-formed clockwise convex hull); null uses Trapezoid. Polygon/Ellipse are
+renderable but refused by the deterministic field; RoundedRectangle,
+ChamferedRectangle, and Convex are supported there. Optional `lift` (`extrude` default, `revolve`)
+revolves the profile about local Y with `scale.z` as the radial offset (zero = a
+solid of revolution); a solid placement refuses a revolve. Optional `rounding`
+(Prism, Cylinder) fillets every edge by a world-unit radius, refused by name
+past `SdfSolidGeometry.MaxRounding` — a trapezoid profile's ceiling is bound by
+its narrower end, so a Cone (a sharp apex) has no room and refuses any rounding;
+a Convex profile's `cornerRadius` already owns the profile's own rounding, so
+this separate field reads a zero ceiling there too. Optional `chamfer`
+(Box, Cylinder, and an extruded Prism only) bevels every edge at 45 degrees by a
+world-unit radius instead of filleting it, refused by name past
+`SdfSolidGeometry.MaxChamfer` and refused by name alongside a nonzero `rounding`
+on the same shape; a Box emits as an extruded ChamferedRectangle and a Cylinder
+as a revolved one, while a Prism's chamfer bevels its existing profile's cap
+rims (RoundedRectangle/Trapezoid/Ellipse profiles only — a Polygon or Convex
+profile's lanes are already full and reads a zero ceiling). Other types refuse
+`taper`, `profile`, `lift`, `rounding`, and `chamfer`. A shape authored
+`type: "Superellipsoid"` generalizes Ellipsoid with an `exponent` field, finite
+in [2, 8] (null = 2, the ellipsoid limit — the two spellings agree bit-for-bit
+there); larger exponents round the solid toward a box (a "squircle"). Exact
+and 1-Lipschitz for the whole admitted exponent range — a proven fact, not
+merely a claim: see `SdfProgramBuilder.Superellipsoid`'s remarks for the
+derivation and `SuperellipsoidLawTests` for the numeric proof. Other types
+refuse `exponent`. The stamp budget is `WorldPlacementPolicy.MaxShapesPerStamp` = 367
+shapes, including expanded glyphs — a panelled shape (below) charges 2; the matched CPU/HLSL
+instance ceiling is 65536 (the stamp pool's own worst-case draw is
+`WorldPlacementPolicy.MaxStampRegistrations x MaxShapesPerStamp` = 46976; the shipped overworld's
+whole COMPOSED boot probe — the presenter's four emitters, the ten adjacency bands' reservations
+included — measures 61392 instances, 4144 of headroom under the ceiling at 367, and drops below the
+4096-instance floor at 368; the scene emitter alone reads 59712 and under-counts by the adjacency and
+field reservations — see `WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom`).
+Verify profile admission and surfaces with
 `AuthoredShapeAdmissionLawTests` / `SdfTrapezoidProfileLawTests`, and capacity with
 `WorldRenderEnvelopeLawTests` plus a real rendered world.
+
+A shape's `panel` (`ShapePanelDocument`) is a second-material inset face region: an eroded copy of
+the same primitive, offset along a local `face` (a direction, normalized; null = `+Z`; zero-length
+refused by name) and composed with its own `material` — `depth` positive recesses it (Subtraction,
+the floor exactly `depth` below the plate's face) and negative raises it proud by exactly `|depth|`
+(Union); `inset` erodes the copy on every local axis, refused by name past the shape's smallest
+local half-extent (`SdfSolidGeometry.HalfExtent`), and `depth` is refused by name past `±2·h′`
+(`h′` = the eroded copy's own half-extent along `face`). Both are creation units — the animated
+pool scales them by the placement — and `ShapePanelDocument.Resolve` is the one placement
+derivation both emission paths read; the static per-shape probe reserves two chains per panelled
+shape (`CreationStampEmitter.PerCopyInstanceCount`). Render-only — the deterministic contact field never reads it, so a
+panelled solid placement's collider is unchanged. Refused by name on a Plane, a domain-folded or
+grouped shape, and a creation that otherwise needs its own field scope (a sibling's non-Union blend,
+an engraved text run, or a noise facet) — a panel's own one-deep field scope has nowhere to nest
+inside one a caller already opened. Verify with `ShapePanelLawTests`.
+
+A creation may be authored in code instead of by hand, through the sculpting
+library in `Puck.World.Authoring/Sculpting` (`CreationBuilder`/`StateHoisting`/
+`SculptPatch`/`ICreationSculpt`/`CreationSculptRegistry`) — see that project's
+README for the primitives; the shipped registry carries no sculpts, so one is
+registered by a composition root or a test. The document
+stays the source of truth either way: a sculpt only ever produces a patch a
+caller applies, validates, and (for the live world) composes into ordinary
+`WorldMutation` rows through the `world.row.set`/`.remove` section table under
+the issuing principal (`creation.sculpt <name>`) or writes to disk offline
+(`puck creation sculpt <name> --world <path>`) — it never bypasses
+whole-document revalidation or the per-section `Mutate` grant check.
+
+A shape carrying `domain` (Symmetry/Repeat/Polar…) admits a `parent` too: it
+rides its own per-shape slot, packed with the rigid delta the parent's chain
+imparts to creation space (identity with no parent, translation in placement
+units), and its chain mirrors the static stamper's — `Scale(placementScale)`,
+the domain ops, then its own static rest pose — so a fold plane travels with
+the parent's driver/effector motion at any look scale; its cull bound rides
+that slot with the static stamper's `RenderReach` radius (rest offset plus
+fold displacement plus primitive reach). It refuses an own `swings`/`slides`
+(a fold rides its parent's frame, never its own swing), a named `frames`
+entry (its geometry never reads a captured pose — and a frame posing its
+PARENT moves the parent alone, since a frame replaces a base pose outside the
+delta chain), an effector-chain bone, and a look `partDynamics` follower (no
+pose of its own to ease). A `parts` entry may name it: both part-pose readers
+(`TryBodyPartPose`, `TryBodyPartAuthoredPose`) compose its rest pose onto the
+carried frame and agree. Pinned by `CreationDomainParentLawTests`.
 
 Creation-driver transitions: `blendInSeconds`/`blendOutSeconds` are optional,
 finite non-negative exponential time constants (null = 0.15 s; zero = immediate
@@ -545,7 +621,11 @@ choosing fixed-point primitives on sim value paths.
   refuses. `$upright:<bodyRef>` (a body's own up
   axis dotted against gravity-up) is the reserved channel a piece's own
   occupancy derive gates on, so a knocked-over piece reads as displaced
-  rather than occupying its last resting cell.
+  rather than occupying its last resting cell. `$fact:<bodyRef>:<fact>` reads
+  one live `BodyFacts` bit (`Airborne`, `Grounded`, …) as 1/0 — the door a
+  rule writes a body's transient into a world row through (an eased
+  `airPose` cell a creation's drivers then read), where `$identity:` is the
+  persisted fact lane.
   See [references/documents.md](references/documents.md)'s
   `state.lattices` section and `Puck.World.Schema/README.md`'s
   tabletop-primitive section; the garden's `chessBoard` is the worked example.
@@ -560,12 +640,13 @@ choosing fixed-point primitives on sim value paths.
   `WorldPlacementPolicy.MaxStampRegistrations`) indices and emits later active
   bodies through the coarse crowd representation. Existing shipped worlds may
   still author 128 with seats 0–3 local and 124 simulated.
-- `SdfProgramBuilder.MaxInstances = 32768` — the per-tile mask width scales
+- `SdfProgramBuilder.MaxInstances = 65536` — the per-tile mask width scales
   with DECLARED instances, which is why the frame source emits active
   avatars only and the render envelope is probed at construction
   (`WorldRenderEnvelope.TryFit` is the apply-time capacity gate).
-- The per-pixel soft-shadow gather addresses ≤1024 instances; beyond that
-  the engine falls back to coarser camera-tile masking.
+- The per-pixel soft-shadow gather addresses ≤2048 mask words (all 65536
+  instance slots); beyond that the engine falls back to coarser camera-tile
+  masking.
 - `OffscreenRenderBudget.RegisteredViews = 64` (Puck.Abstractions.Presentation; the validator caps `cameras` by the same constant) — never register a rendered view per
   population entry.
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`:

@@ -86,7 +86,6 @@ public sealed partial class SdfWorldEngine {
                 Array.Clear(array: m_boundScreenSourceViews[0]);
                 Array.Clear(array: m_boundGlyphAtlasViews);
                 m_hasPreviousFrameSignature = false;
-                m_shadowAccumulationResetFrames = ShadowAccumulationResetFrames;
             }
 
             m_loadedKernels = kernels;

@@ -68,7 +68,7 @@ public sealed class SdfDebugScene {
     public const float DefaultCarveSmoothK = 0.15f;
     /// <summary>The carve-pool cap — the frame source folds a worst-case pool of this many carves into its capacity
     /// probe (each carve is one static subtraction instance), so a live carve can never outgrow the engine's frozen
-    /// buffers. Sized to sit comfortably under <see cref="SdfProgramBuilder.MaxInstances"/> (32768); raised 1024→4096
+    /// buffers. Sized to sit comfortably under <see cref="SdfProgramBuilder.MaxInstances"/> (65536); raised 1024→4096
     /// when the mask-first instance cull flattened the beam's O(instances) wall.</summary>
     public const int MaxCarves = 4096;
     /// <summary>The op-stack cap — the frame source folds a worst-case stack of this many ops into its capacity probe,

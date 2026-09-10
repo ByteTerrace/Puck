@@ -63,7 +63,7 @@ public static class SdfDocumentDecoder {
     /// <c>world.sdf.load</c> before the read completes (a <see cref="System.IO.FileInfo"/> length check, never a
     /// read-then-measure), so a multi-gigabyte file is rejected before it is read, hashed, or DOM-parsed. Derived from
     /// <see cref="MaxMaterials"/>/<see cref="MaxOps"/> with generous headroom: a maximal material entry
-    /// (<c>{"albedo":[...],"emissive":...,"specular":...,"shininess":...}</c>) and a maximal op (the largest is
+    /// (<c>{"albedo":[...],"emissive":...,"specular":...,"roughness":...,"sheen":...}</c>) and a maximal op (the largest is
     /// <c>plane</c>'s 6 members, each a number or 3-array) each run well under 256 bytes even generously
     /// pretty-printed, so <see cref="MaxMaterials"/> materials + <see cref="MaxOps"/> ops top out around 74 KiB
     /// (32 + 256 = 288 entries × 256 bytes); this constant is roughly 100× that, comfortably fitting any legitimately
@@ -77,7 +77,7 @@ public static class SdfDocumentDecoder {
     public const string Schema = "puck.sdf.v1";
 
     private static readonly string[] RootMembers = ["schema", "materials", "ops"];
-    private static readonly string[] MaterialMembers = ["albedo", "emissive", "specular", "shininess"];
+    private static readonly string[] MaterialMembers = ["albedo", "emissive", "specular", "roughness", "sheen"];
     private static readonly Dictionary<string, SdfDocumentOpKind> OpKinds = new(comparer: StringComparer.Ordinal) {
         ["reset"] = SdfDocumentOpKind.Reset,
         ["translate"] = SdfDocumentOpKind.Translate,
@@ -344,9 +344,10 @@ public static class SdfDocumentDecoder {
                 );
             }
 
-            // AddMaterial's RequireNonNegative covers all four channels (a negative reflectance/emissive/specular
-            // strength or Blinn-Phong exponent has no physical reading) — refused HERE now, not inherited from the
-            // builder's throw (see the type remarks).
+            // AddMaterial's RequireNonNegative/RequireUnitRange covers all five channels (a negative
+            // reflectance/emissive/specular strength has no physical reading) — the sign check on albedo/emissive/
+            // specular is refused HERE, not inherited from the builder's throw (see the type remarks); an
+            // out-of-[0,1] roughness/sheen is inherited from AddMaterial's own refusal instead.
             var albedo = ReadNonNegativeVector3(
                 context: $"{context}.albedo",
                 element: albedoElement
@@ -371,22 +372,33 @@ public static class SdfDocumentDecoder {
                 )
                 : 0f
             );
-            var shininess = (members.TryGetValue(
-                key: "shininess",
-                value: out var shininessElement
+            var roughness = (members.TryGetValue(
+                key: "roughness",
+                value: out var roughnessElement
             )
                 ? ReadNonNegativeFloat(
-                    context: $"{context}.shininess",
-                    element: shininessElement
+                    context: $"{context}.roughness",
+                    element: roughnessElement
                 )
-                : 32f
+                : SdfMaterial.DefaultRoughness
+            );
+            var sheen = (members.TryGetValue(
+                key: "sheen",
+                value: out var sheenElement
+            )
+                ? ReadNonNegativeFloat(
+                    context: $"{context}.sheen",
+                    element: sheenElement
+                )
+                : 0f
             );
 
             list.Add(item: new SdfMaterial(
                 Albedo: albedo,
                 Emissive: emissive,
-                Shininess: shininess,
-                Specular: specular
+                Specular: specular,
+                Roughness: roughness,
+                Sheen: sheen
             ));
             index++;
         }

@@ -307,11 +307,9 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
             : "display (automatic — verified VRR capabilities or active signal timing)"
         );
     }
-    // The world.far-field echo: both isolator lanes (F1 bound, F2 shadow exit) and their on/off state.
+    // The world.far-field echo.
     private static string FarFieldEcho(WorldRenderSettings settings) {
         return $"[world.far-field: bound {(settings.FarBound
-            ? "on"
-            : "off")}, shadow {(settings.ShadowFarExit
             ? "on"
             : "off")}]";
     }
@@ -406,12 +404,6 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         }
 
         return new CommandResult(Output: builder.Append(value: ']').ToString());
-    }
-    // The world.shadow.accumulate echo.
-    private static string ShadowAccumulationEcho(WorldRenderSettings settings) {
-        return $"[world.shadow.accumulate: {(settings.ShadowAccumulation
-            ? "on"
-            : "off")}]";
     }
     private static string ShadowEcho(WorldRenderSettings settings) {
         return string.Create(
@@ -728,7 +720,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.far-field",
-            description: "Toggles the far-field termination optimizations live (no rebuild) — the isolators for the owner's paired A/B: world.far-field [on|off|status] moves BOTH lanes together; world.far-field bound [on|off] is the F1 beam-published per-tile far bound (output-identical, skips empty-sky march steps); world.far-field shadow [on|off] is the F2 soft-shadow light-side early exit (a march-path change). No argument (or 'status') echoes both. Both ship ON; 'off' is the paired-run baseline.",
+            description: "Toggles the beam-published per-tile far bound live (no rebuild): world.far-field [on|off|status]. Output-identical when on (it skips empty-sky march steps); off is the paired-run baseline. Ships ON.",
             handler: (context, args) => {
                 if (
                     (args.Count == 0) ||
@@ -738,101 +730,19 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 )
                 ) {
                     return new CommandResult(Output: FarFieldEcho(settings: settings));
-                }
-
-                // Lane-scoped form: world.far-field bound|shadow on|off.
-                if (
-                    args.Is(
-                    index: 0,
-                    value: "bound"
-                ) ||
-                    args.Is(
-                    index: 0,
-                    value: "shadow"
-                )
-                ) {
-                    if (
-                        (args.Count < 2) ||
-                        (ParseOnOff(token: args[1]) is not { } laneState)
-                    ) {
-                        return CommandResult.Error(output: $"[world.far-field: expected '{args[0].ToString().ToLowerInvariant()} on|off']");
-                    }
-
-                    if (args.Is(
-                        index: 0,
-                        value: "bound"
-                    )) {
-                        SubmitLever(
-                            principal: context.ActingPrincipal(),
-                            name: WorldSessionLevers.FarBound,
-                            a: (laneState
-                            ? 1.0
-                            : 0.0)
-                        );
-                    } else {
-                        SubmitLever(
-                            principal: context.ActingPrincipal(),
-                            name: WorldSessionLevers.ShadowFarExit,
-                            a: (laneState
-                            ? 1.0
-                            : 0.0)
-                        );
-                    }
-
-                    // Read AFTER the lever above has applied (or been refused) — loopback drains it inline, so this
-                    // is not a stale/racing read.
-                    return new CommandResult(Output: FarFieldEcho(settings: settings));
-                }
-
-                // Bare form: world.far-field on|off drives BOTH lanes.
-                if (ParseOnOff(token: args[0]) is not { } bothState) {
-                    return CommandResult.Error(output: $"[world.far-field: unknown '{args.Tail(start: 0)}' — on|off|status, or bound|shadow on|off]");
-                }
-
-                SubmitLever(
-                    principal: context.ActingPrincipal(),
-                    name: WorldSessionLevers.FarBound,
-                    a: (bothState
-                    ? 1.0
-                    : 0.0)
-                );
-
-                return SubmitLever(
-                    principal: context.ActingPrincipal(),
-                    name: WorldSessionLevers.ShadowFarExit,
-                    a: (bothState
-                    ? 1.0
-                    : 0.0),
-                    formatEcho: () => new CommandResult(Output: FarFieldEcho(settings: settings))
-                );
-            }
-        );
-        yield return CommandDefinition.WithWireArgs(
-            bindability: CommandBindability.Unbindable,
-            name: "world.shadow.accumulate",
-            description: "Toggles the area-light shadow estimator's TEMPORAL ACCUMULATION live (no rebuild): world.shadow.accumulate [on|off|status]. On (the default) folds each frame's two sun-disc samples into the reprojected previous value, which is what makes the penumbra smooth; off shades the raw per-frame estimate and is deliberately stippled — an A/B isolator, not a quality tier.",
-            handler: (context, args) => {
-                if (
-                    (args.Count == 0) ||
-                    args.Is(
-                    index: 0,
-                    value: "status"
-                )
-                ) {
-                    return new CommandResult(Output: ShadowAccumulationEcho(settings: settings));
                 }
 
                 if (ParseOnOff(token: args[0]) is not { } state) {
-                    return CommandResult.Error(output: $"[world.shadow.accumulate: unknown '{args.Tail(start: 0)}' — on|off|status]");
+                    return CommandResult.Error(output: $"[world.far-field: unknown '{args.Tail(start: 0)}' — on|off|status]");
                 }
 
                 return SubmitLever(
                     principal: context.ActingPrincipal(),
-                    name: WorldSessionLevers.ShadowAccumulation,
+                    name: WorldSessionLevers.FarBound,
                     a: (state
                     ? 1.0
                     : 0.0),
-                    formatEcho: () => new CommandResult(Output: ShadowAccumulationEcho(settings: settings))
+                    formatEcho: () => new CommandResult(Output: FarFieldEcho(settings: settings))
                 );
             }
         );

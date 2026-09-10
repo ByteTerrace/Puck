@@ -988,203 +988,506 @@ public static partial class WorldDefinitionValidator {
             );
         }
     }
-    private static void ValidateRenderLighting(WorldDefinition definition, WorldRenderLighting? lighting, List<string> errors, string path = "render.lighting") {
+    // shape non-null = a render.cycle key: it may move a light only in a slot the statics author, with the same kind,
+    // and never add or remove one — the lane blend between two keys holds kinds and counts, so a key that changed the
+    // list shape would blend one light's lanes into another's.
+    private static void ValidateRenderLighting(WorldDefinition definition, WorldRenderLighting? lighting, List<string> errors, string path = "render.lighting", WorldRenderLighting? shape = null) {
         if (lighting is null) {
             return;
         }
 
-        if (lighting.Sun is { } sun) {
-            if (sun.Direction is { } direction) {
-                if (!IsFinite(value: direction)) {
-                    errors.Add(item: $"{path}.sun.direction must contain finite coordinates.");
-                } else if (direction.LengthSquared() <= 0f) {
-                    errors.Add(item: $"{path}.sun.direction must be nonzero.");
+        if (lighting.Lights is { } lights) {
+            if (lights.Count > SdfEnvironment.MaxLights) {
+                errors.Add(item: $"{path}.lights carries {lights.Count} lights; at most {SdfEnvironment.MaxLights} fit the environment.");
+            }
+
+            if (shape is not null) {
+                var authored = (shape.Lights?.Count ?? 0);
+
+                if (lights.Count != authored) {
+                    errors.Add(item: $"{path}.lights carries {lights.Count} lights but the static render.lighting authors {authored}; a cycle key moves lights by slot and may not add or remove one.");
                 }
             }
 
-            if (sun.Weight is { } weight) {
-                RequireNonNegative(
-                    errors: errors,
-                    name: $"{path}.sun.weight",
-                    value: weight
-                );
+            var shadowing = 0;
+
+            for (var index = 0; (index < lights.Count); index++) {
+                var light = lights[index];
+                var lightPath = $"{path}.lights[{index}]";
+
+                if (light is null) {
+                    errors.Add(item: $"{lightPath} must be a light.");
+
+                    continue;
+                }
+
+                if ((shape?.Lights is { } authoredLights) && (index < authoredLights.Count) && (authoredLights[index]?.GetType() != light.GetType())) {
+                    errors.Add(item: $"{lightPath} must keep the kind the static render.lighting authors in that slot.");
+                }
+
+                switch (light) {
+                    case WorldRenderLight.Directional directional: {
+                            if (directional.Direction is { } direction) {
+                                if (!IsFinite(value: direction)) {
+                                    errors.Add(item: $"{lightPath}.direction must contain finite coordinates.");
+                                } else if (direction.LengthSquared() <= 0f) {
+                                    errors.Add(item: $"{lightPath}.direction must be nonzero.");
+                                }
+                            }
+
+                            if (directional.Weight is { } weight) {
+                                RequireNonNegative(
+                                    errors: errors,
+                                    name: $"{lightPath}.weight",
+                                    value: weight
+                                );
+                            }
+
+                            if (directional.AngularRadius is { } angularRadius) {
+                                RequireRange(
+                                    value: angularRadius,
+                                    min: 0f,
+                                    max: MathF.Atan(x: SdfEnvironment.MaxPenumbraSlope),
+                                    name: $"{lightPath}.angularRadius",
+                                    errors: errors
+                                );
+                            }
+
+                            if (directional.Shadows == true) {
+                                shadowing++;
+                            }
+
+                            break;
+                        }
+                    case WorldRenderLight.Hemisphere hemisphere: {
+                            if (hemisphere.Base is { } ambientBase) {
+                                RequireNonNegative(
+                                    errors: errors,
+                                    name: $"{lightPath}.base",
+                                    value: ambientBase
+                                );
+                            }
+
+                            if (hemisphere.Gradient is { } gradient) {
+                                RequireFinite(
+                                    errors: errors,
+                                    name: $"{lightPath}.gradient",
+                                    value: gradient
+                                );
+                            }
+
+                            break;
+                        }
+                    case WorldRenderLight.Rim rim: {
+                            if (rim.Weight is { } weight) {
+                                RequireNonNegative(
+                                    errors: errors,
+                                    name: $"{lightPath}.weight",
+                                    value: weight
+                                );
+                            }
+
+                            if (rim.Power is { } power) {
+                                RequireNonNegative(
+                                    errors: errors,
+                                    name: $"{lightPath}.power",
+                                    value: power
+                                );
+                            }
+
+                            break;
+                        }
+                }
+
+                if (
+                    (LightColor(light: light) is { } color) &&
+                    !color.IsAuthorable(definition: definition)
+                ) {
+                    errors.Add(item: $"{lightPath}.color '{color.Raw}' {BindableColor.Grammar}.");
+                }
             }
 
-            if (
-                (sun.Color is { } color) &&
-                !color.IsAuthorable(definition: definition)
-            ) {
-                errors.Add(item: $"{path}.sun.color '{color.Raw}' {BindableColor.Grammar}.");
+            if (shadowing > 1) {
+                errors.Add(item: $"{path}.lights names {shadowing} shadowing lights; the soft-shadow march runs once per lit pixel, so at most one light shadows.");
             }
         }
 
-        if (lighting.Ambient is { } ambient) {
-            if (ambient.Base is { } ambientBase) {
+        if (lighting.Curvature is { } curvature) {
+            foreach (var (name, value) in new (string, float?)[] { ("cavity", curvature.Cavity), ("rim", curvature.Rim), ("ink", curvature.Ink) }) {
+                if (value is { } gain) {
+                    RequireNonNegative(
+                        errors: errors,
+                        name: $"{path}.curvature.{name}",
+                        value: gain
+                    );
+                }
+            }
+
+            if (curvature.InkLow is { } inkLow) {
                 RequireNonNegative(
                     errors: errors,
-                    name: $"{path}.ambient.base",
-                    value: ambientBase
+                    name: $"{path}.curvature.inkLow",
+                    value: inkLow
                 );
             }
 
-            if (ambient.Hemisphere is { } hemisphere) {
-                RequireFinite(
+            if (curvature.InkHigh is { } inkHigh) {
+                RequireNonNegative(
                     errors: errors,
-                    name: $"{path}.ambient.hemisphere",
-                    value: hemisphere
+                    name: $"{path}.curvature.inkHigh",
+                    value: inkHigh
                 );
+            }
+
+            // The outline is a smoothstep across the band, which needs a positive width to have any inside. Judged
+            // where the band RESOLVES: an absent end takes the engine default, so authoring only the other end past
+            // it inverts the band just as surely. A cycle key's band resolves through inheritance instead
+            // (ValidateRenderCycleResolution).
+            if (shape is null) {
+                var low = (curvature.InkLow ?? SdfEnvironment.DefaultCurvatureInkLow);
+                var high = (curvature.InkHigh ?? SdfEnvironment.DefaultCurvatureInkHigh);
+
+                if (low >= high) {
+                    errors.Add(item: $"{path}.curvature.inkLow ({low}) must be below {path}.curvature.inkHigh ({high}); an absent end is the engine default.");
+                }
             }
 
             if (
-                (ambient.Color is { } color) &&
-                !color.IsAuthorable(definition: definition)
+                (curvature.InkColor is { } inkColor) &&
+                !inkColor.IsAuthorable(definition: definition)
             ) {
-                errors.Add(item: $"{path}.ambient.color '{color.Raw}' {BindableColor.Grammar}.");
+                errors.Add(item: $"{path}.curvature.inkColor '{inkColor.Raw}' {BindableColor.Grammar}.");
             }
         }
     }
-    private static void ValidateRenderSky(WorldDefinition definition, WorldRenderSky? sky, List<string> errors, string path = "render.sky") {
-        if (sky is null) {
+    private static BindableColor? LightColor(WorldRenderLight light) => (light switch {
+        WorldRenderLight.Directional directional => directional.Color,
+        WorldRenderLight.Hemisphere hemisphere => hemisphere.Color,
+        WorldRenderLight.Rim rim => rim.Color,
+        _ => null,
+    });
+    // shape non-null = a render.cycle key: it may move a layer only of a kind the statics author, and a gradient only
+    // through the stops the statics author, by index.
+    private static void ValidateRenderSky(WorldDefinition definition, WorldRenderSky? sky, List<string> errors, string path = "render.sky", WorldRenderSky? shape = null, WorldRenderLighting? lighting = null) {
+        if (sky?.Layers is not { } layers) {
             return;
         }
 
-        if (
-            (sky.Zenith is { } zenith) &&
-            !zenith.IsAuthorable(definition: definition)
-        ) {
-            errors.Add(item: $"{path}.zenith '{zenith.Raw}' {BindableColor.Grammar}.");
+        var seen = new HashSet<Type>();
+
+        for (var index = 0; (index < layers.Count); index++) {
+            var layer = layers[index];
+            var layerPath = $"{path}.layers[{index}]";
+
+            if (layer is null) {
+                errors.Add(item: $"{layerPath} must be a layer.");
+
+                continue;
+            }
+
+            if (!seen.Add(item: layer.GetType())) {
+                errors.Add(item: $"{layerPath} repeats a layer kind; each kind appears at most once.");
+            }
+
+            if ((shape is not null) && !(shape.Layers?.Any(predicate: authored => authored?.GetType() == layer.GetType()) ?? false)) {
+                errors.Add(item: $"{layerPath} moves a layer kind the static render.sky does not author; a cycle key may not add a layer.");
+            }
+
+            switch (layer) {
+                case WorldRenderSkyLayer.Gradient gradient: {
+                        var stops = gradient.Stops;
+
+                        if (stops is null) {
+                            if (shape is null) {
+                                errors.Add(item: $"{layerPath}.stops must carry two to {SdfEnvironment.MaxSkyStops} stops.");
+                            }
+
+                            break;
+                        }
+
+                        if (shape is null) {
+                            if ((stops.Count < 2) || (stops.Count > SdfEnvironment.MaxSkyStops)) {
+                                errors.Add(item: $"{layerPath}.stops carries {stops.Count} stops; a gradient carries two to {SdfEnvironment.MaxSkyStops}.");
+                            }
+                        } else {
+                            var authoredStops = ((shape.Layers?.OfType<WorldRenderSkyLayer.Gradient>().FirstOrDefault()?.Stops?.Count) ?? 0);
+
+                            if (stops.Count != authoredStops) {
+                                errors.Add(item: $"{layerPath}.stops carries {stops.Count} stops but the static gradient authors {authoredStops}; a cycle key moves stops by index and may not add or remove one.");
+                            }
+                        }
+
+                        float? previous = null;
+
+                        for (var stopIndex = 0; (stopIndex < stops.Count); stopIndex++) {
+                            var stop = stops[stopIndex];
+                            var stopPath = $"{layerPath}.stops[{stopIndex}]";
+
+                            if (stop is null) {
+                                errors.Add(item: $"{stopPath} must be a stop.");
+
+                                continue;
+                            }
+
+                            if (stop.Elevation is { } elevation) {
+                                RequireRange(
+                                    value: elevation,
+                                    min: -1f,
+                                    max: 1f,
+                                    name: $"{stopPath}.elevation",
+                                    errors: errors
+                                );
+
+                                if ((previous is { } last) && (elevation <= last)) {
+                                    errors.Add(item: $"{stopPath}.elevation must exceed the previous stop's.");
+                                }
+
+                                previous = elevation;
+                            } else if (shape is null) {
+                                errors.Add(item: $"{stopPath}.elevation is required.");
+                            }
+
+                            if (stop.Color is { } color) {
+                                if (!color.IsAuthorable(definition: definition)) {
+                                    errors.Add(item: $"{stopPath}.color '{color.Raw}' {BindableColor.Grammar}.");
+                                }
+                            } else if (shape is null) {
+                                errors.Add(item: $"{stopPath}.color is required.");
+                            }
+                        }
+
+                        break;
+                    }
+                case WorldRenderSkyLayer.Fog fog: {
+                        if (fog.Density is { } density) {
+                            RequireNonNegative(
+                                errors: errors,
+                                name: $"{layerPath}.density",
+                                value: density
+                            );
+                        }
+
+                        break;
+                    }
+                case WorldRenderSkyLayer.SunDisc disc: {
+                        if (disc.Radius is { } radius) {
+                            RequireRange(
+                                value: radius,
+                                min: 0f,
+                                max: (MathF.PI / 2f),
+                                name: $"{layerPath}.radius",
+                                errors: errors,
+                                minExclusive: true
+                            );
+                        }
+
+                        if (disc.Intensity is { } intensity) {
+                            RequireNonNegative(
+                                errors: errors,
+                                name: $"{layerPath}.intensity",
+                                value: intensity
+                            );
+                        }
+
+                        if (disc.Light is { } lightIndex) {
+                            var lights = lighting?.Lights;
+
+                            if ((lights is null) || (lightIndex < 0) || (lightIndex >= lights.Count) || (lights[lightIndex] is not WorldRenderLight.Directional)) {
+                                errors.Add(item: $"{layerPath}.light must name a directional light's slot in render.lighting.lights.");
+                            }
+                        }
+
+                        break;
+                    }
+                case WorldRenderSkyLayer.Stars stars: {
+                        if (stars.Density is { } density) {
+                            RequirePositive(
+                                value: density,
+                                name: $"{layerPath}.density",
+                                errors: errors
+                            );
+                        }
+
+                        if (stars.Brightness is { } brightness) {
+                            RequireNonNegative(
+                                value: brightness,
+                                name: $"{layerPath}.brightness",
+                                errors: errors
+                            );
+                        }
+
+                        if (stars.Twinkle is { } twinkle) {
+                            if (twinkle.Share is { } share) {
+                                RequireUnitInterval(
+                                    value: share,
+                                    name: $"{layerPath}.twinkle.share",
+                                    errors: errors
+                                );
+                            }
+
+                            if (twinkle.Depth is { } depth) {
+                                RequireUnitInterval(
+                                    value: depth,
+                                    name: $"{layerPath}.twinkle.depth",
+                                    errors: errors
+                                );
+                            }
+
+                            if (twinkle.Rate is { } rate) {
+                                RequirePositive(
+                                    value: rate,
+                                    name: $"{layerPath}.twinkle.rate",
+                                    errors: errors
+                                );
+                            }
+                        }
+
+                        break;
+                    }
+                case WorldRenderSkyLayer.Clouds clouds: {
+                        if (clouds.Coverage is { } coverage) {
+                            RequireUnitInterval(
+                                value: coverage,
+                                name: $"{layerPath}.coverage",
+                                errors: errors
+                            );
+                        }
+
+                        if (clouds.Softness is { } softness) {
+                            RequireRange(
+                                value: softness,
+                                min: 0f,
+                                max: 1f,
+                                name: $"{layerPath}.softness",
+                                errors: errors,
+                                minExclusive: true
+                            );
+                        }
+
+                        if (clouds.Scale is { } scale) {
+                            RequirePositive(
+                                value: scale,
+                                name: $"{layerPath}.scale",
+                                errors: errors
+                            );
+                        }
+
+                        if (
+                            (clouds.Color is { } cloudColor) &&
+                            !cloudColor.IsAuthorable(definition: definition)
+                        ) {
+                            errors.Add(item: $"{layerPath}.color '{cloudColor.Raw}' {BindableColor.Grammar}.");
+                        }
+
+                        if (
+                            (clouds.Drift is { } drift) &&
+                            (!float.IsFinite(f: drift.X) || !float.IsFinite(f: drift.Y))
+                        ) {
+                            errors.Add(item: $"{layerPath}.drift must contain finite coordinates.");
+                        }
+
+                        if (
+                            (clouds.Shear is { } shear) &&
+                            (!float.IsFinite(f: shear.X) || !float.IsFinite(f: shear.Y))
+                        ) {
+                            errors.Add(item: $"{layerPath}.shear must contain finite coordinates.");
+                        }
+
+                        if (clouds.Spin is { } spin) {
+                            RequireFinite(
+                                errors: errors,
+                                name: $"{layerPath}.spin",
+                                value: spin
+                            );
+                        }
+
+                        if (clouds.Curl is { } curl) {
+                            RequireFinite(
+                                errors: errors,
+                                name: $"{layerPath}.curl",
+                                value: curl
+                            );
+                        }
+
+                        break;
+                    }
+            }
+        }
+    }
+    private static void ValidateRenderEnvironment(WorldDefinition definition, WorldRenderEnvironment? environment, List<string> errors, string path = "render.environment") {
+        if (environment is null) {
+            return;
         }
 
-        if (
-            (sky.Horizon is { } horizon) &&
-            !horizon.IsAuthorable(definition: definition)
-        ) {
-            errors.Add(item: $"{path}.horizon '{horizon.Raw}' {BindableColor.Grammar}.");
-        }
+        if (environment.Softboxes is { } softboxes) {
+            if (softboxes.Count > SdfEnvironment.MaxSoftboxes) {
+                errors.Add(item: $"{path}.softboxes carries {softboxes.Count} softboxes; at most {SdfEnvironment.MaxSoftboxes} fit the environment.");
+            }
 
-        if (
-            (sky.Ground is { } ground) &&
-            !ground.IsAuthorable(definition: definition)
-        ) {
-            errors.Add(item: $"{path}.ground '{ground.Raw}' {BindableColor.Grammar}.");
-        }
+            for (var index = 0; (index < softboxes.Count); index++) {
+                var softbox = softboxes[index];
+                var softboxPath = $"{path}.softboxes[{index}]";
 
-        if (sky.FogDensity is { } fogDensity) {
-            RequireNonNegative(
-                errors: errors,
-                name: $"{path}.fogDensity",
-                value: fogDensity
-            );
-        }
+                if (softbox is null) {
+                    errors.Add(item: $"{softboxPath} must be a softbox.");
 
-        if (sky.Sun is { } sun) {
-            RequireRange(
-                value: sun.DiscRadians,
-                min: 0f,
-                max: (MathF.PI / 2f),
-                name: $"{path}.sun.discRadians",
-                errors: errors,
-                minExclusive: true
-            );
+                    continue;
+                }
 
-            RequireNonNegative(
-                value: sun.Intensity,
-                name: $"{path}.sun.intensity",
-                errors: errors
-            );
-        }
+                var direction = softbox.Direction;
 
-        if (sky.Stars is { } stars) {
-            RequirePositive(
-                value: stars.Density,
-                name: $"{path}.stars.density",
-                errors: errors
-            );
+                if (!float.IsFinite(f: direction.X) || !float.IsFinite(f: direction.Y) || !float.IsFinite(f: direction.Z)) {
+                    errors.Add(item: $"{softboxPath}.direction must contain finite coordinates.");
+                } else if (((direction.X * direction.X) + (direction.Y * direction.Y) + (direction.Z * direction.Z)) <= 0f) {
+                    errors.Add(item: $"{softboxPath}.direction must be nonzero.");
+                }
 
-            RequireNonNegative(
-                value: stars.Brightness,
-                name: $"{path}.stars.brightness",
-                errors: errors
-            );
+                var size = softbox.Size;
 
-            if (stars.Twinkle is { } twinkle) {
-                RequireUnitInterval(
-                    value: twinkle.Share,
-                    name: $"{path}.stars.twinkle.share",
-                    errors: errors
-                );
+                if (!float.IsFinite(f: size.X) || !float.IsFinite(f: size.Y)) {
+                    errors.Add(item: $"{softboxPath}.size must contain finite coordinates.");
+                } else if ((size.X <= 0f) || (size.Y <= 0f)) {
+                    errors.Add(item: $"{softboxPath}.size must be strictly positive on both axes.");
+                }
 
-                RequireUnitInterval(
-                    value: twinkle.Depth,
-                    name: $"{path}.stars.twinkle.depth",
-                    errors: errors
-                );
+                if (softbox.Weight is { } weight) {
+                    RequireNonNegative(
+                        value: weight,
+                        name: $"{softboxPath}.weight",
+                        errors: errors
+                    );
+                }
 
-                RequirePositive(
-                    value: twinkle.Rate,
-                    name: $"{path}.stars.twinkle.rate",
-                    errors: errors
-                );
+                if (softbox.Blur is { } blur) {
+                    RequireNonNegative(
+                        value: blur,
+                        name: $"{softboxPath}.blur",
+                        errors: errors
+                    );
+                }
+
+                if (
+                    (softbox.Color is { } color) &&
+                    !color.IsAuthorable(definition: definition)
+                ) {
+                    errors.Add(item: $"{softboxPath}.color '{color.Raw}' {BindableColor.Grammar}.");
+                }
             }
         }
 
-        if (sky.Clouds is { } clouds) {
-            RequireUnitInterval(
-                value: clouds.Coverage,
-                name: $"{path}.clouds.coverage",
-                errors: errors
-            );
-
-            RequireRange(
-                value: clouds.Softness,
-                min: 0f,
-                max: 1f,
-                name: $"{path}.clouds.softness",
-                errors: errors,
-                minExclusive: true
-            );
-
-            RequirePositive(
-                value: clouds.Scale,
-                name: $"{path}.clouds.scale",
-                errors: errors
-            );
+        if (environment.Horizon is { } horizon) {
+            if (
+                (horizon.Low is { } low) &&
+                !low.IsAuthorable(definition: definition)
+            ) {
+                errors.Add(item: $"{path}.horizon.low '{low.Raw}' {BindableColor.Grammar}.");
+            }
 
             if (
-                (clouds.Color is { } cloudColor) &&
-                !cloudColor.IsAuthorable(definition: definition)
+                (horizon.High is { } high) &&
+                !high.IsAuthorable(definition: definition)
             ) {
-                errors.Add(item: $"{path}.clouds.color '{cloudColor.Raw}' {BindableColor.Grammar}.");
-            }
-
-            if (
-                (clouds.Drift is { } drift) &&
-                (!float.IsFinite(f: drift.X) || !float.IsFinite(f: drift.Y))
-            ) {
-                errors.Add(item: $"{path}.clouds.drift must contain finite coordinates.");
-            }
-
-            if (clouds.Spin is { } spin) {
-                RequireFinite(
-                    errors: errors,
-                    name: $"{path}.clouds.spin",
-                    value: spin
-                );
-            }
-
-            if (clouds.Curl is { } curl) {
-                RequireFinite(
-                    errors: errors,
-                    name: $"{path}.clouds.curl",
-                    value: curl
-                );
-            }
-
-            if (
-                (clouds.Shear is { } shear) &&
-                (!float.IsFinite(f: shear.X) || !float.IsFinite(f: shear.Y))
-            ) {
-                errors.Add(item: $"{path}.clouds.shear must contain finite coordinates.");
+                errors.Add(item: $"{path}.horizon.high '{high.Raw}' {BindableColor.Grammar}.");
             }
         }
     }

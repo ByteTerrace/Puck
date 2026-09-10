@@ -6,15 +6,18 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Adds a material to the program palette.</summary>
     /// <param name="material">The material to add.</param>
     /// <returns>The zero-based material identifier used by shape instructions.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="material"/> is not finite, or is
-    /// negative.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="material"/> is not finite, is
+    /// negative, or (<see cref="SdfMaterial.Roughness"/>/<see cref="SdfMaterial.Sheen"/>/<see cref="SdfMaterial.Metal"/>/
+    /// <see cref="SdfMaterial.Coat"/>) falls outside [0, 1].</exception>
     /// <exception cref="InvalidOperationException">The composed palette already holds <see cref="ScreenMaterialId"/>
     /// materials (see the ceiling check below).</exception>
     public int AddMaterial(SdfMaterial material) {
-        // Every field lands verbatim in the two packed palette words (SdfProgram writes Albedo/Emissive, then
-        // Specular/Shininess), so all four are shading inputs with no host-side normalization: a negative reflectance,
-        // emissive strength, specular strength, or Blinn-Phong exponent has no physical reading, and a NaN in any of
-        // them propagates into the shaded colour of every pixel the material wins.
+        // Every field lands verbatim in the three packed palette words (SdfProgram writes Albedo/Emissive, then
+        // Specular/Roughness/Sheen/Metal, then Coat), so all seven are shading inputs with no host-side
+        // normalization: a negative reflectance or emissive/specular strength has no physical reading, an
+        // out-of-[0,1] roughness/sheen/metal/coat falls outside the curve this material model derives its GGX alpha
+        // and fresnel lift from, and a NaN in any of them propagates into the shaded colour of every pixel the
+        // material wins.
         RequireNonNegative(
             value: material.Albedo,
             paramName: nameof(material),
@@ -30,10 +33,25 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(material),
             subject: "A material specular strength"
         );
-        RequireNonNegative(
-            value: material.Shininess,
+        RequireUnitRange(
+            value: material.Roughness,
             paramName: nameof(material),
-            subject: "A material shininess exponent"
+            subject: "A material roughness"
+        );
+        RequireUnitRange(
+            value: material.Sheen,
+            paramName: nameof(material),
+            subject: "A material sheen strength"
+        );
+        RequireUnitRange(
+            value: material.Metal,
+            paramName: nameof(material),
+            subject: "A material metalness"
+        );
+        RequireUnitRange(
+            value: material.Coat,
+            paramName: nameof(material),
+            subject: "A material coat strength"
         );
 
         // THE PALETTE/SENTINEL COLLISION GATE. A shape's material id is a plain composed index below ScreenMaterialId,

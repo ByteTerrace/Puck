@@ -1177,36 +1177,42 @@ the latter names the absent renderer while retaining all authoritative costs.
 `render.farDistance` is the depth every camera march ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting
 below — geometry beyond it is never marched, so an infinite ground plane shows
-a horizon curve there unless `render.sky.fogDensity` absorbs it first.
+a horizon curve there unless the `render.sky` fog layer absorbs it first.
 
 Two document sections author the scene's lighting instead of a verb, re-read
-on every definition revision (a live edit lands on the next frame):
-`render.lighting` sets the directional sun and ambient term; `render.sky` sets
-the procedural sky gradient, sun disc, star field (each star hash-dealt its own
-blackbody colour and apparent luminosity; `stars.twinkle { share, depth, rate }`
-scintillates a share of them on the tick clock), cloud layer (`clouds
-{ coverage, softness, scale, seed, color, drift, spin, curl, shear }` — a
-hashed, warped noise layer over everything above it; drift translates it,
-spin turns it about the zenith, curl winds it Coriolis-fashion, shear slides
-the shaping field so clouds re-form as they travel — all on the tick clock),
-and distance fog.
-Both are
-optional, and every field within them is optional individually — absent
-renders the pinned defaults unchanged. `render.cycle`
+on every definition revision (a live edit lands on the next frame).
+`render.lighting.lights[]` is a typed list, at most eight, each `$type`
+`directional` (`direction`, `color`, `weight`, `angularRadius`, `shadows` — the
+one shadowing light drives the soft-shadow march, whose penumbra is the tangent
+of its angular radius; the rest are scaled by ambient occlusion), `hemisphere`
+(`color`, `base`, `gradient`) or `rim` (`color`, `weight`, `power`, added after
+the material shade); absent, the pinned sun and hemisphere render.
+`render.lighting.curvature` adds cavity darkening, ridge light and an ink outline
+read through the `inkLow`/`inkHigh` curvature band (1 / fillet radius).
+`render.sky.layers[]` is a stack of `$type` `gradient` (two to four `stops` of
+`elevation`/`color`), `fog`, `sunDisc` (bound to a light slot), `stars` (each
+star hash-dealt its own blackbody colour and apparent luminosity;
+`twinkle { share, depth, rate }` scintillates a share of them on the tick clock)
+and `clouds` (`coverage, softness, scale, seed, color, drift, spin, curl, shear`
+— a hashed, warped noise layer over everything above it, all on the tick clock),
+composited in that order whatever order they are authored in. Every field is
+optional individually. `world.lighting` echoes both sections. `render.cycle`
 keys both over a state row: `{ "state": "timeOfDay", "keys": [ { "at": 0.25,
 "lighting": {…}, "sky": {…} }, … ] }` — the row's live value (its fractional
 part, so an advancing row wraps once per unit) picks the two bracketing keys
-and every lighting/sky field interpolates between them; a key states only the
-fields it moves, the rest hold from the previous key. The clock is simulation
+and every lighting/sky lane interpolates between them (directions along the
+arc; counts, kinds, seeds and flags held); a key states only the fields it
+moves, addresses a light by slot and a stop by index with the kinds the statics
+author, and the rest hold from the previous key. The clock is simulation
 state (an advancing `state` row — deterministic, replayed, settable with
 `world.row.set state`); the interpolation is presentation.
 
 ## Engine boundaries worth knowing
 
-- `SdfProgramBuilder.MaxInstances = 32768`: per-tile mask width scales with
+- `SdfProgramBuilder.MaxInstances = 65536`: per-tile mask width scales with
   DECLARED instances, which is why this project emits active avatars only and
   probes capacity floors at construction.
-- The exact soft-shadow gather addresses all 32768 instance slots, including
+- The exact soft-shadow gather addresses all 65536 instance slots, including
   reserved pools. Camera-tile masking is a separate approximation selected by
   the quality policy or `world.shadow-mask camera-tile`.
 - `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per

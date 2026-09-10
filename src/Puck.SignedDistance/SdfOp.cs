@@ -163,4 +163,24 @@ public enum SdfOp : uint {
     /// <see cref="Displace"/>'s). The outward surface reach is at most <c>|amplitude|</c> (the normalized sum is
     /// bounded by 1) — the scoped-field margin and cull channels read that. amplitude = 0 is an exact identity.</summary>
     NoiseDisplace = 29,
+    /// <summary>Radial flare warp: scales the point's local XZ by a profile along local Y —
+    /// <c>p.xz /= s(t)</c>, <c>s(t) = 1 + amount·t + bulge·sin(π·t)</c>, <c>t = clamp((top − y) / span, 0, 1)</c>
+    /// (t = 0 at Data0.z = top, t = 1 a full Data0.w⁻¹ = span below it). Data0 = (amount, bulge, top, 1/span, ALL
+    /// HOST-BAKED except amount/bulge/top which arrive as authored); Data1.x = the conservative size correction
+    /// <c>1/max(s)</c> over t ∈ [0, 1] (HOST-BAKED, <see cref="SdfProgram.FlareExtrema"/> — always ≤ 1 since s(0) = 1
+    /// is always a candidate for the max). Matches the study's <c>shinRadii</c>/<c>curvedSection</c> silhouette (a
+    /// limb that flares toward the hip, tapers to the ankle, with a mid-span bulge). s(t) is floored at
+    /// <see cref="SdfProgramBuilder.FlareMinScale"/> so a parameter combination that drives it non-positive still
+    /// yields a finite, if visually degenerate, warp rather than a divide-by-zero. distanceScale takes the 1/max(s)
+    /// correction (the same channel <see cref="Scale"/>'s min-axis factor and <see cref="LogSphere"/>'s r/density
+    /// factor ride) — a global, not per-point, correction, since s varies with y. Not an isometry: the y-varying
+    /// scale also shears space (moving along y rescales x and z), so <c>SdfProgram.AnalyzeLipschitz</c> folds a
+    /// reach-dependent operator-norm bound (<c>SdfProgram.FlareOperatorNorm</c>) into the program's step clamp,
+    /// exactly as <see cref="BendY"/>/<see cref="TwistY"/> do for their own warp rates — keep amount/bulge/span
+    /// moderate. RENDER-ONLY: <c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c> does not interpret this op (its
+    /// runtime trig and division are outside the evaluator's warp-free rigid subset, matching
+    /// <see cref="BendX"/>/<see cref="BendY"/>/<see cref="BendZ"/>/<see cref="TwistY"/>'s status), so a shape
+    /// carrying it is unreachable for deterministic field contact — the evaluator's constructor throws, naming the
+    /// op, rather than silently misjudging a query against it.</summary>
+    FlareY = 30,
 }

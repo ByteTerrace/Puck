@@ -6,7 +6,10 @@ of [`Puck.World`](../Puck.World/README.md): `world.grant`/`.revoke`/`.grants`/
 `.why` (`WorldGrantCommandModule`), `world.contributions`
 (`WorldContributionCommandModule` — the contribution-slot read-back; slots are
 authored and filled through `world.row.set placements`, so it carries no
-mutating verb), `world.dynamics` (`WorldDynamicsCommandModule` — the
+mutating verb), `creation.sculpts`/`creation.sculpt`
+(`WorldSculptCommandModule` — lists/applies a `Puck.World.Authoring.Sculpting.ICreationSculpt`'s
+patch against the live document by resubmitting each touched row through
+`world.row.set`/`.remove`, never a parallel apply path), `world.dynamics` (`WorldDynamicsCommandModule` — the
 `dynamics` section's read-back: every row's authored triple, the derived
 fixed-point constants, and its live reference count), `world.curves`
 (`WorldCurveCommandModule` — the `curves` section's read-back: every row's

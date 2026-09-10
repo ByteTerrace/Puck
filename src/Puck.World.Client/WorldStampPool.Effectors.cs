@@ -78,6 +78,7 @@ public sealed partial class WorldStampPool {
                 value: (posedTip * placementScale)
             ));
             var resolved = TryResolveTarget(
+                bodyIndex: (live.BodyIndex ?? -1),
                 client: client,
                 effector: effector,
                 rootRotation: rootRotation,
@@ -85,7 +86,7 @@ public sealed partial class WorldStampPool {
                 tipWorld: tipWorld
             );
 
-            var gateHolds = WorldGaitDrivers.GateHolds(facts: facts, gate: effector.When, moving: moving);
+            var gateHolds = WorldGaitDrivers.GateHolds(facts: facts, gate: effector.When, moving: moving, definition: client.Definition, tick: client.Tick, bodyIndex: (live.BodyIndex ?? -1));
             var contactWeight = 1f;
             if (gateHolds) {
                 resolved = ApplyPlant(
@@ -373,7 +374,7 @@ public sealed partial class WorldStampPool {
     }
     // The effector's world-space goal this frame, or false when nothing answers — a probe that finds no surface, a
     // body target that is not live, a state cell that holds no point.
-    private static bool TryResolveTarget(CreationEffectorDocument effector, WorldClient client, Vector3 tipWorld, Quaternion rootRotation, out Vector3 target) {
+    private static bool TryResolveTarget(CreationEffectorDocument effector, WorldClient client, Vector3 tipWorld, Quaternion rootRotation, int bodyIndex, out Vector3 target) {
         target = tipWorld;
 
         var goal = effector.Target;
@@ -400,6 +401,7 @@ public sealed partial class WorldStampPool {
             }
             case CreationEffectorTargetDocument.KindState: {
                 return ((goal.Reference is { } reference) && WorldGaitDrivers.TryReadStateVector(
+                    bodyIndex: bodyIndex,
                     definition: client.Definition,
                     reference: reference,
                     tick: client.Tick,

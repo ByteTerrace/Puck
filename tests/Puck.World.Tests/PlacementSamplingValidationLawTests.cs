@@ -159,9 +159,9 @@ public sealed class PlacementSamplingValidationLawTests {
     }
     [Fact]
     public void ANoiseGridWorstCaseCannotExceedTheEngineInstanceCeiling() {
-        var oversized = (WellFormedNoise() with { Width = 200, Depth = 200 });
+        var oversized = (WellFormedNoise() with { Width = 300, Depth = 300 });
 
-        Assert.True(condition: ((200L * 200L) > SdfProgramBuilder.MaxInstances));
+        Assert.True(condition: ((300L * 300L) > SdfProgramBuilder.MaxInstances));
         AssertRefusedNaming(
             definition: With(region: oversized),
             needle: $"worst-case exceeds the {SdfProgramBuilder.MaxInstances}-instance engine ceiling"

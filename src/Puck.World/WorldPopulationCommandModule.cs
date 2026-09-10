@@ -198,8 +198,10 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), stepScale {node.LiveProgramStepScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (march ~{(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: CultureInfo.InvariantCulture)}x baseline)" : string.Empty)}{((node.LiveProgramStepScaleBinder is { } binder) ? $" bound by instance {binder.InstanceIndex} ({binder.Shape} x{binder.Factor.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} at instruction {binder.InstructionIndex}, unscoped)" : string.Empty)}"
             : "renderer not built yet"
         );
+        var stampPoolWorstCase = (WorldPlacementPolicy.MaxStampRegistrations * WorldPlacementPolicy.MaxShapesPerStamp);
+        var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);
-        var fogDensity = (server.Definition.Render.Sky?.FogDensity ?? Puck.SdfVm.SdfFrame.DefaultSkyFogDensity);
+        var fogDensity = (server.Definition.Render.Sky?.Layers?.OfType<WorldRenderSkyLayer.Fog>().FirstOrDefault()?.Density ?? Puck.SignedDistance.SdfEnvironment.DefaultFogDensity);
         var far = string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"far {farDistance:0.##} unit(s) (reach x{(farDistance / Puck.SdfVm.SdfFrame.DefaultFarDistance):0.##} the {Puck.SdfVm.SdfFrame.DefaultFarDistance:0}-unit default; horizon ray ~{farDistance:0} step(s) per unit of camera height of {Puck.SdfVm.SdfWorldEngine.PrimaryMarchSteps}; fog remnant at the far plane {MathF.Exp(x: (-fogDensity * farDistance)):0.###})"
@@ -237,7 +239,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         var ruleBudget = WorldRuleWorkBudget.Measure(definition: server.Definition);
         var rules = $"rules {ruleBudget.RuleRows}, interactions {ruleBudget.InteractionRows}/{WorldInteractionCapacity.MaxInteractions}, worst {ruleBudget.EvaluationSlots} evaluation(s), {ruleBudget.WorkUnitsPerTick}/{RuleCapacity.MaxWorkUnitsPerTick} work unit(s) / tick (including {ruleBudget.FlockAffinityWorkUnitsPerTick} flock-affinity units); decision perception {ruleBudget.DecisionImagePointsPerTick} pose(s), {ruleBudget.DecisionGridBuildsPerTick} shared grid rebuild(s)/{ruleBudget.DecisionGridPointsPerTick} point(s) sorted per tick ceiling";
 
-        return $"[world.budget: {render} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()}]";
+        return $"[world.budget: {render} | {stampPool} | {far} | {lattice} | {gravity} | {placements} | state {(server.Definition.State?.Count ?? 0)} row(s) | {rules} | {curves} | {navigation} | {population.DescribeFlockWork()} | {population.DescribeRigidWork()} | {server.DescribePatternBudget()}]";
     }
     private static string DescribeSequence(WorldSequence sequence) =>
         $"{sequence.Name}(offset={sequence.Offset},step={sequence.Step:0.########})";
@@ -275,7 +277,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.budget",
-            description: "Prints the immediate compose-time cost sheet: rendering, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, and local flock perception work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
+            description: "Prints the immediate compose-time cost sheet: rendering, the creation-stamp pool's per-stamp shape ceiling and worst-case instance draw, far-distance, fields, gravity, placements (static instances, rows, and the offsets every dealt template reserves), state/rules, curves, bounded navigation, and local flock perception work. Rendering reads 'not built yet' under a headless host; authoritative costs remain available.",
             handler: (_, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.budget") is { } refusal)
                 ? refusal
                 : new CommandResult(Output: DescribeBudget())),

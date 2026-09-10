@@ -19,6 +19,7 @@ one System.CommandLine tree (`PuckRootCommand.cs`) every verb hangs off:
 | [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
+| [`puck creation`](#puck-creation--code-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck registry`](#puck-registry--world-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
@@ -612,6 +613,29 @@ would let a define cited in a comment resolve against that very comment, which
 makes the check a tautology rather than evidence.
 
 ---
+
+## `puck creation` — code-authored sculpts
+
+The offline twin of the in-engine `creation.sculpt(s)` console verbs (see
+`Puck.World.Authoring`'s README for the sculpting library itself —
+`CreationBuilder`/`StateHoisting`/`SculptPatch`/`ICreationSculpt`):
+
+- `puck creation sculpts` — lists every registered sculpt (`CreationSculptRegistry.All`) by name and description.
+- `puck creation sculpt <name> --world <path>` — reads the world file, runs the named sculpt's `SculptPatch` against it, echoes every operation's `(kind, path, verdict)`, then parses and validates the PATCHED document through `WorldDefinitionSerialization`/`WorldDefinitionValidator` before writing it back canonically. A refusal (unknown sculpt, malformed JSON, a patch fault, a validation failure) leaves the file untouched. Exit codes: 0 wrote, 1 the patch faulted or the patched document was refused, 2 a usage error (unknown sculpt, missing file).
+- `puck creation stats --world <path> [--prototype <id>]` — reports a creation's shape count against `WorldPlacementPolicy.MaxShapesPerStamp`, counts by primitive and blend op, and which shapes use domain ops, onion, twist, bend, rounding, dilate, lift, chamfer, or a panel, plus palette slot usage. Defaults to every prototype carrying a creation document.
+
+`puck creation sculpt` writing to disk goes through the SAME canonical
+serializer `world.save` does, so an UNTOUCHED section of the file (one the
+named sculpt's patch never references) can still change shape — every
+optional field the schema declares gets written out explicitly rather than
+omitted, and every derived field (a camera program operation's `opcode`, a
+rule effect's default `target`) gets filled in. This is not specific to a
+sculpt; it is what routing a document through the typed `WorldDefinition`
+model at all does.
+
+The shipped `CreationSculptRegistry` carries no sculpts — `puck creation
+sculpts` reports "none registered" until a composition root or a test
+registers one.
 
 ## `puck schema` — world.def JSON Schema
 

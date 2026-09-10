@@ -27,8 +27,23 @@ public static class WorldPlacementPolicy {
     /// (authored shapes + expanded text-run glyphs) a creation row may carry. CONTRACT INVARIANT: feeds
     /// <see cref="MaxAnimatedStampShapes"/>, which sizes <c>Client.WorldStampPool</c>'s per-slot
     /// stackalloc spans and (via <c>Client.WorldStampPool.SlotsPerPlacement</c>) the
-    /// field-initializer-time dynamic-transform array. The validator's rejection line names this ceiling word-exactly.</summary>
-    public const int MaxShapesPerStamp = 128;
+    /// field-initializer-time dynamic-transform array. The validator's rejection line names this ceiling word-exactly.
+    /// The stamp pool's own worst-case instance draw is <see cref="MaxStampRegistrations"/> x this value; every
+    /// other boot-probe consumer (the avatar catalog, static placements, screens, every adjacency band's
+    /// reservation, the field bricks) draws against the same
+    /// <c>Puck.SignedDistance.SdfProgramBuilder.MaxInstances</c> ceiling (65536, itself synced to
+    /// <c>SDF_MAX_INSTANCES</c> in <c>sdf-vm.hlsli</c>), and those draws are not independent of this constant either
+    /// (the static-placement probe also reserves one instance per <see cref="MaxShapesPerStamp"/>-shape floor per
+    /// authoring-headroom placement, so the shipped overworld's whole probe grows by 144 instances per shape here:
+    /// 128 pool registrations + 16 headroom placements). 367 is the measured ceiling that keeps the shipped
+    /// overworld's whole COMPOSED boot probe — the presenter's four emitters, the adjacency reservation included —
+    /// at least 4096 instances under the 65536 cap (measured at 367: stamp pool 46976, composed boot total 61392,
+    /// headroom 4144; 368 measures 4000 headroom, under the floor). The scene emitter alone under-counts by the
+    /// adjacency and field reservations (1680 instances for the shipped overworld's ten bands), which is why the
+    /// figure that governs this constant is the composed one. A raise here is a measured decision, not a free one —
+    /// re-measure with <c>WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom</c>
+    /// before changing it.</summary>
+    public const int MaxShapesPerStamp = 367;
     /// <summary>The document-wide ceiling on convex colliders materialized from SOLID placements by the analytic
     /// provider. Protects boot-time allocation and the per-body O(colliders) solver walk. <c>32768</c> admits one
     /// full-budget stamp across hundreds of materialized pattern copies while refusing unbounded authored lattices

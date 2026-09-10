@@ -284,6 +284,96 @@ public sealed class SdfDomainExpansionTests {
         );
     }
     [Fact]
+    public void RepeatExpansionMatchesTheFoldedFieldWhenTheOriginIsOffTheCreationRoot() {
+        // Mirrors the moth wing-band defect: the shape sits off the creation root and the fold's origin recentres
+        // cell selection on it, moving the fundamental domain's boundaries — the fold and the expansion (which
+        // enumerates every cell unconditionally, indifferent to where the boundary sits) must still agree in sign
+        // everywhere, proving TryExpand's copies land where the origin-aware fold renders them.
+        AssertExpansionRefinesTheFold(
+            domain: [
+                new SdfDomainOp.Repeat(
+                    Limit: new Vector3(
+                        x: 0f,
+                        y: 1f,
+                        z: 0f
+                    ),
+                    Origin: new Vector3(
+                        x: 0f,
+                        y: 4.4f,
+                        z: 0f
+                    ),
+                    Spacing: new Vector3(
+                        x: 0f,
+                        y: 2.2f,
+                        z: 0f
+                    )
+                ),
+            ],
+            position: new Vector3(
+                x: 0f,
+                y: 4.4f,
+                z: 0f
+            )
+        );
+    }
+    [Fact]
+    public void AZeroOriginRepeatExpandsToTheSameFramesAsNoOrigin() {
+        Vector3 limit = new(x: 1f, y: 0f, z: 1f);
+        Vector3 spacing = new(x: 6f, y: 12f, z: 6f);
+
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
+            domain: [new SdfDomainOp.Repeat(Limit: limit, Spacing: spacing)],
+            frames: out var withoutOrigin,
+            refusal: out _
+        ));
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
+            domain: [new SdfDomainOp.Repeat(Limit: limit, Origin: Vector3.Zero, Spacing: spacing)],
+            frames: out var withZeroOrigin,
+            refusal: out _
+        ));
+        Assert.Equal(
+            actual: withZeroOrigin,
+            expected: withoutOrigin
+        );
+    }
+    [Fact]
+    public void AZeroOriginPolarExpandsToTheSameFramesAsNoOrigin() {
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
+            domain: [new SdfDomainOp.Polar(Count: 5, Mirror: true)],
+            frames: out var withoutOrigin,
+            refusal: out _
+        ));
+        Assert.True(condition: SdfDomainExpansion.TryExpand(
+            domain: [new SdfDomainOp.Polar(Count: 5, Mirror: true, Origin: Vector3.Zero)],
+            frames: out var withZeroOrigin,
+            refusal: out _
+        ));
+        Assert.Equal(
+            actual: withZeroOrigin,
+            expected: withoutOrigin
+        );
+    }
+    [Fact]
+    public void PolarSectorsRingAPivotAwayFromTheCreationOrigin() {
+        // A shape offset (0,0,6) from a pivot at (10,0,0), not the creation root: the copies ring the PIVOT, each one
+        // that same offset rotated — the control is PolarSectorsRingTheAxis, the identical fold with no origin (a
+        // pivot at the creation root).
+        var pivot = new Vector3(x: 10f, y: 0f, z: 0f);
+        var origins = CopyOrigins(
+            domain: [new SdfDomainOp.Polar(Count: 4, Origin: pivot)],
+            position: (pivot + new Vector3(x: 0f, y: 0f, z: 6f))
+        );
+
+        Assert.Equal(
+            actual: origins.Count,
+            expected: 4
+        );
+        AssertContains(expected: new Vector3(x: 10f, y: 0f, z: 6f), origins: origins);
+        AssertContains(expected: new Vector3(x: 4f, y: 0f, z: 0f), origins: origins);
+        AssertContains(expected: new Vector3(x: 10f, y: 0f, z: -6f), origins: origins);
+        AssertContains(expected: new Vector3(x: 16f, y: 0f, z: 0f), origins: origins);
+    }
+    [Fact]
     public void RepeatExpansionMatchesTheFoldedField() {
         // The prototype sits at the centre cell's middle: a repeat fold is exact only for an on-centre prototype
         // within half a spacing per axis, and one parked on a cell wall is clipped by the fold but whole here.

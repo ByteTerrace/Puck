@@ -29,7 +29,6 @@
 // that shades, so it is the only one that binds it; every other consumer of sdf-world.hlsli compiles the estimator
 // away to fully-lit rather than carrying a descriptor it would never read. The core-ops variant inherits this define
 // through its verbatim include, so BOTH Stage 1 pipelines bind the table.
-#define SDF_SHADOW_SAMPLER
 // The per-tile shadow gather (sdf-world.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
 // workgroup, built cooperatively at the uniform seam inside renderView. Every lane — rendered pixel or not — must
 // reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.
@@ -119,12 +118,6 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // This is a pixel DIAMETER, deliberately 2x the pixel radius Keinert's termination test names — a half-pixel of
     // conservative silhouette, in the same direction as the Lipschitz clamp's bias.
     float pixelFootprint = ((2.0 * view.right.w) / max(float(rectDims.y), 1.0));
-    // The shadow accumulator's history lane: this pixel's RETAINED alpha from the last frame Stage 1 rendered it. The
-    // source texture is the only Stage-1-owned surface whose cross-frame persistence the engine already depends on (the
-    // cadence gate re-composites from it), Stage 2 reads only .rgb, and a hosted child slot returned above — so the
-    // lane is free, private, and never observed by anything downstream.
-    sdfShadowHistoryIn = (active ? sources[id.z][pixel].a : 1.0);
-    sdfShadowHistoryOut = 1.0;
 
     float3 color = renderView(view, localUv, marchStart, firstExit, secondEntry, farBound, instanceMaskBase, pixelFootprint, pixel, id.z, lane, active);
 
@@ -136,5 +129,5 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.
     color += ((sdfR2Dither(pixel) - 0.5) * DitherQuantum);
 
-    sources[id.z][pixel] = float4(color, sdfShadowHistoryOut);
+    sources[id.z][pixel] = float4(color, 1.0);
 }

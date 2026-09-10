@@ -93,9 +93,14 @@ public sealed partial class WorldStampPool {
         public float CueClock;
         public int CueFrame;
         public float CueHoldUntil;
+        // Pose state: each authored pose's timeline frame (1-based, 0 = unresolved) and state reference, and the pose
+        // frame holding now (0 = none), re-read from the live state every PackTransforms.
+        public int[] PoseFrames = [];
+        public string[] PoseReferences = [];
+        public int PoseFrame;
 
-        // The cursor the frame reads: a firing cue's frame overrides the replay cursor for its hold.
-        public int EffectiveCursor => ((CueFrame > 0) ? CueFrame : FrameCursor);
+        // The cursor the frame reads: a holding pose overrides a firing cue, which overrides the replay cursor.
+        public int EffectiveCursor => ((PoseFrame > 0) ? PoseFrame : ((CueFrame > 0) ? CueFrame : FrameCursor));
 
         // Memoized per-frame shape-id → pose index (a pure derivation of the immutable document).
         public Dictionary<int, FrameTransformDocument>?[] FramePoses = [];
@@ -220,21 +225,39 @@ public sealed partial class WorldStampPool {
                 bend: (shape.Bend ?? 0f),
                 blend: (shape.Blend ?? SdfBlendOp.Union),
                 builder: builder,
-                dilate: (shape.Dilate ?? 0f),
+                detail: (shape.Detail ?? false),
+                // Field ops and the blend radius act on the running WORLD-space accumulator directly — never
+                // re-multiplied by a chain's own Scale op the way a primitive's baked-local rounding/chamfer is — so
+                // they take the placement scale unconditionally, domain-carrying member or not (unlike rounding/
+                // chamfer below, whose domain exemption relies on exactly that re-multiply).
+                dilate: ((shape.Dilate ?? 0f) * placementScale),
                 domain: (probeWorstCase ? ShapeDomainOps.ProbeWorstCase : shape.Domain),
+                flare: shape.Flare,
                 inGroupScope: true,
                 material: paletteIds[((shape.Material ?? 0) % paletteIds.Length)],
-                onion: (shape.Onion ?? 0f),
+                onion: ((shape.Onion ?? 0f) * placementScale),
+                placementScale: placementScale,
                 probeWorstCase: probeWorstCase,
                 rootSlot: rootSlot,
-                scale: (shape.Scale * placementScale),
+                // A domain-bearing member's chain carries the placement scale as a Scale op (EmitShape), so its
+                // primitive is emitted at the shape's OWN scale; every other member bakes the product.
+                scale: ((probeWorstCase || (shape.Domain is { Count: > 0 }))
+                ? shape.Scale
+                : (shape.Scale * placementScale)),
                 shapePosition: shape.Position,
                 shapeRotation: shape.Rotation,
                 slot: ((rootSlot + 1) + member),
-                smooth: (shape.Smooth ?? 0f),
+                smooth: ((shape.Smooth ?? 0f) * placementScale),
                 twist: (shape.Twist ?? 0f),
                 type: shape.Type,
-                taper: shape.Taper ?? 0.5f, profile: shape.Profile
+                taper: shape.Taper ?? 0.5f, profile: shape.Profile,
+                lift: (shape.Lift ?? SdfLift.Extrude),
+                // Creation-unit radii follow the primitive's own units: baked into world units with the product
+                // scale, left alone under a domain member's Scale op (the static stamper's chain scales both the same
+                // way through its Scale(transform.Scale) op).
+                rounding: ((shape.Rounding ?? 0f) * ((probeWorstCase || (shape.Domain is { Count: > 0 })) ? 1f : placementScale)),
+                chamfer: ((shape.Chamfer ?? 0f) * ((probeWorstCase || (shape.Domain is { Count: > 0 })) ? 1f : placementScale)),
+                exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
             );
         }
 
@@ -284,8 +307,16 @@ public sealed partial class WorldStampPool {
             )
             : null
         );
+        // The probe's own worst-case raised-panel term: SdfSolidGeometry.MaxPanelReach derives it from
+        // ShapePanelDocument's own |Depth| validation ceiling (twice the eroded copy's own half-extent, worst case
+        // at zero inset) maximized across every primitive a panel can be authored on, at the placement scale
+        // envelope's own ceiling — alongside the existing 2.5x per-shape reach term.
+        // The probe emits the worst-case flare (ShapeFlareDocument.MaxAmount/MaxBulge) on every shape, so its reach
+        // term carries the same ProbeReachFactor the per-shape bounds below take.
         var reach = ((probeWorstCase || (document is null))
-            ? (2.5f * maxPlacementScale)
+            ? (((2.5f * maxPlacementScale) * (probeWorstCase ? ShapeFlareDocument.ProbeReachFactor : 1f)) + (probeWorstCase
+                ? SdfSolidGeometry.MaxPanelReach(scale: new Vector3(value: maxPlacementScale))
+                : 0f))
             : CreationStampEmitter.RenderReach(
                 document: document!,
                 scale: placementScale,
@@ -319,51 +350,101 @@ public sealed partial class WorldStampPool {
             var slot = ((rootSlot + 1) + index);
             var scale = ((placed?.Scale ?? Vector3.One) * placementScale);
             var material = paletteIds[((placed?.Material ?? 0) % paletteIds.Length)];
+            var panelMaterial = ((placed?.Panel is { } placedPanel)
+                ? paletteIds[(placedPanel.Material % paletteIds.Length)]
+                : 0);
             var active = (probeWorstCase || (placed is not null));
-            // A domain-bearing shape cannot ride its own per-shape slot (see EmitShape's remarks); its geometry rides
-            // the ROOT slot instead, so its bound must too — the tight per-shape bound below assumes the primitive
-            // sits AT the per-shape slot's own transform, which a domain fold's reach and translated local pose both
-            // violate. The probe always takes this (larger) form: it dominates the per-shape bound's word/segment
-            // cost for any real content at this index.
+            // A domain-bearing shape rides its own per-shape slot too (see EmitShape's remarks), but that slot
+            // carries its parent's DELTA FRAME, not the shape's composed pose: its geometry sits at its rest pose
+            // inside that frame and its fold images lie wherever the domain ops carry it from the frame's origin.
+            // So its bound is centred on the slot (the frame origin, which travels with the parent) with the radius
+            // RenderReach charges the static stamper — rest offset plus fold displacement, in placement units, plus
+            // the primitive's own reach and field ops — never the tight per-shape sphere, which assumes the primitive
+            // sits AT the slot. The probe takes the creation-wide reach here (the radius costs no word either way).
             var domain = (probeWorstCase
                 ? ShapeDomainOps.ProbeWorstCase
                 : placed?.Domain
             );
             var hasDomain = (domain is { Count: > 0 });
+            // A flare scales the primitive's XZ cross-section by up to max(s) about its own axis, so the primitive's
+            // reach — and only that term: a rest offset or fold displacement is applied before the warp — grows by
+            // ShapeFlareDocument.ReachFactor (the probe's worst-case flare by ProbeReachFactor). Without it a flared
+            // shape clips at its tile edges (the influence-sphere contract).
+            var flareReachFactor = (probeWorstCase
+                ? ShapeFlareDocument.ProbeReachFactor
+                : ShapeFlareDocument.ReachFactor(flare: placed?.Flare)
+            );
 
             _ = builder.BeginInstanceDynamic(
-                slot: (hasDomain ? rootSlot : slot),
+                slot: slot,
                 boundOffset: Vector3.Zero,
                 boundRadius: (hasDomain
-                ? (reach + GroupBoundMargin)
+                ? (probeWorstCase
+                    ? (reach + GroupBoundMargin)
+                    : (((((placed!.Position.Value.Length() + ShapeDomainOps.Reach(domain: domain)) * placementScale) + (SdfSolidGeometry.Reach(
+                        type: placed.Type,
+                        scale: scale,
+                        lift: (placed.Lift ?? SdfLift.Extrude)
+                    ) * flareReachFactor)) + ((placed.Dilate ?? 0f) * placementScale)) + ((placed.Onion ?? 0f) * placementScale)))
                 // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
                 // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
                 // packer adds the smooth halo. It is an INFLUENCE sphere by contract, read per tile cone by the cull
                 // and per SAMPLE by the interpreter's influence skip: until 2026-09-03 it was 0.9 x max(scale), which
                 // does not cover a unit sphere, let alone a box's corners — the halo hid the deficit at tile
                 // granularity, and the per-sample skip exposed it on every shape of the avatar.
-                : ((SdfSolidGeometry.Reach(
+                : ((((SdfSolidGeometry.Reach(
                     type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
-                    scale: scale
-                ) + (placed?.Dilate ?? 0f)) + (placed?.Onion ?? 0f))),
+                    scale: scale,
+                    lift: (placed?.Lift ?? SdfLift.Extrude),
+                    // Depth is a creation-unit value; the raise it adds to this world-unit bound scales with the placement.
+                    panelRaise: ((placed?.Panel is { Depth: < 0f } raisedPanel)
+                    ? (-raisedPanel.Depth * placementScale)
+                    : 0f)
+                ) * flareReachFactor) + ((placed?.Dilate ?? 0f) * placementScale)) + ((placed?.Onion ?? 0f) * placementScale))
+                // A trim's own scope grows the host's copy outward by at most Inset (ShapeTrimDocument.MaxInset)
+                // before it can ever win the Union race against this same shape's plain instance — reserved
+                // unconditionally under the probe, since a live slot's real Trims are not known until content loads.
+                + ((probeWorstCase || (placed?.Trims is { Count: > 0 })) ? (ShapeTrimDocument.MaxInset * placementScale) : 0f))),
                 active: active
             );
             EmitShape(
                 bend: (placed?.Bend ?? 0f),
                 builder: builder,
-                dilate: (placed?.Dilate ?? 0f),
+                detail: (placed?.Detail ?? false),
+                // Field ops act on the running WORLD-space accumulator directly, never re-multiplied by a chain's
+                // own Scale op the way a primitive's baked-local rounding/chamfer is (below), so they take the
+                // placement scale unconditionally, domain-carrying shape or not.
+                dilate: ((placed?.Dilate ?? 0f) * placementScale),
                 domain: domain,
+                flare: placed?.Flare,
                 material: material,
-                onion: (placed?.Onion ?? 0f),
+                onion: ((placed?.Onion ?? 0f) * placementScale),
+                panel: placed?.Panel,
+                panelMaterial: panelMaterial,
+                placementScale: placementScale,
                 probeWorstCase: probeWorstCase,
                 rootSlot: rootSlot,
-                scale: scale,
+                // A domain-bearing shape's chain carries the placement scale as a Scale op (EmitShape), so its
+                // primitive is emitted at the shape's OWN scale; every other shape bakes the product.
+                scale: (hasDomain
+                ? (placed?.Scale ?? Vector3.One)
+                : scale),
                 shapePosition: (placed?.Position.Value ?? default),
                 shapeRotation: (placed?.Rotation.Value ?? default),
                 slot: slot,
                 twist: (placed?.Twist ?? 0f),
                 type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
-                taper: placed?.Taper ?? 0.5f, profile: placed?.Profile
+                taper: placed?.Taper ?? 0.5f, profile: placed?.Profile,
+                lift: (placed?.Lift ?? SdfLift.Extrude),
+                // Creation-unit radii follow the primitive's own units: baked into world units with `scale`, left
+                // alone under a domain shape's Scale op — the same rule Inset/Depth take, and the static stamper's
+                // chain, which scales both through its Scale(transform.Scale) op.
+                rounding: ((placed?.Rounding ?? 0f) * (hasDomain ? 1f : placementScale)),
+                chamfer: ((placed?.Chamfer ?? 0f) * (hasDomain ? 1f : placementScale)),
+                trims: placed?.Trims,
+                allShapes: shapes,
+                paletteIds: paletteIds,
+                exponent: (placed?.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
             );
             _ = builder.EndInstance();
         }
@@ -456,61 +537,103 @@ public sealed partial class WorldStampPool {
     // outside a group; an eccentric primitive takes the same scope for its Lipschitz factor] — the fixed op sequence over the canonical CreationGeometry dimensions. probeWorstCase emits
     // EVERY op unconditionally (the probe binding rule).
     //
-    // A domain-bearing shape cannot ride its own per-shape slot: PackTransforms bakes that slot's dynamic transform
-    // as the WHOLE composed root*shape pose, leaving no seam to insert a domain op between "the placement/registration
-    // root" and "this shape's own translate/rotate" — exactly the seam CreationStampEmitter.Emit's static path opens
-    // by chaining them as separate ops. So it rides the ROOT slot instead, applies its domain ops there, then bakes
-    // its own (STATIC) local pose as ordinary Translate/Rotate — the same "ride root, bake local" shape
-    // CreationStampEmitter.EmitTextDynamic already uses for a creation's text runs. A domain-bearing shape therefore
-    // does not replay a per-shape animation-frame pose (PackTransforms still writes root*shape into its own slot for
-    // part/anchor resolution — TryBodyPartPose and friends — but nothing reads it for this shape's GEOMETRY).
-    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null) {
-        var chain = builder.ResetPoint();
+    // A domain-bearing shape rides its OWN per-shape slot, like any other shape — but PackTransforms packs that slot
+    // with the RIGID DELTA the shape's parent chain imparts to creation space (identity when the shape has no
+    // parent), never a composed root*shape pose: there is no seam to insert a domain op between "the composed pose"
+    // and "this shape's own translate/rotate". So its chain mirrors CreationStampEmitter.EmitShapeChain's static
+    // chain exactly, with the carried frame standing in for the placement frame: TransformDynamic(slot) ->
+    // Scale(placementScale) -> the domain ops -> the shape's own (STATIC, rest-pose) Translate/Rotate -> the
+    // primitive at the shape's OWN scale (the caller passes `scale` unbaked for this branch — the Scale op carries
+    // the placement scale for the fold's offsets, spacings, and cells as well as the rest offset, which a baked
+    // primitive scale could not). A domain-bearing shape therefore never carries its own swing/slide or a
+    // frame-timeline pose (refused at validation) — only a parent's motion reaches it, and only through
+    // PackTransforms's parent-delta chain (WorldStampPool.ChainPartDeltas).
+    //
+    // A panel's copy is emitted from a SECOND chain (its own ResetPoint + TransformDynamic + the same twist/bend
+    // prefix) rather than after the plate's shape instruction, whose emission may leave a persistent Scale op on the
+    // chain. placementScale converts the panel's creation-unit Inset/Depth into the world units `scale` is already
+    // in, and is the Scale op a domain-bearing shape's chain carries (above).
+    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent) {
+        SdfProgramBuilder BuildChain(bool withDomain) {
+            var chain = builder.ResetPoint();
+            var chainCarriesScale = (withDomain && (domain is { Count: > 0 }));
 
-        if (domain is { Count: > 0 }) {
-            chain = ShapeDomainOps.Apply(
-                chain: chain.TransformDynamic(slot: rootSlot),
-                domain: domain
-            )
-                .Translate(offset: shapePosition)
-                .Rotate(rotation: ((shapeRotation == default)
-                ? Quaternion.Identity
-                : Quaternion.Normalize(value: shapeRotation)));
-        } else {
-            chain = chain.TransformDynamic(slot: slot);
+            if (chainCarriesScale) {
+                chain = ShapeDomainOps.Apply(
+                    chain: chain
+                        .TransformDynamic(slot: slot)
+                        .Scale(scale: new Vector3(value: placementScale)),
+                    domain: domain
+                )
+                    .Translate(offset: shapePosition)
+                    .Rotate(rotation: ((shapeRotation == default)
+                    ? Quaternion.Identity
+                    : Quaternion.Normalize(value: shapeRotation)));
+            } else {
+                chain = chain.TransformDynamic(slot: slot);
+            }
+
+            if (
+                probeWorstCase ||
+                (twist != 0f)
+            ) {
+                chain = chain.TwistY(rate: (probeWorstCase
+                    ? 1f
+                    : twist));
+            }
+
+            if (
+                probeWorstCase ||
+                (bend != 0f)
+            ) {
+                chain = chain.BendY(rate: (probeWorstCase
+                    ? 1f
+                    : bend));
+            }
+
+            if (
+                probeWorstCase ||
+                (flare is not null)
+            ) {
+                // Top/Span are creation-unit lengths. A domain-bearing chain already carries the placement scale as
+                // its own Scale op (above), so they pass through in creation units there, exactly as on
+                // CreationStampEmitter.EmitShapeChain's chain; every other chain has no Scale op, so — like the
+                // rounding/chamfer the caller bakes — they take placementScale by hand. Amount/Bulge are
+                // dimensionless ratios and pass through unscaled on both.
+                var lengthScale = (chainCarriesScale ? 1f : placementScale);
+
+                chain = chain.FlareY(
+                    amount: (probeWorstCase ? ShapeFlareDocument.MaxAmount : flare!.Amount),
+                    bulge: (probeWorstCase ? ShapeFlareDocument.MaxBulge : flare!.Bulge),
+                    top: (probeWorstCase ? 0f : ((flare!.Top ?? 0f) * lengthScale)),
+                    span: (probeWorstCase ? 1f : (flare!.Span * lengthScale))
+                );
+            }
+
+            return chain;
         }
 
-        if (
-            probeWorstCase ||
-            (twist != 0f)
-        ) {
-            chain = chain.TwistY(rate: (probeWorstCase
-                ? 1f
-                : twist));
-        }
-
-        if (
-            probeWorstCase ||
-            (bend != 0f)
-        ) {
-            chain = chain.BendY(rate: (probeWorstCase
-                ? 1f
-                : bend));
-        }
-
+        var chain = BuildChain(withDomain: true);
         var wantsDilate = (probeWorstCase || (dilate != 0f));
         var wantsOnion = (probeWorstCase || (onion != 0f));
         // An eccentric primitive (SdfSolidGeometry.StepFactor > 1: a non-uniformly scaled sphere baked as an ellipsoid)
         // takes the same per-shape scope the field ops do, so its Lipschitz factor clamps its own candidate at the pop
         // instead of the whole program's step scale. Inside a group the group's scope already covers it
-        // (GroupNeedsScope); the probe always emits the scope, so the envelope is unchanged.
+        // (GroupNeedsScope); the probe always emits the scope, so the envelope is unchanged. A panel takes the SAME
+        // scope for a different reason — its subtraction/union must bite only this shape's own candidate — and, like
+        // Group, is refused at validation whenever inGroupScope would apply here.
         var eccentric = (SdfSolidGeometry.StepFactor(
             scale: scale,
             type: type
         ) > 1f);
+        var wantsPanel = (probeWorstCase || (panel is not null));
+        // A flare is a warp, so its Lipschitz factor (SdfProgram.FlareOperatorNorm) would otherwise fold into the
+        // WHOLE program's step scale; its own scope clamps it onto this candidate at the pop instead, exactly as an
+        // eccentric primitive's factor is. (The probe already emits the scope unconditionally, so the envelope is unchanged.)
+        var wantsFlare = (flare is not null);
 
         if (
-            (wantsDilate || wantsOnion || eccentric) &&
+            (wantsDilate || wantsOnion || eccentric || wantsPanel || wantsFlare) &&
             !inGroupScope
         ) {
             var scoped = SdfSolidGeometry.AppendScaledPrimitive(
@@ -519,11 +642,13 @@ public sealed partial class WorldStampPool {
                     compose: blend,
                     smooth: smooth
                 ),
+                detail: detail,
                 material: material,
                 scale: scale,
                 smooth: 0f,
                 type: type,
-                taper: taper, profile: profile
+                taper: taper, profile: profile,
+                lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent
             );
 
             if (wantsDilate) {
@@ -538,7 +663,47 @@ public sealed partial class WorldStampPool {
                     : onion));
             }
 
-            _ = scoped.PopField();
+            if (wantsPanel) {
+                // probeWorstCase reserves the recess form unconditionally at the shape's own maximum inset and a
+                // full-extent depth — the instruction-word cost is the same either way; the bound a raised panel
+                // needs is the caller's (the per-shape reach EmitOne packs this instance against). A panel is refused
+                // with a domain, so the copy's chain never carries one; the probe's plate chain does, and dominates.
+                var faceAxis = (probeWorstCase
+                    ? ShapePanelDocument.DefaultFace
+                    : ((panel!.Face is { } face)
+                        ? face.Value
+                        : ShapePanelDocument.DefaultFace));
+                var placement = ShapePanelDocument.Resolve(
+                    depth: (probeWorstCase
+                    ? (2f * SdfSolidGeometry.HalfExtent(type: type, scale: scale, lift: lift, axis: faceAxis))
+                    : (panel!.Depth * placementScale)),
+                    faceAxis: faceAxis,
+                    inset: (probeWorstCase
+                    ? MinHalfExtent(type: type, scale: scale, lift: lift)
+                    : (panel!.Inset * placementScale)),
+                    lift: lift,
+                    scale: scale,
+                    type: type
+                );
+
+                _ = SdfSolidGeometry.AppendScaledPrimitive(
+                    chain: BuildChain(withDomain: false).Translate(offset: (placement.FaceAxis * placement.Offset)),
+                    type: type, taper: taper, profile: profile,
+                    lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent,
+                    scale: placement.ErodedScale,
+                    material: (probeWorstCase ? material : panelMaterial),
+                    blend: placement.Blend,
+                    smooth: 0f
+                );
+            }
+
+            _ = builder.PopField();
+            EmitTrims(
+                builder: builder, slot: slot, rootSlot: rootSlot, type: type, scale: scale, material: material,
+                taper: taper, profile: profile, lift: lift, rounding: rounding, chamfer: chamfer,
+                probeWorstCase: probeWorstCase, placementScale: placementScale,
+                trims: trims, allShapes: allShapes, paletteIds: paletteIds, exponent: exponent
+            );
 
             return;
         }
@@ -546,11 +711,13 @@ public sealed partial class WorldStampPool {
         var afterShape = SdfSolidGeometry.AppendScaledPrimitive(
             blend: blend,
             chain: chain,
+            detail: detail,
             material: material,
             scale: scale,
             smooth: smooth,
             type: type,
-            taper: taper, profile: profile
+            taper: taper, profile: profile,
+            lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent
         );
 
         if (wantsDilate) {
@@ -564,7 +731,40 @@ public sealed partial class WorldStampPool {
                 ? ShapeDocument.MaxOnion
                 : onion));
         }
+
+        if (!inGroupScope) {
+            EmitTrims(
+                builder: builder, slot: slot, rootSlot: rootSlot, type: type, scale: scale, material: material,
+                taper: taper, profile: profile, lift: lift, rounding: rounding, chamfer: chamfer,
+                probeWorstCase: probeWorstCase, placementScale: placementScale,
+                trims: trims, allShapes: allShapes, paletteIds: paletteIds, exponent: exponent
+            );
+        }
     }
+    // The panel probe's worst-case inset: the shape's smallest local half-extent, past which an eroded copy is
+    // empty everywhere.
+    private static float MinHalfExtent(SdfSolidPrimitive type, Vector3 scale, SdfLift lift) => MathF.Min(
+        x: SdfSolidGeometry.HalfExtent(
+            type: type,
+            scale: scale,
+            lift: lift,
+            axis: Vector3.UnitX
+        ),
+        y: MathF.Min(
+            x: SdfSolidGeometry.HalfExtent(
+                type: type,
+                scale: scale,
+                lift: lift,
+                axis: Vector3.UnitY
+            ),
+            y: SdfSolidGeometry.HalfExtent(
+                type: type,
+                scale: scale,
+                lift: lift,
+                axis: Vector3.UnitZ
+            )
+        )
+    );
     private Registration? FindBody(int bodyIndex) {
         foreach (var live in m_pool) {
             if (
@@ -644,7 +844,7 @@ public sealed partial class WorldStampPool {
             // scope, whose pop clamps the group's own 1/L onto its candidate instead (SdfProgram.AnalyzeLipschitz).
             if (
                 ((shape.Group ?? 0) == groupId) &&
-                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f) || (SdfSolidGeometry.StepFactor(type: shape.Type, scale: shape.Scale) > 1f))
+                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f) || (shape.Flare is not null) || (SdfSolidGeometry.StepFactor(type: shape.Type, scale: shape.Scale) > 1f))
             ) {
                 return true;
             }
@@ -677,6 +877,17 @@ public sealed partial class WorldStampPool {
             Cues = stamp.Motion.Cues,
             Replay = stamp.Motion.ReplayFrames,
         };
+
+        if (stamp.Motion.Poses is { Count: > 0 } poses) {
+            var frames = (stamp.Creation.Document.Frames ?? []);
+
+            ResolvePoses(
+                frames: frames,
+                poses: poses,
+                references: out registration.PoseReferences,
+                timelineFrames: out registration.PoseFrames
+            );
+        }
 
         if (stamp.Motion.Cues is { Count: > 0 } cues) {
             var frames = (stamp.Creation.Document.Frames ?? []);
@@ -780,6 +991,77 @@ public sealed partial class WorldStampPool {
             (live.RootOrientationFollower.Seeded ? live.FollowedOrientation : rotation),
             scale
         );
+    }
+    private static int SelectPose(WorldClient client, Registration live) => SelectPoseFrame(
+        bodyIndex: (live.BodyIndex ?? -1),
+        definition: client.Definition,
+        references: live.PoseReferences,
+        tick: client.Tick,
+        timelineFrames: live.PoseFrames
+    );
+    // A look's poses against its creation's timeline: each pose's state reference and its 1-based frame (0 = the
+    // pose names no frame, which the validator refuses before a document reaches here).
+    private static void ResolvePoses(IReadOnlyDictionary<string, string> poses, IReadOnlyList<FrameDocument?> frames, out string[] references, out int[] timelineFrames) {
+        references = new string[poses.Count];
+        timelineFrames = new int[poses.Count];
+
+        var pose = 0;
+
+        foreach (var (frameName, reference) in poses) {
+            references[pose] = reference;
+
+            for (var frame = 0; (frame < frames.Count); frame++) {
+                if (string.Equals(a: frames[frame]?.Name, b: frameName, comparisonType: StringComparison.Ordinal)) {
+                    timelineFrames[pose] = (frame + 1);
+
+                    break;
+                }
+            }
+
+            pose++;
+        }
+    }
+    /// <summary>Selects the timeline frame a look's <c>poses</c> hold this frame: the first pose, in declaration
+    /// order, whose state cell reads nonzero, as a 1-based frame index; 0 when none holds.</summary>
+    /// <param name="definition">The live definition.</param>
+    /// <param name="poses">The look's frame-name to state-reference map.</param>
+    /// <param name="frames">The creation's timeline.</param>
+    /// <param name="bodyIndex">The wearing body's index, substituted for <c>$body</c>.</param>
+    /// <param name="tick">The tick the cells are read at.</param>
+    public static int SelectPoseFrame(WorldDefinition definition, IReadOnlyDictionary<string, string> poses, IReadOnlyList<FrameDocument?> frames, int bodyIndex, ulong tick) {
+        ResolvePoses(
+            frames: frames,
+            poses: poses,
+            references: out var references,
+            timelineFrames: out var timelineFrames
+        );
+
+        return SelectPoseFrame(
+            bodyIndex: bodyIndex,
+            definition: definition,
+            references: references,
+            tick: tick,
+            timelineFrames: timelineFrames
+        );
+    }
+    private static int SelectPoseFrame(WorldDefinition definition, string[] references, int[] timelineFrames, int bodyIndex, ulong tick) {
+        for (var pose = 0; (pose < references.Length); pose++) {
+            if (
+                (timelineFrames[pose] > 0) &&
+                WorldGaitDrivers.TryReadStateTruth(
+                bodyIndex: bodyIndex,
+                definition: definition,
+                reference: references[pose],
+                tick: tick,
+                value: out var value
+            ) &&
+                (value != 0f)
+            ) {
+                return timelineFrames[pose];
+            }
+        }
+
+        return 0;
     }
     // The rest before a cue's next self-fire: a uniform draw in min..max keyed by (body, fire count) — the same body
     // blinks the same way on every run, and no two bodies in step (each body is its own stream). Infinity for a
@@ -1038,6 +1320,8 @@ public sealed partial class WorldStampPool {
             var document = live.Creation.EngineDocument;
             var drivers = document.Drivers;
 
+            live.PoseFrame = SelectPose(client: client, live: live);
+
             if (live.BodyIndex is { } drivenBody) {
                 WorldGaitDrivers.Advance(
                     address: client.EntityAddress(index: drivenBody),
@@ -1131,9 +1415,31 @@ public sealed partial class WorldStampPool {
                     continue;
                 }
 
+                var shape = shapes[shapeIndex];
+
+                // A domain-bearing shape's own slot carries the RIGID DELTA its parent chain imparts to creation
+                // space (identity when it has no parent) rather than a composed pose — EmitShape rides this slot
+                // for its TransformDynamic, applies its domain ops against it, and bakes its own rest-pose local
+                // translate/rotate afterward. The canonicalizer refuses an own swing/slide or a named frame pose on
+                // a domain-bearing shape, so PartOwnRotation/Translation is always identity/zero here and
+                // PartDeltaRotation/Translation[shapeIndex] IS exactly the parent's chained delta (ChainPartDeltas).
+                // The delta's translation is in creation units, like every other shape's, so it takes the placement
+                // scale here — the same product the ordinary path folds into `position * placementScale` below.
+                if (shape.Domain is { Count: > 0 }) {
+                    transforms[slot] = new DynamicTransform(
+                        Orientation: Quaternion.Normalize(value: (rootRotation * live.PartDeltaRotation[shapeIndex])),
+                        Position: (rootPosition + Vector3.Transform(
+                            rotation: rootRotation,
+                            value: (live.PartDeltaTranslation[shapeIndex] * placementScale)
+                        ))
+                    );
+
+                    continue;
+                }
+
                 var (position, rotation) = BasePose(
                     poses: poses,
-                    shape: shapes[shapeIndex]
+                    shape: shape
                 );
 
                 WorldGaitDrivers.Apply(
@@ -1508,21 +1814,53 @@ public sealed partial class WorldStampPool {
     /// <param name="transforms">The current composed transform buffer.</param>
     /// <param name="pose">The live part pose, or default when unresolved.</param>
     /// <returns><see langword="true"/> when the live creation look publishes a packed part pose.</returns>
+    /// <remarks>An ordinary shape's slot IS its composed pose. A domain-bearing shape's slot carries only the
+    /// parent's delta frame (see <see cref="PackTransforms"/>), so its rest pose is composed onto that frame here —
+    /// the same answer <see cref="TryBodyPartAuthoredPose"/> gives for it, read from the packed buffer instead of
+    /// the latch.</remarks>
     public bool TryBodyPartPose(int bodyIndex, string partId, ReadOnlySpan<DynamicTransform> transforms, out SdfAnchor pose) {
         if (
-            !TryBodyPartTransformSlot(
+            (m_packedSlotBase < 0) ||
+            !TryFindBody(
             bodyIndex: bodyIndex,
-            partId: partId,
-            transformSlot: out var transformSlot
+            live: out var live,
+            poolIndex: out var poolIndex
         ) ||
-            (((uint)transformSlot) >= ((uint)transforms.Length))
+            !live.Parts.TryResolve(
+            partId: partId,
+            transformSlot: out var shapeSlot
+        )
         ) {
             pose = default;
 
             return false;
         }
 
+        var transformSlot = (((m_packedSlotBase + (poolIndex * SlotsPerPlacement)) + 1) + shapeSlot);
+
+        if (((uint)transformSlot) >= ((uint)transforms.Length)) {
+            pose = default;
+
+            return false;
+        }
+
         var transform = transforms[transformSlot];
+        var shapes = (live.Creation.EngineDocument.Shapes ?? []);
+
+        if (
+            (((uint)shapeSlot) < ((uint)shapes.Count)) &&
+            (shapes[shapeSlot] is { Domain: { Count: > 0 } } folded)
+        ) {
+            pose = new SdfAnchor(
+                Position: (transform.Position + Vector3.Transform(
+                    rotation: transform.Orientation,
+                    value: (folded.Position.Value * live.Scale)
+                )),
+                Orientation: Quaternion.Normalize(value: (transform.Orientation * folded.Rotation.Value))
+            );
+
+            return true;
+        }
 
         pose = new SdfAnchor(
             Position: transform.Position,

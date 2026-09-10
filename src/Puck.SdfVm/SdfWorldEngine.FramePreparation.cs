@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Puck.Hosting;
+using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -296,108 +297,63 @@ public sealed partial class SdfWorldEngine {
             : 0f
         );
 
-        // The F1/F2 far-field lever row: one reserved row AFTER the shadow-proxy row. x = disable the
-        // beam-published per-tile far bound (F1 A/B "off" side — the fine march ignores plane 3 and runs to MaxDistance
-        // exactly as pre-F1); y = disable the F2 shadow light-side early exit (softShadow runs its full budget/reach); zw
-        // reserved. Both levers default 0, so a frame that sets neither uploads zeros = both features ON (the shipped
-        // behavior). KEEP IN SYNC with sdf-world.hlsli's SdfFarFieldParams / worldFarBoundDisabled / worldShadowEscapeExitDisabled.
+        // The far-field lever row: x = disable the beam-published per-tile far bound (the fine march then runs to
+        // the far distance); yzw reserved. Default 0 = the far bound ON. KEEP IN SYNC with sdf-world.hlsli's
+        // SdfFarFieldParams / worldFarBoundDisabled.
         var farFieldBase = ((MaxScreenSurfaces + 7) * 4);
 
         floats[(farFieldBase + 0)] = (frame.DisableFarBound
             ? 1f
             : 0f
-        ); floats[(farFieldBase + 1)] = (frame.DisableShadowEscapeExit
-            ? 1f
-            : 0f
-        ); floats[(farFieldBase + 2)] = 0f; floats[(farFieldBase + 3)] = 0f;
+        ); floats[(farFieldBase + 1)] = 0f; floats[(farFieldBase + 2)] = 0f; floats[(farFieldBase + 3)] = 0f;
 
-        PackSunFrame(
-            floats: floats,
-            frame: frame
-        );
-        PackSkyFrame(
+        PackEnvironment(
             floats: floats,
             frame: frame
         );
     }
-    // The lighting rows: the scene's directional sun and its ambient, as per-frame data (SdfSunDirection/
-    // SdfSunTangent/SdfSunBitangent/SunWeight/AmbientBase/AmbientHemisphere). Five rows AFTER the far-field row.
-    // KEEP IN SYNC with sdf-world.hlsli's SdfSunFrameA..SdfAmbientColor.
-    //
-    // The sun is a FRAME, not a vector: the area-light shadow estimator samples a disc around the direction, so it
-    // needs two tangents too. They are derived HERE, host-side: DXC's DXIL backend constant-folds normalize() while
-    // its SPIR-V backend emits a runtime call, so a shader-side cross/normalize would be one compile-time constant on
-    // DXIL and a driver rsqrt on SPIR-V. A uniform has no such asymmetry: both backends read these identical bits.
-    //
-    // The arithmetic is DOUBLE, rounded once at the end: a float32 Vector3.Normalize lands one ulp high in the
-    // bitangent's Z for the default sun, so double precision keeps the default-sun path bit-identical.
-    private static void PackSunFrame(SdfFrame frame, Span<float> floats) {
-        var sunBase = ((MaxScreenSurfaces + 8) * 4);
-        double sunX = frame.SunDirection.X, sunY = frame.SunDirection.Y, sunZ = frame.SunDirection.Z;
-        var length = Math.Sqrt(d: (((sunX * sunX) + (sunY * sunY)) + (sunZ * sunZ)));
+    // The environment block: SdfEnvironment's lanes copied row for row after the far-field row, with the host bakes
+    // the shader must not pay per pixel — every directional (light and softbox) normalized in double and rounded once
+    // (DXC's DXIL backend constant-folds a normalize() while its SPIR-V backend emits a runtime call; a uniform has
+    // no such asymmetry), the sun-disc angular radius baked into the pow() exponent that puts the disc's edge at half
+    // brightness (k = ln 0.5 / ln cos r), the twinkle rate baked into a period in engine ticks so the shader reduces
+    // the tick counter by an integer modulo, and the cloud drift, shear and spin integrated from the tick counter in
+    // double (offsets wrapped modulo the lattice period, the angle modulo 2π). KEEP IN SYNC with sdf-world.hlsli's
+    // SdfEnv* rows and SdfEnvironment's row layout.
+    private static void PackEnvironment(SdfFrame frame, Span<float> floats) {
+        var environment = frame.Environment;
+        var lanes = environment.Lanes;
+        var envBase = ((MaxScreenSurfaces + 8) * 4);
 
-        if (length <= 0d) {
-            // A zero/degenerate direction has no frame to build. Fall back to the pinned default rather than uploading
-            // NaNs into every shading term on the frame.
-            sunX = 0.51343602f; sunY = 0.79349202f; sunZ = 0.32673201f;
-            length = Math.Sqrt(d: (((sunX * sunX) + (sunY * sunY)) + (sunZ * sunZ)));
+        lanes.CopyTo(destination: floats.Slice(
+            start: envBase,
+            length: SdfEnvironment.LaneCount
+        ));
+
+        for (var index = 0; (index < SdfEnvironment.MaxLights); index++) {
+            var local = ((SdfEnvironment.LightsRow + (index * SdfEnvironment.RowsPerLight)) * 4);
+            var row = (envBase + local);
+            var kind = ((SdfLightKind)((byte)lanes[(local + 7)]));
+
+            if (kind != SdfLightKind.Directional) {
+                continue;
+            }
+
+            double x = lanes[(local + 0)], y = lanes[(local + 1)], z = lanes[(local + 2)];
+            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
+
+            if (length <= 0d) {
+                // A zero direction has no Lambert term; the authoring doors refuse one by name, and a frame assembled
+                // in code still must not upload NaNs into every shaded pixel.
+                x = SdfEnvironment.DefaultSunDirection.X; y = SdfEnvironment.DefaultSunDirection.Y; z = SdfEnvironment.DefaultSunDirection.Z;
+                length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
+            }
+
+            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
         }
 
-        sunX /= length; sunY /= length; sunZ /= length;
-
-        // tangent = normalize(Z x sun), bitangent = normalize(sun x tangent) — the construction the pasted literals
-        // came from. A sun parallel to +Z degenerates the first cross, so fall back to the X axis there.
-        double referenceX, referenceY, referenceZ;
-
-        if (Math.Abs(value: sunZ) > 0.9999d) {
-            referenceX = 1d; referenceY = 0d; referenceZ = 0d;
-        } else {
-            referenceX = 0d; referenceY = 0d; referenceZ = 1d;
-        }
-
-        var tangentX = ((referenceY * sunZ) - (referenceZ * sunY));
-        var tangentY = ((referenceZ * sunX) - (referenceX * sunZ));
-        var tangentZ = ((referenceX * sunY) - (referenceY * sunX));
-        var tangentLength = Math.Sqrt(d: (((tangentX * tangentX) + (tangentY * tangentY)) + (tangentZ * tangentZ)));
-
-        tangentX /= tangentLength; tangentY /= tangentLength; tangentZ /= tangentLength;
-
-        var bitangentX = ((sunY * tangentZ) - (sunZ * tangentY));
-        var bitangentY = ((sunZ * tangentX) - (sunX * tangentZ));
-        var bitangentZ = ((sunX * tangentY) - (sunY * tangentX));
-        var bitangentLength = Math.Sqrt(d: (((bitangentX * bitangentX) + (bitangentY * bitangentY)) + (bitangentZ * bitangentZ)));
-
-        bitangentX /= bitangentLength; bitangentY /= bitangentLength; bitangentZ /= bitangentLength;
-
-        floats[(sunBase + 0)] = ((float)sunX); floats[(sunBase + 1)] = ((float)sunY); floats[(sunBase + 2)] = ((float)sunZ); floats[(sunBase + 3)] = frame.SunWeight;
-        floats[(sunBase + 4)] = ((float)tangentX); floats[(sunBase + 5)] = ((float)tangentY); floats[(sunBase + 6)] = ((float)tangentZ); floats[(sunBase + 7)] = frame.AmbientBase;
-        floats[(sunBase + 8)] = ((float)bitangentX); floats[(sunBase + 9)] = ((float)bitangentY); floats[(sunBase + 10)] = ((float)bitangentZ); floats[(sunBase + 11)] = frame.AmbientHemisphere;
-        floats[(sunBase + 12)] = frame.SunColor.X; floats[(sunBase + 13)] = frame.SunColor.Y; floats[(sunBase + 14)] = frame.SunColor.Z; floats[(sunBase + 15)] = 0f;
-        floats[(sunBase + 16)] = frame.AmbientColor.X; floats[(sunBase + 17)] = frame.AmbientColor.Y; floats[(sunBase + 18)] = frame.AmbientColor.Z; floats[(sunBase + 19)] = 0f;
-    }
-    // The procedural-sky rows: nine rows AFTER the five lighting rows. KEEP IN SYNC with sdf-world.hlsli's
-    // SdfSkyZenith..SdfSkyCloudsD.
-    //
-    // The sun-disc exponent is HOST-BAKED from SkySunDiscRadians so worldSkyColor pays one pow() per pixel rather
-    // than deriving the exponent from an angle: solving pow(cos(discRadians), k) = 0.5 for k (the disc's edge reads
-    // half brightness) gives k = ln(0.5) / ln(cos(discRadians)), clamped away from the pole at discRadians -> 0.
-    // The twinkle rate is likewise baked to a PERIOD IN ENGINE TICKS so the shader reduces the tick counter by an
-    // integer modulo (exact, no float drift over a long session) before it ever touches a float phase. The cloud
-    // drift, shear and spin are integrated HERE, in double, from the same tick counter — the offsets in layer units
-    // wrapped modulo the lattice period, the spin angle modulo 2π — so they stay float-precise however long the
-    // session runs (SampleIndex itself wraps once per 2^32 ticks, ~23.7 h, a single jump the layer takes at that
-    // moment).
-    private static void PackSkyFrame(SdfFrame frame, Span<float> floats) {
-        var skyBase = ((MaxScreenSurfaces + 13) * 4);
-
-        floats[(skyBase + 0)] = frame.SkyZenithColor.X; floats[(skyBase + 1)] = frame.SkyZenithColor.Y; floats[(skyBase + 2)] = frame.SkyZenithColor.Z; floats[(skyBase + 3)] = frame.SkyFogDensity;
-        floats[(skyBase + 4)] = frame.SkyHorizonColor.X; floats[(skyBase + 5)] = frame.SkyHorizonColor.Y; floats[(skyBase + 6)] = frame.SkyHorizonColor.Z; floats[(skyBase + 7)] = (frame.SkyEnabled
-            ? 1f
-            : 0f
-        );
-        floats[(skyBase + 8)] = frame.SkyGroundColor.X; floats[(skyBase + 9)] = frame.SkyGroundColor.Y; floats[(skyBase + 10)] = frame.SkyGroundColor.Z; floats[(skyBase + 11)] = frame.SkySunDiscIntensity;
-
-        var cosDiscRadius = Math.Cos(d: frame.SkySunDiscRadians);
+        var skyControl = (envBase + (SdfEnvironment.SkyControlRow * 4));
+        var cosDiscRadius = Math.Cos(d: environment.SunDiscRadians);
         var discExponent = ((cosDiscRadius is > 0d and < 1d)
             ? Math.Clamp(
                 value: (Math.Log(d: 0.5d) / Math.Log(d: cosDiscRadius)),
@@ -407,30 +363,44 @@ public sealed partial class SdfWorldEngine {
             : 100000d
         );
 
-        floats[(skyBase + 12)] = ((float)discExponent); floats[(skyBase + 13)] = frame.SkyStarDensity; floats[(skyBase + 14)] = frame.SkyStarBrightness; floats[(skyBase + 15)] = frame.SkyStarSeed;
+        floats[(skyControl + 2)] = ((float)discExponent);
 
-        var twinklePeriodTicks = ((frame.SkyStarTwinkleRate > 0f)
+        var twinkle = (envBase + (SdfEnvironment.TwinkleRow * 4));
+        var twinklePeriodTicks = ((environment.TwinkleRate > 0f)
             ? Math.Max(
                 val1: 1d,
-                val2: Math.Round(a: (((double)EngineTicks.PerSecond) / frame.SkyStarTwinkleRate))
+                val2: Math.Round(a: (((double)EngineTicks.PerSecond) / environment.TwinkleRate))
             )
             : 1d
         );
 
-        floats[(skyBase + 16)] = frame.SkyStarTwinkleShare; floats[(skyBase + 17)] = frame.SkyStarTwinkleDepth; floats[(skyBase + 18)] = ((float)twinklePeriodTicks); floats[(skyBase + 19)] = 0f;
+        floats[(twinkle + 2)] = ((float)twinklePeriodTicks);
 
         var elapsedSeconds = (((double)frame.SampleIndex) / EngineTicks.PerSecond);
-        var cloudOffsetX = Math.IEEERemainder(x: (elapsedSeconds * frame.SkyCloudDrift.X), y: CloudLatticePeriod);
-        var cloudOffsetY = Math.IEEERemainder(x: (elapsedSeconds * frame.SkyCloudDrift.Y), y: CloudLatticePeriod);
+        var drift = environment.CloudDrift;
+        var shear = environment.CloudShear;
+        var cloudsC = (envBase + ((SdfEnvironment.CloudsRow + 2) * 4));
+        var cloudsD = (envBase + ((SdfEnvironment.CloudsRow + 3) * 4));
 
-        floats[(skyBase + 20)] = frame.SkyCloudColor.X; floats[(skyBase + 21)] = frame.SkyCloudColor.Y; floats[(skyBase + 22)] = frame.SkyCloudColor.Z; floats[(skyBase + 23)] = frame.SkyCloudCoverage;
-        floats[(skyBase + 24)] = frame.SkyCloudSoftness; floats[(skyBase + 25)] = frame.SkyCloudScale; floats[(skyBase + 26)] = frame.SkyCloudSeed; floats[(skyBase + 27)] = 0f;
-        var shearOffsetX = Math.IEEERemainder(x: (elapsedSeconds * frame.SkyCloudShear.X), y: CloudLatticePeriod);
-        var shearOffsetY = Math.IEEERemainder(x: (elapsedSeconds * frame.SkyCloudShear.Y), y: CloudLatticePeriod);
-        var spinAngle = Math.IEEERemainder(x: (elapsedSeconds * frame.SkyCloudSpin), y: Math.Tau);
+        floats[(cloudsC + 0)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * drift.X), y: CloudLatticePeriod));
+        floats[(cloudsC + 1)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * drift.Y), y: CloudLatticePeriod));
+        floats[(cloudsC + 2)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * shear.X), y: CloudLatticePeriod));
+        floats[(cloudsC + 3)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * shear.Y), y: CloudLatticePeriod));
+        floats[(cloudsD + 0)] = ((float)Math.IEEERemainder(x: (elapsedSeconds * environment.CloudSpin), y: Math.Tau));
 
-        floats[(skyBase + 28)] = ((float)cloudOffsetX); floats[(skyBase + 29)] = ((float)cloudOffsetY); floats[(skyBase + 30)] = ((float)shearOffsetX); floats[(skyBase + 31)] = ((float)shearOffsetY);
-        floats[(skyBase + 32)] = ((float)spinAngle); floats[(skyBase + 33)] = frame.SkyCloudCurl; floats[(skyBase + 34)] = 0f; floats[(skyBase + 35)] = 0f;
+        for (var index = 0; (index < SdfEnvironment.MaxSoftboxes); index++) {
+            var local = ((SdfEnvironment.SoftboxesRow + (index * SdfEnvironment.RowsPerSoftbox)) * 4);
+            var row = (envBase + local);
+
+            double x = lanes[(local + 0)], y = lanes[(local + 1)], z = lanes[(local + 2)];
+            var length = Math.Sqrt(d: (((x * x) + (y * y)) + (z * z)));
+
+            if (length <= 0d) {
+                continue; // an unauthored softbox slot has zero weight and never contributes; leave its direction zero
+            }
+
+            floats[(row + 0)] = ((float)(x / length)); floats[(row + 1)] = ((float)(y / length)); floats[(row + 2)] = ((float)(z / length));
+        }
     }
 
     // The cloud offset's wrap period in layer units. The lattice is hashed on integer cell coordinates, so any
@@ -565,33 +535,10 @@ public sealed partial class SdfWorldEngine {
         var pushWords = MemoryMarshal.Cast<byte, uint>(span: m_pushConstant.AsSpan());
 
         pushWords[0] = m_width; pushWords[1] = m_height; pushWords[2] = m_tileGridX; pushWords[3] = m_tileGridY; pushWords[4] = viewportCount; pushWords[5] = m_childMask; pushWords[6] = m_screenSourceMask; pushWords[7] = ((uint)m_liveInstanceMaskWordCount);
-        // The shadow estimator's net index. It rides the push (not a buffer) because it changes every frame and
-        // nothing else does, and it is folded into ComputeFrameSignature below via m_pushConstant so the cadence gate
-        // can never skip a frame whose sample index moved.
+        // The deterministic tick clock the sky's twinkle and cloud motion read. It rides the push because it changes
+        // every frame and nothing else does, and it is folded into ComputeFrameSignature below via m_pushConstant so
+        // the cadence gate can never skip a frame whose tick moved.
         pushWords[8] = frame.SampleIndex;
-        // Word 9 — the shadow accumulator's control word: bit 0 disables it, bit 1 forces a reset. The reset covers a
-        // freshly constructed engine, whose source textures have not yet carried a written alpha lane (the history's
-        // home), so the recurrence never folds in an undefined value. The textures are allocated once and never
-        // reallocated or cleared, so that is the only moment the lane is undefined.
-        //
-        // A PROGRAM UPLOAD DELIBERATELY DOES NOT RESET. The history is screen-space and every read is already validated
-        // by reprojection, the epoch, and the depth tolerance, so changed geometry is rejected per pixel rather than
-        // wholesale. A live world uploads a new program EVERY frame — tying the reset to the program revision pins the
-        // reset bit high forever and holds the accumulator at its raw single-frame estimate, which is a silent
-        // no-op rather than a visible failure.
-        //
-        // It is written BEFORE the cadence decision precisely so it IS hashed — an enable flip or a reset must force a
-        // render, or it would be latched and never applied.
-        pushWords[9] = (frame.DisableShadowAccumulation
-            ? 1u
-            : 0u) | ((m_shadowAccumulationResetFrames > 0)
-            ? 2u
-            : 0u
-        );
-
-        if (m_shadowAccumulationResetFrames > 0) {
-            m_shadowAccumulationResetFrames--;
-        }
 
         BuildCompositePush(frame: frame);
         DecideCadenceSkip(

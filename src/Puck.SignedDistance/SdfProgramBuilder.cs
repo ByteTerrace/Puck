@@ -22,6 +22,11 @@ public sealed partial class SdfProgramBuilder {
     /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then bumping the
     /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public const int MaxFieldScopeDepth = 1;
+    /// <summary>The floor <see cref="FlareY"/>'s scale profile s(t) clamps against at evaluation time — an admitted
+    /// amount/bulge combination can still drive the algebraic s(t) non-positive (e.g. a large negative amount paired
+    /// with a large negative bulge), and this keeps the warp finite rather than dividing by zero or flipping sign.
+    /// KEEP IN SYNC with SDF_FLARE_MIN_SCALE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    public const float FlareMinScale = 0.05f;
     /// <summary>The most octaves one <see cref="NoiseDisplace"/> may declare. The interpreter loops the count at
     /// runtime (Blend lane), so this bounds the per-sample hash cost (8 corner hashes per octave) and the
     /// <c>lacunarity^octaves</c> term inside the Lipschitz step clamp.</summary>
@@ -32,13 +37,17 @@ public sealed partial class SdfProgramBuilder {
 
     /// <summary>The instance ceiling — the most instances one program may declare. The world renderer's per-tile
     /// mask is a derived ceil(instanceCount/32) uints (<see cref="SdfProgram.InstanceMaskWordCount"/>), so this caps
-    /// it at 1024 words per tile (32768/32). Everything downstream derives from the live program's instance count — the
+    /// it at 2048 words per tile (65536/32). Everything downstream derives from the live program's instance count — the
     /// mask width, the host-pushed indexing, and the mask-buffer sizing all use
     /// <see cref="SdfProgram.InstanceMaskWordCountFor"/> — so a program declaring fewer instances than this cap packs
     /// byte-identically regardless of the cap's value; only the shader's <c>min(count, SDF_MAX_INSTANCES)</c> clamp
-    /// constant tracks it. The ceiling's static cost is the per-tile mask buffer. KEEP IN SYNC with SDF_MAX_INSTANCES in
+    /// constant tracks it. The ceiling's static cost is the per-tile mask buffer, and (Stage 1's per-workgroup shadow/AO
+    /// gather masks) the two groupshared <c>SDF_SHADOW_MASK_WORDS</c> arrays in sdf-vm.hlsli: 2048 words x 4 bytes x 2
+    /// arrays = 16 KiB, plus ~1 KiB for the gather's other groupshared state (sdfShadowGatherPoints/Cone/LitCount) — about
+    /// 17 KiB per workgroup, comfortably under the 32 KiB Direct3D 12 thread-group-shared-memory limit (a hard API cap,
+    /// not a per-GPU one) with ~15 KiB to spare. KEEP IN SYNC with SDF_MAX_INSTANCES in
     /// Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
-    public const int MaxInstances = 32768;
+    public const int MaxInstances = 65536;
     /// <summary>The maximum voxel count per brick axis: the <see cref="SampledRegion"/> shape packs each dim in 10 bits
     /// (see <see cref="SdfShapeType.SampledRegion"/>'s Data1.y layout), so 1023 is the hard ceiling. KEEP IN SYNC with the
     /// 0x3FFu unpack mask in sdfSampledRegion (Assets/Shaders/Sdf/sdf-vm.hlsli).</summary>
@@ -54,6 +63,17 @@ public sealed partial class SdfProgramBuilder {
     /// fixed-point quantum of profile, so nothing authorable is lost — a trapezoid with equal half-widths and real
     /// height is a rectangle, whose slant is <c>2·halfHeight</c> and never degenerate.</remarks>
     public const float MinTrapezoidProfileSlant = 0.003f;
+    /// <summary>The most uvec4 words one <see cref="ConvexPolygon"/> shape's vertex table spends in the packed
+    /// program's own word stream: <c>ceil(SdfPrismProfile.MaxConvexVertices / 2)</c>, two packed (x, y) vertices per
+    /// word. KEEP IN SYNC with <see cref="SdfPrismProfile.MaxConvexVertices"/> and the table layout in
+    /// <see cref="SdfShapeType.ConvexPolygon"/>'s remarks.</summary>
+    public const int MaxConvexPolygonWordsPerShape = 4;
+    /// <summary>The largest exponent a <see cref="Superellipsoid"/> admits — see its own remarks for the 1-Lipschitz
+    /// proof this interval is sized to.</summary>
+    public const float MaxSuperellipsoidExponent = 8f;
+    /// <summary>The smallest exponent a <see cref="Superellipsoid"/> admits — the ellipsoid limit; see its own
+    /// remarks for the 1-Lipschitz proof this interval is sized to.</summary>
+    public const float MinSuperellipsoidExponent = 2f;
     /// <summary>The most screen surfaces one program may declare (matches <c>Puck.SdfVm.SdfWorldEngine.MaxScreenSurfaces</c>
     /// — the kernels' <c>screenSurfaces[]</c>/<c>screenSources[]</c> array length; a contract separate from the
     /// viewport capacity <c>Puck.SdfVm.SdfWorldEngine.MaxViewports</c>). Capped at 32 by the single-<c>uint</c>
@@ -83,6 +103,12 @@ public sealed partial class SdfProgramBuilder {
     private readonly List<SdfMaterialScope> m_materialScopes = [];
     private readonly List<SdfMaterial> m_materials;
     private readonly List<SdfScreenSurface> m_screenSurfaces;
+    // Every ConvexPolygon shape instruction's authored vertex list, paired with that instruction's index — the host
+    // mirror SdfProgram packs into a side table appended to its own word stream (see SdfShapeType.ConvexPolygon) and
+    // patches the instruction's Data0.x offset lane against, and that SdfFieldEvaluator reads directly (no packed-word
+    // decode needed on the CPU side). Empty for a program with no convex-polygon profile, so packing and validation
+    // both no-op exactly as before this shape existed.
+    private readonly List<(int InstructionIndex, Vector2[] Vertices)> m_convexPolygonProfiles = [];
 
     /// <summary>Creates a builder, optionally pre-sizing its instruction/instance/material/screen-surface lists so a
     /// repeat-construction caller (a live composition rebuild) that already knows roughly how big the next program
@@ -461,6 +487,297 @@ public sealed partial class SdfProgramBuilder {
             );
         }
     }
+    /// <summary>The chamfer radius <see cref="ChamferedRectangle"/> actually emits at: clamped to the rectangle's own
+    /// half-extents and — for <see cref="SdfLift.Extrude"/>, whose cap join bevels at the same radius — to the lift
+    /// half-height. A chamfer at exactly <c>min(halfWidth, halfHeight)</c> degenerates the profile to a diamond (a
+    /// square) or an octagon (a rectangle) — the limit is allowed, since the field stays exact and 1-Lipschitz there;
+    /// past it there is no rectangle left for the chamfer plane to cut. Past the half-height the cap bevel
+    /// <c>(d + |z| − h + c)/√2</c> is positive at <c>z = 0</c> wherever <c>d &gt; h − c</c>, so the side faces are cut
+    /// away and the mid-plane outline shrinks by <c>c − h</c> — the authored outer extent the family preserves would
+    /// silently move, which is why the half-height binds here exactly as it does in <see cref="ClampRounding"/>.</summary>
+    /// <param name="chamfer">The authored radius (a negative or non-positive one reads as none).</param>
+    /// <param name="halfWidth">The profile's local-X half-extent.</param>
+    /// <param name="halfHeight">The profile's local-Y half-extent.</param>
+    /// <param name="lift">The lift the shape emits under.</param>
+    /// <param name="liftAmount">The extrude half-height, or the revolve offset (ignored for a revolve).</param>
+    /// <returns>The emitted chamfer radius, at least zero.</returns>
+    public static float ClampChamfer(float chamfer, float halfWidth, float halfHeight, SdfLift lift, float liftAmount) {
+        if (!(chamfer > 0f)) {
+            return 0f; // NaN lands here too: RequireFinite runs first, so this is belt and braces.
+        }
+
+        var ceiling = MathF.Min(
+            x: MathF.Abs(x: halfWidth),
+            y: MathF.Abs(x: halfHeight)
+        );
+
+        if (lift == SdfLift.Extrude) {
+            ceiling = MathF.Min(
+                x: ceiling,
+                y: MathF.Max(
+                    x: 0f,
+                    y: liftAmount
+                )
+            );
+        }
+
+        return MathF.Min(
+            x: chamfer,
+            y: ceiling
+        );
+    }
+    /// <summary>The largest inscribed-circle radius a chamfered rectangle profile (half-extents <paramref name="halfWidth"/>/
+    /// <paramref name="halfHeight"/>, chamfer <paramref name="chamfer"/>) contains: the plain rectangle's own inradius
+    /// <c>min(halfWidth, halfHeight)</c>, narrowed by the chamfer cut — the bevel plane <c>x + y = halfWidth + halfHeight
+    /// - chamfer</c> sits <c>(halfWidth + halfHeight - chamfer)/√2</c> from the origin along its unit normal, which
+    /// binds first whenever the chamfer is large relative to the rectangle's aspect. Shared by <see cref="ChamferedRectangle"/>
+    /// (as the ceiling its own <c>rounding</c> parameter clamps against) and <see cref="SdfSolidGeometry.MaxRounding"/>'s
+    /// <see cref="SdfPrismProfileKind.ChamferedRectangle"/> arm.</summary>
+    /// <param name="halfWidth">The profile's local-X half-extent.</param>
+    /// <param name="halfHeight">The profile's local-Y half-extent.</param>
+    /// <param name="chamfer">The profile's own chamfer radius, already clamped by <see cref="ClampChamfer"/>.</param>
+    /// <returns>The inradius, at least zero.</returns>
+    public static float ChamferedRectangleInradius(float halfWidth, float halfHeight, float chamfer) {
+        return MathF.Max(
+            x: 0f,
+            y: MathF.Min(
+                x: MathF.Min(
+                    x: MathF.Abs(x: halfWidth),
+                    y: MathF.Abs(x: halfHeight)
+                ),
+                y: (((MathF.Abs(x: halfWidth) + MathF.Abs(x: halfHeight)) - chamfer) * SqrtHalf)
+            )
+        );
+    }
+    // KEEP IN SYNC with SDF_SQRT_HALF in Assets/Shaders/Sdf/sdf-vm.hlsli and SdfProgram's private copy.
+    private const float SqrtHalf = 0.70710678f;
+    /// <summary>The edge-rounding radius an authored value actually emits at for a 2D-family shape or a cylinder:
+    /// never past the profile's own inradius, and — for <see cref="SdfLift.Extrude"/> — never past the lift
+    /// half-height.</summary>
+    /// <param name="rounding">The authored radius (a negative one reads as none).</param>
+    /// <param name="profileInradius">The largest ball the 2D profile contains.</param>
+    /// <param name="lift">The lift the shape emits under.</param>
+    /// <param name="liftAmount">The extrude half-height, or the revolve offset (ignored for a revolve).</param>
+    /// <returns>The emitted rounding radius, at least zero.</returns>
+    /// <remarks>Rounding is a morphological opening: the host insets the profile (and, for an extrude, the lift
+    /// half-height) by the radius and the kernel offsets the whole field back out by it, so the emitted solid is the
+    /// authored one with its edges filleted and its outer extent unchanged. Past the profile's inradius the inset is
+    /// empty and there is nothing left to offset back out; past the lift half-height the offset pushes the caps out
+    /// beyond the authored half-height and grows the cull bound. Clamped rather than refused, as the corner radius,
+    /// the smooth radius, and <see cref="Box"/>'s round already clamp — the authoring doors
+    /// (<see cref="SdfSolidGeometry.TryValidateScaledPrimitive"/> and the creation canonicalizer) refuse an oversized
+    /// value by name before it reaches a builder. Zero returns zero exactly, so an unrounded shape emits the authored
+    /// dimensions and a zero lane.</remarks>
+    public static float ClampRounding(float rounding, float profileInradius, SdfLift lift, float liftAmount) {
+        if (!(rounding > 0f)) {
+            return 0f; // NaN lands here too: the callers all RequireFinite first, so this is belt and braces.
+        }
+
+        var ceiling = MathF.Max(
+            x: 0f,
+            y: profileInradius
+        );
+
+        if (lift == SdfLift.Extrude) {
+            ceiling = MathF.Min(
+                x: ceiling,
+                y: MathF.Max(
+                    x: 0f,
+                    y: liftAmount
+                )
+            );
+        }
+
+        return MathF.Min(
+            x: rounding,
+            y: ceiling
+        );
+    }
+    /// <summary>The largest edge-rounding radius a trapezoid profile carries with its authored extent preserved: the
+    /// half-height less the slant the deterministic evaluator can resolve, and, per end, the radius at which that
+    /// end's inset half-width reaches zero — the two inset half-widths are linear in the radius (each horizontal edge
+    /// moves in by r, each slant side by r along its own normal), so each end bounds r by width / rate whenever its
+    /// rate is positive. A sharp end (a triangle's apex) has no room to round at all. Shared by
+    /// <see cref="Trapezoid"/> and the authoring door's <c>SdfSolidGeometry.MaxRounding</c>; signs are absorbed.</summary>
+    /// <param name="bottomHalfWidth">The half-width at y = −halfHeight.</param>
+    /// <param name="topHalfWidth">The half-width at y = +halfHeight.</param>
+    /// <param name="halfHeight">The half-height.</param>
+    /// <returns>The ceiling, at least zero.</returns>
+    public static float TrapezoidRoundingCeiling(float bottomHalfWidth, float topHalfWidth, float halfHeight) {
+        var bottom = MathF.Abs(x: bottomHalfWidth);
+        var top = MathF.Abs(x: topHalfWidth);
+        var height = MathF.Abs(x: halfHeight);
+        var ceiling = (height - MinTrapezoidProfileSlant);
+
+        if (!(ceiling > 0f)) {
+            return 0f;
+        }
+
+        var twoHeight = (height + height);
+        var delta = (top - bottom);
+        var slantLength = MathF.Sqrt(x: ((delta * delta) + (twoHeight * twoHeight)));
+        var bottomRate = ((twoHeight / slantLength) - ((delta / twoHeight) * (1f - (delta / slantLength))));
+        var topRate = ((twoHeight / slantLength) + ((delta / twoHeight) * (1f + (delta / slantLength))));
+
+        if (bottomRate > 0f) {
+            ceiling = MathF.Min(x: ceiling, y: (bottom / bottomRate));
+        }
+
+        if (topRate > 0f) {
+            ceiling = MathF.Min(x: ceiling, y: (top / topRate));
+        }
+
+        return MathF.Max(x: 0f, y: ceiling);
+    }
+    /// <summary>Returns the largest inscribed-circle radius an isosceles trapezoid profile contains — its true
+    /// inradius, unlike <see cref="TrapezoidRoundingCeiling"/>, which additionally stops where the narrower end's inset
+    /// width reaches zero because the centred shape lane cannot express the off-centre triangle a deeper erosion
+    /// leaves. The erosion by <c>r</c> is the intersection of the four edge half-planes each shifted inward by
+    /// <c>r</c>; its half-width is linear in <c>y</c>, so it is non-empty exactly while <c>r ≤ halfHeight</c> and at
+    /// least one end's inset half-width (<c>width − r·rate</c>, the same per-end rates
+    /// <see cref="TrapezoidRoundingCeiling"/> uses) is still non-negative — the wider end empties last, so the ceiling
+    /// is <c>min(halfHeight, max(bottom/bottomRate, top/topRate))</c>. A triangle (top 0) admits its inradius
+    /// <c>area / semi-perimeter</c> here where the rounding ceiling admits nothing. Shared by <see cref="Trapezoid"/>'s
+    /// <c>capChamfer</c> clamp and <c>SdfSolidGeometry.MaxChamfer</c>'s trapezoid arm (a cap chamfer never erodes the
+    /// profile; the cap survives while the chamfer stays under this inradius). Signs are absorbed.</summary>
+    /// <param name="bottomHalfWidth">The half-width at y = −halfHeight.</param>
+    /// <param name="topHalfWidth">The half-width at y = +halfHeight.</param>
+    /// <param name="halfHeight">The half-height.</param>
+    /// <returns>The inradius, at least zero.</returns>
+    public static float TrapezoidInradius(float bottomHalfWidth, float topHalfWidth, float halfHeight) {
+        var bottom = MathF.Abs(x: bottomHalfWidth);
+        var top = MathF.Abs(x: topHalfWidth);
+        var height = MathF.Abs(x: halfHeight);
+
+        if (!(height > 0f)) {
+            return 0f;
+        }
+
+        var twoHeight = (height + height);
+        var delta = (top - bottom);
+        var slantLength = MathF.Sqrt(x: ((delta * delta) + (twoHeight * twoHeight)));
+        // The per-end rates reduce to (slantLength ∓ delta) / twoHeight, both positive whenever the height is: the
+        // slant is longer than the width difference it spans.
+        var bottomRate = ((slantLength - delta) / twoHeight);
+        var topRate = ((slantLength + delta) / twoHeight);
+        var emptyRadius = MathF.Max(
+            x: (bottom / bottomRate),
+            y: (top / topRate)
+        );
+
+        return MathF.Max(
+            x: 0f,
+            y: MathF.Min(
+                x: height,
+                y: emptyRadius
+            )
+        );
+    }
+    /// <summary>A conservative inradius for a validated convex polygon: the smallest perpendicular distance from the
+    /// polygon's centroid to any edge's LINE. The true (Chebyshev) inradius is the largest inscribed circle over
+    /// every interior point, so it can only be greater — this reads it at one candidate point rather than solving
+    /// that optimization, and is therefore always a SAFE (never-too-large) ceiling for
+    /// <see cref="ClampRounding"/>'s uniform vertex-inset erosion.</summary>
+    /// <param name="vertices">A validated convex, clockwise vertex list (see
+    /// <see cref="SdfPrismProfile.IsValidConvexHull"/>) — not re-validated here.</param>
+    /// <returns>The conservative inradius, at least zero.</returns>
+    public static float ConvexPolygonInradius(IReadOnlyList<Vector2> vertices) {
+        var count = vertices.Count;
+        var centroid = Vector2.Zero;
+
+        for (var i = 0; (i < count); i++) {
+            centroid += vertices[i];
+        }
+
+        centroid /= count;
+
+        var inradius = float.MaxValue;
+
+        for (var i = 0; (i < count); i++) {
+            var a = vertices[i];
+            var b = vertices[((i + 1) % count)];
+            var edge = (b - a);
+            var edgeLength = edge.Length();
+
+            if (!(edgeLength > 1e-8f)) {
+                continue;
+            }
+
+            var distance = (MathF.Abs(x: ((edge.X * (centroid.Y - a.Y)) - (edge.Y * (centroid.X - a.X)))) / edgeLength);
+
+            inradius = MathF.Min(
+                x: inradius,
+                y: distance
+            );
+        }
+
+        return MathF.Max(
+            x: 0f,
+            y: (inradius == float.MaxValue ? 0f : inradius)
+        );
+    }
+    /// <summary>Uniformly insets a validated convex polygon by <paramref name="round"/>: every edge's supporting line
+    /// moves inward along its own normal by <paramref name="round"/>, and each new vertex is where its two adjacent
+    /// shifted edges meet (a bisector displacement — see the derivation in <see cref="ConvexPolygon"/>'s
+    /// remarks).</summary>
+    /// <param name="vertices">A validated convex, clockwise vertex list.</param>
+    /// <param name="round">The inset distance; non-positive returns <paramref name="vertices"/>'s own values
+    /// unchanged.</param>
+    /// <returns>The inset vertex array, one entry per input vertex, in the same order.</returns>
+    public static Vector2[] InsetConvexPolygon(IReadOnlyList<Vector2> vertices, float round) {
+        var count = vertices.Count;
+        var result = new Vector2[count];
+
+        if (!(round > 0f)) {
+            for (var i = 0; (i < count); i++) {
+                result[i] = vertices[i];
+            }
+
+            return result;
+        }
+
+        for (var i = 0; (i < count); i++) {
+            var previous = vertices[(((i - 1) + count) % count)];
+            var current = vertices[i];
+            var next = vertices[((i + 1) % count)];
+            // A clockwise polygon's inward edge normal is its direction rotated -90 degrees: (x, y) -> (y, -x).
+            var edgeIn = (current - previous);
+            var edgeOut = (next - current);
+            var normalIn = SdfSafeNormal2D(new Vector2(x: edgeIn.Y, y: -edgeIn.X));
+            var normalOut = SdfSafeNormal2D(new Vector2(x: edgeOut.Y, y: -edgeOut.X));
+            var cosine = Vector2.Dot(normalIn, normalOut);
+            // A miter displacement of round*(nIn+nOut)/(1+dot(nIn,nOut)) satisfies dot(displacement, nIn) ==
+            // dot(displacement, nOut) == round exactly; the denominator is floored well away from zero (a near-180-
+            // degree turn between two admitted convex edges) so a very shallow vertex insets by a large but finite
+            // amount rather than dividing out to infinity.
+            var denominator = MathF.Max(
+                x: (1f + cosine),
+                y: 0.01f
+            );
+
+            result[i] = (current + ((round / denominator) * (normalIn + normalOut)));
+        }
+
+        return result;
+    }
+    private static Vector2 SdfSafeNormal2D(Vector2 value) {
+        var lengthSquared = value.LengthSquared();
+
+        return ((lengthSquared > 1e-16f)
+            ? (value / MathF.Sqrt(x: lengthSquared))
+            : Vector2.Zero
+        );
+    }
+    // The lift amount a rounded 2D-family shape emits at. An extrude's half-height insets with the profile (the
+    // kernel's outward offset puts the caps back at the authored half-height); a revolve's radial offset does not —
+    // eroding a solid of revolution erodes its meridian profile and leaves the axis distance where it was.
+    private static float InsetLift(SdfLift lift, float liftAmount, float rounding) =>
+        ((lift == SdfLift.Extrude)
+            ? MathF.Max(
+                x: 0f,
+                y: (liftAmount - rounding)
+            )
+            : liftAmount);
     // Shared by the whole 2D-primitive-lift family (RoundedRectangle/RegularPolygon/Star/Trapezoid/Ellipse):
     // SdfProgram.LiftedBoundRadius derives each one's cull bound from its own 2D reach (radius2D) and its lift amount
     // — sqrt(radius2D² + liftAmount²) for Extrude, radius2D + liftAmount for Revolve — and either form can overflow
@@ -504,6 +821,18 @@ public sealed partial class SdfProgramBuilder {
         ) {
             throw new ArgumentOutOfRangeException(
                 message: $"{subject} must be finite and non-negative.",
+                paramName: paramName
+            );
+        }
+    }
+    private static void RequireUnitRange(float value, string paramName, string subject) {
+        if (
+            !float.IsFinite(f: value) ||
+            (value < 0f) ||
+            (value > 1f)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                message: $"{subject} must be finite in [0, 1].",
                 paramName: paramName
             );
         }
@@ -660,7 +989,7 @@ public sealed partial class SdfProgramBuilder {
     }
     // Data1.x is the ISA-wide smooth-blend radius; .yzw carry per-shape HOST-BAKED derived constants (the shader's
     // decode is per shape case — KEEP IN SYNC with sdf-vm.hlsli evaluateShape).
-    private SdfProgramBuilder Shape(SdfShapeType shape, Vector4 dimensions, int material, SdfBlendOp blend, float smooth, float derived1 = 0f, float derived2 = 0f, float derived3 = 0f) {
+    private SdfProgramBuilder Shape(SdfShapeType shape, Vector4 dimensions, int material, SdfBlendOp blend, float smooth, float derived1 = 0f, float derived2 = 0f, float derived3 = 0f, bool detail = false) {
         // The two arguments EVERY public shape method shares, checked once here rather than at twenty call sites.
         // material is cast to uint on the way into the packed lane, so a negative id would arrive as a huge positive
         // one and index past the palette. The UPPER bound is not checked here and cannot be: the palette is still
@@ -705,6 +1034,7 @@ public sealed partial class SdfProgramBuilder {
                 y: derived1,
                 z: derived2
             ),
+            Detail: detail,
             Material: ((uint)material),
             Op: SdfOp.ShapeBlend,
             Shape: ((uint)shape)
@@ -844,6 +1174,7 @@ public sealed partial class SdfProgramBuilder {
 
         return new SdfProgram(
             buildInstanceGrid: buildInstanceGrid,
+            convexPolygonProfiles: m_convexPolygonProfiles,
             gridWorkspace: gridWorkspace,
             instances: m_instances,
             instructions: m_instructions,

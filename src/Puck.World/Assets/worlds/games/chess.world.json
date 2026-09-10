@@ -1882,7 +1882,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.white",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -1917,7 +1917,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.white",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -1952,7 +1952,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.white",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -1987,7 +1987,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.white",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2022,7 +2022,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.white",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2076,7 +2076,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.white",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2130,7 +2130,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.black",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2165,7 +2165,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.black",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2200,7 +2200,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.black",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2235,7 +2235,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.black",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2270,7 +2270,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.black",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2324,7 +2324,7 @@
         "palette": [
           {
             "color": "state.pieceSetColors.black",
-            "shininess": 35,
+            "roughness": 0.64,
             "specular": 0.25
           }
         ],
@@ -2378,7 +2378,7 @@
         "palette": [
           {
             "color": "state.boardColors.light",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.05
           }
         ],
@@ -2413,7 +2413,7 @@
         "palette": [
           {
             "color": "state.boardColors.dark",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.05
           }
         ],

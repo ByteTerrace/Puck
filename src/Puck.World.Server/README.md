@@ -171,6 +171,17 @@ reach one by one, a member that reads a row an earlier member wrote included
 (`tests/Puck.World.Tests/BatchComposeLawTests.cs`), and one refused member
 refuses the whole batch.
 
+The refresh has a mirror for the other direction: a mutation that itself
+carries a `state.` reference (a creation whose shapes bind a cell, a placement
+whose position names one) rehydrates its candidate after composing
+(`WorldServer.TryCompose`, `WorldStateDocumentValues.HasReference` over the
+mutation), so validation and the derived rebuilds read a resolved holder. The
+`UpsertCreation` arm additionally resolves a private JSON copy of the submitted
+row against the current state before canonicalizing it
+(`TryResolveSubmittedRow`), because the canonicalizer reads bound values ahead
+of that rehydration; a reference naming no declared cell refuses there by
+name. `tests/Puck.World.Tests/WorldRowFieldEditLawTests.cs` owns the laws.
+
 ## Local flock steering
 
 `ProduceFlockIntent` consumes the assigned kit's `producers.<name>.flock`

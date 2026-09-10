@@ -14,9 +14,9 @@
 //   words[0]              = (instructionCount, materialCount, dataOffset, materialOffset)
 //   words[1 .. 1+N)       = instruction headers (op, shapeType, blendOp, materialId)
 //   words[dataOffset ..]  = instruction data, 2 uint4 per instruction (data0, data1 as float bits)
-//   words[matOffset ..]   = materials, 2 uint4 each (m0 = albedo.rgb + emissive, m1 = specular + shininess + 2
-//                           reserved, all as float bits)
-//   words[matOffset + 2*materialCount ..] = HOST-BAKED bounding-sphere table (SdfProgram.PackBounds), 2 uint4 per
+//   words[matOffset ..]   = materials, 3 uint4 each (m0 = albedo.rgb + emissive, m1 = specular + roughness + sheen +
+//                           metal, m2 = coat + 3 reserved, all as float bits)
+//   words[matOffset + 3*materialCount ..] = HOST-BAKED bounding-sphere table (SdfProgram.PackBounds), 2 uint4 per
 //                           instruction: b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot,
 //                           skipTo, 0) — map()'s exact Union early-out reads it; mode SDF_BOUND_NONE evaluates fully.
 //   [.. segment directory ..] then the INSTANCE directory (SdfProgram.PackInstances, world render path only): one
@@ -39,9 +39,12 @@
 [[vk::binding(1, 0)]] StructuredBuffer<uint4> sdfWords : register(t0);
 
 // The instance CEILING — the most instances one program may declare. The per-tile mask is a DERIVED
-// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 1024
+// ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 2048
 // words. KEEP IN SYNC with SdfProgramBuilder.MaxInstances.
-#define SDF_MAX_INSTANCES 32768u
+#define SDF_MAX_INSTANCES 65536u
+// Each packed material entry's uint4 stride (m0 albedo+emissive, m1 specular+roughness+sheen+metal, m2 coat+3
+// reserved). KEEP IN SYNC with SdfProgram.MaterialVectorsPerEntry.
+#define SDF_MATERIAL_VECTORS_PER_ENTRY 3u
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
 // view, the ray-query debug kernel, the beam prepass's own cone march) passes this, so an instanced program still
@@ -81,12 +84,12 @@
 // bit). The Stage 1 shared mask addresses the complete instance ceiling, including reserved/parked slots: total
 // capacity must never silently select the camera-tile approximation for an exact shadow request.
 // sdfShadowMaskActive gates sdfInstanceMaskWord onto this
-// array for ONE areaShadowVisibility call. Exact AO independently selects the complete live-instance mask below;
+// array for ONE softShadowVisibility call. Exact AO independently selects the complete live-instance mask below;
 // the primary march, normals, and coverage keep their camera masks. Guarded on SDF_SCREEN_SOURCES: only the world-views kernel
 // shades (the beam/cull/rt kernels never see it).
 #ifdef SDF_SCREEN_SOURCES
 // GROUPSHARED under SDF_GROUP_SHADOW_GATHER (the Stage 1 kernels): the per-tile gather (sdf-world.hlsli's
-// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The full 1024-word mask costs 4 KiB per group, not per lane.
+// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The full 2048-word mask costs 8 KiB per group, not per lane.
 // Other kernels retain the small inactive per-thread array; nothing in them builds a mask.
 #ifdef SDF_GROUP_SHADOW_GATHER
 #define SDF_SHADOW_MASK_WORDS ((SDF_MAX_INSTANCES + 31u) / 32u)
@@ -104,7 +107,7 @@ static bool sdfAmbientMaskActive = false;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
 // Per-instance soft-shadow participation gate (mirrors sdfShadowMaskActive's static-flag pattern). sdf-world.hlsli
-// flips it true for exactly the lifetime of ONE areaShadowVisibility call, so sdfNextVisibleInstanceRange SKIPS any dynamic
+// flips it true for exactly the lifetime of ONE softShadowVisibility call, so sdfNextVisibleInstanceRange SKIPS any dynamic
 // instance whose packed position.w > 0.5 (host encoding: 0 = casts, 1 = shadow-suppressed — see PackDynamicTransforms).
 // False everywhere else (including the beam/instance-cull kernels, which define SDF_DYNAMIC_TRANSFORMS but never set it),
 // so the camera/AO/coverage enumerations are unchanged and a default-casts frame is byte-identical.
@@ -170,7 +173,7 @@ bool sdfInstanceMaskHasSummary(uint instanceMaskBase) {
 uint sdfSegmentDirectoryOffset() {
     uint4 header = sdfWords[0];
 
-    return ((header.w + (2u * header.y)) + (2u * header.x));
+    return ((header.w + (SDF_MATERIAL_VECTORS_PER_ENTRY * header.y)) + (2u * header.x));
 }
 // The INSTANCE directory's element offset, given a caller that ALREADY resolved the segment directory
 // (sdfLoadProgramLayout has both in hand). DXC's SPIR-V backend runs no GVN over StructuredBuffer loads, so
@@ -363,6 +366,11 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_OP_BEND_Z            7u
 #define SDF_OP_ELONGATE          8u
 #define SDF_OP_SHAPE             9u
+// A SDF_OP_SHAPE instruction's high shape-type-lane bit: SHADING-ONLY (Puck.SignedDistance.SdfInstruction.Detail).
+// Skipped by mapCore/mapGradCore's default (march) mode and included only under sdfDetailShadingActive (the hit-only
+// shade re-evaluation in sdf-world.hlsli's renderView). Shape-type ids are far below 2^31, so the bit is free.
+#define SDF_SHAPE_DETAIL_FLAG 0x80000000u
+#define SDF_SHAPE_TYPE_MASK   0x7FFFFFFFu
 #define SDF_OP_REPEAT          11u
 #define SDF_OP_REPEAT_LIMITED  12u
 // Opcode values 13–15 are reserved. SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
@@ -385,6 +393,7 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_OP_PUSH_FIELD      27u
 #define SDF_OP_POP_FIELD       28u
 #define SDF_OP_NOISE_DISPLACE  29u
+#define SDF_OP_FLARE_Y         30u
 #define SDF_MAX_FIELD_SCOPE_DEPTH 1u
 // SDF_CORE_OPS — the CORE-OPS compiled variant of the tape interpreters (defined by sdf-world-views-core.comp.hlsl,
 // the second compiled flavor of the Stage 1 views kernel; every other kernel compiles the FULL ISA). Compiles out every
@@ -469,6 +478,10 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // cannot stall the march: a step of up to 0.1% of the local radius may cross the boundary, an overestimate window far
 // below visible scale (a shell band is ~w/2 of the radius). Host-contracted literal.
 #define SDF_LOGSPHERE_GAP_FLOOR 1.0e-3
+// Floors SDF_OP_FLARE_Y's scale profile s(t) so an authored amount/bulge combination that drives it non-positive
+// still yields a finite warp rather than a divide-by-zero or a sign flip. KEEP IN SYNC with
+// Puck.SignedDistance.SdfProgramBuilder.FlareMinScale.
+#define SDF_FLARE_MIN_SCALE 0.05
 
 // The scene's directional sun, PRE-NORMALIZED to the exact float32 triple that DXC's DXIL backend constant-folds
 // normalize(float3(0.55, 0.85, 0.35)) into (bits 0x3F03708B / 0x3F4B224B / 0x3EA7496B). DXC's SPIR-V backend does NOT
@@ -483,8 +496,6 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // pasted; the residual non-orthonormality is ~2e-8, far below the disc's 0.11 rad aperture. Both DXC backends must
 // read these identical bits.
 static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201);
-static const float3 SdfSunTangent = float3(asfloat(0xBF56EE12u), asfloat(0x3F0B1284u), asfloat(0x00000000u));
-static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8C72F2u), asfloat(0x3F71F330u));
 
 // --- primitives ---
 #define SDF_SHAPE_BOX          0u
@@ -516,6 +527,20 @@ static const float3 SdfSunBitangent = float3(asfloat(0xBE35C1EEu), asfloat(0xBE8
 // (SDF_SAMPLED_REGIONS); every other kernel returns the conservative union-hull fallback (SDF_FAR_DISTANCE, so a
 // Subtraction compose never bites). See sdfSampledRegion.
 #define SDF_SHAPE_SAMPLED_REGION  16u
+// A 45-degree-chamfered rectangle (KEEP IN SYNC with SdfShapeType.ChamferedRectangle) — the family's shared lane
+// layout: data0 = (halfX, halfY, chamfer c, lift); data1 = (smooth, lift mode, UNUSED, edge-rounding radius r).
+// The extrude lift additionally bevels the cap edges at the same c via sdfExtrudeChamfer2D. c = 0 reduces both the 2D
+// core and the extrude join to the plain rectangle/box forms exactly.
+#define SDF_SHAPE_CHAMFERED_RECT  17u
+// A generalized ellipsoid (KEEP IN SYNC with SdfShapeType.Superellipsoid). data0 = (radiusX, radiusY, radiusZ,
+// exponent e in [2, 8]); data1 = (smooth [ISA-wide], 1/radiusX, 1/radiusY, 1/radiusZ [host-baked]). e = 2 is the
+// ellipsoid limit — the builder emits SDF_SHAPE_ELLIPSOID directly at that exponent, so this id never carries it.
+#define SDF_SHAPE_SUPERELLIPSOID  18u
+// A validated convex polygon (KEEP IN SYNC with SdfShapeType.ConvexPolygon) — the 2D-primitive family's lane layout,
+// but its profile is a vertex list too large to pack inline: data0.x = asfloat(packed uint (tableOffset << 4) |
+// vertexCount), data0.w = lift amount; data1 = (smooth [ISA-wide], lift mode, cap chamfer, edge-rounding radius). The
+// vertices live in sdfWords itself, right after every other table this program packs (see sdfPolygonVertex).
+#define SDF_SHAPE_CONVEX_POLYGON  19u
 
 // Lift mode for the 2D-primitive family (data1.y). Decoded as `> 0.5` so a float lane carries it cleanly on both
 // backends. KEEP IN SYNC with Puck.SignedDistance.SdfLift.
@@ -627,6 +652,14 @@ static float sdfMapStepBound = SDF_STEP_BOUND_NONE;
 // lookup — byte-identical shading for any pixel with no smooth material seam within a blend radius of the hit.
 static float sdfMaterialBlendWeight = 0.0;
 static int sdfMaterialBlendOther = 0;
+
+// mapCore/mapGradCore's march-vs-shade mode: false (every march sample — the beam cone, the fine march, shadow, AO,
+// and the rigid-leaf fast path, which SdfProgram's rigid-plan compiler refuses for a Detail-carrying segment) skips a
+// SDF_SHAPE_DETAIL_FLAG shape entirely, so it never appears in the marched hit, the collider, or the step bound.
+// sdf-world.hlsli's renderView flips it true for exactly the lifetime of its hit-only material/normal re-evaluation
+// at the already-found surface point, so a detail shape's local perturbation and material win only there. False
+// everywhere else, so an unauthored program renders byte-identical.
+static bool sdfDetailShadingActive = false;
 
 // GLSL-style FLOOR modulo. HLSL's fmod truncates toward zero, so it disagrees with GLSL's mod for negative
 // operands — and the wallpaper parity keys take mod of (possibly negative) cell indices, where a trunc-mod would
@@ -1024,6 +1057,28 @@ float sdfEllipsoid(float3 p, float3 inverseRadii) {
     float k1 = length(q * inverseRadii);
     return ((k0 * (k0 - 1.0)) / max(k1, SDF_ELLIPSOID_MIN_DENOM));
 }
+// The superellipsoid: q = pow(abs(p) * inverseRadii, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r). EXACTLY
+// 1-Lipschitz for every radius and every e >= 1 (see SdfProgramBuilder.Superellipsoid's remarks for the proof) — no
+// AnalyzeLipschitz step clamp is needed, unlike sdfEllipsoid above. inverseRadii = 1/max(abs(radii), eps),
+// HOST-BAKED (data1.yzw); minRadius = min(abs(radii)) is cheap enough to read straight off data0.xyz per eval.
+// The l_e gauge is computed in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every pow() argument
+// stays in [0, 1] (the sum in [1, 3]), so a far query never overflows — the plain sum(q_i^e) reaches float infinity at
+// |p|/r ~ 1e5 for e = 8 (and saturates the fixed-point mirror's Q48.16 carrier at |p|/r ~ 60), which would collapse
+// the far field. Mathematically identical to sum(q_i^e)^(1/e). KEEP IN SYNC with
+// Puck.SignedDistance.Queries.SdfFieldEvaluator.SdfSuperellipsoid.
+float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, float exponent) {
+    float3 q = (abs(p) * inverseRadii);
+    float m = max(q.x, max(q.y, q.z));
+    float minRadius = min(radii.x, min(radii.y, radii.z));
+
+    if (m <= 0.0) {
+        return -minRadius;
+    }
+
+    float3 u = pow(q / m, exponent);
+
+    return ((m * pow((u.x + u.y) + u.z, (1.0 / exponent))) - 1.0) * minRadius;
+}
 // slope b = (lowerRadius - upperRadius)/height and its complement a = sqrt(1 - b*b) are HOST-BAKED (data0.w / data1.y).
 float sdfRoundCone(float3 p, float lowerRadius, float upperRadius, float height, float b, float a) {
     float2 q = float2(length(p.xz), p.y);
@@ -1064,6 +1119,19 @@ float sdfExtrude2D(float d, float pz, float h) {
     float2 w = float2(d, (abs(pz) - h));
     return (min(max(w.x, w.y), 0.0) + length(max(w, 0.0)));
 }
+// The chamfered extrude join: sdfExtrude2D's box/slab intersection, further intersected with a 45-degree bevel plane
+// across the cap seam — the chamfer-intersection of the 2D field and the +/-Z slab, so an extruded 2D shape's TOP/
+// BOTTOM edges bevel by c as well as whatever its own profile does at the sides. Exact inside/on the surface, a
+// 1-Lipschitz lower bound outside past the bevel's vertex (see sdfChamferBox2D). c = 0 collapses to sdfExtrude2D
+// exactly: w.x + w.y is bounded above by sqrt(2)*length(max(w,0)) (equality only on-axis) plus the (always
+// non-positive) `min(max(w.x,w.y),0)` inside term, so the bevel arm never exceeds the plain join and max() picks the
+// plain value unchanged to the bit.
+float sdfExtrudeChamfer2D(float d, float pz, float h, float c) {
+    float2 w = float2(d, (abs(pz) - h));
+    float plain = (min(max(w.x, w.y), 0.0) + length(max(w, 0.0)));
+    float bevel = ((w.x + w.y + c) * SDF_SQRT_HALF);
+    return max(plain, bevel);
+}
 // The meridian point for revolving around Y at radial offset o: the 2D core is evaluated at (length(p.xz) - o, p.y).
 float2 sdfRevolve2D(float3 p, float o) {
     return float2((length(p.xz) - o), p.y);
@@ -1074,6 +1142,18 @@ float2 sdfRevolve2D(float3 p, float o) {
 float sdfRoundBox2D(float2 p, float2 b, float r) {
     float2 q = ((abs(p) - b) + r);
     return ((min(max(q.x, q.y), 0.0) + length(max(q, 0.0))) - r);
+}
+// 45-degree-chamfered box: the plain box field intersected (max) with a diagonal bevel plane offset by chamfer c.
+// Exact inside and on the surface and a 1-Lipschitz conservative LOWER BOUND outside, in the wedge past each bevel
+// vertex where the nearest point is the vertex rather than either plane (the same class of bound the chamfer blend
+// carries; march- and contact-safe, not the branchy true-distance form). c = 0 collapses to the plain box exactly, by
+// the same triangle-inequality argument as sdfExtrudeChamfer2D (q.x + q.y is bounded above by
+// sqrt(2)*length(max(q,0)) for q outside the box, so the bevel arm never wins).
+float sdfChamferBox2D(float2 p, float2 b, float c) {
+    float2 q = (abs(p) - b);
+    float boxDistance = (min(max(q.x, q.y), 0.0) + length(max(q, 0.0)));
+    float bevel = ((q.x + q.y + c) * SDF_SQRT_HALF);
+    return max(boxDistance, bevel);
 }
 // Isosceles trapezoid: r1 = bottom half-width, r2 = top half-width, he = half-height.
 float sdfTrapezoid2D(float2 p, float r1, float r2, float he) {
@@ -1146,28 +1226,97 @@ float sdfEllipse2D(float2 p, float2 ab) {
 }
 
 // --- lifted wrappers (data1.y > 0.5 selects EXTRUDE; else REVOLVE) — what evaluateShape dispatches to ---
+// data1.w is the family-wide EDGE-ROUNDING radius r. The host already inset the Data0 profile params (and, for an
+// extrude, the lift half-height) by r, so subtracting r here is the outward half of a morphological opening: the
+// solid keeps the authored outer extent and its edges fillet at radius r. Subtracting exactly 0 is the identity on
+// every finite float, so a shape that authors no rounding evaluates to the same bits as before this lane had meaning.
+// data1.z is a CAP-chamfer radius bevelling the extrude's top/bottom rims — 0 (every program predating this lane)
+// takes the plain join exactly, so an unchamfered rounded rectangle is unchanged. Revolve has no cap seam to bevel
+// and ignores it, matching the family's existing per-shape-constant convention for data1.z (RegularPolygon/Star bake
+// ecs.y there instead; RoundedRectangle's lane was unused before this).
 float sdfRoundedRect(float3 p, float4 data0, float4 data1) {
-    return ((data1.y > 0.5)
-        ? sdfExtrude2D(sdfRoundBox2D(p.xy, data0.xy, data0.z), p.z, data0.w)
-        : sdfRoundBox2D(sdfRevolve2D(p, data0.w), data0.xy, data0.z));
+    return (((data1.y > 0.5)
+        ? sdfExtrudeChamfer2D(sdfRoundBox2D(p.xy, data0.xy, data0.z), p.z, data0.w, data1.z)
+        : sdfRoundBox2D(sdfRevolve2D(p, data0.w), data0.xy, data0.z)) - data1.w);
+}
+// The chamfered rectangle: the 2D core already bevels its own four corners at c (data0.z); the extrude join bevels
+// the two cap rims at the SAME c, so a chamfered box reads chamfered on all twelve edges from one parameter. data1.w
+// is the family-wide edge-rounding radius, applied on top exactly as sdfRoundedRect's is.
+float sdfChamferedRect(float3 p, float4 data0, float4 data1) {
+    return (((data1.y > 0.5)
+        ? sdfExtrudeChamfer2D(sdfChamferBox2D(p.xy, data0.xy, data0.z), p.z, data0.w, data0.z)
+        : sdfChamferBox2D(sdfRevolve2D(p, data0.w), data0.xy, data0.z)) - data1.w);
 }
 // Regular polygon AND star share this: data0 = (r, an, ecs.x, lift), data1.z = ecs.y (the polygon bakes ecs = (0, 1)).
 float sdfPolyStar(float3 p, float4 data0, float4 data1) {
     float2 ecs = float2(data0.z, data1.z);
 
-    return ((data1.y > 0.5)
+    return (((data1.y > 0.5)
         ? sdfExtrude2D(sdfStar2D(p.xy, data0.x, data0.y, ecs), p.z, data0.w)
-        : sdfStar2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, ecs));
+        : sdfStar2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, ecs)) - data1.w);
 }
+// data1.z is a CAP-chamfer radius (0 = the plain extrude join exactly), unused before this lane and free here — the
+// Trapezoid shape never baked a per-shape constant into it.
 float sdfTrapezoidSolid(float3 p, float4 data0, float4 data1) {
-    return ((data1.y > 0.5)
-        ? sdfExtrude2D(sdfTrapezoid2D(p.xy, data0.x, data0.y, data0.z), p.z, data0.w)
-        : sdfTrapezoid2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, data0.z));
+    return (((data1.y > 0.5)
+        ? sdfExtrudeChamfer2D(sdfTrapezoid2D(p.xy, data0.x, data0.y, data0.z), p.z, data0.w, data1.z)
+        : sdfTrapezoid2D(sdfRevolve2D(p, data0.w), data0.x, data0.y, data0.z)) - data1.w);
 }
+// data1.z is a CAP-chamfer radius (0 = the plain extrude join exactly), unused before this lane.
 float sdfEllipseSolid(float3 p, float4 data0, float4 data1) {
-    return ((data1.y > 0.5)
-        ? sdfExtrude2D(sdfEllipse2D(p.xy, data0.xy), p.z, data0.w)
-        : sdfEllipse2D(sdfRevolve2D(p, data0.w), data0.xy));
+    return (((data1.y > 0.5)
+        ? sdfExtrudeChamfer2D(sdfEllipse2D(p.xy, data0.xy), p.z, data0.w, data1.z)
+        : sdfEllipse2D(sdfRevolve2D(p, data0.w), data0.xy)) - data1.w);
+}
+// One vertex of a SDF_SHAPE_CONVEX_POLYGON side table (see its own define comment): two packed (x, y) vertices per
+// uvec4 word in sdfWords, so vertex index i lives at word (tableOffset + (i >> 1)), lane .xy for an even index and
+// .zw for an odd one.
+float2 sdfPolygonVertex(uint tableOffset, uint index) {
+    uint4 packed = sdfWords[(tableOffset + (index >> 1u))];
+
+    return (((index & 1u) != 0u) ? asfloat(packed.zw) : asfloat(packed.xy));
+}
+// Exact signed distance to the convex polygon (`count` vertices starting at `tableOffset`, clockwise — this form is
+// correct for any simple polygon, convex or not, which is why convexity is validated at authoring time rather than
+// here). The running minimum squared distance to every edge SEGMENT (projection clamped to [0, 1], not the infinite
+// line), signed by one even/odd crossing-parity flip per edge (iq's sdPolygon) — sqrt-free per edge, one sqrt total.
+float sdfConvexPolygon2D(float2 p, uint tableOffset, uint count) {
+    float2 firstVertex = sdfPolygonVertex(tableOffset, 0u);
+    float2 previous = sdfPolygonVertex(tableOffset, (count - 1u));
+    float2 delta0 = (p - firstVertex);
+    float d = dot(delta0, delta0);
+    float s = 1.0;
+
+    for (uint i = 0u; (i < count); i++) {
+        float2 vertex = sdfPolygonVertex(tableOffset, i);
+        float2 e = (previous - vertex);
+        float2 w = (p - vertex);
+        float2 b = (w - (e * clamp((dot(w, e) / dot(e, e)), 0.0, 1.0)));
+
+        d = min(d, dot(b, b));
+
+        bool3 c = bool3((p.y >= vertex.y), (p.y < previous.y), ((e.x * w.y) > (e.y * w.x)));
+
+        if (all(c) || all(!c)) {
+            s = -s;
+        }
+
+        previous = vertex;
+    }
+
+    return (s * sqrt(d));
+}
+// Lifted wrapper, the family's usual convention: data0.w = lift amount, data1.y = lift mode, data1.z = cap chamfer,
+// data1.w = edge-rounding radius. tableOffset/count are packed into data0.x's reinterpreted uint bits (KEEP IN SYNC
+// with SdfProgramBuilder.ConvexPolygon / SdfProgram's table-offset patch).
+float sdfConvexPolygonSolid(float3 p, float4 data0, float4 data1) {
+    uint packed = asuint(data0.x);
+    uint count = (packed & 0xFu);
+    uint tableOffset = (packed >> 4u);
+
+    return (((data1.y > 0.5)
+        ? sdfExtrudeChamfer2D(sdfConvexPolygon2D(p.xy, tableOffset, count), p.z, data0.w, data1.z)
+        : sdfConvexPolygon2D(sdfRevolve2D(p, data0.w), tableOffset, count)) - data1.w);
 }
 // === end 2D-primitive family =======================================================================================
 
@@ -1413,16 +1562,20 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         // Articulated-character core: limbs overwhelmingly lower to capsules/cylinders. Keeping these two inexpensive
         // primitives in CoreOps avoids promoting an otherwise rigid humanoid program to the register-heavy full ISA.
         case SDF_SHAPE_CAPSULE:     result = sdfCapsule(p, data0.xyz, data0.w, data1.y); break;
-        case SDF_SHAPE_CYLINDER:    result = sdfCylinder(p, data0.x, data0.y); break;
+        // data0.xy arrive inset by the edge-rounding radius data1.w; subtracting it offsets the rims back out.
+        case SDF_SHAPE_CYLINDER:    result = (sdfCylinder(p, data0.x, data0.y) - data1.w); break;
         // The 2D-primitive family: each lifted wrapper reads its lift mode (data1.y) and lift amount (data0.w) itself.
         // A regular polygon is sdfStar2D's m = 2 case, so it shares the star's body verbatim. RoundedRectangle is a
         // CORE shape (the room's cabinetry is built from it); the rest of the family is exotic.
         case SDF_SHAPE_ROUNDED_RECT:    result = sdfRoundedRect(p, data0, data1); break;
+        case SDF_SHAPE_CHAMFERED_RECT:  result = sdfChamferedRect(p, data0, data1); break;
 #ifndef SDF_STRIP_HEAVY
         case SDF_SHAPE_REGULAR_POLYGON:
         case SDF_SHAPE_STAR:            result = sdfPolyStar(p, data0, data1); break;
         case SDF_SHAPE_TRAPEZOID:       result = sdfTrapezoidSolid(p, data0, data1); break;
         case SDF_SHAPE_ELLIPSE:         result = sdfEllipseSolid(p, data0, data1); break;
+        case SDF_SHAPE_SUPERELLIPSOID:  result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;
+        case SDF_SHAPE_CONVEX_POLYGON:  result = sdfConvexPolygonSolid(p, data0, data1); break;
 #endif
         // A glyph is the atlas-sampled letter where the atlas is bound (the world-views kernel), else the conservative
         // extruded quad — so the beam cull and rt-debug see a solid cell box (never a hole), and only the lit render
@@ -1899,7 +2052,7 @@ static SdfProgramLayout sdfProgramLayout = (SdfProgramLayout)0;
 // The ONE per-invocation layout decode. Same loads, same order as mapCore's former inline sequence.
 SdfProgramLayout sdfLoadProgramLayout() {
     uint4 header = sdfWords[0];
-    uint boundsOffset = (header.w + (2u * header.y));
+    uint boundsOffset = (header.w + (SDF_MATERIAL_VECTORS_PER_ENTRY * header.y));
     uint segmentOffset = (boundsOffset + (2u * header.x));
     uint4 segmentHeader = sdfWords[segmentOffset];
     uint segmentCount = segmentHeader.x;
@@ -2501,6 +2654,24 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     break;
                 }
 #endif
+                // Radial flare warp (KEEP IN SYNC with SdfProgramBuilder.FlareY): data0 = (amount, bulge, top,
+                // 1/span), data1.x = the host-baked 1/max(s) size correction over t in [0, 1]. t folds toward the far
+                // end of the span; s(t) is floored at SDF_FLARE_MIN_SCALE so a parameter combination that drives it
+                // non-positive still warps finitely. distanceScale takes the size correction here, the same channel
+                // SDF_OP_SCALE/SDF_OP_LOG_SPHERE use; the residual shear from the y-varying scale is bounded
+                // separately by SdfProgram.AnalyzeLipschitz's chain step clamp, not corrected per candidate.
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_FLARE_Y: {
+                    SDF_VM_LOAD_DATA0;
+                    SDF_VM_LOAD_DATA1;
+                    float flareT = saturate((data0.z - localPosition.y) * data0.w);
+                    float flareS = max(((1.0 + (data0.x * flareT)) + (data0.y * sin(SDF_PI * flareT))), SDF_FLARE_MIN_SCALE);
+
+                    localPosition.xz /= flareS;
+                    distanceScale *= data1.x;
+                    break;
+                }
+#endif
 #ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ELONGATE: {
                     SDF_VM_LOAD_DATA0;
@@ -2610,6 +2781,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 }
 #endif
                 case SDF_OP_SHAPE: {
+                    // A SHADING-ONLY shape (SDF_SHAPE_DETAIL_FLAG) contributes nothing to a march — skip it before
+                    // touching its bound or payload unless the hit-only shade re-evaluation asked for it.
+                    if (((instructionHeader.y & SDF_SHAPE_DETAIL_FLAG) != 0u) && !sdfDetailShadingActive) {
+                        break;
+                    }
+
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
                     // The per-shape flavour of the segment early-out above (same exactness argument): inside an
@@ -2640,7 +2817,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
                     }
 
-                    uint shapeType = instructionHeader.y;
+                    uint shapeType = (instructionHeader.y & SDF_SHAPE_TYPE_MASK);
                     float candidate = (evaluateShape(shapeType, localPosition, data0, data1) * distanceScale);
 
                     // Hand the DISTANCE-SCALED candidate to the shared blend tail below.
@@ -2751,7 +2928,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     //
     // CAVEAT for consumers: the returned distance is scaled. Take a STEP with it freely, but a consumer that COMPARES it
     // against a world-space quantity (a penumbra ratio, a footprint threshold) must divide the clamp back out — see
-    // sdfStepScale() and areaShadowVisibility in sdf-world.hlsli.
+    // sdfStepScale() and softShadowVisibility in sdf-world.hlsli.
     result.distance *= stepScale;
     // Publish the fold-safe step bound in the SAME clamped units as the returned distance: stepScale = 1/L covers the
     // whole chain's worst-case expansion, so the clamped gap remains a conservative world-travel bound even when a
@@ -3282,6 +3459,30 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     break;
                 }
 #endif
+                // KEEP-IN-SYNC with mapCore's SDF_OP_FLARE_Y case. A = diag(1/s, 1, 1/s) plus a rank-1 shear from
+                // ds/dy (moving along y rescales x and z): d(x')/dy = -x*(ds/dy)/s^2, d(z')/dy = -z*(ds/dy)/s^2. The
+                // shear is zero on the clamp plateau (t == 0 or t == 1) and wherever the floor is active (s pinned
+                // constant there, not truly varying) — both measure-zero in t but real wherever the floor clamps.
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_FLARE_Y: {
+                    float flareRawT = ((data0.z - localPosition.y) * data0.w);
+                    float flareT = saturate(flareRawT);
+                    float flareSinPiT = sin(SDF_PI * flareT);
+                    float flareRawS = ((1.0 + (data0.x * flareT)) + (data0.y * flareSinPiT));
+                    float flareS = max(flareRawS, SDF_FLARE_MIN_SCALE);
+                    float flareInvS = (1.0 / flareS);
+                    bool flareInsideBand = ((flareRawT > 0.0) && (flareRawT < 1.0) && (flareRawS > SDF_FLARE_MIN_SCALE));
+                    float flareDsDt = (data0.x + ((data0.y * SDF_PI) * cos(SDF_PI * flareT)));
+                    float flareShear = (flareInsideBand ? ((-data0.w * flareDsDt) * (flareInvS * flareInvS)) : 0.0);
+                    float3 ax = float3(flareInvS, (-localPosition.x * flareShear), 0.0);
+                    float3 ay = float3(0.0, 1.0, 0.0);
+                    float3 az = float3(0.0, (-localPosition.z * flareShear), flareInvS);
+                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
+                    localPosition.xz /= flareS;
+                    distanceScale *= data1.x;
+                    break;
+                }
+#endif
 #ifndef SDF_STRIP_ALL_EXOTIC
                 case SDF_OP_ELONGATE: {
                     // A = diag(indicator(|p_i| > h_i)): the interior of the swept region collapses onto the core (zero
@@ -3391,6 +3592,12 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 }
 #endif
                 case SDF_OP_SHAPE: {
+                    // KEEP IN SYNC with mapCore's SDF_OP_SHAPE detail skip — the dual twin must agree on which
+                    // shapes are visible so a Detail-flagged shape never bends the normal outside shade mode.
+                    if (((instructionHeader.y & SDF_SHAPE_DETAIL_FLAG) != 0u) && !sdfDetailShadingActive) {
+                        break;
+                    }
+
                     uint4 shapeBoundMeta = sdfWords[boundsOffset + (2u * index) + 1u];
 
                     [branch]
@@ -3416,7 +3623,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         }
                     }
 
-                    uint shapeType = instructionHeader.y;
+                    uint shapeType = (instructionHeader.y & SDF_SHAPE_TYPE_MASK);
                     int material = (int)instructionHeader.w;
                     float candidate = (evaluateShape(shapeType, localPosition, data0, data1) * distanceScale);
                     // The primitive's LOCAL gradient, mapped to world through the transform-chain Jacobian columns and
@@ -3536,12 +3743,27 @@ bool sdfInstanceShadowSuppressed(uint instanceOffset, uint index) {
 
 struct SdfMaterialData {
     float3 albedo;
-    float emissive;  // self-illumination strength: albedo * emissive adds to the shaded color
-    float specular;  // Blinn-Phong strength in [0, 1]; 0 = matte
-    float shininess; // Blinn-Phong exponent (highlight tightness)
+    float emissive;   // self-illumination strength: albedo * emissive adds to the shaded color
+    float specular;   // GGX dielectric reflectance at normal incidence (f0) before the metal mix; see sdfMaterialShade
+    float roughness;  // GGX roughness in [0, 1]; see SdfRoughnessFloorSquared
+    float sheen;      // fresnel edge-lift strength in [0, 1]; see sdfMaterialShade
+    float metal;      // metalness in [0, 1]: mixes f0 toward albedo, scales diffuse by (1 - metal)
+    float coat;       // clearcoat strength in [0, 1]: a fixed-roughness (SdfCoatRoughness) second GGX lobe
 };
 
-// The ONE material decode point (KEEP IN SYNC with the 2-uint4 layout above and SdfProgram.cs).
+// The GGX roughness floor: alpha2 = roughness^2 + SdfRoughnessFloorSquared, so a bare light direction (no authored
+// angular size) never collapses the GGX lobe to a delta function. SdfMaterial.DefaultRoughness is calibrated
+// against this exact constant — KEEP THEM IN SYNC.
+static const float SdfRoughnessFloorSquared = 0.018;
+// The clearcoat lobe's fixed roughness and its fresnel-independent peak-reflectance scale (sdfMaterialShade's coat
+// term). KEEP IN SYNC with SdfMaterial.Coat's XML docs.
+static const float SdfCoatRoughness = 0.25;
+static const float SdfCoatScale = 0.04;
+// The per-material fresnel edge-lift exponent sdfMaterialShade's sheen term raises (1 - N.V) to: a broad, soft catch
+// rather than a tight silhouette-only rim.
+static const float SdfSheenFresnelExponent = 2.0;
+
+// The ONE material decode point (KEEP IN SYNC with the 3-uint4 layout above and SdfProgram.cs).
 SdfMaterialData sdfMaterialLoad(int material) {
     uint4 header = sdfWords[0];
     SdfMaterialData data;
@@ -3550,18 +3772,25 @@ SdfMaterialData sdfMaterialLoad(int material) {
         data.albedo = float3(1.0, 0.0, 1.0);
         data.emissive = 4.0;
         data.specular = 0.0;
-        data.shininess = 1.0;
+        data.roughness = 1.0;
+        data.sheen = 0.0;
+        data.metal = 0.0;
+        data.coat = 0.0;
         return data;
     }
 
-    uint materialBase = (header.w + (2u * (uint)material));
+    uint materialBase = (header.w + (SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material));
     float4 m0 = asfloat(sdfWords[materialBase]);
     float4 m1 = asfloat(sdfWords[materialBase + 1u]);
+    float4 m2 = asfloat(sdfWords[materialBase + 2u]);
 
     data.albedo = m0.rgb;
     data.emissive = m0.a;
     data.specular = m1.x;
-    data.shininess = m1.y;
+    data.roughness = m1.y;
+    data.sheen = m1.z;
+    data.metal = m1.w;
+    data.coat = m2.x;
 
     return data;
 }
@@ -3569,20 +3798,58 @@ SdfMaterialData sdfMaterialLoad(int material) {
 float3 sdfMaterialAlbedo(int material) {
     return sdfMaterialLoad(material).albedo;
 }
-// The ONE lit-surface shade funnel: a lambert term, a Blinn-Phong highlight, and an emissive lift. An all-zero
-// specular/emissive material reduces to pure lambert exactly. `diffuse` is the caller's accumulated radiance (ambient +
-// the sun + any colored screen lights — a float3 so colored lights tint the surface); `lightScale` scales the highlight
-// by the caller's shadow/light attenuation. KEEP IN SYNC across every caller (sdf-world.hlsli, sdf-world-rt-debug).
-float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection, float lightScale) {
-    float3 color = (material.albedo * diffuse);
+// The Trowbridge-Reitz (GGX) normal distribution: alpha2 / (pi * d^2), d = nh^2*(alpha2-1)+1.
+float sdfGgxDistribution(float nDotH, float alpha2) {
+    float d = ((nDotH * nDotH) * (alpha2 - 1.0)) + 1.0;
 
-    if (material.specular > 0.0) {
-        float3 halfVector = normalize(lightDirection - rayDirection);
-        color += ((material.specular * pow(saturate(dot(normal, halfVector)), material.shininess)) * lightScale);
+    return (alpha2 / max((SDF_PI * d * d), 1.0e-6));
+}
+// The ONE lit-surface shade funnel: a metal-scaled lambert term, a GGX specular lobe (Smith-Schlick geometry, Schlick
+// fresnel, a roughness floor so a bare light direction stays finite), an optional fixed-roughness clearcoat lobe, an
+// emissive lift, and a fresnel sheen edge-lift. A material with zero specular AND zero metal skips the GGX term
+// entirely, so a plain lambert material (the common case) is unaffected by it. `diffuse` is the caller's accumulated
+// radiance (ambient + the sun + any colored screen lights — a float3 so colored lights tint the surface); `lightScale`
+// scales the GGX/coat lobes by the caller's shadow/light attenuation. KEEP IN SYNC across every caller
+// (sdf-world.hlsli, sdf-world-rt-debug).
+float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection, float lightScale) {
+    float3 diffuseAlbedo = (material.albedo * (1.0 - material.metal));
+    float3 color = (diffuseAlbedo * diffuse);
+
+    if ((material.specular > 0.0) || (material.metal > 0.0)) {
+        float3 f0 = lerp(float3(material.specular, material.specular, material.specular), material.albedo, material.metal);
+        float3 viewDirection = -rayDirection;
+        float3 halfVector = normalize(lightDirection + viewDirection);
+        float nDotH = saturate(dot(normal, halfVector));
+        float nDotV = saturate(dot(normal, viewDirection));
+        float nDotL = saturate(dot(normal, lightDirection));
+
+        if ((nDotV > 0.0) && (nDotL > 0.0)) {
+            float rough = sqrt(((material.roughness * material.roughness) + SdfRoughnessFloorSquared));
+            float alpha2 = (rough * rough);
+            float k = (((material.roughness + 1.0) * (material.roughness + 1.0)) / 8.0);
+            float geometry = ((nDotV / ((nDotV * (1.0 - k)) + k)) * (nDotL / ((nDotL * (1.0 - k)) + k)));
+            float vDotH = saturate(dot(viewDirection, halfVector));
+            float3 fresnel = (f0 + ((1.0 - f0) * pow((1.0 - vDotH), 5.0)));
+            float3 specular = (((sdfGgxDistribution(nDotH, alpha2) * geometry) * fresnel) / max((4.0 * nDotV * nDotL), 1.0e-4));
+
+            color += ((specular * nDotL) * lightScale);
+
+            if (material.coat > 0.0) {
+                float coatAlpha2 = (SdfCoatRoughness * SdfCoatRoughness);
+                float coat = ((sdfGgxDistribution(nDotH, coatAlpha2) * geometry) / max((4.0 * nDotV), 1.0e-4));
+
+                color += ((coat * (material.coat * SdfCoatScale)) * lightScale);
+            }
+        }
     }
 
     if (material.emissive > 0.0) {
         color += (material.albedo * material.emissive);
+    }
+
+    if (material.sheen > 0.0) {
+        float fresnel = pow(saturate(1.0 - saturate(dot(normal, -rayDirection))), SdfSheenFresnelExponent);
+        color += (color * (material.sheen * fresnel));
     }
 
     return color;

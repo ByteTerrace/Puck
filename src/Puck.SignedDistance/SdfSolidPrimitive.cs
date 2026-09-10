@@ -30,6 +30,12 @@ public enum SdfSolidPrimitive {
     Cone,
     /// <summary>A bounded profile in local XY extruded along Z. The default trapezoid has unit bottom
     /// half-width, half-height and depth, with an authored top-to-bottom width ratio (default one half).
-    /// <see cref="SdfPrismProfile"/> selects rounded rectangles, polygons or ellipses instead.</summary>
+    /// <see cref="SdfPrismProfile"/> selects rounded rectangles, polygons, ellipses, or a convex vertex list instead.</summary>
     Prism,
+    /// <summary>A generalized ellipsoid: <c>q = pow(abs(p)/r, e); d = (pow(q.x+q.y+q.z, 1/e) - 1) * min(r)</c>, unit
+    /// radii (1,1,1) and an authored exponent <c>e</c> in [<see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>,
+    /// <see cref="SdfProgramBuilder.MaxSuperellipsoidExponent"/>] (the document's <c>exponent</c> field carries it;
+    /// unauthored is the minimum, the ellipsoid limit — the two spellings agree bit-for-bit at that exponent). A
+    /// squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.</summary>
+    Superellipsoid,
 }
