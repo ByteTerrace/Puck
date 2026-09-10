@@ -5,12 +5,30 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// THE LAW: <see cref="WorldLookLaneEvaluator.Evaluate"/> reads a render lane expression —
-/// literal or state-backed — exactly as a look's damage/thrust lane, feeding
+/// literal or state-backed — into an anonymous component of
 /// <c>Puck.SignedDistance.DynamicTransform.Lanes</c>. A plain numeric literal (the common authored case) reads
 /// back exactly; a null expression, an unsupported token, or a malformed stack reads 0 — never throws on this
 /// per-frame render path.
 /// </summary>
 public sealed class WorldLookLaneEvaluatorLawTests {
+    [Theory]
+    [InlineData("clamp(0.5, 1, 0)")]
+    [InlineData("sign((9999999999999999999999999999 * 9999999999999999999999999999) - (9999999999999999999999999999 * 9999999999999999999999999999))")]
+    public void InvalidArithmeticReadsZero(string expression) =>
+        Assert.Equal(0f, WorldLookLaneEvaluator.Evaluate(ValueExpression.Parse(expression), Fixtures.BuildDocument(), 0, -1));
+
+    [Fact]
+    public void LanesRoundTripThroughTheWorldSourceGeneratedContext() {
+        var document = Fixtures.BuildDocument() with {
+            LooksRaw = new(Rows: [new("probe", new WorldLookSource.Catalog(0), 1f,
+                WorldLookMotion.Default with { Lanes = [ValueExpression.Parse("0.6"), null, ValueExpression.Parse("1")] })]),
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(document, WorldJsonContext.Default.WorldDefinition);
+        var restored = System.Text.Json.JsonSerializer.Deserialize(json, WorldJsonContext.Default.WorldDefinition)!;
+        Assert.Equal(new System.Numerics.Vector4(0.6f, 0f, 1f, 0f),
+            WorldLookLaneEvaluator.EvaluateLanes(restored.Looks.Rows![0].Motion.Lanes, restored, 0, -1));
+    }
+
     [Fact]
     public void FourAnonymousLanesPreserveInteriorGapsAndTheFourthValue() {
         ValueExpression?[] lanes = [ValueExpression.Parse("0.25"), null, ValueExpression.Parse("0.75"), ValueExpression.Parse("1")];

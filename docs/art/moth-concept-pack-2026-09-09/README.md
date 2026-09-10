@@ -17,6 +17,8 @@ Six concept sheets expand the owner's selected Moth into a visual handoff for ch
 
 ## Preserve the character
 
+The editable [Puck Study source](../../../src/Puck.World/Assets/studies/moth.glsl) renders the character with procedural SDF geometry; the [Study guide](../../../src/Puck.World/README.md#shader-studies) covers launching, live reload and animation controls. The identical [Shadertoy export](moth-shadertoy.glsl) can be pasted into the Image tab with no channels. Its header documents the pose selector, flight-cycle animation, pack opening, framing, colorway and quality controls. The same rigid parts serve all poses, with separate ankle articulation and pose-driven backpack thrust. It remains an approximation of these concept sheets.
+
 Keep warm brown skin, expressive brown eyes, black swept hair and one thick braid rooted beside her right cheek through the front helmet opening. The braid can trail during movement; its attachment does not change or move through the helmet back. The hood has an ivory face rim and lilac shell. Its opening follows the forehead and cheeks with a continuous shaped curve. Avoid a box or pentagonal house surrounding the face.
 
 Armor combines broad plate faces, tapered volumes, controlled bevels and purposeful curves. Swept overlapping shoulders, large gauntlets, flared shin armor and substantial flat-soled boots establish the silhouette. Charcoal joints separate rigid pieces and provide bending space. Ivory and lilac dominate; muted ochre and restrained cyan lights are accents. Preserve the friendly arcade character and compact chibi proportions instead of adding realistic anatomy, surface noise or excessive effects.

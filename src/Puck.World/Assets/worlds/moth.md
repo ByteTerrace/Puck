@@ -6,6 +6,10 @@ hood, a dark braid, and folding flight vanes establish the silhouette. The model
 an initial procedural interpretation; facial construction, armor paneling, and
 flight effects still need art refinement before it represents the concept's final quality.
 
+For the more detailed standalone shader, use the [Moth Study workflow](../../README.md#shader-studies).
+It runs in [study.world.json](study.world.json), with live shader reload and a
+compact two-pod flight rig. This page describes the separate playable world model.
+
 The current refinement follows the selected Moth collage: warm brown skin and a
 side braid, a five-sided ivory cowl framing the face, lilac shoulder plates, a split ivory
 chest collar, and a small cyan clasp. Broad boots and dark joints keep the stance

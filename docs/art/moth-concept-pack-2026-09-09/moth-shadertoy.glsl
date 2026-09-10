@@ -1,21 +1,29 @@
 // MOTH - procedural SDF study of 01-character-model-sheet.png.
 // Swept shoulders, curved boots and surface finish: 02-face-and-armor.png.
+// Author in src/Puck.World/Assets/studies/moth.glsl; copy this complete source to
+// docs/art/moth-concept-pack-2026-09-09/moth-shadertoy.glsl for the Shadertoy export.
+// All numbered reference sheets live in that concept-pack directory.
 // Paste this entire file into Shadertoy's Image tab. No channels required.
+// Puck Study uses its paired camera when supplied; otherwise the orbit below.
 // Drag mouse: orbit. Release: hold view. Set AUTO_TURN to 1 for a turntable.
 // Approximate sculpt, not a mesh reconstruction. Front is +Z; units are artistic.
 // CLOSE_UP: face/shoulder framing. AA: 1 = fast, 2 = four samples per pixel.
-// RUN_POSE: 0 = neutral sculpt, 1 = a frozen running key pose with a trailing braid.
+// POSE: 0 rest, 1 jump prep, 2 takeoff, 3 hover, 4 flight, 5 brake, 6 land, 7 run.
+// ANIMATE_POSE loops rest / jump / hover / flight / brake / land using the same rig.
 // ANIMATE_FACE adds a brief blink every 5.1 seconds; set to 0 for a still study.
-// Plates use rigid joint transforms; surface detail follows each piece in either pose.
+// Plates use rigid joint transforms; surface detail follows each piece in every pose.
 // Graphic amber eyes, sculpted facial planes, swept hair and satin pearl paint.
 // Secondary rays use simplified head geometry; eyelid occlusion is shaded locally.
 // AA samples also sample the studio light; tone mapping follows linear averaging.
 // PACK_VIEW frames the flight system. JETS toggles depth-clipped volumetric exhaust.
-// ANIMATE_PACK: gentle, close-to-body hinge motion. Set to 0 for a still sculpt.
-// PACK_DEPLOY: static opening from 0.0 to 1.0 when ANIMATE_PACK is 0 (about 6 degrees).
+// ANIMATE_PACK adds a small hinge settle. Opening follows the selected pose.
+// PACK_DEPLOY: -1.0 follows pose; 0.0..1.0 overrides opening (at most 6 degrees).
+// OWNER_COLORWAY: 1 ivory shin shells from the owner crop, 0 lilac from sheet 1.
+// 05-compact-wing-views.png anchors the twin shells and recessed lower nozzles.
+// 06-compact-wing-motion.png anchors the pose sequence and restrained deployment.
 // WEAR: 0 = fresh paint, 1 = restrained edge chips, scratches and contact abrasion.
 // Jet flow animates with iTime; no noise textures, buffers or opaque flame meshes.
-// The braid exits beside the right cheek through the front opening in both poses.
+// The braid stays rooted beside the right cheek through the front helmet opening.
 // RELAXED_TRACE checks overlapping empty-space bounds and retries rejected steps.
 // Skin transmission and neighbor-color bounce are bounded shading approximations.
 // GEOMETRIC_SEAMS cuts the pack's main reveals; fine engravings remain surface detail.
@@ -24,11 +32,12 @@
 #define CLOSE_UP 0
 #define PACK_VIEW 0
 #define JETS 1
-#define PACK_DEPLOY 0.0
+#define PACK_DEPLOY -1.0
 #define ANIMATE_PACK 1
 #define OWNER_COLORWAY 1
 #define WEAR 1
-#define RUN_POSE 0
+#define POSE 0
+#define ANIMATE_POSE 0
 #define ANIMATE_FACE 1
 #define RELAXED_TRACE 1
 #define GEOMETRIC_SEAMS 1
@@ -45,8 +54,18 @@ const float GOLD=6., CYAN=7., EYE=8., STEEL=9.;
 const float OCHRE=11.;
 const float LIP=12., MOUTH=13.;
 float eyeOpen;
+struct MotionPose {
+    float pitch, lift;
+    vec2 hip, knee, ankle, arm, elbow;
+    float opening, thrust, trail, grip;
+};
+MotionPose motion;
+float characterLift, packOpening;
 
 mat2 rot(float a) { float c=cos(a),s=sin(a); return mat2(c,-s,s,c); }
+// Signed values need multiplication: pow(negative, even) is undefined in GLSL
+// and can become NaN after SPIR-V/HLSL translation (notably blinks and lip cuts).
+float square(float x) { return x*x; }
 float ell(vec3 p, vec3 r) {
     // Conservative distance bound, including at the ellipsoid center.
     return (length(p/r)-1.)*min(r.x,min(r.y,r.z));
@@ -164,7 +183,7 @@ float faceSculpt(vec3 p) {
 float skinGeometry(vec3 p) {
     // A recessed throat widens into the jaw and shoulder root. Keep the front
     // behind the chin so the mandible has an underside instead of a skin stalk.
-    float waist=exp(-pow((p.y-3.28)/.105,2.));
+    float waist=exp(-square((p.y-3.28)/.105));
     float base=1.-smoothstep(3.14,3.27,p.y);
     vec2 radius=vec2(.151-.019*waist+.036*base,.104+.022*base);
     vec2 section=vec2(p.x,p.z-.125)/radius;
@@ -258,169 +277,195 @@ float gauntletShell(vec3 q) {
     shell=smoothIntersection(shell,abs(a.z)-(.214+.10*a.y),.016);
     return smoothIntersection(shell,-q.x-.035-.25*q.y,.025);
 }
+vec3 nozzlePosition() { return vec3(.300,2.175,-.545); }
 vec3 nozzleCoordinates(vec3 p) {
-    // Concealed exhaust frame beneath the wingtip, shared by injector and volume plume.
-    p-=vec3(.22,2.12,-.350);
-    p.xy=rot(.08)*p.xy;
-    p.yz=rot(.24)*p.yz;
+    // Geometry, gas and lighting share a frame aft of the thigh envelope.
+    p-=nozzlePosition();
+    float cant=mix(.32,.08,smoothstep(0.,.3,motion.thrust));
+    cant-=.30*smoothstep(.02,.16,-motion.pitch);
+    p.xy=rot(.10)*p.xy; p.yz=rot(cant)*p.yz;
     return p;
 }
-float podShell(vec3 q) {
-    // Compound-curved aerodynamic carapace pod matching the Moth turnaround art sheets.
-    // Normalized height v in [0, 1] from bottom trailing tip to upper shoulder.
-    float v=clamp((q.y-2.02)/1.14,0.,1.);
-
-    // Domain warp: ribcage arch, lateral flare, and outward trailing tip sweep
-    vec3 a=q-vec3(.235,2.62,-.370);
-    a.x+=.10*a.y-.18*min(a.y,0.)*min(a.y,0.);
-    a.z+=.15*pow(max(a.x,0.)/.22,2.)-.030*sin(PI*v);
-
-    // 3D convex base ellipsoid: full compound curvature in X, Y, and Z
-    float shell=ell(a,vec3(.235,.560,.115))*.80;
-
-    // Medial (inner) spine cut: vertical clearance along spine down to y=2.45,
-    // then smoothly sweeping outward to form the inverted-V thruster cowl opening.
-    float innerMargin=.042+.48*pow(max(2.45-q.y,0.),1.15);
-    float innerCut=innerMargin-q.x;
-    shell=smoothIntersection(shell,innerCut,.020);
-
-    // Outer flank chamfer: aerodynamic mecha bevel along the lateral perimeter
-    float outerBevel=.62*a.x+.18*a.y-.25*a.z-.26;
-    shell=smoothIntersection(shell,outerBevel,.024);
-
-    // Anterior cut: flush fit against the dorsal torso surface with zero air gap
-    float torsoBack=-.280+.030*sin(PI*v)+.07*q.x*q.x;
-    float frontCut=q.z-torsoBack;
-    shell=smoothIntersection(shell,frontCut,.018);
-
-    // Concave underside socket: scooped pocket cradling the angled thruster nozzle
-    float thrusterSocket=ell(q-vec3(.22,2.16,-.35),vec3(.080,.110,.072));
-    shell=max(shell,-thrusterSocket);
-
-    return shell;
+float podBandCoordinate(vec3 p) {
+    float x=p.x-.12;
+    return p.y+.27*x+.20*x*x;
 }
-mat3 partFrame[14];
-vec3 partOffset[14];
+float podBandEdges(vec3 p) {
+    float u=podBandCoordinate(p);
+    return min(abs(abs(u-2.855)-.080),abs(abs(u-2.395)-.100));
+}
+float podShell(vec3 q) {
+    // Fuller behind the ribs, narrow at the root, swept outward toward the lower lip.
+    float u=clamp((3.17-q.y)/1.10,0.,1.);
+    vec3 a=q-vec3(.205+.155*u,2.62,-.405-.085*sin(PI*u)-.035*u);
+    a.z+=.12*a.x*a.x;
+    float shell=ell(a,vec3(.250,.575,.175));
+    float innerMargin=.045+.36*pow(max(2.45-q.y,0.),1.20);
+    shell=smoothIntersection(shell,innerMargin-q.x,.024);
+    shell=smoothIntersection(shell,q.z+.335,.020);
+    // An open-bottom arch leaves a swept outer lip instead of punching a face hole.
+    // Its shape is rigid; only the small bell inside the recess vectors thrust.
+    vec2 arch=vec2((q.x-.285)/.115,max(q.y-2.085,0.)/.170);
+    float socket=(length(arch)-1.)*.115;
+    return max(shell,-socket)*.64;
+}
+// Torso/head, thighs/shins, upper arms/forearms, shoulders, pods, then feet.
+mat3 partFrame[16];
+vec3 partOffset[16];
 void rotateFrame(inout mat3 frame,inout vec3 offset,vec3 pivot,float angle) {
     float c=cos(angle),s=sin(angle);
     mat3 rotation=mat3(vec3(1,0,0),vec3(0,c,-s),vec3(0,s,c));
     frame=rotation*frame;
     offset=rotation*(offset-pivot)+pivot;
 }
+MotionPose poseAt(int pose) {
+    MotionPose p=MotionPose(0.,0.,vec2(0),vec2(0),vec2(0),vec2(0),vec2(0),0.,0.,0.,.12);
+    if(pose==1) { // Compress over planted, flat soles.
+        p.pitch=.24; p.hip=vec2(-.68); p.knee=vec2(.98);
+        p.arm=vec2(.24); p.elbow=vec2(-.30); p.grip=.40;
+    } else if(pose==2) {
+        p.pitch=.10; p.lift=.40; p.hip=vec2(-.10,-.34); p.knee=vec2(.20,.64);
+        p.arm=vec2(-.34,-.46); p.elbow=vec2(-.38); p.opening=.68; p.thrust=.9;
+        p.trail=.22; p.grip=.20;
+    } else if(pose==3) {
+        p.lift=.68; p.hip=vec2(-.10); p.knee=vec2(.25);
+        p.arm=vec2(-.05); p.elbow=vec2(-.20); p.opening=.85; p.thrust=.62;
+        p.trail=.12;
+    } else if(pose==4) {
+        p.pitch=.60; p.lift=.84; p.hip=vec2(.06,.13); p.knee=vec2(.30,.46);
+        p.arm=vec2(-.95,-.90); p.elbow=vec2(-1.20,-1.25);
+        p.opening=1.; p.thrust=1.; p.trail=.95; p.grip=.90;
+    } else if(pose==5) {
+        p.pitch=-.18; p.lift=.64; p.hip=vec2(-.58,-.50); p.knee=vec2(.58,.50);
+        p.arm=vec2(-.44,-.32); p.elbow=vec2(-.30); p.opening=.95; p.thrust=.85;
+        p.trail=-.35; p.grip=.08;
+    } else if(pose==6) {
+        p.pitch=.32; p.hip=vec2(-.84); p.knee=vec2(1.12);
+        p.arm=vec2(-.55); p.elbow=vec2(-.40); p.opening=.52; p.trail=-.16;
+    } else if(pose==7) {
+        p.pitch=.13; p.hip=vec2(-.75,.65); p.knee=vec2(.38,.90);
+        p.arm=vec2(-.75,1.38); p.elbow=vec2(-1.20,-.15); p.trail=1.; p.grip=.86;
+    }
+    // Feet articulate independently from shin armor. Contact poses have level soles.
+    p.ankle=-p.hip-p.knee-vec2(p.pitch);
+    if(pose>=2 && pose<=5) p.ankle=mix(p.ankle,vec2(-.08),.68);
+    if(pose==7) p.ankle=vec2(.12,-.35);
+    return p;
+}
+MotionPose blendPose(MotionPose a,MotionPose b,float t) {
+    return MotionPose(mix(a.pitch,b.pitch,t),mix(a.lift,b.lift,t),
+        mix(a.hip,b.hip,t),mix(a.knee,b.knee,t),mix(a.ankle,b.ankle,t),
+        mix(a.arm,b.arm,t),mix(a.elbow,b.elbow,t),mix(a.opening,b.opening,t),
+        mix(a.thrust,b.thrust,t),mix(a.trail,b.trail,t),mix(a.grip,b.grip,t));
+}
 void preparePose() {
+    motion=poseAt(POSE);
+    if(ANIMATE_POSE==1) {
+        // Deliberate holds between actions; land before the shells finish closing.
+        float t=mod(iTime,12.);
+        int a=0,b=1; float u=smoothstep(.75,1.65,t);
+        if(t>=1.65) {a=1;b=2;u=smoothstep(1.65,2.55,t);}
+        if(t>=2.55) {a=2;b=3;u=smoothstep(2.55,3.6,t);}
+        if(t>=4.8) {a=3;b=4;u=smoothstep(4.8,6.,t);}
+        if(t>=7.2) {a=4;b=5;u=smoothstep(7.2,8.3,t);}
+        if(t>=8.7) {a=5;b=6;u=smoothstep(8.7,10.,t);}
+        if(t>=10.25) {a=6;b=0;u=smoothstep(10.25,11.7,t);}
+        motion=blendPose(poseAt(a),poseAt(b),u);
+    }
     // Cache inverse rigid frames once per fragment, outside all distance queries.
-    for(int i=0;i<12;i++) {
+    for(int i=0;i<16;i++) {
         mat3 frame=mat3(1.); vec3 offset=vec3(0);
-        if(RUN_POSE==1) rotateFrame(frame,offset,vec3(0,2.15,0),.13);
-        bool otherSide=(i==4 || i==5 || i==8 || i==9 || i==11);
+        rotateFrame(frame,offset,vec3(0,2.15,0),motion.pitch);
+        bool otherSide=(i==4 || i==5 || i==8 || i==9 || i==11 || i==15);
+        int side=otherSide?1:0;
         if(i==1) {
-            // Seat the head into the shoulder assembly instead of stretching the neck.
-            offset.y+=.140;
-            if(RUN_POSE==1) rotateFrame(frame,offset,vec3(0,3.15,0),-.10);
+            rotateFrame(frame,offset,vec3(0,3.15,0),-.66*motion.pitch);
+            offset.y+=.185;
             mat3 scale=mat3(vec3(1./.88,0,0),vec3(0,1./.88,0),vec3(0,0,1./.90));
             frame=scale*frame;
             offset=scale*(offset-vec3(0,3.2,0))+vec3(0,3.2,0);
-        } else if(i>=2) {
+        } else if(i>=2 && (i<12 || i>=14)) {
             if(otherSide) {
                 mat3 mirror=mat3(vec3(-1,0,0),vec3(0,1,0),vec3(0,0,1));
                 frame=mirror*frame; offset.x=-offset.x;
             }
-            if(RUN_POSE==1) {
-                if(i<=5) {
-                    rotateFrame(frame,offset,vec3(.29,2.055,0),otherSide?.65:-.75);
-                    if(i==3 || i==5) rotateFrame(frame,offset,vec3(.38,1.49,0),otherSide?.90:.38);
-                } else if(i<=9) {
-                    rotateFrame(frame,offset,vec3(.59,2.90,0),otherSide?1.38:-.75);
-                    if(i==7 || i==9) rotateFrame(frame,offset,vec3(.78,2.35,.01),otherSide?-.15:-1.20);
-                } else rotateFrame(frame,offset,vec3(.59,2.90,0),.40*(otherSide?1.38:-.75));
-            }
+            if(i<=5 || i>=14) {
+                rotateFrame(frame,offset,vec3(.29,2.055,0),motion.hip[side]);
+                if(i==3 || i==5 || i>=14)
+                    rotateFrame(frame,offset,vec3(.38,1.49,0),motion.knee[side]);
+                if(i>=14) rotateFrame(frame,offset,vec3(.4,.34,.015),motion.ankle[side]);
+            } else if(i<=9) {
+                rotateFrame(frame,offset,vec3(.59,2.90,0),motion.arm[side]);
+                if(i==7 || i==9) rotateFrame(frame,offset,vec3(.78,2.35,.01),motion.elbow[side]);
+            } else rotateFrame(frame,offset,vec3(.59,2.90,0),.30*motion.arm[side]);
         }
         partFrame[i]=frame; partOffset[i]=offset;
     }
+    // Contact is computed from transformed sole support points, then lift is added.
+    float lowest=10.;
+    for(int foot=14;foot<16;foot++) for(int j=0;j<4;j++) {
+        vec3 sole=vec3(.4+(j<2?-.24:.24),-.003,(j==0 || j==2)?-.23:.61);
+        vec3 world=transpose(partFrame[foot])*(sole-partOffset[foot]);
+        lowest=min(lowest,world.y);
+    }
+    characterLift=motion.lift-lowest;
+    for(int i=0;i<16;i++) partOffset[i]-=partFrame[i]*vec3(0,characterLift,0);
 }
 vec3 localPosition(vec3 p,int part) { return partFrame[part]*p+partOffset[part]; }
+vec3 worldPosition(vec3 p,int part) {
+    if(part==1) return inverse(partFrame[part])*(p-partOffset[part]);
+    return transpose(partFrame[part])*(p-partOffset[part]);
+}
 void preparePack() {
-    float phase=.5-.5*cos(iTime*.72);
-    float opening=ANIMATE_PACK==1?smoothstep(.12,.88,phase):clamp(float(PACK_DEPLOY),0.,1.);
+    packOpening=PACK_DEPLOY<0.?motion.opening:clamp(float(PACK_DEPLOY),0.,1.);
     for(int i=0;i<2;i++) {
         float side=i==0?1.:-1.;
         mat3 mirror=mat3(vec3(side,0,0),vec3(0,1,0),vec3(0,0,1));
         mat3 frame=mirror*partFrame[0]; vec3 offset=mirror*partOffset[0];
-        vec3 pivot=vec3(.09,3.12,-.33);
-        float settle=ANIMATE_PACK==1?.012*sin(iTime*1.1+side*.35)*opening:0.;
-        mat2 r=rot(.35*opening+settle);
+        vec3 pivot=vec3(.18,3.10,-.37);
+        float settle=ANIMATE_PACK==1?.035*sin(iTime*1.1+side*.35)*packOpening:0.;
+        float opening=clamp(packOpening+settle,0.,1.);
+        mat2 r=rot(.105*opening);
         mat3 hinge=mat3(vec3(r[0],0),vec3(r[1],0),vec3(0,0,1));
         frame=hinge*frame; offset=hinge*(offset-pivot)+pivot;
-        rotateFrame(frame,offset,pivot,.12*opening);
+        rotateFrame(frame,offset,pivot,.070*opening);
         partFrame[12+i]=frame; partOffset[12+i]=offset;
     }
 }
 vec2 podScene(vec3 p,bool detail) {
-    float bound=box(p-vec3(.24,2.60,-.37),vec3(.28,.64,.20),.02);
+    float bound=box(p-vec3(.29,2.62,-.49),vec3(.34,.65,.28),.02);
     if(bound>.12) return vec2(bound,-1.);
     vec2 h=vec2(10.,LILAC);
-    vec3 q=p;
-
-    // Continuous compound-curved 3D carapace shell
-    float shell=podShell(q);
-
-    // Geodesic parameter u curving downward as it radiates outward across the pod dome
-    float u=q.y+.20*(q.x-.05)+.32*pow(max(q.x-.05,0.),2.);
-
-    // Hairline panel grooves between tiers when geometric seams are enabled
-    if(detail && GEOMETRIC_SEAMS==1 && abs(shell)<.024) {
-        float seamDist=min(abs(u-2.92),min(abs(u-2.69),min(abs(u-2.46),abs(u-2.22))));
-        shell=carvePanel(shell,seamDist,.0032,.0055,.0012);
-    }
-
-    // Top mantle vent in Lilac Band 1 (recessed dark slot)
-    vec3 ventPos=q-vec3(.17,3.06,-.385);
-    float vent=box(ventPos,vec3(.024,.018,.040),.005);
-    shell=max(shell,-vent);
-    add(h,shell,LILAC);
-    add(h,vent,JOINT);
-
-    // 5-Tier Colorway:
-    // Band 2 (Ivory upper curved slat): u in [2.69, 2.92]
-    float ivory2=max(shell-.0028,abs(u-2.805)-.115);
-    add(h,ivory2,IVORY);
-
-    // Band 4 (Ivory lower curved slat): u in [2.22, 2.46]
-    float ivory4=max(shell-.0028,abs(u-2.340)-.120);
-    // Geometric panel notch on outer flank of Band 4
-    vec3 notchPos=q-vec3(.38,2.28,-.35);
-    float notch=box(notchPos,vec3(.022,.014,.030),.004);
-    ivory4=max(ivory4,-notch);
-    add(h,ivory4,IVORY);
-    add(h,notch,JOINT);
-
-    // Thruster nozzle bell seated inside the scooped underside socket
-    vec3 noz=nozzleCoordinates(q);
-    // Conical dark metallic nozzle bell
-    float bell=max(cylZ((noz-vec3(0,.028,0)).xzy,.056,.055),-noz.y-.038);
-    float bore=cylZ((noz-vec3(0,.045,0)).xzy,.044,.080);
-    bell=max(bell,-bore);
+    // Paint boundaries, shallow reveals and wear use the same curved coordinates.
+    float shell=podShell(p),u=podBandCoordinate(p);
+    if(detail && GEOMETRIC_SEAMS==1 && abs(shell)<.024)
+        shell=carvePanel(shell,podBandEdges(p),.0015,.0030,.0008);
+    float vent=length(vec2(max(abs(p.x-.22)-.014,0.),p.y-3.035))-.009;
+    add(h,shell,vent<0. && p.z<-.46?JOINT:LILAC);
+    float ivory=min(abs(u-2.855)-.080,abs(u-2.395)-.100);
+    add(h,max(shell-.0012,ivory),IVORY);
+    vec3 noz=nozzleCoordinates(p);
+    float flare=.052-.20*clamp(noz.y,-.055,.055);
+    float bell=max(abs(noz.y)-.057,abs(length(noz.xz)-flare)-.009);
     add(h,bell,JOINT);
-    // Steel nozzle lip
-    float lip=length(vec2(length(noz.xz)-.052,noz.y+.036))-.0055;
+    float lip=length(vec2(length(noz.xz)-.063,noz.y+.055))-.0055;
     add(h,lip,STEEL);
-    // Glowing cyan injector core
-    float injector=ell(noz-vec3(0,.018,0),vec3(.036,.009,.036));
-    add(h,injector,CYAN);
-
-    // Top hinge knuckle connecting to the spine
-    add(h,cylZ(q-vec3(.09,3.12,-.33),.034,.018)-.004,JOINT);
-
+    add(h,ell(noz-vec3(0,-.044,0),vec3(.044,.008,.044)),CYAN);
+    add(h,cylZ(p-vec3(.18,3.10,-.37),.042,.022)-.005,JOINT);
     return h;
 }
 vec3 braidCenter(float t) {
     // The visible root exits the front aperture beside her right cheek.
     vec3 root=vec3(-.365,3.565,.325);
-    if(RUN_POSE==0) return bezier(root,vec3(-.54,3.13,.62),vec3(-.51,2.52,.51),t);
-    // Clear the front rim and shoulder before the free end sweeps aft in motion.
-    vec3 a=mix(root,vec3(-.57,3.24,.62),t);
-    vec3 b=mix(vec3(-.57,3.24,.62),vec3(-.95,3.11,.23),t);
-    vec3 c=mix(vec3(-.95,3.11,.23),vec3(-1.22,3.05,-.68),t);
+    float aft=max(motion.trail,0.),forward=max(-motion.trail,0.)*2.;
+    vec3 middle=mix(vec3(-.54,2.98,.65),vec3(-.92,3.16,.20),aft);
+    vec3 tip=mix(vec3(-.51,2.52,.51),vec3(-1.13,3.10,-.66),aft);
+    middle=mix(middle,vec3(-.62,3.15,.85),forward);
+    tip=mix(tip,vec3(-.60,3.07,1.05),forward);
+    // The first handle clears the cheek and shoulder in every pose.
+    vec3 a=mix(root,vec3(-.56,3.26,.62),t);
+    vec3 b=mix(vec3(-.56,3.26,.62),middle,t);
+    vec3 c=mix(middle,tip,t);
     return mix(mix(a,b,t),mix(b,c,t),t);
 }
 vec3 braidStrand(float t,float strand) {
@@ -458,7 +503,7 @@ float braidSculpt(vec3 p) {
 
 vec2 braidScene(vec3 p) {
     vec2 h=vec2(10.,HAIR);
-    // Three interwoven strands share the front root in the neutral and running poses.
+    // Three interwoven strands share one front root throughout the pose sequence.
     add(h,braidSculpt(p),HAIR);
     vec3 tip=braidTip;
     vec3 tangent=braidDirection;
@@ -524,7 +569,7 @@ vec2 headScene(vec3 p) {
     face=smoothIntersection(face,-socket,.006);
     float mouthX=clamp(p.x,-.132,.132);
     float smile=smileHeight(mouthX);
-    float mouthWidth=max(1.-pow(mouthX/.133,2.),0.);
+    float mouthWidth=max(1.-square(mouthX/.133),0.);
     float lipZ=faceFront(vec2(mouthX,smile));
     float mouth=max(max(abs(p.y-smile)-(.002+.003*mouthWidth),abs(p.x)-.133),lipZ-.012-p.z);
     float faceWithMouth=max(face,-mouth);
@@ -622,20 +667,28 @@ vec2 lowerLegScene(vec3 p) {
                           vec2(-.045,.53),vec2(-.26,.74));
     add(h,max(shin-.008,max(cheek,.20-q.x)),IVORY);
 #endif
-    add(h,ell(s-vec3(.4,.38,.015),vec3(.21,.23,.225)),JOINT);
+    add(h,ell(s-vec3(.4,.38,.015),vec3(.17,.17,.185)),JOINT);
     add(h,cap(s,vec3(.4,.48,.015),vec3(.38,1.39,0),.143),JOINT);
+    add(h,cylX(s-vec3(.772,.365,.005),.114,.025)-.008,JOINT);
+    add(h,cylX(s-vec3(.804,.365,.005),.078,.012)-.006,LILAC);
+    return h;
+}
+vec2 footScene(vec3 p) {
+    float bound=box(p-vec3(.4,.30,.15),vec3(.37,.32,.58),.03);
+    if(bound>.12) return vec2(bound,-1.);
+    vec2 h=vec2(10.,JOINT);
+    vec3 q,s=p;
     // Sculpted instep and rounded, broad toe, resting on a flat rubber sole.
+    add(h,ell(s-vec3(.4,.44,.015),vec3(.172,.155,.180)),JOINT);
     q=s-vec3(.4,0,0);
     float outline=footOutline(q);
     outline=smoothIntersection(outline,(q.z+.45*q.y-.73)/1.096,.035);
-    float crown=1.-.75*clamp(pow(q.x/.33,2.),0.,1.);
-    float top=.225+.34*exp(-pow((q.z-.15)/.36,2.))*crown;
+    float crown=1.-.75*clamp(square(q.x/.33),0.,1.);
+    float top=.225+.34*exp(-square((q.z-.15)/.36))*crown;
     float shoe=roundedExtrusion(outline,max(.055-q.y,q.y-top),.03)*.45;
-    float toe=q.z-(.46-.12*pow(q.x/.33,2.));
+    float toe=q.z-(.46-.12*square(q.x/.33));
     add(h,shoe,(toe>0. || q.z+.45*q.y>.69 || q.y<.15 || q.z<-.17)?LILAC:IVORY);
     add(h,roundedExtrusion(outline+.003,abs(q.y-.048)-.036,.015),JOINT);
-    add(h,cylX(s-vec3(.772,.365,.005),.114,.025)-.008,JOINT);
-    add(h,cylX(s-vec3(.804,.365,.005),.078,.012)-.006,LILAC);
     add(h,cylZ(s-vec3(.4,.31,-.345),.14,.032)-.012,JOINT);
     add(h,cylZ(s-vec3(.4,.31,-.383),.106,.014)-.008,LILAC);
     add(h,cylZ(s-vec3(.4,.31,-.405),.086,.016),JOINT);
@@ -656,11 +709,48 @@ vec2 upperArmScene(vec3 p) {
     return h;
 }
 
+float taperedCap(vec3 p,vec3 a,vec3 b,float ra,float rb) {
+    vec3 axis=b-a;
+    float t=clamp(dot(p-a,axis)/dot(axis,axis),0.,1.);
+    return (length(p-mix(a,b,t))-mix(ra,rb,t))*.88;
+}
+float handSculpt(vec3 p) {
+    // A single wrist frame joins the cuff, palm and all five digits.
+    vec3 q=gauntletCoordinates(p)+vec3(0,.32,0);
+    q.xz=rot(-.28)*q.xz;
+    float bound=box(q-vec3(-.025,-.16,-.025),vec3(.21,.245,.15),.01);
+    if(bound>.06) return bound;
+    float wrist=cap(q*vec3(1,1,1.15),vec3(0,.045,0),vec3(0,-.11,0),.080)/1.15;
+    vec3 palmP=abs(q-vec3(0,-.140,-.004))/vec3(.134,.108,.080);
+    float palm=(pow(dot(pow(palmP,vec3(2.8)),vec3(1)),1./2.8)-1.)*.080;
+    float d=smoothUnion(wrist,palm,.026);
+    for(int i=0;i<4;i++) {
+        float x=-.093+.062*float(i);
+        float extra=i==1?.012:(i==2?.007:(i==3?-.021:0.));
+        vec3 a=vec3(x,-.211,.006);
+        vec3 b=mix(vec3(x,-.290-extra,.008),vec3(x,-.257,.038),motion.grip);
+        vec3 c=mix(vec3(x*.96,-.335-extra,-.033),vec3(x*.98,-.292,-.034),motion.grip);
+        vec3 e=mix(vec3(x*.92,-.322-extra,-.077),vec3(x*.94,-.235,-.087),motion.grip);
+        float finger=taperedCap(q,a,b,.030,.028);
+        finger=smoothUnion(finger,taperedCap(q,b,c,.028,.025),.007);
+        finger=smoothUnion(finger,taperedCap(q,c,e,.025,.023),.006);
+        d=smoothUnion(d,finger,.010);
+    }
+    // The thumb originates on the medial palm and crosses the curled fingers.
+    vec3 a=vec3(-.090,-.108,-.010),b=vec3(-.149,-.172,-.018);
+    vec3 c=mix(vec3(-.145,-.243,-.053),vec3(-.102,-.231,-.093),motion.grip);
+    vec3 e=mix(vec3(-.097,-.268,-.084),vec3(-.026,-.241,-.108),motion.grip);
+    float thumb=taperedCap(q,a,b,.045,.038);
+    thumb=smoothUnion(thumb,taperedCap(q,b,c,.038,.032),.012);
+    thumb=smoothUnion(thumb,taperedCap(q,c,e,.032,.026),.008);
+    return smoothUnion(d,thumb,.018);
+}
+
 vec2 forearmScene(vec3 p) {
     vec2 h=vec2(10.,JOINT);
     vec3 q,s=p;
     float d;
-    float bound=box(p-vec3(.96,2.02,.03),vec3(.42,.62,.40),.02);
+    float bound=box(p-vec3(.96,2.02,.03),vec3(.44,.69,.40),.02);
     if(bound>.18) return vec2(bound,-1.);
     q=gauntletCoordinates(p);
     vec2 barrelRadii=vec2(.177,.185)+.055*smoothstep(-.32,.22,q.y);
@@ -672,15 +762,7 @@ vec2 forearmScene(vec3 p) {
     add(h,cylZ(lens,.119,.025)-.012,IVORY);
     add(h,cylZ(lens-vec3(0,0,.031),.091,.016)-.006,JOINT);
     add(h,ell(lens-vec3(0,0,.052),vec3(.060,.060,.023)),CYAN);
-    // Four curled fingers extend below the palm and remain readable from the rear.
-    add(h,ell(s-vec3(1.035,1.65,.05),vec3(.14,.13,.12)),JOINT);
-    for(int i=0;i<4;i++) {
-        float f=float(i);
-        vec3 c=vec3(.925+.071*f,1.49+.025*abs(f-1.5),.12);
-        add(h,cap(s,c,c+vec3(.015,.115,.045),.041),JOINT);
-        add(h,cap(s,c+vec3(.012,.015,-.07),c+vec3(.02,.06,.035),.040),JOINT);
-    }
-    add(h,cap(s,vec3(.90,1.71,.17),vec3(.865,1.60,.20),.061),JOINT);
+    add(h,handSculpt(p),JOINT);
 
     return h;
 }
@@ -723,10 +805,9 @@ vec2 torsoScene(vec3 p) {
     chest=smoothIntersection(chest,breastPlane,.025);
     float neckHole=ell(p-vec3(0,3.135,.055),vec3(.235,.16,.30));
     chest=smoothIntersection(chest,-neckHole,.018);
-    float chevron=abs(p.y-(2.795+.43*abs(p.x)))-.064;
-    float sternum=max(abs(p.x)-.090,abs(p.y-2.66)-.16);
-    float yoke=min(chevron,sternum);
-    yoke=max(yoke,p.y-3.010);
+    // A broad ivory breastplate sits beneath the lilac upper yoke.
+    float yoke=max(p.y-(2.80+.24*abs(p.x)),2.53+.23*abs(p.x)-p.y);
+    yoke=max(yoke,abs(p.x)-.395);
     add(h,chest,(yoke<0. && p.z>.13)?IVORY:LILAC);
     // Two overlapping abdominal plates connect the breastplate to the belt.
     for(int i=0;i<2;i++) {
@@ -734,7 +815,7 @@ vec2 torsoScene(vec3 p) {
         float abdomen=fiveSides(q.xy,vec2(-.250,.085),vec2(.250,.085),
                                 vec2(.265,-.008),vec2(0,-.110),vec2(-.265,-.008));
         float plate=roundedExtrusion(abdomen,abs(q.z)+.18*abs(q.x)-.055,.014);
-        add(h,plate,i==0?IVORY:LILAC);
+        add(h,plate,LILAC);
     }
     q=p-vec3(0,2.18,0);
     add(h,chamferIntersection(ell(q,vec3(.385,.13,.265)),abs(q.y)-.06,.012),OCHRE);
@@ -754,8 +835,8 @@ vec2 torsoScene(vec3 p) {
     for(int i=0;i<5;i++)
         add(h,box(p-vec3(0,2.405+.135*float(i),-.330),vec3(.038,.024,.014),.006),JOINT);
     s=p; s.x=abs(s.x);
-    add(h,cap(s,vec3(.04,3.08,-.30),vec3(.12,3.12,-.33),.028),JOINT);
-    add(h,cylZ(s-vec3(.10,3.12,-.33),.036,.012)-.004,STEEL);
+    add(h,cap(s,vec3(.04,3.08,-.30),vec3(.18,3.10,-.37),.028),JOINT);
+    add(h,cylZ(s-vec3(.18,3.10,-.37),.036,.012)-.004,STEEL);
     q=p-vec3(0,2.12,-.215);
     add(h,smoothIntersection(ell(q,vec3(.165,.19,.075)),-q.y-.17+.6*abs(q.x),.02),OCHRE);
     // The collar is seated in the breastplate. A broad, low undersuit yoke
@@ -777,7 +858,7 @@ vec2 torsoScene(vec3 p) {
 
 vec2 scene(vec3 p) {
     vec2 h=vec2(p.y,0.);
-    float bound=box(p-vec3(0,2.15,0),vec3(1.65,2.3,2.4),.03);
+    float bound=box(p-vec3(0,2.15+characterLift,0),vec3(1.9,2.7,3.),.03);
     if(bound>.35) { add(h,bound,-1.); return h; }
     vec2 part=torsoScene(localPosition(p,0)); add(h,part.x,part.y);
     part=headScene(localPosition(p,1)); add(h,part.x*.88,part.y+20.);
@@ -785,6 +866,7 @@ vec2 scene(vec3 p) {
         int leg=2+2*side,arm=6+2*side,shoulder=10+side;
         part=upperLegScene(localPosition(p,leg)); add(h,part.x,part.y+20.*float(leg));
         part=lowerLegScene(localPosition(p,leg+1)); add(h,part.x,part.y+20.*float(leg+1));
+        part=footScene(localPosition(p,14+side)); add(h,part.x,part.y+20.*float(14+side));
         part=upperArmScene(localPosition(p,arm)); add(h,part.x,part.y+20.*float(arm));
         part=forearmScene(localPosition(p,arm+1)); add(h,part.x,part.y+20.*float(arm+1));
         part=shoulderScene(localPosition(p,shoulder)); add(h,part.x,part.y+20.*float(shoulder));
@@ -827,6 +909,7 @@ vec2 secondaryScene(vec3 p) {
         int leg=2+side*2,arm=6+side*2,shoulder=10+side;
         piece=upperLegScene(localPosition(p,leg)); add(h,piece.x,piece.y);
         piece=lowerLegScene(localPosition(p,leg+1)); add(h,piece.x,piece.y);
+        piece=footScene(localPosition(p,14+side)); add(h,piece.x,piece.y);
         piece=upperArmScene(localPosition(p,arm)); add(h,piece.x,piece.y);
         piece=forearmScene(localPosition(p,arm+1)); add(h,piece.x,piece.y);
         piece=shoulderScene(localPosition(p,shoulder)); add(h,piece.x,piece.y);
@@ -984,7 +1067,7 @@ vec2 armorDetail(vec3 p,float m) {
         return vec2(seam,rivet);
     } else if(p.y<.40) {
         q-=vec3(.4,0,0);
-        float toe=q.z-(.46-.12*pow(q.x/.33,2.));
+        float toe=q.z-(.46-.12*square(q.x/.33));
         seam=min(abs(toe)*.65,abs(footOutline(q)+.032));
         rivet=length(vec2(abs(q.x)-.20,q.z-.38));
         return vec2(seam,rivet);
@@ -997,23 +1080,22 @@ vec2 armorDetail(vec3 p,float m) {
         return vec2(seam,rivet);
     } else if(p.y>2.56 && q.x<.43) {
         // A shallow contour follows the upper lip of the ivory chest inset.
-        seam=abs(p.y-(2.965-.082*exp(-pow(p.x/.18,2.))));
+        seam=abs(p.y-(2.965-.082*exp(-square(p.x/.18))));
         if(p.y<2.91) seam=min(seam,abs(p.x));
         rivet=length(vec2(abs(p.x)-.275,p.y-2.915));
         return vec2(seam,rivet);
     } else return vec2(1.);
 }
 float armorHeight(vec2 d) {
-    float groove=exp(-pow(d.x/.0027,2.));
-    float recess=exp(-pow(d.y/.008,4.));
+    float groove=exp(-square(d.x/.0027));
+    float recess=exp(-square(square(d.y/.008)));
     return -.0015*groove-.002*recess;
 }
 vec2 detailAt(vec3 p,float m,int part) {
     vec3 q=localPosition(p,part);
-    if(part>=12) {
-        float u=q.y+.22*(q.x-.05)+.36*pow(max(q.x-.05,0.),2.);
-        float seam=min(abs(u-2.92),min(abs(u-2.70),min(abs(u-2.48),abs(u-2.24))));
-        return vec2(seam,length(vec2(q.x-.24,q.y-2.62)));
+    if(part==12 || part==13) {
+        float notch=length(vec2(max(abs(q.x-.365)-.019,0.),podBandCoordinate(q)-2.40));
+        return vec2(podBandEdges(q),notch);
     }
     return armorDetail(q,m);
 }
@@ -1043,7 +1125,7 @@ void armorWear(vec3 p,vec3 n,vec2 detail,float pixel,int part,inout Surface surf
     // Authored contact zones keep wear off broad, protected paint surfaces.
     float edge=detail.x+.020,contact=.05,dust=0.;
     vec3 q=p; q.x=abs(q.x);
-    if(part==3 || part==5) {
+    if(part==3 || part==5 || part==14 || part==15) {
         q-=vec3(.4,0,0);
         if(q.y<.40) {
             edge=min(abs(q.y-.135),abs(q.z+.45*q.y-.69)*.8);
@@ -1062,9 +1144,8 @@ void armorWear(vec3 p,vec3 n,vec2 detail,float pixel,int part,inout Surface surf
         float end=min(abs(q.y+.32-.12*q.x),abs(q.y-.31+.28*q.x));
         edge=min(detail.x+.010,max(end,abs(side)));
         contact=.34;
-    } else if(part>=12) {
-        float u=q.y+.22*(q.x-.05)+.36*pow(max(q.x-.05,0.),2.);
-        float edge=min(min(abs(q.x-.048),abs(u-2.02)),abs(u-3.15));
+    } else if(part==12 || part==13) {
+        edge=min(podBandEdges(q)+.012,min(abs(q.y-2.12),abs(q.y-3.14)));
         contact=.15;
     } else if(part>=10) {
         q-=vec3(.62,3.,.015);
@@ -1137,14 +1218,14 @@ vec3 directLight(Surface s,vec3 n,vec3 v,vec3 l,vec3 radiance,float visibility,f
     vec3 f0=mix(vec3(s.specular),s.base,s.metal),f=fresnel(vh,f0);
     // A finite light size broadens highlights rather than producing pinpricks.
     float rough=sqrt(s.roughness*s.roughness+.018);
-    float k=pow(rough+1.,2.)/8.;
+    float k=square(rough+1.)/8.;
     float gv=nv/(nv*(1.-k)+k),gl=nl/(nl*(1.-k)+k);
     vec3 spec=distribution(nh,rough)*gv*gl*f/max(4.*nl*nv,.001);
     float diffuse=mix(nl,max((dot(n,l)+.30)/1.30,0.),skin);
     float cel=mix(.16,.95,smoothstep(-.035,.10,dot(n,l)));
     diffuse=mix(diffuse,cel,float(CEL_STYLE));
     vec3 result=(1.-f)*(1.-s.metal)*s.base*(diffuse/PI);
-    float terminator=exp(-pow(dot(n,l)/.10,2.));
+    float terminator=exp(-square(dot(n,l)/.10));
     result+=float(CEL_STYLE)*s.base*vec3(.11,.022,.005)*terminator;
     result+=spec*nl;
     float coat=distribution(nh,.25)*gv*gl/max(4.*nv,.001);
@@ -1168,7 +1249,7 @@ vec3 studioReflection(vec3 r,float roughness) {
 }
 vec3 hairTangent(vec3 p) {
     if(p.x<-.32 && p.y<3.55) {
-        float t=clamp(RUN_POSE==1?(-.365-p.x)/.855:(3.565-p.y)/1.045,0.,1.);
+        float t=clamp(mix((3.565-p.y)/1.045,(-.365-p.x)/.765,max(motion.trail,0.)),0.,1.);
         return normalize(braidCenter(t+.005)-braidCenter(t-.005));
     }
     return normalize(vec3(.85,sign(p.x)*-.6,.15));
@@ -1176,8 +1257,8 @@ vec3 hairTangent(vec3 p) {
 vec2 jetInterval(vec3 ro,vec3 rd) {
     // Intersect only a tight local volume; most screen pixels do no plume work.
     vec3 inv=1./(sign(rd+vec3(1e-8))*max(abs(rd),vec3(1e-7)));
-    vec3 a=(vec3(-.19,-.64,-.19)-ro)*inv;
-    vec3 b=(vec3(.19,.12,.19)-ro)*inv;
+    vec3 a=(vec3(-.16,-.47,-.16)-ro)*inv;
+    vec3 b=(vec3(.16,-.025,.16)-ro)*inv;
     vec3 lo=min(a,b),hi=max(a,b);
     return vec2(max(lo.x,max(lo.y,lo.z)),min(hi.x,min(hi.y,hi.z)));
 }
@@ -1189,14 +1270,16 @@ vec4 integrateJet(vec3 ro,vec3 rd,vec2 interval,float solidDepth,float seed,floa
     float time=iTime+seed;
     for(int i=0;i<32;i++) {
         vec3 p=ro+rd*(begin+(float(i)+.5+sampleOffset*.65)*stepLength);
+        p.y+=.055; // Gas begins at the bell lip, not inside the injector.
         float axial=max(-p.y,0.);
-        float tail=1.-smoothstep(.24,.61,axial);
-        float ignition=1.-smoothstep(.055,.115,p.y);
+        float jetLength=.24+.16*motion.thrust;
+        float tail=1.-smoothstep(jetLength*.35,jetLength,axial);
+        float ignition=1.-smoothstep(-.005,.025,p.y);
         // Advected noise deforms the gas, with increasing breakup downstream.
         vec3 flow=vec3(p.x*39.,axial*15.-time*9.,p.z*39.+seed*7.);
         float turbulence=noise3(flow),fine=noise3(flow*1.93+vec3(7,3,-5));
         vec2 center=.012*axial*vec2(sin(axial*16.-time*8.),cos(axial*13.-time*11.));
-        float width=.059*(1.-.52*clamp(axial/.61,0.,1.));
+        float width=.055*(1.-.30*clamp(axial/jetLength,0.,1.));
         width*=1.+.11*sin(axial*34.-.6*sin(time*4.));
         float radius=length(p.xz-center)/width;
         radius+=(turbulence-.5)*(.22+1.7*axial);
@@ -1208,8 +1291,8 @@ vec4 integrateJet(vec3 ro,vec3 rd,vec2 interval,float solidDepth,float seed,floa
         cells*=exp(-7.*radius*radius)*exp(-2.8*axial)*tail*ignition;
         float pulse=.94+.06*sin(time*17.);
         vec3 emission=(vec3(.008,.46,1.25)*sheath+vec3(.24,2.3,3.8)*core
-                       +vec3(2.8,3.4,3.8)*cells)*pulse*16.;
-        float extinction=(.45*sheath+core)*8.;
+                       +vec3(2.8,3.4,3.8)*cells)*pulse*14.*motion.thrust;
+        float extinction=(.30*sheath+.70*core)*6.;
         float segment=exp(-extinction*stepLength);
         radiance+=transmission*emission*(1.-segment)/max(extinction,.0001);
         transmission*=segment;
@@ -1217,7 +1300,7 @@ vec4 integrateJet(vec3 ro,vec3 rd,vec2 interval,float solidDepth,float seed,floa
     return vec4(radiance,transmission);
 }
 vec3 compositeJets(vec3 col,vec3 ro,vec3 rd,float solidDepth,vec2 sampleOffset) {
-    if(JETS==0) return col;
+    if(JETS==0 || motion.thrust<.001) return col;
     vec3 a=nozzleCoordinates(localPosition(ro,12));
     vec3 ad=nozzleCoordinates(localPosition(ro+rd,12))-a;
     vec3 b=nozzleCoordinates(localPosition(ro,13));
@@ -1230,7 +1313,24 @@ vec3 compositeJets(vec3 col,vec3 ro,vec3 rd,float solidDepth,vec2 sampleOffset) 
     return col;
 }
 vec3 render(vec2 uv,vec2 lightSample) {
-    float yaw=RUN_POSE==1?-.75:.22, pitch=.055;
+    vec3 ro,ww,uu,vv,rd;
+    float focal=2.25;
+#ifdef PUCK_STUDY
+    // The world model faces -Z at half this study's scale. Rotate 180 degrees
+    // about Y and scale uniformly, preserving handedness and the ground plane.
+    const vec3 worldToStudy=vec3(-2.,2.,-2.);
+    if(iCameraFov>0.) {
+        vec3 target=iCameraTarget*worldToStudy;
+        ro=iCameraPos*worldToStudy;
+        ww=normalize(target-ro);
+        uu=normalize(cross(ww,normalize(iCameraUp*worldToStudy)));
+        vv=cross(uu,ww);
+        focal=.5/tan(iCameraFov*.5);
+        rd=normalize(uv.x*uu+uv.y*vv+focal*ww);
+    } else
+#endif
+    {
+    float yaw=POSE==7?-.75:.22, pitch=.055;
     if(PACK_VIEW==1) { yaw=-2.65; pitch=.10; }
     if(AUTO_TURN==1) yaw+=iTime*.30;
     if(abs(iMouse.z)>1.) {
@@ -1239,12 +1339,15 @@ vec3 render(vec2 uv,vec2 lightSample) {
     }
     vec3 target=vec3(0,2.22,0);
     float distance=11.8;
-    if(CLOSE_UP==1) { target=vec3(0,3.46,.06); distance=4.8; }
-    if(PACK_VIEW==1) { target=vec3(0,2.63,-.32); distance=6.8; }
-    vec3 ro=target+distance*vec3(sin(yaw)*cos(pitch),sin(pitch),cos(yaw)*cos(pitch));
-    vec3 ww=normalize(target-ro),uu=normalize(cross(ww,vec3(0,1,0)));
-    vec3 vv=cross(uu,ww);
-    vec3 rd=normalize(uv.x*uu+uv.y*vv+2.25*ww);
+    target.y+=.60*characterLift;
+    distance+=.6*smoothstep(0.,.3,motion.lift);
+    if(CLOSE_UP==1) { target=worldPosition(vec3(0,3.64,.06),1); distance=4.8; }
+    if(PACK_VIEW==1) { target=worldPosition(vec3(0,2.63,-.43),0); distance=6.8; }
+    ro=target+distance*vec3(sin(yaw)*cos(pitch),sin(pitch),cos(yaw)*cos(pitch));
+    ww=normalize(target-ro); uu=normalize(cross(ww,vec3(0,1,0)));
+    vv=cross(uu,ww);
+    rd=normalize(uv.x*uu+uv.y*vv+focal*ww);
+    }
     vec3 col=mix(vec3(.49,.455,.415),vec3(.34,.32,.31),smoothstep(-.5,.8,uv.y));
     vec3 background=col;
     float t=0.,radius=0.,stepLength=0.,contour=100.; vec2 h=vec2(1,0); bool hit=false;
@@ -1262,7 +1365,7 @@ vec3 render(vec2 uv,vec2 lightSample) {
         }
         t=candidate;
         if(h.y>0. && mod(h.y,20.)<18.)
-            contour=min(contour,max(h.x,0.)/max(candidate/(iResolution.y*2.25),.0004));
+            contour=min(contour,max(h.x,0.)/max(candidate/(iResolution.y*focal),.0004));
         float hitEpsilon=.0009*max(1.,t*.16);
         // Resolve the small neck silhouette more closely than the broad armor.
         if(h.y==20.+SKIN && localPosition(ro+rd*t,1).y<3.48) hitEpsilon*=.20;
@@ -1279,10 +1382,10 @@ vec3 render(vec2 uv,vec2 lightSample) {
         vec3 paintP=localPosition(p,part);
         h.y-=20.*float(part);
         Surface surf=material(h.y);
-        float pixel=t/(iResolution.y*2.25);
+        float pixel=t/(iResolution.y*focal);
         if(h.y==LILAC || h.y==IVORY) {
             finishArmor(p,ng,h.y,pixel,part,n,surf);
-            float grazing=pow(1.-max(dot(n,v),0.),3.5);
+            float grazing=pow(clamp(1.-dot(n,v),0.,1.),3.5);
             vec3 pearl=h.y==LILAC?vec3(.43,.18,.36):vec3(.90,.75,.51);
             surf.base=mix(surf.base,pearl,grazing*.36*(1.-surf.metal));
             // The broad plate faces carry a restrained sky/ground value separation.
@@ -1338,20 +1441,20 @@ vec3 render(vec2 uv,vec2 lightSample) {
             float backLight=pow(max(dot(-n,rim),0.),1.5);
             col+=vec3(.36,.095,.028)*transmission*backLight;
         }
-        if(JETS==1 && skin<.5 && h.y!=EYE && h.y!=HAIR) {
+        if(JETS==1 && motion.thrust>.001 && skin<.5 && h.y!=EYE && h.y!=HAIR) {
             // Restrained nearby cyan bounce follows the two moving injectors.
             float bounce=0.;
             for(int i=0;i<2;i++) {
-                vec3 tip=vec3(.25,2.05,-.345);
+                vec3 tip=nozzlePosition();
                 vec3 source=transpose(partFrame[12+i])*(tip-partOffset[12+i])-p;
                 float reach=length(source);
                 float facing=max(dot(n,source/max(reach,.001)),0.);
                 bounce+=facing*exp(-reach*5.)/(.15+reach*reach);
             }
-            col+=surf.base*vec3(.010,.095,.14)*bounce*ao;
+            col+=surf.base*vec3(.010,.095,.14)*bounce*ao*motion.thrust;
         }
         vec3 f0=mix(vec3(surf.specular),surf.base,surf.metal);
-        vec3 f=f0+(max(vec3(1.-surf.roughness),f0)-f0)*pow(1.-max(dot(n,v),0.),5.);
+        vec3 f=f0+(max(vec3(1.-surf.roughness),f0)-f0)*pow(clamp(1.-dot(n,v),0.,1.),5.);
         float specAO=clamp(pow(ao,1.+surf.roughness),0.,1.);
         col+=studioReflection(reflect(-v,n),surf.roughness)*f*specAO*(h.y==EYE?.08:.75);
         if(h.y==EYE) col+=eyeGlints;
@@ -1360,8 +1463,8 @@ vec3 render(vec2 uv,vec2 lightSample) {
             vec3 halfVector=normalize(key+v);
             // Two shifted, bounded sheen lobes approximate surface and internal reflection.
             float th=dot(tangent,halfVector);
-            float primary=pow(max(1.-pow(th+.05,2.),0.),65.);
-            float secondary=pow(max(1.-pow(th-.10,2.),0.),18.);
+            float primary=pow(max(1.-square(th+.05),0.),65.);
+            float secondary=pow(max(1.-square(th-.10),0.),18.);
             float strand=.90+.10*sin(dot(paintP,vec3(145.,53.,89.)));
             col+=(vec3(.044,.041,.038)*primary+vec3(.037,.025,.014)*secondary)
                   *strand*max(dot(n,key),0.)*sh;
@@ -1375,7 +1478,7 @@ vec3 render(vec2 uv,vec2 lightSample) {
         }
         if(h.y<.5) {
             // Broad contact grounding, supplementing ray-marched shadows.
-            float contact=exp(-2.8*dot(p.xz,p.xz));
+            float contact=exp(-2.8*dot(p.xz,p.xz)-4.*motion.lift);
             col*=1.-.22*contact;
             col=mix(col,background,smoothstep(14.,45.,t));
         }
@@ -1388,7 +1491,8 @@ vec3 render(vec2 uv,vec2 lightSample) {
     return compositeJets(col,ro,rd,hit?t:80.,lightSample);
 }
 void mainImage(out vec4 fragColor,in vec2 fragCoord) {
-    float blink=exp(-pow((fract((iTime+1.1)/5.1)-.50)/.023,4.));
+    float blinkPhase=(fract((iTime+1.1)/5.1)-.50)/.023;
+    float blink=exp(-square(square(blinkPhase)));
     eyeOpen=ANIMATE_FACE==1?1.-.98*blink:1.;
     preparePose();
     preparePack();

@@ -10,7 +10,7 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// THE LAW: <see cref="ShapeDocument.Shear"/> and <see cref="ShapeDocument.Bumps"/> (<see cref="ShapeBumpDocument"/>)
-/// are admitted on every primitive, refused by name against non-finite values, a nonzero reserved Shear.Z, a bump
+/// are admitted on every primitive, refused by name against non-finite values, equal shear target and driver axes, a bump
 /// list past <see cref="ShapeBumpDocument.MaxBumps"/>, or negative Radii; both warps emit inside their own field
 /// scope on both emission paths (their Lipschitz factor would otherwise fold into the whole program's step scale);
 /// and both grow a shape's cull bound (mirroring <c>ShapeFlareLawTests</c>'s convention).
@@ -205,6 +205,23 @@ public sealed class ShapeWarpLawTests {
         AssertWarpIsScoped(program: EmitStatic(shape: Shape(SdfSolidPrimitive.Box, Vector3.One, Shear, Bumps), stampScale: 1f));
         Assert.Equal(expected: 1f, actual: EmitPool(shape: Shape(SdfSolidPrimitive.Box, Vector3.One, Shear, Bumps), bodyScale: 1f).StepScale);
         Assert.Equal(expected: 1f, actual: EmitStatic(shape: Shape(SdfSolidPrimitive.Box, Vector3.One, Shear, Bumps), stampScale: 1f).StepScale);
+    }
+
+    [Fact]
+    public void ComposedWarpBoundsCoverTheInverseImageAtEveryPlacementScale() {
+        var shape = Shape(SdfSolidPrimitive.Sphere, Vector3.One,
+            shear: new(Linear: 0f, Cubic: 1f, Target: 0, Driver: 1)) with {
+            Flare = new(Amount: 0f, Bulge: 0f, Span: 1f, StartScale: 3f),
+        };
+        // The primitive point (0,1,0) maps back through shear to (-1,1,0), then profile to (-3,1,0).
+        var surfaceReach = MathF.Sqrt(10f);
+        foreach (var scale in new[] { 0.5f, 1f, 2f }) {
+            var bound = CreationStampEmitter.ShapeStampBound(Document(shape), 0,
+                new CreationStampTransform(Vector3.Zero, Quaternion.Identity, scale, null));
+            Assert.True(bound.Radius >= surfaceReach * scale);
+            var pool = EmitPool(shape, scale);
+            Assert.True(pool.Instances[0].Radius >= surfaceReach * scale);
+        }
     }
 
     private static void AssertWarpIsScoped(SdfProgram program) {

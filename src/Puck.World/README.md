@@ -224,6 +224,35 @@ own the row and its live clock/watch state; `study.world.json` is a
 fullscreen-study demo world and `moth.world.json`'s `study` layout is a
 split-screen pairing beside its `three-quarter` camera.
 
+Edit the Moth study in [Assets/studies/moth.glsl](Assets/studies/moth.glsl).
+It contains the character sculpt, materials and one shared rig for rest, jump,
+hover, flight, braking and landing. Its header selects `POSE` (0–7),
+`ANIMATE_POSE` (the 12-second flight cycle), `CLOSE_UP`, `PACK_VIEW` and `AA`
+(1 for iteration, 2 for four samples per pixel). The two curved pack shells
+open at most six degrees; thrust follows the pose and the boot lights stay idle.
+
+From the repository root, start the full-window study with:
+
+```powershell
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/study.world.json --state-dir artifacts/moth-study/state
+```
+
+In Puck's console, `study.watch moth-study on` reloads saved shader edits.
+With `ANIMATE_POSE` set to 1, `study.time moth-study pause` and
+`study.time moth-study set 4` hold the hover pose; `study.time moth-study resume`
+continues the cycle. `study.status` reports compilation and watch state.
+The paired camera takes precedence over the shader's orbit and framing switches.
+
+Keep the [Shadertoy export](../../docs/art/moth-concept-pack-2026-09-09/moth-shadertoy.glsl)
+identical after shader edits; its Puck camera branch is conditional:
+
+```powershell
+Copy-Item src/Puck.World/Assets/studies/moth.glsl docs/art/moth-concept-pack-2026-09-09/moth-shadertoy.glsl
+```
+
+The [concept pack](../../docs/art/moth-concept-pack-2026-09-09/README.md)
+remains the visual target; the study is a procedural approximation.
+
 ## The console
 
 The console is the control plane: process stdin in, results on stdout,
