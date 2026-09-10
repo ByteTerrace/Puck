@@ -243,13 +243,6 @@ With `ANIMATE_POSE` set to 1, `study.time moth-study pause` and
 continues the cycle. `study.status` reports compilation and watch state.
 The paired camera takes precedence over the shader's orbit and framing switches.
 
-Keep the [Shadertoy export](../../docs/art/moth-concept-pack-2026-09-09/moth-shadertoy.glsl)
-identical after shader edits; its Puck camera branch is conditional:
-
-```powershell
-Copy-Item src/Puck.World/Assets/studies/moth.glsl docs/art/moth-concept-pack-2026-09-09/moth-shadertoy.glsl
-```
-
 The [concept pack](../../docs/art/moth-concept-pack-2026-09-09/README.md)
 remains the visual target; the study is a procedural approximation.
 

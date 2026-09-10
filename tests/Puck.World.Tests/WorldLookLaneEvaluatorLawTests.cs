@@ -26,7 +26,7 @@ public sealed class WorldLookLaneEvaluatorLawTests {
         var json = System.Text.Json.JsonSerializer.Serialize(document, WorldJsonContext.Default.WorldDefinition);
         var restored = System.Text.Json.JsonSerializer.Deserialize(json, WorldJsonContext.Default.WorldDefinition)!;
         Assert.Equal(new System.Numerics.Vector4(0.6f, 0f, 1f, 0f),
-            WorldLookLaneEvaluator.EvaluateLanes(restored.Looks.Rows![0].Motion.Lanes, restored, 0, -1));
+            WorldLookLaneEvaluator.EvaluateLanes(restored.Looks[0].Motion.Lanes, restored, 0, -1));
     }
 
     [Fact]

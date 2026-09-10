@@ -275,12 +275,44 @@ public static class CreationStampEmitter {
             // Creation-unit lengths, like the rest of this chain past the Scale(transform.Scale) op above — no
             // explicit placement-scale multiply needed here (unlike WorldStampPool.EmitShape's twist/bend/flare
             // prefix, which has no such chain-level Scale and so must bake placementScale in by hand).
-            return ((shape.Flare is { } flare)
-                ? prefix.FlareY(amount: flare.Amount, bulge: flare.Bulge, top: (flare.Top ?? 0f), span: flare.Span)
+            var flared = ((shape.Flare is { } flare)
+                ? prefix.AxialProfile(amount: flare.Amount, bulge: flare.Bulge, top: (flare.Top ?? 0f), span: flare.Span, axis: flare.Axis, startScale: flare.StartScale)
                 : prefix);
+            var sheared = ((shape.Shear is { } shear)
+                ? flared.Shear(linear: shear.Linear, quadratic: shear.Quadratic, cubic: shear.Cubic, target: shear.Target, driver: shear.Driver)
+                : flared);
+
+            foreach (var bump in (shape.Bumps ?? [])) {
+                sheared = sheared.GaussianPush(center: bump.Center, radii: bump.Radii, push: bump.Push);
+            }
+
+            return sheared;
         }
 
         var chain = BuildTransformChain();
+        // Per-shape lane-driven erosion (KEEP IN SYNC with WorldStampPool.EmitShape's mirrored prefix): the reach is
+        // this shape's own SdfSolidGeometry.Reach, taken in WORLD units like the rest of this chain past the Scale
+        // op above. Chained immediately before whichever AppendScaledPrimitive call emits this shape's ShapeBlend —
+        // ordinary point ops (twist/bend/flare/shear/bumps, already applied above) land on the point as usual.
+        var erodeReach = ((shape.Erode is not null)
+            ? (SdfSolidGeometry.Reach(
+                lift: (shape.Lift ?? SdfLift.Extrude),
+                scale: shapeScale,
+                type: shape.Type
+            ) * transform.Scale)
+            : 0f);
+
+        SdfProgramBuilder ApplyErode(SdfProgramBuilder target) =>
+            ((shape.Erode is { } erode)
+                ? target.LaneErode(
+                    from: erode.From,
+                    lane: erode.Lane,
+                    noiseScale: (erode.Noise ?? 1f),
+                    reach: erodeReach,
+                    to: erode.To
+                )
+                : target);
+
         var blend = (shape.Blend ?? SdfBlendOp.Union);
         // The blend radius and the field ops below act on the running WORLD-space accumulator directly — never
         // re-multiplied by the chain's own Scale(transform.Scale) op the way a primitive's baked-local rounding/
@@ -306,29 +338,31 @@ public static class CreationStampEmitter {
             // own scope: its subtraction/union must bite only this shape's own candidate, never a sibling composed
             // before it — validation refuses a panel wherever inScope would be true here (RequiresScope/Group), so
             // this branch is unreachable for a panelled shape.
-            // A flare (a warp) joins the eccentric case for the same reason: unscoped, SdfProgram.FlareOperatorNorm
-            // would fold into the whole program's step scale.
+            // A flare/shear/bump/erode (each a warp, or an erosion whose noise term folds the same way — see
+            // SdfProgram.Lipschitz.cs's LaneErode case) joins the eccentric case for the same reason: unscoped,
+            // its Lipschitz factor would fold into the whole program's step scale.
             var ownScope = (
                 !inScope &&
                 (wantsDilate || wantsOnion ||
                 (SdfSolidGeometry.StepFactor(
                     scale: shapeScale,
                     type: shape.Type
-                ) > 1f) || (panel is not null) || (shape.Flare is not null))
+                ) > 1f) || (panel is not null) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null))
             );
 
             if (ownScope) {
                 var scoped = SdfSolidGeometry.AppendScaledPrimitive(
-                    chain: chain.PushField(
+                    chain: ApplyErode(chain.PushField(
                         compose: blend,
                         smooth: smooth
-                    ),
+                    )),
                     type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
                     lift: (shape.Lift ?? SdfLift.Extrude), rounding: (shape.Rounding ?? 0f), chamfer: (shape.Chamfer ?? 0f), exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                    curve: shape.Curve?.Parameters(),
                     scale: shapeScale,
                     material: material,
                     detail: (shape.Detail ?? false)
-                );
+                ).MarkSecondary(secondary: (shape.Secondary ?? true));
 
                 if (wantsDilate) {
                     scoped = scoped.Dilate(radius: dilate);
@@ -350,6 +384,15 @@ public static class CreationStampEmitter {
                     );
                 }
 
+                if (shape.Cells is { } cells) {
+                    // Relief samples the shape's rigid frame, independently of the primitive's residual
+                    // scale or panel offset. Frequency and amplitude convert inversely, preserving its bound.
+                    _ = builder.ResetPoint()
+                        .Translate(transform.Origin + Vector3.Transform(shapePosition * transform.Scale, transform.Rotation))
+                        .Rotate(Quaternion.Normalize(transform.Rotation * shapeRotation))
+                        .CellDisplace(cells.Frequency / transform.Scale, cells.Amplitude * transform.Scale,
+                            cells.Seed, cells.Mode, cells.Randomness);
+                }
                 _ = chain.PopField();
 
                 return;
@@ -359,12 +402,13 @@ public static class CreationStampEmitter {
                 chain: chain,
                 type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
                     lift: (shape.Lift ?? SdfLift.Extrude), rounding: (shape.Rounding ?? 0f), chamfer: (shape.Chamfer ?? 0f), exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                    curve: shape.Curve?.Parameters(),
                 scale: shapeScale,
                 material: material,
                 blend: blend,
                 smooth: smooth,
                 detail: (shape.Detail ?? false)
-            );
+            ).MarkSecondary(secondary: (shape.Secondary ?? true));
 
             if (wantsDilate) {
                 afterShape = afterShape.Dilate(radius: dilate);
@@ -378,16 +422,17 @@ public static class CreationStampEmitter {
         }
 
         chain = SdfSolidGeometry.AppendScaledPrimitive(
-            chain: chain.PushField(
+            chain: ApplyErode(chain.PushField(
                 compose: blend,
                 smooth: smooth
-            ),
+            )),
             type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
                     lift: (shape.Lift ?? SdfLift.Extrude), rounding: (shape.Rounding ?? 0f), chamfer: (shape.Chamfer ?? 0f), exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                    curve: shape.Curve?.Parameters(),
             scale: shapeScale,
             material: material,
             detail: (shape.Detail ?? false)
-        ).Dilate(radius: margin);
+        ).MarkSecondary(secondary: (shape.Secondary ?? true)).Dilate(radius: margin);
         _ = chain.PopField();
     }
     // The panel copy: the same primitive re-emitted from a fresh transform chain (its own ResetPoint/Translate/
@@ -412,6 +457,7 @@ public static class CreationStampEmitter {
             chain: baseChain.Translate(offset: (placement.FaceAxis * placement.Offset)),
             type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
             lift: lift, rounding: (shape.Rounding ?? 0f), chamfer: (shape.Chamfer ?? 0f), exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+            curve: shape.Curve?.Parameters(),
             scale: placement.ErodedScale,
             material: material,
             blend: placement.Blend,
@@ -495,6 +541,7 @@ public static class CreationStampEmitter {
             chain: hostChain.PushField(compose: SdfBlendOp.Union),
             type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
             lift: (shape.Lift ?? SdfLift.Extrude), rounding: (shape.Rounding ?? 0f), chamfer: (shape.Chamfer ?? 0f), exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+            curve: shape.Curve?.Parameters(),
             scale: EffectiveScale(value: shape.Scale),
             material: material,
             blend: SdfBlendOp.Union,
@@ -589,19 +636,25 @@ public static class CreationStampEmitter {
             : 0f
         );
 
-        // A flare grows the primitive's own reach by up to max(s) (ShapeFlareDocument.ReachFactor); the position term
-        // is untouched since the warp applies after the shape's own translate.
+        // Inverse warp bounds compose in reverse point-evaluation order (bumps, shear, profile) — the position term is untouched since every warp
+        // applies after the shape's own translate. A Sweep carries no SdfSolidGeometry.Reach unit-scale law (see
+        // RenderReach's identical Sweep branch); a panel is refused on it, so panelRaise never applies.
+        var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
+            ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
+            : SdfSolidGeometry.Reach(
+            type: shape.Type,
+            scale: shape.Scale,
+            lift: (shape.Lift ?? SdfLift.Extrude),
+            panelRaise: panelRaise
+        ));
+        var warpedReach = ShapeWarpReach.Expand(primitiveReach + (shape.Cells?.Parameters.OutwardReach ?? 0f) * ShapeFlareDocument.ReachFactor(shape.Flare), shape.Flare, shape.Shear, ShapeBumpDocument.ReachExtra(shape.Bumps));
+
         return (
             (transform.Origin + Vector3.Transform(
                 value: (shapePosition * transform.Scale),
                 rotation: transform.Rotation
             )),
-            ((((SdfSolidGeometry.Reach(
-                type: shape.Type,
-                scale: shape.Scale,
-                lift: (shape.Lift ?? SdfLift.Extrude),
-                panelRaise: panelRaise
-            ) * ShapeFlareDocument.ReachFactor(flare: shape.Flare)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale)
+            ((warpedReach + (shape.Dilate ?? 0f) + (shape.Onion ?? 0f)) * transform.Scale)
         );
     }
     /// <summary>Returns whether a creation's stamp needs its own field scope: a blend outside the union family
@@ -718,6 +771,13 @@ public static class CreationStampEmitter {
                 continue;
             }
 
+            // A Sweep is not a closed solid a body can stand on (SdfSolidPrimitive.Sweep's remarks) — its field is
+            // "exact enough" for rendering, not a sound collider, so it contributes no contact geometry, exactly
+            // like a Detail shape.
+            if (shape.Type == SdfSolidPrimitive.Sweep) {
+                continue;
+            }
+
             if (!ShapeDomainOps.TryExpand(
                 domain: shape.Domain,
                 frames: out var frames,
@@ -760,6 +820,7 @@ public static class CreationStampEmitter {
                         chain: chain,
                         type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
                     lift: (shape.Lift ?? SdfLift.Extrude), rounding: (shape.Rounding ?? 0f), chamfer: (shape.Chamfer ?? 0f), exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                    curve: shape.Curve?.Parameters(),
                         scale: shapeScale,
                         material: materialFor(arg: shape),
                         blend: blend,
@@ -776,6 +837,7 @@ public static class CreationStampEmitter {
                     ),
                     type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
                     lift: (shape.Lift ?? SdfLift.Extrude), rounding: (shape.Rounding ?? 0f), chamfer: (shape.Chamfer ?? 0f), exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                    curve: shape.Curve?.Parameters(),
                     scale: shapeScale,
                     material: materialFor(arg: shape)
                 ).Dilate(radius: margin);
@@ -1072,14 +1134,21 @@ public static class CreationStampEmitter {
             // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged
             // beside the shape's own position; Dilate/Onion move the outer surface outward by their own value — all
             // in creation units, scaled with them.
-            // A flare grows the primitive's own reach by up to max(s) (ShapeFlareDocument.ReachFactor).
+            // A flare grows the primitive's own reach by up to max(s) (ShapeFlareDocument.ReachFactor). A Sweep
+            // carries no SdfSolidGeometry.Reach unit-scale law (its own control points already carry creation-unit
+            // dimensions — see SdfSolidPrimitive.Sweep's remarks); its own uniform scale bakes on directly.
+            var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
+                ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
+                : SdfSolidGeometry.Reach(
+                type: shape.Type,
+                scale: shape.Scale,
+                lift: (shape.Lift ?? SdfLift.Extrude)
+            ));
+            var warpedReach = ShapeWarpReach.Expand(primitiveReach + (shape.Cells?.Parameters.OutwardReach ?? 0f) * ShapeFlareDocument.ReachFactor(shape.Flare), shape.Flare, shape.Shear, ShapeBumpDocument.ReachExtra(shape.Bumps));
+
             reach = MathF.Max(
                 x: reach,
-                y: ((((shape.Position.Length() + (SdfSolidGeometry.Reach(
-                    type: shape.Type,
-                    scale: shape.Scale,
-                    lift: (shape.Lift ?? SdfLift.Extrude)
-                ) * ShapeFlareDocument.ReachFactor(flare: shape.Flare))) + ShapeDomainOps.Reach(domain: shape.Domain) + (shape.Dilate ?? 0f) + (shape.Onion ?? 0f)) * scale) + (document.Noise?.Amplitude ?? 0f))
+                y: (((shape.Position.Length() + warpedReach + ShapeDomainOps.Reach(domain: shape.Domain) + (shape.Dilate ?? 0f) + (shape.Onion ?? 0f)) * scale) + (document.Noise?.Amplitude ?? 0f))
             );
             any = true;
         }
@@ -1172,6 +1241,13 @@ public static class CreationStampEmitter {
             // A detail shape is SHADING-ONLY — it never reaches this contact compiler at all, so it neither carves
             // nor pads the collider it would otherwise emit.
             if (shape.Detail == true) {
+                continue;
+            }
+
+            // A Sweep is not a closed solid a body can stand on (SdfSolidPrimitive.Sweep's remarks) — its field is
+            // "exact enough" for rendering, not a sound collider, so it contributes no contact geometry, exactly
+            // like a Detail shape.
+            if (shape.Type == SdfSolidPrimitive.Sweep) {
                 continue;
             }
 

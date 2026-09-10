@@ -1,9 +1,7 @@
 // MOTH - procedural SDF study of 01-character-model-sheet.png.
 // Swept shoulders, curved boots and surface finish: 02-face-and-armor.png.
-// Author in src/Puck.World/Assets/studies/moth.glsl; copy this complete source to
-// docs/art/moth-concept-pack-2026-09-09/moth-shadertoy.glsl for the Shadertoy export.
-// All numbered reference sheets live in that concept-pack directory.
-// Paste this entire file into Shadertoy's Image tab. No channels required.
+// Author and run this study in Puck; study.watch moth-study on reloads saved edits.
+// Reference sheets: docs/art/moth-concept-pack-2026-09-09/.
 // Puck Study uses its paired camera when supplied; otherwise the orbit below.
 // Drag mouse: orbit. Release: hold view. Set AUTO_TURN to 1 for a turntable.
 // Approximate sculpt, not a mesh reconstruction. Front is +Z; units are artistic.
@@ -1315,7 +1313,6 @@ vec3 compositeJets(vec3 col,vec3 ro,vec3 rd,float solidDepth,vec2 sampleOffset) 
 vec3 render(vec2 uv,vec2 lightSample) {
     vec3 ro,ww,uu,vv,rd;
     float focal=2.25;
-#ifdef PUCK_STUDY
     // The world model faces -Z at half this study's scale. Rotate 180 degrees
     // about Y and scale uniformly, preserving handedness and the ground plane.
     const vec3 worldToStudy=vec3(-2.,2.,-2.);
@@ -1327,9 +1324,7 @@ vec3 render(vec2 uv,vec2 lightSample) {
         vv=cross(uu,ww);
         focal=.5/tan(iCameraFov*.5);
         rd=normalize(uv.x*uu+uv.y*vv+focal*ww);
-    } else
-#endif
-    {
+    } else {
     float yaw=POSE==7?-.75:.22, pitch=.055;
     if(PACK_VIEW==1) { yaw=-2.65; pitch=.10; }
     if(AUTO_TURN==1) yaw+=iTime*.30;

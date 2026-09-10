@@ -11,7 +11,7 @@ namespace Puck.World.Authoring;
 /// canonicalizes an upserted creation row through <see cref="Canonicalize"/> and validates a loaded one through
 /// <see cref="Validate"/>; nothing anywhere deserializes a creation without crossing it.
 /// </summary>
-public static class CreationCanonicalizer {
+public static partial class CreationCanonicalizer {
     // The default extrude half-depth a text run relies on when it declares none, and the floors every run clamps to —
     // a zero-depth glyph slab has no relief (it would be coplanar with the surface), so the depth is floored positive.
     private const float DefaultTextDepth = 0.02f;
@@ -1430,6 +1430,16 @@ public static class CreationCanonicalizer {
             ValidateUnitRange(value: entry.Sheen, name: "sheen", errors: errors, path: $"palette[{i}].sheen");
             ValidateUnitRange(value: entry.Metal, name: "metal", errors: errors, path: $"palette[{i}].metal");
             ValidateUnitRange(value: entry.Coat, name: "coat", errors: errors, path: $"palette[{i}].coat");
+            ValidatePaletteShading(
+                entry: entry,
+                errors: errors,
+                index: i
+            );
+            ValidatePaletteLayers(
+                entry: entry,
+                errors: errors,
+                index: i
+            );
         }
     }
     private static void ValidateUnitRange(float? value, string name, List<DocumentValidationError> errors, string path) {
@@ -2071,7 +2081,7 @@ public static class CreationCanonicalizer {
     }
     // Amount/Bulge clamp like Bend/Twist; Span is left to Validate's hard refusal (no sensible default exists for a
     // missing profile length) but still floored defensively here so a direct Normalize() call on already-invalid
-    // data — bypassing Validate — cannot hand SdfProgramBuilder.FlareY a non-positive span. Top defaults to 0.
+    // data — bypassing Validate — cannot hand SdfProgramBuilder.AxialProfile a non-positive span. Top defaults to 0.
     private static ShapeFlareDocument? NormalizeFlare(ShapeFlareDocument? flare) {
         if (flare is null) {
             return null;
@@ -2092,6 +2102,7 @@ public static class CreationCanonicalizer {
                 x: (float.IsFinite(f: flare.Span) ? flare.Span : 0f),
                 y: 0.001f
             ),
+            StartScale = Math.Clamp(flare.StartScale, SdfProgramBuilder.FlareMinScale, ShapeFlareDocument.MaxStartScale),
             Top = (float.IsFinite(f: (flare.Top ?? 0f)) ? (flare.Top ?? 0f) : 0f),
         };
     }
@@ -2156,6 +2167,8 @@ public static class CreationCanonicalizer {
                 min: -ShapeDocument.MaxTwist
             ),
                 Flare = NormalizeFlare(flare: shape.Flare),
+                Bumps = NormalizeBumps(bumps: shape.Bumps),
+                Shear = NormalizeShear(shear: shape.Shear),
             });
             _ = shapeIds.Add(item: shape.Id);
         }
@@ -2280,9 +2293,25 @@ public static class CreationCanonicalizer {
             if ((shape.Chamfer ?? 0f) != 0f && (shape.Rounding ?? 0f) != 0f) {
                 errors.Add(new(Path: $"shapes[{i}].chamfer", Message: "chamfer and rounding cannot both be nonzero on one shape."));
             }
-            if (shape.Flare is { } flare && (!float.IsFinite(flare.Amount) || !float.IsFinite(flare.Bulge) || !float.IsFinite(flare.Span) || (flare.Span <= 0f) || !float.IsFinite(flare.Top ?? 0f))) {
+            if (shape.Flare is { } flare && (!float.IsFinite(flare.Amount) || !float.IsFinite(flare.Bulge) || !float.IsFinite(flare.Span) || (flare.Span <= 0f) || !float.IsFinite(flare.Top ?? 0f) || (uint)flare.Axis > 2u || !float.IsFinite(flare.StartScale) || flare.StartScale <= 0f)) {
                 errors.Add(new(Path: $"shapes[{i}].flare", Message: "flare requires a finite amount, bulge and top, and a finite span greater than zero."));
             }
+            ValidateShapeErode(
+                errors: errors,
+                index: i,
+                shape: shape
+            );
+            ValidateCells(document, shape, errors, $"shapes[{i}].cells");
+            ValidateShear(
+                errors: errors,
+                path: $"shapes[{i}].shear",
+                shape: shape
+            );
+            ValidateBumps(
+                errors: errors,
+                path: $"shapes[{i}].bumps",
+                shape: shape
+            );
             if (shape.Exponent is { } exponent && (shape.Type != SdfSolidPrimitive.Superellipsoid || !float.IsFinite(exponent) || exponent < SdfProgramBuilder.MinSuperellipsoidExponent || exponent > SdfProgramBuilder.MaxSuperellipsoidExponent)) {
                 errors.Add(new(Path: $"shapes[{i}].exponent", Message: $"exponent requires Superellipsoid and a finite value in [{SdfProgramBuilder.MinSuperellipsoidExponent}, {SdfProgramBuilder.MaxSuperellipsoidExponent}]."));
             }
@@ -2385,6 +2414,11 @@ public static class CreationCanonicalizer {
                 path: $"shapes[{i}].detail",
                 shape: shape
             );
+            ValidateCurve(
+                errors: errors,
+                path: $"shapes[{i}].curve",
+                shape: shape
+            );
         }
 
         ValidateDrivers(
@@ -2435,6 +2469,10 @@ public static class CreationCanonicalizer {
             errors: errors
         );
         ValidatePolarStride(
+            document: document,
+            errors: errors
+        );
+        ValidateVolumes(
             document: document,
             errors: errors
         );

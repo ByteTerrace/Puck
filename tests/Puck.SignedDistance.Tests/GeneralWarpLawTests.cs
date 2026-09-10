@@ -62,6 +62,35 @@ public sealed class GeneralWarpLawTests {
             step = p.StepScale;
         }
     }
+    private static float Step(Action<SdfProgramBuilder> chain) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new(Vector3.One));
+        builder.ResetPoint();
+        chain(builder);
+        return builder.Sphere(1f, material).Build().StepScale;
+    }
+    [Fact]
+    public void AScaleUpstreamOfAWarpLeavesTheWarpsOwnReachUnchanged() {
+        var unscaled = Step(b => b.RotatePlane(2, 1, 1f));
+        Assert.True(unscaled < 1f);
+        Assert.Equal(unscaled, Step(b => b.Scale(new Vector3(0.1f)).RotatePlane(2, 1, 1f)));
+        Assert.Equal(unscaled, Step(b => b.Scale(new Vector3(10f)).RotatePlane(2, 1, 1f)));
+    }
+    [Fact]
+    public void AScaleDownstreamOfAWarpWidensTheWarpsReachByThatScale() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new(Vector3.One));
+        var tenfold = builder.ResetPoint().RotatePlane(2, 1, 1f).Sphere(10f, material).Build().StepScale;
+        Assert.Equal(tenfold, Step(b => b.RotatePlane(2, 1, 1f).Scale(new Vector3(10f))));
+        Assert.True(tenfold < Step(b => b.RotatePlane(2, 1, 1f)));
+    }
+    [Fact]
+    public void OnlyTranslatesAfterACellJitterCountTowardItsContainment() {
+        // spacing/2 = 5 and jitter/2 = 1 leave a 4-unit prototype budget; a 3.5 offset on a unit sphere spends 4.5.
+        static SdfProgramBuilder Lattice(SdfProgramBuilder b) => b.CellJitter(jitter: 2f, spacing: new Vector3(10f));
+        _ = Step(b => Lattice(b.Translate(new Vector3(3.5f, 0f, 0f))));
+        Assert.Throws<ArgumentException>(() => Step(b => Lattice(b).Translate(new Vector3(3.5f, 0f, 0f))));
+    }
     [Fact]
     public void InvalidSelectorsAreRefusedBeforePacking() {
         Assert.Throws<ArgumentOutOfRangeException>(() => Program(b => b.RotatePlane(3, 0, 1f)));

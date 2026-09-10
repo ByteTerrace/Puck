@@ -3,16 +3,16 @@ using Puck.Shaders.Study;
 namespace Puck.Shaders.Tests;
 
 public sealed class StudyShaderCompilerTests {
-    private static string MothShadertoyPath =>
-        RepositoryPaths.Resolve(relativePath: "docs/art/moth-concept-pack-2026-09-09/moth-shadertoy.glsl");
+    private static string MothStudyPath =>
+        RepositoryPaths.Resolve(relativePath: "src/Puck.World/Assets/studies/moth.glsl");
 
     [Fact]
-    public void Moth_shadertoy_reference_compiles_to_both_bytecodes_with_no_errors() {
+    public void Moth_study_compiles_to_both_bytecodes_with_no_errors() {
         var compiler = new StudyShaderCompiler(cacheDirectory: FreshCacheDirectory());
         StudyProgram program;
 
         try {
-            program = compiler.Compile(name: "moth", sourcePath: MothShadertoyPath, sourceText: File.ReadAllText(path: MothShadertoyPath));
+            program = compiler.Compile(name: "moth", sourcePath: MothStudyPath, sourceText: File.ReadAllText(path: MothStudyPath));
         } catch (StudyToolMissingException exception) {
             Assert.Skip($"study toolchain unavailable: {exception.Message}");
             return;
