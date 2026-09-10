@@ -16,7 +16,59 @@ namespace Puck.Cli.Architecture;
 internal static class ArchitectureCommand {
     private const string BackendsLayer = "Backends";
     private const string CompositionRootsLayer = "Composition roots";
+    private const string LayeringFenceClose = "```";
+    private const string LayeringFenceOpen = "```text";
+    private const string LayeringHeading = "## Layering";
     private const string PresentationLayer = "Presentation";
+    private const string ProjectMapRelativePath = "docs/project-map.md";
+
+    /// <summary>
+    /// Compares the generated layering block with the first <c>```text</c> fence under the Layering heading of
+    /// docs/project-map.md and returns the exit code: 0 when they match, 1 on drift or a missing block.
+    /// </summary>
+    private static int CheckProjectMap(string generated, string repositoryRoot) {
+        var path = Path.Combine(path1: repositoryRoot, path2: ProjectMapRelativePath);
+
+        if (!File.Exists(path: path)) {
+            Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} is missing.");
+
+            return 1;
+        }
+
+        var lines = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
+        var heading = Array.IndexOf(array: lines, value: LayeringHeading);
+        var open = ((heading < 0) ? -1 : Array.IndexOf(array: lines, startIndex: heading, value: LayeringFenceOpen));
+        var close = ((open < 0) ? -1 : Array.IndexOf(array: lines, startIndex: (open + 1), value: LayeringFenceClose));
+
+        if (close < 0) {
+            Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} has no `{LayeringFenceOpen}` block under `{LayeringHeading}`; paste the output of `puck architecture --map` there.");
+
+            return 1;
+        }
+
+        var onDisk = lines[(open + 1)..close];
+        var expected = generated.ReplaceLineEndings(replacementText: "\n").TrimEnd(trimChar: '\n').Split(separator: '\n');
+        var count = Math.Max(val1: onDisk.Length, val2: expected.Length);
+
+        for (var index = 0; (index < count); index++) {
+            var onDiskLine = ((index < onDisk.Length) ? onDisk[index] : "(end of block)");
+            var expectedLine = ((index < expected.Length) ? expected[index] : "(end of block)");
+
+            if (string.Equals(a: onDiskLine, b: expectedLine, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} layering block disagrees with the project declarations at line {((open + index) + 2)}; paste the output of `puck architecture --map` over it.");
+            Console.Error.WriteLine(value: $"  on disk:   {onDiskLine}");
+            Console.Error.WriteLine(value: $"  generated: {expectedLine}");
+
+            return 1;
+        }
+
+        Console.Out.WriteLine(value: $"architecture: {ProjectMapRelativePath} layering block matches the project declarations.");
+
+        return 0;
+    }
 
     public static Command Create() {
         var configurationOption = new Option<string>(name: "--configuration") {
@@ -26,21 +78,27 @@ internal static class ArchitectureCommand {
         var mapOption = new Option<bool>(name: "--map") {
             Description = "Print only the layering block, generated from each project's own <PuckLayer> declaration, for docs/project-map.md.",
         };
-        var command = new Command(description: """
+        var checkOption = new Option<bool>(name: "--check") {
+            Description = $"Compare the generated layering block with the one checked in under {ProjectMapRelativePath}; exit 1 on drift.",
+        };
+        var command = new Command(description: $"""
             Report on the repository's project-layering policy.
 
             The build-time gate is the authority; this verb explains it. Policy lives in
             build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
-            """, name: "architecture") { configurationOption, mapOption };
+            --map prints the layering block for {ProjectMapRelativePath}; --check fails when the
+            checked-in block no longer matches the declarations.
+            """, name: "architecture") { configurationOption, mapOption, checkOption };
 
         command.SetAction(action: parseResult => Run(
+            check: parseResult.GetValue(option: checkOption),
             configuration: parseResult.GetRequiredValue(option: configurationOption),
             map: parseResult.GetValue(option: mapOption)));
 
         return command;
     }
 
-    private static int Run(string configuration, bool map) {
+    private static int Run(bool check, string configuration, bool map) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -51,6 +109,10 @@ internal static class ArchitectureCommand {
             Console.Out.Write(value: RenderLayeringBlock(model: model));
 
             return 0;
+        }
+
+        if (check) {
+            return CheckProjectMap(generated: RenderLayeringBlock(model: model), repositoryRoot: repositoryRoot);
         }
 
         var failures = new List<string>();

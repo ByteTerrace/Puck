@@ -89,7 +89,10 @@ vocabulary insert/eject/select/options/link/unlink, each CAS-pinned where it
 names on-disk content), and `WorldSubmissionResult.cs`.
 
 `WorldSubmissionCodec.cs` is the single encoder/decoder owner for each of the
-thirteen payload leaves. `WorldWireCodec.cs` holds the leaf layouts it shares
+twelve payload leaves (`WorldSubmissionKind`'s ordinal 11 — the retired
+addon-lifecycle leaf — is unassigned and never reused; `TryEncodeCommittedMutation`/
+`TryDecodeCommittedMutation` are a separate entry-point pair for persisted
+journal entries, not a thirteenth leaf). `WorldWireCodec.cs` holds the leaf layouts it shares
 byte for byte with `Puck.World.Server`'s `.puckreplay` tape, authority
 checkpoint, and federation frames — nullable string, channel vector,
 `IntentSource`, `WorldPrincipal`. Each layout carries two overloads, one over

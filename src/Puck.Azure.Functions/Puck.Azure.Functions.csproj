@@ -34,7 +34,6 @@
         <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="[2.*,3.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.EventGrid" Version="[3.*,4.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="[2.*,3.0)" />
-        <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Mcp" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Storage.Blobs" Version="[6.*,7.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.OpenTelemetry" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="[2.*,3.0)" />

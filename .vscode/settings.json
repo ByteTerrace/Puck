@@ -1,4 +1,5 @@
 {
+    "azureFunctions.projectSubpath": "src/Puck.Azure.Functions",
     "chat.tools.terminal.autoApprove": {
         "dotnet build": true
     },

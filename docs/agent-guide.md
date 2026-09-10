@@ -423,7 +423,7 @@ all verification work here. Each keeps one compressed instance as evidence.
 - `*Options` denotes configuration-bound data. `*CliSeams` owns a command-line
   surface that must stay out of the main composition method.
 - Command-module conventions are documented on `ICommandModule`; screen claim
-  arbitration is documented on `ScreenSlotLedger`; GPU-host ordering is
+  arbitration is documented on `WorldScreenBinder`; GPU-host ordering is
   documented on `GpuHostComposition`.
 - CA1502, CA1505, and CA1506 are suggestion-level design signals. Simplify a
   design when they identify real coupling; do not add facades solely to change

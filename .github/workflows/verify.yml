@@ -7,9 +7,11 @@ run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'front
 # corpora; its BIOS-dependent stages skip here. The frontier runs nightly and through the manual lane: rows recorded
 # as failing or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded
 # so a ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries
-# are pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check` and
-# `puck registry --check` from the installed producer CLI artifact on every change, so a document field added without
-# regenerating the checked-in schema or the name registry fails the build here rather than only in a manual verb run.
+# are pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check`,
+# `puck registry --check`, and `puck architecture --check` from the installed producer CLI artifact on every change, so
+# a document field added without regenerating the checked-in schema or the name registry, or a project declaration
+# changed without regenerating the layering block in docs/project-map.md, fails the build here rather than only in a
+# manual verb run.
 
 on:
   schedule:
@@ -211,4 +213,6 @@ jobs:
         run: puck schema --check
       - name: puck registry --check
         run: puck registry --check
+      - name: puck architecture --check
+        run: puck architecture --check
     timeout-minutes: 15

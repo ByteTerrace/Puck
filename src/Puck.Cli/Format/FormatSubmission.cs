@@ -47,8 +47,8 @@ internal sealed class FormatSubmission {
         }
         var repositoryInfo = await GetAsync(path: prefix);
 
-        if ((branch == ((string?)repositoryInfo["default_branch"])) || (branch == ((string?)pull["base"]!["ref"])) || (branch == "codex/azure-ci")) {
-            throw new InvalidDataException(message: "Refusing to autoformat a default, base, or deployment branch.");
+        if ((branch == ((string?)repositoryInfo["default_branch"])) || (branch == ((string?)pull["base"]!["ref"]))) {
+            throw new InvalidDataException(message: "Refusing to autoformat a default or base branch.");
         }
         var currentHead = ((string)pull["head"]!["sha"]!);
         var message = $"style: apply Puck formatting\n\nPuck-Format-Run: {runId}";

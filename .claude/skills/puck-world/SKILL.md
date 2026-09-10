@@ -560,7 +560,7 @@ choosing fixed-point primitives on sim value paths.
   `WorldPlacementPolicy.MaxStampRegistrations`) indices and emits later active
   bodies through the coarse crowd representation. Existing shipped worlds may
   still author 128 with seats 0–3 local and 124 simulated.
-- `SdfProgramBuilder.MaxInstances = 16384` — the per-tile mask width scales
+- `SdfProgramBuilder.MaxInstances = 32768` — the per-tile mask width scales
   with DECLARED instances, which is why the frame source emits active
   avatars only and the render envelope is probed at construction
   (`WorldRenderEnvelope.TryFit` is the apply-time capacity gate).

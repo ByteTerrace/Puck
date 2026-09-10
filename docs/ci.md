@@ -79,7 +79,8 @@ deployment retains its separate serialization and is never cancelled by that rul
 **Verify runtime behavior** (`verify.yml`) runs the producer's HGB (Humble GamingBrick)
 and AGB (Advanced GamingBrick) binaries
 on Linux, its exact deployable AppBundle under Node, and its candidate CLI for
-generated schema/name-registry checks. The browser job fails if its input bundle
+the generated schema, name-registry, and project-map layering checks. The
+browser job fails if its input bundle
 is missing. Its nightly frontier measures
 known failing or inconclusive HGB cases separately from release gates.
 The nightly frontier builds its own battery for that scheduled run. Test reports
@@ -267,8 +268,8 @@ puck nuget pin 0.1.0-alpha
 It installs the published version in an empty tool path to prove it before
 editing the manifest, and uploads and commits nothing.
 
-Source-dependent operations use the candidate CLI explicitly. Schema and name
-registry checks and Azure application assembly consume the producer's candidate
+Source-dependent operations use the candidate CLI explicitly. Schema, name
+registry, and layering checks and Azure application assembly consume the producer's candidate
 package, and the silo Docker build publishes its Linux composer.
 An older CLI's embedded world model must not validate a new checkout's schema.
 
@@ -397,8 +398,7 @@ must reconcile those generated files before a release can claim a clean checkout
 
 A push to `main` deploys after all build and verification jobs succeed. A manual
 run exposes one `deploy` switch; setting it to false performs build and validation
-only. `codex/azure-ci` also builds and supports manual deployment while this path
-is qualified. Pull requests have no Azure credentials. Trusted infrastructure
+only. Pull requests have no Azure credentials. Trusted infrastructure
 builds authenticate before restoring the pinned `ts/bvm` Template Specs through
 `src/Puck.Azure.Resources/bicepconfig.json`.
 

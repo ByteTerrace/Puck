@@ -144,14 +144,15 @@ exclusivity, so an actor can always revoke an exclusive hold it authorized).
 ## ONE admission predicate decides a mutation
 
 `WorldServer.TryAdmitMutation(principal, section, kindOrdinal,
-rowScopedEditSubject, meter, out admission)` owns the WHOLE authority decision
+rowScopedEditSubject, rowScopedMutateSubject, meter, out admission)` owns the WHOLE authority decision
 for a document write. ONE structural exemption runs first — a `World` principal
 is admitted (`WorldMutationAdmissionRule.Structural`) without any lookup; there
 is no bypass parameter and nothing else may exempt. Then four gates, in order:
 
 1. `Allows(Mutate, section:<name>)` — the coarse section hold — OR, when
    the mutation names one concrete creations/placements row and the section
-   check missed, `Allows(Mutate, creation:<id>|placement:<id>)`. A
+   check missed, `Allows(Mutate, creation:<id>|placement:<id>)` against
+   `rowScopedMutateSubject`. A
    DISJUNCTION, unlike gate 3: a section grant admits every row, a row grant
    admits only its own. That scoping is also the whole cure for the compose
    arms' replace-by-key — a row grantee cannot name another row to collide
@@ -440,12 +441,11 @@ once-per-episode stderr line. Decode is NOT metered — it happens at
   the row), `[world.mutation rejected: …]`, contention
   `[world.grant: body:<n> driven by both … this tick — …]`.
 - `world.refusals [door]` prints the DECLARED refusal catalog
-  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`): 97 declarations across eight
-  doors today: `addon.mutate` (11), `grant.authority` (3), `hud.validate`
-  (11), `replay.tape` (9), `sdf.decode` (34), `world.rule.compile` (27),
-  `world.interaction.compile` (1), `world.rule.effect` (1) — re-run the count
-  (`puck search "\[Refusal\(" src -M 0`) rather than trusting this list once
-  the surface moves again. It does NOT cover console-tier text refusals (parse
+  (`RefusalTaxonomy.cs` + `RefusalCatalog.cs`) across the doors: `addon.mutate`,
+  `grant.authority`, `hud.validate`, `replay.tape`, `sdf.decode`,
+  `world.rule.compile`, `world.interaction.compile`, `world.rule.effect` — run
+  `puck search "\[Refusal\(" src -M 0` for the current declaration count per
+  door rather than trusting a written-down number. It does NOT cover console-tier text refusals (parse
   errors, `Conflicts` reasons, module refusals) — never claim that
   coverage. Tagging is one-directional: it proves a door cannot refuse with
   an unlisted reason, not that every listed reason has a live call site.

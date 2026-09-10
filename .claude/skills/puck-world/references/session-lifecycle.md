@@ -125,7 +125,7 @@ without ever reusing it.
 
 ## The `$parked:<bodyRef>` reserved rule channel
 
-`WorldRuleFacts.ParkedPrefix` (`WorldRules.cs`, alongside `$tick`/`$population`/
+`WorldRuleFacts.ParkedPrefix` (`WorldRuleFacts.cs`, alongside `$tick`/`$population`/
 `$region:`/`$machine:`/`$reduce:`/`$argmax:`/`$argmin:`/`$distance:`/`$los:`).
 `<bodyRef>` is the SAME single-body-reference grammar `$distance:`/`$los:`
 spend one half of theirs on — `body:<n>` (a literal 0-based index) or

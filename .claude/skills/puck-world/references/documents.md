@@ -194,12 +194,12 @@ mutates them in session and no grant subject names them:
   `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
   a delta deletes the inherited key rather than storing a literal null.
 
-The `WorldSection` enum (`Protocol/WorldGrant.cs`, 32 members, declared
-order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
+The `WorldSection` enum (`src/Puck.World.Schema/WorldGrant.cs`, declared
+order — read the enum for the current member list): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
 Bindings, Creations, Placements, Authoring, Speakers, Tunes, Patches, Audio,
 Collision, Host, Views, Looks, Grants, Hud, State, InputHold, Rules,
 Groups, Properties, Interactions, PlayerDefaults, Probes, Dynamics,
-Curves`.
+Curves, Tables`.
 It is the grant subject vocabulary
 (`section:<name>`) and the mutation dispatch axis — narrower than
 `WorldDefinition`'s own member list above: `Channels`,
@@ -2503,7 +2503,7 @@ zone, and neutral-grace duration.
   bone storage.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
 - `StateCapacity` (`Puck.State/StateRow.cs`): `MaxRows = 256`,
-  `MaxCellsPerRow = 128` (an authored `capacity` may only narrow it),
+  `MaxCellsPerRow = TopologyCompilation.MaxCells` (an authored `capacity` may only narrow it),
   `MaxTextValueLength = 256` (UTF-16 units, a text cell's value), and
   `MaxBodySlots = 128` across the `body` and `identity` lanes (the fixed
   per-body register/checkpoint width).

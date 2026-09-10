@@ -1203,10 +1203,10 @@ state (an advancing `state` row — deterministic, replayed, settable with
 
 ## Engine boundaries worth knowing
 
-- `SdfProgramBuilder.MaxInstances = 16384`: per-tile mask width scales with
+- `SdfProgramBuilder.MaxInstances = 32768`: per-tile mask width scales with
   DECLARED instances, which is why this project emits active avatars only and
   probes capacity floors at construction.
-- The exact soft-shadow gather addresses all 16384 instance slots, including
+- The exact soft-shadow gather addresses all 32768 instance slots, including
   reserved pools. Camera-tile masking is a separate approximation selected by
   the quality policy or `world.shadow-mask camera-tile`.
 - `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per
@@ -1249,13 +1249,11 @@ failure. See [the render contract](../Puck.SdfVm/README.md#capture-completion).
 
 Committed, re-runnable proofs cover most load-bearing seams as `puck canary`
 manifests under `tests/Puck.World.Canaries/` — `sdf-decode-sign-refusal`
-(all twelve builder-mirrored sign fields), `world-seat-binding-recompose`
+(all twelve builder-mirrored sign fields) and `world-seat-binding-recompose`
 (a forced seat recompose against a registered command, cleanly, with no
-binding-narration), and `addon-mutation-seam` (the grant-door outcome matrix
-plus a real compiled WASM guest's chained mutate and boot-anchored replay
-arming — see `src/Puck.Cli/README.md`'s `puck canary` section for the
-`stream` override that lets a `world.grant` claim bind its stderr-narrated
-confirmation) among them. Strict-parse and mutation-all-or-nothing are
+binding-narration) among them — see `src/Puck.Cli/README.md`'s `puck canary`
+section for the `stream` override that lets a `world.grant` claim bind its
+stderr-narrated confirmation. Strict-parse and mutation-all-or-nothing are
 proved in-process by
 `tests/Puck.World.Tests/{StrictParseLawTests,MutationAllOrNothingLawTests}.cs`,
 and cited repository paths are checked by `puck doc-links`.

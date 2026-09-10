@@ -116,16 +116,6 @@
           "Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore.Analyzers": "1.0.4"
         }
       },
-      "Microsoft.Azure.Functions.Worker.Extensions.Mcp": {
-        "type": "Direct",
-        "requested": "[1.*, 2.0.0)",
-        "resolved": "1.6.0",
-        "contentHash": "cJTJPRftW044eRunuTMtFUF2J8vCH69otniZZtLuhltpSTqilS6lLvKLl8EdYuarqPe58TZo7IijgCKAKGRKXA==",
-        "dependencies": {
-          "Microsoft.Azure.Functions.Worker": "2.51.0",
-          "Microsoft.Azure.Functions.Worker.Extensions.Abstractions": "1.3.0"
-        }
-      },
       "Microsoft.Azure.Functions.Worker.Extensions.Storage.Blobs": {
         "type": "Direct",
         "requested": "[6.*, 7.0.0)",
@@ -174,8 +164,8 @@
       "Microsoft.Extensions.Caching.Hybrid": {
         "type": "Direct",
         "requested": "[10.*, 11.0.0)",
-        "resolved": "10.9.0",
-        "contentHash": "D0tHRbUCliInxTfPgN9K6RxrCVaWu9kyIT66vbIJ/YwA6BV2xa8vTqoE3JQXA2Rf2vRdgd29+HR6Ay6KmzDslw=="
+        "resolved": "10.10.0",
+        "contentHash": "+16+e4EjjvBg8OedpucUqSFeI9liu0S5AQG2FHY7OnBOV1jGYduYBN8KNPh6noNRM1npF4RBWKONQoAR9nFDSA=="
       },
       "Microsoft.Extensions.Caching.StackExchangeRedis": {
         "type": "Direct",

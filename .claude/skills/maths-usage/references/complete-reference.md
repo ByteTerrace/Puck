@@ -310,11 +310,13 @@ at one of these**:
 | You touched | Also run |
 |---|---|
 | A rounding path, a value kernel, an exhaustive claim | the suite again with `--settings tests/Puck.Maths.Tests/deep.runsettings` — Deep is the tier that has to pass before a rounding change lands |
-| `FixedPosition` | `… -- --stage worldcoord3` — the stage kept its pre-rename name; it is the stage a `FixedPosition` change owes |
-| `BinaryPolynomial` / `BinaryField` / `BinaryFields` | `… -- --stage binary-field` |
-| `DigitalNetSampler` / `StratifiedShuffle` / `InvertibleBitMix` | `… -- --stage digital-net` |
-| `MonotonicPartitioner` | `… -- --stage monotonic-partitioner` |
-| `BinaryIntegerFunctions`, `SecureRandom`'s refusal edge | `… -- --stage binary-integer-functions` |
+| `FixedPosition` | the `position.*` law family (`laws/position.json`) — not `laws/world-coord.json`, which despite its name covers only `BinaryIntegerFunctions` |
+| `BinaryPolynomial` | the `polynomial.*` law family (`laws/polynomial.json`) |
+| `BinaryField` / `BinaryFields` | the `binary-field.*` law family (`laws/binary-field.json`) |
+| `DigitalNetSampler` / `StratifiedShuffle` / `InvertibleBitMix` | the `sampling.*` law family — cases live in `laws/sampling.json`, and `DigitalNetSampler`'s also in `laws/digital-net.json` |
+| `MonotonicPartitioner` | the `core.*` law family — cases live in `laws/monotonic-partitioner.json` |
+| `BinaryIntegerFunctions` | the `core.*` law family (`laws/core.json`) |
+| `SecureRandom`'s refusal edge | the `sampling.*` law family (`laws/sampling.json`) |
 | The presented algebra (`Oracle/`) | the `presented.*` law families, which run as Default-tier cases; the Default tier is the gate of record |
 | `QuadraticAlgebra` / `MonogenicAlgebra` / `GeometricAlgebra` / `DoublingAlgebra` | the matching law family — see [Algebra → Verifying changes](../../../../src/Puck.Maths/Algebra/README.md#verifying-changes) |
 | `PrimeField64` / `QuadraticExtensionField64` | the `prime-field.*` and `extension-field.*` law families |

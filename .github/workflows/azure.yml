@@ -4,7 +4,7 @@ run-name: Azure ${{ (github.event_name == 'pull_request' || (github.event_name =
 on:
   pull_request:
   push:
-    branches: [main, codex/azure-ci]
+    branches: [main]
   workflow_call:
     inputs:
       deploy:
@@ -54,7 +54,7 @@ jobs:
     env:
       BICEPPARAM_WORLD_MCP: ${{ vars.WORLD_MCP || 'null' }}
     environment: Puck
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     name: Validate Azure infrastructure
     needs: artifacts
     permissions:
@@ -94,8 +94,7 @@ jobs:
       url: https://puck.byteterrace.com
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.deploy &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci'))
+      (github.event_name == 'workflow_dispatch' && inputs.deploy && github.ref == 'refs/heads/main')
     name: Deploy and verify Azure production
     needs: [build, verify, pack, infrastructure, applications, containers]
     permissions:

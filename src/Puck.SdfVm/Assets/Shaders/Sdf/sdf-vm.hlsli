@@ -86,7 +86,7 @@
 // shades (the beam/cull/rt kernels never see it).
 #ifdef SDF_SCREEN_SOURCES
 // GROUPSHARED under SDF_GROUP_SHADOW_GATHER (the Stage 1 kernels): the per-tile gather (sdf-world.hlsli's
-// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The full 512-word mask costs 2 KiB per group, not per lane.
+// sdfShadowGatherGroup) fills ONE mask per 8x8 workgroup. The full 1024-word mask costs 4 KiB per group, not per lane.
 // Other kernels retain the small inactive per-thread array; nothing in them builds a mask.
 #ifdef SDF_GROUP_SHADOW_GATHER
 #define SDF_SHADOW_MASK_WORDS ((SDF_MAX_INSTANCES + 31u) / 32u)
