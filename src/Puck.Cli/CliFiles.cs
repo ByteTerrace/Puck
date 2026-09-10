@@ -20,7 +20,7 @@ internal static class CliFiles {
             var target = Path.Combine(path1: destination, path2: Path.GetRelativePath(path: file, relativeTo: source));
 
             Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-            File.Copy(destFileName: target, sourceFileName: file);
+            File.Copy(destFileName: target, overwrite: true, sourceFileName: file);
         }
     }
 }

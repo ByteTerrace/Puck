@@ -31,7 +31,7 @@ namespace Puck.Cli;
 
 /// <summary>
 /// The <c>puck</c> command tree: every verb hangs off one root, and the process entry point and
-/// in-process self-invocations both go through <see cref="InvokeAsync"/>.
+/// in-process self-invocations both go through <see cref="InvokeAsync(string[])"/>.
 /// </summary>
 internal static class PuckRootCommand {
     public static RootCommand Create() =>
@@ -66,12 +66,18 @@ internal static class PuckRootCommand {
             WorktreeBaseCommand.Create(),
             WorldCommand.Create(),
         };
-    public static int Invoke(string[] args) => (Parse(args: args)?.Invoke() ?? 2);
-    public static async Task<int> InvokeAsync(string[] args) => ((Parse(args: args) is { } result) ? await result.InvokeAsync() : 2);
+    public static int Invoke(string[] args) => Invoke(args: args, root: Create());
+    public static Task<int> InvokeAsync(string[] args) => InvokeAsync(args: args, root: Create());
 
+    internal static int Invoke(string[] args, RootCommand root) => (Parse(args: args, root: root)?.Invoke(configuration: Invocation()) ?? 2);
+    internal static async Task<int> InvokeAsync(string[] args, RootCommand root) => ((Parse(args: args, root: root) is { } result) ? await result.InvokeAsync(configuration: Invocation()) : 2);
+
+    // Ctrl+C and SIGTERM cancel the verb's token and the process waits for the verb: a host's own shutdown
+    // lifecycle (the silo allows ShutdownSeconds + 5) is the only deadline, never the parser's two-second default.
+    private static InvocationConfiguration Invocation() => new() { ProcessTerminationTimeout = Timeout.InfiniteTimeSpan };
     // A usage error exits 2, so verbs keep 1 for a failed check and 0 for success.
-    private static ParseResult? Parse(string[] args) {
-        var result = Create().Parse(args: args);
+    private static ParseResult? Parse(string[] args, RootCommand root) {
+        var result = root.Parse(args: args);
         var errors = result.Errors.Select(selector: error => error.Message).Concat(second: OptionLikeValues(result: result).Select(selector: token => $"Unrecognized option '{token}'.")).ToArray();
 
         if ((result.Action is not ParseErrorAction) && (errors.Length == 0)) { return result; }

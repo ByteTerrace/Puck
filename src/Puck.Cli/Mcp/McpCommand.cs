@@ -62,8 +62,8 @@ internal static class McpCommand {
     }
 
     private static async Task<int> RunAsync(string? attachmentPath, string? configurationPath, string? siloPath, CancellationToken cancellationToken) {
-        // Ctrl+C is a graceful drain with no deadline of its own: the handler cancels the token the server shuts down
-        // on rather than letting the runtime tear the process down mid-session.
+        // The root already turns Ctrl+C and SIGTERM into this token with no deadline; this handler adds Ctrl+Break,
+        // so every console interrupt is a graceful drain rather than a tear-down mid-session.
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
         ConsoleCancelEventHandler cancel = (_, eventArgs) => {
             eventArgs.Cancel = true;
