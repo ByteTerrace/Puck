@@ -452,3 +452,23 @@ seat1 sees and what seat2 sees without submitting as either — the read-back
 side of a hidden-hand table (see the garden's `games/poker.world.json` poker table).
 Operators and limits live in the Schema README's discrete-state section rather
 than a second command vocabulary here.
+
+`study.*` (`WorldStudyCommandModule`) is the shader-study verb family, CORE-
+registered (windowed and headless) like `view.override`/`world.view.state`:
+`study.load <name> <path> [camera]` upserts a `views.studies` row (Simulation-
+routed, through the same registered-echo door `world.row.set` uses) so it
+genuinely works headless, and windowed also compiles `<path>` right away and
+registers a new name as a live child (`SdfEngineNode.RegisterChild`), so a
+layout slot naming it shows it once the row applies; `study.reload [name]`,
+`study.watch <name> on|off`, `study.time <name> pause|resume|set <seconds>|scale
+<x>`, and the read-back `study.status` are Immediate and refuse `[study.*:
+requires a windowed boot]` when no render tree exists, the same pattern
+`world.view.pointer` takes toward `WorldCursorFeed`. `study.watch` polls the source's write stamp once per
+produced frame on the pump thread (`WorldStudyRuntime.PumpWatches`, no
+watcher thread) and reloads once the stamp has held still for 150 ms; a
+failed compile echoes every
+diagnostic as `<file>:<line>: <message>` on stderr and leaves the last good
+pipeline rendering. `iMouse` is the process pointer (`WorldPointer`, primary
+button) mapped into the study slot's own pixel space, Shadertoy convention. See
+`documents.md`'s `views.studies` section for the row shape and `sdf-world`'s
+frame-driven child-view row for how a study slot renders.

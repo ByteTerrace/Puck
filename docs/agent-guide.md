@@ -262,12 +262,10 @@ the command line; see their READMEs):
 
 | Variable | Purpose |
 |---|---|
-| `PUCK_RAY_QUERY` | Permit or deny the ray-query path. |
 | `PUCK_GENLOCK=0` | Disable the launcher genlock control law. The document equivalent is `host.genlock`. |
 | `PUCK_PRESENT_TIMING` | Log measured present intervals. |
 | `PUCK_TEST_DEVICE_LOSS=<seconds>` | Request synthetic device loss for live verification. |
 | `PUCK_D3D12_DEBUG` | Opt in to the Direct3D 12 debug layer. |
-| `PUCK_CAPTURE_FRAME=<number>` | Delay one-shot capture for a world-document run. |
 | `PUCK_FLAGSHIPS_REGENERATE=1` | Regenerate committed flagship creation documents. |
 | `PUCK_AGB_BIOS`, `PUCK_ARES_COSIM`, `PUCK_AGB_FULLBOOT`, `PUCK_AGS_TRACE`, `PUCK_AGB_SUITE_FOCUS` | Read only by the Advanced battery's diagnostic modes (lockstep co-simulation, full-boot renders, AGS tracing, suite focus); the battery itself takes every input on the command line. |
 

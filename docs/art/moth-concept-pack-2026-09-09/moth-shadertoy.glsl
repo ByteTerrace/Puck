@@ -7,19 +7,33 @@
 // RUN_POSE: 0 = neutral sculpt, 1 = a frozen running key pose with a trailing braid.
 // ANIMATE_FACE adds a brief blink every 5.1 seconds; set to 0 for a still study.
 // Plates use rigid joint transforms; surface detail follows each piece in either pose.
-// Refractive procedural eyes, swept hair, GGX paint and art-directed skin normals.
+// Graphic amber eyes, sculpted facial planes, swept hair and satin pearl paint.
 // Secondary rays use simplified head geometry; eyelid occlusion is shaded locally.
 // AA samples also sample the studio light; tone mapping follows linear averaging.
-// PACK_VIEW frames the curved flight pods. JETS toggles depth-clipped volumetric exhaust.
+// PACK_VIEW frames the flight system. JETS toggles depth-clipped volumetric exhaust.
+// ANIMATE_PACK: gentle, close-to-body hinge motion. Set to 0 for a still sculpt.
+// PACK_DEPLOY: static opening from 0.0 to 1.0 when ANIMATE_PACK is 0 (about 6 degrees).
 // WEAR: 0 = fresh paint, 1 = restrained edge chips, scratches and contact abrasion.
 // Jet flow animates with iTime; no noise textures, buffers or opaque flame meshes.
+// The braid exits beside the right cheek through the front opening in both poses.
+// RELAXED_TRACE checks overlapping empty-space bounds and retries rejected steps.
+// Skin transmission and neighbor-color bounce are bounded shading approximations.
+// GEOMETRIC_SEAMS cuts the pack's main reveals; fine engravings remain surface detail.
+// CEL_STYLE: 0 = studio shading, 1 = stepped diffuse. INK adds a narrow outer contour.
 #define AUTO_TURN 0
 #define CLOSE_UP 0
 #define PACK_VIEW 0
 #define JETS 1
+#define PACK_DEPLOY 0.0
+#define ANIMATE_PACK 1
+#define OWNER_COLORWAY 1
 #define WEAR 1
 #define RUN_POSE 0
 #define ANIMATE_FACE 1
+#define RELAXED_TRACE 1
+#define GEOMETRIC_SEAMS 1
+#define CEL_STYLE 0
+#define INK 0
 #define AA 2
 #define MAX_STEPS 220
 #define SHADOW_STEPS 96
@@ -27,7 +41,7 @@
 const float PI = 3.14159265;
 // Base material IDs. Hits add 20 times the rigid part index for local surface details.
 const float LILAC=1., IVORY=2., JOINT=3., SKIN=4., HAIR=5.;
-const float GOLD=6., CYAN=7., EYE=8.;
+const float GOLD=6., CYAN=7., EYE=8., STEEL=9.;
 const float OCHRE=11.;
 const float LIP=12., MOUTH=13.;
 float eyeOpen;
@@ -61,79 +75,105 @@ float smoothIntersection(float a,float b,float k) {
 vec3 bezier(vec3 a,vec3 b,vec3 c,float t) {
     return mix(mix(a,b,t),mix(b,c,t),t);
 }
-vec4 hairNodes[68];
+vec4 hairNodes[52];
 void prepareHair() {
     // Sample the authored curves once per fragment; march only the cached sweeps.
     for(int lock=0;lock<4;lock++) {
         vec3 a,b,c; float width;
-        if(lock==0) { a=vec3(.12,4.148,.325); b=vec3(-.16,4.17,.57); c=vec3(-.387,3.844,.38); width=.130; }
-        else if(lock==1) { a=vec3(.115,4.15,.326); b=vec3(.315,4.078,.53); c=vec3(.376,3.881,.36); width=.118; }
-        else if(lock==2) { a=vec3(-.18,4.104,.32); b=vec3(-.42,3.90,.48); c=vec3(-.343,3.60,.32); width=.081; }
-        else { a=vec3(.326,4.008,.28); b=vec3(.437,3.80,.37); c=vec3(.35,3.609,.26); width=.075; }
-        for(int i=0;i<17;i++) {
-            float t=float(i)/16.;
-            hairNodes[lock*17+i]=vec4(bezier(a,b,c,t)*vec3(1,1,3.1),.012+width*pow(max(sin(PI*t),0.),.65));
+        if(lock==0) { a=vec3(.105,4.18,.285); b=vec3(-.105,4.17,.57); c=vec3(-.44,3.80,.36); width=.133; }
+        else if(lock==1) { a=vec3(.09,4.18,.286); b=vec3(.29,4.11,.53); c=vec3(.45,3.88,.33); width=.088; }
+        else if(lock==2) { a=vec3(-.33,3.925,.285); b=vec3(-.435,3.72,.39); c=vec3(-.365,3.55,.325); width=.074; }
+        else { a=vec3(.355,3.93,.23); b=vec3(.425,3.76,.315); c=vec3(.348,3.60,.26); width=.067; }
+        for(int i=0;i<13;i++) {
+            float t=float(i)/12.;
+            // Broad roots join the hair cap, then taper into swept, thin tips.
+            float taper=(.80+.40*sin(PI*t))*(1.-smoothstep(.35,1.,t));
+            hairNodes[lock*13+i]=vec4(bezier(a,b,c,t)*vec3(1,1,3.1),.008+width*taper);
         }
     }
 }
 float hairSculpt(vec3 p) {
+    float bound=box(p-vec3(0,3.94,.38),vec3(.57,.48,.23),0.);
+    if(bound>.06) return bound;
     p*=vec3(1,1,3.1);
     float d=10.;
-    for(int i=0;i<64;i++) {
-        int node=i+i/16;
+    for(int i=0;i<48;i++) {
+        int node=i+i/12;
         vec4 a=hairNodes[node],b=hairNodes[node+1];
         vec3 v=b.xyz-a.xyz;
         float t=clamp(dot(p-a.xyz,v)/dot(v,v),0.,1.);
         float strand=length(p-mix(a.xyz,b.xyz,t))-mix(a.w,b.w,t);
-        d=smoothUnion(d,strand,.009);
+        d=smoothUnion(d,strand,.014);
     }
     return d*.27;
 }
 vec3 eyeCoordinates(vec3 p) {
-    p.x=abs(p.x); p-=vec3(.177,3.744,.412);
-    p.xz=rot(-.16)*p.xz; p.xy=rot(.10)*p.xy;
+    p.x=abs(p.x); p-=vec3(.174,3.743,.421);
+    p.xz=rot(-.21)*p.xz; p.xy=rot(.055)*p.xy;
     return p;
 }
+const vec3 EYE_RADII=vec3(.145,.145,.098);
+float eyeFront(vec2 p) { return .098*sqrt(max(1.-dot(p,p)/(.145*.145),.0001)); }
 vec2 eyelidHeights(float x) {
-    float u=x/.123,arch=pow(max(1.-u*u,0.),.68);
-    return vec2(.090*arch+.007*u,-.074*arch+.007*u)*eyeOpen;
+    float u=x/.110,arch=pow(max(1.-u*u,0.),.65);
+    return vec2(.083*arch+.012*u,-.071*arch+.012*u)*eyeOpen;
 }
 float eyeOpening(vec3 q) {
     vec2 lids=eyelidHeights(q.x);
-    return max(max(q.y-lids.x,lids.y-q.y),abs(q.x)-.123)*.60;
+    return max(max(q.y-lids.x,lids.y-q.y),abs(q.x)-.110)*.60;
 }
 float lidDistance(vec3 q,bool upper) {
-    float x=clamp(q.x,-.117,.117);
+    float x=clamp(q.x,-.108,.108);
     vec2 heights=eyelidHeights(x);
     float y=upper?heights.x:heights.y;
-    float z=sqrt(max(.124*.124-x*x-y*y,.0001));
-    float radius=upper?.009:.004;
+    float z=eyeFront(vec2(x,y));
+    float radius=upper?(.010+.005*smoothstep(-.07,.12,x)):.0035;
     return (length(q-vec3(x,y,z))-radius)*.30;
 }
+const vec3 FACE_CENTER=vec3(0,3.725,.235);
+const vec3 FACE_RADII=vec3(.400,.375,.295);
 float faceWidth(float y) {
-    float jaw=mix(.80,1.,smoothstep(3.38,3.65,y));
-    return .414*jaw*(1.-.07*smoothstep(3.90,4.11,y));
+    float jaw=mix(.84,1.,smoothstep(3.38,3.65,y));
+    return .400*jaw*(1.-.045*smoothstep(3.90,4.10,y));
 }
+float smileHeight(float x) { return 3.496+1.75*x*x+.018*x; }
 float faceOffset(vec2 p) {
-    vec2 cheek=(vec2(abs(p.x),p.y)-vec2(.228,3.612))/vec2(.145,.115);
-    vec2 muzzle=(p-vec2(0,3.510))/vec2(.16,.075);
-    return .025*exp(-dot(cheek,cheek))+.021*exp(-dot(muzzle,muzzle));
+    // A small lip volume on a broad facial surface; cheeks are shaped by planes.
+    float muzzle=(1.-smoothstep(.08,.21,abs(p.x)))
+                 *smoothstep(3.42,3.49,p.y)*(1.-smoothstep(3.53,3.60,p.y));
+    vec2 lip=vec2(p.x/.105,(p.y-smileHeight(clamp(p.x,-.13,.13))+.014)/.012);
+    return .010*muzzle+.004*exp(-dot(lip,lip));
 }
 float faceFront(vec2 p) {
-    vec2 q=vec2(p.x/faceWidth(p.y),(p.y-3.730)/.38);
-    return .250+faceOffset(p)+.285*sqrt(max(1.-dot(q,q),0.));
+    vec2 q=vec2(p.x/faceWidth(p.y),(p.y-FACE_CENTER.y)/FACE_RADII.y);
+    return FACE_CENTER.z+faceOffset(p)+FACE_RADII.z*sqrt(max(1.-dot(q,q),0.));
 }
 float faceSculpt(vec3 p) {
-    // One continuous deformed surface gives the cheeks and muzzle their volume.
-    vec3 q=p-vec3(0,3.730,.250); q.z-=faceOffset(p.xy);
-    float d=ell(q,vec3(faceWidth(p.y),.38,.285));
+    // Broad cheek planes narrow into a rounded mandible, without added cheek balls.
+    vec3 q=p-FACE_CENTER; q.z-=faceOffset(p.xy);
+    float d=ell(q,vec3(faceWidth(p.y),FACE_RADII.yz));
     vec3 s=p; s.x=abs(s.x);
-    d=smoothUnion(d,cap(p,vec3(0,3.730,.501),vec3(0,3.639,.542),.020),.033);
-    d=smoothUnion(d,ell(p-vec3(0,3.608,.555),vec3(.047,.036,.040)),.028);
-    d=smoothUnion(d,ell(s-vec3(.031,3.591,.538),vec3(.026,.019,.028)),.019);
+    float jaw=.68*s.x-.70*(p.y-3.40)+.18*(p.z-.24)-.136;
+    d=smoothIntersection(d,jaw,.055);
+    d=smoothIntersection(d,3.367-p.y,.020);
+    d=smoothUnion(d,cap(p,vec3(0,3.710,.504),vec3(0,3.636,.529),.010),.028);
+    d=smoothUnion(d,ell(p-vec3(0,3.610,.548),vec3(.036,.024,.034)),.024);
+    d=smoothUnion(d,ell(s-vec3(.026,3.601,.534),vec3(.017,.013,.018)),.017);
     return d*.70;
 }
-float smileHeight(float x) { return 3.502+1.35*x*x+.014*x; }
+float skinGeometry(vec3 p) {
+    // A recessed throat widens into the jaw and shoulder root. Keep the front
+    // behind the chin so the mandible has an underside instead of a skin stalk.
+    float waist=exp(-pow((p.y-3.28)/.105,2.));
+    float base=1.-smoothstep(3.14,3.27,p.y);
+    vec2 radius=vec2(.151-.019*waist+.036*base,.104+.022*base);
+    vec2 section=vec2(p.x,p.z-.125)/radius;
+    float neck=(length(section)-1.)*radius.y;
+    neck=smoothIntersection(neck,max(3.12-p.y,p.y-3.49),.025)*.60;
+    float skin=smoothUnion(faceSculpt(p),neck,.016);
+    vec3 ear=p; ear.x=abs(ear.x);
+    return min(skin,ell(ear-vec3(.365,3.645,.22),vec3(.048,.090,.055)));
+}
 float edgePlane(vec2 p,vec2 a,vec2 b) {
     vec2 e=b-a;
     return dot(p-a,vec2(-e.y,e.x))/length(e);
@@ -146,19 +186,38 @@ float fiveSides(vec2 p,vec2 a,vec2 b,vec2 c,vec2 d,vec2 e) {
     return smoothIntersection(f,edgePlane(p,e,a),.018);
 }
 float roundedExtrusion(float profile,float depth,float bevel) {
+    // Quarter-circle rounding in the profile/depth plane preserves the broad faces.
     vec2 q=vec2(profile,depth)+bevel;
     return min(max(q.x,q.y),0.)+length(max(q,0.))-bevel;
+}
+float chamferIntersection(float a,float b,float width) {
+    // Plane/section intersection with a straight bevel; positive width cuts inward.
+    return max(max(a,b),(a+b+width)*.70710678);
+}
+float superEllipse(vec2 p,vec2 r,float power) {
+    vec2 q=pow(abs(p)/r,vec2(power));
+    return (pow(q.x+q.y,1./power)-1.)*min(r.x,r.y);
+}
+float carvePanel(float plate,float seam,float width,float depth,float bevel) {
+    // Subtract a rounded trench extending from the surface down to the chosen depth.
+    vec2 q=vec2(abs(seam)-width,-plate-depth)+bevel;
+    float trench=length(max(q,0.))+min(max(q.x,q.y),0.)-bevel;
+    return max(plate,-trench);
 }
 float shoulderProfile(vec2 p) {
     return fiveSides(p,vec2(-.12,.10),vec2(.08,.20),vec2(.29,.10),
                      vec2(.48,-.45),vec2(.12,-.24));
 }
 float shoulderPlate(vec3 q) {
-    // A thin tip and a domed cross-section, with a broad face for the paint.
+    // Preserve a continuous outer wall and a rounded rim around the blade.
+    // The cavity opens only toward the arm, on the hidden medial side.
     float radius=.31*(1.-.50*smoothstep(.05,.45,-q.y));
-    vec2 sectionP=pow(abs(vec2((q.x+.02)/.50,q.z/radius)),vec2(2.6));
-    float section=(pow(sectionP.x+sectionP.y,1./2.6)-1.)*radius;
-    return roundedExtrusion(shoulderProfile(q.xy),section,.018)*.7;
+    float section=superEllipse(vec2(q.x+.02,q.z),vec2(.50,radius),2.6);
+    float outer=roundedExtrusion(shoulderProfile(q.xy),section,.018);
+    float inside=superEllipse(vec2(q.x+.02,q.z),vec2(.465,radius-.036),2.6);
+    float cavityProfile=min(shoulderProfile(q.xy)+.038,q.x+.035);
+    inside=max(inside,max(cavityProfile,q.y-.072));
+    return max(outer,-inside)*.65;
 }
 vec2 shinRadii(float y) {
     float flare=clamp((1.41-y)/1.12,0.,1.);
@@ -167,8 +226,13 @@ vec2 shinRadii(float y) {
 }
 float curvedSection(vec2 p,vec2 r) {
     // Between an ellipse and a rounded rectangle: broad, gently curved plate faces.
-    vec2 q=pow(abs(p)/r,vec2(2.6));
-    return (pow(q.x+q.y,1./2.6)-1.)*min(r.x,r.y);
+    return superEllipse(p,r,2.6);
+}
+float shinSection(vec3 q,float inset) {
+    float flare=clamp((1.41-q.y)/1.12,0.,1.);
+    // Round at the knee, with tensioned broad faces at the flared ankle.
+    float power=mix(2.15,3.65,flare*flare);
+    return superEllipse(q.xz,shinRadii(q.y)-inset,power);
 }
 float ankleOpening(vec2 p) {
     float arch=(length(vec2(p.x,p.y-.27)/vec2(.302,.30))-1.)*.30;
@@ -180,7 +244,7 @@ float footOutline(vec3 q) {
     return smoothIntersection(outline,toeCorners,.018);
 }
 vec3 gauntletCoordinates(vec3 p) {
-    p-=vec3(.92,2.10,.015); p.xy=rot(-.23)*p.xy;
+    p-=vec3(.92,2.10,.015); p.xy=rot(.23)*p.xy;
     return p;
 }
 float gauntletShell(vec3 q) {
@@ -194,31 +258,49 @@ float gauntletShell(vec3 q) {
     shell=smoothIntersection(shell,abs(a.z)-(.214+.10*a.y),.016);
     return smoothIntersection(shell,-q.x-.035-.25*q.y,.025);
 }
-vec3 podCoordinates(vec3 p) {
-    p.x=abs(p.x); p-=vec3(.285,2.73,-.415);
-    // The centerline bows outward and aft, then curls back toward the exhaust.
-    float u=clamp((.50-p.y)/1.05,0.,1.);
-    p.x-=.045*u+.075*sin(PI*u);
-    p.z+=.020+.185*sin(PI*u)+.12*u;
+vec3 nozzleCoordinates(vec3 p) {
+    // Concealed exhaust frame beneath the wingtip, shared by injector and volume plume.
+    p-=vec3(.22,2.12,-.350);
+    p.xy=rot(.08)*p.xy;
+    p.yz=rot(.24)*p.yz;
     return p;
 }
 float podShell(vec3 q) {
-    // A rounded leaf loft, with a narrow root and a swept, asymmetric lower lip.
-    float width=.25+.035*clamp(.5-q.y,0.,1.);
-    float shell=ell(q-vec3(0,.01,0),vec3(width,.60,.18));
-    float lip=max(q.y-.505+.25*q.x,-q.y-.445-.65*q.x+.20*q.z);
-    return smoothIntersection(shell,lip,.045)*.57;
+    // Compound-curved aerodynamic carapace pod matching the Moth turnaround art sheets.
+    // Normalized height v in [0, 1] from bottom trailing tip to upper shoulder.
+    float v=clamp((q.y-2.02)/1.14,0.,1.);
+
+    // Domain warp: ribcage arch, lateral flare, and outward trailing tip sweep
+    vec3 a=q-vec3(.235,2.62,-.370);
+    a.x+=.10*a.y-.18*min(a.y,0.)*min(a.y,0.);
+    a.z+=.15*pow(max(a.x,0.)/.22,2.)-.030*sin(PI*v);
+
+    // 3D convex base ellipsoid: full compound curvature in X, Y, and Z
+    float shell=ell(a,vec3(.235,.560,.115))*.80;
+
+    // Medial (inner) spine cut: vertical clearance along spine down to y=2.45,
+    // then smoothly sweeping outward to form the inverted-V thruster cowl opening.
+    float innerMargin=.042+.48*pow(max(2.45-q.y,0.),1.15);
+    float innerCut=innerMargin-q.x;
+    shell=smoothIntersection(shell,innerCut,.020);
+
+    // Outer flank chamfer: aerodynamic mecha bevel along the lateral perimeter
+    float outerBevel=.62*a.x+.18*a.y-.25*a.z-.26;
+    shell=smoothIntersection(shell,outerBevel,.024);
+
+    // Anterior cut: flush fit against the dorsal torso surface with zero air gap
+    float torsoBack=-.280+.030*sin(PI*v)+.07*q.x*q.x;
+    float frontCut=q.z-torsoBack;
+    shell=smoothIntersection(shell,frontCut,.018);
+
+    // Concave underside socket: scooped pocket cradling the angled thruster nozzle
+    float thrusterSocket=ell(q-vec3(.22,2.16,-.35),vec3(.080,.110,.072));
+    shell=max(shell,-thrusterSocket);
+
+    return shell;
 }
-float podBand(vec3 q) { return q.y+.38*q.x+.80*q.x*q.x+.12*q.z; }
-vec3 nozzleCoordinates(vec3 p) {
-    // A rigid exhaust frame, shared by the physical nozzle and the volume renderer.
-    p-=vec3(.37,2.245,-.60);
-    p.xy=rot(.10)*p.xy;
-    p.yz=rot(.28)*p.yz;
-    return p;
-}
-mat3 partFrame[12];
-vec3 partOffset[12];
+mat3 partFrame[14];
+vec3 partOffset[14];
 void rotateFrame(inout mat3 frame,inout vec3 offset,vec3 pivot,float angle) {
     float c=cos(angle),s=sin(angle);
     mat3 rotation=mat3(vec3(1,0,0),vec3(0,c,-s),vec3(0,s,c));
@@ -232,6 +314,8 @@ void preparePose() {
         if(RUN_POSE==1) rotateFrame(frame,offset,vec3(0,2.15,0),.13);
         bool otherSide=(i==4 || i==5 || i==8 || i==9 || i==11);
         if(i==1) {
+            // Seat the head into the shoulder assembly instead of stretching the neck.
+            offset.y+=.140;
             if(RUN_POSE==1) rotateFrame(frame,offset,vec3(0,3.15,0),-.10);
             mat3 scale=mat3(vec3(1./.88,0,0),vec3(0,1./.88,0),vec3(0,0,1./.90));
             frame=scale*frame;
@@ -255,89 +339,218 @@ void preparePose() {
     }
 }
 vec3 localPosition(vec3 p,int part) { return partFrame[part]*p+partOffset[part]; }
+void preparePack() {
+    float phase=.5-.5*cos(iTime*.72);
+    float opening=ANIMATE_PACK==1?smoothstep(.12,.88,phase):clamp(float(PACK_DEPLOY),0.,1.);
+    for(int i=0;i<2;i++) {
+        float side=i==0?1.:-1.;
+        mat3 mirror=mat3(vec3(side,0,0),vec3(0,1,0),vec3(0,0,1));
+        mat3 frame=mirror*partFrame[0]; vec3 offset=mirror*partOffset[0];
+        vec3 pivot=vec3(.09,3.12,-.33);
+        float settle=ANIMATE_PACK==1?.012*sin(iTime*1.1+side*.35)*opening:0.;
+        mat2 r=rot(.35*opening+settle);
+        mat3 hinge=mat3(vec3(r[0],0),vec3(r[1],0),vec3(0,0,1));
+        frame=hinge*frame; offset=hinge*(offset-pivot)+pivot;
+        rotateFrame(frame,offset,pivot,.12*opening);
+        partFrame[12+i]=frame; partOffset[12+i]=offset;
+    }
+}
+vec2 podScene(vec3 p,bool detail) {
+    float bound=box(p-vec3(.24,2.60,-.37),vec3(.28,.64,.20),.02);
+    if(bound>.12) return vec2(bound,-1.);
+    vec2 h=vec2(10.,LILAC);
+    vec3 q=p;
+
+    // Continuous compound-curved 3D carapace shell
+    float shell=podShell(q);
+
+    // Geodesic parameter u curving downward as it radiates outward across the pod dome
+    float u=q.y+.20*(q.x-.05)+.32*pow(max(q.x-.05,0.),2.);
+
+    // Hairline panel grooves between tiers when geometric seams are enabled
+    if(detail && GEOMETRIC_SEAMS==1 && abs(shell)<.024) {
+        float seamDist=min(abs(u-2.92),min(abs(u-2.69),min(abs(u-2.46),abs(u-2.22))));
+        shell=carvePanel(shell,seamDist,.0032,.0055,.0012);
+    }
+
+    // Top mantle vent in Lilac Band 1 (recessed dark slot)
+    vec3 ventPos=q-vec3(.17,3.06,-.385);
+    float vent=box(ventPos,vec3(.024,.018,.040),.005);
+    shell=max(shell,-vent);
+    add(h,shell,LILAC);
+    add(h,vent,JOINT);
+
+    // 5-Tier Colorway:
+    // Band 2 (Ivory upper curved slat): u in [2.69, 2.92]
+    float ivory2=max(shell-.0028,abs(u-2.805)-.115);
+    add(h,ivory2,IVORY);
+
+    // Band 4 (Ivory lower curved slat): u in [2.22, 2.46]
+    float ivory4=max(shell-.0028,abs(u-2.340)-.120);
+    // Geometric panel notch on outer flank of Band 4
+    vec3 notchPos=q-vec3(.38,2.28,-.35);
+    float notch=box(notchPos,vec3(.022,.014,.030),.004);
+    ivory4=max(ivory4,-notch);
+    add(h,ivory4,IVORY);
+    add(h,notch,JOINT);
+
+    // Thruster nozzle bell seated inside the scooped underside socket
+    vec3 noz=nozzleCoordinates(q);
+    // Conical dark metallic nozzle bell
+    float bell=max(cylZ((noz-vec3(0,.028,0)).xzy,.056,.055),-noz.y-.038);
+    float bore=cylZ((noz-vec3(0,.045,0)).xzy,.044,.080);
+    bell=max(bell,-bore);
+    add(h,bell,JOINT);
+    // Steel nozzle lip
+    float lip=length(vec2(length(noz.xz)-.052,noz.y+.036))-.0055;
+    add(h,lip,STEEL);
+    // Glowing cyan injector core
+    float injector=ell(noz-vec3(0,.018,0),vec3(.036,.009,.036));
+    add(h,injector,CYAN);
+
+    // Top hinge knuckle connecting to the spine
+    add(h,cylZ(q-vec3(.09,3.12,-.33),.034,.018)-.004,JOINT);
+
+    return h;
+}
 vec3 braidCenter(float t) {
-    // Both poses share the same root at the nape, behind the right ear.
-    vec3 hanging=vec3(-.42-.11*sin(PI*t),3.48-.96*t,-.30+.76*smoothstep(0.,.40,t));
-    vec3 trailing=vec3(-.42-.70*t,3.48-.16*t+.045*sin(PI*t),-.30-.88*t);
-    return RUN_POSE==1?trailing:hanging;
+    // The visible root exits the front aperture beside her right cheek.
+    vec3 root=vec3(-.365,3.565,.325);
+    if(RUN_POSE==0) return bezier(root,vec3(-.54,3.13,.62),vec3(-.51,2.52,.51),t);
+    // Clear the front rim and shoulder before the free end sweeps aft in motion.
+    vec3 a=mix(root,vec3(-.57,3.24,.62),t);
+    vec3 b=mix(vec3(-.57,3.24,.62),vec3(-.95,3.11,.23),t);
+    vec3 c=mix(vec3(-.95,3.11,.23),vec3(-1.22,3.05,-.68),t);
+    return mix(mix(a,b,t),mix(b,c,t),t);
 }
 vec3 braidStrand(float t,float strand) {
     vec3 tangent=normalize(braidCenter(t+.001)-braidCenter(t-.001));
     vec3 u=normalize(cross(tangent,vec3(0,0,1))),v=cross(tangent,u);
-    float phase=t*8.*PI+strand*2.*PI/3.;
-    return braidCenter(t)+(u*cos(phase)*.066+v*sin(phase)*.054)*(1.-.35*t);
+    // A figure-eight cross-section alternates the over/under crossings of a flat plait.
+    float phase=t*6.*PI+strand*2.*PI/3.;
+    return braidCenter(t)+(u*cos(phase)*.056+v*sin(2.*phase)*.050)*(1.-.30*t);
 }
-vec4 braidNodes[39];
+vec4 braidNodes[75];
 vec3 braidTip,braidDirection;
+vec3 braidBoundsCenter,braidBoundsHalf;
 void prepareBraid() {
-    for(int strand=0;strand<3;strand++) for(int i=0;i<13;i++) {
-        float t=float(i)/12.;
-        braidNodes[strand*13+i]=vec4(braidStrand(t,float(strand)),.060-.014*t);
+    vec3 lo=vec3(10),hi=vec3(-10);
+    for(int strand=0;strand<3;strand++) for(int i=0;i<25;i++) {
+        float t=float(i)/24.;
+        vec4 node=vec4(braidStrand(t,float(strand)),.050-.010*t);
+        braidNodes[strand*25+i]=node;
+        lo=min(lo,node.xyz-vec3(.051)); hi=max(hi,node.xyz+vec3(.051));
     }
+    braidBoundsCenter=(lo+hi)*.5; braidBoundsHalf=(hi-lo)*.5;
     braidTip=braidCenter(1.);
     braidDirection=normalize(braidTip-braidCenter(.97));
 }
+float braidSculpt(vec3 p) {
+    float bound=box(p-braidBoundsCenter,braidBoundsHalf,0.);
+    if(bound>.045) return bound;
+    float d=10.;
+    for(int i=0;i<72;i++) {
+        int node=i+i/24;
+        d=min(d,cap(p,braidNodes[node].xyz,braidNodes[node+1].xyz,braidNodes[node].w));
+    }
+    return d;
+}
 
+vec2 braidScene(vec3 p) {
+    vec2 h=vec2(10.,HAIR);
+    // Three interwoven strands share the front root in the neutral and running poses.
+    add(h,braidSculpt(p),HAIR);
+    vec3 tip=braidTip;
+    vec3 tangent=braidDirection;
+    vec3 tie=p-tip;
+    float tieY=dot(tie,tangent);
+    vec3 radial=tie-tangent*tieY;
+    vec2 band=vec2(length(radial)-.073,abs(tieY)-.021);
+    add(h,min(max(band.x,band.y),0.)+length(max(band,0.))-.006,GOLD);
+    vec3 side=normalize(cross(tangent,vec3(0,0,1))),depth=cross(tangent,side);
+    vec3 tuft=vec3(dot(tie,side),tieY-.095,dot(tie,depth));
+    tuft.x-=.013*sin(clamp(tieY/.21,0.,1.)*PI);
+    add(h,ell(tuft,vec3(.048,.105,.034)),HAIR);
+
+    return h;
+}
+float skullBound(vec3 p) {
+    return box(p-vec3(0,3.835,0),vec3(.73,.625,.61),.005);
+}
+vec2 helmetShell(vec3 p) {
+    // The same open-bottom shell is used by camera, shadow and occlusion rays.
+    vec3 q=p-vec3(0,3.77,-.035);
+    float outer=ell(q,vec3(.655,.685,.55));
+    float inner=ell(q-vec3(0,-.01,.055),vec3(.555,.587,.49));
+    float width=.505*(.84+.16*smoothstep(-.50,-.10,q.y));
+    vec2 opening=(q.xy-vec2(0,-.045))/vec2(width,.548);
+    float cut=max((length(opening)-1.)*width,.07-q.z);
+    float chinHeight=3.34-.055*smoothstep(.20,.55,abs(p.x));
+    chinHeight-=.030*(1.-smoothstep(-.15,.12,p.z));
+    float throatCut=p.y-chinHeight;
+    float d=max(max(max(outer,-inner),-cut),-throatCut);
+    float hoodMaterial=(cut<.090 && q.z>.075)?IVORY:LILAC;
+    if(throatCut<.018) hoodMaterial=p.z>.10?IVORY:JOINT;
+    if(-inner>max(max(outer,-cut),-throatCut)-.001) hoodMaterial=JOINT;
+    if(q.z<-.24 && q.y<-.30-.45*q.x*q.x) hoodMaterial=JOINT;
+    return vec2(d,hoodMaterial);
+}
 vec2 headScene(vec3 p) {
     vec3 q,s=p; s.x=abs(s.x);
     float d;
     vec2 h=vec2(10.,HAIR);
     float bound=box(p-vec3(-.24,3.34,-.28),vec3(1.15,1.16,1.25),.025);
     if(bound>.20) return vec2(bound,-1.);
-    // Hollow hood with a continuous oval face opening.
-    q=p-vec3(0,3.77,-.035);
-    float outer=ell(q,vec3(.655,.685,.55));
-    float inner=ell(q-vec3(0,-.01,.055),vec3(.555,.587,.49));
-    vec2 opening=(q.xy-vec2(0,-.045))/vec2(.505,.548);
-    float cut=max((length(opening)-1.)*.505,.07-q.z);
-    d=max(max(outer,-inner),-cut);
-    float hoodMaterial=(cut<.090 && q.z>.075)?IVORY:LILAC;
-    if(-inner>max(outer,-cut)-.001) hoodMaterial=JOINT;
-    if(q.z<-.24 && q.y<-.30-.45*q.x*q.x) hoodMaterial=JOINT;
-    add(h,d,hoodMaterial);
+    h=braidScene(p);
+    float skull=skullBound(p);
+    if(skull>.10) { add(h,skull,-1.); return h; }
+    vec2 hood=helmetShell(p); add(h,hood.x,hood.y);
     add(h,cylX(s-vec3(.626,3.70,-.035),.218,.033)-.007,IVORY);
     add(h,cylX(s-vec3(.672,3.70,-.035),.159,.011)-.007,LILAC);
     add(h,cylX(s-vec3(.696,3.70,-.035),.100,.005)-.004,GOLD);
     add(h,cylX(s-vec3(.708,3.70,-.035),.075,.005)-.003,LILAC);
     // Separate cheek guards extend the hood's shaped ivory edge below each ear.
-    q=s-vec3(.49,3.44,.17);
-    float guard=fiveSides(q.xy,vec2(-.04,.17),vec2(.11,.11),vec2(.13,-.08),
-                         vec2(-.035,-.18),vec2(-.10,-.07));
-    add(h,roundedExtrusion(guard,abs(q.z)-.085,.025),IVORY);
+    q=s-vec3(.465,3.47,.240);
+    q.z+=.16*q.y;
+    float guard=fiveSides(q.xy,vec2(-.02,.15),vec2(.09,.105),vec2(.085,-.04),
+                         vec2(-.145,-.125),vec2(-.175,-.060));
+    add(h,roundedExtrusion(guard,abs(q.z)-.052,.018),IVORY);
+    add(h,cap(s,vec3(.46,3.57,.13),vec3(.325,3.405,.18),.027),JOINT);
 
-    // Sculpted face with actual eye sockets and a narrow, recessed smile.
-    float face=faceSculpt(p);
-    face=smoothUnion(face,cap(p,vec3(0,3.29,.09),vec3(0,3.42,.14),.095),.025);
+    // Continuous cheeks, button nose and lip volume, with inset almond eye openings.
+    float face=skinGeometry(p);
     q=eyeCoordinates(p);
-    face=smoothUnion(face,ell(q,vec3(.124,.106,.126)),.014);
     float socket=max(eyeOpening(q),-.025-q.z);
     face=smoothIntersection(face,-socket,.006);
-    float mouthX=clamp(p.x,-.112,.112);
+    float mouthX=clamp(p.x,-.132,.132);
     float smile=smileHeight(mouthX);
-    float mouthWidth=max(1.-pow(mouthX/.113,2.),0.);
+    float mouthWidth=max(1.-pow(mouthX/.133,2.),0.);
     float lipZ=faceFront(vec2(mouthX,smile));
-    float mouth=max(max(abs(p.y-smile)-(.002+.003*mouthWidth),abs(p.x)-.113),lipZ-.018-p.z);
+    float mouth=max(max(abs(p.y-smile)-(.002+.003*mouthWidth),abs(p.x)-.133),lipZ-.012-p.z);
     float faceWithMouth=max(face,-mouth);
     add(h,faceWithMouth,(-mouth>face)?MOUTH:SKIN);
-    add(h,ell(s-vec3(.365,3.645,.22),vec3(.048,.090,.055)),SKIN);
-    vec3 lip=p-vec3(mouthX,smile-.010*mouthWidth,lipZ+.002);
-    float lipTaper=.45+.55*mouthWidth;
-    add(h,ell(lip,vec3(.008,.007,.007)*lipTaper)*.65,LIP);
-    lip=p-vec3(mouthX,smile+.007*mouthWidth,lipZ);
-    add(h,ell(lip,vec3(.007,.004,.005)*lipTaper)*.65,LIP);
-    if(h.y==SKIN && p.z>.560) {
-        float nostril=length((vec2(s.x,p.y)-vec2(.026,3.587))/vec2(.010,.004));
+    if(h.y==SKIN && p.z>.565) {
+        float nostril=length((vec2(s.x,p.y)-vec2(.028,3.591))/vec2(.008,.0035));
         if(nostril<1.) h.y=MOUTH;
     }
 
-    // Embedded eyeballs. Iris depth and corneal reflections are evaluated at the hit.
+    // Shallow eye surfaces carry the graphic iris and illustrated catchlights.
     q=eyeCoordinates(p);
-    add(h,max(length(q)-.124,eyeOpening(q)),EYE);
+    add(h,max(ell(q,EYE_RADII),eyeOpening(q)),EYE);
     add(h,lidDistance(q,true),HAIR);
     add(h,lidDistance(q,false),SKIN);
-    float browT=clamp((s.x-.064)/.217,0.,1.);
-    vec3 brow=bezier(vec3(.064,3.914,.520),vec3(.166,3.942,.517),vec3(.281,3.888,.439),browT);
-    add(h,(length((s-brow)*vec3(1,1,1.65))-(.011+.012*sin(PI*browT)))*.42,HAIR);
+    vec3 lashRoot=vec3(.097,.036*eyeOpen,eyeFront(vec2(.097,.036*eyeOpen)));
+    vec3 lashTip=vec3(.134,.043*eyeOpen,eyeFront(vec2(.114,.012))-.010);
+    vec3 lashVector=lashTip-lashRoot;
+    float lashT=clamp(dot(q-lashRoot,lashVector)/dot(lashVector,lashVector),0.,1.);
+    add(h,(length(q-mix(lashRoot,lashTip,lashT))-mix(.012,.0015,lashT))*.75,HAIR);
+    vec3 tear=vec3(-.102,-.012*eyeOpen,eyeFront(vec2(-.102,-.012)));
+    add(h,ell(q-tear,vec3(.009,.005*eyeOpen+.001,.006)),LIP);
+    float browT=clamp((s.x-.069)/.226,0.,1.);
+    vec3 brow=bezier(vec3(.069,3.915,.516),vec3(.165,3.953,.524),vec3(.295,3.918,.432),browT);
+    // Brows follow the forehead surface; a thin depth keeps them from floating in profile.
+    brow.z=faceFront(brow.xy)+.001;
+    add(h,(length((s-brow)*vec3(1,1,4.5))-(.012+.009*sin(PI*browT)))*.20,HAIR);
 
     // The fringe is built from flattened, tapered curve sweeps over the scalp.
     q=p-vec3(0,3.80,.19);
@@ -345,20 +558,6 @@ vec2 headScene(vec3 p) {
     d=smoothIntersection(d,max(3.91-p.y,p.z-.335),.025);
     add(h,d,HAIR);
     add(h,hairSculpt(p),HAIR);
-    // Three interwoven strands follow one shared curve; the tail trails in the run pose.
-    for(int i=0;i<36;i++) {
-        int node=i+i/12;
-        add(h,cap(p,braidNodes[node].xyz,braidNodes[node+1].xyz,braidNodes[node].w),HAIR);
-    }
-    vec3 tip=braidTip;
-    vec3 tangent=braidDirection;
-    add(h,cap(p,tip-tangent*.018,tip+tangent*.034,.090),GOLD);
-    for(int i=0;i<3;i++) {
-        vec3 bend=vec3((float(i)-1.)*.048,0,.04);
-        add(h,cap(p,tip+tangent*.045,tip+tangent*.17+bend,.027),HAIR);
-        add(h,cap(p,tip+tangent*.17+bend,tip+tangent*.23+bend*1.3,.012),HAIR);
-    }
-
     return h;
 }
 
@@ -399,19 +598,32 @@ vec2 lowerLegScene(vec3 p) {
     // Continuously flared shin shell, with a real arched ankle cutout.
     q=s-vec3(.4,0,.025);
     q.z-=.035*sin(PI*clamp((1.41-q.y)/1.12,0.,1.));
-    vec2 radii=shinRadii(q.y);
-    float side=curvedSection(q.xz,radii);
+    float side=shinSection(q,0.);
     float ankleCut=ankleOpening(q.xy);
     float kneeSeat=(length(vec2(q.x,q.y-1.46)/vec2(.145,.15))-1.)*.145;
-    float shin=smoothIntersection(side,max(max(q.y-1.41+.10*q.z,ankleCut),-kneeSeat),.025)*.7;
-    add(h,shin,LILAC);
+    float ends=max(max(q.y-1.41+.10*q.z,ankleCut),-kneeSeat);
+    float outer=chamferIntersection(side,ends,.018);
+    float cavity=shinSection(q,.038);
+    float shin=max(outer,-cavity)*.64;
+#if OWNER_COLORWAY == 1
+    add(h,shin,-cavity>outer?JOINT:IVORY);
+    // The lilac trim follows the arch all the way around the boot.
+    add(h,max(shin-.003,-ankleCut-.095),LILAC);
+    // A narrow lilac side panel follows the bowed shin, tapering toward the knee.
+    float cheek=fiveSides(q.zy,vec2(-.13,1.25),vec2(.07,1.25),vec2(.14,.96),
+                          vec2(-.045,.53),vec2(-.26,.74));
+    add(h,max(shin-.008,max(cheek,.20-q.x)),LILAC);
+#else
+    add(h,shin,-cavity>outer?JOINT:LILAC);
     // The ivory trim follows the arch all the way around the boot.
     add(h,max(shin-.003,-ankleCut-.095),IVORY);
     // A narrow ivory side panel follows the bowed shin, tapering toward the knee.
     float cheek=fiveSides(q.zy,vec2(-.13,1.25),vec2(.07,1.25),vec2(.14,.96),
                           vec2(-.045,.53),vec2(-.26,.74));
     add(h,max(shin-.008,max(cheek,.20-q.x)),IVORY);
+#endif
     add(h,ell(s-vec3(.4,.38,.015),vec3(.21,.23,.225)),JOINT);
+    add(h,cap(s,vec3(.4,.48,.015),vec3(.38,1.39,0),.143),JOINT);
     // Sculpted instep and rounded, broad toe, resting on a flat rubber sole.
     q=s-vec3(.4,0,0);
     float outline=footOutline(q);
@@ -480,7 +692,7 @@ vec2 shoulderScene(vec3 p) {
     float bound=box(p-vec3(.77,2.93,.015),vec3(.42,.37,.36),.02);
     if(bound>.18) return vec2(bound,-1.);
     // Swept overlapping plates. The upper saddle sits behind the long outer blade.
-    q=s-vec3(.61,3.10,-.025);
+    q=s-vec3(.61,3.155,-.025);
     q.y*=1.25;
     float saddle=ell(q-vec3(.04,-.05,0),vec3(.30,.21,.29));
     float saddleInside=ell(q-vec3(.04,-.085,0),vec3(.245,.165,.235));
@@ -504,63 +716,68 @@ vec2 torsoScene(vec3 p) {
     float bound=box(p-vec3(0,2.53,-.16),vec3(.73,.84,.79),.02);
     if(bound>.18) return vec2(bound,-1.);
     // A compact breastplate with a curved ivory inset and a beveled lower edge.
-    add(h,ell(p-vec3(0,2.58,0),vec3(.41,.57,.245)),JOINT);
+    add(h,ell(p-vec3(0,2.58,0),vec3(.325,.57,.245)),JOINT);
     float chest=ell(p-vec3(0,2.79,.025),vec3(.48,.345,.32));
-    chest=smoothIntersection(chest,(2.46+.24*abs(p.x)-p.y)/1.03,.026);
+    chest=chamferIntersection(chest,(2.46+.24*abs(p.x)-p.y)/1.03,.016);
+    float breastPlane=(p.z+.32*abs(p.x)+.20*(2.80-p.y)-.337)/1.069;
+    chest=smoothIntersection(chest,breastPlane,.025);
     float neckHole=ell(p-vec3(0,3.135,.055),vec3(.235,.16,.30));
     chest=smoothIntersection(chest,-neckHole,.018);
-    float bibWidth=.14+.82*clamp(p.y-2.49,0.,.24);
-    float bibTop=2.965-.082*exp(-pow(p.x/.18,2.));
-    float yoke=max(abs(p.x)-bibWidth,p.y-bibTop);
-    yoke=min(yoke,max(.30-abs(p.x),abs(p.y-2.96)-.049));
+    float chevron=abs(p.y-(2.795+.43*abs(p.x)))-.064;
+    float sternum=max(abs(p.x)-.090,abs(p.y-2.66)-.16);
+    float yoke=min(chevron,sternum);
+    yoke=max(yoke,p.y-3.010);
     add(h,chest,(yoke<0. && p.z>.13)?IVORY:LILAC);
-    q=p-vec3(0,2.385,.268);
-    float abdomen=fiveSides(q.xy,vec2(-.125,.095),vec2(.125,.095),
-                            vec2(.155,-.025),vec2(0,-.095),vec2(-.155,-.025));
-    add(h,roundedExtrusion(abdomen,abs(q.z)-.04,.020),IVORY);
+    // Two overlapping abdominal plates connect the breastplate to the belt.
+    for(int i=0;i<2;i++) {
+        q=p-vec3(0,2.43-.135*float(i),.244);
+        float abdomen=fiveSides(q.xy,vec2(-.250,.085),vec2(.250,.085),
+                                vec2(.265,-.008),vec2(0,-.110),vec2(-.265,-.008));
+        float plate=roundedExtrusion(abdomen,abs(q.z)+.18*abs(q.x)-.055,.014);
+        add(h,plate,i==0?IVORY:LILAC);
+    }
     q=p-vec3(0,2.18,0);
-    add(h,smoothIntersection(ell(q,vec3(.385,.13,.265)),abs(q.y)-.06,.025),GOLD);
+    add(h,chamferIntersection(ell(q,vec3(.385,.13,.265)),abs(q.y)-.06,.012),OCHRE);
     q=p-vec3(0,2.21,.275);
     float buckle=fiveSides(q.xy,vec2(-.11,.085),vec2(.11,.085),
                            vec2(.15,-.02),vec2(0,-.09),vec2(-.15,-.02));
-    add(h,roundedExtrusion(buckle,abs(q.z)-.045,.015),GOLD);
+    add(h,roundedExtrusion(buckle,abs(q.z)-.045,.015),OCHRE);
     add(h,ell(p-vec3(0,2.04,0),vec3(.39,.285,.295)),JOINT);
+    q=p-vec3(0,2.030,.265);
+    float pelvis=fiveSides(q.xy,vec2(-.235,.155),vec2(.235,.155),
+                          vec2(.270,-.015),vec2(0,-.220),vec2(-.270,-.015));
+    float pelvicPlate=roundedExtrusion(pelvis,abs(q.z)+.22*abs(q.x)-.072,.018);
+    add(h,pelvicPlate,LILAC);
 
-    // Bowed flight shells leave a deliberate reveal around the central spine.
-    add(h,cap(p,vec3(0,2.32,-.37),vec3(0,3.08,-.34),.07),JOINT);
-    for(int i=0;i<4;i++)
-        add(h,ell(p-vec3(0,2.45+.14*float(i),-.465),vec3(.067,.04,.027)),JOINT);
+    // Central spine and compact mounts sit between the two curved flight shells.
+    add(h,box(p-vec3(0,2.69,-.310),vec3(.045,.355,.025),.015),JOINT);
+    for(int i=0;i<5;i++)
+        add(h,box(p-vec3(0,2.405+.135*float(i),-.330),vec3(.038,.024,.014),.006),JOINT);
+    s=p; s.x=abs(s.x);
+    add(h,cap(s,vec3(.04,3.08,-.30),vec3(.12,3.12,-.33),.028),JOINT);
+    add(h,cylZ(s-vec3(.10,3.12,-.33),.036,.012)-.004,STEEL);
     q=p-vec3(0,2.12,-.215);
     add(h,smoothIntersection(ell(q,vec3(.165,.19,.075)),-q.y-.17+.6*abs(q.x),.02),OCHRE);
-    q=podCoordinates(p);
-    d=podShell(q);
-    s=p; s.x=abs(s.x);
-    vec3 nozzle=nozzleCoordinates(s);
-    float bore=cylZ((nozzle-vec3(0,.075,0)).xzy,.090,.15);
-    d=max(d,-bore);
-    add(h,d,LILAC);
-    float band=podBand(q);
-    add(h,max(d-.0025,abs(band-.12)-.052),IVORY);
-    add(h,max(d-.0025,abs(band+.305)-.072),IVORY);
-    // Dark recessed throat, metal lip and a luminous injector deep inside the opening.
-    float housing=cylZ((nozzle-vec3(0,.038,0)).xzy,.118,.052)-.009;
-    add(h,max(housing,-cylZ(nozzle.xzy,.087,.20)),JOINT);
-    float rim=length(vec2(length(nozzle.xz)-.100,nozzle.y+.007))-.009;
-    add(h,rim,GOLD);
-    add(h,cylZ((nozzle-vec3(0,.125,0)).xzy,.089,.012),JOINT);
-    add(h,ell(nozzle-vec3(0,.106,0),vec3(.070,.009,.070)),CYAN);
-
-    // A short, beveled collar has a broad face for the inset hardware.
-    q=p-vec3(0,3.23,0);
-    add(h,cylZ(q.xzy,.23,.070)-.012,GOLD);
-    add(h,cylZ(p-vec3(0,3.23,.246),.044,.009)-.003,JOINT);
+    // The collar is seated in the breastplate. A broad, low undersuit yoke
+    // joins it to the shoulders; there is no exposed spherical neck joint.
+    float neckYoke=ell(p-vec3(0,2.987,.005),vec3(.350,.140,.230));
+    add(h,neckYoke,JOINT);
+    q=p-vec3(0,3.077,.090);
+    float taper=1.-.09*clamp(q.y/.044,-1.,1.);
+    float collarSide=(length(q.xz/(vec2(.181,.142)*taper))-1.)*.129;
+    float collarHole=(length(q.xz/vec2(.130,.100))-1.)*.100;
+    // The front edge dips slightly to follow the throat, rather than a level choker.
+    float collarHeight=q.y+.012*smoothstep(-.05,.12,q.z);
+    float collar=roundedExtrusion(collarSide,abs(collarHeight)-.044,.010)*.80;
+    add(h,max(collar,-collarHole),OCHRE);
+    add(h,cylZ(p-vec3(.040,3.066,.235),.022,.004)-.002,JOINT);
 
     return h;
 }
 
 vec2 scene(vec3 p) {
     vec2 h=vec2(p.y,0.);
-    float bound=box(p-vec3(0,2.15,0),vec3(1.55,2.3,2.4),.03);
+    float bound=box(p-vec3(0,2.15,0),vec3(1.65,2.3,2.4),.03);
     if(bound>.35) { add(h,bound,-1.); return h; }
     vec2 part=torsoScene(localPosition(p,0)); add(h,part.x,part.y);
     part=headScene(localPosition(p,1)); add(h,part.x*.88,part.y+20.);
@@ -571,6 +788,10 @@ vec2 scene(vec3 p) {
         part=upperArmScene(localPosition(p,arm)); add(h,part.x,part.y+20.*float(arm));
         part=forearmScene(localPosition(p,arm+1)); add(h,part.x,part.y+20.*float(arm+1));
         part=shoulderScene(localPosition(p,shoulder)); add(h,part.x,part.y+20.*float(shoulder));
+    }
+    for(int i=0;i<2;i++) {
+        part=podScene(localPosition(p,12+i),true);
+        add(h,part.x,part.y+20.*float(12+i));
     }
     return h;
 }
@@ -588,15 +809,19 @@ vec2 secondaryScene(vec3 p) {
     // Secondary rays resolve the larger forms; eyelids and grooves use local shading.
     vec2 h=vec2(p.y,0.),piece;
     vec3 q=localPosition(p,1);
-    vec3 hood=q-vec3(0,3.77,-.035);
-    float outer=ell(hood,vec3(.655,.685,.55));
-    float inner=ell(hood-vec3(0,-.01,.055),vec3(.555,.587,.49));
-    float opening=max((length((hood.xy-vec2(0,-.045))/vec2(.505,.548))-1.)*.505,.07-hood.z);
-    float head=max(max(outer,-inner),-opening);
-    head=min(head,faceSculpt(q));
-    head=min(head,cap(q,braidCenter(0.),braidCenter(.40),.095));
-    head=min(head,cap(q,braidCenter(.40),braidTip,.078));
-    add(h,head*.88,SKIN);
+    float skull=skullBound(q);
+    if(skull>.10) add(h,skull*.88,-1.);
+    else {
+        vec2 hood=helmetShell(q); add(h,hood.x*.88,hood.y);
+        add(h,skinGeometry(q)*.88,SKIN);
+    }
+    float braidBound=box(q-braidBoundsCenter,braidBoundsHalf+vec3(.10),0.);
+    if(braidBound>.10) add(h,braidBound*.88,-1.);
+    else {
+        float braid=min(cap(q,braidCenter(0.),braidCenter(.40),.095),
+                        cap(q,braidCenter(.40),braidTip,.078));
+        add(h,braid*.88,HAIR);
+    }
     piece=torsoScene(localPosition(p,0)); add(h,piece.x,piece.y);
     for(int side=0;side<2;side++) {
         int leg=2+side*2,arm=6+side*2,shoulder=10+side;
@@ -606,6 +831,9 @@ vec2 secondaryScene(vec3 p) {
         piece=forearmScene(localPosition(p,arm+1)); add(h,piece.x,piece.y);
         piece=shoulderScene(localPosition(p,shoulder)); add(h,piece.x,piece.y);
     }
+    for(int i=0;i<2;i++) {
+        piece=podScene(localPosition(p,12+i),false); add(h,piece.x,piece.y);
+    }
     return h;
 }
 float shadow(vec3 p,vec3 l,float distanceScale) {
@@ -613,22 +841,34 @@ float shadow(vec3 p,vec3 l,float distanceScale) {
     for(int i=0;i<SHADOW_STEPS;i++) {
         vec2 hit=secondaryScene(p+l*t);
         float d=hit.x;
+        // An actual blocker is fully occluded. Returning the current penumbra
+        // estimate here leaks quantized light into the nose and throat shadows.
+        if(d<.0008) return 0.;
         // Bounds accelerate traversal but do not represent shadow-casting surfaces.
         if(mod(hit.y,20.)<18.) v=min(v,7.*d/(t*distanceScale));
         // Small near-surface steps keep grazing rays from skipping narrow plate details.
         t+=clamp(d*.9,.004,.10);
-        if(d<.0008 || t>6.) break;
+        if(t>6.) break;
     }
     return clamp(v,0.,1.);
 }
-float ambientOcclusion(vec3 p,vec3 n,float distanceScale) {
+vec3 materialAlbedo(float m);
+float ambientOcclusion(vec3 p,vec3 n,float distanceScale,out vec3 bleed) {
     float v=0.,w=1.;
+    bleed=vec3(0);
     for(int i=1;i<=4;i++) {
         float t=.055*float(i);
         vec2 hit=secondaryScene(p+n*t);
-        if(mod(hit.y,20.)<18.) v+=max(t-hit.x/distanceScale,0.)*w;
+        if(mod(hit.y,20.)<18.) {
+            float separation=hit.x/distanceScale;
+            v+=max(t-separation,0.)*w;
+            // Reuse these probes for restrained neighbor-color bounce, not full GI.
+            float proximity=clamp(1.-separation/t,0.,1.);
+            bleed+=materialAlbedo(mod(hit.y,20.))*proximity*w;
+        }
         w*=.55;
     }
+    bleed*=.16;
     return clamp(1.-2.7*v,.25,1.);
 }
 struct Surface {
@@ -643,39 +883,57 @@ Surface material(float m) {
     if(m>12.5) return Surface(vec3(.065,.014,.004),.6,0.,0.,.02);
     if(m>11.5) return Surface(vec3(.28,.112,.062),.57,0.,0.,.018);
     if(m>10.5) return Surface(vec3(.36,.20,.035),.65,0.,0.,.025);
+    if(m>8.5) return Surface(vec3(.20,.23,.26),.32,.78,0.,.04);
     if(m<.5) return Surface(vec3(.38,.35,.32),.90,0.,0.,.025);
-    if(m<1.5) return Surface(vec3(.34,.15,.54),.38,0.,.20,.04);
-    if(m<2.5) return Surface(vec3(.86,.67,.45),.43,0.,.13,.04);
+    if(m<1.5) return Surface(vec3(.30,.17,.45),.36,0.,.30,.04);
+    if(m<2.5) return Surface(vec3(.86,.67,.45),.40,0.,.24,.04);
     if(m<3.5) return Surface(vec3(.025,.028,.035),.65,0.,0.,.03);
-    if(m<4.5) return Surface(vec3(.31,.126,.058),.56,0.,0.,.025);
+    if(m<4.5) return Surface(vec3(.33,.134,.047),.59,0.,0.,.022);
     if(m<5.5) return Surface(vec3(.012,.009,.007),.52,0.,0.,.025);
     if(m<6.5) return Surface(vec3(.64,.365,.095),.34,.72,.08,.04);
     if(m<7.5) return Surface(vec3(.012,.22,.29),.16,.18,.5,.04);
-    return Surface(vec3(.68,.63,.51),.12,0.,.12,.04);
+    return Surface(vec3(.84,.79,.69),.27,0.,0.,.006);
 }
-void eyeSurface(vec3 p,vec3 localView,float pixel,inout Surface surf,out float occlusion) {
+vec3 materialAlbedo(float m) { return material(m).base; }
+vec3 skinTransmission(vec3 p,vec3 normal,vec3 light) {
+    // March only the skin volume from just inside the surface to its light-facing
+    // exit. A bounded thin-feature transmission estimate, not a scattering solver.
+    vec3 origin=p-normal*.006;
+    float travel=.006;
+    for(int i=0;i<10;i++) {
+        float d=skinGeometry(origin+light*travel);
+        if(d>.0004) return exp(-travel*vec3(14.,32.,55.));
+        travel+=clamp(-d*.85,.006,.045);
+        if(travel>.28) break;
+    }
+    return vec3(0); // Opaque when this short march cannot find an exit.
+}
+void eyeSurface(vec3 p,float pixel,inout Surface surf,out float occlusion,out vec3 glints) {
+    // Authored graphic iris under the shallow eye surface. No refracted fibers.
     vec3 q=eyeCoordinates(p);
-    localView.x*=sign(p.x);
-    localView.xz=rot(-.16)*localView.xz;
-    localView.xy=rot(.10)*localView.xy;
-    vec3 ray=refract(-normalize(localView),normalize(q),1./1.336);
-    // Intersect the refracted ray with a recessed iris plane under the cornea.
-    float t=(.068-q.z)/min(ray.z,-.05);
-    vec2 iris=((q+max(t,0.)*ray).xy-vec2(-.005,-.002))*vec2(1.04,.90);
-    float radius=length(iris),a=atan(iris.y,iris.x);
-    float aa=max(pixel*1.2,.0006);
-    float irisMask=1.-smoothstep(.068-aa,.068+aa,radius);
-    float pupil=1.-smoothstep(.034-aa,.034+aa,radius);
-    float limbus=smoothstep(.058,.067,radius);
-    float fibers=.90+.075*sin(a*43.+radius*180.)+.045*sin(a*79.-radius*240.);
-    float ring=exp(-pow((radius-.041)/.010,2.));
-    vec3 brown=mix(vec3(.18,.064,.015),vec3(.32,.145,.033),ring*.65)*fibers;
-    brown*=1.-limbus*.72;
-    brown=mix(brown,vec3(.0025,.0018,.0014),pupil);
-    surf.base=mix(surf.base,brown,irisMask);
+    vec2 uv=vec2(q.x*sign(p.x),q.y)*vec2(1.,.86)-vec2(.002,.003);
+    float aa=max(pixel*1.1,.00065),radius=length(uv);
+    float irisMask=1.-smoothstep(.067-aa,.067+aa,radius);
+    float upperShade=smoothstep(-.045,.043,uv.y);
+    vec3 amber=mix(vec3(.22,.085,.022),vec3(.040,.014,.006),upperShade);
+    // A curved honey-colored lower band, cut away by the offset dark iris center.
+    float crescent=(1.-smoothstep(.057-aa,.057+aa,radius))
+                  *smoothstep(.047-aa,.047+aa,length(uv-vec2(0,.018)));
+    amber=mix(amber,vec3(.48,.235,.055),crescent*.68);
+    amber*=1.-.76*smoothstep(.058,.067,radius);
+    float pupilRadius=length(uv/vec2(.032,.046));
+    float pupil=1.-smoothstep(1.-aa/.030,1.+aa/.030,pupilRadius);
+    amber=mix(amber,vec3(.006,.003,.002),pupil);
+    surf.base=mix(vec3(.84,.79,.69),amber,irisMask);
     float upper=eyelidHeights(q.x).x;
-    occlusion=.48+.52*smoothstep(.002,.075,upper-q.y);
+    occlusion=.38+.62*smoothstep(.002,.078,upper-q.y);
     surf.base*=occlusion;
+    // Both eyes share the same illustrated light direction; highlights are emission
+    // so the graphic design survives the studio lighting and the iris stays dark.
+    float primary=length((uv-vec2(-.021,.025))/vec2(.011,.015));
+    float spot=1.-smoothstep(1.-aa/.011,1.+aa/.011,primary);
+    float dotGlint=1.-smoothstep(.006-aa,.006+aa,length(uv-vec2(.029,-.035)));
+    glints=vec3(2.8,2.65,2.4)*(spot+.60*dotGlint)*irisMask;
 }
 
 // Analytic panel lines and fastener recesses, evaluated only at a surface hit.
@@ -737,17 +995,6 @@ vec2 armorDetail(vec3 p,float m) {
         seam=abs(shoulderProfile(q.xy)+.032);
         rivet=length(q.xy-vec2(.315,-.20));
         return vec2(seam,rivet);
-    } else if(p.z<-.38 && p.y>2.15) {
-        q=podCoordinates(p);
-        float angle=atan(q.x/.27,q.z/.18);
-        seam=abs(abs(angle)-2.48)*.20;
-        seam=min(seam,abs(podBand(q)+.205));
-        // A small inset service hatch sits on the broad lower ivory panel.
-        vec2 hatch=q.xy-vec2(.075,-.29);
-        float hatchEdge=box(vec3(hatch,0),vec3(.045,.017,.1),.006);
-        seam=min(seam,abs(hatchEdge));
-        rivet=length(vec2(q.x+.105,q.y-.185));
-        return vec2(seam,rivet);
     } else if(p.y>2.56 && q.x<.43) {
         // A shallow contour follows the upper lip of the ivory chest inset.
         seam=abs(p.y-(2.965-.082*exp(-pow(p.x/.18,2.))));
@@ -761,7 +1008,15 @@ float armorHeight(vec2 d) {
     float recess=exp(-pow(d.y/.008,4.));
     return -.0015*groove-.002*recess;
 }
-vec2 detailAt(vec3 p,float m,int part) { return armorDetail(localPosition(p,part),m); }
+vec2 detailAt(vec3 p,float m,int part) {
+    vec3 q=localPosition(p,part);
+    if(part>=12) {
+        float u=q.y+.22*(q.x-.05)+.36*pow(max(q.x-.05,0.),2.);
+        float seam=min(abs(u-2.92),min(abs(u-2.70),min(abs(u-2.48),abs(u-2.24))));
+        return vec2(seam,length(vec2(q.x-.24,q.y-2.62)));
+    }
+    return armorDetail(q,m);
+}
 float hash31(vec3 p) {
     p=fract(p*.1031); p+=dot(p,p.yzx+33.33);
     return fract((p.x+p.y)*p.z);
@@ -795,22 +1050,28 @@ void armorWear(vec3 p,vec3 n,vec2 detail,float pixel,int part,inout Surface surf
             contact=.40+.6*smoothstep(.33,.65,q.z);
             dust=(1.-smoothstep(.07,.24,q.y))*.09;
         } else if(q.y<1.42) {
-            edge=min(abs(ankleOpening(q.xy)),abs(q.y-1.41+.10*q.z));
+            vec3 shin=q;
+            shin.z-=.025+.035*sin(PI*clamp((1.41-q.y)/1.12,0.,1.));
+            float side=shinSection(shin,0.);
+            edge=max(min(abs(ankleOpening(q.xy)),abs(q.y-1.41+.10*q.z)),abs(side));
             contact=.24;
         } else { edge=min(edge,.7*abs(q.y-1.58)); contact=.45; }
     } else if(part==7 || part==9) {
         q=gauntletCoordinates(p);
-        edge=min(edge,min(abs(q.y+.30-.12*q.x),abs(q.y-.31+.28*q.x)));
+        float side=curvedSection(q.xz,vec2(.177,.185)+.055*smoothstep(-.32,.22,q.y));
+        float end=min(abs(q.y+.32-.12*q.x),abs(q.y-.31+.28*q.x));
+        edge=min(detail.x+.010,max(end,abs(side)));
         contact=.34;
+    } else if(part>=12) {
+        float u=q.y+.22*(q.x-.05)+.36*pow(max(q.x-.05,0.),2.);
+        float edge=min(min(abs(q.x-.048),abs(u-2.02)),abs(u-3.15));
+        contact=.15;
     } else if(part>=10) {
         q-=vec3(.62,3.,.015);
-        edge=min(edge,abs(shoulderProfile(q.xy)));
+        float radius=.31*(1.-.5*smoothstep(.05,.45,-q.y));
+        float side=curvedSection(vec2(q.x+.02,q.z),vec2(.5,radius));
+        edge=min(edge,max(abs(shoulderProfile(q.xy)),abs(side)));
         contact=.14;
-    } else if(part==0 && p.z<-.38 && p.y>2.12) {
-        q=podCoordinates(p);
-        edge=min(abs(q.y+.445+.65*q.x-.20*q.z),
-                 min(abs(abs(podBand(q)-.12)-.052),abs(abs(podBand(q)+.305)-.072)));
-        contact=.19;
     } else if(part==1) {
         q=p-vec3(0,3.77,-.035);
         float opening=(length((q.xy-vec2(0,-.045))/vec2(.505,.548))-1.)*.505;
@@ -880,7 +1141,11 @@ vec3 directLight(Surface s,vec3 n,vec3 v,vec3 l,vec3 radiance,float visibility,f
     float gv=nv/(nv*(1.-k)+k),gl=nl/(nl*(1.-k)+k);
     vec3 spec=distribution(nh,rough)*gv*gl*f/max(4.*nl*nv,.001);
     float diffuse=mix(nl,max((dot(n,l)+.30)/1.30,0.),skin);
+    float cel=mix(.16,.95,smoothstep(-.035,.10,dot(n,l)));
+    diffuse=mix(diffuse,cel,float(CEL_STYLE));
     vec3 result=(1.-f)*(1.-s.metal)*s.base*(diffuse/PI);
+    float terminator=exp(-pow(dot(n,l)/.10,2.));
+    result+=float(CEL_STYLE)*s.base*vec3(.11,.022,.005)*terminator;
     result+=spec*nl;
     float coat=distribution(nh,.25)*gv*gl/max(4.*nv,.001);
     result+=s.coat*.04*coat;
@@ -902,8 +1167,8 @@ vec3 studioReflection(vec3 r,float roughness) {
     return env;
 }
 vec3 hairTangent(vec3 p) {
-    if(p.x<-.32 && p.y<3.5) {
-        float t=clamp(RUN_POSE==1?(-.42-p.x)/.70:(3.48-p.y)/.96,0.,1.);
+    if(p.x<-.32 && p.y<3.55) {
+        float t=clamp(RUN_POSE==1?(-.365-p.x)/.855:(3.565-p.y)/1.045,0.,1.);
         return normalize(braidCenter(t+.005)-braidCenter(t-.005));
     }
     return normalize(vec3(.85,sign(p.x)*-.6,.15));
@@ -911,8 +1176,8 @@ vec3 hairTangent(vec3 p) {
 vec2 jetInterval(vec3 ro,vec3 rd) {
     // Intersect only a tight local volume; most screen pixels do no plume work.
     vec3 inv=1./(sign(rd+vec3(1e-8))*max(abs(rd),vec3(1e-7)));
-    vec3 a=(vec3(-.23,-.88,-.23)-ro)*inv;
-    vec3 b=(vec3(.23,.12,.23)-ro)*inv;
+    vec3 a=(vec3(-.19,-.64,-.19)-ro)*inv;
+    vec3 b=(vec3(.19,.12,.19)-ro)*inv;
     vec3 lo=min(a,b),hi=max(a,b);
     return vec2(max(lo.x,max(lo.y,lo.z)),min(hi.x,min(hi.y,hi.z)));
 }
@@ -925,16 +1190,16 @@ vec4 integrateJet(vec3 ro,vec3 rd,vec2 interval,float solidDepth,float seed,floa
     for(int i=0;i<32;i++) {
         vec3 p=ro+rd*(begin+(float(i)+.5+sampleOffset*.65)*stepLength);
         float axial=max(-p.y,0.);
-        float tail=1.-smoothstep(.42,.84,axial);
+        float tail=1.-smoothstep(.24,.61,axial);
         float ignition=1.-smoothstep(.055,.115,p.y);
         // Advected noise deforms the gas, with increasing breakup downstream.
         vec3 flow=vec3(p.x*39.,axial*15.-time*9.,p.z*39.+seed*7.);
         float turbulence=noise3(flow),fine=noise3(flow*1.93+vec3(7,3,-5));
         vec2 center=.012*axial*vec2(sin(axial*16.-time*8.),cos(axial*13.-time*11.));
-        float width=.065*(1.-.50*clamp(axial/.8,0.,1.));
+        float width=.059*(1.-.52*clamp(axial/.61,0.,1.));
         width*=1.+.11*sin(axial*34.-.6*sin(time*4.));
         float radius=length(p.xz-center)/width;
-        radius+=(turbulence-.5)*(.22+.95*axial);
+        radius+=(turbulence-.5)*(.22+1.7*axial);
         float core=exp(-3.4*radius*radius)*tail*ignition;
         float sheath=exp(-1.05*radius*radius)*tail*ignition;
         sheath*=mix(.60,1.35,turbulence)*mix(.75,1.2,fine);
@@ -942,9 +1207,9 @@ vec4 integrateJet(vec3 ro,vec3 rd,vec2 interval,float solidDepth,float seed,floa
         float cells=pow(.5+.5*cos(axial*37.-.45*sin(time*3.)),7.);
         cells*=exp(-7.*radius*radius)*exp(-2.8*axial)*tail*ignition;
         float pulse=.94+.06*sin(time*17.);
-        vec3 emission=(vec3(.025,.72,1.95)*sheath+vec3(.30,2.3,3.8)*core
+        vec3 emission=(vec3(.008,.46,1.25)*sheath+vec3(.24,2.3,3.8)*core
                        +vec3(2.8,3.4,3.8)*cells)*pulse*16.;
-        float extinction=(.45*sheath+core)*2.4;
+        float extinction=(.45*sheath+core)*8.;
         float segment=exp(-extinction*stepLength);
         radiance+=transmission*emission*(1.-segment)/max(extinction,.0001);
         transmission*=segment;
@@ -953,14 +1218,13 @@ vec4 integrateJet(vec3 ro,vec3 rd,vec2 interval,float solidDepth,float seed,floa
 }
 vec3 compositeJets(vec3 col,vec3 ro,vec3 rd,float solidDepth,vec2 sampleOffset) {
     if(JETS==0) return col;
-    ro=localPosition(ro,0); rd=partFrame[0]*rd;
-    vec3 a=nozzleCoordinates(ro),ad=nozzleCoordinates(ro+rd)-a;
-    ro.x=-ro.x; rd.x=-rd.x;
-    vec3 b=nozzleCoordinates(ro),bd=nozzleCoordinates(ro+rd)-b;
+    vec3 a=nozzleCoordinates(localPosition(ro,12));
+    vec3 ad=nozzleCoordinates(localPosition(ro+rd,12))-a;
+    vec3 b=nozzleCoordinates(localPosition(ro,13));
+    vec3 bd=nozzleCoordinates(localPosition(ro+rd,13))-b;
     vec2 ia=jetInterval(a,ad),ib=jetInterval(b,bd);
     vec4 left=integrateJet(a,ad,ia,solidDepth,0.,sampleOffset.x+sampleOffset.y*.5);
     vec4 right=integrateJet(b,bd,ib,solidDepth,1.73,sampleOffset.x+sampleOffset.y*.5);
-    // Disjoint plumes are composited in camera order, in linear light.
     if(ia.x<ib.x) { col=right.rgb+right.a*col; col=left.rgb+left.a*col; }
     else { col=left.rgb+left.a*col; col=right.rgb+right.a*col; }
     return col;
@@ -975,7 +1239,7 @@ vec3 render(vec2 uv,vec2 lightSample) {
     }
     vec3 target=vec3(0,2.22,0);
     float distance=11.8;
-    if(CLOSE_UP==1) { target=vec3(0,3.54,.06); distance=4.8; }
+    if(CLOSE_UP==1) { target=vec3(0,3.46,.06); distance=4.8; }
     if(PACK_VIEW==1) { target=vec3(0,2.63,-.32); distance=6.8; }
     vec3 ro=target+distance*vec3(sin(yaw)*cos(pitch),sin(pitch),cos(yaw)*cos(pitch));
     vec3 ww=normalize(target-ro),uu=normalize(cross(ww,vec3(0,1,0)));
@@ -983,11 +1247,28 @@ vec3 render(vec2 uv,vec2 lightSample) {
     vec3 rd=normalize(uv.x*uu+uv.y*vv+2.25*ww);
     vec3 col=mix(vec3(.49,.455,.415),vec3(.34,.32,.31),smoothstep(-.5,.8,uv.y));
     vec3 background=col;
-    float t=0.; vec2 h=vec2(1,0); bool hit=false;
+    float t=0.,radius=0.,stepLength=0.,contour=100.; vec2 h=vec2(1,0); bool hit=false;
     for(int i=0;i<MAX_STEPS;i++) {
-        vec3 p=ro+rd*t; h=scene(p);
-        if(h.x<.0009*max(1.,t*.16)) { hit=true; break; }
-        t+=max(h.x*.78,.00035);
+        float candidate=t+stepLength;
+        h=scene(ro+rd*candidate);
+        float nextRadius=h.x*.78;
+        // Keinert et al., Enhanced Sphere Tracing: a speculative segment must be
+        // covered by overlapping unbounding spheres. Otherwise retry a safe step.
+        // https://doi.org/10.2312/stag.20141233
+        if(RELAXED_TRACE==1 && stepLength>radius*1.001 &&
+           (nextRadius<0. || stepLength>radius+nextRadius)) {
+            stepLength=radius;
+            continue;
+        }
+        t=candidate;
+        if(h.y>0. && mod(h.y,20.)<18.)
+            contour=min(contour,max(h.x,0.)/max(candidate/(iResolution.y*2.25),.0004));
+        float hitEpsilon=.0009*max(1.,t*.16);
+        // Resolve the small neck silhouette more closely than the broad armor.
+        if(h.y==20.+SKIN && localPosition(ro+rd*t,1).y<3.48) hitEpsilon*=.20;
+        if(h.x<hitEpsilon) { hit=true; break; }
+        radius=max(nextRadius,.00035);
+        stepLength=radius*(RELAXED_TRACE==1?1.30:1.);
         if(t>80.) break;
     }
     if(hit) {
@@ -999,22 +1280,42 @@ vec3 render(vec2 uv,vec2 lightSample) {
         h.y-=20.*float(part);
         Surface surf=material(h.y);
         float pixel=t/(iResolution.y*2.25);
-        if(h.y==LILAC || h.y==IVORY) finishArmor(p,ng,h.y,pixel,part,n,surf);
+        if(h.y==LILAC || h.y==IVORY) {
+            finishArmor(p,ng,h.y,pixel,part,n,surf);
+            float grazing=pow(1.-max(dot(n,v),0.),3.5);
+            vec3 pearl=h.y==LILAC?vec3(.43,.18,.36):vec3(.90,.75,.51);
+            surf.base=mix(surf.base,pearl,grazing*.36*(1.-surf.metal));
+            // The broad plate faces carry a restrained sky/ground value separation.
+            surf.base*=.88+.12*smoothstep(-.55,.65,ng.y);
+        }
         float skin=(h.y==SKIN || h.y==LIP)?1.:0.;
         if(skin>.5) {
-            vec2 cheekP=(vec2(abs(paintP.x),paintP.y)-vec2(.245,3.58))/vec2(.12,.075);
+            vec2 cheekP=(vec2(abs(paintP.x),paintP.y)-vec2(.255,3.595))/vec2(.11,.072);
             float cheek=exp(-dot(cheekP,cheekP));
-            surf.base=mix(surf.base,vec3(.36,.102,.066),cheek*.23);
+            surf.base=mix(surf.base,vec3(.39,.105,.047),cheek*.25);
+            float mouthX=clamp(paintP.x,-.133,.133);
+            vec2 lipP=vec2(paintP.x/.115,(paintP.y-smileHeight(mouthX)+.014)/.012);
+            float lip=exp(-dot(lipP,lipP))*smoothstep(.36,.47,paintP.z);
+            surf.base=mix(surf.base,vec3(.43,.158,.069),lip*.55);
             // Keep broad facial lighting smooth while preserving the modeled nose and lips.
-            vec3 guide=normalize((paintP-vec3(0,3.730,.250))/vec3(.414*.414,.38*.38,.285*.285));
+            vec3 guide=normalize((paintP-FACE_CENTER)/(FACE_RADII*FACE_RADII));
             guide=normalize(transpose(partFrame[part])*guide);
             float nose=exp(-dot((paintP.xy-vec2(0,3.62))/vec2(.085,.17),(paintP.xy-vec2(0,3.62))/vec2(.085,.17)));
             float front=smoothstep(.36,.50,paintP.z);
-            if(h.y==SKIN) n=normalize(mix(n,guide,.24*front*(1.-nose)));
+            if(h.y==SKIN) n=normalize(mix(n,guide,.10*front*(1.-nose)*(1.-lip)));
         }
-        float eyeOcclusion=1.;
-        if(h.y==EYE) eyeSurface(paintP,partFrame[part]*v,pixel,surf,eyeOcclusion);
-        float ao=ambientOcclusion(p,ng,gradient.w);
+        float eyeOcclusion=1.; vec3 eyeGlints=vec3(0);
+        if(h.y==EYE) {
+            eyeSurface(paintP,pixel,surf,eyeOcclusion,eyeGlints);
+            // The cornea has its own optical normal; socket CSG must not flatten it.
+            vec3 cornea=normalize(eyeCoordinates(paintP)/(EYE_RADII*EYE_RADII));
+            cornea.xy=rot(-.055)*cornea.xy;
+            cornea.xz=rot(.21)*cornea.xz;
+            cornea.x*=sign(paintP.x);
+            n=normalize(transpose(partFrame[part])*cornea);
+        }
+        vec3 bleed;
+        float ao=ambientOcclusion(p,ng,gradient.w,bleed);
         if(skin>.5) ao=mix(ao,1.,.35);
         if(h.y==EYE) ao=max(ao,.70);
         vec3 key=normalize(vec3(-3.,5.,4.));
@@ -1029,36 +1330,41 @@ vec3 render(vec2 uv,vec2 lightSample) {
         col+=directLight(surf,n,v,rim,vec3(1.7,1.45,1.9),ao,0.);
         vec3 ambient=mix(vec3(.15,.105,.08),vec3(.26,.25,.29),n.y*.5+.5);
         col+=surf.base*(1.-surf.metal)*ambient*ao;
-        if(JETS==1 && h.y!=SKIN && h.y!=EYE && h.y!=HAIR) {
-            // A restrained, art-directed cyan bounce on aft-facing nearby hardware.
-            vec3 rear=localPosition(p,0),rearNormal=normalize(partFrame[0]*n);
-            vec3 source=vec3(sign(rear.x)*.385,2.12,-.637)-rear;
-            float reach=length(source);
-            float bounce=max(dot(rearNormal,source/max(reach,.001)),0.);
-            bounce*=exp(-reach*4.)/(.10+reach*reach)*(1.-smoothstep(-.34,-.20,rear.z));
-            col+=surf.base*vec3(.015,.19,.28)*bounce*ao;
+        col+=surf.base*(1.-surf.metal)*bleed;
+        if(skin>.5 && dot(n,rim)<-.1) {
+            vec3 localLight=normalize(partFrame[part]*rim);
+            vec3 localNormal=normalize(partFrame[part]*ng);
+            vec3 transmission=skinTransmission(paintP,localNormal,localLight);
+            float backLight=pow(max(dot(-n,rim),0.),1.5);
+            col+=vec3(.36,.095,.028)*transmission*backLight;
         }
-        // Warm skin bounce is a deliberate illustration approximation, not SSS tracing.
-        col+=skin*surf.base*vec3(.20,.085,.033)*(1.-max(dot(n,key),0.))*ao;
+        if(JETS==1 && skin<.5 && h.y!=EYE && h.y!=HAIR) {
+            // Restrained nearby cyan bounce follows the two moving injectors.
+            float bounce=0.;
+            for(int i=0;i<2;i++) {
+                vec3 tip=vec3(.25,2.05,-.345);
+                vec3 source=transpose(partFrame[12+i])*(tip-partOffset[12+i])-p;
+                float reach=length(source);
+                float facing=max(dot(n,source/max(reach,.001)),0.);
+                bounce+=facing*exp(-reach*5.)/(.15+reach*reach);
+            }
+            col+=surf.base*vec3(.010,.095,.14)*bounce*ao;
+        }
         vec3 f0=mix(vec3(surf.specular),surf.base,surf.metal);
         vec3 f=f0+(max(vec3(1.-surf.roughness),f0)-f0)*pow(1.-max(dot(n,v),0.),5.);
         float specAO=clamp(pow(ao,1.+surf.roughness),0.,1.);
-        col+=studioReflection(reflect(-v,n),surf.roughness)*f*specAO*.75;
-        if(h.y==EYE) {
-            // These catchlights follow the cornea, camera and studio lights.
-            vec3 reflected=reflect(-v,n);
-            float keyReflection=softbox(reflected,key,vec2(.115,.16),.014);
-            float fillReflection=softbox(reflected,fill,vec2(.045,.08),.012);
-            col+=vec3(2.8,2.65,2.4)*keyReflection*eyeOcclusion;
-            col+=vec3(.55,.62,.75)*fillReflection;
-        }
+        col+=studioReflection(reflect(-v,n),surf.roughness)*f*specAO*(h.y==EYE?.08:.75);
+        if(h.y==EYE) col+=eyeGlints;
         if(h.y==HAIR && (abs(paintP.x)>.31 || paintP.y>3.94)) {
             vec3 tangent=normalize(transpose(partFrame[part])*hairTangent(paintP));
             vec3 halfVector=normalize(key+v);
+            // Two shifted, bounded sheen lobes approximate surface and internal reflection.
             float th=dot(tangent,halfVector);
-            float sheen=pow(max(1.-th*th,0.),45.);
+            float primary=pow(max(1.-pow(th+.05,2.),0.),65.);
+            float secondary=pow(max(1.-pow(th-.10,2.),0.),18.);
             float strand=.90+.10*sin(dot(paintP,vec3(145.,53.,89.)));
-            col+=vec3(.065,.056,.047)*sheen*strand*max(dot(n,key),0.)*sh;
+            col+=(vec3(.044,.041,.038)*primary+vec3(.037,.025,.014)*secondary)
+                  *strand*max(dot(n,key),0.)*sh;
         }
         if(h.y==CYAN) {
             // Dark lens edges and a pale luminous center retain the optic's volume.
@@ -1074,12 +1380,18 @@ vec3 render(vec2 uv,vec2 lightSample) {
             col=mix(col,background,smoothstep(14.,45.,t));
         }
     }
+    if(INK==1 && (!hit || h.y<.5)) {
+        // Only missed/grazed character surfaces can ink the floor or background.
+        float ink=1.-smoothstep(.15,.55,contour);
+        col=mix(col,vec3(.025,.018,.032),ink*.8);
+    }
     return compositeJets(col,ro,rd,hit?t:80.,lightSample);
 }
 void mainImage(out vec4 fragColor,in vec2 fragCoord) {
     float blink=exp(-pow((fract((iTime+1.1)/5.1)-.50)/.023,4.));
     eyeOpen=ANIMATE_FACE==1?1.-.98*blink:1.;
     preparePose();
+    preparePack();
     prepareHair();
     prepareBraid();
     vec3 color=vec3(0);
@@ -1089,10 +1401,11 @@ void mainImage(out vec4 fragColor,in vec2 fragCoord) {
         color+=render(uv,offset);
     }
     color/=float(AA*AA);
-    // Tone mapping follows linear-light integration, including corneal highlights.
+    // Tone mapping follows linear-light integration, including illustrated eye glints.
     color=(color*(2.51*color+.03))/(color*(2.43*color+.59)+.14);
     color=pow(max(color,0.),vec3(1./2.2));
     vec2 uv=(fragCoord-.5*iResolution.xy)/iResolution.y;
     color*=1.-.14*dot(uv,uv);
+    color+=(hash31(vec3(fragCoord,17.))-.5)/255.;
     fragColor=vec4(color,1.);
 }

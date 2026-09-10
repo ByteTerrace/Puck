@@ -39,6 +39,7 @@ half — the reach a whole creation implies, shapes and text runs together.
 | Torus | major 1, minor 0.4 | scaled per axis |
 | Prism | XY profile extruded along Z | profile X/Y half-extents, extrusion half-depth |
 | Superellipsoid | radii (1,1,1), `exponent` (default 2) | radius per axis |
+| Sweep | a quadratic Bezier `curve` (creation-unit control points/radii, NOT a unit shape) | must be uniform; bakes onto the curve's own lengths |
 
 A `Prism` shape's optional `taper` is its top width divided by its bottom width:
 0 gives a triangle, 1 a rectangle, and omission uses 0.5. Rotate the shape to
@@ -79,6 +80,19 @@ A shape authored `type: "Superellipsoid"` generalizes `Ellipsoid` with an
 spellings then agree bit-for-bit). Larger exponents round the solid toward a
 box. Exact and 1-Lipschitz for the whole admitted range, so — unlike
 `Ellipsoid` — it earns no separate march correction.
+
+A shape authored `type: "Sweep"` requires a `curve` (`ShapeCurveDocument`): a
+quadratic Bezier `a`/`b`/`c` (each a literal `[x,y,z]` or a
+`state.<row>[.<key>]` reference) swept with a radius tapering between
+`radiusStart`/`radiusEnd` plus a mid-span `bulge`, optionally 1-4 `strands`
+orbiting the curve at `strandOffset` and rate `twist` — the study's hair locks
+(one strand) and braid (three, `twist: 4`). `curve` is admitted only on, and
+required on, this type; the curve's own control points and radii already carry
+creation-unit dimensions, so `scale` must be uniform. Not a closed solid: no
+collider, no panel/trims/flare/shear/bumps/domain. `bulge`/the radius taper/
+`strandOffset` are each capped as a ratio to the authored radii, past which the
+shape's field can no longer be proven conservative — see the sdf-world skill's
+`Sweep` row for the exact ratios and what they guard.
 
 Animated and static stamps use the same profile. The deterministic field
 supports trapezoids, rounded rectangles, chamfered rectangles, convex
@@ -458,6 +472,30 @@ shape outright (no collider, not even a plain one — unlike Panel/Trims, which
 emit their host shape's own collider unchanged and only skip their second
 copy), and `WorldDefinitionValidator`'s solid-placement collider count does
 the same. Verified by `ShapeDetailLawTests`.
+
+## Bounded volumes (`volumes[]`)
+
+`CreationDocument.Volumes` (`VolumeDocument`, at most
+`SdfProgramBuilder.MaxVolumes`) declares participating media beside the
+shapes: a `plume` is a tapering, advected emissive column inside an
+oriented box (`halfExtent`, creation units) whose mouth is the box's +Y
+face, flowing toward −Y. A volume is not a shape — it emits no instruction,
+carves nothing, and has no collider; the renderer ray-marches it after the
+opaque surface is shaded and clips it against that depth.
+
+`parent` names the shape whose dynamic slot the volume rides, so a nozzle's
+plume follows the nozzle's live pose; the volume's `position`/`rotation` are
+then shape-local, and `CreationFrame.ToEngine` leaves them alone because the
+shape's own author-frame flip already carries them. A root-riding volume
+(`parent` null) converts like a shape. `thrust` scales the emission by the
+riding slot's `lanes.thrust` render lane. `VolumeDocument.ToVolume` is the
+one door both emission paths use: `Client.WorldStampPool.PackTransforms`
+packs a live registration's volumes each frame, and
+`Client.WorldPlacementStamper.EmitStatic` bakes a static placement's with the
+placement frame and no slot. `CreationCanonicalizer.ValidateVolumes` refuses
+an unknown kind, a parent naming no shape, a non-positive box, steps outside
+`SdfVolume.MinSteps..MaxSteps`, a non-hex colour, or more volumes than the
+ceiling, each by name. Verified by `VolumeLawTests`.
 
 ## Sculpting: authoring creations in code (`Sculpting/`)
 

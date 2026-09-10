@@ -56,10 +56,12 @@ public sealed class ShapeFlareLawTests {
         );
     }
     private static SdfInstruction FlareInstruction(SdfProgram program) =>
-        program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.FlareY));
+        program.Instructions.Single(predicate: static instruction => (instruction.Op == SdfOp.AxialProfile));
 
+    // Sweep is not a closed solid: its curve facet refuses the warp facets by name (ShapeCurveLawTests), so this
+    // every-primitive admission law ranges over the closed set only.
     public static IEnumerable<object[]> EveryPrimitive() =>
-        Enum.GetValues<SdfSolidPrimitive>().Select(selector: static type => new object[] { type });
+        Enum.GetValues<SdfSolidPrimitive>().Where(predicate: static type => (type != SdfSolidPrimitive.Sweep)).Select(selector: static type => new object[] { type });
 
     [Theory]
     [MemberData(memberName: nameof(EveryPrimitive))]
@@ -139,7 +141,7 @@ public sealed class ShapeFlareLawTests {
         var atScaleOne = EmitStatic(shape: Shape(SdfSolidPrimitive.Box, Vector3.One, Flare), stampScale: 1f);
         var instructions = atScaleTwo.Instructions.ToList();
         var scaleIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.Scale));
-        var flareIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.FlareY));
+        var flareIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.AxialProfile));
 
         Assert.Equal(expected: FlareInstruction(program: atScaleOne).Data0, actual: FlareInstruction(program: atScaleTwo).Data0);
         Assert.Equal(expected: FlareInstruction(program: atScaleOne).Data1, actual: FlareInstruction(program: atScaleTwo).Data1);
@@ -216,7 +218,7 @@ public sealed class ShapeFlareLawTests {
         var atScaleOne = EmitPool(shape: Shape(SdfSolidPrimitive.Box, Vector3.One, Flare, domain: domain), bodyScale: 1f);
         var instructions = atScaleTwo.Instructions.ToList();
         var scaleIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.Scale));
-        var flareIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.FlareY));
+        var flareIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.AxialProfile));
 
         Assert.Equal(expected: FlareInstruction(program: atScaleOne).Data0, actual: FlareInstruction(program: atScaleTwo).Data0);
         Assert.True(condition: ((scaleIndex >= 0) && (scaleIndex < flareIndex)), userMessage: "the domain chain's Scale op must precede the flare.");
@@ -269,12 +271,12 @@ public sealed class ShapeFlareLawTests {
 
     private static void AssertFlareIsScoped(SdfProgram program) {
         var instructions = program.Instructions.ToList();
-        var flareIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.FlareY));
+        var flareIndex = instructions.FindIndex(match: static instruction => (instruction.Op == SdfOp.AxialProfile));
         var shapeIndex = instructions.FindIndex(startIndex: flareIndex, match: static instruction => (instruction.Op == SdfOp.ShapeBlend));
         var pushIndex = instructions.FindLastIndex(startIndex: shapeIndex, match: static instruction => (instruction.Op == SdfOp.PushField));
         var popIndex = instructions.FindIndex(startIndex: shapeIndex, match: static instruction => (instruction.Op == SdfOp.PopField));
 
-        Assert.True(condition: (flareIndex >= 0), userMessage: "no FlareY emitted.");
+        Assert.True(condition: (flareIndex >= 0), userMessage: "no AxialProfile emitted.");
         Assert.True(condition: (shapeIndex > flareIndex), userMessage: "no shape follows the flare.");
         Assert.True(condition: ((pushIndex >= 0) && (pushIndex < shapeIndex)), userMessage: "the flared shape has no PushField before it.");
         Assert.True(condition: (popIndex > shapeIndex), userMessage: "the flared shape has no PopField after it.");
@@ -285,6 +287,6 @@ public sealed class ShapeFlareLawTests {
     public void ThePoolsProbeEmitsAFlareInstructionEvenWithoutOneAuthored() {
         var program = EmitPool(shape: Shape(SdfSolidPrimitive.Box, Vector3.One, flare: null), bodyScale: 1f, probeWorstCase: true);
 
-        Assert.Contains(collection: program.Instructions, filter: static instruction => (instruction.Op == SdfOp.FlareY));
+        Assert.Contains(collection: program.Instructions, filter: static instruction => (instruction.Op == SdfOp.AxialProfile));
     }
 }

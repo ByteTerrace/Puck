@@ -205,6 +205,25 @@ state, matched group, and precedence winner. A missing row contributes no match,
 which keeps portable profile layers usable across worlds. When the winning group
 changes, held commands and chord/page latches from the old group are cleared.
 
+## Shader studies
+
+A `views.studies` row (`WorldViewStudy`: `name`, `source`, `camera`, `timeScale`)
+authors a Shadertoy-dialect shader — `void mainImage(out vec4
+fragColor, in vec2 fragCoord)`, `source` resolved relative to the document's
+own directory — as a compiled child view a `views.layouts` slot's `study`
+field names instead of a `camera`. A slot names at most one of the two.
+Under `#define PUCK_STUDY 1` the study additionally reads the paired authored
+camera's `iCameraPos`/`iCameraTarget`/`iCameraUp`/`iCameraFov`, so `camera`
+lets a study render from the same eye as an SDF pane beside it (`camera:
+null` hands the study `iCameraFov` 0 so it keeps its own `iMouse` orbit, fed
+by the window's pointer in the slot's pixel space). `views.studyToolchain`
+names the directory holding `glslang`/`spirv-cross`/`dxc`; null resolves each
+by bare name on the search path. The `study.load`/`study.reload`/
+`study.watch`/`study.time`/`study.status` console verbs (`WorldStudyCommandModule`)
+own the row and its live clock/watch state; `study.world.json` is a
+fullscreen-study demo world and `moth.world.json`'s `study` layout is a
+split-screen pairing beside its `three-quarter` camera.
+
 ## The console
 
 The console is the control plane: process stdin in, results on stdout,

@@ -40,6 +40,9 @@ what each one measures, so an authored scale of `(1,1,1)` is its unit size. It
 also answers whether a given scale emits at all —
 `SdfSolidGeometry.TryValidateScaledPrimitive` is the predicate a document
 validator asks before an authoring path reaches an emission that would throw.
+`Sweep` is the one member outside that unit-size law: its curve's own control
+points and radii already carry creation-unit dimensions directly (see
+`SdfSolidGeometry.SweepReach`), so only a uniform scale bakes onto it.
 
 `SdfProgramBuilder` builds an `SdfProgram` as an ordered stream of point
 transforms, field operations, shapes, and materials — reset/translate/rotate,
@@ -119,7 +122,8 @@ warps (`BendX/Y/Z`, `TwistY`, `LogSphere`, `CellJitter`, `RepeatPolar`,
 transcendentals or texture sampling (`RegularPolygon`, `Star`, `Ellipse`,
 `Glyph`), plus `SampledRegion` (its brick pool is an engine resource unavailable
 to the headless evaluator). `RoundedRectangle`, `ChamferedRectangle`,
-`Superellipsoid`, `ConvexPolygon`,
+`Superellipsoid`, `ConvexPolygon`, `Sweep` (strands == 1 only — a strand count
+above 1 is render-only and refused for deterministic field contact by name),
 `Repeat`/`RepeatLimited`/`SymmetryPlane`/`Elongate`/`Onion`/`Dilate` and
 isotropic `Scale` interpret directly as 1-Lipschitz operations.
 

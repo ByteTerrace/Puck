@@ -196,6 +196,70 @@ public sealed class SdfMaterialLawTests {
             expected: material.Coat
         );
     }
+    [Fact]
+    public void MaterialLayersPackAuthoredSurfacesAndAllStops() {
+        var stages = new SdfRevealStage[] { new(0.3f, new(new(0.1f, 0.2f, 0.3f), 0.7f, 0.1f)), new(0.8f, new(Vector3.One, 0.2f, 1f)) };
+        var inset = new SdfInset(new(1f, 2f, 3f), Quaternion.Identity, 0.1f, 1f,
+            new([new(0f, Vector3.Zero), new(0.1f, Vector3.UnitX), new(0.2f, Vector3.UnitY), new(0.3f, Vector3.UnitZ)]));
+        var material = new SdfMaterial(Vector3.One, Inset: inset,
+            Weathering: new(Edge: 1f, Under: stages, Lane: 3, Seed: uint.MaxValue));
+        var program = new SdfProgram([Shape()], [material]);
+        var words = program.Words;
+        var offset = (int)words[3] * 4;
+        Assert.Equal(4f, BitConverter.UInt32BitsToSingle(words[offset + 6 * 4 + 1]));
+        Assert.Equal(0.3f, BitConverter.UInt32BitsToSingle(words[offset + 11 * 4 + 3]));
+        Assert.Equal(uint.MaxValue, words[offset + 13 * 4]);
+        Assert.Equal(3f, BitConverter.UInt32BitsToSingle(words[offset + 13 * 4 + 3]));
+        Assert.Equal(0.8f, BitConverter.UInt32BitsToSingle(words[offset + 16 * 4 + 3]));
+        Assert.Equal(1f, BitConverter.UInt32BitsToSingle(words[offset + 17 * 4 + 1]));
+    }
+    [Fact]
+    public void UnauthoredLayersPackAsZero() {
+        var program = new SdfProgram([Shape()], [new SdfMaterial(Vector3.One)]);
+        var offset = (int)program.Words[3] * 4;
+        for (var i = 4 * 4; i < 20 * 4; i++) {
+            Assert.Equal(0u, program.Words[offset + i]);
+        }
+    }
+    [Fact]
+    public void WeatheringRequiresItsAuthoredSurfacesAtBothAdmissionDoors() {
+        foreach (var weathering in new SdfWeathering[] { new(Edge: 1f), new(Lines: 1f), new(Settle: 1f), new(Lane: 4), new(Reach: 0f) }) {
+            var material = new SdfMaterial(Vector3.One, Weathering: weathering);
+            Assert.Throws<ArgumentOutOfRangeException>(() => NewBuilder().AddMaterial(material));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new SdfProgram([Shape()], [material]));
+        }
+    }
+    [Fact]
+    public void AddMaterialRefusesWrapOrSoftenOutsideTheUnitRange() {
+        var negativeWrap = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: new SdfMaterial(Albedo: Vector3.One, Wrap: -0.01f)));
+        var aboveOneSoften = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: new SdfMaterial(Albedo: Vector3.One, Soften: 1.01f)));
+
+        Assert.Contains(expectedSubstring: "wrap", actualString: negativeWrap.Message);
+        Assert.Contains(expectedSubstring: "soften", actualString: aboveOneSoften.Message);
+
+        // Control.
+        _ = NewBuilder().AddMaterial(material: new SdfMaterial(Albedo: Vector3.One, Wrap: 1f, Soften: 0f));
+    }
+    [Fact]
+    public void AddMaterialRefusesANegativeBounceComponent() {
+        var refusal = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => NewBuilder().AddMaterial(material: new SdfMaterial(Albedo: Vector3.One, Bounce: new Vector3(-0.1f, 0f, 0f))));
+
+        Assert.Contains(expectedSubstring: "bounce", actualString: refusal.Message);
+    }
+    [Fact]
+    public void InvalidInsetFramesAndRampsAreRefusedAtBothDoors() {
+        var valid = new SdfInset(Vector3.Zero, Quaternion.Identity, 0.1f, 1f, new([new(0f, Vector3.Zero), new(1f, Vector3.One)]));
+        _ = NewBuilder().AddMaterial(new(Vector3.One, Inset: valid));
+        foreach (var inset in new[] {
+            valid with { Ior = 0f }, valid with { Rotation = default },
+            valid with { Paint = new([new(1f, Vector3.One), new(0f, Vector3.Zero)]) },
+            valid with { Paint = new(Enumerable.Range(0, 5).Select(i => new SdfRadialStop(i, Vector3.One)).ToArray()) },
+        }) {
+            var material = new SdfMaterial(Vector3.One, Inset: inset);
+            Assert.Throws<ArgumentOutOfRangeException>(() => NewBuilder().AddMaterial(material));
+            Assert.Throws<ArgumentOutOfRangeException>(() => new SdfProgram([Shape()], [material]));
+        }
+    }
     // A default-constructed material (unauthored Metal/Coat) packs both as exactly 0 — the byte-identical-with-the
     // pre-migration-shape contract Metal/Coat's XML docs promise.
     [Fact]

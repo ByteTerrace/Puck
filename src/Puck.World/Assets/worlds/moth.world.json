@@ -7610,6 +7610,29 @@
         ],
         "transitionRenderScale": 1,
         "transitionSeconds": 0.25
+      },
+      {
+        "name": "study",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": null,
+            "height": 1,
+            "study": "moth-study",
+            "width": 0.5,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "camera": "three-quarter",
+            "height": 1,
+            "width": 0.5,
+            "x": 0.5,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
       }
     ],
     "seatControl": {
@@ -7688,6 +7711,14 @@
       "pathOp": null,
       "selectOp": null,
       "version": "puck.camera.v1"
-    }
+    },
+    "studies": [
+      {
+        "camera": "three-quarter",
+        "name": "moth-study",
+        "source": "../studies/moth.glsl",
+        "timeScale": 1
+      }
+    ]
   }
 }

@@ -23,6 +23,7 @@ one System.CommandLine tree (`PuckRootCommand.cs`) every verb hangs off:
 | [`puck registry`](#puck-registry--world-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
+| [`puck shaders`](#puck-shaders--shader-studies) | `shaders study`: compiles one Shadertoy-dialect study source to both backend compute kernels through `glslang`, `spirv-cross`, and `dxc`. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck declarations`](#puck-declarations--declaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck lengths`](#puck-lengths--file-length-ledger) | checks or regenerates `FileLengths.json`, the ledger the file-length build error (LEN001–LEN004) reads; the ledger only shrinks. |
@@ -170,6 +171,25 @@ default design coordinates. Complex-script shaping remains a separate layer;
 generated atlases preserve source glyph IDs for it.
 
 ---
+
+## `puck shaders` — shader studies
+
+```sh
+puck shaders study <glsl> --out <directory> [--name <name>] [--toolchain <directory>]
+```
+
+Wraps the source in `StudyPrelude` (`Puck.Shaders.Study`) and runs
+`glslang`/`glslangValidator` (GLSL to SPIR-V), `spirv-cross` (SPIR-V to
+HLSL), then `dxc -T cs_6_6` (HLSL to DXIL), writing `<name>.comp.spv` and
+`<name>.comp.dxil` (`--name` defaults to the source file's stem). Every
+diagnostic prints as `<file>:<line>: <message>` with `<line>` already mapped
+back onto the author's file; exit 1 on an error diagnostic, and on a missing
+tool naming the tool and the directory searched. `--toolchain` is the only
+way to point at a tool directory — with it absent each tool is resolved by
+bare name on the search path; no environment variable is read. The same
+compiler runs inside `Puck.World` for a `views.studies` row (see that
+project's README); successful compiles are cached beside the output under
+`.puck-study-cache`, keyed by prelude plus source.
 
 ## `puck canary` — real-World behavioral proofs
 

@@ -175,6 +175,218 @@
       "additionalProperties": false,
       "title": "WorldRenderLightRim"
     },
+    "WorldAnchorEntity": {
+      "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+      "properties": {
+        "$type": {
+          "const": "entity"
+        },
+        "index": {
+          "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "additionalProperties": false,
+      "title": "WorldAnchorEntity"
+    },
+    "WorldAnchorEntityPart": {
+      "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+      "properties": {
+        "$type": {
+          "const": "entityPart"
+        },
+        "index": {
+          "description": "The 0-based entity index.",
+          "type": "integer"
+        },
+        "partId": {
+          "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "partId"
+      ],
+      "additionalProperties": false,
+      "title": "WorldAnchorEntityPart"
+    },
+    "WorldAnchorPlacement": {
+      "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+      "properties": {
+        "$type": {
+          "const": "placement"
+        },
+        "placementId": {
+          "description": "The referenced Id (must resolve).",
+          "type": "string"
+        },
+        "shapeId": {
+          "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "placementId",
+        "shapeId"
+      ],
+      "additionalProperties": false,
+      "title": "WorldAnchorPlacement"
+    },
+    "Int32List": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "integer"
+      }
+    },
+    "WorldAnchorGroup": {
+      "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+      "properties": {
+        "$type": {
+          "const": "group"
+        },
+        "indices": {
+          "$ref": "#/$defs/Int32List",
+          "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity."
+        },
+        "smoothRate": {
+          "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "indices",
+        "smoothRate"
+      ],
+      "additionalProperties": false,
+      "title": "WorldAnchorGroup"
+    },
+    "WorldAnchorSeat": {
+      "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+      "properties": {
+        "$type": {
+          "const": "seat"
+        },
+        "number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        },
+        "partId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldAnchorSeat"
+    },
+    "WorldAnchorRecentSpeaker": {
+      "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+      "properties": {
+        "$type": {
+          "const": "recentSpeaker"
+        },
+        "partId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldAnchorRecentSpeaker"
+    },
+    "WorldAnchor": {
+      "description": "WHERE a placeable thing rides \u2014 the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldAnchorEntity"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorEntityPart"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorPlacement"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorGroup"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorSeat"
+        },
+        {
+          "$ref": "#/$defs/WorldAnchorRecentSpeaker"
+        }
+      ],
+      "title": "WorldAnchor"
+    },
+    "WorldRenderLightPoint": {
+      "description": "A point light with inverse-square falloff and a soft core: intensity = weight / (1 \u002B (distance / radius)^2). No shadow march in v1 \u2014 a point light never occludes and is never occluded.",
+      "properties": {
+        "$type": {
+          "const": "point"
+        },
+        "position": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The world-space position for a static (unanchored) light. Absent is the world origin. Ignored once Anchor resolves live.",
+          "default": null
+        },
+        "radius": {
+          "description": "The falloff radius. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldAnchor",
+          "description": "A Placement the light rides \u2014 its placement and, optionally, one of the placement\u0027s creation shapes \u2014 so the position tracks that shape\u0027s dynamic transform every frame instead of the authored Position. Every other WorldAnchor kind is refused by name. Optional; absent is a static light at Position.",
+          "default": null
+        },
+        "color": {
+          "description": "The light\u0027s linear colour.",
+          "default": null,
+          "title": "BindableColor",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight": {
+          "description": "The strength. Absent is the engine default.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightPoint"
+    },
     "WorldRenderLight": {
       "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
       "type": [
@@ -193,6 +405,9 @@
         },
         {
           "$ref": "#/$defs/WorldRenderLightRim"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightPoint"
         }
       ],
       "title": "WorldRenderLight"
@@ -1214,142 +1429,6 @@
       "additionalProperties": false,
       "title": "WorldSolid"
     },
-    "WorldAnchorEntity": {
-      "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
-      "properties": {
-        "$type": {
-          "const": "entity"
-        },
-        "index": {
-          "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "index"
-      ],
-      "additionalProperties": false,
-      "title": "WorldAnchorEntity"
-    },
-    "WorldAnchorEntityPart": {
-      "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
-      "properties": {
-        "$type": {
-          "const": "entityPart"
-        },
-        "index": {
-          "description": "The 0-based entity index.",
-          "type": "integer"
-        },
-        "partId": {
-          "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "index",
-        "partId"
-      ],
-      "additionalProperties": false,
-      "title": "WorldAnchorEntityPart"
-    },
-    "WorldAnchorPlacement": {
-      "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
-      "properties": {
-        "$type": {
-          "const": "placement"
-        },
-        "placementId": {
-          "description": "The referenced Id (must resolve).",
-          "type": "string"
-        },
-        "shapeId": {
-          "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
-          "type": [
-            "integer",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "placementId",
-        "shapeId"
-      ],
-      "additionalProperties": false,
-      "title": "WorldAnchorPlacement"
-    },
-    "Int32List": {
-      "type": [
-        "array",
-        "null"
-      ],
-      "items": {
-        "type": "integer"
-      }
-    },
-    "WorldAnchorGroup": {
-      "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
-      "properties": {
-        "$type": {
-          "const": "group"
-        },
-        "indices": {
-          "$ref": "#/$defs/Int32List",
-          "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity."
-        },
-        "smoothRate": {
-          "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
-          "type": "number"
-        }
-      },
-      "required": [
-        "indices",
-        "smoothRate"
-      ],
-      "additionalProperties": false,
-      "title": "WorldAnchorGroup"
-    },
-    "WorldAnchorSeat": {
-      "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
-      "properties": {
-        "$type": {
-          "const": "seat"
-        },
-        "number": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "default": null
-        },
-        "partId": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldAnchorSeat"
-    },
-    "WorldAnchorRecentSpeaker": {
-      "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
-      "properties": {
-        "$type": {
-          "const": "recentSpeaker"
-        },
-        "partId": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "additionalProperties": false,
-      "title": "WorldAnchorRecentSpeaker"
-    },
     "WorldCameraSubjectReference": {
       "description": "The program\u0027s externally supplied reference pose \u2014 a named camera\u0027s own WorldAnchor, or a seat rig\u0027s currently perceived body (the seat\u0027s own avatar, or a possessed camera body). Resolved outside the program and handed to it as the SdfAnchor the compiled rig receives every frame.",
       "properties": {
@@ -2264,7 +2343,7 @@
       "additionalProperties": false,
       "title": "WorldCameraProgram"
     },
-    "WorldAnchor": {
+    "WorldAnchorNonNullable": {
       "description": "WHERE a placeable thing rides \u2014 the one shared pose-target vocabulary a placeable WorldCamera and a placeable WorldSpeaker both consume through the SAME resolver, distinct from HOW the thing looks at or emits from that pose (a WorldCameraProgram, a feed). The $type string is the JSON discriminator; a new anchor kind is a new derived record plus its JsonDerivedTypeAttribute line.",
       "type": "object",
       "required": [

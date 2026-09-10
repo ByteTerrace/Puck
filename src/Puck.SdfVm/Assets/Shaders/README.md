@@ -73,6 +73,7 @@ by running `Puck.World` and looking at the pixels on both backends.
 | `Sdf/sdf-isa.hlsli` | The shader-reported SDF ISA version. The production beam and all three views variants write it through their existing tile/output bindings during initialization and compiled-shader reload. | `SdfIsa.Version`, verified at runtime rather than trusted by duplication |
 | `Sdf/sdf-vm.hlsli` | The primary VM include: packed instruction stream decode, shape SDFs, blends, wallpaper folds, bounds skips, segment/instance merge, dynamic transforms, materials, and `map`/`mapMasked`. | `SdfOp`, `SdfShapeType`, `SdfBlendOp`, `SdfWallpaperGroup`, `SdfProgram`, `SdfProgramBuilder` |
 | `Sdf/sdf-world.hlsli` | World-render shared code: viewport push/data contract, screen-source sampling, camera ray generation, cone march, per-tile instance cull, and `renderView`. | `SdfWorldEngine`, `SdfFrame`, `SdfScreenSurface` |
+| `Sdf/shade-volumes.hlsli` | Bounded emissive volumes (participating media — plumes and future kinds): the `sdfVolumes` decode, the volume-local AABB slab test, the per-volume emission/extinction integration, and the one `shadeVolumes` call site `renderView` invokes before tonemap. Included from `sdf-world.hlsli`, Stage 1 only. | `SdfWorldEngine.PackVolumes`, `Puck.SignedDistance.SdfVolume` |
 
 ## SDF support and diagnostic shaders
 

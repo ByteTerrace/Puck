@@ -29,6 +29,15 @@
     "maxSlopeDegrees": 60.0,
     "gradientProbe": 0.0
   },
+  "render": {
+    "lighting": {
+      "lights": [
+        { "$type": "directional", "shadows": true },
+        { "$type": "hemisphere" },
+        { "$type": "point", "color": "#29C8FF", "position": [0, 2.6, 19.4], "radius": 1.4, "weight": 1.6 }
+      ]
+    }
+  },
   "prototypes": [
     {
       "id": "vocabRig",

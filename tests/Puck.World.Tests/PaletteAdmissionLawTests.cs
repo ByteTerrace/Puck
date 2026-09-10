@@ -76,4 +76,42 @@ public sealed class PaletteAdmissionLawTests {
     public void AnUnauthoredRoughnessAndSheenAreAccepted() {
         AssertAccepts(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null));
     }
+    [Theory]
+    [InlineData("wrap")]
+    [InlineData("soften")]
+    public void WrapOrSoftenOutsideZeroOneIsRefusedByName(string lane) {
+        var denied = ((lane == "wrap")
+            ? new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null, Wrap: 1.5f)
+            : new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null, Soften: -0.01f));
+        var control = ((lane == "wrap")
+            ? new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null, Wrap: 0.3f)
+            : new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null, Soften: 0.5f));
+
+        AssertRefusesNaming(entry: denied, needle: $"{lane} must be in [0, 1]");
+        AssertAccepts(entry: control);
+    }
+    [Fact]
+    public void ABounceThatIsNeitherHexNorAStateBindingIsRefusedByName() {
+        AssertRefusesNaming(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null, Bounce: "warm"), needle: "bounce");
+
+        // Control.
+        AssertAccepts(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null, Bounce: "#33150A"));
+        AssertAccepts(entry: new PaletteEntryDocument(Color: "#CCCCCC", Emissive: null, Specular: null, Roughness: null, Bounce: null));
+    }
+    [Fact]
+    public void WeatheringRequiresAuthoredRevealAndDepositSurfaces() {
+        var entry = new PaletteEntryDocument("#CCCCCC", null, null, null, Weathering: new(Edge: 1f));
+        AssertRefusesNaming(entry, "Invalid inset or weathering");
+        AssertAccepts(entry with { Weathering = new(Edge: 1f, Under: [new(0.4f, new("#223344", 0.5f, 0.8f))]) });
+        AssertRefusesNaming(entry with { Weathering = new(Settle: 1f) }, "Invalid inset or weathering");
+    }
+    [Fact]
+    public void InsetRequiresOrderedStopsAndValidColors() {
+        var inset = new PaletteInsetDocument(System.Numerics.Vector3.Zero, System.Numerics.Quaternion.Identity, 0.1f, 1f,
+            new([new(0f, "#000000"), new(1f, "#FFFFFF")]));
+        var entry = new PaletteEntryDocument("#CCCCCC", null, null, null, Inset: inset);
+        AssertAccepts(entry);
+        AssertRefusesNaming(entry with { Inset = inset with { Paint = new([new(1f, "#FFFFFF"), new(0f, "#000000")]) } }, "Invalid inset");
+        AssertRefusesNaming(entry with { Inset = inset with { Paint = new([new(0f, "brown")]) } }, "Layer colors");
+    }
 }

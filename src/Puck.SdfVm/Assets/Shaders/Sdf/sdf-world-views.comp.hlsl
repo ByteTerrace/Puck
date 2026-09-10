@@ -24,11 +24,10 @@
 // verbatim include, so BOTH Stage 1 variants bind the pool and evaluate bricks.
 #define SDF_SAMPLED_REGIONS
 #define SDF_BRICK_POOL_REGISTER t41
-// The area-light shadow estimator's host-baked sampler table (sdf-world.hlsli declares it at binding 48 / register
-// t43, APPENDED LAST in the engine's viewsBindings after the frame instance grid t42). Stage 1 is the only kernel
-// that shades, so it is the only one that binds it; every other consumer of sdf-world.hlsli compiles the estimator
-// away to fully-lit rather than carrying a descriptor it would never read. The core-ops variant inherits this define
-// through its verbatim include, so BOTH Stage 1 pipelines bind the table.
+// The bounded-volume buffer (sdf-world.hlsli's sdfVolumes, declared unconditionally under SDF_SCREEN_SOURCES) binds
+// at 48 / t43, APPENDED LAST in the engine's viewsBindings after the frame instance grid t42 — shade-volumes.hlsli's
+// one call site at the end of renderView. Stage 1 is the only kernel that shades, so it is the only one that binds
+// it. The core-ops variant inherits SDF_SCREEN_SOURCES through its verbatim include, so both Stage 1 pipelines bind it.
 // The per-tile shadow gather (sdf-world.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
 // workgroup, built cooperatively at the uniform seam inside renderView. Every lane — rendered pixel or not — must
 // reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.

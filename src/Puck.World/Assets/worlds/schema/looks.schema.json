@@ -168,6 +168,27 @@
                     "null"
                   ]
                 }
+              },
+              "lanes": {
+                "description": "The per-instance render lanes the body\u0027s dynamic slot carries (see Lanes) \u2014 the diegetic \u0022body IS the health bar\u0022 carrier a worn creation\u0027s erode shape fields and wear materials read. null = both lanes stay 0 (a static floor, if any material\u0027s wear.static is authored, still shows).",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "damage": {
+                    "$ref": "./common.schema.json#/$defs/ValueExpression",
+                    "description": "The expression driving Lanes\u0027s x component (null = 0).",
+                    "default": null
+                  },
+                  "thrust": {
+                    "$ref": "./common.schema.json#/$defs/ValueExpression",
+                    "description": "The expression driving Lanes\u0027s y component (null = 0).",
+                    "default": null
+                  }
+                },
+                "additionalProperties": false,
+                "title": "WorldLookLanes"
               }
             },
             "additionalProperties": false,

@@ -332,7 +332,9 @@ public sealed class SdfTrapezoidProfileLawTests {
         // primitive, is what keeps them from drifting apart silently.
         float[] steps = [0f, 0.00005f, 0.0001f, 0.0005f, 0.001f, 0.002f, 0.003f, 0.01f, 0.5f, 1f, 7f];
 
-        foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
+        // Sweep's reach/admission depend on its own curve, not (only) scale — this scale-driven law does not
+            // apply to it; SweepLawTests covers its admission/emission agreement separately.
+            foreach (var type in Enum.GetValues<SdfSolidPrimitive>().Where(predicate: (SdfSolidPrimitive candidate) => (candidate != SdfSolidPrimitive.Sweep))) {
             foreach (var radial in steps) {
                 foreach (var axial in steps) {
                     var scale = new Vector3(

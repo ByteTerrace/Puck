@@ -1,6 +1,7 @@
 using System.Numerics;
 
 using Puck.SignedDistance;
+using Puck.SdfVm;
 using Puck.World.Client;
 
 using Xunit;
@@ -13,10 +14,11 @@ namespace Puck.World.Tests;
 /// shapes the lane table cannot carry.</summary>
 public sealed class WorldRenderLightingSkyLawTests {
     private static WorldRenderDefaults BaseDefaults() => WorldRenderDefaults.Absent;
-    private static SdfEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldRenderCycleTrack? track = null) => (track ?? new WorldRenderCycleTrack()).Resolve(
+    private static SdfEnvironment Resolve(WorldRenderDefaults defaults, IReadOnlyList<WorldStateRow>? state = null, int revision = 0, WorldRenderCycleTrack? track = null, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) => (track ?? new WorldRenderCycleTrack()).Resolve(
         definition: (Fixtures.BuildDocument().WithWorldState(rows: (state ?? [])) with { RenderRaw = defaults }),
         revision: revision,
-        tick: 0UL
+        tick: 0UL,
+        resolveLightAnchor: resolveLightAnchor
     );
     private static WorldStateRow ColorsRow(string hex) => new(
         Name: CellName.Parse(candidate: "colors"),
@@ -132,6 +134,35 @@ public sealed class WorldRenderLightingSkyLawTests {
         Assert.Equal(expected: 0.8f, actual: eighth.Weight, precision: 5);
     }
     [Fact]
+    public void PointLightAnchorComposesItsOffsetIntoTheResolvedPose() {
+        var resolved = Resolve(
+            defaults: BaseDefaults() with {
+                Lighting = new WorldRenderLighting(Lights: [
+                    new WorldRenderLight.Point(Position: new Vector3(x: 0f, y: 2f, z: 4f), Radius: 1.5f, Weight: 1.2f, Anchor: new WorldAnchor.Placement(PlacementId: "nozzle", ShapeId: null)),
+                    new WorldRenderLight.Point(Position: new Vector3(x: 1f, y: 1f, z: 1f)),
+                ]),
+            },
+            resolveLightAnchor: static anchor => ((anchor is WorldAnchor.Placement { PlacementId: "nozzle" }) ? new SdfAnchor(new Vector3(7f, 0f, 0f), Quaternion.Identity) : null)
+        );
+
+        Assert.Equal(expected: 2, actual: resolved.LightCount);
+        Assert.Equal(expected: SdfLightKind.Point, actual: resolved.GetLight(index: 0).Kind);
+        Assert.Equal(expected: -1, actual: resolved.GetLight(index: 0).DynamicSlot);
+        Assert.Equal(new Vector3(7f, 2f, 4f), resolved.GetLight(0).Direction);
+        Assert.Equal(expected: SdfLightKind.Point, actual: resolved.GetLight(index: 1).Kind);
+        Assert.Equal(expected: -1, actual: resolved.GetLight(index: 1).DynamicSlot);
+    }
+    [Fact]
+    public void PointLight_AnchorWithNoResolver_ResolvesToMinusOne() {
+        var resolved = Resolve(defaults: BaseDefaults() with {
+            Lighting = new WorldRenderLighting(Lights: [
+                new WorldRenderLight.Point(Anchor: new WorldAnchor.Placement(PlacementId: "nozzle", ShapeId: null)),
+            ]),
+        });
+
+        Assert.Equal(expected: -1, actual: resolved.GetLight(index: 0).DynamicSlot);
+    }
+    [Fact]
     public void SunColor_BoundToStateTextCell_ResolvesToTheCell_AndFollowsARevisionMove() {
         var track = new WorldRenderCycleTrack();
         var lighting = SunAndSky(sunColor: new BindableColor(Raw: "state.colors.sun"));
@@ -178,6 +209,29 @@ public sealed class WorldRenderLightingSkyLawTests {
                         new WorldRenderLight.Directional(Direction: new Vector3(x: -1f, y: 1f, z: 0f)),
                     ]),
                 },
+            }))
+        );
+    }
+    [Fact]
+    public void PointLightWithCycleIsAdmitted() {
+        var definition = ClockCycle(BaseDefaults() with {
+            Lighting = new(Lights: [new WorldRenderLight.Point()]),
+            Cycle = new("clock", [
+                new(0f, Lighting: new(Lights: [new WorldRenderLight.Point(Position: new Vector3(10f, 2f, 3f))])),
+                new(0.5f, Lighting: new(Lights: [new WorldRenderLight.Point(Position: new Vector3(20f, 4f, 6f))]))
+            ]),
+        });
+        Assert.True(TryValidateLocal(definition));
+    }
+    [Fact]
+    public void PointLightAnchor_SeatRelative_RefusesByName_ControlStaticClean() {
+        Laws.RefusalWithControl(
+            lawId: "render.lighting.point-light-anchor-kind",
+            deniedOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Point(Anchor: new WorldAnchor.Seat())]) },
+            })),
+            controlOutcome: static () => TryValidateLocal(definition: (Fixtures.BuildGradientUpDocument(gradientUp: false) with {
+                RenderRaw = BaseDefaults() with { Lighting = new WorldRenderLighting(Lights: [new WorldRenderLight.Point(Anchor: new WorldAnchor.Placement(PlacementId: "ball", ShapeId: null))]) },
             }))
         );
     }
@@ -674,5 +728,45 @@ public sealed class WorldRenderLightingSkyLawTests {
                 RenderRaw = BaseDefaults() with { Environment = new WorldRenderEnvironment(Softboxes: [Softbox(width: 0.1f)]) },
             }))
         );
+    }
+    [Fact]
+    public void OccluderUsesTheGeneralLightTableAndMissingAnchorsDisableIt() {
+        var defaults = BaseDefaults() with { Lighting = new(Lights: [
+            new WorldRenderLight.Occluder(Position: new Vector3(2f, 3f, 4f), Radius: 2f, Anchor: new WorldAnchor.Entity(0), Weight: 0.6f)
+        ]) };
+        var track = new WorldRenderCycleTrack();
+        var missing = Resolve(defaults, track: track).GetLight(0);
+        Assert.Equal(0f, missing.Weight);
+        var live = Resolve(defaults, track: track, resolveLightAnchor: _ => new SdfAnchor(new Vector3(7f, 0f, 0f), Quaternion.Identity)).GetLight(0);
+        Assert.Equal(0.6f, live.Weight);
+        Assert.Equal(-1, live.DynamicSlot);
+        Assert.Equal(SdfLightKind.Occluder, live.Kind);
+        Assert.Equal(new Vector3(9f, 3f, 4f), live.Direction);
+    }
+    [Theory]
+    [InlineData(SdfLightKind.Point)]
+    [InlineData(SdfLightKind.Occluder)]
+    public void PositionKindsInterpolateLinearlyWithoutNormalization(SdfLightKind kind) {
+        var from = new SdfEnvironment { LightCount = 1 };
+        var to = new SdfEnvironment { LightCount = 1 };
+        var result = new SdfEnvironment();
+        from.SetLight(0, new(kind, new(10f, 20f, 30f), Vector3.One, 0.2f, 1f, false));
+        to.SetLight(0, new(kind, new(30f, 40f, 50f), Vector3.One, 0.8f, 3f, false));
+        var blended = new float[SdfEnvironment.LaneCount];
+        SdfEnvironment.Blend(from.Lanes, to.Lanes, 0.5f, blended);
+        result.CopyFrom(blended);
+        Assert.Equal(new Vector3(20f, 30f, 40f), result.GetLight(0).Direction);
+        Assert.Equal(2f, result.GetLight(0).Param);
+    }
+    [Fact]
+    public void OccluderRefusesInvalidStrengthAndRadius() {
+        var valid = BaseDefaults() with { Lighting = new(Lights: [new WorldRenderLight.Occluder(Radius: 2f, Weight: 0.5f)]) };
+        Assert.True(TryValidateLocal(Fixtures.BuildDocument() with { RenderRaw = valid }));
+        Assert.False(TryValidateLocal(Fixtures.BuildDocument() with {
+            RenderRaw = valid with { Lighting = new(Lights: [new WorldRenderLight.Occluder(Radius: 0f)]) }
+        }));
+        Assert.False(TryValidateLocal(Fixtures.BuildDocument() with {
+            RenderRaw = valid with { Lighting = new(Lights: [new WorldRenderLight.Occluder(Weight: 1.1f)]) }
+        }));
     }
 }

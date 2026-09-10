@@ -424,6 +424,34 @@
         "null"
       ],
       "default": null
+    },
+    "grounding": {
+      "description": "The contact-darkening blob drawn under each live body on an upward-facing hit. Optional; absent (strength 0) contributes nothing.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "strength": {
+          "description": "The darkening strength at a centre\u0027s own position, in [0, 1]. Absent is 0 \u2014 no darkening, byte-identical.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "radius": {
+          "description": "The falloff radius in world units, strictly positive. Absent is 1.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderGrounding"
     }
   },
   "additionalProperties": false,

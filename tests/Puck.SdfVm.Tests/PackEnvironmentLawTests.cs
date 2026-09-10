@@ -71,4 +71,18 @@ public sealed class PackEnvironmentLawTests {
         Assert.Equal(expected: 1f, actual: floats[(row + 2)]);
         Assert.Equal(expected: 0.9f, actual: floats[(row + 3)]);
     }
+    [Fact]
+    public void OccluderPositionAndAnchorPackWithoutDirectionNormalization() {
+        var environment = new SdfEnvironment { LightCount = 1 };
+        environment.SetLight(0, new(SdfLightKind.Occluder, new(12f, 3f, -4f), Vector3.Zero, 0.6f, 2.5f, false, 7));
+        var floats = PackedFloats(environment);
+        var row = (SdfProgramBuilder.MaxScreenSurfaces + 8 + SdfEnvironment.LightsRow) * 4;
+        Assert.Equal(12f, floats[row]);
+        Assert.Equal(3f, floats[row + 1]);
+        Assert.Equal(-4f, floats[row + 2]);
+        Assert.Equal(0.6f, floats[row + 3]);
+        Assert.Equal(4f, floats[row + 7]);
+        Assert.Equal(2.5f, floats[row + 8]);
+        Assert.Equal(7f, floats[row + 10]);
+    }
 }

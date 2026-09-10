@@ -25,6 +25,7 @@ using Puck.Cli.Registry;
 using Puck.Cli.Scan;
 using Puck.Cli.Schema;
 using Puck.Cli.Search;
+using Puck.Cli.Shaders;
 using Puck.Cli.WasmStdlib;
 using Puck.Cli.WorktreeBase;
 
@@ -63,6 +64,7 @@ internal static class PuckRootCommand {
             ScanCommand.Create(),
             SchemaCommand.Create(),
             SearchCommand.Create(),
+            ShadersCommand.Create(),
             WasmBuildCommand.Create(),
             WasmStdlibCommand.Create(),
             WorktreeBaseCommand.Create(),

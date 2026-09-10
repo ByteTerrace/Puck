@@ -6,7 +6,7 @@ using Xunit;
 namespace Puck.SignedDistance.Tests;
 
 /// <summary>
-/// The conservativeness contract of <see cref="SdfOp.FlareY"/>: <see cref="SdfProgram.FlareExtrema"/>'s exact
+/// The conservativeness contract of <see cref="SdfOp.AxialProfile"/>: <see cref="SdfProgram.FlareExtrema"/>'s exact
 /// scale-profile extrema at the endpoints, the distanceScale/step-clamp mirror against
 /// <c>SdfProgram.FlareOperatorNorm</c>, a zero-amount-and-bulge identity, and a finite-difference proof that the
 /// warped, corrected field never changes faster than true distance can (the conservative-marching property the step
@@ -19,7 +19,7 @@ public sealed class FlareLawTests {
 
         return builder
             .ResetPoint()
-            .FlareY(
+            .AxialProfile(
                 amount: amount,
                 bulge: bulge,
                 span: span,
@@ -31,7 +31,7 @@ public sealed class FlareLawTests {
             )
             .Build();
     }
-    // Reproduces SDF_OP_FLARE_Y's mapCore case plus the trailing distanceScale/stepScale multiplies exactly, so this
+    // Reproduces SDF_OP_AXIAL_PROFILE's mapCore case plus the trailing distanceScale/stepScale multiplies exactly, so this
     // is what the shader's returned distance would be at p for the same authored program.
     private static float FlareFieldDistance(Vector3 p, float amount, float bulge, float top, float span, float radius, float distanceScaleCorrection, float stepScale) {
         var t = Math.Clamp(
@@ -147,7 +147,7 @@ public sealed class FlareLawTests {
     [InlineData(4.0f, -1.0f)]
     public void MaxSIsAlwaysAtLeastOne(float amount, float bulge) {
         // s(0) == 1 is always a candidate for the maximum, however negative amount/bulge run — the invariant
-        // SdfProgramBuilder.FlareY's 1/maxS distanceScale correction relies on to stay <= 1.
+        // SdfProgramBuilder.AxialProfile's 1/maxS distanceScale correction relies on to stay <= 1.
         var (_, maxS) = SdfProgram.FlareExtrema(
             amount: amount,
             bulge: bulge
@@ -256,7 +256,7 @@ public sealed class FlareLawTests {
     [Fact]
     public void ANonPositiveSpanRefusesByName() {
         var builder = new SdfProgramBuilder();
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => builder.FlareY(
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => builder.AxialProfile(
             amount: 1.0f,
             bulge: 0.0f,
             span: 0.0f,
@@ -271,7 +271,7 @@ public sealed class FlareLawTests {
     [Fact]
     public void ANonFiniteAmountRefusesByName() {
         var builder = new SdfProgramBuilder();
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => builder.FlareY(
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => builder.AxialProfile(
             amount: float.NaN,
             bulge: 0.0f,
             span: 1.0f,
@@ -295,7 +295,7 @@ public sealed class FlareLawTests {
 
         Assert.Contains(
             actualString: exception.Message,
-            expectedSubstring: "FlareY"
+            expectedSubstring: "AxialProfile"
         );
     }
 }
