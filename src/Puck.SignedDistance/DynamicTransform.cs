@@ -10,5 +10,8 @@ namespace Puck.SignedDistance;
 /// <c>.w</c> lane (see <c>SdfWorldEngine.PackDynamicTransforms</c>): <see langword="false"/> means this dynamic instance is
 /// skipped by the soft-shadow march only — the camera/AO marches are unaffected, so a suppressed avatar still renders and
 /// self-occludes, it just stops casting/receiving through the sun-shadow enumeration. Per-frame data (avatars move every
-/// frame); flipping it never rebuilds the program. Default casts is byte-identical to every prior frame's zero-pad upload.</para></summary>
-public readonly record struct DynamicTransform(Vector3 Position, Quaternion Orientation, bool CastsSoftShadow = true);
+/// frame); flipping it never rebuilds the program. Default casts is byte-identical to every prior frame's zero-pad upload.</para>
+/// <para><paramref name="Lanes"/> is an anonymous four-component carrier, indexed 0 through 3. Every component
+/// must be finite. Shape operations and material layers select their component explicitly; the engine assigns
+/// no meaning to a component. A chain without a dynamic transform reads four zeros.</para></summary>
+public readonly record struct DynamicTransform(Vector3 Position, Quaternion Orientation, bool CastsSoftShadow = true, Vector4 Lanes = default);

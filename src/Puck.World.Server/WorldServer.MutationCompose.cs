@@ -495,7 +495,8 @@ public sealed partial class WorldServer {
         WorldMutation.SetAudioDefaults => WorldSection.Audio,
         WorldMutation.SetCollision => WorldSection.Collision,
         WorldMutation.SetHostDefaults => WorldSection.Host,
-        WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout => WorldSection.Views,
+        WorldMutation.SetViewDefaults or WorldMutation.SetViewSeatRig or WorldMutation.SetViewSeatControl or WorldMutation.UpsertViewLayout or WorldMutation.RemoveViewLayout
+            or WorldMutation.UpsertViewStudy or WorldMutation.RemoveViewStudy => WorldSection.Views,
         WorldMutation.SetPlayerDefaults or WorldMutation.SetPlayerSeatLook => WorldSection.PlayerDefaults,
         WorldMutation.UpsertLook or WorldMutation.RemoveLook or WorldMutation.SetLookAssignment => WorldSection.Looks,
         WorldMutation.UpsertDynamics or WorldMutation.RemoveDynamics => WorldSection.Dynamics,
@@ -1311,6 +1312,40 @@ public sealed partial class WorldServer {
                     }
 
                     candidate = (current with { ViewsRaw = (views with { Layouts = layouts }) });
+
+                    return true;
+                }
+            case WorldMutation.UpsertViewStudy m: {
+                    var views = current.Views;
+
+                    candidate = (current with {
+                        ViewsRaw = (views with {
+                            Studies = Upsert(
+                        list: views.Studies,
+                        item: m.Study,
+                        keyOf: static study => study.Name
+                    ),
+                        }),
+                    });
+
+                    return true;
+                }
+            case WorldMutation.RemoveViewStudy m: {
+                    var views = current.Views;
+
+                    if (!Remove(
+                        list: views.Studies,
+                        key: m.Name,
+                        keyOf: static study => study.Name,
+                        result: out var studies
+                    )) {
+                        candidate = current;
+                        reason = $"no views.studies row named '{m.Name}'";
+
+                        return false;
+                    }
+
+                    candidate = (current with { ViewsRaw = (views with { Studies = studies }) });
 
                     return true;
                 }

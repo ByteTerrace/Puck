@@ -1324,6 +1324,9 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.motion.replayFrames requires a positive secondsPerFrame (a zero-hold replay is an infinite loop).");
             }
 
+            if (look.Motion.Lanes is { Count: > 4 }) {
+                errors.Add(item: $"looks row '{look.Name}' carries more than four render lanes.");
+            }
             if (look.Motion.Poses is { } poses) {
                 var poseFrames = ((!isCatalog && (look.Source is WorldLookSource.Creation poseCreation))
                     ? WorldDefinitionRows.FindCreation(creations: creations, id: poseCreation.PrototypeId)?.Document.Frames

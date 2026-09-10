@@ -25,6 +25,9 @@ public static partial class CreationCanonicalizer {
         if (shape.Group is not (null or 0) || CreationStampEmitter.RequiresScope(document)) {
             errors.Add(new(Path: path, Message: "cells requires a per-shape field scope; grouped shapes and creations requiring an outer field scope cannot isolate it."));
         }
+        if (shape.Type == SdfSolidPrimitive.Sweep) {
+            errors.Add(new(Path: path, Message: "cells requires a closed primitive; Sweep has no bounded solid offset contract."));
+        }
         if (shape.Detail == true) {
             errors.Add(new(Path: path, Message: "cells cannot follow a detail-only shape, which is absent from the primary field."));
         }

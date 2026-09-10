@@ -6,9 +6,7 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>Adds a material to the program palette.</summary>
     /// <param name="material">The material to add.</param>
     /// <returns>The zero-based material identifier used by shape instructions.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="material"/> is not finite, is
-    /// negative, or (<see cref="SdfMaterial.Roughness"/>/<see cref="SdfMaterial.Sheen"/>/<see cref="SdfMaterial.Metal"/>/
-    /// <see cref="SdfMaterial.Coat"/>) falls outside [0, 1].</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A material component or layer is invalid.</exception>
     /// <exception cref="InvalidOperationException">The composed palette already holds <see cref="ScreenMaterialId"/>
     /// materials (see the ceiling check below).</exception>
     public int AddMaterial(SdfMaterial material) {
@@ -53,6 +51,24 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(material),
             subject: "A material coat strength"
         );
+        RequireUnitRange(
+            value: material.Wrap,
+            paramName: nameof(material),
+            subject: "A material wrap-lighting share"
+        );
+        RequireUnitRange(
+            value: material.Soften,
+            paramName: nameof(material),
+            subject: "A material shading-normal soften"
+        );
+        RequireNonNegative(
+            value: material.Bounce,
+            paramName: nameof(material),
+            subject: "A material bounce tint"
+        );
+        if (!SdfMaterialLayers.IsValid(material.Inset, material.Weathering)) {
+            throw new ArgumentOutOfRangeException(nameof(material), "Invalid inset or weathering layer.");
+        }
 
         // THE PALETTE/SENTINEL COLLISION GATE. A shape's material id is a plain composed index below ScreenMaterialId,
         // or a screen sentinel AT OR ABOVE it (ScreenMaterialId itself, or ScreenMaterialId + 1 + screenIndex — see

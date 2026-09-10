@@ -87,16 +87,17 @@ public static class SdfViewsKernelVariants {
 
         foreach (var instruction in program.Instructions) {
             switch (instruction.Op) {
-                case SdfOp.TwistY:
-                case SdfOp.BendX:
-                case SdfOp.BendY:
-                case SdfOp.BendZ:
+                case SdfOp.RotatePlane:
+                case SdfOp.Shear:
+                case SdfOp.GaussianPush:
                 case SdfOp.LogSphere:
                 case SdfOp.CellJitter:
                 case SdfOp.Displace:
                 case SdfOp.DomainWarp:
                 case SdfOp.NoiseDisplace:
-                case SdfOp.FlareY:
+                case SdfOp.CellDisplace:
+                case SdfOp.AxialProfile:
+                case SdfOp.LaneErode:
                     return $"op {instruction.Op}";
                 case SdfOp.ShapeBlend:
                     switch ((SdfShapeType)instruction.Shape) {
@@ -106,6 +107,7 @@ public static class SdfViewsKernelVariants {
                         case SdfShapeType.Ellipse:
                         case SdfShapeType.Superellipsoid:
                         case SdfShapeType.ConvexPolygon:
+                        case SdfShapeType.Sweep:
                             return $"shape {((SdfShapeType)instruction.Shape)}";
                         default:
                             break;

@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.SignedDistance;
+using Puck.SdfVm;
 
 namespace Puck.World.Client;
 
@@ -91,6 +92,26 @@ public sealed class WorldRenderCycleTrack {
                             Weight = (rim.Weight ?? previous.Weight),
                             Param = (rim.Power ?? previous.Param),
                             Shadows = false,
+                        },
+                        WorldRenderLight.Occluder occluder => previous with {
+                            Kind = SdfLightKind.Occluder,
+                            Direction = occluder.Position ?? previous.Direction,
+                            Color = Vector3.Zero,
+                            Weight = occluder.Weight ?? previous.Weight,
+                            Param = occluder.Radius ?? previous.Param,
+                            Shadows = false,
+                            DynamicSlot = -1,
+                        },
+                        WorldRenderLight.Point point => previous with {
+                            Kind = SdfLightKind.Point,
+                            Direction = (point.Position ?? previous.Direction),
+                            Color = Rgb(color: point.Color, definition: definition, fallback: previous.Color),
+                            Weight = (point.Weight ?? previous.Weight),
+                            Param = (point.Radius ?? previous.Param),
+                            Shadows = false,
+                            // Never carried: a live anchor is resolved fresh every frame by ApplyAnchors, after the
+                            // statics/keys this method writes are cached for the revision.
+                            DynamicSlot = -1,
                         },
                         _ => previous,
                     })
@@ -224,6 +245,7 @@ public sealed class WorldRenderCycleTrack {
         into.SoftboxCount = count;
         into.HorizonLow = Rgb(color: environment?.Horizon?.Low, definition: definition, fallback: Vector3.Zero);
         into.HorizonHigh = Rgb(color: environment?.Horizon?.High, definition: definition, fallback: Vector3.Zero);
+
     }
     private static SdfLight PinnedLight(WorldRenderLight light) => (light switch {
         WorldRenderLight.Directional => new SdfLight(
@@ -240,6 +262,15 @@ public sealed class WorldRenderCycleTrack {
             Color: Vector3.One,
             Weight: SdfEnvironment.DefaultAmbientBase,
             Param: SdfEnvironment.DefaultAmbientHemisphere,
+            Shadows: false
+        ),
+        WorldRenderLight.Occluder => new SdfLight(SdfLightKind.Occluder, Vector3.Zero, Vector3.Zero, 0f, 1f, false),
+        WorldRenderLight.Point => new SdfLight(
+            Kind: SdfLightKind.Point,
+            Direction: Vector3.Zero,
+            Color: Vector3.One,
+            Weight: SdfEnvironment.DefaultPointWeight,
+            Param: SdfEnvironment.DefaultPointRadius,
             Shadows: false
         ),
         _ => new SdfLight(
@@ -279,13 +310,41 @@ public sealed class WorldRenderCycleTrack {
         m_stateRow = cycle.State;
     }
 
+    // A point light's anchor rides the resolver's live dynamic-transform slot every call (never cached with the
+    // statics/keys above, which move only once per revision) — an anchored placement's pool slot can differ from
+    // frame to frame independently of the definition. definition.Render.Lighting is read directly rather than
+    // through the cached SdfEnvironment because only the document carries which light is a Point with an anchor;
+    // a cycle key may not change a light's kind (validated), so the statics' kind at each index holds for every key.
+    private static void ApplyAnchors(SdfEnvironment output, WorldDefinition definition, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor) {
+        if (definition.Render.Lighting?.Lights is not { } lights) {
+            return;
+        }
+
+        var count = Math.Min(val1: lights.Count, val2: output.LightCount);
+
+        for (var index = 0; (index < count); index++) {
+            var anchor = lights[index] switch {
+                WorldRenderLight.Point point => point.Anchor,
+                WorldRenderLight.Occluder occluder => occluder.Anchor,
+                _ => null,
+            };
+            if (anchor is null) { continue; }
+            var pose = resolveLightAnchor?.Invoke(anchor);
+            var light = output.GetLight(index);
+            output.SetLight(index, pose is { } frame
+                ? light with { DynamicSlot = -1, Direction = frame.Position + Vector3.Transform(light.Direction, frame.Orientation) }
+                : light with { DynamicSlot = -1, Weight = 0f });
+        }
+    }
     /// <summary>Resolves this frame's environment: the cycle's interpolation at the state row's live value, or the
     /// statics when the definition authors no cycle or the row cannot be read. The returned instance is reused every
     /// other call; a consumer that must hold one across frames copies it.</summary>
     /// <param name="definition">The live definition.</param>
     /// <param name="revision">The definition revision (statics and keys are resolved once per revision).</param>
     /// <param name="tick">The tick to read the state row as of.</param>
-    public SdfEnvironment Resolve(WorldDefinition definition, int revision, ulong tick) {
+    /// <param name="resolveLightAnchor">Resolves a positional light anchor to its current pose.
+    /// Missing targets return null and disable the light for this frame.</param>
+    public SdfEnvironment Resolve(WorldDefinition definition, int revision, ulong tick, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         var cycle = definition.Render.Cycle;
@@ -320,6 +379,7 @@ public sealed class WorldRenderCycleTrack {
 
         if (cycle is not { Keys.Count: >= 2 }) {
             output.CopyFrom(source: m_statics);
+            ApplyAnchors(output: output, definition: definition, resolveLightAnchor: resolveLightAnchor);
 
             return output;
         }
@@ -337,6 +397,7 @@ public sealed class WorldRenderCycleTrack {
             (rawValue is not { } raw)
         ) {
             output.CopyFrom(source: m_statics);
+            ApplyAnchors(output: output, definition: definition, resolveLightAnchor: resolveLightAnchor);
 
             return output;
         }
@@ -383,6 +444,7 @@ public sealed class WorldRenderCycleTrack {
             to: m_keys[toIndex]
         );
         output.CopyFrom(lanes: m_blend);
+        ApplyAnchors(output: output, definition: definition, resolveLightAnchor: resolveLightAnchor);
 
         return output;
     }

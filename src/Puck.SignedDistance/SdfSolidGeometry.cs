@@ -242,13 +242,53 @@ public static class SdfSolidGeometry {
     /// — skipped by every march/step-bound consumer and included only at an already-found hit.</param>
     /// <param name="exponent">Superellipsoid only: the generalizing exponent; ignored by every other
     /// primitive.</param>
+    /// <param name="curve">Required for, and only meaningful for, <see cref="SdfSolidPrimitive.Sweep"/>: the curve's
+    /// control points and radius/strand parameters. The curve's own points and radii already carry creation-unit
+    /// dimensions — <paramref name="scale"/> must be uniform for a Sweep (refused otherwise, by name) and is baked
+    /// as one multiplier onto every one of the curve's lengths, exactly as a uniform scale bakes onto every other
+    /// primitive's own unit dimensions via the <see cref="SdfProgramBuilder.Scale"/> transform.</param>
     public static SdfProgramBuilder AppendScaledPrimitive(SdfProgramBuilder chain, SdfSolidPrimitive type, Vector3 scale,
         int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float taper = 0.5f, SdfPrismProfile? profile = null,
-        SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, bool detail = false, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent) {
+        SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, bool detail = false, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent,
+        SdfSweepParameters? curve = null) {
         ArgumentNullException.ThrowIfNull(chain);
         if (profile is not null && (type != SdfSolidPrimitive.Prism || !profile.IsValid())) { throw new ArgumentOutOfRangeException(nameof(profile)); }
 
         var effectiveScale = EffectiveScale(scale: scale);
+
+        if (type == SdfSolidPrimitive.Sweep) {
+            if (curve is not { } sweep) {
+                throw new ArgumentException(
+                    message: "A Sweep primitive requires a curve.",
+                    paramName: nameof(curve)
+                );
+            }
+
+            if (!IsUniform(scale: effectiveScale)) {
+                throw new ArgumentOutOfRangeException(
+                    paramName: nameof(scale),
+                    message: $"A Sweep must be scaled uniformly (its control points already carry creation-unit dimensions directly); got ({effectiveScale.X}, {effectiveScale.Y}, {effectiveScale.Z})."
+                );
+            }
+
+            var uniformScale = effectiveScale.X;
+
+            return chain.Sweep(
+                a: (sweep.A * uniformScale),
+                b: (sweep.B * uniformScale),
+                blend: blend,
+                bulge: (sweep.Bulge * uniformScale),
+                c: (sweep.C * uniformScale),
+                detail: detail,
+                material: material,
+                radiusEnd: (sweep.RadiusEnd * uniformScale),
+                radiusStart: (sweep.RadiusStart * uniformScale),
+                smooth: smooth,
+                strandOffset: (sweep.StrandOffset * uniformScale),
+                strands: sweep.Strands,
+                twist: sweep.Twist
+            );
+        }
 
         if (type == SdfSolidPrimitive.Prism && profile is { Kind: not SdfPrismProfileKind.Trapezoid }) {
             return AppendProfile(chain, effectiveScale, profile, material, blend, smooth, lift, rounding, detail);
@@ -460,6 +500,15 @@ public static class SdfSolidGeometry {
 
         if (type == SdfSolidPrimitive.Prism && (!float.IsFinite(taper) || taper < 0f || taper > 1f)) {
             refusal = "a prism taper outside the finite [0, 1] interval";
+            return false;
+        }
+
+        // A Sweep's control points and radii already carry creation-unit dimensions directly (see
+        // AppendScaledPrimitive's Sweep branch), so only a uniform scale bakes onto them cleanly — KEEP IN SYNC with
+        // that branch's own refusal (the curve itself is validated separately, where SdfProgramBuilder.Sweep reads
+        // it, since this door carries no curve data).
+        if ((type == SdfSolidPrimitive.Sweep) && !IsUniform(scale: effectiveScale)) {
+            refusal = "a non-uniform scale on a Sweep, whose control points already carry creation-unit dimensions directly";
             return false;
         }
 
@@ -777,6 +826,32 @@ public static class SdfSolidGeometry {
     /// <returns>The widened reach in local units.</returns>
     public static float Reach(SdfSolidPrimitive type, Vector3 scale, SdfLift lift, float panelRaise) =>
         (Reach(type: type, scale: scale, lift: lift) + MathF.Max(x: 0f, y: panelRaise));
+    /// <summary>A <see cref="SdfSolidPrimitive.Sweep"/>'s worst-case reach from its local origin: the control
+    /// polygon's own farthest point from the origin, plus the largest radius the sweep's tapered/bulged profile can
+    /// reach, plus the strand orbit radius. KEEP IN SYNC with <see cref="SdfProgram.ShapeReachRadius"/>'s Sweep case
+    /// and <c>WorldStampPool</c>'s probe.</summary>
+    /// <param name="a">The curve's first control point.</param>
+    /// <param name="b">The curve's middle control point.</param>
+    /// <param name="c">The curve's last control point.</param>
+    /// <param name="radiusStart">The sweep radius at <c>t = 0</c>.</param>
+    /// <param name="radiusEnd">The sweep radius at <c>t = 1</c>.</param>
+    /// <param name="bulge">The mid-span radius bulge amplitude.</param>
+    /// <param name="strandOffset">The strand orbit radius.</param>
+    /// <returns>The reach in local units.</returns>
+    public static float SweepReach(Vector3 a, Vector3 b, Vector3 c, float radiusStart, float radiusEnd, float bulge, float strandOffset) {
+        var controlReach = MathF.Max(
+            x: a.Length(),
+            y: MathF.Max(
+                x: b.Length(),
+                y: c.Length()
+            )
+        );
+
+        return ((controlReach + MathF.Max(
+            x: radiusStart,
+            y: radiusEnd
+        )) + (MathF.Abs(x: bulge) + strandOffset));
+    }
     // Every primitive a panel can be authored on — every SdfSolidPrimitive but Plane, which the panel facet refuses
     // (no meaningful local face). KEEP IN SYNC with the enum: a member added there and left out here silently
     // undercounts MaxPanelReach's worst case.

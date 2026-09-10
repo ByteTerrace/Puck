@@ -350,7 +350,7 @@
         },
         "position": {
           "$ref": "#/$defs/DocumentVector3",
-          "description": "The world-space position for a static (unanchored) light. Absent is the world origin. Ignored once Anchor resolves live.",
+          "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
           "default": null
         },
         "radius": {
@@ -363,7 +363,7 @@
         },
         "anchor": {
           "$ref": "#/$defs/WorldAnchor",
-          "description": "A Placement the light rides \u2014 its placement and, optionally, one of the placement\u0027s creation shapes \u2014 so the position tracks that shape\u0027s dynamic transform every frame instead of the authored Position. Every other WorldAnchor kind is refused by name. Optional; absent is a static light at Position.",
+          "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
           "default": null
         },
         "color": {
@@ -387,6 +387,38 @@
       "additionalProperties": false,
       "title": "WorldRenderLightPoint"
     },
+    "WorldRenderLightOccluder": {
+      "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
+      "properties": {
+        "$type": {
+          "const": "occluder"
+        },
+        "position": {
+          "$ref": "#/$defs/DocumentVector3",
+          "default": null
+        },
+        "radius": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldAnchor",
+          "default": null
+        },
+        "weight": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightOccluder"
+    },
     "WorldRenderLight": {
       "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
       "type": [
@@ -408,6 +440,9 @@
         },
         {
           "$ref": "#/$defs/WorldRenderLightPoint"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightOccluder"
         }
       ],
       "title": "WorldRenderLight"

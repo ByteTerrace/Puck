@@ -1025,6 +1025,16 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{lightPath} must keep the kind the static render.lighting authors in that slot.");
                 }
 
+                static WorldAnchor? LightAnchor(WorldRenderLight value) => value switch {
+                    WorldRenderLight.Point point => point.Anchor,
+                    WorldRenderLight.Occluder occluder => occluder.Anchor,
+                    _ => null,
+                };
+                if (shape?.Lights is { } baseLights && index < baseLights.Count &&
+                    LightAnchor(light) is { } keyAnchor && keyAnchor != LightAnchor(baseLights[index])) {
+                    errors.Add($"{lightPath}.anchor must match the base light; cycle keys interpolate offsets within that frame.");
+                }
+
                 switch (light) {
                     case WorldRenderLight.Directional directional: {
                             if (directional.Direction is { } direction) {
@@ -1097,6 +1107,69 @@ public static partial class WorldDefinitionValidator {
 
                             break;
                         }
+                    case WorldRenderLight.Occluder occluder: {
+                            if (occluder.Position is { } position && !IsFinite(position)) {
+                                errors.Add($"{lightPath}.position must be finite.");
+                            }
+                            if (occluder.Radius is { } radius) {
+                                RequirePositive(errors: errors, name: $"{lightPath}.radius", value: radius);
+                            }
+                            if (occluder.Weight is { } weight) {
+                                RequireRange(value: weight, min: 0f, max: 1f, name: $"{lightPath}.weight", errors: errors);
+                            }
+                            if (occluder.Anchor is { } anchor) {
+                                if (anchor is not (WorldAnchor.Entity or WorldAnchor.EntityPart or WorldAnchor.Placement)) {
+                                    errors.Add($"{lightPath}.anchor must name an entity, entity part, or placement frame.");
+                                } else {
+                                    ValidateAnchor(anchor, definition.Placements,
+                                        new HashSet<string>(definition.Placements.Select(p => p.Id), StringComparer.Ordinal),
+                                        definition.Creations, definition.Population.Capacity, $"{lightPath}.anchor", errors);
+                                }
+                            }
+                            break;
+                        }
+                    case WorldRenderLight.Point point: {
+                            if (
+                                (point.Position is { } position) &&
+                                !IsFinite(value: position)
+                            ) {
+                                errors.Add(item: $"{lightPath}.position must contain finite coordinates.");
+                            }
+
+                            if (point.Radius is { } radius) {
+                                RequirePositive(
+                                    errors: errors,
+                                    name: $"{lightPath}.radius",
+                                    value: radius
+                                );
+                            }
+
+                            if (point.Weight is { } weight) {
+                                RequireNonNegative(
+                                    errors: errors,
+                                    name: $"{lightPath}.weight",
+                                    value: weight
+                                );
+                            }
+
+                            if (point.Anchor is { } anchor) {
+                                if (anchor is not (WorldAnchor.Placement or WorldAnchor.Entity or WorldAnchor.EntityPart)) {
+                                    errors.Add(item: $"{lightPath}.anchor must name an entity, entity part, or placement frame.");
+                                } else {
+                                    ValidateAnchor(
+                                        anchor: anchor,
+                                        placements: definition.Placements,
+                                        placementIds: new HashSet<string>(collection: definition.Placements.Select(selector: static placement => placement.Id), comparer: StringComparer.Ordinal),
+                                        creations: definition.Creations,
+                                        populationCapacity: definition.Population.Capacity,
+                                        path: $"{lightPath}.anchor",
+                                        errors: errors
+                                    );
+                                }
+                            }
+
+                            break;
+                        }
                 }
 
                 if (
@@ -1164,6 +1237,7 @@ public static partial class WorldDefinitionValidator {
         WorldRenderLight.Directional directional => directional.Color,
         WorldRenderLight.Hemisphere hemisphere => hemisphere.Color,
         WorldRenderLight.Rim rim => rim.Color,
+        WorldRenderLight.Point point => point.Color,
         _ => null,
     });
     // shape non-null = a render.cycle key: it may move a layer only of a kind the statics author, and a gradient only

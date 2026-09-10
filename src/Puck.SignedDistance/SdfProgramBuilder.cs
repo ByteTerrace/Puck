@@ -22,15 +22,24 @@ public sealed partial class SdfProgramBuilder {
     /// indexed array and giving push/pop real push/pop-by-depth stack semantics in the shader first, then bumping the
     /// <c>#define</c> and this constant. KEEP IN SYNC with SDF_MAX_FIELD_SCOPE_DEPTH in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public const int MaxFieldScopeDepth = 1;
-    /// <summary>The floor <see cref="FlareY"/>'s scale profile s(t) clamps against at evaluation time — an admitted
+    /// <summary>The floor <see cref="AxialProfile"/>'s scale profile s(t) clamps against at evaluation time — an admitted
     /// amount/bulge combination can still drive the algebraic s(t) non-positive (e.g. a large negative amount paired
     /// with a large negative bulge), and this keeps the warp finite rather than dividing by zero or flipping sign.
     /// KEEP IN SYNC with SDF_FLARE_MIN_SCALE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
     public const float FlareMinScale = 0.05f;
+    /// <summary>The floor <see cref="GaussianPush"/> clamps each <c>radii</c> component against, so the Gaussian
+    /// exponent's divisor is never zero.</summary>
+    public const float GaussianPushMinRadius = 0.001f;
     /// <summary>The most octaves one <see cref="NoiseDisplace"/> may declare. The interpreter loops the count at
     /// runtime (Blend lane), so this bounds the per-sample hash cost (8 corner hashes per octave) and the
     /// <c>lacunarity^octaves</c> term inside the Lipschitz step clamp.</summary>
     public const int MaxNoiseOctaves = 8;
+    /// <summary>How far <see cref="LaneErode"/>'s 3D noise sample (centered, [-0.5, 0.5]) perturbs the saturated
+    /// lane fraction before it scales the target shape's reach. Also the amplitude term
+    /// <see cref="SdfProgram.NoiseDisplaceStepFactor"/> uses to bound a lane-erode candidate's Lipschitz factor
+    /// (single-octave, unit gain/lacunarity) — the spatially-constant base fraction contributes no gradient, only
+    /// this noise swing does. KEEP IN SYNC with SDF_LANE_ERODE_RAGGED_AMOUNT in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    public const float LaneErodeRaggedAmount = 0.35f;
 
     // The largest |dot(unitRight, unitUp)| RequireOrthogonalBasis accepts: a cosine, so it reads as ~0.057 degrees.
     private const float BasisSkewTolerance = 1.0e-3f;
@@ -82,6 +91,11 @@ public sealed partial class SdfProgramBuilder {
     // KEEP IN SYNC with SDF_SCREEN_MATERIAL in Assets/Shaders/Sdf/sdf-vm.hlsli.
     /// <summary>The reserved material identifier used by the plain procedural screen material.</summary>
     public const int ScreenMaterialId = 65535;
+    /// <summary>The most bounded emissive volumes (<see cref="SdfVolume"/>) one rendered frame may carry — matches
+    /// <c>Puck.SdfVm.SdfWorldEngine.MaxVolumes</c>, which reads this rather than hand-syncing a second literal. Sized
+    /// for bounded media per frame; the per-pixel cost is a slab test for every volume whose ray
+    /// misses, so this stays small.</summary>
+    public const int MaxVolumes = 8;
 
     private readonly List<SdfInstanceRange> m_instances;
     private readonly List<SdfInstruction> m_instructions;
@@ -147,7 +161,7 @@ public sealed partial class SdfProgramBuilder {
     // one open scope; every call site below is an is-open/the-open-scope check, never an index. Raising the depth
     // cap needs converting this to an indexed structure (see MaxFieldScopeDepth's doc) — the depth guard below keeps
     // reading MaxFieldScopeDepth rather than hardcoding 1, so that conversion stays localized to this field + guard.
-    private (SdfBlendOp Blend, float Smooth, int ShapeCountAtOpen)? m_fieldScope;
+    private (SdfBlendOp Blend, float Smooth, int ShapeCountAtOpen, Vector4 Data0, float StepCount)? m_fieldScope;
     // The SECOND mirror of the shader's parityMaterialDelta slot, and the one the Build()-time refusal below reads.
     // It exists beside m_positionalFold because the two answer different questions: m_positionalFold feeds the
     // material-scope CLAMP, whose repair vocabulary is a fold's per-unit stride, so it deliberately tracks only the two
@@ -376,7 +390,7 @@ public sealed partial class SdfProgramBuilder {
     private static void RequireDefined(SdfBlendOp value, string paramName) =>
         RequirePackedEnumValue(
             value: ((uint)value),
-            maximum: ((uint)SdfBlendOp.ChamferSubtraction),
+            maximum: ((uint)SdfBlendOp.StairsSubtraction),
             actualValue: value,
             enumName: nameof(SdfBlendOp),
             paramName: paramName
@@ -1010,6 +1024,12 @@ public sealed partial class SdfProgramBuilder {
             value: blend,
             paramName: nameof(blend)
         );
+        if (blend is SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
+            throw new ArgumentException(
+                message: $"Blend operation '{blend}' is supported only as a PopField composition.",
+                paramName: nameof(blend)
+            );
+        }
         RequireFinite(
             value: smooth,
             paramName: nameof(smooth),
@@ -1042,14 +1062,32 @@ public sealed partial class SdfProgramBuilder {
 
         return this;
     }
-    private SdfProgramBuilder Transform(SdfOp op, Vector4 data0 = default, Vector4 data1 = default) {
+    /// <summary>Marks the most recently emitted <see cref="SdfOp.ShapeBlend"/> instruction's
+    /// <see cref="SdfInstruction.Secondary"/> — false excludes it from a soft-shadow/AO march while it still marches
+    /// for the camera and every other consumer (see <see cref="SdfInstruction"/>'s remarks). Must chain directly onto
+    /// the shape method that emitted it, before any field op (<see cref="Dilate"/>/<see cref="Onion"/>) that would
+    /// append a later instruction and move "most recent" past it.</summary>
+    /// <exception cref="InvalidOperationException">The most recently emitted instruction is not a
+    /// <see cref="SdfOp.ShapeBlend"/>.</exception>
+    public SdfProgramBuilder MarkSecondary(bool secondary) {
+        var index = (m_instructions.Count - 1);
+
+        if ((index < 0) || (m_instructions[index].Op != SdfOp.ShapeBlend)) {
+            throw new InvalidOperationException(message: "MarkSecondary must chain directly onto the shape method that emitted the most recent SdfOp.ShapeBlend instruction.");
+        }
+
+        m_instructions[index] = (m_instructions[index] with { Secondary = secondary });
+
+        return this;
+    }
+    private SdfProgramBuilder Transform(SdfOp op, Vector4 data0 = default, Vector4 data1 = default, uint shape = 0u, uint blend = 0u) {
         m_instructions.Add(item: new SdfInstruction(
-            Blend: 0,
+            Blend: blend,
             Data0: data0,
             Data1: data1,
             Material: 0,
             Op: op,
-            Shape: 0
+            Shape: shape
         ));
 
         return this;
@@ -1179,7 +1217,8 @@ public sealed partial class SdfProgramBuilder {
             instances: m_instances,
             instructions: m_instructions,
             materials: m_materials,
-            screenSurfaces: m_screenSurfaces
+            screenSurfaces: m_screenSurfaces,
+            sweepCurves: m_sweepCurves
         );
     }
 }

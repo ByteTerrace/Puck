@@ -184,6 +184,8 @@ public sealed record WorldRenderLighting(IReadOnlyList<WorldRenderLight>? Lights
 [JsonDerivedType(typeof(WorldRenderLight.Directional), typeDiscriminator: "directional")]
 [JsonDerivedType(typeof(WorldRenderLight.Hemisphere), typeDiscriminator: "hemisphere")]
 [JsonDerivedType(typeof(WorldRenderLight.Rim), typeDiscriminator: "rim")]
+[JsonDerivedType(typeof(WorldRenderLight.Point), typeDiscriminator: "point")]
+[JsonDerivedType(typeof(WorldRenderLight.Occluder), typeDiscriminator: "occluder")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldRenderLight {
     private WorldRenderLight() {
@@ -227,6 +229,25 @@ public abstract record WorldRenderLight {
         float? Weight = null,
         float? Power = null
     ) : WorldRenderLight;
+    /// <summary>A point light with inverse-square falloff and a soft core:
+    /// <c>intensity = weight / (1 + (distance / radius)^2)</c>. No shadow march in v1 — a point light never occludes
+    /// and is never occluded.</summary>
+    /// <param name="Position">The world-space position for a static (unanchored) light. Absent is the world origin.
+    /// An offset in the anchor frame when an anchor is authored.</param>
+    /// <param name="Radius">The falloff radius. Absent is the engine default.</param>
+    /// <param name="Anchor">An entity, entity part, or placement frame. A missing live target disables the light.</param>
+    /// <param name="Color">The light's linear colour.</param>
+    /// <param name="Weight">The strength. Absent is the engine default.</param>
+    public sealed record Point(
+        DocumentVector3? Position = null,
+        float? Radius = null,
+        WorldAnchor? Anchor = null,
+        BindableColor? Color = null,
+        float? Weight = null
+    ) : WorldRenderLight;
+    /// <summary>A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement
+    /// frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.</summary>
+    public sealed record Occluder(DocumentVector3? Position = null, float? Radius = null, WorldAnchor? Anchor = null, float? Weight = null) : WorldRenderLight;
 }
 /// <summary>The stylized curvature enrichment, keyed on the level-set mean curvature the lit path already measures
 /// at each hit. Every field is optional individually — absent resolves to the engine's pinned default. The three
@@ -349,7 +370,7 @@ public sealed record WorldRenderCycleKey(float At, WorldRenderLighting? Lighting
 public enum WorldTonemap {
     /// <summary>No remap: the stylized shaded color, as every world rendered before this field existed.</summary>
     None = 0,
-    /// <summary>A filmic curve, then gamma 2.2.</summary>
+    /// <summary>A filmic (ACES-fit) curve on the frame's final color.</summary>
     Filmic = 1,
 }
 /// <summary>The analytic studio reflections a GGX specular lobe reflects — see

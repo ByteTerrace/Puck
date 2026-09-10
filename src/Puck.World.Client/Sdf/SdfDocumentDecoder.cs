@@ -92,6 +92,7 @@ public static class SdfDocumentDecoder {
         ["torus"] = SdfDocumentOpKind.Torus,
         ["plane"] = SdfDocumentOpKind.Plane,
         ["noiseDisplace"] = SdfDocumentOpKind.NoiseDisplace,
+        ["cellDisplace"] = SdfDocumentOpKind.CellDisplace,
         ["cellJitter"] = SdfDocumentOpKind.CellJitter,
     };
     private static readonly Dictionary<SdfDocumentOpKind, string[]> OpMembers = new() {
@@ -108,6 +109,7 @@ public static class SdfDocumentDecoder {
         [SdfDocumentOpKind.Torus] = ["op", "majorRadius", "minorRadius", "material", "blend", "smooth"],
         [SdfDocumentOpKind.Plane] = ["op", "normal", "offset", "material", "blend", "smooth"],
         [SdfDocumentOpKind.NoiseDisplace] = ["op", "frequency", "amplitude", "octaves", "gain", "lacunarity", "seed"],
+        [SdfDocumentOpKind.CellDisplace] = ["op", "frequency", "amplitude", "seed", "mode", "randomness"],
         [SdfDocumentOpKind.CellJitter] = ["op", "spacing", "jitter", "seed", "tumble", "flavor"],
     };
     private static readonly Dictionary<string, SdfBlendOp> BlendNames = new(comparer: StringComparer.Ordinal) {
@@ -121,6 +123,10 @@ public static class SdfDocumentDecoder {
         ["chamferUnion"] = SdfBlendOp.ChamferUnion,
         ["chamferIntersection"] = SdfBlendOp.ChamferIntersection,
         ["chamferSubtraction"] = SdfBlendOp.ChamferSubtraction,
+        ["grooveUnion"] = SdfBlendOp.GrooveUnion,
+        ["pipeUnion"] = SdfBlendOp.PipeUnion,
+        ["grooveSubtraction"] = SdfBlendOp.GrooveSubtraction,
+        ["pipeSubtraction"] = SdfBlendOp.PipeSubtraction,
     };
     private static readonly HashSet<SdfBlendOp> TopLevelBlends = [SdfBlendOp.Union, SdfBlendOp.SmoothUnion, SdfBlendOp.ChamferUnion];
     private static readonly Dictionary<string, SdfNoiseFlavor> NoiseFlavorNames = new(comparer: StringComparer.Ordinal) {
@@ -225,6 +231,9 @@ public static class SdfDocumentDecoder {
                         smooth: op.Smooth
                     );
 
+                    break;
+                case SdfDocumentOpKind.CellDisplace:
+                    _ = builder.CellDisplace(op.Scalar0, op.Scalar1, op.Seed, (SdfCellMode)op.Integer0, op.Vector0.X);
                     break;
                 case SdfDocumentOpKind.NoiseDisplace:
                     // Octave-range / gain / lacunarity refusals are INHERITED from the builder (see the catch below),
@@ -708,6 +717,7 @@ public static class SdfDocumentDecoder {
                     members: members
                 )
             ),
+                SdfDocumentOpKind.CellDisplace => DecodeCellDisplace(members, context, depth, index),
                 SdfDocumentOpKind.NoiseDisplace => DecodeNoiseDisplace(
                 context: context,
                 depth: depth,
@@ -895,6 +905,28 @@ public static class SdfDocumentDecoder {
     // would displace every shape the composed world program holds before this document); octave-count integrality is
     // checked here (the builder takes an int), while its range and the gain/lacunarity positivity refusals are
     // inherited from the builder through Apply's catch.
+    private static SdfDocumentOp DecodeCellDisplace(Dictionary<string, JsonElement> members, string context, int depth, int index) {
+        if (depth < 1) {
+            throw new SdfDocumentException(SdfRefusal.FieldOpNotScoped, $"{context}: cellDisplace requires a push/pop field scope.");
+        }
+        if (!members.TryGetValue("mode", out var modeValue) || modeValue.ValueKind != JsonValueKind.String ||
+            modeValue.GetString() is not ("F1" or "F2MinusF1")) {
+            throw new SdfDocumentException(SdfRefusal.NotANumber, $"{context}.mode: expected F1 or F2MinusF1.");
+        }
+        if (!members.TryGetValue("seed", out var seedValue) || seedValue.ValueKind != JsonValueKind.Number || !seedValue.TryGetUInt32(out var seed)) {
+            throw new SdfDocumentException(SdfRefusal.NotANumber, $"{context}.seed: expected an integer in 0..4294967295.");
+        }
+        var mode = Enum.Parse<SdfCellMode>(modeValue.GetString()!);
+        var frequency = RequireFloat(members, "frequency", context);
+        var amplitude = RequireFloat(members, "amplitude", context);
+        var randomness = RequireFloat(members, "randomness", context);
+        try { new SdfCellDisplacement(frequency, amplitude, seed, mode, randomness).Validate(); }
+        catch (ArgumentException exception) {
+            throw new SdfDocumentException(SdfRefusal.NotANumber, $"{context}: {exception.Message}");
+        }
+        return new(Index: index, Kind: SdfDocumentOpKind.CellDisplace, Vector0: new(randomness, 0f, 0f),
+            Scalar0: frequency, Scalar1: amplitude, Integer0: (int)mode, Seed: seed);
+    }
     private static SdfDocumentOp DecodeNoiseDisplace(Dictionary<string, JsonElement> members, string context, int depth, int index) {
         if (depth < 1) {
             throw new SdfDocumentException(

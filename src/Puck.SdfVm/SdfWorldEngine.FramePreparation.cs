@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Puck.Hosting;
@@ -188,13 +189,14 @@ public sealed partial class SdfWorldEngine {
         if (count == 0) {
             floats[0] = 0f; floats[1] = 0f; floats[2] = 0f; floats[3] = 0f;   // position.xyz, pad
             floats[4] = 0f; floats[5] = 0f; floats[6] = 0f; floats[7] = 1f;   // identity quaternion
+            floats[8] = 0f; floats[9] = 0f; floats[10] = 0f; floats[11] = 0f; // Lanes: x damage, y thrust, z/w free
 
             return;
         }
 
         for (var index = 0; (index < count); index++) {
             var transform = transforms[index];
-            var b = (index * 8);
+            var b = (index * 12);
 
             // position.w encodes per-instance soft-shadow participation: 0 = casts (the default pad every prior frame
             // uploaded → byte-identical), 1 = shadow-suppressed (skipped by the soft-shadow march only). Read by
@@ -204,6 +206,9 @@ public sealed partial class SdfWorldEngine {
                 : 1f
             );
             floats[(b + 4)] = transform.Orientation.X; floats[(b + 5)] = transform.Orientation.Y; floats[(b + 6)] = transform.Orientation.Z; floats[(b + 7)] = transform.Orientation.W;
+            // Lanes row: any op evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's thrust read)
+            // sees the current value through sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
+            floats[(b + 8)] = transform.Lanes.X; floats[(b + 9)] = transform.Lanes.Y; floats[(b + 10)] = transform.Lanes.Z; floats[(b + 11)] = transform.Lanes.W;
         }
     }
     // Pack the per-frame screen-light buffer: entries 0..(MaxScreenSurfaces-1) = each screen's emitted color (the
@@ -311,6 +316,38 @@ public sealed partial class SdfWorldEngine {
             floats: floats,
             frame: frame
         );
+    }
+    // Ten float4 rows, paired with shade-volumes.hlsli. Unused slots carry zero bounds.
+    private void PackVolumes(SdfFrame frame) {
+        Array.Clear(array: m_volumeScratch);
+
+        var floats = MemoryMarshal.Cast<byte, float>(span: m_volumeScratch.AsSpan());
+        var volumes = frame.Volumes;
+        if (volumes.Count > MaxVolumes) {
+            throw new ArgumentOutOfRangeException(nameof(frame), "Too many bounded volumes.");
+        }
+        var count = volumes.Count;
+
+        for (var index = 0; (index < count); index++) {
+            var volume = volumes[index];
+            volume.Validate(frame.DynamicTransforms.Count);
+            var b = index * SdfVolume.VectorsPerEntry * 4;
+            var rotation = Quaternion.Normalize(volume.Rotation);
+
+            floats[(b + 0)] = volume.Position.X; floats[(b + 1)] = volume.Position.Y; floats[(b + 2)] = volume.Position.Z; floats[(b + 3)] = volume.DynamicSlot;
+            floats[(b + 4)] = rotation.X; floats[(b + 5)] = rotation.Y; floats[(b + 6)] = rotation.Z; floats[(b + 7)] = rotation.W;
+            floats[(b + 8)] = volume.HalfExtent.X; floats[(b + 9)] = volume.HalfExtent.Y; floats[(b + 10)] = volume.HalfExtent.Z; floats[(b + 11)] = volume.Axis;
+            floats[(b + 12)] = volume.Width; floats[(b + 13)] = volume.Speed; floats[(b + 14)] = BitConverter.UInt32BitsToSingle(volume.Seed); floats[(b + 15)] = volume.Steps;
+            floats[b + 16] = volume.Intensity; floats[b + 17] = volume.Extinction;
+            floats[b + 18] = volume.PulseAmplitude; floats[b + 19] = volume.PulseFrequency;
+            floats[b + 20] = volume.IntensityLane ?? -1; floats[b + 21] = volume.Ramp.Count;
+            for (var stop = 0; stop < volume.Ramp.Count; stop++) {
+                var row = b + 24 + stop * 4;
+                var value = volume.Ramp[stop];
+                floats[row] = value.Color.X; floats[row + 1] = value.Color.Y;
+                floats[row + 2] = value.Color.Z; floats[row + 3] = value.Density;
+            }
+        }
     }
     // The environment block: SdfEnvironment's lanes copied row for row after the far-field row, with the host bakes
     // the shader must not pay per pixel — every directional (light and softbox) normalized in double and rounded once
@@ -521,6 +558,8 @@ public sealed partial class SdfWorldEngine {
 
         PackScreenLights(frame: frame);
         m_screenLightBuffers[slot].Write<byte>(data: m_screenLightScratch);
+        PackVolumes(frame: frame);
+        m_volumeBuffers[slot].Write<byte>(data: m_volumeScratch);
         // The glyph-decal buffer: SetScreenDecal/ClearScreenDecal patch the host mirror; unlike the buffers above this
         // one is only re-uploaded when a decal call actually dirtied this slot's copy — it is 820 KB, and a program
         // that never touches decals (e.g. the bare revealed room) must not pay that upload every frame. An all-zero

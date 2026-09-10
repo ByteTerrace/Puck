@@ -5,10 +5,16 @@ using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-/// <summary>Describes one camera and its normalized output region for an SDF frame.</summary>
+/// <summary>Describes one viewport slot's normalized output region for an SDF frame — an SDF camera render, or,
+/// when <see cref="Child"/> names one, a hosted child render node instead (see <see cref="SdfWorldRenderSpec.Children"/>
+/// and <see cref="SdfEngineNode"/>'s per-frame child-mask derivation). <see cref="Camera"/> is unused for a child slot.</summary>
 /// <param name="Camera">The camera used to render the view.</param>
 /// <param name="Region">The view's normalized output region.</param>
 public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedRect Region) {
+    /// <summary>The <see cref="SdfWorldRenderSpec.Children"/> key backing this slot instead of an SDF camera render,
+    /// or <see langword="null"/> for an ordinary camera view. A name unresolved when <see cref="SdfEngineNode"/> first
+    /// derives its child mask takes the ordinary camera path for the life of the engine instead — see its remarks.</summary>
+    public string? Child { get; init; }
     /// <summary>The off-axis (asymmetric) frustum's tangent-space center offset — <c>(0, 0)</c> (the default) is the
     /// ordinary symmetric camera every view used before this member existed, byte-identical: the shader adds it as a
     /// trailing term (see sdf-world.hlsli's <c>cameraRayDirection</c>), and adding exactly zero changes no rounding.
@@ -49,6 +55,12 @@ public sealed record SdfFrame(
     /// never references). Updating this list is how entities move — the program (binding 1) is uploaded once and left
     /// untouched.</summary>
     public IReadOnlyList<DynamicTransform> DynamicTransforms { get; init; } = [];
+    /// <summary>The frame's bounded flow volumes, at most
+    /// <see cref="SdfWorldEngine.MaxVolumes"/> — extras beyond the cap are dropped, nearest-first is a host concern.
+    /// Packed into its own structured buffer (never <c>sdfScreenLights</c>) and shaded by <c>shade-volumes.hlsli</c>'s
+    /// one call site at the end of <c>renderView</c>, after the surface color is final. Empty (the default) uploads an
+    /// all-zero table the shader never iterates past — byte-identical to a build without volumes.</summary>
+    public IReadOnlyList<SdfVolume> Volumes { get; init; } = [];
     /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
     /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>
     public float AmbientScale { get; init; } = 1f;

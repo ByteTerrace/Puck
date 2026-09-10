@@ -75,4 +75,34 @@ public enum SdfShapeType : uint {
     // packed (x, y) float-bit vertices each, vertices in the shape's local XY plane, clockwise. KEEP IN SYNC with
     // SDF_SHAPE_CONVEX_POLYGON / sdfConvexPolygon2D / sdfPolygonVertex.
     ConvexPolygon = 19,
+    // Sweep = 20: a quadratic Bezier curve (control points A, B, C, in the shape's local frame) swept with a radius
+    // that tapers linearly between two endpoints plus a mid-span bulge, optionally as 1-4 helical strands orbiting
+    // the curve. Too much data to pack inline (9 floats for the control points alone) — the points and the per-strand
+    // radius endpoints live in a side table appended to the packed program's own word stream, the SAME door
+    // ConvexPolygon's vertex table uses (see that shape's remarks): no new GPU binding. Data0.x = asfloat(uint table
+    // offset, in uvec4 units) — HOST-PATCHED by SdfProgram's constructor once the table's layout is known, exactly
+    // like ConvexPolygon's Data0.x; Data0.y = strands (1..4, always a small positive integer, so it round-trips
+    // through float exactly), Data0.z = twist (turns along the curve), Data0.w = strandOffset (creation units).
+    // Data1 = (smooth [ISA-wide], reserved, reserved, reserved). The table is exactly 3 uvec4 entries: (A.xyz,
+    // radiusStart), (B.xyz, radiusEnd), (C.xyz, bulge) — fixed size, unlike ConvexPolygon's variable vertex count, so
+    // no count needs packing alongside the offset.
+    //
+    // Distance: "exact-enough", not exact — the closest point on the quadratic Bezier CENTERLINE (ignoring radius and
+    // strand offset) has the standard iq closed form (a depressed-cubic solve); the radius and, for strands > 1, the
+    // orbit offset are evaluated AT that one parameter t*, never re-solved for the radius-adjusted or helical
+    // objective. That approximation can overestimate true distance near strong radius/orbit variation (the same
+    // failure mode a single-sample "closest point on a fat, tapered tube" approximation always has — proven
+    // numerically over a randomized grid, see SweepLawTests and SdfProgramBuilder.Sweep's admission bounds), so the
+    // shape returns the raw candidate minus a CONSERVATIVE MARGIN derived from the curve's own authored parameters —
+    // KEEP IN SYNC with SdfProgramBuilder.SweepConservativeMargin / sdfSweepConservativeMargin (sdf-vm.hlsli) / the
+    // fixed-point mirror in Puck.SignedDistance.Queries.SdfFieldEvaluator. The margin is a NUMERICALLY CALIBRATED
+    // constant (like several other approximate shapes in this ISA — Ellipsoid #6's eccentricity factor, Vesica's
+    // pre-fix history), not a closed-form Lipschitz proof; SdfProgramBuilder.Sweep refuses (by name) a declaration
+    // whose bulge/taper/strand-offset ratios exceed the envelope that margin was calibrated against.
+    //
+    // Fixed-point mirror (Puck.SignedDistance.Queries.SdfFieldEvaluator): supported ONLY for strands == 1 — a single
+    // closed-form closest point on a Bezier is fine in fixed point (FixedQ4816.Pow/Sin/Cos are available), but the
+    // multi-strand orbit and its per-strand min are RENDER-ONLY and refused for deterministic field contact by name,
+    // exactly like Glyph/SampledRegion are refused for reasons of their own.
+    Sweep = 20,
 }

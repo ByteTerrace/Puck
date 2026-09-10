@@ -358,6 +358,60 @@ panel or an eccentric primitive would (below) — unscoped, they would inflate
 or hollow every shape emitted before them in the whole program, not just this
 one.
 
+## Round seams and cellular relief
+
+`GrooveUnion` removes a round tube along the intersection of two fields;
+`PipeUnion` adds that tube to their union. Both use `smooth` as the radius
+in creation units. With incoming distances a and b and h = sqrt(a²+b²),
+groove is max(min(a,b), r-h), and pipe is min(min(a,b), h-r).
+There is no separate groove-width field. Radius measures the tube in field
+coordinates; its physical cross-section depends on the angle between surfaces.
+
+A panel seam uses two overlapping Box shapes pitched toward each other:
+give them positions [-0.6,0,0] and [0.6,0,0], scales [1,1,0.3], and Y
+rotations +0.36 and -0.36 radians. The first uses Union; the second uses
+`"blend": "GrooveUnion", "smooth": 0.12`. Their intersecting front faces
+carry a recessed line.
+
+A pipe-joint bead uses two Cylinder shapes of scale [0.65,1,0.65], at
+[0,-0.25,0] and [0.45,0.35,0]. Rotate the second by pi/2 about Z and give
+it `"blend": "PipeUnion", "smooth": 0.28`.
+
+A shape's `cells` object adds actual surface relief:
+
+```json
+{
+  "amplitude": 0.28,
+  "frequency": 4,
+  "mode": "F1",
+  "randomness": 0.46,
+  "seed": 3751
+}
+```
+
+Attach this object as `cells` on a unit Sphere to produce a cellular
+surface. For ridged cell boundaries, use `mode: "F2MinusF1"`,
+`amplitude: 0.24`, and `randomness: 0.2`.
+Frequency is cells per creation unit; amplitude is field displacement in
+creation units. The emitter restores the shape's rigid frame after emitting
+its geometry and before sampling the relief, including on warped shapes.
+Placement scaling preserves the pattern by converting frequency inversely
+and amplitude directly.
+
+Randomness is the side length of the centered feature-position box inside
+each unit lattice cell. F1 admits [0,0.46]; F2MinusF1 admits [0,0.20].
+These conservative ceilings keep both nearest features inside a fixed
+27-cell neighborhood. Frequency must be finite in (0,8], amplitude in [0,4],
+and 1 + amplitude*frequency*L must not exceed 8, with L=1 for F1 and
+L=2 for F2MinusF1. Invalid fields are refused by name.
+
+Cells require a closed primitive and a per-shape field scope. Sweep,
+grouped shapes, detail-only shapes,
+and creations that need an outer field scope are refused; use separate
+prototypes when combining these features in a scene. Authoring cells affect
+render geometry; solid-placement colliders retain the base primitive.
+The low-level `CellDisplace` op also has a deterministic fixed-point evaluator.
+
 ## Shape panel (second-material inset)
 
 `ShapeDocument.Panel` (`ShapePanelDocument`) is a second-material inset face
@@ -475,27 +529,23 @@ the same. Verified by `ShapeDetailLawTests`.
 
 ## Bounded volumes (`volumes[]`)
 
-`CreationDocument.Volumes` (`VolumeDocument`, at most
-`SdfProgramBuilder.MaxVolumes`) declares participating media beside the
-shapes: a `plume` is a tapering, advected emissive column inside an
-oriented box (`halfExtent`, creation units) whose mouth is the box's +Y
-face, flowing toward −Y. A volume is not a shape — it emits no instruction,
-carves nothing, and has no collider; the renderer ray-marches it after the
-opaque surface is shaded and clips it against that depth.
+`CreationDocument.Volumes` declares bounded participating media beside
+the shapes. Each `flow` uses an oriented `halfExtent` box, with its mouth
+at +Y and advection toward -Y. The renderer integrates it after opaque
+shading and clips it against that depth; it creates no collider.
 
-`parent` names the shape whose dynamic slot the volume rides, so a nozzle's
-plume follows the nozzle's live pose; the volume's `position`/`rotation` are
-then shape-local, and `CreationFrame.ToEngine` leaves them alone because the
-shape's own author-frame flip already carries them. A root-riding volume
-(`parent` null) converts like a shape. `thrust` scales the emission by the
-riding slot's `lanes.thrust` render lane. `VolumeDocument.ToVolume` is the
-one door both emission paths use: `Client.WorldStampPool.PackTransforms`
-packs a live registration's volumes each frame, and
-`Client.WorldPlacementStamper.EmitStatic` bakes a static placement's with the
-placement frame and no slot. `CreationCanonicalizer.ValidateVolumes` refuses
-an unknown kind, a parent naming no shape, a non-positive box, steps outside
-`SdfVolume.MinSteps..MaxSteps`, a non-hex colour, or more volumes than the
-ceiling, each by name. Verified by `VolumeLawTests`.
+A volume declares `position`, `rotation`, `halfExtent`, and a `ramp`
+of one to four ascending `{ density, color }` stops. The ramp maps local
+density to emission before integration. `axis`, `width`, `speed`,
+`seed`, `steps`, `intensity`, `extinction`, `pulseAmplitude`, and
+`pulseFrequency` control its shape, motion, and integration.
+Optional `intensityLane` selects anonymous render lane 0..3; omission
+uses unit gain. Zero extinction uses the transparent integration limit.
+
+Optional `parent` names a shape frame; omission uses the creation root.
+The frame and all creation-unit lengths follow placement scaling.
+`CreationCanonicalizer.ValidateVolumes` refuses invalid values and more
+than `SdfProgramBuilder.MaxVolumes` entries.
 
 ## Sculpting: authoring creations in code (`Sculpting/`)
 

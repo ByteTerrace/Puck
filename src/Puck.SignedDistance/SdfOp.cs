@@ -13,14 +13,9 @@ public enum SdfOp : uint {
     /// be repositioned each frame by updating a small buffer, without re-uploading the static scene program. Honored only
     /// by shaders compiled with <c>SDF_DYNAMIC_TRANSFORMS</c> (the world path); a no-op elsewhere.</summary>
     TransformDynamic = 4,
-    /// <summary>Bends space about the local X axis: the XY plane rotates by <c>rate * x</c> radians (Data0.x = rate).
-    /// Not an isometry (space stretches tangentially) — keep rates moderate so the march stays stable.</summary>
-    BendX = 5,
-    /// <summary>Bends the XY plane by <c>rate * y</c> radians (Data0.x = rate).</summary>
-    BendY = 6,
-    /// <summary>Bends the YZ plane by <c>rate * y</c> radians (Data0.x = rate). Quirk, kept deliberately: like
-    /// <see cref="BendY"/> it keys on the local Y coordinate (not Z).</summary>
-    BendZ = 7,
+    /// <summary>Rotates a plane (Shape: XY=0, YZ=1, XZ=2) driven by a coordinate (Blend: X=0, Y=1, Z=2).
+    /// Angle = Data0.x * (driver - Data0.y); inverse-domain rotation is (c*u+s*v, -s*u+c*v).</summary>
+    RotatePlane = 5,
     /// <summary>Elongates the shape that follows by clamping the point into a box (Data0.xyz = extents): the shape's
     /// cross-section is swept over <c>±extents</c> — the classic capsule-from-sphere operator.</summary>
     Elongate = 8,
@@ -47,9 +42,6 @@ public enum SdfOp : uint {
     /// Data1.z = the symmetry-LOD distance threshold (0 = off): past it the lattice keeps its copies but the in-cell
     /// folds are skipped — upright copies, cheaper and shimmer-free at range.</summary>
     WallpaperFold = 18,
-    /// <summary>Twists space about the local Y axis: the XZ plane rotates by <c>rate * y</c> radians (Data0.x = rate).
-    /// It is not an isometry; keep rates moderate.</summary>
-    TwistY = 20,
     /// <summary>Log-spherical domain warp: tiles space into infinite self-similar "Droste" shells by folding the
     /// radial log-coordinate to the nearest shell — a translation along <c>log(radius)</c> becomes a uniform scaling
     /// in Cartesian space, so one authored prototype shell repeats outward/inward as scaled copies from a handful of
@@ -163,24 +155,34 @@ public enum SdfOp : uint {
     /// <see cref="Displace"/>'s). The outward surface reach is at most <c>|amplitude|</c> (the normalized sum is
     /// bounded by 1) — the scoped-field margin and cull channels read that. amplitude = 0 is an exact identity.</summary>
     NoiseDisplace = 29,
-    /// <summary>Radial flare warp: scales the point's local XZ by a profile along local Y —
-    /// <c>p.xz /= s(t)</c>, <c>s(t) = 1 + amount·t + bulge·sin(π·t)</c>, <c>t = clamp((top − y) / span, 0, 1)</c>
-    /// (t = 0 at Data0.z = top, t = 1 a full Data0.w⁻¹ = span below it). Data0 = (amount, bulge, top, 1/span, ALL
-    /// HOST-BAKED except amount/bulge/top which arrive as authored); Data1.x = the conservative size correction
-    /// <c>1/max(s)</c> over t ∈ [0, 1] (HOST-BAKED, <see cref="SdfProgram.FlareExtrema"/> — always ≤ 1 since s(0) = 1
-    /// is always a candidate for the max). Matches the study's <c>shinRadii</c>/<c>curvedSection</c> silhouette (a
-    /// limb that flares toward the hip, tapers to the ankle, with a mid-span bulge). s(t) is floored at
-    /// <see cref="SdfProgramBuilder.FlareMinScale"/> so a parameter combination that drives it non-positive still
-    /// yields a finite, if visually degenerate, warp rather than a divide-by-zero. distanceScale takes the 1/max(s)
-    /// correction (the same channel <see cref="Scale"/>'s min-axis factor and <see cref="LogSphere"/>'s r/density
-    /// factor ride) — a global, not per-point, correction, since s varies with y. Not an isometry: the y-varying
-    /// scale also shears space (moving along y rescales x and z), so <c>SdfProgram.AnalyzeLipschitz</c> folds a
-    /// reach-dependent operator-norm bound (<c>SdfProgram.FlareOperatorNorm</c>) into the program's step clamp,
-    /// exactly as <see cref="BendY"/>/<see cref="TwistY"/> do for their own warp rates — keep amount/bulge/span
-    /// moderate. RENDER-ONLY: <c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c> does not interpret this op (its
-    /// runtime trig and division are outside the evaluator's warp-free rigid subset, matching
-    /// <see cref="BendX"/>/<see cref="BendY"/>/<see cref="BendZ"/>/<see cref="TwistY"/>'s status), so a shape
-    /// carrying it is unreachable for deterministic field contact — the evaluator's constructor throws, naming the
-    /// op, rather than silently misjudging a query against it.</summary>
-    FlareY = 30,
+    /// <summary>Divides both coordinates perpendicular to Shape (axis 0..2) by an axial profile.
+    /// Data0=(amount, bulge, origin, inverseSpan); Data1=(distanceCorrection, startScale, 0, 0).
+    /// s(t)=startScale+amount*t+bulge*sin(pi*t), t=clamp((origin-p[axis])*inverseSpan,0,1).
+    /// The shader floors s at FlareMinScale; the host bounds the resulting Jacobian. Render-only.</summary>
+    AxialProfile = 30,
+    /// <summary>Adds a cubic polynomial of the Blend-selected driver coordinate to the Shape-selected
+    /// target coordinate. Data0.xyz=(linear, quadratic, cubic); both selectors are distinct axes in [0,2].
+    /// The host bounds its derivative over the composed chain reach. Render-only.</summary>
+    Shear = 31,
+    /// <summary>An anisotropic Gaussian domain displacement: p -= push * exp(-|(p-center)/radii|²).
+    /// Data0 = center.xyz, push.x; Data1 = radii.xyz, push.y; Shape stores push.z as float bits.
+    /// Its reach-independent Jacobian bound is 1 + |push| * sqrt(2/e) / min(radii). Render-only.</summary>
+    GaussianPush = 32,
+    /// <summary>Per-shape lane-driven erosion, ordered immediately before the <see cref="ShapeBlend"/> it targets
+    /// (whatever ordinary point ops the shape's own chain still applies in between). Data0 = (lane index 0..3 — see
+    /// an integer in [0, 3], from, to, noiseScale), Data1.x = the target shape's HOST-BAKED reach (its bound
+    /// radius; see <see cref="SdfProgramBuilder.LaneErode"/>). Reads the CURRENT dynamic slot's
+    /// <c>DynamicTransform.Lanes</c> component named by the lane index (zero under no dynamic slot).
+    /// <c>t = saturate((lane − from) / (to − from))</c>: a reversed range (from &gt; to) runs the fold the other way
+    /// (the shape grows IN as the lane rises). <c>t &gt;= 1</c> skips the target shape's evaluation entirely — a
+    /// cheap early-out, no field cost. Otherwise the shape is dilated inward by <c>t · reach</c>, modulated by 3D
+    /// value noise so the erosion front is ragged rather than a uniform shrink. RENDER-ONLY, like the other warp
+    /// family ops: <c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c> does not interpret this op (it carries no
+    /// dynamic-transform table in its signature to read a lane from), so a shape carrying it is unreachable for
+    /// deterministic field contact. KEEP IN SYNC with SDF_OP_LANE_ERODE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    LaneErode = 34,
+    /// <summary>Adds amplitude*(F(localPoint*frequency)-0.5) to the running field.
+    /// Data0=(frequency, amplitude, randomness, 0), Shape=seed, Blend=SdfCellMode.
+    /// The 27-cell PCG3D neighborhood is exact within the mode's admitted randomness range.</summary>
+    CellDisplace = 35,
 }

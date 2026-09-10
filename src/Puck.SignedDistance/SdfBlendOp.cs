@@ -28,12 +28,12 @@ public enum SdfBlendOp : uint {
     SmoothSubtraction = 6,
     /// <summary>Union with a chamfered (45° beveled) seam instead of a round fillet (bevel size = instruction Data1.x)
     /// — the mechanical/CAD look, distinct from <see cref="SmoothUnion"/>'s organic blob.
-    /// <para>The chamfer family is the only blend that is not 1-Lipschitz, and the only one whose Lipschitz bound can
+    /// <para>The chamfer family's Lipschitz bound can
     /// exceed BOTH of its operands: the bevel plane's gradient is <c>(∇a ± ∇b)/√2</c>, so composing fields bounded by
     /// <c>La</c> and <c>Lb</c> yields <c>max(La, Lb, (La + Lb)/√2)</c>. <c>AnalyzeLipschitz</c> therefore folds it once
     /// per COMPOSITION, not once per program: the first chamfer against an empty accumulator is the identity, two reach
-    /// √2, and a longer chain approaches the recurrence's fixed point <c>1 + √2</c>. A chamfer-free program is
-    /// unaffected and bakes a step scale of exactly 1.</para></summary>
+    /// √2, and a longer chain approaches the recurrence's fixed point <c>1 + √2</c>. Other composition families
+    /// retain their own bounds.</para></summary>
     ChamferUnion = 7,
     /// <summary>Intersection with a chamfered (45° beveled) seam (bevel size = instruction Data1.x). Composes through
     /// the same Lipschitz recurrence as <see cref="ChamferUnion"/>.</summary>
@@ -41,4 +41,26 @@ public enum SdfBlendOp : uint {
     /// <summary>Subtraction with a chamfered (45° beveled) carve seam (bevel size = instruction Data1.x). Composes
     /// through the same Lipschitz recurrence as <see cref="ChamferUnion"/>.</summary>
     ChamferSubtraction = 9,
+    /// <summary>Carves a round seam from the union: max(min(a,b), r - sqrt(a²+b²)). Radius is Data1.x.
+    /// The tube is measured in field coordinates; its spatial width depends on the surfaces' angle.</summary>
+    GrooveUnion = 10,
+    /// <summary>Adds a round seam to the union: min(a,b,sqrt(a²+b²)-r). Radius is Data1.x.
+    /// Both round seam blends compose derivative bounds as sqrt(La²+Lb²).</summary>
+    PipeUnion = 11,
+    /// <summary>Continuous linear field interpolation between parent accumulator and field scope: (1 - t)·a + t·b.
+    /// t is derived from an instance render lane: t = saturate((lane[Data0.x] - Data0.y) / (Data0.z - Data0.y)).
+    /// Strictly 1-Lipschitz. PopField compose only.</summary>
+    Morph = 12,
+    /// <summary>Carves a round seam while subtracting: max(a, -b, r - sqrt(a²+b²)). Radius is Data1.x.
+    /// Composes derivative bounds as sqrt(La²+Lb²).</summary>
+    GrooveSubtraction = 13,
+    /// <summary>Leaves a round bead while subtracting: min(max(a, -b), sqrt(a²+b²) - r). Radius is Data1.x.
+    /// Composes derivative bounds as sqrt(La²+Lb²).</summary>
+    PipeSubtraction = 14,
+    /// <summary>Adds continuous steps of radius r (Data1.x) and step count n (Data1.y) to the union.
+    /// Strictly 1-Lipschitz. PopField compose only.</summary>
+    StairsUnion = 15,
+    /// <summary>Carves continuous steps of radius r (Data1.x) and step count n (Data1.y) from the subtraction.
+    /// Strictly 1-Lipschitz. PopField compose only.</summary>
+    StairsSubtraction = 16,
 }

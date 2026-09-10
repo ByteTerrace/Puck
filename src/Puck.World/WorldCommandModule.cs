@@ -408,7 +408,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
     private static string ShadowEcho(WorldRenderSettings settings) {
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.shadows: {ShadowTiers.Name(reach: settings.ShadowReach)} | crowd {settings.ShadowCrowdRadius:0.##}]"
+            handler: $"[world.shadows: {ShadowTiers.Name(reach: settings.ShadowReach)} | crowd {settings.ShadowCrowdRadius:0.##} | gradient-scaled]"
         );
     }
     // The world.shadows echo: continuous reach plus crowd radius; named-notch values render through their facade.
@@ -696,7 +696,7 @@ internal sealed class WorldCommandModule(FrameRateMonitor frameRate, PresentPaci
                 if (args.Count == 0) {
                     return new CommandResult(Output: $"[world.ao: {(settings.AmbientOcclusion
                         ? "on"
-                        : "off")}]");
+                        : "off")} | gradient-scaled]");
                 }
 
                 var on = ParseOnOff(token: args[0]);

@@ -59,7 +59,7 @@ internal static class ParityCommand {
 
         Console.WriteLine(value: $"parity: artifacts {runDirectory}");
 
-        if (!TryBuildWorld(artifact: out var artifact, repositoryRoot: repositoryRoot, suiteClock: suiteClock)) {
+        if (!TryBuildWorld(artifact: out var artifact, repositoryRoot: repositoryRoot, runDirectory: runDirectory, suiteClock: suiteClock)) {
             return 2;
         }
 
@@ -84,10 +84,11 @@ internal static class ParityCommand {
             rightDir: Path.Combine(path1: runDirectory, path2: "captures-directx")
         );
     }
-    private static bool TryBuildWorld(string repositoryRoot, Stopwatch suiteClock, out string artifact) {
+    private static bool TryBuildWorld(string repositoryRoot, string runDirectory, Stopwatch suiteClock, out string artifact) {
         var worldProject = Path.Combine(path1: repositoryRoot, path2: "src", path3: "Puck.World", path4: "Puck.World.csproj");
 
-        artifact = Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "bin", "Release", "net10.0", "Puck.World.dll"]);
+        var buildDirectory = Path.Combine(runDirectory, "build");
+        artifact = Path.Combine(buildDirectory, "Puck.World.dll");
 
         Console.WriteLine(value: "parity: building Puck.World once (Release).");
 
@@ -96,7 +97,7 @@ internal static class ParityCommand {
         try {
             build = CliProcess.RunCaptured(
                 fileName: "dotnet",
-                arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false"],
+                arguments: ["build", worldProject, "-c", "Release", "--nologo", "--no-restore", "-p:NuGetAudit=false", "--output", buildDirectory],
                 input: string.Empty,
                 timeout: CliProcess.RemainingBudget(budget: SuiteBudget, clock: suiteClock)
             );
@@ -106,6 +107,8 @@ internal static class ParityCommand {
             return false;
         }
 
+        File.WriteAllText(Path.Combine(runDirectory, "build-stdout.log"), build.Stdout, new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(runDirectory, "build-stderr.log"), build.Stderr, new UTF8Encoding(false));
         if (build.TimedOut || (build.ExitCode != 0)) {
             Console.Error.WriteLine(value: (build.TimedOut
                 ? $"ERROR: the Puck.World build exceeded the {SuiteBudget.TotalSeconds:0}-second whole-suite budget."

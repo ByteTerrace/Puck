@@ -16,6 +16,14 @@ namespace Puck.SignedDistance;
 /// <c>SDF_SHAPE_DETAIL_FLAG</c>/<c>sdfDetailShadingActive</c> in Assets/Shaders/Sdf/sdf-vm.hlsli). Packs into the
 /// otherwise-unused high bit of the instruction's Shape lane (see <see cref="SdfProgram"/>'s packing), so it is
 /// meaningful only when <see cref="Op"/> is <see cref="SdfOp.ShapeBlend"/>; false elsewhere.</param>
+/// <param name="Secondary">Whether a <see cref="SdfOp.ShapeBlend"/> instruction participates in a SECONDARY-RAY
+/// march: true (the default) marches for the camera/beam/fine march, the hit-only shade re-evaluations, AND the
+/// soft-shadow/ambient-occlusion field walks, exactly like an ordinary shape. False drops it ONLY from the
+/// soft-shadow and ambient-occlusion walks — it still marches for the camera, still carves the silhouette and the
+/// collider — the opposite exclusion set from <see cref="Detail"/> (KEEP IN SYNC with
+/// <c>SDF_SHAPE_NO_SECONDARY_FLAG</c>/<c>sdfSecondaryMarchActive</c> in Assets/Shaders/Sdf/sdf-vm.hlsli). Packs into
+/// the instruction's Shape lane's next-highest bit, so it is meaningful only when <see cref="Op"/> is
+/// <see cref="SdfOp.ShapeBlend"/>; true elsewhere.</param>
 public readonly record struct SdfInstruction(
     SdfOp Op,
     uint Shape,
@@ -23,5 +31,6 @@ public readonly record struct SdfInstruction(
     uint Material,
     Vector4 Data0,
     Vector4 Data1,
-    bool Detail = false
+    bool Detail = false,
+    bool Secondary = true
 );

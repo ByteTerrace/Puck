@@ -32,7 +32,7 @@ namespace Puck.World;
 /// <see cref="IServerLink"/> and <see cref="WorldViewComposer"/> are core, so <c>view.override</c> and
 /// <c>world.view.state</c> function headless; <see cref="WorldCursorFeed"/> is presentation-only, so it is optional
 /// (default <see langword="null"/>) and <c>world.view.pointer</c> refuses by name when it is absent.</para></remarks>
-internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCursorFeed? cursorFeed = null) : ICommandModule {
+internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer composer, WorldCursorFeed? cursorFeed = null, WorldRenderProbe? renderProbe = null) : ICommandModule {
     // The plan-wide clear-to-absent tokens for a live override: 'auto' (and '-') clear it back to the composer's own
     // selection; any other token is the forced name.
     private static string? ClearOrName(string token) =>
@@ -87,9 +87,14 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
 
         for (var index = 0; (index < composer.Slots.Count); index++) {
             var slot = composer.Slots[index];
-            var occupant = ((slot.Camera is { } camera)
-                ? $"cam:{camera}"
-                : $"seat{slot.SeatOrder}"
+            var occupant = ((slot.Study is { } study)
+                ? (((renderProbe?.Node is { } node) && !node.HasChild(name: study))
+                    ? $"study:{study}:missing"
+                    : $"study:{study}")
+                : ((slot.Camera is { } camera)
+                    ? $"cam:{camera}"
+                    : $"seat{slot.SeatOrder}"
+                )
             );
 
             _ = builder.Append(
@@ -172,7 +177,7 @@ internal sealed class WorldViewCommandModule(IServerLink link, WorldViewComposer
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.view.state",
-            description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name>). A query (always echoes) — the pipe-assertable composition read.",
+            description: "Echoes the live window composition: world.view.state — the active layout name, selection reason (override|authored|builtin), transition progress, and each slot's rect + occupant (seat<order> | cam:<name> | study:<name>, appended :missing when a study slot names a views.studies row the render engine has not registered). A query (always echoes) — the pipe-assertable composition read.",
             handler: (context, args) => ((CommandResult.RequireNoArguments(args: args, verb: "world.view.state") is { } refusal)
             ? refusal
             : new CommandResult(Output: DescribeState())),

@@ -6,13 +6,20 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/<c>render.tonemap</c> read-back:
-/// <c>world.lighting</c> reports every authored light by slot, the curvature enrichment, every sky layer, the
-/// studio-reflection softbox count and horizon colors, the tonemap mode, and the state row a <c>render.cycle</c>
-/// keys them on. The sections are authored through <c>world.row.set render</c>; every field is optional and an
-/// absent one reads <c>default</c>, which is the engine's pinned value for that field of that kind, not zero.
+/// The <c>render.lighting</c>/<c>render.sky</c>/<c>render.environment</c>/<c>render.grounding</c>/
+/// <c>render.tonemap</c> read-back: <c>world.lighting</c> reports every authored light by slot, the curvature
+/// enrichment, every sky layer, the studio-reflection softbox count and horizon colors, the grounding
+/// strength/radius, the tonemap mode, and the state row a <c>render.cycle</c> keys them on. The sections are
+/// authored through <c>world.row.set render</c>; every field is optional and an absent one reads <c>default</c>,
+/// which is the engine's pinned value for that field of that kind, not zero.
 /// </summary>
 public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority) : ICommandModule {
+    private static string DescribeLightAnchor(WorldAnchor? anchor) => anchor switch {
+        WorldAnchor.Entity entity => $"entity:{entity.Index}",
+        WorldAnchor.EntityPart part => $"entityPart:{part.Index}/{part.PartId}",
+        WorldAnchor.Placement placement => $"placement:{placement.PlacementId}/{placement.ShapeId}",
+        _ => "none",
+    };
     private static string Describe(float? value) => ((value is { } number)
         ? number.ToString(
             format: "0.####",
@@ -62,6 +69,19 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
                 .Field(key: "color", value: Describe(color: rim.Color))
                 .Field(key: "weight", value: Describe(value: rim.Weight))
                 .Field(key: "power", value: Describe(value: rim.Power)),
+            WorldRenderLight.Occluder occluder => echo
+                .Field(key: "type", value: "occluder")
+                .Field(key: "position", value: Describe(vector: occluder.Position))
+                .Field(key: "radius", value: Describe(value: occluder.Radius))
+                .Field(key: "weight", value: Describe(value: occluder.Weight))
+                .Field(key: "anchor", value: DescribeLightAnchor(occluder.Anchor)),
+            WorldRenderLight.Point point => echo
+                .Field(key: "type", value: "point")
+                .Field(key: "position", value: Describe(vector: point.Position))
+                .Field(key: "radius", value: Describe(value: point.Radius))
+                .Field(key: "color", value: Describe(color: point.Color))
+                .Field(key: "weight", value: Describe(value: point.Weight))
+                .Field(key: "anchor", value: DescribeLightAnchor(point.Anchor)),
             _ => echo.Field(key: "type", value: "unknown"),
         });
     }
@@ -191,7 +211,7 @@ public sealed class WorldLightingCommandModule(IWorldConsoleAuthority authority)
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.lighting",
-            description: "Reports the render.lighting, render.sky, render.environment, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the tonemap mode, and the state row a render.cycle keys them on. An unauthored field reads 'default' — the engine's pinned value for it, not zero.",
+            description: "Reports the render.lighting, render.sky, render.environment, render.grounding, and render.tonemap census (Immediate; the stdin barrier makes it read the settled state after any pending mutation): every light by slot with its kind and fields, the stylized curvature enrichment and whether its runtime gate is open, every sky layer by index, the studio-reflection softbox count and horizon colors, the grounding strength/radius, the tonemap mode, and the state row a render.cycle keys them on. An unauthored field reads 'default' — the engine's pinned value for it, not zero.",
             handler: (context, args) => {
                 if (CommandResult.RequireNoArguments(args: args, verb: "world.lighting") is { } refusal) {
                     return refusal;

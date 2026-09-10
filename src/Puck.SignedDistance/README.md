@@ -46,7 +46,7 @@ points and radii already carry creation-unit dimensions directly (see
 
 `SdfProgramBuilder` builds an `SdfProgram` as an ordered stream of point
 transforms, field operations, shapes, and materials — reset/translate/rotate,
-union/subtraction/intersection blends (with smooth and chamfer variants),
+union/subtraction/intersection blends (with smooth, chamfer, and round seam variants),
 domain folds (repeat, wallpaper, polar repeat, symmetry planes), warps (bend,
 twist, log-spherical, cell jitter, displacement, domain warp), and the shape
 vocabulary (primitives, the 2D-primitive-lift family, glyphs, screen slabs,
@@ -65,6 +65,27 @@ half-extents), finite non-negative material values and instance bounds, finite
 screen origins, the screen frame's orthonormality, instance ranges that
 partition the instructions they claim rather than overlapping, and balanced
 one-deep field scopes that never cross an instance boundary.
+
+Round seams use the existing smooth-radius lane: `GrooveUnion` carves the
+complement of sqrt(a²+b²)-r from the union, and `PipeUnion` adds that tube;
+`GrooveSubtraction` and `PipeSubtraction` do the same against `max(a, -b)`.
+Their derivative bounds compose as hypot(La,Lb) at each blend.
+
+`Morph` and the two `Stairs` blends compose only at a `PopField`. A morph reads
+its weight from an instance render lane through the same (lane, from, to)
+mapping `LaneErode` uses; this evaluator has no dynamic transform table, so it
+reads every lane as zero and a morphed scope resolves at the weight that lane
+value maps to. A stairs pop carries its integer step count in Data1.z; Data1.y
+is the analyzer's candidate scale on every pop.
+
+`CellDisplace` adds amplitude*(F-0.5) to the running field. A fixed 27-cell
+PCG3D search evaluates F1 or F2MinusF1, with conservative centered-randomness
+ceilings 0.46 and 0.20. The fixed-point evaluator shares feature identity and
+visit order with the shader. Its coordinate derivative is bounded separately
+from a primitive's distance correction; restore a rigid frame before relief
+when a preceding fold cannot supply a global continuous bound.
+[Shape authoring examples](../Puck.World.Authoring/README.md#round-seams-and-cellular-relief)
+show the higher-level scope and placement rules.
 
 ## 🔍 The CPU query layer (`Puck.SignedDistance.Queries`)
 

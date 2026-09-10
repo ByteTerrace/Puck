@@ -45,6 +45,9 @@ public sealed partial class WorldStampPool {
 
     private readonly Registration?[] m_pool = new Registration?[WorldPlacementPolicy.MaxStampRegistrations];
     private int m_packedSlotBase = -1;
+    // The bounded volumes every live registration's creation authors (CreationDocument.Volumes), rebuilt by
+    // PackTransforms each frame and riding the registration's root or a named shape's dynamic slot.
+    private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
 
     // Latched by Tick, consumed once by the next PackTransforms — the frame delta the pool's root/part followers
     // step by (accumulates across a Tick called more than once before a pack, mirroring the replay clock above).
@@ -82,6 +85,10 @@ public sealed partial class WorldStampPool {
         // Cue state: the look's cues, each cue's timeline frame (1-based cursor, 0 = unresolved), when each next
         // self-fires on the cue clock, its fire count (the draw's seed), and the cue frame holding now (0 = none).
         public IReadOnlyList<WorldLookCue>? Cues;
+        // The look's anonymous render-lane expressions (WorldLookMotion.Lanes), evaluated fresh every frame
+        // against live state (WorldLookLaneEvaluator) and written into every dynamic slot this registration owns —
+        // null for a row-rooted registration (row placements carry no WorldLookMotion) or an unauthored lane.
+        public IReadOnlyList<ValueExpression?>? Lanes;
 
         // Whether the timeline replays on the render clock (an animated row always does; a body look only when its
         // motion says so — a cue-only timeline otherwise rests on frame 0, the live pose).
@@ -233,6 +240,10 @@ public sealed partial class WorldStampPool {
                 dilate: ((shape.Dilate ?? 0f) * placementScale),
                 domain: (probeWorstCase ? ShapeDomainOps.ProbeWorstCase : shape.Domain),
                 flare: shape.Flare,
+                shear: shape.Shear,
+                bumps: shape.Bumps,
+                erode: shape.Erode,
+                cells: shape.Cells,
                 inGroupScope: true,
                 material: paletteIds[((shape.Material ?? 0) % paletteIds.Length)],
                 onion: ((shape.Onion ?? 0f) * placementScale),
@@ -257,7 +268,9 @@ public sealed partial class WorldStampPool {
                 // way through its Scale(transform.Scale) op).
                 rounding: ((shape.Rounding ?? 0f) * ((probeWorstCase || (shape.Domain is { Count: > 0 })) ? 1f : placementScale)),
                 chamfer: ((shape.Chamfer ?? 0f) * ((probeWorstCase || (shape.Domain is { Count: > 0 })) ? 1f : placementScale)),
-                exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
+                exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                secondary: (shape.Secondary ?? true),
+                curve: shape.Curve?.Parameters()
             );
         }
 
@@ -312,10 +325,13 @@ public sealed partial class WorldStampPool {
         // at zero inset) maximized across every primitive a panel can be authored on, at the placement scale
         // envelope's own ceiling — alongside the existing 2.5x per-shape reach term.
         // The probe emits the worst-case flare (ShapeFlareDocument.MaxAmount/MaxBulge) on every shape, so its reach
-        // term carries the same ProbeReachFactor the per-shape bounds below take.
+        // term carries the same ProbeReachFactor the per-shape bounds below take; the worst-case shear/bump term
+        // mirrors ShearBumpExtra's own probe branch against this same 2.5x reach proxy.
         var reach = ((probeWorstCase || (document is null))
-            ? (((2.5f * maxPlacementScale) * (probeWorstCase ? ShapeFlareDocument.ProbeReachFactor : 1f)) + (probeWorstCase
+            ? ((((2.5f * maxPlacementScale) * (probeWorstCase ? ShapeFlareDocument.ProbeReachFactor : 1f)) + (probeWorstCase
                 ? SdfSolidGeometry.MaxPanelReach(scale: new Vector3(value: maxPlacementScale))
+                : 0f)) + (probeWorstCase
+                ? ((2f * ShapeDocument.MaxShear * (2.5f * maxPlacementScale)) + (ShapeBumpDocument.MaxBumps * ShapeBumpDocument.MaxPushMagnitude * maxPlacementScale))
                 : 0f))
             : CreationStampEmitter.RenderReach(
                 document: document!,
@@ -366,45 +382,54 @@ public sealed partial class WorldStampPool {
                 : placed?.Domain
             );
             var hasDomain = (domain is { Count: > 0 });
-            // A flare scales the primitive's XZ cross-section by up to max(s) about its own axis, so the primitive's
-            // reach — and only that term: a rest offset or fold displacement is applied before the warp — grows by
-            // ShapeFlareDocument.ReachFactor (the probe's worst-case flare by ProbeReachFactor). Without it a flared
-            // shape clips at its tile edges (the influence-sphere contract).
-            var flareReachFactor = (probeWorstCase
-                ? ShapeFlareDocument.ProbeReachFactor
-                : ShapeFlareDocument.ReachFactor(flare: placed?.Flare)
-            );
+            // Convert the radius to creation units before composing the inverse warp bounds.
+            float WarpedReach(float primitiveReach) => ShapeWarpReach.Expand(
+                primitiveReach / placementScale + (placed?.Cells?.PrimitiveReachPadding(placed.Scale, placed.Flare) ?? 0f),
+                probeWorstCase ? new(ShapeFlareDocument.MaxAmount, ShapeFlareDocument.MaxBulge, 1f, StartScale: ShapeFlareDocument.MaxStartScale) : placed?.Flare,
+                probeWorstCase ? new(ShapeDocument.MaxShear, ShapeDocument.MaxShear, ShapeDocument.MaxShear) : placed?.Shear,
+                probeWorstCase ? ShapeBumpDocument.MaxBumps * ShapeBumpDocument.MaxPushMagnitude : ShapeBumpDocument.ReachExtra(placed?.Bumps)) * placementScale;
+
+            // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
+            // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
+            // packer adds the smooth halo. It is an INFLUENCE sphere by contract, read per tile cone by the cull
+            // and per SAMPLE by the interpreter's influence skip: until 2026-09-03 it was 0.9 x max(scale), which
+            // does not cover a unit sphere, let alone a box's corners — the halo hid the deficit at tile
+            // granularity, and the per-sample skip exposed it on every shape of the avatar.
+            // A Sweep carries no SdfSolidGeometry.Reach unit-scale law (its own control points already carry
+            // creation-unit dimensions — see SdfSolidPrimitive.Sweep's remarks); a panel is refused on it, so
+            // panelRaise never applies.
+            var tightPrimitiveReach = ((placed?.Type == SdfSolidPrimitive.Sweep)
+                ? ((placed.Curve?.Reach() ?? 0f) * scale.X)
+                : SdfSolidGeometry.Reach(
+                type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
+                scale: scale,
+                lift: (placed?.Lift ?? SdfLift.Extrude),
+                // Depth is a creation-unit value; the raise it adds to this world-unit bound scales with the placement.
+                panelRaise: ((placed?.Panel is { Depth: < 0f } raisedPanel)
+                ? (-raisedPanel.Depth * placementScale)
+                : 0f)
+            ));
+            var dilateWorld = ((placed?.Dilate ?? 0f) * placementScale);
+            var onionWorld = ((placed?.Onion ?? 0f) * placementScale);
+            // A trim's own scope grows the host's copy outward by at most Inset (ShapeTrimDocument.MaxInset) before
+            // it can ever win the Union race against this same shape's plain instance — reserved unconditionally
+            // under the probe, since a live slot's real Trims are not known until content loads.
+            var trimMargin = ((probeWorstCase || (placed?.Trims is { Count: > 0 }))
+                ? (ShapeTrimDocument.MaxInset * placementScale)
+                : 0f);
+            var boundRadius = ((hasDomain
+                ? (probeWorstCase
+                    ? (reach + GroupBoundMargin)
+                    : ((((placed!.Position.Value.Length() + ShapeDomainOps.Reach(domain: domain)) * placementScale)
+                        + WarpedReach(tightPrimitiveReach))
+                        + dilateWorld) + onionWorld)
+                : ((WarpedReach(tightPrimitiveReach) + dilateWorld) + onionWorld)
+            ) + trimMargin);
 
             _ = builder.BeginInstanceDynamic(
                 slot: slot,
                 boundOffset: Vector3.Zero,
-                boundRadius: (hasDomain
-                ? (probeWorstCase
-                    ? (reach + GroupBoundMargin)
-                    : (((((placed!.Position.Value.Length() + ShapeDomainOps.Reach(domain: domain)) * placementScale) + (SdfSolidGeometry.Reach(
-                        type: placed.Type,
-                        scale: scale,
-                        lift: (placed.Lift ?? SdfLift.Extrude)
-                    ) * flareReachFactor)) + ((placed.Dilate ?? 0f) * placementScale)) + ((placed.Onion ?? 0f) * placementScale)))
-                // The per-shape bound is the primitive's TRUE reach at this scale (SdfSolidGeometry.Reach — the same
-                // measure the static stamper's ShapeStampBound takes) plus the shape's own outward field ops; the
-                // packer adds the smooth halo. It is an INFLUENCE sphere by contract, read per tile cone by the cull
-                // and per SAMPLE by the interpreter's influence skip: until 2026-09-03 it was 0.9 x max(scale), which
-                // does not cover a unit sphere, let alone a box's corners — the halo hid the deficit at tile
-                // granularity, and the per-sample skip exposed it on every shape of the avatar.
-                : ((((SdfSolidGeometry.Reach(
-                    type: (placed?.Type ?? SdfSolidPrimitive.Sphere),
-                    scale: scale,
-                    lift: (placed?.Lift ?? SdfLift.Extrude),
-                    // Depth is a creation-unit value; the raise it adds to this world-unit bound scales with the placement.
-                    panelRaise: ((placed?.Panel is { Depth: < 0f } raisedPanel)
-                    ? (-raisedPanel.Depth * placementScale)
-                    : 0f)
-                ) * flareReachFactor) + ((placed?.Dilate ?? 0f) * placementScale)) + ((placed?.Onion ?? 0f) * placementScale))
-                // A trim's own scope grows the host's copy outward by at most Inset (ShapeTrimDocument.MaxInset)
-                // before it can ever win the Union race against this same shape's plain instance — reserved
-                // unconditionally under the probe, since a live slot's real Trims are not known until content loads.
-                + ((probeWorstCase || (placed?.Trims is { Count: > 0 })) ? (ShapeTrimDocument.MaxInset * placementScale) : 0f))),
+                boundRadius: boundRadius,
                 active: active
             );
             EmitShape(
@@ -417,6 +442,10 @@ public sealed partial class WorldStampPool {
                 dilate: ((placed?.Dilate ?? 0f) * placementScale),
                 domain: domain,
                 flare: placed?.Flare,
+                shear: placed?.Shear,
+                bumps: placed?.Bumps,
+                erode: placed?.Erode,
+                cells: placed?.Cells,
                 material: material,
                 onion: ((placed?.Onion ?? 0f) * placementScale),
                 panel: placed?.Panel,
@@ -444,7 +473,9 @@ public sealed partial class WorldStampPool {
                 trims: placed?.Trims,
                 allShapes: shapes,
                 paletteIds: paletteIds,
-                exponent: (placed?.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
+                exponent: (placed?.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
+                secondary: (placed?.Secondary ?? true),
+                curve: placed?.Curve?.Parameters()
             );
             _ = builder.EndInstance();
         }
@@ -553,7 +584,14 @@ public sealed partial class WorldStampPool {
     // prefix) rather than after the plate's shape instruction, whose emission may leave a persistent Scale op on the
     // chain. placementScale converts the panel's creation-unit Inset/Depth into the world units `scale` is already
     // in, and is the Scale op a domain-bearing shape's chain carries (above).
-    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent) {
+    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, bool secondary = true, ShapeShearDocument? shear = null, IReadOnlyList<ShapeBumpDocument>? bumps = null, SdfSweepParameters? curve = null, ShapeErodeDocument? erode = null, ShapeCellsDocument? cells = null) {
+        // The worst-case reservation for a Sweep's fixed 3-uvec4 curve table entry — any admitted curve costs the
+        // SAME table words (unlike ConvexPolygon's variable vertex count), so one representative curve inside the
+        // admitted envelope (SdfProgramBuilder.MaxSweepBulgeRatio et al.) reserves it.
+        var effectiveCurve = (probeWorstCase
+            ? new SdfSweepParameters(A: Vector3.Zero, B: Vector3.UnitY, Bulge: 0.1f, C: (2f * Vector3.UnitY), RadiusEnd: 0.1f, RadiusStart: 0.1f, Strands: SdfProgramBuilder.MinSweepStrands, StrandOffset: 0f, Twist: 0f)
+            : curve);
+
         SdfProgramBuilder BuildChain(bool withDomain) {
             var chain = builder.ResetPoint();
             var chainCarriesScale = (withDomain && (domain is { Count: > 0 }));
@@ -602,11 +640,72 @@ public sealed partial class WorldStampPool {
                 // dimensionless ratios and pass through unscaled on both.
                 var lengthScale = (chainCarriesScale ? 1f : placementScale);
 
-                chain = chain.FlareY(
+                chain = chain.AxialProfile(
                     amount: (probeWorstCase ? ShapeFlareDocument.MaxAmount : flare!.Amount),
                     bulge: (probeWorstCase ? ShapeFlareDocument.MaxBulge : flare!.Bulge),
                     top: (probeWorstCase ? 0f : ((flare!.Top ?? 0f) * lengthScale)),
-                    span: (probeWorstCase ? 1f : (flare!.Span * lengthScale))
+                    span: (probeWorstCase ? 1f : (flare!.Span * lengthScale)),
+                    axis: probeWorstCase ? 1 : flare!.Axis,
+                    startScale: probeWorstCase ? ShapeFlareDocument.MaxStartScale : flare!.StartScale
+                );
+            }
+
+            if (
+                probeWorstCase ||
+                (shear is not null)
+            ) {
+                // Linear is a dimensionless slope (like Flare's Amount/Bulge) and passes through unscaled; Quadratic
+                // carries units of 1/length (quadratic*y*y must resolve to a length), so it takes the INVERSE of the
+                // length conversion Top/Span above take — dividing by lengthScale keeps the same real-world shear
+                // whichever unit space this chain's point sits in when Shear evaluates it.
+                var lengthScale = (chainCarriesScale ? 1f : placementScale);
+
+                chain = chain.Shear(
+                    linear: (probeWorstCase ? ShapeDocument.MaxShear : shear!.Linear),
+                    quadratic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Quadratic / lengthScale)),
+                    cubic: (probeWorstCase ? ShapeDocument.MaxShear : (shear!.Cubic / (lengthScale * lengthScale))),
+                    target: probeWorstCase ? 0 : shear!.Target,
+                    driver: probeWorstCase ? 1 : shear!.Driver
+                );
+            }
+
+            if (probeWorstCase) {
+                // Worst-case reserves the widest declared bump list; every entry is otherwise identical for capacity
+                // purposes (each costs the same single instruction) — Push length feeds the reach probe below,
+                // not the instruction count.
+                for (var i = 0; (i < ShapeBumpDocument.MaxBumps); i++) {
+                    chain = chain.GaussianPush(center: Vector3.Zero, radii: Vector3.One, push: new Vector3(value: ShapeBumpDocument.MaxPushMagnitude));
+                }
+            } else {
+                foreach (var bump in (bumps ?? [])) {
+                    var lengthScale = (chainCarriesScale ? 1f : placementScale);
+
+                    chain = chain.GaussianPush(
+                        center: (bump.Center.Value * lengthScale),
+                        radii: (bump.Radii.Value * lengthScale),
+                        push: (bump.Push.Value * lengthScale)
+                    );
+                }
+            }
+
+            if (probeWorstCase || erode is not null) {
+                // KEEP IN SYNC with CreationStampEmitter.EmitShapeChain's mirrored erode prefix. reach is this
+                // shape's own SdfSolidGeometry.Reach in WORLD units — a domain-bearing chain carries the placement
+                // scale as its own Scale op (chainCarriesScale), so reach takes it by hand there exactly as Flare's
+                // Top/Span do; every other chain's `scale` parameter is already world-scaled.
+                var reachScale = (chainCarriesScale ? placementScale : 1f);
+                var erodeReach = (SdfSolidGeometry.Reach(
+                    lift: lift,
+                    scale: scale,
+                    type: type
+                ) * reachScale);
+
+                chain = chain.LaneErode(
+                    from: (probeWorstCase ? 0f : erode!.From),
+                    lane: (probeWorstCase ? 0 : erode!.Lane),
+                    noiseScale: (probeWorstCase ? 1f : (erode!.Noise ?? 1f)),
+                    reach: erodeReach,
+                    to: (probeWorstCase ? 1f : erode!.To)
                 );
             }
 
@@ -627,13 +726,19 @@ public sealed partial class WorldStampPool {
             type: type
         ) > 1f);
         var wantsPanel = (probeWorstCase || (panel is not null));
-        // A flare is a warp, so its Lipschitz factor (SdfProgram.FlareOperatorNorm) would otherwise fold into the
-        // WHOLE program's step scale; its own scope clamps it onto this candidate at the pop instead, exactly as an
-        // eccentric primitive's factor is. (The probe already emits the scope unconditionally, so the envelope is unchanged.)
+        // A flare/shear/bump/erode is a warp (or, for erode, a noise-perturbed candidate whose Lipschitz factor
+        // folds the same way — SdfProgram.Lipschitz.cs's LaneErode case), so its factor
+        // (SdfProgram.FlareOperatorNorm/ShearOperatorNorm/GaussianPushLipschitz/NoiseDisplaceStepFactor) would
+        // otherwise fold into the WHOLE program's step scale; its own scope clamps it onto this candidate at the pop
+        // instead, exactly as an eccentric primitive's factor is. (The probe already emits the scope
+        // unconditionally, so the envelope is unchanged.)
         var wantsFlare = (flare is not null);
+        var wantsShear = (shear is not null);
+        var wantsBumps = (bumps is { Count: > 0 });
+        var wantsErode = (erode is not null);
 
         if (
-            (wantsDilate || wantsOnion || eccentric || wantsPanel || wantsFlare) &&
+            (wantsDilate || wantsOnion || eccentric || wantsPanel || wantsFlare || wantsShear || wantsBumps || wantsErode || cells is not null) &&
             !inGroupScope
         ) {
             var scoped = SdfSolidGeometry.AppendScaledPrimitive(
@@ -648,8 +753,9 @@ public sealed partial class WorldStampPool {
                 smooth: 0f,
                 type: type,
                 taper: taper, profile: profile,
-                lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent
-            );
+                lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent,
+                curve: effectiveCurve
+            ).MarkSecondary(secondary: secondary);
 
             if (wantsDilate) {
                 scoped = scoped.Dilate(radius: (probeWorstCase
@@ -697,6 +803,16 @@ public sealed partial class WorldStampPool {
                 );
             }
 
+            if (probeWorstCase || cells is not null) {
+                var relief = cells ?? new ShapeCellsDocument(1f, 0.1f, 0u, SdfCellMode.F1, 0.2f);
+                var cellChain = builder.ResetPoint().TransformDynamic(slot);
+                if (domain is { Count: > 0 }) {
+                    cellChain = cellChain.Translate(shapePosition * placementScale)
+                        .Rotate(shapeRotation == default ? Quaternion.Identity : shapeRotation);
+                }
+                _ = cellChain.CellDisplace(relief.Frequency / placementScale,
+                    relief.Amplitude * placementScale, relief.Seed, relief.Mode, relief.Randomness);
+            }
             _ = builder.PopField();
             EmitTrims(
                 builder: builder, slot: slot, rootSlot: rootSlot, type: type, scale: scale, material: material,
@@ -717,8 +833,9 @@ public sealed partial class WorldStampPool {
             smooth: smooth,
             type: type,
             taper: taper, profile: profile,
-            lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent
-        );
+            lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent,
+            curve: effectiveCurve
+        ).MarkSecondary(secondary: secondary);
 
         if (wantsDilate) {
             afterShape = afterShape.Dilate(radius: (probeWorstCase
@@ -844,7 +961,7 @@ public sealed partial class WorldStampPool {
             // scope, whose pop clamps the group's own 1/L onto its candidate instead (SdfProgram.AnalyzeLipschitz).
             if (
                 ((shape.Group ?? 0) == groupId) &&
-                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f) || (shape.Flare is not null) || (SdfSolidGeometry.StepFactor(type: shape.Type, scale: shape.Scale) > 1f))
+                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ((shape.Onion ?? 0f) != 0f) || ((shape.Dilate ?? 0f) != 0f) || (shape.Flare is not null) || (shape.Shear is not null) || (shape.Bumps is { Count: > 0 }) || (shape.Erode is not null) || (shape.Cells is not null) || (SdfSolidGeometry.StepFactor(type: shape.Type, scale: shape.Scale) > 1f))
             ) {
                 return true;
             }
@@ -876,6 +993,7 @@ public sealed partial class WorldStampPool {
             FramePoses = new Dictionary<int, FrameTransformDocument>?[((stamp.Creation.Document.Frames?.Count ?? 0) + 1)],
             Cues = stamp.Motion.Cues,
             Replay = stamp.Motion.ReplayFrames,
+            Lanes = stamp.Motion.Lanes,
         };
 
         if (stamp.Motion.Poses is { Count: > 0 } poses) {
@@ -1235,6 +1353,7 @@ public sealed partial class WorldStampPool {
     /// frame — parks, hidden below the floor (<see cref="SdfEmitContext.ParkPosition"/>).</param>
     public void PackTransforms(Span<DynamicTransform> transforms, WorldClient client, int slotBase, Vector3 parkPosition) {
         m_packedSlotBase = slotBase;
+        m_volumes.Clear();
 
         var deltaSeconds = m_pendingDeltaSeconds;
 
@@ -1312,7 +1431,14 @@ public sealed partial class WorldStampPool {
                 live.FollowedOrientation = rootRotation;
             }
 
+            // The look's anonymous render lanes (WorldLookMotion.Lanes), evaluated fresh every frame against live
+            // state and carried on EVERY dynamic slot this registration owns — root and every shape — so whichever
+            // slot a shape's own erode/wear reads (SDF_OP_LANE_ERODE's TransformDynamic, shade-wear.hlsli) sees the
+            // current value regardless of which slot it rides.
+            var lanes = WorldLookLaneEvaluator.EvaluateLanes(live.Lanes, client.Definition, client.Tick, live.BodyIndex ?? -1);
+
             transforms[rootSlot] = new DynamicTransform(
+                Lanes: lanes,
                 Orientation: rootRotation,
                 Position: rootPosition
             );
@@ -1427,6 +1553,7 @@ public sealed partial class WorldStampPool {
                 // scale here — the same product the ordinary path folds into `position * placementScale` below.
                 if (shape.Domain is { Count: > 0 }) {
                     transforms[slot] = new DynamicTransform(
+                        Lanes: lanes,
                         Orientation: Quaternion.Normalize(value: (rootRotation * live.PartDeltaRotation[shapeIndex])),
                         Position: (rootPosition + Vector3.Transform(
                             rotation: rootRotation,
@@ -1464,10 +1591,60 @@ public sealed partial class WorldStampPool {
                 }
 
                 transforms[slot] = new DynamicTransform(
+                    Lanes: lanes,
                     Orientation: Quaternion.Normalize(value: (rootRotation * rotation)),
                     Position: worldPosition
                 );
             }
+
+            AppendVolumes(
+                document: document,
+                placementScale: placementScale,
+                rootSlot: rootSlot,
+                shapeCount: shapeCount
+            );
+        }
+    }
+    /// <summary>Gets the bounded volumes the pool's live registrations author, as packed by the latest
+    /// <see cref="PackTransforms"/> — each riding its registration's root slot or its parent shape's slot.</summary>
+    public IReadOnlyList<SdfVolume> Volumes => m_volumes;
+    // A volume rides the slot of the shape its parent names (the shape's own live frame, so the volume's authored
+    // offset is shape-local) or the root slot; a parent past the animated shape-slot budget has no slot and falls
+    // back to the root. The list is capped at the engine's volume ceiling; later registrations' volumes are dropped.
+    private void AppendVolumes(CreationDocument document, float placementScale, int rootSlot, int shapeCount) {
+        if (document.Volumes is not { Count: > 0 } volumes) {
+            return;
+        }
+
+        var shapes = (document.Shapes ?? []);
+
+        foreach (var volume in volumes) {
+            if (m_volumes.Count >= SdfProgramBuilder.MaxVolumes) {
+                return;
+            }
+
+            var slot = rootSlot;
+
+            if (volume.Parent is { } parent) {
+                for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
+                    if (string.Equals(
+                        a: shapes[shapeIndex].Name?.Value,
+                        b: parent,
+                        comparisonType: StringComparison.Ordinal
+                    )) {
+                        slot = ((rootSlot + 1) + shapeIndex);
+
+                        break;
+                    }
+                }
+            }
+
+            m_volumes.Add(item: volume.ToVolume(
+                dynamicSlot: slot,
+                origin: Vector3.Zero,
+                rotation: Quaternion.Identity,
+                scale: placementScale
+            ));
         }
     }
     // The shape's rest pose, or the timeline frame's snapshot of it when the registration's cursor names one.
@@ -1869,6 +2046,15 @@ public sealed partial class WorldStampPool {
 
         return true;
     }
+    /// <summary>Resolves a live body's root dynamic transform, or false when its render stamp is absent.</summary>
+    public bool TryBodyTransformSlot(int bodyIndex, out int transformSlot) {
+        if (m_packedSlotBase < 0 || !TryFindBody(bodyIndex: bodyIndex, live: out _, poolIndex: out var poolIndex)) {
+            transformSlot = -1;
+            return false;
+        }
+        transformSlot = m_packedSlotBase + poolIndex * SlotsPerPlacement;
+        return true;
+    }
     /// <summary>Resolves a body-rooted creation look's authored part id to its absolute packed transform slot.</summary>
     /// <param name="bodyIndex">The population entity index.</param>
     /// <param name="partId">The ordinal, case-sensitive authored part identifier.</param>
@@ -1990,6 +2176,69 @@ public sealed partial class WorldStampPool {
         }
 
         position = rootPosition;
+
+        return true;
+    }
+    /// <summary>Resolves a live registration's current dynamic-transform slot for one of its shapes (or its root when
+    /// <paramref name="shapeId"/> is null) — the seam an anchored point light rides so its GPU-read position tracks
+    /// the shape every frame without a per-frame CPU pose readback. Same live/inactive verdicts as
+    /// <see cref="TryShapePosition"/>, and the same root/shape slot numbering <see cref="Emit"/> packs.</summary>
+    /// <param name="placementId">The placement row id.</param>
+    /// <param name="shapeId">The creation shape id to ride, or <see langword="null"/> for the stamped root.</param>
+    /// <param name="client">The client whose inhabitant lookup resolves a body-rooted placement.</param>
+    /// <param name="transformSlot">The absolute packed dynamic-transform slot, or -1 when unresolved.</param>
+    public bool TryShapeTransformSlot(string placementId, int? shapeId, WorldClient client, out int transformSlot) {
+        transformSlot = -1;
+
+        if (m_packedSlotBase < 0) {
+            return false;
+        }
+
+        var live = FindRow(id: placementId);
+
+        if (
+            (live is null) &&
+            client.TryInhabitantBody(
+            index: out var bodyIndex,
+            placementId: placementId
+        )
+        ) {
+            live = FindBody(bodyIndex: bodyIndex);
+        }
+
+        if (live is null || (live.BodyIndex is { } activeBody && !client.IsActive(activeBody))) {
+            return false;
+        }
+
+        if (
+            (live.Row?.Attach is { } attach) &&
+            ((((uint)attach.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: attach.BodyIndex))
+        ) {
+            return false;
+        }
+
+        var poolIndex = Array.IndexOf(array: m_pool, value: live);
+
+        if (poolIndex < 0) {
+            return false;
+        }
+
+        var rootSlot = (m_packedSlotBase + (poolIndex * SlotsPerPlacement));
+
+        if (shapeId is { } targetShapeId) {
+            var shapes = (live.Creation.EngineDocument.Shapes ?? []);
+
+            for (var shapeIndex = 0; (shapeIndex < shapes.Count); shapeIndex++) {
+                if (shapes[shapeIndex].Id == targetShapeId) {
+                    transformSlot = ((rootSlot + 1) + shapeIndex);
+
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        transformSlot = rootSlot;
 
         return true;
     }

@@ -18,6 +18,7 @@ using Puck.Platform.Linux;
 using Puck.Platform.Windows;
 using Puck.SdfVm;
 using Puck.Shaders;
+using Puck.Shaders.Study;
 using Puck.World.Addons;
 using Puck.World.Audio;
 using Puck.World.Client;
@@ -642,6 +643,12 @@ internal static class WorldBootComposition {
         // OPTIONAL (default null) and world.view.pointer refuses by name at use when it is absent.
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
 
+        // The shader-study verb surface — study.load/.reload/.watch/.time/.status. CORE-registered for the same
+        // command-vocabulary-parity reason as WorldViewCommandModule above; study.load's row upsert is core so it
+        // genuinely works headless, and WorldRenderProbe is OPTIONAL (default null) so every other verb refuses by
+        // name at use when it is absent (compiling/swapping a study needs a live render tree).
+        services.AddSingleton<ICommandModule, WorldStudyCommandModule>();
+
         return services;
     }
     /// <summary>
@@ -901,6 +908,20 @@ internal static class WorldBootComposition {
             ? "directx"
             : "vulkan"));
 
+        // The shader-study runtime: one StudyPassNode + boot compile per views.studies row, shared by the frame
+        // presenter (resizes/feeds each node per produced frame) and the render root below (keys
+        // SdfWorldRenderSpec.Children by the same names) — see BuildStudyRuntime's remarks.
+        services.AddSingleton(implementationFactory: sp => {
+            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
+
+            return BuildStudyRuntime(
+                sp: sp,
+                hostsOnDirectX: hostSettings.HostsOnDirectX,
+                width: ((uint)hostSettings.Width),
+                height: ((uint)hostSettings.Height)
+            );
+        });
+
         // The composed frame source, registered on its own rather than built inside the render-root factory below:
         // it touches no GPU, and its constructor runs the ONE capacity probe, so the boot can resolve it before any
         // hosted service starts (WorldPostBuildWiring) and report an over-envelope world as an ordinary named boot
@@ -926,7 +947,8 @@ internal static class WorldBootComposition {
             text: sp.GetRequiredService<WorldTextCatalog>(),
             adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
             markers: sp.GetRequiredService<MarkerStore>(),
-            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon
+            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
+            studies: sp.GetRequiredService<WorldStudyRuntime>()
         ));
 
         // The render root: the shared SDF world assembly over the grass-and-boulders scene. The built Producer (the
@@ -974,6 +996,10 @@ internal static class WorldBootComposition {
                     Height: height,
                     Width: width
                 ) {
+                    Children = sp.GetRequiredService<WorldStudyRuntime>().Entries.ToDictionary(
+                        keySelector: static entry => entry.Key,
+                        elementSelector: static entry => ((IRenderNode)entry.Value.Node)
+                    ),
                     // The post-render extension chain composes FIRST, over the bare SDF producer — before the
                     // unified overlay wraps it and before the glyph-atlas early return below, so a missing atlas
                     // never silently drops an authored extension (world content gets the extension's effect; HUD/
@@ -1197,6 +1223,20 @@ internal static class WorldBootComposition {
         // world.host — the RESOLVED presentation column reports "offscreen" (see WorldHostCommandModule.DescribeHost).
         services.AddSingleton<ICommandModule, WorldHostCommandModule>();
 
+        // See the windowed factory's own remarks (AddWorldAuthoritativeCore) — the same shared runtime, built once
+        // GPU services are live (WorldOffscreenGpuActivation runs before this factory resolves, at the same point
+        // its own device-bring-up already does).
+        services.AddSingleton(implementationFactory: sp => {
+            var hostSettings = sp.GetRequiredService<WorldHostSettings>();
+
+            return BuildStudyRuntime(
+                sp: sp,
+                hostsOnDirectX: hostSettings.HostsOnDirectX,
+                width: ((uint)hostSettings.Width),
+                height: ((uint)hostSettings.Height)
+            );
+        });
+
         services.AddSingleton(implementationFactory: sp => new WorldFramePresenter(
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             client: sp.GetRequiredService<WorldClient>(),
@@ -1218,7 +1258,8 @@ internal static class WorldBootComposition {
             text: sp.GetRequiredService<WorldTextCatalog>(),
             adjacencies: sp.GetRequiredService<IWorldAdjacencySource>(),
             markers: sp.GetRequiredService<MarkerStore>(),
-            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon
+            resolveIcon: sp.GetRequiredService<WorldIconTable>().ResolveIcon,
+            studies: sp.GetRequiredService<WorldStudyRuntime>()
         ));
 
         services.AddSingleton<IRenderNode>(implementationFactory: sp => {
@@ -1240,6 +1281,10 @@ internal static class WorldBootComposition {
             var render = SdfWorldRenderBuilder.Build(
                 services: viewGpuServices,
                 spec: new SdfWorldRenderSpec(FrameSource: frameSource, Height: height, Width: width) {
+                    Children = sp.GetRequiredService<WorldStudyRuntime>().Entries.ToDictionary(
+                        keySelector: static entry => entry.Key,
+                        elementSelector: static entry => ((IRenderNode)entry.Value.Node)
+                    ),
                     DynamicTransformCapacity = frameSource.DynamicTransformCapacity,
                     HostsOnDirectX = hostSettings.HostsOnDirectX,
                     InstanceCapacity = frameSource.InstanceCapacity,
@@ -1262,5 +1307,92 @@ internal static class WorldBootComposition {
         });
 
         return services;
+    }
+    // Builds and populates the shader-study runtime: one StudyShaderCompiler (cache dir under the world state root,
+    // toolchain from views.studyToolchain — never an environment variable), one StudyPassNode + boot compile per
+    // views.studies row, over the same IGpuComputeServices the SDF engine node itself dispatches through. A row whose
+    // source cannot be read, or whose compile fails, still registers a node (showing StudyPlaceholderShader's flat
+    // grey, or the last-good bytecode on a later successful reload) — never absent, since an absent registration is
+    // what leaves a slot on the camera-path fallback. Shared by both the windowed and offscreen render-tree
+    // factories, each calling this once against their own resolved GPU services.
+    private static WorldStudyRuntime BuildStudyRuntime(IServiceProvider sp, bool hostsOnDirectX, uint width, uint height) {
+        var definition = sp.GetRequiredService<WorldDefinition>();
+        var documentDirectory = (Path.GetDirectoryName(path: sp.GetRequiredService<WorldDefinitionSource>().SourcePath) is { Length: > 0 } directory
+            ? directory
+            : AppContext.BaseDirectory
+        );
+        var compiler = new StudyShaderCompiler(
+            cacheDirectory: Path.Combine(path1: WorldStateRoot.Resolve(), path2: "studies"),
+            toolchainDirectory: definition.Views.StudyToolchain
+        );
+        var runtime = new WorldStudyRuntime(compiler: compiler, documentDirectory: documentDirectory);
+
+        // The iMouse source: the process's one pointer store, read NON-destructively (position + primary button —
+        // never the drained motion/wheel accumulators WorldSeatViewInput owns), on the seat the pointer rides. An
+        // offscreen boot registers no pointer, so its studies see iMouse zero.
+        if (
+            (sp.GetService<WorldPointer>() is { } pointer) &&
+            (sp.GetService<PlayerRoster>() is { } roster)
+        ) {
+            runtime.ReadPointer = () => {
+                var slot = WorldPointerSlot.Resolve(roster: roster);
+
+                return new WorldStudyPointerSample(
+                    ClientPosition: pointer.Position(slot: slot),
+                    HasPosition: pointer.HasPosition(slot: slot),
+                    Pressed: pointer.IsButtonDown(
+                        button: 0,
+                        slot: slot
+                    )
+                );
+            };
+        }
+
+        var gpu = sp.GetRequiredService<IGpuComputeServices>();
+        var deviceContext = sp.GetRequiredService<IGpuDeviceContext>();
+
+        // The same node shape for a study loaded after boot (study.load naming a new row) as for a boot-time row.
+        runtime.CreateNode = name => new StudyPassNode(
+            name: name,
+            gpu: gpu,
+            deviceContext: deviceContext,
+            hostsOnDirectX: hostsOnDirectX,
+            width: width,
+            height: height
+        );
+
+        foreach (var study in definition.Views.Studies) {
+            var node = runtime.CreateNode(study.Name);
+            var resolvedSource = (Path.IsPathRooted(path: study.Source)
+                ? study.Source
+                : Path.Combine(path1: documentDirectory, path2: study.Source)
+            );
+
+            StudyProgram? compiled = null;
+
+            try {
+                var sourceText = File.ReadAllText(path: resolvedSource);
+
+                compiled = compiler.Compile(name: study.Name, sourcePath: resolvedSource, sourceText: sourceText);
+
+                if (compiled.IsError) {
+                    foreach (var diagnostic in compiled.Diagnostics) {
+                        if (diagnostic.IsError) {
+                            Console.Error.WriteLine(value: $"[study.load: {resolvedSource}:{diagnostic.Line}: {diagnostic.Message}]");
+                        }
+                    }
+                } else {
+                    node.Swap(program: compiled);
+                }
+            } catch (IOException exception) {
+                Console.Error.WriteLine(value: $"[study.load: '{study.Name}' source '{resolvedSource}' could not be read: {exception.Message}]");
+            } catch (StudyToolMissingException exception) {
+                Console.Error.WriteLine(value: $"[study.load: '{study.Name}' — {exception.Message}]");
+            }
+
+            runtime.Register(name: study.Name, node: node, compile: compiled);
+        }
+
+        return runtime;
     }
 }

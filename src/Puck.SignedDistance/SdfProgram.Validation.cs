@@ -19,6 +19,9 @@ public sealed partial class SdfProgram {
     private const uint GlyphReinterpretedLanes = 0b0000_0011u;
     private const uint SampledRegionReinterpretedLanes = 0b0110_0000u;
     private const uint ConvexPolygonReinterpretedLanes = 0b0000_0001u;
+    // Sweep's Data0.x is ALSO a reinterpreted table offset (see SdfShapeType.Sweep), patched from a finite 0f
+    // placeholder after this sweep runs, exactly like ConvexPolygon's.
+    private const uint SweepReinterpretedLanes = 0b0000_0001u;
 
     private static readonly string[] OperandLaneNames = ["Data0.x", "Data0.y", "Data0.z", "Data0.w", "Data1.x", "Data1.y", "Data1.z", "Data1.w"];
 
@@ -41,11 +44,32 @@ public sealed partial class SdfProgram {
     // and warp rate into one scalar) and the cull bounds derived from the same lanes, and the shader propagates it
     // through every blend. SdfProgramBuilder refuses the same values one layer earlier, naming the caller's argument.
     private static void RequireFiniteOperands(SdfInstruction instruction, int index, string paramName) {
+        if (instruction.Op == SdfOp.CellDisplace) {
+            new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
+                (SdfCellMode)instruction.Blend, instruction.Data0.Z).Validate();
+        }
+        if (instruction.Op == SdfOp.GaussianPush &&
+            (!float.IsFinite(BitConverter.UInt32BitsToSingle(instruction.Shape)) ||
+             instruction.Data1.X <= 0f || instruction.Data1.Y <= 0f || instruction.Data1.Z <= 0f)) {
+            throw new ArgumentException($"Instruction {index} requires a finite Gaussian push and positive radii.", paramName);
+        }
+        if (instruction.Op == SdfOp.RotatePlane && (instruction.Shape > 2u || instruction.Blend > 2u)) {
+            throw new ArgumentException($"Instruction {index} requires plane and driver indices in [0, 2].", paramName);
+        }
+        if (instruction.Op == SdfOp.Shear &&
+            (instruction.Shape > 2u || instruction.Blend > 2u || instruction.Shape == instruction.Blend)) {
+            throw new ArgumentException($"Instruction {index} requires distinct shear axes in [0, 2].", paramName);
+        }
+        if (instruction.Op == SdfOp.AxialProfile &&
+            (instruction.Shape > 2u || instruction.Data1.Y <= 0f || instruction.Data0.W <= 0f)) {
+            throw new ArgumentException($"Instruction {index} requires an axis in [0, 2], positive start scale and inverse span.", paramName);
+        }
         var reinterpreted = ((instruction.Op == SdfOp.ShapeBlend)
             ? (((SdfShapeType)instruction.Shape) switch {
                 SdfShapeType.Glyph => GlyphReinterpretedLanes,
                 SdfShapeType.SampledRegion => SampledRegionReinterpretedLanes,
                 SdfShapeType.ConvexPolygon => ConvexPolygonReinterpretedLanes,
+                SdfShapeType.Sweep => SweepReinterpretedLanes,
                 _ => 0u,
             })
             : 0u
@@ -139,6 +163,60 @@ public sealed partial class SdfProgram {
             }
         }
     }
+    // Every Sweep shape instruction must have exactly one matching curve entry — same shape as
+    // ValidateConvexPolygonProfiles, minus the vertex-count range check (a Sweep curve carries no variable-length
+    // data of its own).
+    private void ValidateSweepCurves(string paramName) {
+        var claimed = new HashSet<int>();
+
+        foreach (var curve in m_sweepCurves) {
+            var instructionIndex = curve.InstructionIndex;
+
+            if (
+                (instructionIndex < 0) ||
+                (instructionIndex >= m_instructions.Length)
+            ) {
+                throw new ArgumentException(
+                    message: $"A Sweep curve names instruction index {instructionIndex}, outside this program's {m_instructions.Length} instructions.",
+                    paramName: paramName
+                );
+            }
+
+            var instruction = m_instructions[instructionIndex];
+
+            if (
+                (instruction.Op != SdfOp.ShapeBlend) ||
+                (((SdfShapeType)instruction.Shape) != SdfShapeType.Sweep)
+            ) {
+                throw new ArgumentException(
+                    message: $"A Sweep curve names instruction {instructionIndex}, which is not a Sweep shape.",
+                    paramName: paramName
+                );
+            }
+
+            if (!claimed.Add(item: instructionIndex)) {
+                throw new ArgumentException(
+                    message: $"Instruction {instructionIndex} is claimed by more than one Sweep curve.",
+                    paramName: paramName
+                );
+            }
+        }
+
+        for (var index = 0; (index < m_instructions.Length); index++) {
+            var instruction = m_instructions[index];
+
+            if (
+                (instruction.Op == SdfOp.ShapeBlend) &&
+                (((SdfShapeType)instruction.Shape) == SdfShapeType.Sweep) &&
+                !claimed.Contains(item: index)
+            ) {
+                throw new ArgumentException(
+                    message: $"Instruction {index} is a Sweep shape with no matching curve.",
+                    paramName: paramName
+                );
+            }
+        }
+    }
     private static void RequirePackedBlend(uint blend, int index, string paramName) {
         if (!Enum.IsDefined(value: ((SdfBlendOp)blend))) {
             throw new ArgumentException(
@@ -173,10 +251,21 @@ public sealed partial class SdfProgram {
                 (material.Metal > 1f) ||
                 !float.IsFinite(f: material.Coat) ||
                 (material.Coat < 0f) ||
-                (material.Coat > 1f)
+                (material.Coat > 1f) ||
+                !float.IsFinite(f: material.Wrap) ||
+                (material.Wrap < 0f) ||
+                (material.Wrap > 1f) ||
+                !float.IsFinite(f: material.Soften) ||
+                (material.Soften < 0f) ||
+                (material.Soften > 1f) ||
+                !IsFinite(value: material.Bounce) ||
+                (material.Bounce.X < 0f) ||
+                (material.Bounce.Y < 0f) ||
+                (material.Bounce.Z < 0f) ||
+                !SdfMaterialLayers.IsValid(material.Inset, material.Weathering)
             ) {
                 throw new ArgumentOutOfRangeException(
-                    message: $"Material {index} must carry finite, non-negative albedo, emissive, and specular, with roughness/sheen/metal/coat finite in [0, 1]; got {material}.",
+                    message: $"Material {index} must carry finite, non-negative albedo, emissive, specular, and bounce tint, with roughness/sheen/metal/coat/wrap/soften finite in [0, 1], and valid material layers; got {material}.",
                     paramName: paramName
                 );
             }
@@ -314,6 +403,25 @@ public sealed partial class SdfProgram {
             );
         }
     }
+    // SDF_OP_LANE_ERODE's Data0.x packs the lane index as a reinterpreted float (SdfProgramBuilder.LaneErode
+    // writes (float)(uint)lane); the shader thresholds it (< 0.5 / < 1.5 / < 2.5) rather than rounding, so a
+    // hand-assembled program carrying a non-exact-integer or out-of-range value would silently read the wrong
+    // (or, past 3, the w) lane instead of failing loudly.
+    private static void RequireLaneErodeLaneIndex(SdfInstruction instruction, int index, string paramName) {
+        var lane = instruction.Data0.X;
+
+        if (
+            !float.IsFinite(f: lane) ||
+            (lane != MathF.Round(lane)) ||
+            (lane < ((float)0)) ||
+            (lane > ((float)3))
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: paramName,
+                message: $"Instruction {index} is a LaneErode carrying lane index {lane} in Data0.x; it must be an exact integer in [{(uint)0}, {(uint)3}] ."
+            );
+        }
+    }
     // The screen frame is packed as two independent axes the shader projects a hit point onto, while the slab's own
     // geometry rides the rotation derived from that same pair — so a non-unit or skewed pair packs a UV that does not
     // describe the surface it labels. KEEP IN SYNC with SdfProgramBuilder's RequireOrthogonalBasis tolerance.
@@ -376,12 +484,48 @@ public sealed partial class SdfProgram {
                 paramName: instructionsParamName
             );
 
+            if (instruction.Op == SdfOp.LaneErode) {
+                RequireLaneErodeLaneIndex(
+                    index: index,
+                    instruction: instruction,
+                    paramName: instructionsParamName
+                );
+            }
+
             if (instruction.Op == SdfOp.PopField) {
                 RequirePackedBlend(
                     blend: instruction.Blend,
                     index: index,
                     paramName: instructionsParamName
                 );
+
+                if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {
+                    var lane = instruction.Data0.X;
+
+                    if (!float.IsFinite(lane) || (lane < 0f) || (lane > 3f) || (lane != MathF.Floor(lane))) {
+                        throw new ArgumentException(
+                            message: $"Instruction {index} is a PopField Morph carrying lane index {lane} in Data0.x; it must be an exact integer in [0, 3].",
+                            paramName: instructionsParamName
+                        );
+                    }
+
+                    if (instruction.Data0.Y == instruction.Data0.Z) {
+                        throw new ArgumentException(
+                            message: $"Instruction {index} is a PopField Morph carrying identical from/to thresholds ({instruction.Data0.Y}); from and to must differ to avoid division by zero.",
+                            paramName: instructionsParamName
+                        );
+                    }
+                } else if (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
+                    var steps = instruction.Data1.Z;
+
+                    if (!float.IsFinite(steps) || (steps < 1f) || (steps != MathF.Floor(steps))) {
+                        throw new ArgumentException(
+                            message: $"Instruction {index} is a PopField Stairs carrying step count {steps} in Data1.z; it must be an integer >= 1.",
+                            paramName: instructionsParamName
+                        );
+                    }
+                }
+
                 continue;
             }
 
@@ -389,6 +533,12 @@ public sealed partial class SdfProgram {
                 if (instruction.Detail) {
                     throw new ArgumentException(
                         message: $"Instruction {index} carries Detail but is not a ShapeBlend instruction; Detail marks a shape as shading-only and is meaningful only on SdfOp.ShapeBlend.",
+                        paramName: instructionsParamName
+                    );
+                }
+                if (!instruction.Secondary) {
+                    throw new ArgumentException(
+                        message: $"Instruction {index} carries Secondary=false but is not a ShapeBlend instruction; Secondary marks a shape's shadow/AO participation and is meaningful only on SdfOp.ShapeBlend.",
                         paramName: instructionsParamName
                     );
                 }
@@ -408,6 +558,13 @@ public sealed partial class SdfProgram {
                 index: index,
                 paramName: instructionsParamName
             );
+
+            if (instruction.Blend is ((uint)SdfBlendOp.Morph) or ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
+                throw new ArgumentException(
+                    message: $"Instruction {index} is a ShapeBlend carrying blend {(SdfBlendOp)instruction.Blend}; Morph, StairsUnion, and StairsSubtraction are valid only on PopField instructions.",
+                    paramName: instructionsParamName
+                );
+            }
 
             if (instruction.Shape == ((uint)SdfShapeType.Trapezoid)) {
                 RequireTrapezoidProfileSlant(
@@ -528,6 +685,7 @@ public sealed partial class SdfProgram {
             instructionOwners: instructionOwners,
             paramName: instructionsParamName
         );
+
 
         return instructionOwners;
     }

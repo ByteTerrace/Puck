@@ -86,6 +86,8 @@ public enum SdfDocumentOpKind {
     /// op over the running accumulator, so the decoder refuses it outside a push/pop pair — unscoped it would displace
     /// every shape the composed world program accumulated before this document.</summary>
     NoiseDisplace,
+    /// <summary>Cellular relief: Scalar0 frequency, Scalar1 amplitude, Vector0.x randomness, Integer0 mode, Seed identity.</summary>
+    CellDisplace,
     /// <summary><see cref="SdfProgramBuilder.CellJitter"/>, geometric-only (no material variants) - the scatter fold:
     /// <see cref="SdfDocumentOp.Vector0"/> is the cell spacing, <see cref="SdfDocumentOp.Scalar0"/> the jitter,
     /// <see cref="SdfDocumentOp.Scalar1"/> the tumble, <see cref="SdfDocumentOp.Integer0"/> the

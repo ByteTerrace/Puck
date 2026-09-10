@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Puck.SignedDistance;
 
-/// <summary>One entry of the scene's material palette. Packed as THREE uvec4 words (see <see cref="SdfProgram"/>).</summary>
+/// <summary>One entry of the scene's material palette. Packed as twenty uint4 words (see <see cref="SdfProgram"/>).</summary>
 /// <param name="Albedo">The linear-RGB base color; every component must be finite and non-negative when admitted to
 /// a builder or program. Also the metallic reflectance tint — see <see cref="Metal"/>.</param>
 /// <param name="Emissive">The self-illumination strength: <c>albedo * emissive</c> adds to the shaded color, so an
@@ -27,7 +27,23 @@ namespace Puck.SignedDistance;
 /// <param name="Coat">The finite clearcoat strength in [0, 1]: a second, narrower fixed-roughness (0.25) GGX lobe
 /// riding the same light and normal, scaled by <c>coat * 0.04</c> — a thin lacquer/varnish catch layered over the
 /// primary specular response, independent of <see cref="Roughness"/>/<see cref="Metal"/>. 0 = none.</param>
-public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f) {
+/// <param name="Weathering">Optional authored coverage and reveal surfaces.</param>
+/// <param name="Wrap">The wrap-lighting share in [0, 1]: the shaded diffuse term becomes
+/// <c>max((n·l + Wrap) / (1 + Wrap), 0)</c> in place of the plain <c>max(n·l, 0)</c> Lambert term, widening the
+/// terminator so light appears to carry past grazing incidence — the skin/soft-surface look (ported from the
+/// study's <c>directLight</c> <c>skin</c> mix). 0 (the default) reduces the formula to the plain Lambert term
+/// exactly, so an unauthored material is byte-identical.</param>
+/// <param name="Soften">The shading-normal broadening in [0, 1]: blends the hit's normal toward a wide-stencil
+/// (0.05 creation-unit epsilon) field-gradient guide, smoothing fine surface detail (pores, panel seams, wear
+/// noise) out of the LIT normal while leaving the geometric silhouette untouched — the study's per-part guide
+/// ellipsoid normal, generalized without an authored guide shape. 0 (the default) skips the extra probe
+/// entirely.</param>
+/// <param name="Bounce">The warm/cool bounce tint added as <c>albedo * Bounce * (1 - max(n·key, 0)) *
+/// ambientOcclusion</c> — a restrained, art-directed fill on the side of a surface the key light does not reach
+/// (the study's skin bounce term, generalized to any material via an authored color instead of a hardcoded warm
+/// constant). Black (the default) contributes exactly 0.</param>
+/// <param name="Inset">Optional refractive radial paint layer.</param>
+public readonly record struct SdfMaterial(Vector3 Albedo, float Emissive = 0f, float Specular = 0f, float Roughness = SdfMaterial.DefaultRoughness, float Sheen = 0f, float Metal = 0f, float Coat = 0f, SdfWeathering? Weathering = null, float Wrap = 0f, float Soften = 0f, Vector3 Bounce = default, SdfInset? Inset = null) {
     /// <summary>The roughness whose GGX alpha (<c>sqrt(roughness^2 + SdfRoughnessFloorSquared)</c>, see
     /// <see cref="Roughness"/>) equals the Walter et al. (2007) Blinn-Phong-equivalent alpha of exponent 32,
     /// <c>sqrt(2 / (32 + 2))</c>. KEEP IN SYNC with <c>SdfRoughnessFloorSquared</c> in <c>sdf-vm.hlsli</c>

@@ -63,6 +63,15 @@ public static class WorldDefinitionRows {
         name: name,
         selector: static row => row.Name
     );
+    /// <summary>Finds a <c>views.studies</c> row by stable name.</summary>
+    /// <param name="studies">The section's study rows.</param>
+    /// <param name="name">The study row name to find.</param>
+    /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
+    public static WorldViewStudy? FindStudy(IReadOnlyList<WorldViewStudy>? studies, string name) => Find(
+        rows: studies,
+        name: name,
+        selector: static row => row.Name
+    );
     /// <summary>Resolves an entity's look row: <paramref name="rows"/> indexed at <paramref name="index"/>, or the
     /// implicit single catalog look (<see cref="WorldLook.Implicit"/>) when the world authors no <c>looks</c>
     /// section, or for an index no declared row covers.</summary>

@@ -57,6 +57,7 @@ public static class WorldPlacementStamper {
                 );
             }
 
+            Vector3 ResolveLayerColor(string value) => WorldColor.Resolve(definition: definition, fallback: Vector3.Zero, value: value);
             ids[index] = builder.AddMaterial(material: new SdfMaterial(
                 Albedo: albedo,
                 Emissive: (entry?.Emissive ?? 0f),
@@ -64,7 +65,12 @@ public static class WorldPlacementStamper {
                 Sheen: (entry?.Sheen ?? 0f),
                 Specular: (entry?.Specular ?? 0f),
                 Metal: (entry?.Metal ?? 0f),
-                Coat: (entry?.Coat ?? 0f)
+                Coat: (entry?.Coat ?? 0f),
+                Weathering: entry?.Weathering?.ToWeathering(ResolveLayerColor),
+                Wrap: (entry?.Wrap ?? 0f),
+                Soften: (entry?.Soften ?? 0f),
+                Bounce: WorldColor.Resolve(definition: definition, fallback: Vector3.Zero, value: entry?.Bounce),
+                Inset: entry?.Inset?.ToInset(ResolveLayerColor)
             ));
         }
 
@@ -92,7 +98,7 @@ public static class WorldPlacementStamper {
             )]
         );
     }
-    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed) {
+    private static void EmitPlacement(SdfProgramBuilder builder, CreationDocument creation, WorldDefinition definition, int[] paletteIds, WorldPlacement placement, PackedFontAtlasCatalog? textCatalog, ulong worldSeed, ICollection<SdfVolume>? volumes) {
         var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement);
         // Laid out ONCE here (rather than once for the reach measure below plus once per pattern/scatter instance
         // inside the visitor's EmitText call) — TextLayout.Layout is a pure function of (atlas, text, scale,
@@ -143,6 +149,14 @@ public static class WorldPlacementStamper {
             sampledOffsets: WorldPlacementStamp.SampledOffsetsFor(placement: placement, worldSeed: worldSeed),
             mirror: WorldPlacementStamp.MirrorFor(placement: placement),
             visitor: instance => {
+                AppendStaticVolumes(
+                    creation: creation,
+                    origin: instance.Origin,
+                    rotation: rotation,
+                    scale: placement.Scale,
+                    volumes: volumes
+                );
+
                 if (perShape) {
                     var stampTransform = new CreationStampTransform(
                         Origin: instance.Origin,
@@ -310,7 +324,8 @@ public static class WorldPlacementStamper {
                         .Scale(scale: Vector3.One),
                     type: SdfSolidPrimitive.Sphere,
                     material: paletteIds[(shape % CreationDocument.PaletteSize)]
-                ).PopField();
+                ).ResetPoint().Translate(center).Rotate(Quaternion.Identity)
+                    .CellDisplace(1f, 0.1f, 0u, SdfCellMode.F1, 0.2f).PopField();
             }
 
             _ = builder.EndInstance();
@@ -352,7 +367,8 @@ public static class WorldPlacementStamper {
                     .PushField(compose: SdfBlendOp.Union),
                 type: SdfSolidPrimitive.Sphere,
                 material: material
-            ).PopField();
+            ).ResetPoint().Translate(center).Rotate(Quaternion.Identity)
+                .CellDisplace(1f, 0.1f, 0u, SdfCellMode.F1, 0.2f).PopField();
             _ = builder.EndInstance();
         }
     }
@@ -368,7 +384,9 @@ public static class WorldPlacementStamper {
     /// null only when no catalog is declared, while remote projection callers currently have no transported font
     /// assets to resolve.</param>
     /// <param name="tintFor">Resolves a placement id's albedo tint (color + blend), or <see langword="null"/> untinted.</param>
-    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null) {
+    /// <param name="volumes">Receives each static placement instance's bounded volumes (<see cref="CreationDocument.Volumes"/>)
+    /// baked into world space with no dynamic slot, or <see langword="null"/> when the caller renders none.</param>
+    public static void EmitStatic(SdfProgramBuilder builder, WorldDefinition definition, IReadOnlyList<WorldPrototype> creations, IReadOnlyList<WorldPlacement> placements, PackedFontAtlasCatalog? textCatalog = null, Func<string, (Vector3 Color, float Blend)?>? tintFor = null, ICollection<SdfVolume>? volumes = null) {
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
         var paletteById = new Dictionary<string, int[]>(comparer: StringComparer.Ordinal);
 
@@ -409,8 +427,56 @@ public static class WorldPlacementStamper {
                 paletteIds: paletteIds,
                 placement: placement,
                 textCatalog: textCatalog,
-                worldSeed: worldSeed
+                worldSeed: worldSeed,
+                volumes: volumes
             );
+        }
+    }
+    // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
+    // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a plume's column is
+    // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
+    private static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes) {
+        if (
+            (volumes is null) ||
+            (creation.Volumes is not { Count: > 0 } authored)
+        ) {
+            return;
+        }
+
+        var shapes = (creation.Shapes ?? []);
+
+        foreach (var volume in authored) {
+            if (volumes.Count >= SdfProgramBuilder.MaxVolumes) {
+                return;
+            }
+
+            var frameOrigin = origin;
+            var frameRotation = rotation;
+
+            if (volume.Parent is { } parent) {
+                foreach (var shape in shapes) {
+                    if (string.Equals(
+                        a: shape.Name?.Value,
+                        b: parent,
+                        comparisonType: StringComparison.Ordinal
+                    )) {
+                        frameOrigin = (origin + Vector3.Transform(
+                            rotation: rotation,
+                            value: (shape.Position.Value * scale)
+                        ));
+                        frameRotation = Quaternion.Normalize(value: (rotation * shape.Rotation.Value));
+
+                        break;
+                    }
+                }
+            }
+
+            volumes.Add(item: volume.ToVolume(
+                dynamicSlot: -1,
+                origin: frameOrigin,
+                rotation: frameRotation,
+                scale: scale
+            ));
         }
     }
     /// <summary>The emitted instance count of one placement, including pattern/sampled and reflected copies.</summary>

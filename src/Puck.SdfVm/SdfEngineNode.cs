@@ -32,6 +32,14 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// The viewport count follows <see cref="SdfFrame.Views"/>; nothing about the scene, cameras, or layout is baked in.
 /// </para>
 /// <para>
+/// A child occupies a slot by NAME (<see cref="SdfViewSnapshot.Child"/> against the constructor's <c>children</c> map),
+/// never a fixed slot index — the SAME name may sit at a different viewport slot on a later frame, since the slot
+/// order follows <see cref="SdfFrame.Views"/>. Which slots skip the SDF camera march for a child is decided EVERY
+/// frame from that frame's bindings resolved against the registered names (a layout switch can turn any slot into a
+/// child or back); a slot naming a child the map lacks renders through the ordinary SDF camera path instead — see
+/// <see cref="HasChild"/> for the read-back a caller uses to tell the two apart.
+/// </para>
+/// <para>
 /// Diegetic screens ride a separate, shading-only seam: a program may declare up to 8 static screen surfaces (see
 /// <see cref="SdfProgramBuilder"/>'s screen-surface <c>ScreenSlab</c> overload), and this node polls the
 /// <c>screenSources</c> constructor argument each frame to bind (or unbind) each one's sampled image — unlike a
@@ -45,8 +53,13 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     private const ulong TimingReportInterval = 60;
 
     private readonly int m_brickPoolVoxelCapacity;
-    private readonly string? m_capturePath;
-    private readonly Dictionary<int, IRenderNode> m_children;
+    // Not readonly: RegisterChild swaps the shared empty singleton for a private map on the first post-construction
+    // registration (see the constructor's copy remark).
+    private Dictionary<string, IRenderNode> m_children;
+    // THIS frame's child-slot bitmask, derived by DeriveChildMask from the frame's own SdfViewSnapshot.Child bindings
+    // resolved against m_children, and handed to the engine (SetChildMask) before its SetChildSource calls — the one
+    // answer ProduceChildren/StepChildren/the SetChildSource loop all share for "is this slot a child this frame".
+    private uint m_childSlotMask;
     private readonly Func<IGpuDeviceContext, IGpuStorageImage>? m_createStorageImage;
     private readonly string? m_debugLabel;
     private readonly int m_dynamicTransformCapacity;
@@ -67,11 +80,44 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <summary>Gets the last uploaded program's step-scale binder (see <see cref="SdfProgram.StepScaleBinder"/>), or
     /// <see langword="null"/> before the first upload and whenever nothing unscoped binds the step scale.</summary>
     public SdfStepScaleBinder? LiveProgramStepScaleBinder { get; private set; }
+    /// <summary>Gets whether <paramref name="name"/> is registered in this node's <c>children</c> map (see the
+    /// constructor) — the read-back a caller (e.g. a <c>world.view.state</c> echo) uses to tell an unresolved child
+    /// binding apart from a live one, since a slot naming an unregistered child falls back to the ordinary SDF
+    /// camera path rather than throwing.</summary>
+    /// <param name="name">The child name a view binding's <see cref="SdfViewSnapshot.Child"/> may carry.</param>
+    public bool HasChild(string name) =>
+        m_children.ContainsKey(key: name);
+    /// <summary>Registers <paramref name="node"/> under <paramref name="name"/> AFTER construction — a study a console
+    /// verb loads mid-session — so a later frame's <see cref="SdfViewSnapshot.Child"/> naming it resolves like a
+    /// constructor-supplied child; this node then owns the child's lifetime (<see cref="Dispose"/>,
+    /// <see cref="OnDeviceLost"/>) exactly the same way. Pump-thread only: the same thread <see cref="ProduceFrame"/>
+    /// runs on, since the map is iterated there unguarded.</summary>
+    /// <param name="name">The child's name — refused when already registered.</param>
+    /// <param name="node">The child render node; must produce a same-device storage-image surface.</param>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or already registered.</exception>
+    public void RegisterChild(string name, IRenderNode node) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: name);
+        ArgumentNullException.ThrowIfNull(argument: node);
+
+        if (ReferenceEquals(
+            objA: m_children,
+            objB: EmptyChildren
+        )) {
+            m_children = new Dictionary<string, IRenderNode>(comparer: StringComparer.Ordinal);
+        }
+
+        if (!m_children.TryAdd(
+            key: name,
+            value: node
+        )) {
+            throw new ArgumentException(message: $"A child named '{name}' is already registered.", paramName: nameof(name));
+        }
+    }
     /// <summary>Gets the frozen program-word envelope this node was constructed with.</summary>
     public int ProgramWordCapacity => m_programWordCapacity;
 
     private readonly int m_programWordCapacity;
-    private readonly bool? m_rayQueryEnabled;
+    private readonly bool m_rayQueryEnabled;
     private readonly Dictionary<int, Func<Vector3>> m_screenLights;
 
     private SdfScreenSourceFrame[] m_pendingScreenSourceFrames = [];
@@ -88,8 +134,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
 
     private readonly CapturePngWriter m_capturePng = new();
 
-    private bool m_captured;
-    private byte[]? m_capturedPixels;
     // [frame-timing] CPU-side sub-buckets: plain Stopwatch wall time (never a GPU query), so this digest still prints
     // even when the backend has no usable GPU timestamps. Armed live off GpuTimingControl.Shared, so bench.run / the
     // gpu.timing switch turn it on and off mid-session with no restart. Each digest reports the slowest node frame in
@@ -138,7 +182,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
 
     // Concrete Dictionary<,> (not the read-only interface) so the per-frame foreach binds the struct enumerator
     // instead of boxing IEnumerator on the render thread every ProduceFrame; the ctor copies caller maps to match.
-    private static readonly Dictionary<int, IRenderNode> EmptyChildren = new();
+    private static readonly Dictionary<string, IRenderNode> EmptyChildren = new(comparer: StringComparer.Ordinal);
     private static readonly Dictionary<int, Func<SdfScreenSourceFrame>> EmptyScreenSourceFrames = new();
     private static readonly Dictionary<int, Func<nint>> EmptyScreenSources = new();
     private static readonly Dictionary<int, Func<Vector3>> EmptyScreenLights = new();
@@ -153,15 +197,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
 
     private ISteppableRenderNode[] m_steppableChildren = [];
 
-    private static int CaptureDelayFrames() {
-        return ((int.TryParse(
-            Environment.GetEnvironmentVariable(variable: "PUCK_CAPTURE_FRAME"),
-            out var frame
-        ) && (frame > 0))
-            ? frame
-            : 0
-        );
-    }
     private static SdfScreenSourceFrame[][] BuildScreenSourceFrameRing(int capacity) {
         var ring = new SdfScreenSourceFrame[SdfWorldEngine.FrameRingSize][];
 
@@ -193,19 +228,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             throw new ArgumentException(message: $"The world compositor supports at most {SdfWorldEngine.MaxViewports} viewports; the frame/floor asks for {viewportCount}.");
         }
 
-        // Mark which live viewport slots a hosted child backs (the beam prepass and Stage 1 skip these); the source
-        // for such a slot is the child's surface, not an SDF render.
-        var childMask = 0u;
-
-        foreach (var slot in m_children.Keys) {
-            if (
-                (slot >= 0) &&
-                (slot < ((int)viewportCount))
-            ) {
-                childMask |= (1u << slot);
-            }
-        }
-
         // GPU performance counters, LIVE-ARMED: always USE the timing seam when the backend registered it (it is part
         // of the eagerly-resolved SdfViewGpuServices bundle now, not resolved granularly here). The engine creates its
         // rotating pools lazily on the first ARMED frame and consults GpuTimingControl.Shared per frame, so bench.run
@@ -221,7 +243,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             kernels: m_kernels,
             options: new SdfWorldEngineOptions(
                 BrickPoolVoxelCapacity: m_brickPoolVoxelCapacity,
-                ChildMask: childMask,
                 CreateOutputImage: m_createStorageImage,
                 DynamicTransformCapacity: Math.Max(
                     val1: Math.Max(
@@ -258,6 +279,43 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     }
     private static int Percent(double part, double whole) =>
         ((int)Math.Round(a: ((100.0 * part) / whole)));
+    // Which live viewport slots a hosted child backs THIS frame (the beam prepass and Stage 1 skip these; the source
+    // for such a slot is the child's surface, not an SDF render): the frame's own SdfViewSnapshot.Child bindings
+    // resolved by NAME against m_children. Re-derived every produced frame — a layout switch (view.override) can
+    // turn any slot into a child or back — and handed to the engine as its live mask (SetChildMask). A name absent
+    // from m_children leaves its slot on the ordinary SDF camera path (see this type's remarks).
+    private uint DeriveChildMask(SdfFrame frame) {
+        var childMask = 0u;
+        var slotCount = Math.Min(
+            val1: frame.Views.Count,
+            val2: ((int)SdfWorldEngine.MaxViewports)
+        );
+
+        for (var slot = 0; (slot < slotCount); slot++) {
+            if (
+                (frame.Views[slot].Child is { } childName) &&
+                m_children.ContainsKey(key: childName)
+            ) {
+                childMask |= (1u << slot);
+            }
+        }
+
+        return childMask;
+    }
+    // The current frame's child for viewport slot `slot`, resolved by name against m_children and gated by this
+    // frame's m_childSlotMask (DeriveChildMask) — the one lookup ProduceChildren/StepChildren/the SetChildSource loop
+    // in ProduceFrame all share, so their "is this slot a child this frame" question always agrees.
+    private bool TryChildForSlot(SdfFrame frame, int slot, out IRenderNode child) {
+        child = null!;
+
+        return (
+            (slot >= 0) &&
+            (slot < frame.Views.Count) &&
+            (0 != (m_childSlotMask & (1u << slot))) &&
+            (frame.Views[slot].Child is { } name) &&
+            m_children.TryGetValue(key: name, value: out child!)
+        );
+    }
     // Render each hosted child viewport's surface at its slot's pixel rect. Children resolve the same shared device
     // from the forwarded host context; the parent passes each the slot's pixel extent (matching the SDF source
     // sizing) so Stage 2's 1:1 copy lands in bounds. Their submits are enqueued ahead of the compositor's.
@@ -266,10 +324,13 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             return;
         }
 
-        // Sized once to the first frame's view count (the layout is stable for the run); never resized, so a frozen
-        // child slot index can never fall outside it.
-        if (m_childSurfaces.Length == 0) {
-            m_childSurfaces = new Surface[frame.Views.Count];
+        // Grown to the widest view count seen (a layout switch can add slots mid-run); never shrunk, so a slot index
+        // this frame's mask names can never fall outside it.
+        if (m_childSurfaces.Length < frame.Views.Count) {
+            Array.Resize(
+                array: ref m_childSurfaces,
+                newSize: frame.Views.Count
+            );
         }
 
         StepChildren(
@@ -277,11 +338,12 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             frame: frame
         );
 
-        foreach (var (slot, child) in m_children) {
-            if (
-                (slot < 0) ||
-                (slot >= frame.Views.Count)
-            ) {
+        for (var slot = 0; (slot < frame.Views.Count); slot++) {
+            if (!TryChildForSlot(
+                child: out var child,
+                frame: frame,
+                slot: slot
+            )) {
                 continue;
             }
 
@@ -298,15 +360,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             ),
             });
         }
-    }
-    // PUCK_RAY_QUERY permits (default, unset, or any value other than "0") or denies ("0") the ray-query path; the
-    // env read is the fallback when the constructor's rayQueryEnabled argument is null.
-    private static bool RayQueryEnabledFromEnvironment() {
-        return !string.Equals(
-            a: Environment.GetEnvironmentVariable(variable: "PUCK_RAY_QUERY"),
-            b: "0",
-            comparisonType: StringComparison.Ordinal
-        );
     }
     // A world load may replace (or remove) its immutable atlas without rebuilding this node. Polling the reference is
     // cheap; SetGlyphAtlas performs the expensive ring drain and upload only when the catalog actually changes.
@@ -403,14 +456,15 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     private void StepChildren(in FrameContext context, SdfFrame frame) {
         var ready = 0;
 
-        foreach (var (slot, child) in m_children) {
-            // The SAME eligibility as the produce loop: a child whose slot is not (yet) in the frame's view list is
-            // not produced, so it must not step either — a just-booted pane's machine starts consuming the timeline
-            // on exactly the frame its view exists.
-            if (
-                (slot < 0) ||
-                (slot >= frame.Views.Count)
-            ) {
+        // The SAME eligibility as the produce loop (TryChildForSlot): a child whose slot is not this frame's child
+        // slot is not produced, so it must not step either — a just-booted pane's machine starts consuming the
+        // timeline on exactly the frame its view exists.
+        for (var slot = 0; (slot < frame.Views.Count); slot++) {
+            if (!TryChildForSlot(
+                child: out var child,
+                frame: frame,
+                slot: slot
+            )) {
                 continue;
             }
 
@@ -516,9 +570,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         m_glyphAtlasInitialized = false;
         m_uploadedGlyphAtlas = null;
         m_deviceContext = null;
-        // Re-arm the one-shot capture so a --capture run writes a POST-recovery frame (lets device-loss recovery be
-        // visually verified from the readback; harmless when no capture path is set).
-        m_captured = false;
     }
     /// <summary>Looks up a named pass's milliseconds in a <see cref="TryReadPassTimings"/> result — a passthrough of
     /// <see cref="SdfWorldEngine.PassMilliseconds"/>.</summary>
@@ -562,8 +613,10 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         var captureFrameTicks = captureFrameTimer.Stop();
         var cpuPhaseTimer = CpuPhaseTimer.Start(enabled: cpuTimingEnabled);
 
-        // Produce each child viewport's surface first (so its image-view is known before the source array is bound),
-        // then build/refresh the engine, then hand it the child views for this frame's source-array (re)bind.
+        // Decide this frame's child slots, produce each child viewport's surface (so its image-view is known before
+        // the source array is bound), then build/refresh the engine and hand it the mask + child views for this
+        // frame's source-array (re)bind.
+        m_childSlotMask = DeriveChildMask(frame: frame);
         ProduceChildren(
             context: in context,
             frame: frame
@@ -572,6 +625,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             frame: frame,
             gpuDevice: gpuDevice
         );
+        m_engine!.SetChildMask(mask: m_childSlotMask);
         ApplyPendingShaderReload();
         ReconcileGlyphAtlas();
         m_engine!.DebugMode = m_debugMode;
@@ -582,11 +636,12 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
 
         var setupTicks = cpuPhaseTimer.Stop();
 
-        foreach (var (slot, _) in m_children) {
-            if (
-                (slot < 0) ||
-                (slot >= frame.Views.Count)
-            ) {
+        for (var slot = 0; (slot < frame.Views.Count); slot++) {
+            if (!TryChildForSlot(
+                child: out _,
+                frame: frame,
+                slot: slot
+            )) {
                 continue;
             }
 
@@ -715,31 +770,9 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             ));
         }
 
-        // PUCK_CAPTURE_FRAME=N delays the one-shot --capture to the Nth produced frame (default 0 = first), so a capture
-        // can grab a post-transition frame (e.g. an animated split-screen settled) instead of frame 1. Diagnostic aid.
         ++m_produceFrameIndex;
 
-        if (
-            (m_capturePath is not null) &&
-            !m_captured &&
-            !m_capturePng.Unavailable &&
-            (m_produceFrameIndex > CaptureDelayFrames())
-        ) {
-            // Retain a copy of the readback (the readback buffer is reused across calls) so a parity gate can diff
-            // two backends' output without a second GPU read.
-            m_capturedPixels = m_engine.ReadPixels().ToArray();
-
-            _ = m_capturePng.TryWrite(
-                height: ((int)m_height),
-                path: m_capturePath,
-                rgba: m_capturedPixels,
-                width: ((int)m_width)
-            );
-
-            m_captured = true;
-        }
-
-        // The runtime sibling of --capture: a debug verb arms a one-shot capture of whatever frame is produced next.
+        // A debug verb (world.screenshot) arms a one-shot capture of whatever frame is produced next.
         m_debugCapture.Serve(
             failureLabel: "[debug] capture failed",
             writer: path => {
@@ -839,9 +872,13 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <param name="kernels">The compiled world kernel set (SPIR-V for Vulkan, DXIL for Direct3D 12).</param>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
-    /// <param name="capturePath">An optional PNG path; when set, the first rendered frame is read back from the GPU and written there.</param>
     /// <param name="createStorageImage">An optional factory for the output image. When it returns an <see cref="IGpuExportableStorageImage"/>, the node runs in <em>export</em> mode: it ends each frame in the cross-backend handoff layout, drains the producer queue, and emits a shared-handle <see cref="Surface"/> (for zero-copy cross-backend present) instead of a same-device image-view one. When <see langword="null"/>, a plain same-device storage image is created from the resolved <see cref="IGpuStorageImageFactory"/>.</param>
-    /// <param name="children">An optional map from viewport slot to a child <see cref="IRenderNode"/> that supplies that slot's surface instead of an SDF camera. Each child is produced every frame at its slot's pixel rect, its same-device storage image is bound straight into the source-agnostic compositor's <c>sources[]</c> slot, and the SDF render skips that slot. The child must produce a <em>compute source</em> (a same-device storage image left in the general layout).</param>
+    /// <param name="children">An optional map from a stable name to a child <see cref="IRenderNode"/> that supplies a
+    /// viewport slot's surface instead of an SDF camera whenever the frame's own <see cref="SdfFrame.Views"/> binds that
+    /// slot's <see cref="SdfViewSnapshot.Child"/> to the same name (see this class's remarks for the per-frame
+    /// derivation). Each bound child is produced every frame at its slot's pixel rect, its same-device storage image is
+    /// bound straight into the source-agnostic compositor's <c>sources[]</c> slot, and the SDF render skips that slot.
+    /// The child must produce a <em>compute source</em> (a same-device storage image left in the general layout).</param>
     /// <param name="screenSources">An optional map from a program-declared <see cref="SdfScreenSurface.ScreenIndex"/>
     /// to a provider of that screen's current same-device storage-image view (General layout, shader-readable),
     /// called once per produced frame after children have produced — a provider may close over a hosted child (its
@@ -880,8 +917,8 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// switch / Puck.World's world.timing verb, or the run-doc <c>host.timing</c> field) — but seeds that shared
     /// control at construction (the lowest precedence tier: a programmatic arm or the run-doc composition seed outrank
     /// it).</param>
-    /// <param name="rayQueryEnabled">The <c>PUCK_RAY_QUERY</c> toggle (permit/deny the ray-query path), or
-    /// <see langword="null"/> to fall back to the environment/default. Exposed for parity with
+    /// <param name="rayQueryEnabled">The resolved <c>host.rayQuery</c> document toggle (permit/deny the ray-query
+    /// path; the <c>world.host</c> verb echoes it). Exposed for parity with
     /// <paramref name="timingEnabled"/> and read back via <see cref="RayQueryEnabled"/>; no current render path
     /// consults it (the ray-query world's device-level feature probe is unconditional — see
     /// <c>VulkanLogicalDeviceFactory</c>; it does not own a per-viewport ray-query render node because
@@ -896,7 +933,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// carves (no pool is allocated).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, string? capturePath = null, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<int, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, bool? timingEnabled = null, bool? rayQueryEnabled = null, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
+    public SdfEngineNode(SdfViewGpuServices services, ISdfFrameSource frameSource, SdfWorldKernels kernels, uint width, uint height, Func<IGpuDeviceContext, IGpuStorageImage>? createStorageImage = null, IReadOnlyDictionary<string, IRenderNode>? children = null, IReadOnlyDictionary<int, Func<nint>>? screenSources = null, IReadOnlyDictionary<int, Func<Vector3>>? screenLights = null, IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? screenSurfaceTransforms = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, int viewportCapacity = 0, bool? timingEnabled = null, bool rayQueryEnabled = true, string? debugLabel = null, int brickPoolVoxelCapacity = SdfWorldEngine.DefaultBrickPoolVoxelCapacity) {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(frameSource);
 
@@ -907,7 +944,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             throw new ArgumentException(message: "SDF engine node dimensions must be non-zero.");
         }
 
-        m_capturePath = capturePath;
         m_debugLabel = debugLabel;
         // Copy each caller map into a concrete Dictionary<,> (its struct enumerator is what the per-frame foreach binds
         // — see the Empty* fields) rather than storing the read-only interface; the maps are built once and never
@@ -915,7 +951,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         // is observably identical. A null map shares the empty singleton.
         m_children = ((children is null)
             ? EmptyChildren
-            : new Dictionary<int, IRenderNode>(collection: children)
+            : new Dictionary<string, IRenderNode>(collection: children, comparer: StringComparer.Ordinal)
         );
         m_createStorageImage = createStorageImage;
         m_dynamicTransformCapacity = dynamicTransformCapacity;
@@ -971,9 +1007,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <inheritdoc/>
     ReadOnlySpan<string> IPassTimingSource.PassLabels => PassTimingLabels;
 
-    /// <summary>Gets the RGBA pixels read back the first time this node captured (its <c>capturePath</c> was set);
-    /// empty until then. Lets a parity gate diff two backends' renders without re-reading the GPU.</summary>
-    public ReadOnlyMemory<byte> CapturedPixels => m_capturedPixels;
     /// <summary>Gets or sets the SDF debug view mode applied to the next submitted frame.</summary>
     public int DebugMode {
         get => m_debugMode;
@@ -1000,8 +1033,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     public static ReadOnlySpan<string> PassTimingLabels => SdfWorldEngine.PassTimingLabels;
     /// <inheritdoc/>
     public string? PendingCapturePath => m_debugCapture.PendingPath;
-    /// <summary>Gets a value indicating whether the resolved <c>PUCK_RAY_QUERY</c> toggle is enabled: the constructor
-    /// argument when given, else the environment/default. See the constructor's <c>rayQueryEnabled</c> parameter doc
-    /// for why nothing consumes this yet.</summary>
-    public bool RayQueryEnabled => (m_rayQueryEnabled ?? RayQueryEnabledFromEnvironment());
+    /// <summary>Gets a value indicating whether the resolved <c>host.rayQuery</c> toggle is enabled (the constructor
+    /// argument). See the constructor's <c>rayQueryEnabled</c> parameter doc for why nothing consumes this yet.</summary>
+    public bool RayQueryEnabled => m_rayQueryEnabled;
 }

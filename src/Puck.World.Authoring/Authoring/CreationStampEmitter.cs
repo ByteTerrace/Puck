@@ -647,7 +647,7 @@ public static class CreationStampEmitter {
             lift: (shape.Lift ?? SdfLift.Extrude),
             panelRaise: panelRaise
         ));
-        var warpedReach = ShapeWarpReach.Expand(primitiveReach + (shape.Cells?.Parameters.OutwardReach ?? 0f) * ShapeFlareDocument.ReachFactor(shape.Flare), shape.Flare, shape.Shear, ShapeBumpDocument.ReachExtra(shape.Bumps));
+        var warpedReach = ShapeWarpReach.Expand(primitiveReach + (shape.Cells?.PrimitiveReachPadding(shape.Scale, shape.Flare) ?? 0f), shape.Flare, shape.Shear, ShapeBumpDocument.ReachExtra(shape.Bumps));
 
         return (
             (transform.Origin + Vector3.Transform(
@@ -1144,7 +1144,7 @@ public static class CreationStampEmitter {
                 scale: shape.Scale,
                 lift: (shape.Lift ?? SdfLift.Extrude)
             ));
-            var warpedReach = ShapeWarpReach.Expand(primitiveReach + (shape.Cells?.Parameters.OutwardReach ?? 0f) * ShapeFlareDocument.ReachFactor(shape.Flare), shape.Flare, shape.Shear, ShapeBumpDocument.ReachExtra(shape.Bumps));
+            var warpedReach = ShapeWarpReach.Expand(primitiveReach + (shape.Cells?.PrimitiveReachPadding(shape.Scale, shape.Flare) ?? 0f), shape.Flare, shape.Shear, ShapeBumpDocument.ReachExtra(shape.Bumps));
 
             reach = MathF.Max(
                 x: reach,

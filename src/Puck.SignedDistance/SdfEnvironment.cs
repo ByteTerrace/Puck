@@ -14,16 +14,29 @@ public enum SdfLightKind : byte {
     /// <summary>A view-dependent silhouette brighten added after the material shade:
     /// <c>weight · color · pow(1 − saturate(dot(normal, −ray)), param)</c>.</summary>
     Rim = 2,
+    /// <summary>A point light with inverse-square falloff and a soft core:
+    /// <c>intensity = weight / (1 + (d / r)^2)</c>, <c>r</c> = <see cref="SdfLight.Param"/>. <see cref="SdfLight.Direction"/>
+    /// carries the light's WORLD-SPACE POSITION rather than a direction; <see cref="SdfLight.DynamicSlot"/>
+    /// optionally rides a dynamic transform so the position follows an anchored shape every frame instead of the
+    /// authored (possibly stale) position. Lambert diffuse plus the material's GGX response from the point
+    /// direction, both scaled by ambient occlusion like every non-shadow light. No shadow march in v1 — a point
+    /// light never occludes and is never occluded.</summary>
+    Point = 3,
+    /// <summary>A bounded attenuation field with position, radius, and weight in [0, 1].</summary>
+    Occluder = 4,
 }
 /// <summary>One light of the lit path.</summary>
 /// <param name="Kind">What the light is.</param>
-/// <param name="Direction">Directional only: from the surface toward the light, any nonzero length (normalized on
-/// upload).</param>
+/// <param name="Direction">Directional: from the surface toward the light, any nonzero length (normalized on
+/// upload). Point: the light's world-space POSITION instead (see <see cref="SdfLightKind.Point"/>).</param>
 /// <param name="Color">The linear RGB color.</param>
 /// <param name="Weight">The strength; a hemisphere's floor.</param>
-/// <param name="Param">The kind's second scalar: penumbra half-slope, hemisphere gradient, or rim exponent.</param>
+/// <param name="Param">The kind's second scalar: penumbra half-slope, hemisphere gradient, rim exponent, or (point)
+/// the falloff radius.</param>
 /// <param name="Shadows">Directional only: whether this light drives the soft-shadow march.</param>
-public readonly record struct SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows);
+/// <param name="DynamicSlot">Point only: the dynamic-transform slot its position is read from every frame, or −1 for
+/// the static authored position in <paramref name="Direction"/>. Ignored (packed as 0) for every other kind.</param>
+public readonly record struct SdfLight(SdfLightKind Kind, Vector3 Direction, Vector3 Color, float Weight, float Param, bool Shadows, int DynamicSlot = -1);
 /// <summary>One analytic studio-reflection softbox — see <c>worldStudioReflection</c> in sdf-world.hlsli.</summary>
 /// <param name="Direction">From a lit surface toward the softbox, any nonzero length (normalized on upload).</param>
 /// <param name="Color">The linear RGB color.</param>
@@ -45,7 +58,8 @@ public enum SdfEnvironmentBlend : byte {
 public enum SdfTonemapMode : byte {
     /// <summary>No remap: the stylized shaded color, as every world rendered before this field existed.</summary>
     None = 0,
-    /// <summary>The Narkowicz ACES-fit filmic curve, then gamma 2.2.</summary>
+    /// <summary>The Narkowicz ACES-fit filmic curve on the display-referred shaded color (no gamma encode: the
+    /// pipeline never linearizes).</summary>
     Filmic = 1,
 }
 /// <summary>The lit path's per-frame environment — every light, the stylization gains, and the sky — as one lane
@@ -56,7 +70,7 @@ public enum SdfTonemapMode : byte {
 /// Row layout (row-relative to the environment base, four float lanes per row):
 /// <list type="table">
 /// <item><term>0 control</term><description>x light count, y shadow light index (−1 none), z sky enabled, w fog density</description></item>
-/// <item><term>1 + 3i .. 3 + 3i, i &lt; 8</term><description>light i: (direction.xyz, weight) (color.rgb, kind) (param, shadows, 0, 0)</description></item>
+/// <item><term>1 + 3i .. 3 + 3i, i &lt; 8</term><description>light i: (direction.xyz — a position for a point light, weight) (color.rgb, kind) (param, shadows, dynamicSlot — point only, else 0, 0)</description></item>
 /// <item><term>25</term><description>curvature: cavity, rim, ink, ink band low</description></item>
 /// <item><term>26</term><description>ink color.rgb, ink band high</description></item>
 /// <item><term>27 sky control</term><description>x gradient stop count, y sun-disc light index (−1 none), z sun-disc angular radius in radians (uploaded as the baked <c>pow</c> exponent), w sun-disc intensity</description></item>
@@ -127,6 +141,10 @@ public sealed class SdfEnvironment {
     public const float DefaultAmbientHemisphere = 0.25f;
     /// <summary>The default rim exponent.</summary>
     public const float DefaultRimPower = 3f;
+    /// <summary>The default point-light weight.</summary>
+    public const float DefaultPointWeight = 1f;
+    /// <summary>The default point-light falloff radius, in world units.</summary>
+    public const float DefaultPointRadius = 1f;
     /// <summary>The default curvature magnitude at which the ink outline starts.</summary>
     public const float DefaultCurvatureInkLow = 6f;
     /// <summary>The default curvature magnitude at which the ink outline saturates.</summary>
@@ -250,7 +268,8 @@ public sealed class SdfEnvironment {
             Color: GetVector(row: (row + 1)),
             Weight: GetLane(row: row, lane: 3),
             Param: GetLane(row: (row + 2), lane: 0),
-            Shadows: (GetLane(row: (row + 2), lane: 1) > 0.5f)
+            Shadows: (GetLane(row: (row + 2), lane: 1) > 0.5f),
+            DynamicSlot: ((int)GetLane(row: (row + 2), lane: 2))
         );
     }
     /// <summary>Sets one light and, when it shadows, makes it the shadow light.</summary>
@@ -267,7 +286,8 @@ public sealed class SdfEnvironment {
         SetLane(row: (row + 1), lane: 3, value: ((float)((byte)light.Kind)));
         SetLane(row: (row + 2), lane: 0, value: light.Param);
         SetLane(row: (row + 2), lane: 1, value: (light.Shadows ? 1f : 0f));
-        SetLane(row: (row + 2), lane: 2, value: 0f);
+        // Packed only for a point light (byte-identical for every other kind, as before this lane was assigned).
+        SetLane(row: (row + 2), lane: 2, value: ((light.Kind is SdfLightKind.Point or SdfLightKind.Occluder) ? light.DynamicSlot : 0f));
         SetLane(row: (row + 2), lane: 3, value: 0f);
 
         if (light.Shadows && (light.Kind == SdfLightKind.Directional)) {
@@ -394,7 +414,7 @@ public sealed class SdfEnvironment {
     /// <summary>Gets or sets the studio-reflection horizon's high (sky-ward) color.</summary>
     public Vector3 HorizonHigh { get => GetVector(row: HorizonHighRow); set => SetVector(row: HorizonHighRow, value: value); }
     /// <summary>Returns how a lane interpolates between two keys.</summary>
-    public static SdfEnvironmentBlend BlendOf(int laneIndex) {
+    public static SdfEnvironmentBlend BlendOf(int laneIndex, SdfLightKind lightKind = SdfLightKind.Directional) {
         var row = (laneIndex / 4);
         var lane = (laneIndex % 4);
 
@@ -406,6 +426,7 @@ public sealed class SdfEnvironment {
             var part = ((row - LightsRow) % RowsPerLight);
 
             return (part switch {
+                0 when lightKind is SdfLightKind.Point or SdfLightKind.Occluder => SdfEnvironmentBlend.Lerp,
                 0 => ((lane == 0) ? SdfEnvironmentBlend.Direction : ((lane == 3) ? SdfEnvironmentBlend.Lerp : SdfEnvironmentBlend.Hold)),
                 1 => ((lane == 3) ? SdfEnvironmentBlend.Hold : SdfEnvironmentBlend.Lerp),
                 _ => ((lane == 0) ? SdfEnvironmentBlend.Lerp : SdfEnvironmentBlend.Hold),
@@ -448,7 +469,11 @@ public sealed class SdfEnvironment {
         }
 
         for (var index = 0; (index < LaneCount); index++) {
-            switch (BlendOf(laneIndex: index)) {
+            var row = index / 4;
+            var kind = row >= LightsRow && row < LightsRow + MaxLights * RowsPerLight
+                ? (SdfLightKind)(byte)from[(LightsRow + (row - LightsRow) / RowsPerLight * RowsPerLight) * 4 + 7]
+                : SdfLightKind.Directional;
+            switch (BlendOf(laneIndex: index, lightKind: kind)) {
                 case SdfEnvironmentBlend.Lerp: {
                         into[index] = float.Lerp(value1: from[index], value2: to[index], amount: t);
 

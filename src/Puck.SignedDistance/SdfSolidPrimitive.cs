@@ -38,4 +38,12 @@ public enum SdfSolidPrimitive {
     /// unauthored is the minimum, the ellipsoid limit — the two spellings agree bit-for-bit at that exponent). A
     /// squircle/rounded-cube family: the minimum exponent is a plain ellipsoid, larger values round toward a box.</summary>
     Superellipsoid,
+    /// <summary>A quadratic Bezier curve swept with a tapering, optionally bulging radius, optionally as 1-4 helical
+    /// strands — see <see cref="SdfShapeType.Sweep"/>. NOT a closed solid a body can stand on in the sense the rest
+    /// of this enum's members are: its field is "exact enough", not exact, and carries no
+    /// <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, System.Numerics.Vector3, SdfLift)"/> unit-scale law —
+    /// its control points and radii already carry creation-unit dimensions directly (see
+    /// <see cref="SdfSolidGeometry.SweepReach"/>). The authoring layer admits it only with a curve facet naming its
+    /// control points and radii.</summary>
+    Sweep,
 }

@@ -83,59 +83,109 @@
                   ],
                   "default": null
                 },
-                "wear": {
+                "weathering": {
                   "type": [
                     "object",
                     "null"
                   ],
                   "properties": {
-                    "chips": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
+                    "edge": {
+                      "type": "number",
+                      "default": 0
                     },
-                    "scratches": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
+                    "lines": {
+                      "type": "number",
+                      "default": 0
                     },
-                    "dust": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
+                    "settle": {
+                      "type": "number",
+                      "default": 0
                     },
-                    "contact": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
+                    "reach": {
+                      "type": "number",
+                      "default": 1
                     },
                     "seed": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
+                      "type": "integer",
+                      "default": 0
                     },
                     "scale": {
+                      "type": "number",
+                      "default": 1
+                    },
+                    "floor": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "lane": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "under": {
                       "type": [
-                        "number",
+                        "array",
                         "null"
                       ],
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "threshold": {
+                            "type": "number"
+                          },
+                          "surface": {
+                            "type": "object",
+                            "properties": {
+                              "color": {
+                                "type": "string"
+                              },
+                              "roughness": {
+                                "type": "number"
+                              },
+                              "metal": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "color",
+                              "roughness",
+                              "metal"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "threshold",
+                          "surface"
+                        ],
+                        "additionalProperties": false
+                      },
                       "default": null
                     },
-                    "static": {
+                    "deposit": {
                       "type": [
-                        "number",
+                        "object",
                         "null"
                       ],
+                      "properties": {
+                        "color": {
+                          "type": "string"
+                        },
+                        "roughness": {
+                          "type": "number"
+                        },
+                        "metal": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "color",
+                        "roughness",
+                        "metal"
+                      ],
+                      "additionalProperties": false,
                       "default": null
                     }
                   },
@@ -163,53 +213,74 @@
                   ],
                   "default": null
                 },
-                "eye": {
+                "inset": {
                   "type": [
                     "object",
                     "null"
                   ],
                   "properties": {
-                    "iris": {
-                      "type": "string"
-                    },
-                    "irisRadius": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "pupilRadius": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "limbus": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
-                    },
+                    "origin": true,
+                    "rotation": true,
                     "depth": {
-                      "type": [
-                        "number",
-                        "null"
-                      ],
-                      "default": null
+                      "type": "number"
                     },
-                    "fibers": {
-                      "type": [
-                        "number",
-                        "null"
+                    "ior": {
+                      "type": "number"
+                    },
+                    "paint": {
+                      "type": "object",
+                      "properties": {
+                        "stops": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "radius": {
+                                "type": "number"
+                              },
+                              "color": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "radius",
+                              "color"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "softness": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "modulationAmplitude": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "modulationFrequency": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "stops"
                       ],
-                      "default": null
+                      "additionalProperties": false
                     }
                   },
                   "required": [
-                    "iris"
+                    "origin",
+                    "rotation",
+                    "depth",
+                    "ior",
+                    "paint"
                   ],
                   "additionalProperties": false,
                   "default": null
@@ -273,6 +344,13 @@
                     "ChamferUnion",
                     "ChamferIntersection",
                     "ChamferSubtraction",
+                    "GrooveUnion",
+                    "PipeUnion",
+                    "Morph",
+                    "GrooveSubtraction",
+                    "PipeSubtraction",
+                    "StairsUnion",
+                    "StairsSubtraction",
                     null
                   ]
                 },
@@ -711,6 +789,14 @@
                         "null"
                       ],
                       "default": null
+                    },
+                    "axis": {
+                      "type": "integer",
+                      "default": 1
+                    },
+                    "startScale": {
+                      "type": "number",
+                      "default": 1
                     }
                   },
                   "required": [
@@ -760,6 +846,35 @@
                   "default": null
                 },
                 "shear": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "linear": {
+                      "type": "number"
+                    },
+                    "quadratic": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "cubic": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "target": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "driver": {
+                      "type": "integer",
+                      "default": 1
+                    }
+                  },
+                  "required": [
+                    "linear"
+                  ],
+                  "additionalProperties": false,
                   "default": null
                 },
                 "curve": {
@@ -823,12 +938,7 @@
                   ],
                   "properties": {
                     "lane": {
-                      "enum": [
-                        "Damage",
-                        "Thrust",
-                        "Z",
-                        "W"
-                      ]
+                      "type": "integer"
                     },
                     "from": {
                       "type": "number"
@@ -848,6 +958,41 @@
                     "lane",
                     "from",
                     "to"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "cells": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "frequency": {
+                      "type": "number"
+                    },
+                    "amplitude": {
+                      "type": "number"
+                    },
+                    "seed": {
+                      "type": "integer"
+                    },
+                    "mode": {
+                      "enum": [
+                        "F1",
+                        "F2MinusF1"
+                      ]
+                    },
+                    "randomness": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "frequency",
+                    "amplitude",
+                    "seed",
+                    "mode",
+                    "randomness"
                   ],
                   "additionalProperties": false,
                   "default": null
@@ -1552,6 +1697,28 @@
                 "position": true,
                 "rotation": true,
                 "halfExtent": true,
+                "ramp": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "density": {
+                        "type": "number"
+                      },
+                      "color": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "density",
+                      "color"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
                 "parent": {
                   "type": [
                     "string",
@@ -1582,7 +1749,7 @@
                 },
                 "seed": {
                   "type": [
-                    "number",
+                    "integer",
                     "null"
                   ],
                   "default": null
@@ -1590,27 +1757,6 @@
                 "steps": {
                   "type": [
                     "integer",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "core": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "sheath": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "cells": {
-                  "type": [
-                    "string",
                     "null"
                   ],
                   "default": null
@@ -1629,9 +1775,23 @@
                   ],
                   "default": null
                 },
-                "thrust": {
+                "pulseAmplitude": {
                   "type": [
-                    "boolean",
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "pulseFrequency": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "intensityLane": {
+                  "type": [
+                    "integer",
                     "null"
                   ],
                   "default": null
@@ -1644,7 +1804,8 @@
                 "kind",
                 "position",
                 "rotation",
-                "halfExtent"
+                "halfExtent",
+                "ramp"
               ],
               "additionalProperties": false
             },

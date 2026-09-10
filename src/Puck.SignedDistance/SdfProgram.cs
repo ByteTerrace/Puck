@@ -7,9 +7,8 @@ namespace Puck.SignedDistance;
 //   word[0]             = (instructionCount, materialCount, dataOffset, materialOffset) in uvec4 units
 //   [1 .. 1+N)          = instruction headers (op, shape, blend, material)
 //   [dataOffset ..)     = instruction data, 2 uvec4 per instruction (data0, data1 as float bits)
-//   [materialOffset ..) = materials, 3 uvec4 each (m0 = albedo.rgb + emissive, m1 = specular + roughness + sheen +
-//                         metal, m2 = coat + 3 reserved, all as float bits)
-//   [materialOffset + 3*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
+//   [materialOffset ..) = material layers, 20 uint4 per entry; see PackMaterials and sdfMaterialLoad.
+//   [materialOffset + 20*materialCount ..) = the per-SHAPE bounding-sphere table, 2 uvec4 per instruction:
 //                         b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot, index, index+1).
 //   [.. + 2*instructionCount ..) = the SEGMENT directory: one (segmentCount, stepScale, rigidPlanOffset, 0) header uvec4, then 2
 //                         uvec4 per segment — s0 = center/offset.xyz + radius (float bits), s1 = (mode, dynamicSlot,
@@ -83,13 +82,17 @@ public sealed partial class SdfProgram {
     // High shape-type-lane bit on a ShapeBlend instruction: SdfInstruction.Detail. Shape-type ids are far below 2^31,
     // so the bit is free. KEEP IN SYNC with SDF_SHAPE_DETAIL_FLAG in sdf-vm.hlsli.
     private const uint ShapeDetailFlag = 0x80000000u;
+    // The next-highest shape-type-lane bit: SdfInstruction.Secondary == false. KEEP IN SYNC with
+    // SDF_SHAPE_NO_SECONDARY_FLAG in sdf-vm.hlsli.
+    private const uint ShapeNoSecondaryFlag = 0x40000000u;
     /// <summary>Each packed screen-surface entry's uvec4 (16-byte) stride: right.xyz+halfWidth, up.xyz+halfHeight,
     /// origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli's ScreenSurfaceData).</summary>
     private const int ScreenSurfaceVectorsPerEntry = 3;
-    /// <summary>Each packed material entry's uvec4 (16-byte) stride: m0 = albedo.rgb + emissive, m1 = specular +
-    /// roughness + sheen + metal, m2 = coat + 3 reserved (KEEP IN SYNC with sdf-vm.hlsli's SdfMaterialData/
-    /// sdfMaterialLoad).</summary>
-    private const int MaterialVectorsPerEntry = 3;
+    /// <summary>Each packed <see cref="SdfShapeType.Sweep"/> curve table entry's uvec4 stride: (A.xyz, radiusStart),
+    /// (B.xyz, radiusEnd), (C.xyz, bulge).</summary>
+    private const int SweepCurveVectorsPerEntry = 3;
+    /// <summary>Material float4 stride; paired with PackMaterials and sdfMaterialLoad.</summary>
+    private const int MaterialVectorsPerEntry = 20;
     private const uint SegmentEndMask = 0x7FFFFFFFu;
     // High segment-mode bit: the segment owns a host-compiled rigid-leaf plan. The low byte remains SDF_BOUND_*.
     // KEEP IN SYNC with SDF_SEGMENT_RIGID_PLAN / SDF_SEGMENT_BOUND_MASK in sdf-vm.hlsli.
@@ -125,6 +128,11 @@ public sealed partial class SdfProgram {
     // the packed offset. Empty for a program with no convex-polygon profile.
     private readonly (int InstructionIndex, Vector2[] Vertices)[] m_convexPolygonProfiles;
     private readonly SdfInstanceGridInput[] m_instanceBinning;
+    // Every SdfShapeType.Sweep instruction's own control points/radius endpoints, keyed by that instruction's index —
+    // the host side of the side table PackSweepCurves appends to the packed word stream (see SdfShapeType.Sweep), and
+    // what SdfFieldEvaluator reads directly to mirror the field without decoding the packed offset. Empty for a
+    // program with no Sweep shape.
+    private readonly SdfSweepCurve[] m_sweepCurves;
     private readonly SdfInstanceRange[] m_instances;
     private readonly ReadOnlyCollection<SdfInstanceRange> m_instancesView;
     private readonly SdfInstruction[] m_instructions;
@@ -154,6 +162,10 @@ public sealed partial class SdfProgram {
     /// list, keyed by that instruction's index in <paramref name="instructions"/> — exactly one entry per such
     /// instruction, no two claiming the same index. <see langword="null"/> (the default) is empty, valid only when
     /// <paramref name="instructions"/> carries no <see cref="SdfShapeType.ConvexPolygon"/> shape.</param>
+    /// <param name="sweepCurves">Every <see cref="SdfShapeType.Sweep"/> instruction's own control points and radius
+    /// endpoints, keyed by that instruction's <see cref="SdfSweepCurve.InstructionIndex"/> — exactly one entry per
+    /// such instruction, no two claiming the same index. <see langword="null"/> (the default) is empty, valid only
+    /// when <paramref name="instructions"/> carries no <see cref="SdfShapeType.Sweep"/> shape.</param>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
     /// the packed format carries; an operand lane that is not a reinterpreted integer field is not finite; field scopes
     /// are unbalanced, empty, nested beyond the supported depth, or cross an instance boundary; two screen surfaces claim one
@@ -164,7 +176,7 @@ public sealed partial class SdfProgram {
     /// not orthonormal, or its half-width or half-height is not finite and positive; a material component is not finite
     /// and non-negative; an instance bound is not finite and non-negative; or a trapezoid's profile slant vanishes in
     /// the deterministic field's representation.</exception>
-    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null) {
+    public SdfProgram(IReadOnlyList<SdfInstruction> instructions, IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, bool buildInstanceGrid = true, SdfInstanceGrid.Workspace? gridWorkspace = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null) {
         ArgumentNullException.ThrowIfNull(instructions);
         ArgumentNullException.ThrowIfNull(materials);
 
@@ -177,6 +189,7 @@ public sealed partial class SdfProgram {
         m_instructions = [.. instructions];
         m_screenSurfaces = [.. (screenSurfaces ?? [])];
         m_buildInstanceGrid = buildInstanceGrid;
+        m_sweepCurves = [.. (sweepCurves ?? [])];
         var convexPolygonProfilesSource = (convexPolygonProfiles ?? []);
 
         m_convexPolygonProfiles = new (int InstructionIndex, Vector2[] Vertices)[convexPolygonProfilesSource.Count];
@@ -210,6 +223,7 @@ public sealed partial class SdfProgram {
         }
 
         ValidateConvexPolygonProfiles(paramName: nameof(convexPolygonProfiles));
+        ValidateSweepCurves(paramName: nameof(sweepCurves));
 
         var instructionOwners = ValidatePackedContract(
             materials: materialTable,
@@ -227,12 +241,13 @@ public sealed partial class SdfProgram {
         // Data1.y gains the scope's 1/L candidate scale) — the packed words and the typed stream must describe the
         // same program. Exactly 1.0f for a warp-free, eccentricity-free program, so isometric scenes stay
         // byte-identical; a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale in the shader).
-        var stepScale = AnalyzeLipschitz(convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions);
+        var stepScale = AnalyzeLipschitz(convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, sweepCurves: m_sweepCurves);
 
         StepScaleBinder = AnalyzeStepScaleBinder(
             convexPolygonProfiles: m_convexPolygonProfiles,
             instances: m_instances,
-            instructions: m_instructions
+            instructions: m_instructions,
+            sweepCurves: m_sweepCurves
         );
 
         // ALWAYS the full MaxScreenSurfaces capacity, indexed by ScreenIndex (not declaration order): the shader
@@ -333,7 +348,16 @@ public sealed partial class SdfProgram {
             convexPolygonWords += ((m_convexPolygonProfiles[profileIndex].Vertices.Length + 1) / 2);
         }
 
-        var totalVectors = (convexPolygonOffsetVectors + convexPolygonWords);
+        // The Sweep curve table sits immediately after the convex-polygon table — a FIXED 3-uvec4 stride per curve
+        // (A, B, C), unlike ConvexPolygon's variable vertex count, so no per-entry word count needs computing here.
+        var sweepOffsetVectors = (convexPolygonOffsetVectors + convexPolygonWords);
+        var sweepCurveOffsets = new int[m_sweepCurves.Length];
+
+        for (var curveIndex = 0; (curveIndex < m_sweepCurves.Length); curveIndex++) {
+            sweepCurveOffsets[curveIndex] = (sweepOffsetVectors + (curveIndex * SweepCurveVectorsPerEntry));
+        }
+
+        var totalVectors = (sweepOffsetVectors + (SweepCurveVectorsPerEntry * m_sweepCurves.Length));
 
         InstructionCount = instructionCount;
         m_words = new uint[(totalVectors * WordsPerVector)];
@@ -357,6 +381,22 @@ public sealed partial class SdfProgram {
             });
         }
 
+        // Same patch, same reason, for every Sweep instruction's table-offset placeholder (no vertex count to pack
+        // alongside it — the table entry is fixed-size).
+        for (var curveIndex = 0; (curveIndex < m_sweepCurves.Length); curveIndex++) {
+            var instructionIndex = m_sweepCurves[curveIndex].InstructionIndex;
+            var instruction = m_instructions[instructionIndex];
+
+            m_instructions[instructionIndex] = (instruction with {
+                Data0 = new Vector4(
+                    w: instruction.Data0.W,
+                    x: BitConverter.UInt32BitsToSingle(value: ((uint)sweepCurveOffsets[curveIndex])),
+                    y: instruction.Data0.Y,
+                    z: instruction.Data0.Z
+                ),
+            });
+        }
+
         m_words[0] = ((uint)instructionCount);
         m_words[1] = ((uint)materialCount);
         m_words[2] = ((uint)dataOffsetVectors);
@@ -367,7 +407,9 @@ public sealed partial class SdfProgram {
             var headerBase = ((1 + index) * WordsPerVector);
 
             m_words[headerBase] = ((uint)instruction.Op);
-            m_words[(headerBase + 1)] = (instruction.Shape | (instruction.Detail ? ShapeDetailFlag : 0u));
+            m_words[(headerBase + 1)] = instruction.Op == SdfOp.ShapeBlend
+                ? (instruction.Shape | (instruction.Detail ? ShapeDetailFlag : 0u) | (instruction.Secondary ? 0u : ShapeNoSecondaryFlag))
+                : instruction.Shape;
             m_words[(headerBase + 2)] = instruction.Blend;
             m_words[(headerBase + 3)] = instruction.Material;
 
@@ -391,35 +433,11 @@ public sealed partial class SdfProgram {
             );
         }
 
-        for (var index = 0; (index < materialCount); index++) {
-            var material = materialTable[index];
-            var materialBase = ((materialOffsetVectors + (MaterialVectorsPerEntry * index)) * WordsPerVector);
-
-            WriteVector4(
-                words: m_words,
-                baseIndex: materialBase,
-                w: material.Emissive,
-                x: material.Albedo.X,
-                y: material.Albedo.Y,
-                z: material.Albedo.Z
-            );
-            WriteVector4(
-                words: m_words,
-                baseIndex: (materialBase + WordsPerVector),
-                w: material.Metal,
-                x: material.Specular,
-                y: material.Roughness,
-                z: material.Sheen
-            );
-            WriteVector4(
-                words: m_words,
-                baseIndex: (materialBase + (2 * WordsPerVector)),
-                w: 0f,
-                x: material.Coat,
-                y: 0f,
-                z: 0f
-            );
-        }
+        PackMaterials(
+            materialCount: materialCount,
+            materialOffsetVectors: materialOffsetVectors,
+            materialTable: materialTable
+        );
 
         PackBounds(
             boundsOffsetVectors: boundsOffsetVectors,
@@ -453,6 +471,7 @@ public sealed partial class SdfProgram {
             rigidPlanOffsetVectors: rigidPlanOffsetVectors
         );
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
+        PackSweepCurves(curveOffsets: sweepCurveOffsets);
     }
 
     /// <summary>Gets the per-(viewport, tile) instance-mask width in uints for this program: ceil(instance count / 32),
@@ -480,6 +499,11 @@ public sealed partial class SdfProgram {
     /// mirror the field without decoding the packed word offset. Empty for a program with no convex-polygon
     /// profile.</summary>
     internal IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)> ConvexPolygonProfiles => m_convexPolygonProfiles;
+    /// <summary>Gets every <see cref="SdfShapeType.Sweep"/> instruction's own control points and radius endpoints,
+    /// keyed by that instruction's index in <see cref="Instructions"/> — the host-side twin of the packed side table
+    /// <see cref="Words"/> carries, so a CPU consumer (<c>Puck.SignedDistance.Queries.SdfFieldEvaluator</c>) can
+    /// mirror the field without decoding the packed word offset. Empty for a program with no Sweep shape.</summary>
+    internal IReadOnlyList<SdfSweepCurve> SweepCurves => m_sweepCurves;
     /// <summary>Gets the number of materials in this program's palette — read back from the packed header lane
     /// (<c>m_words[1]</c>), which is the single source of truth. Exposed so a caller rebuilding a similar program (a
     /// live composition rebuild, say) can use the previous program's material count as a <see cref="SdfProgramBuilder"/>
@@ -640,9 +664,9 @@ public sealed partial class SdfProgram {
     /// <param name="candidate">The candidate's Lipschitz bound.</param>
     /// <param name="blend">The packed <see cref="SdfBlendOp"/> lane.</param>
     /// <returns>The composed field's Lipschitz bound.</returns>
-    /// <remarks>Every non-chamfer arm is a min/max/lerp of its operands and carries <c>max(La, Lb)</c>. The three
+    /// <remarks>The ordinary min/max/lerp arms carry <c>max(La, Lb)</c>. The three
     /// chamfer arms add the bevel plane <c>(a ± b ± r)·√½</c>, whose gradient <c>(∇a ± ∇b)/√2</c> reaches
-    /// <c>(La + Lb)/√2</c> — the only arm that can exceed BOTH operands, and the reason the caller folds per
+    /// <c>(La + Lb)/√2</c>. Round seams carry <c>sqrt(La²+Lb²)</c>. Both families require a fold per
     /// composition rather than per chain. KEEP IN SYNC with <c>blendShape</c>'s arms.</remarks>
     private static float ComposeLipschitz(float current, float candidate, uint blend) {
         var bound = MathF.Max(
@@ -650,6 +674,11 @@ public sealed partial class SdfProgram {
             y: candidate
         );
 
+        if (blend is (uint)SdfBlendOp.GrooveUnion or (uint)SdfBlendOp.PipeUnion or (uint)SdfBlendOp.GrooveSubtraction or (uint)SdfBlendOp.PipeSubtraction) {
+            // Cauchy-Schwarz bounds (a*grad(a)+b*grad(b))/sqrt(a²+b²).
+            // Unlike the chamfer's sum, this also covers unequal operand bounds.
+            return float.Hypot(current, candidate);
+        }
         return ((
             (blend == ((uint)SdfBlendOp.ChamferUnion)) ||
             (blend == ((uint)SdfBlendOp.ChamferIntersection)) ||
@@ -779,7 +808,8 @@ public sealed partial class SdfProgram {
                     }
                 default: {
                         // Scale (distance rescale), Repeat/RepeatLimited/SymmetryPlane/WallpaperFold/CellJitter/RepeatPolar
-                        // (space folding), Twist/Bend/Elongate/DomainWarp (non-isometries), Onion/Dilate/Displace/NoiseDisplace (field ops a skip must never jump over):
+                        // (space folding), Twist/Bend/Elongate/DomainWarp/AxialProfile/Shear/GaussianPush(Data) (non-isometries),
+                        // Onion/Dilate/Displace/NoiseDisplace (field ops a skip must never jump over):
                         // no world-space sphere is sound past this point, and the segment cannot be skipped whole.
                         chainBoundable = false;
                         segmentEligible = false;
@@ -1147,6 +1177,10 @@ public sealed partial class SdfProgram {
     //   L = |amplitude|·frequency·(15/4)·√3·Σ (gain·lacunarity)ᵏ / Σ gainᵏ.
     // Reach-INDEPENDENT (a global bound on the lattice basis), so it multiplies the whole chain like Displace's
     // factor. amplitude == 0 yields 1.0f exactly, so a noise-free program stays byte-identical.
+    private static float CellDisplaceLipschitz(SdfInstruction instruction) =>
+        new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
+            (SdfCellMode)instruction.Blend, instruction.Data0.Z).StepFactor;
+
     private static float NoiseDisplaceLipschitz(SdfInstruction instruction) => NoiseDisplaceStepFactor(
         amplitude: MathF.Abs(x: instruction.Data0.Y),
         frequency: MathF.Abs(x: instruction.Data0.X),
@@ -1318,46 +1352,53 @@ public sealed partial class SdfProgram {
     // cannot be accumulated inline — the shape reach is only known once the whole chain has been walked). Compounds as a
     // PRODUCT (like nested log-spherical folds): two CellJitters in one chain each contribute their own overestimate.
     // Empty (no CellJitter in the chain) ⇒ 1.0f exactly, so a jitter-free program stays byte-identical.
-    private static float FoldCellJitterProduct(List<(float MinSpacing, float Jitter)> cellJitters, float shapeReach) {
+    // The prototype reach each fold contains is the chain's max shape reach plus the translates that FOLLOW the fold
+    // (the chain's final translate reach minus the reach recorded as of the op, which already holds the op's own
+    // jitter term), read back into the fold's own frame through its min-axis scale.
+    private static float FoldCellJitterProduct(List<(float MinSpacing, float Jitter, float TranslateReachAtOp, float MinScale)> cellJitters, float shapeReach, float translateReach) {
         var product = 1.0f;
 
-        foreach (var (minSpacing, jitter) in cellJitters) {
+        foreach (var (minSpacing, jitter, translateReachAtOp, minScale) in cellJitters) {
             product *= CellJitterLipschitz(
                 jitter: jitter,
                 minSpacing: minSpacing,
-                shapeReach: shapeReach
+                shapeReach: (((translateReach - translateReachAtOp) + shapeReach) / minScale)
             );
         }
 
         return product;
     }
     // One chain's Lipschitz factor: the product of its warps' exact operator norms over the chain reach rho, times
-    // FlareY's conservative operator-norm bounds over the same reach, times the max shape-approx factor (ellipsoid
+    // AxialProfile's conservative operator-norm bounds over the same reach, times the max shape-approx factor (ellipsoid
     // eccentricity) in it. A warp-free, flare-free, eccentricity-free chain returns 1.0f exactly (empty products
-    // times a 1.0 max).
-    private static float FoldChainLipschitz(List<(float Rate, bool KeyInRotatedPlane)> warpRates, List<(float Amount, float Bulge, float InverseSpan, float DistanceScale)> flares, float shapeApproxMax, float reach) {
+    // times a 1.0 max). reach arrives in the chain's outermost frame; each warp reads it in its own frame by dividing
+    // by the min-axis scale accumulated before it, and a displacement's growth is written back through the max axis.
+    private static float FoldChainLipschitz(List<(float Rate, bool KeyInRotatedPlane, float MinScale)> warpRates, List<(SdfInstruction Warp, float MinScale, float MaxScale)> reachWarps, float shapeApproxMax, float reach) {
         var domainProduct = 1.0f;
-
+        // Walk from the primitive toward the world. A later displacement widens the coordinates at
+        // which an earlier polynomial/profile derivative is evaluated.
+        for (var index = reachWarps.Count - 1; index >= 0; index--) {
+            var (warp, minScale, maxScale) = reachWarps[index];
+            var ownReach = (reach / minScale);
+            switch (warp.Op) {
+                case SdfOp.GaussianPush:
+                    reach += (new Vector3(warp.Data0.W, warp.Data1.W, BitConverter.UInt32BitsToSingle(warp.Shape)).Length() * maxScale);
+                    break;
+                case SdfOp.Shear:
+                    domainProduct *= ShearOperatorNorm(warp.Data0.X, warp.Data0.Y, warp.Data0.Z, ownReach);
+                    reach += ((ownReach * (MathF.Abs(warp.Data0.X) + ownReach * (MathF.Abs(warp.Data0.Y) + ownReach * MathF.Abs(warp.Data0.Z)))) * maxScale);
+                    break;
+                case SdfOp.AxialProfile:
+                    domainProduct *= FlareOperatorNorm(warp.Data0.X, warp.Data0.Y, warp.Data0.W, warp.Data1.X, ownReach, warp.Data1.Y);
+                    reach *= MathF.Max(1f, FlareExtrema(warp.Data0.X, warp.Data0.Y, warp.Data1.Y).MaxS);
+                    break;
+            }
+        }
         foreach (var warp in warpRates) {
-            var a = (warp.Rate * reach);
-
-            domainProduct *= (warp.KeyInRotatedPlane
-                ? BendOperatorNorm(a: a)
-                : TwistOperatorNorm(a: a)
-            );
+            var a = warp.Rate * (reach / warp.MinScale);
+            domainProduct *= warp.KeyInRotatedPlane ? BendOperatorNorm(a) : TwistOperatorNorm(a);
         }
-
-        foreach (var flare in flares) {
-            domainProduct *= FlareOperatorNorm(
-                amount: flare.Amount,
-                bulge: flare.Bulge,
-                distanceScale: flare.DistanceScale,
-                inverseSpan: flare.InverseSpan,
-                reach: reach
-            );
-        }
-
-        return (domainProduct * shapeApproxMax);
+        return domainProduct * shapeApproxMax;
     }
     private bool HasFrameBinnableDynamicInstance() {
         for (var index = 0; (index < m_instances.Length); index++) {
@@ -1460,7 +1501,7 @@ public sealed partial class SdfProgram {
                 (instruction.Op == SdfOp.Onion) ||
                 (instruction.Op == SdfOp.Dilate) ||
                 (instruction.Op == SdfOp.Displace) ||
-                (instruction.Op == SdfOp.NoiseDisplace)
+                (instruction.Op is SdfOp.NoiseDisplace or SdfOp.CellDisplace)
             ) {
                 return true;
             }
@@ -1507,7 +1548,7 @@ public sealed partial class SdfProgram {
                 (instruction.Op == SdfOp.Onion) ||
                 (instruction.Op == SdfOp.Dilate) ||
                 (instruction.Op == SdfOp.Displace) ||
-                (instruction.Op == SdfOp.NoiseDisplace) ||
+                (instruction.Op is SdfOp.NoiseDisplace or SdfOp.CellDisplace) ||
                 (instruction.Op == SdfOp.PushField) ||
                 (instruction.Op == SdfOp.PopField)
             ) {
@@ -1624,6 +1665,7 @@ public sealed partial class SdfProgram {
                 SdfOp.Dilate => MathF.Abs(x: instruction.Data0.X),
                 SdfOp.Displace => MathF.Abs(x: instruction.Data0.W),
                 SdfOp.NoiseDisplace => MathF.Abs(x: instruction.Data0.Y),
+                SdfOp.CellDisplace => 0.5f * instruction.Data0.Y,
                 _ => 0.0f,
             };
         }
@@ -1685,6 +1727,10 @@ public sealed partial class SdfProgram {
                     x: margin,
                     y: radius
                 );
+            } else if (instruction.Blend is ((uint)SdfBlendOp.PipeUnion) or ((uint)SdfBlendOp.PipeSubtraction)) {
+                margin = MathF.Max(margin, (1f + MathF.Sqrt(2f)) * radius);
+            } else if (instruction.Blend is ((uint)SdfBlendOp.GrooveUnion) or ((uint)SdfBlendOp.GrooveSubtraction) or ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
+                margin = MathF.Max(margin, radius);
             } else if (instruction.Blend == ((uint)SdfBlendOp.ChamferUnion)) {
                 margin = MathF.Max(
                     x: margin,
@@ -1885,7 +1931,17 @@ public sealed partial class SdfProgram {
     // cull bound — its SDF can underestimate — but whose geometric max radius is a fine reach), and treats the
     // unbounded plane as 0 (planes are never warped in practice, and any bounded shape sharing the chain dominates the
     // max). Over-estimating rho only slows the march, never makes it unsafe.
-    private static float ShapeReachRadius(SdfInstruction instruction, int instructionIndex, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles) {
+    private static float ShapeReachRadius(SdfInstruction instruction, int instructionIndex, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
+        // Sweep carries no TryGetLocalBound cull bound (its own field is already only "exact enough", not a sound
+        // cull lower bound) — see SweepShapeReachRadius (SdfProgram.Sweep.cs).
+        if (((SdfShapeType)instruction.Shape) == SdfShapeType.Sweep) {
+            return SweepShapeReachRadius(
+                instruction: instruction,
+                instructionIndex: instructionIndex,
+                sweepCurves: sweepCurves
+            );
+        }
+
         if (TryGetLocalBound(
             center: out var center,
             convexPolygonProfiles: convexPolygonProfiles,
@@ -1996,9 +2052,10 @@ public sealed partial class SdfProgram {
                     }
                 case SdfOp.ShapeBlend: {
                         // The rigid-leaf walk evaluates every leaf unconditionally (sdf-vm.hlsli has no mode check on
-                        // that path) — a Detail shape needs the generic per-instruction switch, where the mode gate
-                        // lives, so it never marches. Fall back to the slow path for the whole segment.
-                        if (instruction.Detail) {
+                        // that path) — a Detail or non-secondary shape needs the generic per-instruction switch, where
+                        // the mode gate lives, so it never marches under sdfDetailShadingActive/sdfSecondaryMarchActive
+                        // as its flag requires. Fall back to the slow path for the whole segment.
+                        if (instruction.Detail || !instruction.Secondary) {
                             dynamicSlot = -1;
 
                             return false;
@@ -2283,6 +2340,33 @@ public sealed partial class SdfProgram {
         var aSquared = (a * a);
 
         return MathF.Sqrt(x: (((2.0f + aSquared) + (a * MathF.Sqrt(x: (aSquared + 4.0f)))) / 2.0f));
+    }
+    // SdfOp.Shear's Jacobian is exactly [[1, s(y), 0], [0, 1, 0], [0, 0, 1]] with s(y) = linear + 2*quadratic*y — a
+    // rank-1 perturbation of the identity driven by a coordinate (y) OUTSIDE the axis it perturbs (x), the same
+    // structure TwistOperatorNorm's derivation covers (its key axis is likewise orthogonal to the plane it rotates),
+    // so the two share the identical sqrt((2 + a^2 + a*sqrt(a^2 + 4)) / 2) singular-value bound. s(y) is monotone in
+    // |y|, so its supremum over the chain's reach rho is attained at |y| = rho: |linear| + 2*|quadratic|*rho.
+    private static float ShearOperatorNorm(float linear, float quadratic, float cubic, float reach) => TwistOperatorNorm(a: (MathF.Abs(x: linear) + ((2.0f * MathF.Abs(x: quadratic)) * reach) + 3f * MathF.Abs(cubic) * reach * reach));
+    // SdfOp.GaussianPush's Jacobian is I - Push (outer) gradG, gradG = -2*g(p)*(offset/Radii) (offset = (p-Center)/Radii,
+    // g = exp(-dot(offset,offset))) — a rank-1 perturbation of the identity, operator norm <= 1 + |Push|*sup|gradG|.
+    // sup|gradG|: each component of offset/Radii is bounded by |offset|/min(Radii), so |gradG| <= 2*g*|offset|/min(Radii);
+    // the scalar s*exp(-s^2) (s = |offset| >= 0) maximizes at s = 1/sqrt(2), value 1/sqrt(2e), giving
+    // sup|gradG| = sqrt(2/e)/min(Radii) — REACH-INDEPENDENT (the Gaussian decays to 0 away from Center), unlike
+    // ShearOperatorNorm. Push = 0 or an unbounded Radii component returns exactly 1.
+    private static float GaussianPushLipschitz(Vector3 radii, Vector3 push) {
+        const float SqrtTwoOverE = 0.8577638f;   // sqrt(2/e)
+        var minRadius = MathF.Min(
+            x: MathF.Abs(x: radii.X),
+            y: MathF.Min(
+                x: MathF.Abs(x: radii.Y),
+                y: MathF.Abs(x: radii.Z)
+            )
+        );
+
+        return ((minRadius > 0.0f)
+            ? (1.0f + ((push.Length() * SqrtTwoOverE) / minRadius))
+            : float.PositiveInfinity
+        );
     }
     private void WriteBound(int entryBase, in BoundRecord record) {
         WriteVector4(

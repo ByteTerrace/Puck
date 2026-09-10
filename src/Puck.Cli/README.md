@@ -276,6 +276,10 @@ future transport arm, not a reshape of `authorities`' current members.
 
 ## `puck parity` — cross-backend parity over the authored parity world
 
+The runner builds into its own scratch directory before starting either
+backend. An open world using the normal build output does not block this
+build. Build stdout and stderr remain beside the capture transcripts.
+
 `puck parity` boots `tests/Puck.Parity/parity.world.json` once per graphics
 backend (Vulkan, Direct3D 12) with `host.presentation: offscreen` — no window
 is shown — and lets the world's own `captures` rows land every tick-scheduled

@@ -14,9 +14,8 @@
 //   words[0]              = (instructionCount, materialCount, dataOffset, materialOffset)
 //   words[1 .. 1+N)       = instruction headers (op, shapeType, blendOp, materialId)
 //   words[dataOffset ..]  = instruction data, 2 uint4 per instruction (data0, data1 as float bits)
-//   words[matOffset ..]   = materials, 3 uint4 each (m0 = albedo.rgb + emissive, m1 = specular + roughness + sheen +
-//                           metal, m2 = coat + 3 reserved, all as float bits)
-//   words[matOffset + 3*materialCount ..] = HOST-BAKED bounding-sphere table (SdfProgram.PackBounds), 2 uint4 per
+//   words[matOffset ..] = materials, 20 uint4 each; see SdfProgram.Materials.cs and sdfMaterialLoad.
+//   words[matOffset + 20*materialCount ..] = HOST-BAKED bounding-sphere table (SdfProgram.PackBounds), 2 uint4 per
 //                           instruction: b0 = center/offset.xyz + radius (float bits), b1 = (mode, dynamicSlot,
 //                           skipTo, 0) — map()'s exact Union early-out reads it; mode SDF_BOUND_NONE evaluates fully.
 //   [.. segment directory ..] then the INSTANCE directory (SdfProgram.PackInstances, world render path only): one
@@ -42,9 +41,8 @@
 // ceil(instanceCount/32) uints (sdfInstanceMaskWordCount), so the ceiling caps it at SDF_MAX_INSTANCES/32 = 2048
 // words. KEEP IN SYNC with SdfProgramBuilder.MaxInstances.
 #define SDF_MAX_INSTANCES 65536u
-// Each packed material entry's uint4 stride (m0 albedo+emissive, m1 specular+roughness+sheen+metal, m2 coat+3
-// reserved). KEEP IN SYNC with SdfProgram.MaterialVectorsPerEntry.
-#define SDF_MATERIAL_VECTORS_PER_ENTRY 3u
+// Material float4 stride; paired with SdfProgram.Materials.cs.
+#define SDF_MATERIAL_VECTORS_PER_ENTRY 20u
 // Sentinel instance-mask BASE meaning "every instance visible" (sdfInstanceMaskWord then reads no buffer and
 // returns all-ones words). Every map() CONSUMER that cannot reach the beam-computed per-tile mask (the debug frag
 // view, the ray-query debug kernel, the beam prepass's own cone march) passes this, so an instanced program still
@@ -319,10 +317,12 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
 // Per-frame dynamic entity transforms (the world render path only). Each moving entity (player/enemy/carried screen)
-// owns a slot: element 2*slot is its world position (xyz), 2*slot+1 its orientation quaternion (xyzw). The
-// SDF_OP_TRANSFORM_DYNAMIC opcode reads its rigid transform from here by slot index, so an entity moves by updating
-// this small buffer instead of re-uploading the static program — the same way the camera moves via the per-frame
-// viewport table. register(t2) follows the program (t0) and the world viewport table (t1, in sdf-world.hlsli).
+// owns a slot of THREE rows: element 3*slot is its world position (xyz) + soft-shadow participation (w),
+// 3*slot+1 its orientation quaternion (xyzw), 3*slot+2 its Lanes carrier (components 0 through 3 —
+// Puck.SignedDistance.DynamicTransform.Lanes). The SDF_OP_TRANSFORM_DYNAMIC opcode reads the rigid transform AND the
+// lanes from here by slot index, so an entity moves and its anonymous state updates by writing this small
+// buffer instead of re-uploading the static program — the same way the camera moves via the per-frame viewport
+// table. register(t2) follows the program (t0) and the world viewport table (t1, in sdf-world.hlsli).
 [[vk::binding(9, 0)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t2);
 #endif
 
@@ -361,23 +361,26 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_OP_ROTATE            2u
 #define SDF_OP_SCALE             3u
 #define SDF_OP_TRANSFORM_DYNAMIC 4u
-#define SDF_OP_BEND_X            5u
-#define SDF_OP_BEND_Y            6u
-#define SDF_OP_BEND_Z            7u
+#define SDF_OP_ROTATE_PLANE      5u
 #define SDF_OP_ELONGATE          8u
 #define SDF_OP_SHAPE             9u
 // A SDF_OP_SHAPE instruction's high shape-type-lane bit: SHADING-ONLY (Puck.SignedDistance.SdfInstruction.Detail).
 // Skipped by mapCore/mapGradCore's default (march) mode and included only under sdfDetailShadingActive (the hit-only
 // shade re-evaluation in sdf-world.hlsli's renderView). Shape-type ids are far below 2^31, so the bit is free.
 #define SDF_SHAPE_DETAIL_FLAG 0x80000000u
-#define SDF_SHAPE_TYPE_MASK   0x7FFFFFFFu
+// The next-highest shape-type-lane bit: SECONDARY-EXCLUDED (Puck.SignedDistance.SdfInstruction.Secondary == false).
+// Unlike SDF_SHAPE_DETAIL_FLAG (skipped by every march), this shape marches for the camera/beam/fine march and the
+// hit-only shade re-evaluations like any ordinary shape — it drops out ONLY under sdfSecondaryMarchActive, the
+// soft-shadow and ambient-occlusion field walks in sdf-world.hlsli (the study's secondaryScene posture: eyelids and
+// other small parts still shade and collide, they just cast no shadow and cost no AO tap).
+#define SDF_SHAPE_NO_SECONDARY_FLAG 0x40000000u
+#define SDF_SHAPE_TYPE_MASK   0x3FFFFFFFu
 #define SDF_OP_REPEAT          11u
 #define SDF_OP_REPEAT_LIMITED  12u
 // Opcode values 13–15 are reserved. SDF_OP_SYMMETRY_PLANE reproduces the axis-aligned folds with an axis normal.
 #define SDF_OP_ONION           16u
 #define SDF_OP_DILATE          17u
 #define SDF_OP_WALLPAPER_FOLD  18u
-#define SDF_OP_TWIST_Y         20u
 #define SDF_OP_LOG_SPHERE      21u
 #define SDF_OP_CELL_JITTER     22u
 #define SDF_OP_REPEAT_POLAR    23u
@@ -393,7 +396,14 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 #define SDF_OP_PUSH_FIELD      27u
 #define SDF_OP_POP_FIELD       28u
 #define SDF_OP_NOISE_DISPLACE  29u
-#define SDF_OP_FLARE_Y         30u
+#define SDF_OP_AXIAL_PROFILE         30u
+#define SDF_OP_SHEAR            31u
+// Gaussian push: Data0=center/push.x, Data1=radii/push.y, header.y=push.z bits.
+#define SDF_OP_GAUSSIAN_PUSH      32u
+// Per-shape lane-driven erosion (KEEP IN SYNC with Puck.SignedDistance.SdfOp.LaneErode): ordered immediately before
+// the SdfOp.ShapeBlend it targets.
+#define SDF_OP_LANE_ERODE 34u
+#define SDF_OP_CELL_DISPLACE 35u
 #define SDF_MAX_FIELD_SCOPE_DEPTH 1u
 // SDF_CORE_OPS — the CORE-OPS compiled variant of the tape interpreters (defined by sdf-world-views-core.comp.hlsl,
 // the second compiled flavor of the Stage 1 views kernel; every other kernel compiles the FULL ISA). Compiles out every
@@ -478,10 +488,17 @@ uint sdfGridWordAt(SdfInstanceGridHeader grid, uint relativeWord) {
 // cannot stall the march: a step of up to 0.1% of the local radius may cross the boundary, an overestimate window far
 // below visible scale (a shell band is ~w/2 of the radius). Host-contracted literal.
 #define SDF_LOGSPHERE_GAP_FLOOR 1.0e-3
-// Floors SDF_OP_FLARE_Y's scale profile s(t) so an authored amount/bulge combination that drives it non-positive
+// Floors SDF_OP_AXIAL_PROFILE's scale profile s(t) so an authored amount/bulge combination that drives it non-positive
 // still yields a finite warp rather than a divide-by-zero or a sign flip. KEEP IN SYNC with
 // Puck.SignedDistance.SdfProgramBuilder.FlareMinScale.
 #define SDF_FLARE_MIN_SCALE 0.05
+// SDF_OP_LANE_ERODE's ragged-front noise weight: how far the noise sample (centered, [-0.5, 0.5]) perturbs the
+// saturated lane fraction before it scales the target shape's reach — 0 would erode a uniform, noise-free front.
+#define SDF_LANE_ERODE_RAGGED_AMOUNT 0.35
+// The hash-stream triple SDF_OP_LANE_ERODE folds into sdfValueNoise3 — the op carries no seed lane of its own
+// (data0/data1 are fully spent on lane index/from/to/noiseScale/reach), so every erode instruction shares one fixed,
+// still-decorrelated-per-axis stream (reusing the existing hash-stream separators, never a fresh magic constant).
+#define SDF_LANE_ERODE_SEED uint3(SDF_HASH_STREAM_A, SDF_HASH_STREAM_B, SDF_HASH_TUMBLE)
 
 // The scene's directional sun, PRE-NORMALIZED to the exact float32 triple that DXC's DXIL backend constant-folds
 // normalize(float3(0.55, 0.85, 0.35)) into (bits 0x3F03708B / 0x3F4B224B / 0x3EA7496B). DXC's SPIR-V backend does NOT
@@ -541,6 +558,11 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // vertexCount), data0.w = lift amount; data1 = (smooth [ISA-wide], lift mode, cap chamfer, edge-rounding radius). The
 // vertices live in sdfWords itself, right after every other table this program packs (see sdfPolygonVertex).
 #define SDF_SHAPE_CONVEX_POLYGON  19u
+// A quadratic Bezier curve (KEEP IN SYNC with SdfShapeType.Sweep) swept with a tapering, bulging radius, optionally
+// as helical strands. data0 = (asfloat(uint table offset), strands, twist, strandOffset); data1 = (smooth
+// [ISA-wide], reserved, reserved, reserved). The control points (A, B, C) and radius endpoints
+// (radiusStart, radiusEnd, bulge) live in sdfWords, 3 fixed uvec4 words at the table offset (see sdfSweepCurve).
+#define SDF_SHAPE_SWEEP           20u
 
 // Lift mode for the 2D-primitive family (data1.y). Decoded as `> 0.5` so a float lane carries it cleanly on both
 // backends. KEEP IN SYNC with Puck.SignedDistance.SdfLift.
@@ -585,6 +607,13 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 #define SDF_BLEND_CHAMFER_UNION        7u
 #define SDF_BLEND_CHAMFER_INTERSECTION 8u
 #define SDF_BLEND_CHAMFER_SUBTRACTION  9u
+#define SDF_BLEND_GROOVE_UNION       10u
+#define SDF_BLEND_PIPE_UNION         11u
+#define SDF_BLEND_MORPH              12u
+#define SDF_BLEND_GROOVE_SUBTRACTION 13u
+#define SDF_BLEND_PIPE_SUBTRACTION   14u
+#define SDF_BLEND_STAIRS_UNION       15u
+#define SDF_BLEND_STAIRS_SUBTRACTION 16u
 
 // Material sentinel range: a SCREEN_SLAB shades as a "screen" rather than a table albedo. The plain sentinel
 // (SdfProgramBuilder.ScreenSlab with no screen index) shades the procedural test-card. SDF_SCREEN_MATERIAL + 1 +
@@ -594,15 +623,20 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 #define SDF_SCREEN_MATERIAL 65535
 #define SDF_ISA_ERROR_MATERIAL (-1) // sdfMaterialLoad decodes this as emissive diagnostic magenta.
 
+// The winning candidate's anonymous values and dynamic frame travel with its material.
 struct SdfHit {
     float distance;
     int material;
+    float4 lanes;
+    int frameSlot;
 };
 
 SdfHit sdfIsaErrorHit() {
     SdfHit result;
     result.distance = 0.0;
     result.material = SDF_ISA_ERROR_MATERIAL;
+    result.lanes = float4(0.0, 0.0, 0.0, 0.0);
+    result.frameSlot = -1;
     return result;
 }
 
@@ -660,6 +694,13 @@ static int sdfMaterialBlendOther = 0;
 // at the already-found surface point, so a detail shape's local perturbation and material win only there. False
 // everywhere else, so an unauthored program renders byte-identical.
 static bool sdfDetailShadingActive = false;
+
+// mapCore/mapGradCore's secondary-ray exclusion mode: false (the primary/beam/fine march, the normal probes, and the
+// hit-only shade/detail re-evaluations) carries a SDF_SHAPE_NO_SECONDARY_FLAG shape like any ordinary shape. true
+// (sdf-world.hlsli's renderView, for exactly the lifetime of its softShadowVisibility/calcAO/calcFastAO calls) skips
+// it — the study's secondaryScene posture: a shape marked secondary=false still shades and collides, it just casts
+// no shadow and contributes no AO. False everywhere else, so an unauthored program renders byte-identical.
+static bool sdfSecondaryMarchActive = false;
 
 // GLSL-style FLOOR modulo. HLSL's fmod truncates toward zero, so it disagrees with GLSL's mod for negative
 // operands — and the wallpaper parity keys take mod of (possibly negative) cell indices, where a trunc-mod would
@@ -985,6 +1026,43 @@ float sdfValueNoise3(float3 q, uint3 seed) {
     float y0 = lerp(x00, x10, u.y);
     float y1 = lerp(x01, x11, u.y);
     return ((lerp(y0, y1, u.z) * 2.0) - 1.0);
+}
+// A seeded 3D value-noise sample over the same deterministic lattice (sdfValueNoise3), folding one uint seed into
+// its three hash streams so two consumers sharing a lattice (a material's wear, a volume's advection) read different
+// noise fields. The one definition: shade-weathering.hlsli and shade-volumes.hlsli both read it from here.
+float sdfLatticeNoise3(float3 q, uint seed) {
+    return sdfValueNoise3(q, uint3(seed, (seed ^ 0x9E3779B9u), (seed ^ 0x85EBCA77u)));
+}
+// Exact 27-cell Worley field within SdfCellDisplacement's mode-specific randomness bounds.
+// KEEP IN SYNC with SdfFieldEvaluator.Cells.cs: PCG streams, top 16 bits, and z/y/x visit order.
+float sdfCellDistanceGrad(float3 q, uint seed, uint mode, float randomness, out float3 gradient) {
+    float3 cellFloor = floor(q);
+    int3 cell = int3(cellFloor);
+    float3 f = q - cellFloor;
+    float first = 1.0e20, second = 1.0e20;
+    float3 firstDelta = 0.0, secondDelta = 0.0;
+    [loop] for (int z = -1; z <= 1; z++) {
+        [loop] for (int y = -1; y <= 1; y++) {
+            [loop] for (int x = -1; x <= 1; x++) {
+                int3 offset = int3(x, y, z);
+                uint3 hash = sdfPcg3d(asuint(cell + offset) ^ uint3(seed, seed ^ 0x9E3779B9u, seed ^ 0x85EBCA77u));
+                float3 feature = 0.5 + randomness * (float3(hash >> 16u) * (1.0 / 65536.0) - 0.5);
+                float3 delta = f - (float3(offset) + feature);
+                float squared = dot(delta, delta);
+                if (squared < first) {
+                    second = first; secondDelta = firstDelta;
+                    first = squared; firstDelta = delta;
+                } else if (squared < second) {
+                    second = squared; secondDelta = delta;
+                }
+            }
+        }
+    }
+    first = sqrt(first); second = sqrt(second);
+    gradient = first > 1.0e-12 ? firstDelta / first : 0.0;
+    if (mode == 0u) return first;
+    gradient = (second > 1.0e-12 ? secondDelta / second : 0.0) - gradient;
+    return second - first;
 }
 // The gradient twin (KEEP IN SYNC with sdfValueNoise3 and mapGradCore's SDF_OP_NOISE_DISPLACE case): the same eight
 // corners plus the analytic partials of the quintic-blended trilinear (du = 30*f^2*(f-1)^2), in NOISE-CELL units —
@@ -1535,6 +1613,134 @@ float sdfSampledRegion(float3 p, float4 data0, float4 data1) {
 }
 // === end SDF_SHAPE_SAMPLED_REGION ====================================================================================
 
+// === SDF_SHAPE_SWEEP: a quadratic Bezier curve swept with a tapering, bulging radius, optionally as helical strands
+// (KEEP IN SYNC with Puck.SignedDistance.SdfProgramBuilder.Sweep / Puck.SignedDistance.Queries.SdfFieldEvaluator).
+// One curve's table entry: 3 fixed uvec4 words at tableOffset in sdfWords — (A.xyz, radiusStart), (B.xyz,
+// radiusEnd), (C.xyz, bulge). KEEP IN SYNC with SdfProgram.PackSweepCurves.
+void sdfSweepCurve(uint tableOffset, out float3 a, out float3 b, out float3 c, out float radiusStart, out float radiusEnd, out float bulge) {
+    uint4 wordsA = sdfWords[tableOffset];
+    uint4 wordsB = sdfWords[(tableOffset + 1u)];
+    uint4 wordsC = sdfWords[(tableOffset + 2u)];
+
+    a = asfloat(wordsA.xyz);
+    radiusStart = asfloat(wordsA.w);
+    b = asfloat(wordsB.xyz);
+    radiusEnd = asfloat(wordsB.w);
+    c = asfloat(wordsC.xyz);
+    bulge = asfloat(wordsC.w);
+}
+float3 sdfBezierPoint(float3 a, float3 b, float3 c, float t) {
+    float3 ab = lerp(a, b, t);
+    float3 bc = lerp(b, c, t);
+
+    return lerp(ab, bc, t);
+}
+float3 sdfBezierDerivative(float3 a, float3 b, float3 c, float t) {
+    return (2.0 * (lerp((b - a), (c - b), t)));
+}
+// The closest parameter t in [0, 1] on the quadratic Bezier (a, b, c) to p — the standard closed-form
+// closest-point-on-quadratic-bezier (a depressed-cubic solve, iq's construction), degenerating to the A-C line
+// segment's own closest point when b is (numerically) the exact midpoint of a and c — the quadratic coefficient
+// vanishes there and the cubic solve's 1/dot(coefficient, coefficient) would divide by zero.
+float sdfSweepClosestT(float3 p, float3 a, float3 b, float3 c) {
+    float3 coefA = (b - a);
+    float3 coefB = ((a - (2.0 * b)) + c);
+    float3 coefC = (coefA * 2.0);
+    float3 d = (a - p);
+    float bb = dot(coefB, coefB);
+
+    if (bb < 1e-10) {
+        float3 ac = (c - a);
+
+        return saturate(dot((p - a), ac) / max(dot(ac, ac), 1e-20));
+    }
+
+    float kk = (1.0 / bb);
+    float kx = (kk * dot(coefA, coefB));
+    float ky = ((kk * ((2.0 * dot(coefA, coefA)) + dot(d, coefB))) / 3.0);
+    float kz = (kk * dot(d, coefA));
+    float p1 = (ky - (kx * kx));
+    float p3 = ((p1 * p1) * p1);
+    float q = ((kx * ((2.0 * kx * kx) - (3.0 * ky))) + kz);
+    float h = ((q * q) + (4.0 * p3));
+
+    if (h >= 0.0) {
+        h = sqrt(h);
+
+        float2 x = ((float2(h, -h) - q) * 0.5);
+        float2 uv = (sign(x) * pow(abs(x), float2(1.0 / 3.0, 1.0 / 3.0)));
+
+        return saturate((uv.x + uv.y) - kx);
+    }
+
+    float z = sqrt(-p1);
+    float v = (acos(clamp((q / ((p1 * z) * 2.0)), -1.0, 1.0)) / 3.0);
+    float m = cos(v);
+    float n = (sin(v) * 1.7320508);
+    float3 ts = saturate(((float3((m + m), (-n - m), (n - m)) * z) - kx));
+    float3 qa = (d + ((coefC + (coefB * ts.x)) * ts.x));
+    float3 qb = (d + ((coefC + (coefB * ts.y)) * ts.y));
+    float3 qc = (d + ((coefC + (coefB * ts.z)) * ts.z));
+    float da = dot(qa, qa);
+    float db = dot(qb, qb);
+    float dc = dot(qc, qc);
+    float best = min(da, min(db, dc));
+
+    return ((best == da) ? ts.x : ((best == db) ? ts.y : ts.z));
+}
+// The sweep's radius profile: a linear taper plus a mid-span bulge that vanishes at both ends (the exponent softens
+// the bulge's rise off zero — KEEP IN SYNC with SdfProgramBuilder.Sweep's remarks).
+float sdfSweepRadiusAt(float t, float radiusStart, float radiusEnd, float bulge) {
+    float taper = lerp(radiusStart, radiusEnd, t);
+    float s = max(sin((SDF_PI * t)), 0.0);
+
+    return (taper + (bulge * pow(s, 0.65)));
+}
+// The conservative margin subtracted from the raw closest-point candidate — the closed-form closest point is taken
+// on the CENTERLINE alone (ignoring how the radius/orbit vary elsewhere along the curve), so the raw candidate can
+// OVERESTIMATE true distance near strong radius/orbit variation; this margin, calibrated over a randomized grid
+// against a fine-sampled reference tube (SweepLawTests), restores a conservative (never-overestimating, within the
+// calibrated envelope) field. KEEP IN SYNC with SdfProgramBuilder.SweepConservativeMargin and the fixed-point mirror.
+float sdfSweepConservativeMargin(float bulge, float strandOffset, float twist, float radiusStart, float radiusEnd) {
+    return (((1.0 * abs(bulge)) + ((0.7 * strandOffset) * (1.0 + abs(twist)))) + (0.9 * abs((radiusEnd - radiusStart))));
+}
+float sdfSweep(float3 p, float4 data0, float4 data1) {
+    uint tableOffset = asuint(data0.x);
+    float strandsFloat = data0.y;
+    float twist = data0.z;
+    float strandOffset = data0.w;
+    float3 a, b, c;
+    float radiusStart, radiusEnd, bulge;
+
+    sdfSweepCurve(tableOffset, a, b, c, radiusStart, radiusEnd, bulge);
+
+    float t = sdfSweepClosestT(p, a, b, c);
+    float3 base = sdfBezierPoint(a, b, c, t);
+    float radius = sdfSweepRadiusAt(t, radiusStart, radiusEnd, bulge);
+    float3 tangent = sdfBezierDerivative(a, b, c, t);
+    float tangentLength = length(tangent);
+    float3 tangentDir = ((tangentLength > 1e-8) ? (tangent / tangentLength) : float3(0.0, 1.0, 0.0));
+    float3 refAxis = ((abs(tangentDir.y) < 0.999) ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0));
+    float3 u = normalize(cross(tangentDir, refAxis));
+    float3 v = cross(tangentDir, u);
+    uint strandCount = max(((uint)(strandsFloat + 0.5)), 1u);
+    float best = SDF_FAR_DISTANCE;
+
+    for (uint strand = 0u; (strand < strandCount); strand++) {
+        float phase = ((t * twist * SDF_TAU) + ((float(strand) * SDF_TAU) / float(strandCount)));
+        float sinP, cosP;
+
+        sincos(phase, sinP, cosP);
+
+        float3 offsetPoint = (base + (strandOffset * ((u * cosP) + (v * sinP))));
+
+        best = min(best, (length(p - offsetPoint) - radius));
+    }
+
+    return (best - sdfSweepConservativeMargin(bulge, strandOffset, twist, radiusStart, radiusEnd));
+}
+// === end SDF_SHAPE_SWEEP =============================================================================================
+
 // The ONE shape dispatch. Single-return (a result variable rather than returning inside the switch) so the compiler's
 // flow analysis sees the value is always initialized. data1's .x lane is the ISA-wide smooth-blend radius; lanes .yzw
 // carry HOST-BAKED derived constants per shape (see SdfProgramBuilder). Ids that share a body FALL THROUGH: DXC inlines
@@ -1576,6 +1782,7 @@ float evaluateShape(uint shapeType, float3 p, float4 data0, float4 data1) {
         case SDF_SHAPE_ELLIPSE:         result = sdfEllipseSolid(p, data0, data1); break;
         case SDF_SHAPE_SUPERELLIPSOID:  result = sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w); break;
         case SDF_SHAPE_CONVEX_POLYGON:  result = sdfConvexPolygonSolid(p, data0, data1); break;
+        case SDF_SHAPE_SWEEP:           result = sdfSweep(p, data0, data1); break;
 #endif
         // A glyph is the atlas-sampled letter where the atlas is bound (the world-views kernel), else the conservative
         // extruded quad — so the beam cull and rt-debug see a solid cell box (never a hole), and only the lit render
@@ -1635,9 +1842,16 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
         // with -candidate. The bevel plane's gradient reaches sqrt(2) at a FLAT/near-parallel seam (1 at a perpendicular
         // one, 0 at an acute one), hence the per-composition chamfer step clamp in SdfProgram.AnalyzeLipschitz — see the
         // SDF_BLEND_CHAMFER_* banner for the max(La, Lb, (La + Lb)/sqrt(2)) recurrence it folds.
+        case SDF_BLEND_GROOVE_UNION: result = max(min(current, candidate), chamfer - length(float2(current, candidate))); break;
+        case SDF_BLEND_PIPE_UNION: result = min(min(current, candidate), length(float2(current, candidate)) - chamfer); break;
+        case SDF_BLEND_GROOVE_SUBTRACTION: result = max(max(current, -candidate), chamfer - length(float2(current, candidate))); break;
+        case SDF_BLEND_PIPE_SUBTRACTION: result = min(max(current, -candidate), length(float2(current, candidate)) - chamfer); break;
         case SDF_BLEND_CHAMFER_UNION:        result = min(min(current, candidate), ((current + candidate - chamfer) * SDF_SQRT_HALF)); break;
         case SDF_BLEND_CHAMFER_INTERSECTION: result = max(max(current, candidate), ((current + candidate + chamfer) * SDF_SQRT_HALF)); break;
         case SDF_BLEND_CHAMFER_SUBTRACTION:  result = max(max(current, -candidate), ((current - candidate + chamfer) * SDF_SQRT_HALF)); break;
+        case SDF_BLEND_MORPH:
+        case SDF_BLEND_STAIRS_UNION:        result = min(current, candidate); break;
+        case SDF_BLEND_STAIRS_SUBTRACTION:  result = max(current, -candidate); break;
     }
 
     return result;
@@ -1646,7 +1860,7 @@ float blendShape(float current, float candidate, uint blendOp, float smoothRadiu
 // The scalar interpreter and the host-compiled rigid-leaf path meet here. Keeping the material winner, smooth seam
 // channel, and distance compose in one helper prevents the fast path from becoming a subtly different VM. DXC sees
 // trackMaterial as a literal at every public entry point and erases this whole material half for secondary rays.
-void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int material, float smooth, bool trackMaterial) {
+void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int material, float4 lanes, int frameSlot, float smooth, bool trackMaterial) {
     if (trackMaterial) {
         bool candidateWins;
 
@@ -1656,7 +1870,9 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
             case SDF_BLEND_CHAMFER_INTERSECTION: { candidateWins = (candidate > result.distance); break; }
             case SDF_BLEND_SUBTRACTION:
             case SDF_BLEND_SMOOTH_SUBTRACTION:
-            case SDF_BLEND_CHAMFER_SUBTRACTION:  { candidateWins = (-candidate > result.distance); break; }
+            case SDF_BLEND_CHAMFER_SUBTRACTION:
+            case SDF_BLEND_GROOVE_SUBTRACTION:
+            case SDF_BLEND_PIPE_SUBTRACTION:     { candidateWins = (-candidate > result.distance); break; }
             default:                             { candidateWins = (candidate < result.distance); break; }
         }
 
@@ -1689,6 +1905,8 @@ void sdfComposeCandidate(inout SdfHit result, float candidate, uint blend, int m
 
         if (candidateWins) {
             result.material = material;
+            result.lanes = lanes;
+            result.frameSlot = frameSlot;
         }
     }
 
@@ -1863,6 +2081,30 @@ void blendShapeDual(float current, float3 currentGrad, float candidate, float3 c
             outGrad = lerp((-candidateGrad), currentGrad, (1.0 - h));
             break;
         }
+        case SDF_BLEND_GROOVE_UNION:
+        case SDF_BLEND_PIPE_UNION:
+        case SDF_BLEND_GROOVE_SUBTRACTION:
+        case SDF_BLEND_PIPE_SUBTRACTION: {
+            bool isSubtraction = (blendOp == SDF_BLEND_GROOVE_SUBTRACTION || blendOp == SDF_BLEND_PIPE_SUBTRACTION);
+            bool groove = (blendOp == SDF_BLEND_GROOVE_UNION || blendOp == SDF_BLEND_GROOVE_SUBTRACTION);
+            float baseDist = isSubtraction ? max(current, -candidate) : min(current, candidate);
+            float3 baseGrad = isSubtraction
+                ? (((-candidate) > current) ? (-candidateGrad) : currentGrad)
+                : ((candidate < current) ? candidateGrad : currentGrad);
+            outDist = baseDist;
+            outGrad = baseGrad;
+
+            float tubeLength = length(float2(current, candidate));
+            float tube = tubeLength - chamfer;
+            float seam = groove ? -tube : tube;
+            if (groove ? seam > outDist : seam < outDist) {
+                outDist = seam;
+                // At a=b=0 the tube norm has no unique derivative; its symmetric derivative is zero.
+                outGrad = tubeLength > 1.0e-12 ? (current * currentGrad + candidate * candidateGrad) / tubeLength : 0.0;
+                if (groove) outGrad = -outGrad;
+            }
+            break;
+        }
         case SDF_BLEND_CHAMFER_UNION: {
             float bevel = ((current + candidate - chamfer) * SDF_SQRT_HALF);
             outDist = min(min(current, candidate), bevel);
@@ -1887,6 +2129,17 @@ void blendShapeDual(float current, float3 currentGrad, float candidate, float3 c
             if (bevel >= max(current, -candidate)) { outGrad = ((currentGrad - candidateGrad) * SDF_SQRT_HALF); }
             break;
         }
+        case SDF_BLEND_MORPH:
+        case SDF_BLEND_STAIRS_UNION: {
+            outDist = min(current, candidate);
+            outGrad = (candidate < current) ? candidateGrad : currentGrad;
+            break;
+        }
+        case SDF_BLEND_STAIRS_SUBTRACTION: {
+            outDist = max(current, -candidate);
+            outGrad = ((-candidate) > current) ? (-candidateGrad) : currentGrad;
+            break;
+        }
     }
 }
 // The dual twin of sdfComposeCandidate: the interpreted dual walk and the host-compiled rigid-leaf dual fast path meet
@@ -1895,7 +2148,7 @@ void blendShapeDual(float current, float3 currentGrad, float candidate, float3 c
 // blend semantics preserved. HIT-ONLY: resolves the winning material and the world gradient, never the smooth-seam
 // material blend channel (renderView captures that from the scalar accept-sample march), exactly as it skips
 // sdfMapStepBound for being hit-only.
-void sdfComposeDualCandidate(inout SdfHit result, inout float3 resultGradient, float candidate, float3 candidateGrad, uint blend, int material, float smooth) {
+void sdfComposeDualCandidate(inout SdfHit result, inout float3 resultGradient, float candidate, float3 candidateGrad, uint blend, int material, float4 lanes, int frameSlot, float smooth) {
     bool candidateWins;
 
     switch (blend) {
@@ -1904,12 +2157,16 @@ void sdfComposeDualCandidate(inout SdfHit result, inout float3 resultGradient, f
         case SDF_BLEND_CHAMFER_INTERSECTION: { candidateWins = (candidate > result.distance); break; }
         case SDF_BLEND_SUBTRACTION:
         case SDF_BLEND_SMOOTH_SUBTRACTION:
-        case SDF_BLEND_CHAMFER_SUBTRACTION:  { candidateWins = (-candidate > result.distance); break; }
+        case SDF_BLEND_CHAMFER_SUBTRACTION:
+        case SDF_BLEND_GROOVE_SUBTRACTION:
+        case SDF_BLEND_PIPE_SUBTRACTION:  { candidateWins = (-candidate > result.distance); break; }
         default:                             { candidateWins = (candidate < result.distance); break; }
     }
 
     if (candidateWins) {
         result.material = material;
+        result.lanes = lanes;
+        result.frameSlot = frameSlot;
     }
 
     float blendedDistance;
@@ -1922,6 +2179,8 @@ void sdfComposeDualCandidate(inout SdfHit result, inout float3 resultGradient, f
 struct SdfFieldSave {
     float distance;
     int material;
+    float4 lanes;
+    int frameSlot;
     float3 gradient;
 };
 
@@ -2006,7 +2265,7 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         // position.w > 0.5 is shadow-suppressed (host encoding: 0 casts / 1 suppressed), so drop its whole segment range
         // from the shadow enumeration — mirroring the parked-radius continue above. Static instances (no dynamic slot)
         // always cast: they never take this branch.
-        if (sdfShadowParticipationActive && (instanceMeta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransforms[2u * instanceMeta.y].w > 0.5)) {
+        if (sdfShadowParticipationActive && (instanceMeta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransforms[3u * instanceMeta.y].w > 0.5)) {
             continue;
         }
 #endif
@@ -2155,6 +2414,15 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // from the per-program stepScale above — that one clamps only the FINAL returned distance to keep the marcher's
     // steps 1-Lipschitz-safe and never touches a candidate mid-walk. Keep the two distinct.
     float distanceScale = 1.0;
+    // The riding dynamic slot's per-instance carrier (DynamicTransform.Lanes: components 0 through 3),
+    // read by any op evaluating under that slot — currently SDF_OP_LANE_ERODE. Reset with the chain (RESET), set by
+    // TRANSFORM_DYNAMIC, exactly like localPosition; zero under no dynamic slot.
+    float4 currentLanes = float4(0.0, 0.0, 0.0, 0.0);
+    int currentSlot = -1;
+    // SDF_OP_LANE_ERODE's pending effect on the NEXT SDF_OP_SHAPE: a cheap early-out skip (no field cost) or,
+    // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
+    bool laneErodeSkipShape = false;
+    float laneErodeAmount = 0.0;
     // The fold-safe step bound accumulator (see sdfMapStepBound): the min, across every radial fold executed by any
     // chain this call, of the fold's local boundary gap mapped toward world units by the chain's accumulated
     // distanceScale. Published (times the final stepScale, which conservatively covers any upstream non-conformal
@@ -2168,6 +2436,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
     result.distance = SDF_FAR_DISTANCE;
     result.material = 0;
+    result.lanes = float4(0.0, 0.0, 0.0, 0.0);
+    result.frameSlot = -1;
 
     // The one-deep SCOPED-ACCUMULATOR slot (SDF_OP_PUSH_FIELD/POP_FIELD): PUSH saves the parent accumulator here and
     // reseeds `result`; POP composes the scope's `result` back into this saved value. This is a single NON-INDEXED pair,
@@ -2177,6 +2447,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // its codegen and render stay byte-identical.
     float savedFieldDistance = SDF_FAR_DISTANCE;
     int savedFieldMaterial = 0;
+    float4 savedFieldLanes = float4(0.0, 0.0, 0.0, 0.0);
+    int savedFieldSlot = -1;
     float savedFieldBlendWeight = 0.0;
     int savedFieldBlendOther = 0;
 
@@ -2229,7 +2501,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
             if (segmentBoundMode == SDF_BOUND_DYNAMIC) {
-                boundCenter += sdfDynamicTransforms[2u * segmentMeta.y].xyz;
+                boundCenter += sdfDynamicTransforms[3u * segmentMeta.y].xyz;
                 boundReady = true;
             }
 #endif
@@ -2265,12 +2537,16 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
             if (planReady) {
                 float3 rigidBasePosition = worldPosition;
+                float4 rigidLanes = 0.0;
+                int rigidSlot = -1;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                 if (plan.z != 0u) {
                     uint dynamicSlot = (plan.z - 1u);
-                    float4 dynamicPosition = sdfDynamicTransforms[2u * dynamicSlot];
-                    float4 dynamicOrientation = sdfDynamicTransforms[(2u * dynamicSlot) + 1u];
+                    rigidSlot = (int)dynamicSlot;
+                    rigidLanes = sdfDynamicTransforms[3u * dynamicSlot + 2u];
+                    float4 dynamicPosition = sdfDynamicTransforms[3u * dynamicSlot];
+                    float4 dynamicOrientation = sdfDynamicTransforms[(3u * dynamicSlot) + 1u];
                     rigidBasePosition = rotatePointByInverseQuaternion((worldPosition - dynamicPosition.xyz), dynamicOrientation);
                 }
 #endif
@@ -2308,7 +2584,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     float candidate = evaluateShape(shapeHeader.y, rigidPosition, shapeData0, shapeData1);
                     int material = (trackMaterial ? (int)shapeHeader.w : 0);
 
-                    sdfComposeCandidate(result, candidate, shapeHeader.z, material, shapeData1.x, trackMaterial);
+                    sdfComposeCandidate(result, candidate, shapeHeader.z, material, rigidLanes, rigidSlot, shapeData1.x, trackMaterial);
                 }
 
                 continue;
@@ -2334,12 +2610,18 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             float composeCandidate = SDF_FAR_DISTANCE;
             uint composeBlend = SDF_BLEND_UNION;
             int composeMaterial = 0;
+            float4 composeLanes = float4(0.0, 0.0, 0.0, 0.0);
+            int composeSlot = -1;
             float composeSmooth = 0.0;
 
             switch (op) {
                 case SDF_OP_RESET: {
                     localPosition = worldPosition;
                     distanceScale = 1.0;
+                    currentLanes = float4(0.0, 0.0, 0.0, 0.0);
+                    currentSlot = -1;
+                    laneErodeSkipShape = false;
+                    laneErodeAmount = 0.0;
                     if (trackMaterial) {
                         parityMaterialDelta = 0;
                     }
@@ -2416,12 +2698,15 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 case SDF_OP_TRANSFORM_DYNAMIC: {
                     // A rigid transform sourced from a per-frame buffer slot (data0.x): place the shape at the slot's world
                     // position + orientation by moving the sample point into the shape's local frame (translate then
-                    // inverse-rotate), exactly like an immediate Translate + Rotate would.
+                    // inverse-rotate), exactly like an immediate Translate + Rotate would. Also rides the slot's Lanes
+                    // row into currentLanes, so a later SDF_OP_LANE_ERODE on this chain reads it.
                     SDF_VM_LOAD_DATA0;
                     uint dynamicSlot = (uint)data0.x;
-                    float4 dynamicPosition = sdfDynamicTransforms[(2u * dynamicSlot)];
-                    float4 dynamicOrientation = sdfDynamicTransforms[((2u * dynamicSlot) + 1u)];
+                    float4 dynamicPosition = sdfDynamicTransforms[(3u * dynamicSlot)];
+                    float4 dynamicOrientation = sdfDynamicTransforms[((3u * dynamicSlot) + 1u)];
                     localPosition = rotatePointByInverseQuaternion((localPosition - dynamicPosition.xyz), dynamicOrientation);
+                    currentLanes = sdfDynamicTransforms[((3u * dynamicSlot) + 2u)];
+                    currentSlot = (int)dynamicSlot;
                     break;
                 }
 #endif
@@ -2607,68 +2892,92 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // TWIST_Y keys on y and rotates XZ (the axis-orthogonal plane) — the only one that twists about its axis.
 #endif
 #ifndef SDF_STRIP_HEAVY
-                case SDF_OP_TWIST_Y: {
+                case SDF_OP_ROTATE_PLANE: {
                     SDF_VM_LOAD_DATA0;
-                    float twistCos = cos(data0.x * localPosition.y);
-                    float twistSin = sin(data0.x * localPosition.y);
-
-                    localPosition.xz = float2(
-                        ((twistCos * localPosition.x) + (twistSin * localPosition.z)),
-                        ((-twistSin * localPosition.x) + (twistCos * localPosition.z)));
+                    uint u = (instructionHeader.y == 1u) ? 1u : 0u;
+                    uint v = (instructionHeader.y == 0u) ? 1u : 2u;
+                    float angle = data0.x * (localPosition[instructionHeader.z] - data0.y);
+                    float c = cos(angle), sn = sin(angle);
+                    float pu = localPosition[u], pv = localPosition[v];
+                    localPosition[u] = c * pu + sn * pv;
+                    localPosition[v] = -sn * pu + c * pv;
                     break;
                 }
 #endif
-#ifndef SDF_STRIP_HEAVY
-                case SDF_OP_BEND_X: {
-                    SDF_VM_LOAD_DATA0;
-                    float bendCos = cos(data0.x * localPosition.x);
-                    float bendSin = sin(data0.x * localPosition.x);
-
-                    localPosition.xy = float2(
-                        ((bendCos * localPosition.x) + (bendSin * localPosition.y)),
-                        ((-bendSin * localPosition.x) + (bendCos * localPosition.y)));
-                    break;
-                }
-#endif
-#ifndef SDF_STRIP_HEAVY
-                case SDF_OP_BEND_Y: {
-                    SDF_VM_LOAD_DATA0;
-                    float bendCos = cos(data0.x * localPosition.y);
-                    float bendSin = sin(data0.x * localPosition.y);
-
-                    localPosition.xy = float2(
-                        ((bendCos * localPosition.x) + (bendSin * localPosition.y)),
-                        ((-bendSin * localPosition.x) + (bendCos * localPosition.y)));
-                    break;
-                }
-#endif
-#ifndef SDF_STRIP_HEAVY
-                case SDF_OP_BEND_Z: {
-                    SDF_VM_LOAD_DATA0;
-                    float bendCos = cos(data0.x * localPosition.y);
-                    float bendSin = sin(data0.x * localPosition.y);
-
-                    localPosition.yz = float2(
-                        ((bendCos * localPosition.y) + (bendSin * localPosition.z)),
-                        ((-bendSin * localPosition.y) + (bendCos * localPosition.z)));
-                    break;
-                }
-#endif
-                // Radial flare warp (KEEP IN SYNC with SdfProgramBuilder.FlareY): data0 = (amount, bulge, top,
+                // Radial flare warp (KEEP IN SYNC with SdfProgramBuilder.AxialProfile): data0 = (amount, bulge, top,
                 // 1/span), data1.x = the host-baked 1/max(s) size correction over t in [0, 1]. t folds toward the far
                 // end of the span; s(t) is floored at SDF_FLARE_MIN_SCALE so a parameter combination that drives it
                 // non-positive still warps finitely. distanceScale takes the size correction here, the same channel
                 // SDF_OP_SCALE/SDF_OP_LOG_SPHERE use; the residual shear from the y-varying scale is bounded
                 // separately by SdfProgram.AnalyzeLipschitz's chain step clamp, not corrected per candidate.
 #ifndef SDF_STRIP_HEAVY
-                case SDF_OP_FLARE_Y: {
+                case SDF_OP_AXIAL_PROFILE: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
-                    float flareT = saturate((data0.z - localPosition.y) * data0.w);
-                    float flareS = max(((1.0 + (data0.x * flareT)) + (data0.y * sin(SDF_PI * flareT))), SDF_FLARE_MIN_SCALE);
-
-                    localPosition.xz /= flareS;
+                    uint axis = instructionHeader.y;
+                    float rawT = (data0.z - localPosition[axis]) * data0.w;
+                    float t = saturate(rawT);
+                    float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
+                    float scale = max(rawS, SDF_FLARE_MIN_SCALE);
+                    float invScale = 1.0 / scale;
+                    [unroll] for (uint component = 0u; component < 3u; component++) {
+                        if (component != axis) { localPosition[component] *= invScale; }
+                    }
                     distanceScale *= data1.x;
+                    break;
+                }
+#endif
+                // Polynomial shear (KEEP IN SYNC with SdfProgramBuilder.Shear): only X moves, by an exact
+                // (not small-angle) polynomial of Y — data0 = (linear, quadratic).
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_SHEAR: {
+                    SDF_VM_LOAD_DATA0;
+                    uint target = instructionHeader.y, driver = instructionHeader.z;
+                    float t = localPosition[driver];
+                    localPosition[target] += ((data0.z * t + data0.y) * t + data0.x) * t;
+                    break;
+                }
+#endif
+                // Gaussian domain push (KEEP IN SYNC with SdfProgramBuilder.GaussianPush): always a HEAD+TAIL pair —
+                // this case reads its own data0 (Center)/data1 (Radii) plus the TAIL instruction's data0.xyz (Push)
+                // by indexing one instruction ahead in the packed word stream (SdfProgram guarantees the tail is
+                // adjacent and same-owner). The tail's own case is an inert no-op.
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_GAUSSIAN_PUSH: {
+                    SDF_VM_LOAD_DATA0;
+                    SDF_VM_LOAD_DATA1;
+                    float3 gaussianPush = float3(data0.w, data1.w, asfloat(instructionHeader.y));
+                    float3 gaussianOffset = ((localPosition - data0.xyz) / data1.xyz);
+                    float gaussianWeight = exp(-dot(gaussianOffset, gaussianOffset));
+                    localPosition -= (gaussianPush * gaussianWeight);
+                    break;
+                }
+#endif
+                // Per-shape lane-driven erosion (KEEP IN SYNC with SdfProgramBuilder.LaneErode): data0 = (lane index
+                // 0..3, from, to, noiseScale), data1.x = the target shape's HOST-BAKED reach (its bound radius).
+                // t = saturate((lane - from) / (to - from)) (a reversed from > to range runs the fold the other way);
+                // t >= 1 sets the cheap early-out (SDF_OP_SHAPE skips its own evaluation entirely — no field cost);
+                // otherwise a 3D noise sample ragged-fronts t before it scales the reach into a world-unit candidate
+                // erosion, consumed by the immediately-following SDF_OP_SHAPE (whatever ordinary point ops the
+                // shape's own chain still applies in between) and cleared there.
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_LANE_ERODE: {
+                    SDF_VM_LOAD_DATA0;
+                    SDF_VM_LOAD_DATA1;
+                    float lane = ((data0.x < 0.5) ? currentLanes.x : ((data0.x < 1.5) ? currentLanes.y : ((data0.x < 2.5) ? currentLanes.z : currentLanes.w)));
+                    float t = saturate((lane - data0.y) / (data0.z - data0.y));
+
+                    if (t >= 1.0) {
+                        laneErodeSkipShape = true;
+                        laneErodeAmount = 0.0;
+                    } else {
+                        float noiseSample = 0.5 + 0.5 * sdfValueNoise3((localPosition * data0.w), SDF_LANE_ERODE_SEED);
+                        float raggedT = saturate(t + ((noiseSample - 0.5) * SDF_LANE_ERODE_RAGGED_AMOUNT * (4.0 * t * (1.0 - t))));
+
+                        laneErodeSkipShape = false;
+                        laneErodeAmount = (raggedT * data1.x);
+                    }
+
                     break;
                 }
 #endif
@@ -2728,6 +3037,14 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 // |amplitude| (the scoped-reach / cull-margin channels read that).
 #endif
 #ifndef SDF_STRIP_HEAVY
+                case SDF_OP_CELL_DISPLACE: {
+                    SDF_VM_LOAD_DATA0;
+                    float3 ignoredGradient;
+                    float value = sdfCellDistanceGrad(localPosition * data0.x, instructionHeader.y,
+                        instructionHeader.z, data0.z, ignoredGradient);
+                    result.distance += data0.y * (value - 0.5);
+                    break;
+                }
                 case SDF_OP_NOISE_DISPLACE: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
@@ -2781,9 +3098,28 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 }
 #endif
                 case SDF_OP_SHAPE: {
+                    // Consume the pending SDF_OP_LANE_ERODE effect (if any) FIRST, before every other skip path below,
+                    // so it never leaks onto a later, unrelated shape (a bound-culled or Detail/Secondary-skipped
+                    // shape still clears it here).
+                    bool laneEroded = laneErodeSkipShape;
+                    float laneErosion = laneErodeAmount;
+                    laneErodeSkipShape = false;
+                    laneErodeAmount = 0.0;
+
+                    if (laneEroded) {
+                        break;
+                    }
+
                     // A SHADING-ONLY shape (SDF_SHAPE_DETAIL_FLAG) contributes nothing to a march — skip it before
                     // touching its bound or payload unless the hit-only shade re-evaluation asked for it.
                     if (((instructionHeader.y & SDF_SHAPE_DETAIL_FLAG) != 0u) && !sdfDetailShadingActive) {
+                        break;
+                    }
+
+                    // A SECONDARY-EXCLUDED shape (SDF_SHAPE_NO_SECONDARY_FLAG) marches for the camera/beam/fine march
+                    // and the hit-only shade re-evaluations like any ordinary shape; it drops out ONLY here, under the
+                    // soft-shadow/AO field walks (sdfSecondaryMarchActive).
+                    if (((instructionHeader.y & SDF_SHAPE_NO_SECONDARY_FLAG) != 0u) && sdfSecondaryMarchActive) {
                         break;
                     }
 
@@ -2802,7 +3138,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                         if (shapeBoundMeta.x == SDF_BOUND_DYNAMIC) {
-                            shapeBoundCenter += sdfDynamicTransforms[2u * shapeBoundMeta.y].xyz;
+                            shapeBoundCenter += sdfDynamicTransforms[3u * shapeBoundMeta.y].xyz;
                             shapeBoundReady = true;
                         }
 #endif
@@ -2818,9 +3154,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     }
 
                     uint shapeType = (instructionHeader.y & SDF_SHAPE_TYPE_MASK);
-                    float candidate = (evaluateShape(shapeType, localPosition, data0, data1) * distanceScale);
+                    float candidate = ((evaluateShape(shapeType, localPosition, data0, data1) * distanceScale) + laneErosion);
 
-                    // Hand the DISTANCE-SCALED candidate to the shared blend tail below.
+                    // Hand the DISTANCE-SCALED (plus any pending lane erosion) candidate to the shared blend tail below.
                     composeCandidate = candidate;
                     composeBlend = instructionHeader.z;
                     composeSmooth = data1.x;
@@ -2836,6 +3172,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
 
                         composeMaterial = material;
+                        composeLanes = currentLanes;
+                    composeSlot = currentSlot;
                     }
                     break;
                 }
@@ -2849,6 +3187,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     savedFieldDistance = result.distance;
                     if (trackMaterial) {
                         savedFieldMaterial = result.material;
+                        savedFieldLanes = result.lanes;
+                        savedFieldSlot = result.frameSlot;
                         savedFieldBlendWeight = sdfMaterialBlendWeight;
                         savedFieldBlendOther = sdfMaterialBlendOther;
                         sdfMaterialBlendWeight = 0.0;
@@ -2857,6 +3197,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     result.distance = SDF_FAR_DISTANCE;
                     if (trackMaterial) {
                         result.material = 0;
+                        result.lanes = float4(0.0, 0.0, 0.0, 0.0);
+                        result.frameSlot = -1;
                     }
                     break;
                 }
@@ -2867,31 +3209,92 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // parityMaterialDelta must NOT touch it (the fusion trap). Restore the parent accumulator as the
                     // blend LHS, then fall into the SAME material-winner + blendShape tail a SHAPE uses. The compose blend
                     // + smooth ride the POP instruction (header.z / data1.x, baked by SdfProgramBuilder.PushField).
-                    // data1.y is the scope's baked 1/L candidate scale (SdfProgram.AnalyzeLipschitz): a positively
-                    // scaled distance keeps its zero set and the scaled candidate is exactly 1-Lipschitz, so a scoped
-                    // warp/relief pays its march tax only through this candidate, never the global stepScale. Zero
-                    // (unpatched, every factor-1 scope) means no scale.
+                    // data1.y is the scope's baked 1/L candidate scale on every pop; a stairs pop carries its step count
+                    // in data1.z (KEEP IN SYNC with AnalyzeLipschitz and the fixed-point mirror).
+                    composeBlend = instructionHeader.z;
+                    bool isStairs = (composeBlend == SDF_BLEND_STAIRS_UNION || composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
+                    float candidateScale = data1.y;
                     composeCandidate = result.distance;
-                    if (data1.y > 0.0) {
-                        composeCandidate *= data1.y;
+                    if (candidateScale > 0.0) {
+                        composeCandidate *= candidateScale;
                     }
                     if (trackMaterial) {
                         composeMaterial = result.material;
+                        composeLanes = result.lanes;
+                        composeSlot = result.frameSlot;
                     }
-                    composeBlend = instructionHeader.z;
                     composeSmooth = data1.x;
                     float scopeBlendWeight = sdfMaterialBlendWeight;
                     int scopeBlendOther = sdfMaterialBlendOther;
                     result.distance = savedFieldDistance;
                     if (trackMaterial) {
                         result.material = savedFieldMaterial;
+                        result.lanes = savedFieldLanes;
+                        result.frameSlot = savedFieldSlot;
                         sdfMaterialBlendWeight = savedFieldBlendWeight;
                         sdfMaterialBlendOther = savedFieldBlendOther;
                     }
+
+                    if (composeBlend == SDF_BLEND_MORPH) {
+                        SDF_VM_LOAD_DATA0;
+                        float lane = ((data0.x < 0.5) ? currentLanes.x : ((data0.x < 1.5) ? currentLanes.y : ((data0.x < 2.5) ? currentLanes.z : currentLanes.w)));
+                        float t = saturate((lane - data0.y) / (data0.z - data0.y));
+                        result.distance = lerp(savedFieldDistance, composeCandidate, t);
+                        if (trackMaterial) {
+                            bool candidateWins = (t >= 0.5);
+                            result.material = candidateWins ? composeMaterial : savedFieldMaterial;
+                            result.lanes = candidateWins ? composeLanes : savedFieldLanes;
+                            result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
+                            bool tableSeam = ((savedFieldMaterial < SDF_SCREEN_MATERIAL) && (composeMaterial < SDF_SCREEN_MATERIAL));
+                            sdfMaterialBlendWeight = tableSeam ? min(t, 1.0 - t) : 0.0;
+                            sdfMaterialBlendOther = candidateWins ? savedFieldMaterial : composeMaterial;
+                        }
+                        composePending = false;
+                        break;
+                    }
+
+                    if (isStairs) {
+                        float r = composeSmooth;
+                        float n = data1.z;
+                        if (n >= 1.0 && r > 0.0) {
+                            float s = r / n;
+                            float period = 2.0 * s;
+                            bool isSub = (composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
+                            float a = savedFieldDistance;
+                            float b = composeCandidate;
+                            float u = isSub ? (-b - r) : (b - r);
+                            float arg = u - a + s;
+                            float m = arg - period * floor(arg / period);
+                            float w = m - s;
+                            float dStairs = 0.5 * (u + a + abs(w));
+                            if (isSub) {
+                                result.distance = max(max(a, -b), -dStairs);
+                                if (trackMaterial) {
+                                    bool candidateWins = (-b > a);
+                                    result.material = candidateWins ? composeMaterial : savedFieldMaterial;
+                                    result.lanes = candidateWins ? composeLanes : savedFieldLanes;
+                                    result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
+                                    sdfMaterialBlendWeight = 0.0;
+                                }
+                            } else {
+                                result.distance = min(min(a, b), dStairs);
+                                if (trackMaterial) {
+                                    bool candidateWins = (b < a);
+                                    result.material = candidateWins ? composeMaterial : savedFieldMaterial;
+                                    result.lanes = candidateWins ? composeLanes : savedFieldLanes;
+                                    result.frameSlot = candidateWins ? composeSlot : savedFieldSlot;
+                                    sdfMaterialBlendWeight = 0.0;
+                                }
+                            }
+                            composePending = false;
+                            break;
+                        }
+                    }
+
                     // A losing scope cannot tint its parent. A winning hard union carries its own internal seam;
                     // a smooth outer composition instead creates a new two-material seam in the shared helper.
                     bool scopeWinsUnion = (composeBlend == SDF_BLEND_UNION) && (composeCandidate < result.distance);
-                    sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeSmooth, trackMaterial);
+                    sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeSlot, composeSmooth, trackMaterial);
                     if (trackMaterial && scopeWinsUnion) {
                         sdfMaterialBlendWeight = scopeBlendWeight;
                         sdfMaterialBlendOther = scopeBlendOther;
@@ -2912,7 +3315,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             // is a contact locus of ties). Then blend the candidate into result.distance. composePending is false for
             // every point/field op AND for a bound-skipped SHAPE, so those paths are byte-for-byte the pre-scope walk.
             if (composePending) {
-                sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeSmooth, trackMaterial);
+                sdfComposeCandidate(result, composeCandidate, composeBlend, composeMaterial, composeLanes, composeSlot, composeSmooth, trackMaterial);
             }
         }
     }
@@ -3048,16 +3451,25 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     float3 jx = float3(1.0, 0.0, 0.0);
     float3 jy = float3(0.0, 1.0, 0.0);
     float3 jz = float3(0.0, 0.0, 1.0);
+    // KEEP IN SYNC with mapCore's currentLanes/laneErodeSkipShape/laneErodeAmount — same reset/set/consume points.
+    float4 currentLanes = float4(0.0, 0.0, 0.0, 0.0);
+    int currentSlot = -1;
+    bool laneErodeSkipShape = false;
+    float laneErodeAmount = 0.0;
     SdfHit result;
 
     result.distance = SDF_FAR_DISTANCE;
     result.material = 0;
+    result.lanes = float4(0.0, 0.0, 0.0, 0.0);
+    result.frameSlot = -1;
     float3 resultGradient = float3(0.0, 0.0, 0.0);
 
-    // The one-deep scoped-accumulator save slot carries distance, material, and gradient together.
+    // The one-deep scoped-accumulator save slot carries distance, material, lanes, and gradient together.
     SdfFieldSave saved;
     saved.distance = SDF_FAR_DISTANCE;
     saved.material = 0;
+    saved.lanes = float4(0.0, 0.0, 0.0, 0.0);
+    saved.frameSlot = -1;
     saved.gradient = float3(0.0, 0.0, 0.0);
 
     [loop]
@@ -3095,7 +3507,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
             if (segmentBoundMode == SDF_BOUND_DYNAMIC) {
-                boundCenter += sdfDynamicTransforms[2u * segmentMeta.y].xyz;
+                boundCenter += sdfDynamicTransforms[3u * segmentMeta.y].xyz;
                 boundReady = true;
             }
 #endif
@@ -3129,14 +3541,18 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
             if (planReady) {
                 float3 rigidBasePosition = worldPosition;
+                float4 rigidLanes = 0.0;
+                int rigidSlot = -1;
                 float4 rigidDynamicOrientation = float4(0.0, 0.0, 0.0, 1.0);
                 bool rigidDynamic = false;
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                 if (plan.z != 0u) {
                     uint dynamicSlot = (plan.z - 1u);
-                    float4 dynamicPosition = sdfDynamicTransforms[2u * dynamicSlot];
-                    rigidDynamicOrientation = sdfDynamicTransforms[(2u * dynamicSlot) + 1u];
+                    rigidSlot = (int)dynamicSlot;
+                    rigidLanes = sdfDynamicTransforms[3u * dynamicSlot + 2u];
+                    float4 dynamicPosition = sdfDynamicTransforms[3u * dynamicSlot];
+                    rigidDynamicOrientation = sdfDynamicTransforms[(3u * dynamicSlot) + 1u];
                     rigidBasePosition = rotatePointByInverseQuaternion((worldPosition - dynamicPosition.xyz), rigidDynamicOrientation);
                     rigidDynamic = true;
                 }
@@ -3188,7 +3604,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     }
 #endif
 
-                    sdfComposeDualCandidate(result, resultGradient, candidate, leafGrad, shapeHeader.z, (int)shapeHeader.w, shapeData1.x);
+                    sdfComposeDualCandidate(result, resultGradient, candidate, leafGrad, shapeHeader.z, (int)shapeHeader.w, rigidLanes, rigidSlot, shapeData1.x);
                 }
 
                 continue;
@@ -3208,6 +3624,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             float3 composeGradient = float3(0.0, 0.0, 0.0);
             uint composeBlend = SDF_BLEND_UNION;
             int composeMaterial = 0;
+            float4 composeLanes = float4(0.0, 0.0, 0.0, 0.0);
+            int composeSlot = -1;
             float composeSmooth = 0.0;
 
             switch (op) {
@@ -3217,6 +3635,10 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     jx = float3(1.0, 0.0, 0.0);
                     jy = float3(0.0, 1.0, 0.0);
                     jz = float3(0.0, 0.0, 1.0);
+                    currentLanes = float4(0.0, 0.0, 0.0, 0.0);
+                    currentSlot = -1;
+                    laneErodeSkipShape = false;
+                    laneErodeAmount = 0.0;
                     break;
                 }
                 case SDF_OP_TRANSLATE: {
@@ -3268,12 +3690,14 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 #ifdef SDF_DYNAMIC_TRANSFORMS
                 case SDF_OP_TRANSFORM_DYNAMIC: {
                     uint dynamicSlot = (uint)data0.x;
-                    float4 dynamicPosition = sdfDynamicTransforms[(2u * dynamicSlot)];
-                    float4 dynamicOrientation = sdfDynamicTransforms[((2u * dynamicSlot) + 1u)];
+                    float4 dynamicPosition = sdfDynamicTransforms[(3u * dynamicSlot)];
+                    float4 dynamicOrientation = sdfDynamicTransforms[((3u * dynamicSlot) + 1u)];
                     localPosition = rotatePointByInverseQuaternion((localPosition - dynamicPosition.xyz), dynamicOrientation);
                     jx = rotatePointByInverseQuaternion(jx, dynamicOrientation);
                     jy = rotatePointByInverseQuaternion(jy, dynamicOrientation);
                     jz = rotatePointByInverseQuaternion(jz, dynamicOrientation);
+                    currentLanes = sdfDynamicTransforms[((3u * dynamicSlot) + 2u)];
+                    currentSlot = (int)dynamicSlot;
                     break;
                 }
 #endif
@@ -3400,86 +3824,106 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 }
 #endif
 #ifndef SDF_STRIP_HEAVY
-                case SDF_OP_TWIST_Y: {
-                    float twistCos = cos(data0.x * localPosition.y);
-                    float twistSin = sin(data0.x * localPosition.y);
-                    float nx = ((twistCos * localPosition.x) + (twistSin * localPosition.z));
-                    float nz = ((-twistSin * localPosition.x) + (twistCos * localPosition.z));
-                    float k = data0.x;
-                    float3 ax = float3(twistCos, (k * nz), twistSin);
-                    float3 ay = float3(0.0, 1.0, 0.0);
-                    float3 az = float3(-twistSin, (-k * nx), twistCos);
-                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
-                    localPosition.xz = float2(nx, nz);
+                case SDF_OP_ROTATE_PLANE: {
+                    uint u = (instructionHeader.y == 1u) ? 1u : 0u;
+                    uint v = (instructionHeader.y == 0u) ? 1u : 2u;
+                    uint driver = instructionHeader.z;
+                    float angle = data0.x * (localPosition[driver] - data0.y);
+                    float c = cos(angle), sn = sin(angle);
+                    float pu = localPosition[u], pv = localPosition[v];
+                    float nu = c * pu + sn * pv, nv = -sn * pu + c * pv;
+                    float3 rows[3] = { float3(1,0,0), float3(0,1,0), float3(0,0,1) };
+                    rows[u] = float3(0,0,0); rows[v] = float3(0,0,0);
+                    rows[u][u] = c; rows[u][v] = sn;
+                    rows[v][u] = -sn; rows[v][v] = c;
+                    rows[u][driver] += data0.x * nv;
+                    rows[v][driver] -= data0.x * nu;
+                    sdfApplyJacobian(rows[0], rows[1], rows[2], jx, jy, jz);
+                    localPosition[u] = nu; localPosition[v] = nv;
                     break;
                 }
 #endif
-#ifndef SDF_STRIP_HEAVY
-                case SDF_OP_BEND_X: {
-                    float bendCos = cos(data0.x * localPosition.x);
-                    float bendSin = sin(data0.x * localPosition.x);
-                    float nx = ((bendCos * localPosition.x) + (bendSin * localPosition.y));
-                    float ny = ((-bendSin * localPosition.x) + (bendCos * localPosition.y));
-                    float k = data0.x;
-                    float3 ax = float3((bendCos + (k * ny)), bendSin, 0.0);
-                    float3 ay = float3((-bendSin - (k * nx)), bendCos, 0.0);
-                    float3 az = float3(0.0, 0.0, 1.0);
-                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
-                    localPosition.xy = float2(nx, ny);
-                    break;
-                }
-#endif
-#ifndef SDF_STRIP_HEAVY
-                case SDF_OP_BEND_Y: {
-                    float bendCos = cos(data0.x * localPosition.y);
-                    float bendSin = sin(data0.x * localPosition.y);
-                    float nx = ((bendCos * localPosition.x) + (bendSin * localPosition.y));
-                    float ny = ((-bendSin * localPosition.x) + (bendCos * localPosition.y));
-                    float k = data0.x;
-                    float3 ax = float3(bendCos, (bendSin + (k * ny)), 0.0);
-                    float3 ay = float3(-bendSin, (bendCos - (k * nx)), 0.0);
-                    float3 az = float3(0.0, 0.0, 1.0);
-                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
-                    localPosition.xy = float2(nx, ny);
-                    break;
-                }
-#endif
-#ifndef SDF_STRIP_HEAVY
-                case SDF_OP_BEND_Z: {
-                    float bendCos = cos(data0.x * localPosition.y);
-                    float bendSin = sin(data0.x * localPosition.y);
-                    float ny = ((bendCos * localPosition.y) + (bendSin * localPosition.z));
-                    float nz = ((-bendSin * localPosition.y) + (bendCos * localPosition.z));
-                    float k = data0.x;
-                    float3 ax = float3(1.0, 0.0, 0.0);
-                    float3 ay = float3(0.0, (bendCos + (k * nz)), bendSin);
-                    float3 az = float3(0.0, (-bendSin - (k * ny)), bendCos);
-                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
-                    localPosition.yz = float2(ny, nz);
-                    break;
-                }
-#endif
-                // KEEP-IN-SYNC with mapCore's SDF_OP_FLARE_Y case. A = diag(1/s, 1, 1/s) plus a rank-1 shear from
+                // KEEP-IN-SYNC with mapCore's SDF_OP_AXIAL_PROFILE case. A = diag(1/s, 1, 1/s) plus a rank-1 shear from
                 // ds/dy (moving along y rescales x and z): d(x')/dy = -x*(ds/dy)/s^2, d(z')/dy = -z*(ds/dy)/s^2. The
                 // shear is zero on the clamp plateau (t == 0 or t == 1) and wherever the floor is active (s pinned
                 // constant there, not truly varying) — both measure-zero in t but real wherever the floor clamps.
 #ifndef SDF_STRIP_HEAVY
-                case SDF_OP_FLARE_Y: {
-                    float flareRawT = ((data0.z - localPosition.y) * data0.w);
-                    float flareT = saturate(flareRawT);
-                    float flareSinPiT = sin(SDF_PI * flareT);
-                    float flareRawS = ((1.0 + (data0.x * flareT)) + (data0.y * flareSinPiT));
-                    float flareS = max(flareRawS, SDF_FLARE_MIN_SCALE);
-                    float flareInvS = (1.0 / flareS);
-                    bool flareInsideBand = ((flareRawT > 0.0) && (flareRawT < 1.0) && (flareRawS > SDF_FLARE_MIN_SCALE));
-                    float flareDsDt = (data0.x + ((data0.y * SDF_PI) * cos(SDF_PI * flareT)));
-                    float flareShear = (flareInsideBand ? ((-data0.w * flareDsDt) * (flareInvS * flareInvS)) : 0.0);
-                    float3 ax = float3(flareInvS, (-localPosition.x * flareShear), 0.0);
-                    float3 ay = float3(0.0, 1.0, 0.0);
-                    float3 az = float3(0.0, (-localPosition.z * flareShear), flareInvS);
-                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
-                    localPosition.xz /= flareS;
+                case SDF_OP_AXIAL_PROFILE: {
+                    uint axis = instructionHeader.y;
+                    float rawT = (data0.z - localPosition[axis]) * data0.w;
+                    float t = saturate(rawT);
+                    float rawS = data1.y + data0.x * t + data0.y * sin(SDF_PI * t);
+                    float scale = max(rawS, SDF_FLARE_MIN_SCALE);
+                    float invScale = 1.0 / scale;
+                    float dsdy = (rawT > 0.0 && rawT < 1.0 && rawS > SDF_FLARE_MIN_SCALE)
+                        ? -data0.w * (data0.x + data0.y * SDF_PI * cos(SDF_PI * t)) : 0.0;
+                    float3 rows[3] = { float3(1,0,0), float3(0,1,0), float3(0,0,1) };
+                    [unroll] for (uint component = 0u; component < 3u; component++) {
+                        if (component != axis) {
+                            rows[component][component] = invScale;
+                            rows[component][axis] = -localPosition[component] * dsdy * invScale * invScale;
+                        }
+                    }
+                    sdfApplyJacobian(rows[0], rows[1], rows[2], jx, jy, jz);
+                    [unroll] for (uint component = 0u; component < 3u; component++) {
+                        if (component != axis) { localPosition[component] *= invScale; }
+                    }
                     distanceScale *= data1.x;
+                    break;
+                }
+#endif
+                // KEEP IN SYNC with mapCore's SDF_OP_SHEAR case. A = [[1, linear + 2*quadratic*y, 0], [0,1,0], [0,0,1]]
+                // (exact everywhere, not a local linearization — only x depends on y, and that dependence is exactly
+                // this polynomial).
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_SHEAR: {
+                    uint target = instructionHeader.y, driver = instructionHeader.z;
+                    float t = localPosition[driver];
+                    float slope = data0.x + 2.0 * data0.y * t + 3.0 * data0.z * t * t;
+                    float3 rows[3] = { float3(1,0,0), float3(0,1,0), float3(0,0,1) };
+                    rows[target][driver] = slope;
+                    sdfApplyJacobian(rows[0], rows[1], rows[2], jx, jy, jz);
+                    localPosition[target] += ((data0.z * t + data0.y) * t + data0.x) * t;
+                    break;
+                }
+#endif
+                // KEEP IN SYNC with mapCore's SDF_OP_GAUSSIAN_PUSH case. A = I - Push (outer) gradG, gradG = -2*g*
+                // (offset/Radii) (the Gaussian's world-space gradient); reads the TAIL instruction's Data0 one
+                // instruction ahead, exactly as mapCore does.
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_GAUSSIAN_PUSH: {
+                    float3 gaussianPush = float3(data0.w, data1.w, asfloat(instructionHeader.y));
+                    float3 gaussianOffset = ((localPosition - data0.xyz) / data1.xyz);
+                    float gaussianWeight = exp(-dot(gaussianOffset, gaussianOffset));
+                    float3 gaussianGrad = ((-2.0 * gaussianWeight) * (gaussianOffset / data1.xyz));
+                    float3 ax = (float3(1.0, 0.0, 0.0) - (gaussianPush.x * gaussianGrad));
+                    float3 ay = (float3(0.0, 1.0, 0.0) - (gaussianPush.y * gaussianGrad));
+                    float3 az = (float3(0.0, 0.0, 1.0) - (gaussianPush.z * gaussianGrad));
+                    sdfApplyJacobian(ax, ay, az, jx, jy, jz);
+                    localPosition -= (gaussianPush * gaussianWeight);
+                    break;
+                }
+#endif
+                // KEEP IN SYNC with mapCore's SDF_OP_LANE_ERODE case (same t/skip/candidate math). The noise term
+                // contributes no gradient here (a documented approximation, like the exotic shapes' shape-local FD
+                // gradient) — only the scalar distance is corrected; a hit-only hit hides the flat normal at the
+                // noise's own frequency inside the analytic normal's usual tap-vs-analytic tolerance.
+#ifndef SDF_STRIP_HEAVY
+                case SDF_OP_LANE_ERODE: {
+                    float lane = ((data0.x < 0.5) ? currentLanes.x : ((data0.x < 1.5) ? currentLanes.y : ((data0.x < 2.5) ? currentLanes.z : currentLanes.w)));
+                    float t = saturate((lane - data0.y) / (data0.z - data0.y));
+
+                    if (t >= 1.0) {
+                        laneErodeSkipShape = true;
+                        laneErodeAmount = 0.0;
+                    } else {
+                        float noiseSample = 0.5 + 0.5 * sdfValueNoise3((localPosition * data0.w), SDF_LANE_ERODE_SEED);
+                        float raggedT = saturate(t + ((noiseSample - 0.5) * SDF_LANE_ERODE_RAGGED_AMOUNT * (4.0 * t * (1.0 - t))));
+
+                        laneErodeSkipShape = false;
+                        laneErodeAmount = (raggedT * data1.x);
+                    }
+
                     break;
                 }
 #endif
@@ -3533,6 +3977,15 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 }
 #endif
 #ifndef SDF_STRIP_HEAVY
+                case SDF_OP_CELL_DISPLACE: {
+                    float3 gradient;
+                    float value = sdfCellDistanceGrad(localPosition * data0.x, instructionHeader.y,
+                        instructionHeader.z, data0.z, gradient);
+                    result.distance += data0.y * (value - 0.5);
+                    float3 localGradient = (data0.y * data0.x) * gradient;
+                    resultGradient += float3(dot(localGradient, jx), dot(localGradient, jy), dot(localGradient, jz));
+                    break;
+                }
                 case SDF_OP_NOISE_DISPLACE: {
                     // distance += amp*invNorm*fbm; gradient += the analytic octave-summed lattice gradient, mapped to
                     // world through the chain Jacobian columns (KEEP IN SYNC with mapCore's case above).
@@ -3592,9 +4045,23 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 }
 #endif
                 case SDF_OP_SHAPE: {
-                    // KEEP IN SYNC with mapCore's SDF_OP_SHAPE detail skip — the dual twin must agree on which
-                    // shapes are visible so a Detail-flagged shape never bends the normal outside shade mode.
+                    // KEEP IN SYNC with mapCore's SDF_OP_SHAPE lane-erode/detail/secondary skips — the dual twin must
+                    // agree on which shapes are visible, and a pending lane-erode effect must clear here exactly like
+                    // mapCore's, whichever skip path (if any) consumes it.
+                    bool laneEroded = laneErodeSkipShape;
+                    float laneErosion = laneErodeAmount;
+                    laneErodeSkipShape = false;
+                    laneErodeAmount = 0.0;
+
+                    if (laneEroded) {
+                        break;
+                    }
+
                     if (((instructionHeader.y & SDF_SHAPE_DETAIL_FLAG) != 0u) && !sdfDetailShadingActive) {
+                        break;
+                    }
+
+                    if (((instructionHeader.y & SDF_SHAPE_NO_SECONDARY_FLAG) != 0u) && sdfSecondaryMarchActive) {
                         break;
                     }
 
@@ -3608,7 +4075,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
                         if (shapeBoundMeta.x == SDF_BOUND_DYNAMIC) {
-                            shapeBoundCenter += sdfDynamicTransforms[2u * shapeBoundMeta.y].xyz;
+                            shapeBoundCenter += sdfDynamicTransforms[3u * shapeBoundMeta.y].xyz;
                             shapeBoundReady = true;
                         }
 #endif
@@ -3625,7 +4092,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
 
                     uint shapeType = (instructionHeader.y & SDF_SHAPE_TYPE_MASK);
                     int material = (int)instructionHeader.w;
-                    float candidate = (evaluateShape(shapeType, localPosition, data0, data1) * distanceScale);
+                    float candidate = ((evaluateShape(shapeType, localPosition, data0, data1) * distanceScale) + laneErosion);
                     // The primitive's LOCAL gradient, mapped to world through the transform-chain Jacobian columns and
                     // scaled by the same distanceScale the candidate distance took (Scale/LogSphere's metric factor).
                     float3 localGrad = evaluateShapeGradient(shapeType, localPosition, data0, data1);
@@ -3634,6 +4101,8 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     composeCandidate = candidate;
                     composeGradient = worldGrad;
                     composeMaterial = material;
+                    composeLanes = currentLanes;
+                    composeSlot = currentSlot;
                     composeBlend = instructionHeader.z;
                     composeSmooth = data1.x;
                     composePending = true;
@@ -3643,28 +4112,100 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 case SDF_OP_PUSH_FIELD: {
                     saved.distance = result.distance;
                     saved.material = result.material;
+                    saved.lanes = result.lanes;
+                    saved.frameSlot = result.frameSlot;
                     saved.gradient = resultGradient;
                     result.distance = SDF_FAR_DISTANCE;
                     result.material = 0;
+                    result.lanes = float4(0.0, 0.0, 0.0, 0.0);
+                    result.frameSlot = -1;
                     resultGradient = float3(0.0, 0.0, 0.0);
                     break;
                 }
                 case SDF_OP_POP_FIELD: {
-                    // data1.y = the scope's baked 1/L candidate scale (see mapCore's pop). The gradient scales WITH the
-                    // distance so the soft-blend h weights stay consistent with the scaled candidate; the consumer's
-                    // final normalize cancels the uniform factor.
+                    // data1.y = the scope's baked 1/L candidate scale on every pop; a stairs pop carries its step count
+                    // in data1.z (KEEP IN SYNC with mapCore's pop and AnalyzeLipschitz).
+                    composeBlend = instructionHeader.z;
+                    bool isStairs = (composeBlend == SDF_BLEND_STAIRS_UNION || composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
+                    float candidateScale = data1.y;
                     composeCandidate = result.distance;
                     composeGradient = resultGradient;
-                    if (data1.y > 0.0) {
-                        composeCandidate *= data1.y;
-                        composeGradient *= data1.y;
+                    if (candidateScale > 0.0) {
+                        composeCandidate *= candidateScale;
+                        composeGradient *= candidateScale;
                     }
                     composeMaterial = result.material;
-                    composeBlend = instructionHeader.z;
+                    composeLanes = result.lanes;
+                    composeSlot = result.frameSlot;
                     composeSmooth = data1.x;
                     result.distance = saved.distance;
                     result.material = saved.material;
+                    result.lanes = saved.lanes;
+                    result.frameSlot = saved.frameSlot;
                     resultGradient = saved.gradient;
+
+                    if (composeBlend == SDF_BLEND_MORPH) {
+                        float lane = ((data0.x < 0.5) ? currentLanes.x : ((data0.x < 1.5) ? currentLanes.y : ((data0.x < 2.5) ? currentLanes.z : currentLanes.w)));
+                        float t = saturate((lane - data0.y) / (data0.z - data0.y));
+                        result.distance = lerp(saved.distance, composeCandidate, t);
+                        resultGradient = lerp(saved.gradient, composeGradient, t);
+                        bool candidateWins = (t >= 0.5);
+                        result.material = candidateWins ? composeMaterial : saved.material;
+                        result.lanes = candidateWins ? composeLanes : saved.lanes;
+                        result.frameSlot = candidateWins ? composeSlot : saved.frameSlot;
+                        composePending = false;
+                        break;
+                    }
+
+                    if (isStairs) {
+                        float r = composeSmooth;
+                        float n = data1.z;
+                        if (n >= 1.0 && r > 0.0) {
+                            float s = r / n;
+                            float period = 2.0 * s;
+                            bool isSub = (composeBlend == SDF_BLEND_STAIRS_SUBTRACTION);
+                            float a = saved.distance;
+                            float b = composeCandidate;
+                            float u = isSub ? (-b - r) : (b - r);
+                            float arg = u - a + s;
+                            float m = arg - period * floor(arg / period);
+                            float w = m - s;
+                            float dStairs = 0.5 * (u + a + abs(w));
+                            float3 gradStairs = (m >= s) ? (isSub ? (-composeGradient) : composeGradient) : saved.gradient;
+                            if (isSub) {
+                                float baseDist = max(a, -b);
+                                float3 baseGrad = ((-b) > a) ? (-composeGradient) : saved.gradient;
+                                if (-dStairs > baseDist) {
+                                    result.distance = -dStairs;
+                                    resultGradient = -gradStairs;
+                                } else {
+                                    result.distance = baseDist;
+                                    resultGradient = baseGrad;
+                                }
+                                bool candidateWins = (-b > a);
+                                result.material = candidateWins ? composeMaterial : saved.material;
+                                result.lanes = candidateWins ? composeLanes : saved.lanes;
+                                result.frameSlot = candidateWins ? composeSlot : saved.frameSlot;
+                            } else {
+                                float baseDist = min(a, b);
+                                float3 baseGrad = (b < a) ? composeGradient : saved.gradient;
+                                if (dStairs < baseDist) {
+                                    result.distance = dStairs;
+                                    resultGradient = gradStairs;
+                                } else {
+                                    result.distance = baseDist;
+                                    resultGradient = baseGrad;
+                                }
+                                bool candidateWins = (b < a);
+                                result.material = candidateWins ? composeMaterial : saved.material;
+                                result.lanes = candidateWins ? composeLanes : saved.lanes;
+                                result.frameSlot = candidateWins ? composeSlot : saved.frameSlot;
+                            }
+                            composePending = false;
+                            break;
+                        }
+                    }
+
                     composePending = true;
                     break;
                 }
@@ -3680,7 +4221,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                 // EXCEPT the material blend channel: this dual twin is HIT-ONLY and resolves the NORMAL, not the shaded
                 // albedo (renderView captures sdfMaterialBlendWeight from the scalar accept-sample march), so it neither
                 // computes nor publishes the channel — exactly as it skips sdfMapStepBound for being hit-only.
-                sdfComposeDualCandidate(result, resultGradient, composeCandidate, composeGradient, composeBlend, composeMaterial, composeSmooth);
+                sdfComposeDualCandidate(result, resultGradient, composeCandidate, composeGradient, composeBlend, composeMaterial, composeLanes, composeSlot, composeSmooth);
             }
         }
     }
@@ -3709,7 +4250,7 @@ float4 sdfInstanceBoundAt(uint instanceOffset, uint index) {
 
 #ifdef SDF_DYNAMIC_TRANSFORMS
     if (meta.x == SDF_BOUND_DYNAMIC) {
-        bound.xyz += sdfDynamicTransforms[2u * meta.y].xyz;
+        bound.xyz += sdfDynamicTransforms[3u * meta.y].xyz;
     }
 #endif
 
@@ -3737,18 +4278,33 @@ bool sdfInstanceShadowSuppressed(uint instanceOffset, uint index) {
     uint entryBase = sdfInstanceEntryOffset(instanceOffset, index);
     uint4 meta = sdfWords[entryBase + 1u];
 
-    return ((meta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransforms[2u * meta.y].w > 0.5));
+    return ((meta.x == SDF_BOUND_DYNAMIC) && (sdfDynamicTransforms[3u * meta.y].w > 0.5));
 }
 #endif
 
+// Generic material rows, paired with SdfProgram.Materials.cs.
 struct SdfMaterialData {
     float3 albedo;
-    float emissive;   // self-illumination strength: albedo * emissive adds to the shaded color
-    float specular;   // GGX dielectric reflectance at normal incidence (f0) before the metal mix; see sdfMaterialShade
-    float roughness;  // GGX roughness in [0, 1]; see SdfRoughnessFloorSquared
-    float sheen;      // fresnel edge-lift strength in [0, 1]; see sdfMaterialShade
-    float metal;      // metalness in [0, 1]: mixes f0 toward albedo, scales diffuse by (1 - metal)
-    float coat;       // clearcoat strength in [0, 1]: a fixed-roughness (SdfCoatRoughness) second GGX lobe
+    float emissive;
+    float specular;
+    float roughness;
+    float sheen;
+    float metal;
+    float coat;
+    float wrap;
+    float soften;
+    float3 bounce;
+    float4 insetOriginDepth;
+    float4 insetRotation;
+    float4 paintControls; // ior, stop count, softness, modulation amplitude
+    float4 paintModulation; // frequency, seed bits, reserved
+    float4 paintStops[4]; // color, radius
+    float4 weathering; // edge, lines, settle, reach
+    float4 weatheringControls; // seed bits, scale, floor, lane
+    float4 underColorThreshold[2];
+    float4 underResponse[2]; // roughness, metal, stage count, reserved
+    float4 deposit;
+    float4 depositResponse;
 };
 
 // The GGX roughness floor: alpha2 = roughness^2 + SdfRoughnessFloorSquared, so a bare light direction (no authored
@@ -3763,34 +4319,43 @@ static const float SdfCoatScale = 0.04;
 // rather than a tight silhouette-only rim.
 static const float SdfSheenFresnelExponent = 2.0;
 
-// The ONE material decode point (KEEP IN SYNC with the 3-uint4 layout above and SdfProgram.cs).
+// The ONE material decode point (KEEP IN SYNC with SdfProgram.Materials.cs and SdfProgram.cs).
 SdfMaterialData sdfMaterialLoad(int material) {
     uint4 header = sdfWords[0];
-    SdfMaterialData data;
-
+    SdfMaterialData data = (SdfMaterialData)0;
     if ((material < 0) || ((uint)material >= header.y)) {
         data.albedo = float3(1.0, 0.0, 1.0);
         data.emissive = 4.0;
-        data.specular = 0.0;
         data.roughness = 1.0;
-        data.sheen = 0.0;
-        data.metal = 0.0;
-        data.coat = 0.0;
         return data;
     }
-
-    uint materialBase = (header.w + (SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material));
+    uint materialBase = header.w + SDF_MATERIAL_VECTORS_PER_ENTRY * (uint)material;
     float4 m0 = asfloat(sdfWords[materialBase]);
     float4 m1 = asfloat(sdfWords[materialBase + 1u]);
     float4 m2 = asfloat(sdfWords[materialBase + 2u]);
-
     data.albedo = m0.rgb;
-    data.emissive = m0.a;
+    data.emissive = m0.w;
     data.specular = m1.x;
     data.roughness = m1.y;
     data.sheen = m1.z;
     data.metal = m1.w;
     data.coat = m2.x;
+    data.wrap = m2.y;
+    data.soften = m2.z;
+    data.bounce = asfloat(sdfWords[materialBase + 3u]).rgb;
+    data.insetOriginDepth = asfloat(sdfWords[materialBase + 4u]);
+    data.insetRotation = asfloat(sdfWords[materialBase + 5u]);
+    data.paintControls = asfloat(sdfWords[materialBase + 6u]);
+    data.paintModulation = asfloat(sdfWords[materialBase + 7u]);
+    [unroll] for (uint i = 0u; i < 4u; i++) data.paintStops[i] = asfloat(sdfWords[materialBase + 8u + i]);
+    data.weathering = asfloat(sdfWords[materialBase + 12u]);
+    data.weatheringControls = asfloat(sdfWords[materialBase + 13u]);
+    [unroll] for (uint j = 0u; j < 2u; j++) {
+        data.underColorThreshold[j] = asfloat(sdfWords[materialBase + 14u + 2u * j]);
+        data.underResponse[j] = asfloat(sdfWords[materialBase + 15u + 2u * j]);
+    }
+    data.deposit = asfloat(sdfWords[materialBase + 18u]);
+    data.depositResponse = asfloat(sdfWords[materialBase + 19u]);
 
     return data;
 }
@@ -3804,20 +4369,17 @@ float sdfGgxDistribution(float nDotH, float alpha2) {
 
     return (alpha2 / max((SDF_PI * d * d), 1.0e-6));
 }
-// The ONE lit-surface shade funnel: a metal-scaled lambert term, a GGX specular lobe (Smith-Schlick geometry, Schlick
-// fresnel, a roughness floor so a bare light direction stays finite), an optional fixed-roughness clearcoat lobe, an
-// emissive lift, and a fresnel sheen edge-lift. A material with zero specular AND zero metal skips the GGX term
-// entirely, so a plain lambert material (the common case) is unaffected by it. `diffuse` is the caller's accumulated
-// radiance (ambient + the sun + any colored screen lights — a float3 so colored lights tint the surface); `lightScale`
-// scales the GGX/coat lobes by the caller's shadow/light attenuation. KEEP IN SYNC across every caller
-// (sdf-world.hlsli, sdf-world-rt-debug).
-float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection, float lightScale) {
-    float3 diffuseAlbedo = (material.albedo * (1.0 - material.metal));
-    float3 color = (diffuseAlbedo * diffuse);
+// The GGX specular lobe (Smith-Schlick geometry, Schlick fresnel, a roughness floor so a bare light direction stays
+// finite) plus an optional fixed-roughness clearcoat lobe, for ONE light direction — factored out of sdfMaterialShade
+// so a second light (an attached accent point light) can add its own specular response without re-deriving the BRDF.
+// Zero when the material carries no specular/metal response, or when N.V or N.L is non-positive. `viewDirection` is
+// the caller's own -rayDirection (passed rather than re-negated, matching sdfMaterialShade's original inline form
+// exactly); `lightScale` scales the whole lobe by the caller's shadow/light attenuation.
+float3 sdfMaterialSpecular(SdfMaterialData material, float3 normal, float3 viewDirection, float3 lightDirection, float lightScale) {
+    float3 result = float3(0.0, 0.0, 0.0);
 
     if ((material.specular > 0.0) || (material.metal > 0.0)) {
         float3 f0 = lerp(float3(material.specular, material.specular, material.specular), material.albedo, material.metal);
-        float3 viewDirection = -rayDirection;
         float3 halfVector = normalize(lightDirection + viewDirection);
         float nDotH = saturate(dot(normal, halfVector));
         float nDotV = saturate(dot(normal, viewDirection));
@@ -3832,16 +4394,29 @@ float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal,
             float3 fresnel = (f0 + ((1.0 - f0) * pow((1.0 - vDotH), 5.0)));
             float3 specular = (((sdfGgxDistribution(nDotH, alpha2) * geometry) * fresnel) / max((4.0 * nDotV * nDotL), 1.0e-4));
 
-            color += ((specular * nDotL) * lightScale);
+            result += ((specular * nDotL) * lightScale);
 
             if (material.coat > 0.0) {
                 float coatAlpha2 = (SdfCoatRoughness * SdfCoatRoughness);
                 float coat = ((sdfGgxDistribution(nDotH, coatAlpha2) * geometry) / max((4.0 * nDotV), 1.0e-4));
 
-                color += ((coat * (material.coat * SdfCoatScale)) * lightScale);
+                result += ((coat * (material.coat * SdfCoatScale)) * lightScale);
             }
         }
     }
+
+    return result;
+}
+// The ONE lit-surface shade funnel: a metal-scaled lambert term, sdfMaterialSpecular's GGX + clearcoat lobe for the
+// caller's own light direction, an emissive lift, and a fresnel sheen edge-lift. `diffuse` is the caller's
+// accumulated radiance (ambient + the sun + any colored screen/point lights — a float3 so colored lights tint the
+// surface); `lightScale` scales the GGX/coat lobes by the caller's shadow/light attenuation. KEEP IN SYNC across
+// every caller (sdf-world.hlsli, sdf-world-rt-debug).
+float3 sdfMaterialShade(SdfMaterialData material, float3 diffuse, float3 normal, float3 rayDirection, float3 lightDirection, float lightScale) {
+    float3 diffuseAlbedo = (material.albedo * (1.0 - material.metal));
+    float3 color = (diffuseAlbedo * diffuse);
+
+    color += sdfMaterialSpecular(material, normal, -rayDirection, lightDirection, lightScale);
 
     if (material.emissive > 0.0) {
         color += (material.albedo * material.emissive);

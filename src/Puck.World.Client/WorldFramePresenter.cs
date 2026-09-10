@@ -4,6 +4,7 @@ using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Overlays;
 using Puck.SdfVm;
+using Puck.Shaders.Study;
 using Puck.SdfVm.Views;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
@@ -82,15 +83,23 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     private readonly OverlayMarkerChip[][] m_markerChips = new OverlayMarkerChip[PlayerRoster.MaxSlots][];
     private readonly OverlayMarkerSeat[] m_markerSeats = new OverlayMarkerSeat[PlayerRoster.MaxSlots];
     private readonly List<MarkerCandidate> m_markerCandidates = [];
+    // This frame's bounded volumes: the static placements' baked ones, then the stamp pool's slot-riding ones, in
+    // that order up to the engine's ceiling (SdfProgramBuilder.MaxVolumes) — reused across frames.
+    private readonly List<SdfVolume> m_volumes = new(capacity: SdfProgramBuilder.MaxVolumes);
 
     private readonly Func<string, OverlayResolvedGlyph> m_resolveIcon;
     private readonly PlayerRoster m_roster;
     // The first-party puck.sdf.v1 document emitter (world.sdf.load) — a SECOND tenant of the same live composition
     // seam m_emitter already exercises, never a parallel composition point (see WorldSdfDocumentEmitter's remarks).
     private readonly WorldSdfDocumentEmitter m_sdfDocuments;
+    // Null for a document/host with no live study children (no views.studies row was registered at boot) — every
+    // study slot then falls through to its degenerate camera fallback below, never a null-reference.
+    private readonly WorldStudyRuntime? m_studies;
     private readonly WorldRenderSettings m_settings;
 
     private readonly WorldRenderCycleTrack m_cycle = new();
+    private SdfAnchor? ResolveLightAnchor(WorldAnchor anchor) =>
+        WorldLightAnchorResolver.Resolve(anchor, m_client, m_animator, m_transforms);
 
     // The routed-definition registry supplies the structure half of each seat's live look policy while the
     // presentation clock integrates its latched stick Y. A traveling seat therefore uses the destination's clamp,
@@ -191,8 +200,10 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     /// <param name="speech">The speech clock a <see cref="WorldAnchor.RecentSpeaker"/> camera anchor reads.</param>
     /// <param name="overlayFacts">The predicate evaluator a ranked camera anchor list selects through, or
     /// <see langword="null"/> (every candidate condition then holds).</param>
+    /// <param name="studies">The shared shader-study runtime, or <see langword="null"/> for a document/host with no
+    /// live study children — every study slot then falls through to its degenerate camera fallback.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null) {
+    public WorldFramePresenter(FrameRateMonitor frameRate, WorldClient client, IWorldSimulationClock simulation, WorldRenderSettings settings, IWorldScreenPresenter binder, WorldRenderEnvelope envelope, WorldSeatBindings seatBindings, WorldStampPool animator, IWorldAudioFrameFeed audio, WorldPerceptionAnchor anchor, WorldCompositionState composition, WorldViewComposer composer, WorldSdfDocumentEmitter sdfDocuments, WorldSeatViewports viewports, WorldContinuum continuum, WorldTextCatalog text, IWorldAdjacencySource adjacencies, MarkerStore markers, Func<string, OverlayResolvedGlyph> resolveIcon, WorldSpeechClock speech, IOverlayPredicateEvaluator? overlayFacts = null, WorldStudyRuntime? studies = null) {
         ArgumentNullException.ThrowIfNull(argument: frameRate);
         ArgumentNullException.ThrowIfNull(argument: client);
         ArgumentNullException.ThrowIfNull(argument: anchor);
@@ -245,6 +256,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         m_seatBindings = seatBindings;
         m_animator = animator;
         m_sdfDocuments = sdfDocuments;
+        m_studies = studies;
 
         // Resolve the primer snapshot's render poses once so the capacity probe and the camera anchors are live before
         // the first frame. Alpha 0 is immaterial — a freshly spawned entity has previous == current pose.
@@ -1061,6 +1073,64 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
     // Resolves a named authored camera into a CameraSnapshot framed in `region`: its anchor pose (entity/part/placement/
     // group, or null = world), motion, aim, lens, and group spread. Returns
     // false when the name resolves no camera row (a faulted layout slot renders nothing rather than a bogus view).
+    // A study's iMouse this frame, Shadertoy's stateful convention in the slot's OWN pixel space (origin bottom-left,
+    // y up, matching the prelude's fragCoord flip): the pointer's CLIENT position maps to FRAME pixels by the same
+    // per-axis frame/client scale WorldCursorFeed.Decide applies (the presenters stretch the produced frame over the
+    // whole back buffer), then into the slot by its region's pixel origin. No pointer feed (an offscreen boot) or no
+    // reported position yet leaves the value untouched — zero until the first motion.
+    private Vector4 ResolveStudyMouse(WorldStudyRuntime.Entry entry, NormalizedRect region, uint width, uint height) {
+        if (m_studies?.ReadPointer is not { } readPointer) {
+            return Vector4.Zero;
+        }
+
+        var sample = readPointer();
+
+        if (!sample.HasPosition) {
+            return entry.Mouse;
+        }
+
+        var framePosition = sample.ClientPosition;
+        var clientWidth = m_viewports.ClientWidth;
+        var clientHeight = m_viewports.ClientHeight;
+
+        if (
+            (clientWidth > 0) &&
+            (clientHeight > 0)
+        ) {
+            framePosition = new Vector2(
+                x: (sample.ClientPosition.X * (width / ((float)clientWidth))),
+                y: (sample.ClientPosition.Y * (height / ((float)clientHeight)))
+            );
+        }
+
+        var slotX = (framePosition.X - (region.X * width));
+        var slotY = ((region.Height * height) - (framePosition.Y - (region.Y * height)));
+        var previous = entry.Mouse;
+        var pressFrame = (sample.Pressed && !entry.MouseWasPressed);
+        var mouse = (sample.Pressed
+            ? new Vector4(
+                x: slotX,
+                y: slotY,
+                z: (pressFrame
+                    ? slotX
+                    : MathF.Abs(x: previous.Z)),
+                w: (pressFrame
+                    ? slotY
+                    : (-MathF.Abs(x: previous.W)))
+            )
+            : new Vector4(
+                x: previous.X,
+                y: previous.Y,
+                z: (-MathF.Abs(x: previous.Z)),
+                w: (-MathF.Abs(x: previous.W))
+            )
+        );
+
+        entry.Mouse = mouse;
+        entry.MouseWasPressed = sample.Pressed;
+
+        return mouse;
+    }
     private bool ResolveNamedCamera(string name, NormalizedRect region, uint width, uint height, float deltaSeconds, out CameraSnapshot camera) {
         camera = default;
 
@@ -1323,8 +1393,105 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var markerSeatCount = 0;
         Span<bool> seatSlotBound = stackalloc bool[PlayerRoster.MaxSlots];
 
+        // Due study.watch reloads run here, on the pump thread, before any study node produces this frame.
+        m_studies?.PumpWatches();
+
         foreach (var composed in m_composer.Slots) {
             var region = composed.Region;
+
+            if (composed.Study is { } studyName) {
+                // A study slot: the SDF engine skips its own camera march for this slot (see SdfEngineNode's
+                // per-frame child-mask derivation) and shows the named views.studies row's compiled render instead.
+                // The camera here is a degenerate placeholder used ONLY when that name never resolved in the
+                // engine's children map — never a live march (a near-zero field of view keeps it finite/valid
+                // rather than an invalid all-zero default).
+                if (
+                    (m_studies is { } studies) &&
+                    studies.TryGet(
+                    entry: out var entry,
+                    name: studyName
+                )
+                ) {
+                    entry.Node.Resize(
+                        height: Math.Max(
+                        val1: 1u,
+                        val2: ((uint)(region.Height * height))
+                    ),
+                        width: Math.Max(
+                        val1: 1u,
+                        val2: ((uint)(region.Width * width))
+                    )
+                    );
+
+                    if (!entry.ClockPaused) {
+                        entry.ClockSeconds += (deltaSeconds * entry.ClockScale);
+                    }
+
+                    var studyRow = WorldDefinitionRows.FindStudy(
+                        name: studyName,
+                        studies: m_client.Definition.Views.Studies
+                    );
+                    // The paired camera, or NONE: a row without a camera (or whose name fails to resolve) hands the
+                    // study iCameraFov 0 with zero vectors — the documented "no paired camera" signal a study
+                    // branches on to keep its own Shadertoy iMouse orbit — never a made-up default eye.
+                    var cameraPos = Vector3.Zero;
+                    var cameraTarget = Vector3.Zero;
+                    var cameraUp = Vector3.Zero;
+                    var cameraFov = 0f;
+
+                    if (
+                        (studyRow?.Camera is { } studyCameraName) &&
+                        ResolveNamedCamera(
+                        camera: out var studyCamera,
+                        deltaSeconds: deltaSeconds,
+                        height: height,
+                        name: studyCameraName,
+                        region: region,
+                        width: width
+                    )
+                    ) {
+                        cameraPos = studyCamera.Position;
+                        cameraTarget = (studyCamera.Position + studyCamera.Forward);
+                        cameraUp = studyCamera.Up;
+                        cameraFov = (2f * MathF.Atan(x: studyCamera.TanHalfFieldOfView));
+                    }
+
+                    entry.Node.Input = new StudyFrameInput(
+                        Seconds: entry.ClockSeconds,
+                        DeltaSeconds: (entry.ClockPaused
+                            ? 0.0
+                            : (deltaSeconds * entry.ClockScale)),
+                        Mouse: ResolveStudyMouse(
+                            entry: entry,
+                            region: region,
+                            width: width,
+                            height: height
+                        ),
+                        Date: Vector4.Zero,
+                        CameraPos: cameraPos,
+                        CameraTarget: cameraTarget,
+                        CameraUp: cameraUp,
+                        CameraFov: cameraFov
+                    );
+                }
+
+                m_views.Add(item: new SdfViewSnapshot(
+                    Camera: CameraSnapshot.LookAt(
+                        position: Vector3.UnitY,
+                        target: Vector3.Zero,
+                        fieldOfViewRadians: 0.001f,
+                        viewportWidth: width,
+                        viewportHeight: height
+                    ),
+                    Region: region
+                ) {
+                    Child = studyName,
+                    RenderScale = transitionScale,
+                    UpscaleSharpness = m_settings.UpscaleSharpness,
+                });
+
+                continue;
+            }
 
             if (composed.Camera is { } cameraName) {
                 // A camera-bearing slot: render the named authored camera into the rect (no seat pose / gizmo).
@@ -1475,8 +1642,23 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
         var lighting = m_cycle.Resolve(
             definition: m_client.Definition,
             revision: m_client.DefinitionRevision,
-            tick: m_client.Tick
+            tick: m_client.Tick,
+            resolveLightAnchor: ResolveLightAnchor
         );
+
+        m_volumes.Clear();
+
+        foreach (var volume in m_emitter.StaticVolumes) {
+            if (m_volumes.Count < SdfProgramBuilder.MaxVolumes) {
+                m_volumes.Add(item: volume);
+            }
+        }
+
+        foreach (var volume in m_animator.Volumes) {
+            if (m_volumes.Count < SdfProgramBuilder.MaxVolumes) {
+                m_volumes.Add(item: volume);
+            }
+        }
 
         // Stashed on the way out (see m_dressedFrame): RenderViews runs LATER in the same produced frame and hands
         // this exact instance to every offscreen view, which derives its own submission from it. Returning it without
@@ -1496,6 +1678,7 @@ public sealed class WorldFramePresenter : ISdfFrameSource, ISdfFrameDresser {
             // The far-field isolator (world.far-field) ships ON, so the frame's flag is the negated "disable" side.
             DisableFarBound = !m_settings.FarBound,
             DynamicTransforms = transforms,
+            Volumes = m_volumes,
             // The far plane every march ends at: render.farDistance off the LIVE definition (a world.row.set render
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),

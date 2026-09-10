@@ -618,7 +618,7 @@
                         "const": "point"
                       },
                       "position": {
-                        "description": "The world-space position for a static (unanchored) light. Absent is the world origin. Ignored once Anchor resolves live.",
+                        "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
                         "default": null,
                         "title": "DocumentVector3",
                         "anyOf": [
@@ -646,7 +646,7 @@
                         "default": null
                       },
                       "anchor": {
-                        "description": "A Placement the light rides \u2014 its placement and, optionally, one of the placement\u0027s creation shapes \u2014 so the position tracks that shape\u0027s dynamic transform every frame instead of the authored Position. Every other WorldAnchor kind is refused by name. Optional; absent is a static light at Position.",
+                        "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
                         "type": [
                           "object",
                           "null"
@@ -812,6 +812,188 @@
                     },
                     "additionalProperties": false,
                     "title": "WorldRenderLightPoint"
+                  },
+                  {
+                    "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
+                    "properties": {
+                      "$type": {
+                        "const": "occluder"
+                      },
+                      "position": {
+                        "default": null,
+                        "title": "DocumentVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      },
+                      "radius": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "anchor": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "required": [
+                          "$type"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+                            "properties": {
+                              "$type": {
+                                "const": "entity"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "index"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntity"
+                          },
+                          {
+                            "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+                            "properties": {
+                              "$type": {
+                                "const": "entityPart"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index.",
+                                "type": "integer"
+                              },
+                              "partId": {
+                                "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "index",
+                              "partId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntityPart"
+                          },
+                          {
+                            "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+                            "properties": {
+                              "$type": {
+                                "const": "placement"
+                              },
+                              "placementId": {
+                                "description": "The referenced Id (must resolve).",
+                                "type": "string"
+                              },
+                              "shapeId": {
+                                "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "placementId",
+                              "shapeId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorPlacement"
+                          },
+                          {
+                            "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+                            "properties": {
+                              "$type": {
+                                "const": "group"
+                              },
+                              "indices": {
+                                "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/anchor/anyOf/3/properties/indices"
+                              },
+                              "smoothRate": {
+                                "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "indices",
+                              "smoothRate"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorGroup"
+                          },
+                          {
+                            "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+                            "properties": {
+                              "$type": {
+                                "const": "seat"
+                              },
+                              "number": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorSeat"
+                          },
+                          {
+                            "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+                            "properties": {
+                              "$type": {
+                                "const": "recentSpeaker"
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorRecentSpeaker"
+                          }
+                        ],
+                        "default": null,
+                        "title": "WorldAnchor"
+                      },
+                      "weight": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightOccluder"
                   }
                 ],
                 "title": "WorldRenderLight"
@@ -1415,34 +1597,6 @@
             "null"
           ],
           "default": null
-        },
-        "grounding": {
-          "description": "The contact-darkening blob drawn under each live body on an upward-facing hit. Optional; absent (strength 0) contributes nothing.",
-          "type": [
-            "object",
-            "null"
-          ],
-          "properties": {
-            "strength": {
-              "description": "The darkening strength at a centre\u0027s own position, in [0, 1]. Absent is 0 \u2014 no darkening, byte-identical.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            },
-            "radius": {
-              "description": "The falloff radius in world units, strictly positive. Absent is 1.",
-              "type": [
-                "number",
-                "null"
-              ],
-              "default": null
-            }
-          },
-          "additionalProperties": false,
-          "default": null,
-          "title": "WorldRenderGrounding"
         }
       },
       "additionalProperties": false,
@@ -9792,59 +9946,109 @@
                       ],
                       "default": null
                     },
-                    "wear": {
+                    "weathering": {
                       "type": [
                         "object",
                         "null"
                       ],
                       "properties": {
-                        "chips": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
+                        "edge": {
+                          "type": "number",
+                          "default": 0
                         },
-                        "scratches": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
+                        "lines": {
+                          "type": "number",
+                          "default": 0
                         },
-                        "dust": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
+                        "settle": {
+                          "type": "number",
+                          "default": 0
                         },
-                        "contact": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
+                        "reach": {
+                          "type": "number",
+                          "default": 1
                         },
                         "seed": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
+                          "type": "integer",
+                          "default": 0
                         },
                         "scale": {
+                          "type": "number",
+                          "default": 1
+                        },
+                        "floor": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "lane": {
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "under": {
                           "type": [
-                            "number",
+                            "array",
                             "null"
                           ],
+                          "items": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "threshold": {
+                                "type": "number"
+                              },
+                              "surface": {
+                                "type": "object",
+                                "properties": {
+                                  "color": {
+                                    "type": "string"
+                                  },
+                                  "roughness": {
+                                    "type": "number"
+                                  },
+                                  "metal": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "color",
+                                  "roughness",
+                                  "metal"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "threshold",
+                              "surface"
+                            ],
+                            "additionalProperties": false
+                          },
                           "default": null
                         },
-                        "static": {
+                        "deposit": {
                           "type": [
-                            "number",
+                            "object",
                             "null"
                           ],
+                          "properties": {
+                            "color": {
+                              "type": "string"
+                            },
+                            "roughness": {
+                              "type": "number"
+                            },
+                            "metal": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "color",
+                            "roughness",
+                            "metal"
+                          ],
+                          "additionalProperties": false,
                           "default": null
                         }
                       },
@@ -9872,53 +10076,74 @@
                       ],
                       "default": null
                     },
-                    "eye": {
+                    "inset": {
                       "type": [
                         "object",
                         "null"
                       ],
                       "properties": {
-                        "iris": {
-                          "type": "string"
-                        },
-                        "irisRadius": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "pupilRadius": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
-                        "limbus": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
-                        },
+                        "origin": true,
+                        "rotation": true,
                         "depth": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "default": null
+                          "type": "number"
                         },
-                        "fibers": {
-                          "type": [
-                            "number",
-                            "null"
+                        "ior": {
+                          "type": "number"
+                        },
+                        "paint": {
+                          "type": "object",
+                          "properties": {
+                            "stops": {
+                              "type": "array",
+                              "items": {
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "radius": {
+                                    "type": "number"
+                                  },
+                                  "color": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "radius",
+                                  "color"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "softness": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "modulationAmplitude": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "modulationFrequency": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "seed": {
+                              "type": "integer",
+                              "default": 0
+                            }
+                          },
+                          "required": [
+                            "stops"
                           ],
-                          "default": null
+                          "additionalProperties": false
                         }
                       },
                       "required": [
-                        "iris"
+                        "origin",
+                        "rotation",
+                        "depth",
+                        "ior",
+                        "paint"
                       ],
                       "additionalProperties": false,
                       "default": null
@@ -9982,6 +10207,13 @@
                         "ChamferUnion",
                         "ChamferIntersection",
                         "ChamferSubtraction",
+                        "GrooveUnion",
+                        "PipeUnion",
+                        "Morph",
+                        "GrooveSubtraction",
+                        "PipeSubtraction",
+                        "StairsUnion",
+                        "StairsSubtraction",
                         null
                       ]
                     },
@@ -10420,6 +10652,14 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "axis": {
+                          "type": "integer",
+                          "default": 1
+                        },
+                        "startScale": {
+                          "type": "number",
+                          "default": 1
                         }
                       },
                       "required": [
@@ -10469,6 +10709,35 @@
                       "default": null
                     },
                     "shear": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "linear": {
+                          "type": "number"
+                        },
+                        "quadratic": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "cubic": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "target": {
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "driver": {
+                          "type": "integer",
+                          "default": 1
+                        }
+                      },
+                      "required": [
+                        "linear"
+                      ],
+                      "additionalProperties": false,
                       "default": null
                     },
                     "curve": {
@@ -10532,12 +10801,7 @@
                       ],
                       "properties": {
                         "lane": {
-                          "enum": [
-                            "Damage",
-                            "Thrust",
-                            "Z",
-                            "W"
-                          ]
+                          "type": "integer"
                         },
                         "from": {
                           "type": "number"
@@ -10557,6 +10821,41 @@
                         "lane",
                         "from",
                         "to"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "cells": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "frequency": {
+                          "type": "number"
+                        },
+                        "amplitude": {
+                          "type": "number"
+                        },
+                        "seed": {
+                          "type": "integer"
+                        },
+                        "mode": {
+                          "enum": [
+                            "F1",
+                            "F2MinusF1"
+                          ]
+                        },
+                        "randomness": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "frequency",
+                        "amplitude",
+                        "seed",
+                        "mode",
+                        "randomness"
                       ],
                       "additionalProperties": false,
                       "default": null
@@ -11261,6 +11560,28 @@
                     "position": true,
                     "rotation": true,
                     "halfExtent": true,
+                    "ramp": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "density": {
+                            "type": "number"
+                          },
+                          "color": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "density",
+                          "color"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "parent": {
                       "type": [
                         "string",
@@ -11291,7 +11612,7 @@
                     },
                     "seed": {
                       "type": [
-                        "number",
+                        "integer",
                         "null"
                       ],
                       "default": null
@@ -11299,27 +11620,6 @@
                     "steps": {
                       "type": [
                         "integer",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "core": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "sheath": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "default": null
-                    },
-                    "cells": {
-                      "type": [
-                        "string",
                         "null"
                       ],
                       "default": null
@@ -11338,9 +11638,23 @@
                       ],
                       "default": null
                     },
-                    "thrust": {
+                    "pulseAmplitude": {
                       "type": [
-                        "boolean",
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "pulseFrequency": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "intensityLane": {
+                      "type": [
+                        "integer",
                         "null"
                       ],
                       "default": null
@@ -11353,7 +11667,8 @@
                     "kind",
                     "position",
                     "rotation",
-                    "halfExtent"
+                    "halfExtent",
+                    "ramp"
                   ],
                   "additionalProperties": false
                 },
@@ -13915,47 +14230,25 @@
                 }
               },
               "lanes": {
-                "description": "The per-instance render lanes the body\u0027s dynamic slot carries (see Lanes) \u2014 the diegetic \u0022body IS the health bar\u0022 carrier a worn creation\u0027s erode shape fields and wear materials read. null = both lanes stay 0 (a static floor, if any material\u0027s wear.static is authored, still shows).",
+                "description": "Up to four optional expressions, in x/y/z/w order. Missing entries read zero. Expressions read eased state; each consumer defines its own numeric range.",
                 "type": [
-                  "object",
+                  "array",
                   "null"
                 ],
-                "properties": {
-                  "damage": {
-                    "description": "The expression driving Lanes\u0027s x component (null = 0).",
-                    "default": null,
-                    "title": "ValueExpression",
-                    "anyOf": [
-                      {
-                        "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 4096
-                      },
-                      {
-                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/1/properties/left/anyOf/1"
-                      }
-                    ]
-                  },
-                  "thrust": {
-                    "description": "The expression driving Lanes\u0027s y component (null = 0).",
-                    "default": null,
-                    "title": "ValueExpression",
-                    "anyOf": [
-                      {
-                        "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 4096
-                      },
-                      {
-                        "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/1/properties/left/anyOf/1"
-                      }
-                    ]
-                  }
-                },
-                "additionalProperties": false,
-                "title": "WorldLookLanes"
+                "items": {
+                  "title": "ValueExpression",
+                  "anyOf": [
+                    {
+                      "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/1/properties/left/anyOf/1"
+                    }
+                  ]
+                }
               }
             },
             "additionalProperties": false,
