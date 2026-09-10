@@ -110,10 +110,7 @@ public static class WorldQueryBaker {
     // The number of cells covering [originRaw, maxRaw], refusing a span no 32-bit cell index can address rather than
     // narrowing it: the unchecked narrowing turns a grid wider than 2^31 cells into a silently empty artifact.
     private static int AxisCells(string paramName, long originRaw, long maxRaw) {
-        var cells = CeilDiv(
-            dividend: ((((Int128)maxRaw)) - originRaw),
-            divisor: CellSizeRaw
-        );
+        var cells = ((((Int128)maxRaw)) - originRaw).CeilingDivide(divisor: ((Int128)CellSizeRaw));
 
         if (cells > int.MaxValue) {
             throw new ArgumentException(
@@ -125,15 +122,6 @@ public static class WorldQueryBaker {
         return ((cells < Int128.Zero)
             ? 0
             : ((int)cells)
-        );
-    }
-    private static Int128 CeilDiv(Int128 dividend, Int128 divisor) {
-        var quotient = (dividend / divisor);
-        var remainder = (dividend % divisor);
-
-        return (((remainder != Int128.Zero) && ((remainder < Int128.Zero) == (divisor < Int128.Zero)))
-            ? (quotient + Int128.One)
-            : quotient
         );
     }
     private static void MarkBlocked(ulong[] blocked, int width, int height, long originXRaw, long originZRaw, WorldQueryBlockerInput blocker) {
@@ -214,10 +202,7 @@ public static class WorldQueryBaker {
         );
         var maxIndex = ClampIndex(
             axisCells: axisCells,
-            value: CeilDiv(
-                dividend: ((((Int128)maxRaw)) - originRaw),
-                divisor: CellSizeRaw
-            )
+            value: ((((Int128)maxRaw)) - originRaw).CeilingDivide(divisor: ((Int128)CellSizeRaw))
         );
 
         minCell = minIndex;

@@ -33,7 +33,7 @@ public sealed partial class AgbApu : ISnapshotable {
         writer.WriteInt32(value: m_directSoundB);
         writer.WriteBoolean(value: m_fifoARefill);
         writer.WriteBoolean(value: m_fifoBRefill);
-        writer.WriteInt64(value: m_samplePhase);
+        writer.WriteInt64(value: m_samplePhase.Phase);
     }
     /// <inheritdoc/>
     public void LoadState(StateReader reader) {
@@ -57,7 +57,7 @@ public sealed partial class AgbApu : ISnapshotable {
         m_directSoundB = reader.ReadInt32();
         m_fifoARefill = reader.ReadBoolean();
         m_fifoBRefill = reader.ReadBoolean();
-        m_samplePhase = reader.ReadInt64();
+        m_samplePhase.Phase = reader.ReadInt64();
     }
 
 }

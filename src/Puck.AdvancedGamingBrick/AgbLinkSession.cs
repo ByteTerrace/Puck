@@ -5,12 +5,10 @@ namespace Puck.AdvancedGamingBrick;
 /// Constructing the session builds an <see cref="AgbLinkCable"/> and connects each machine's serial controller in
 /// argument order (the first machine is the parent, player 0); the set must then be advanced THROUGH the session:
 /// <see cref="Run"/> moves every machine forward by one shared budget of master-clock cycles (the same unit
-/// <see cref="AdvancedGamingBrickMachine.RunCycles"/> consumes), always stepping the machine that is furthest behind
-/// its own cumulative target, one CPU step at a time (an instruction or halted idle cycle), ties to the lowest index. That interleave is a pure function
-/// of the machines' states and the budget sequence — a fixed, state-free rule, the same one the DMG/CGB
-/// <c>SerialLinkSession</c> proved — so a linked run is deterministic and replay-identical, and the per-machine
-/// targets are cumulative (anchored at connect), so instruction overshoot carries between calls instead of accreting
-/// into drift.
+/// <see cref="AdvancedGamingBrickMachine.RunCycles"/> consumes) through the shared <see cref="LinkPacer"/> — the same
+/// furthest-behind interleave the DMG/CGB serial and infrared sessions pace by — so a linked run is deterministic and
+/// replay-identical, and the per-machine targets are cumulative (anchored at connect), so instruction overshoot
+/// carries between calls instead of accreting into drift.
 /// <para>
 /// Causality across the cable is instruction-atomic: when one machine's transfer completes and the cable exchanges
 /// words, each peer's state is its last instruction boundary — at most one instruction stale, thousands of cycles
@@ -205,28 +203,10 @@ public sealed class AgbLinkSession : IDisposable {
             m_targets[index] += cycles;
         }
 
-        while (true) {
-            // Step whichever machine is furthest behind its target so no machine ever observes another more than one
-            // instruction stale; ties go to the lowest index — a fixed, state-free rule, so the interleave (and
-            // therefore every word exchanged) replays identically for identical inputs.
-            var furthest = -1;
-            var furthestRemaining = 0L;
-
-            for (var index = 0; (index < m_machines.Length); ++index) {
-                var remaining = (m_targets[index] - m_machines[index].Cycles);
-
-                if (remaining > furthestRemaining) {
-                    furthest = index;
-                    furthestRemaining = remaining;
-                }
-            }
-
-            if (furthest < 0) {
-                return;
-            }
-
-            m_machines[furthest].Step();
-        }
+        LinkPacer.Run(participants: new Chain(
+            machines: m_machines,
+            targets: m_targets
+        ));
     }
     /// <summary>Severs the cable and returns the credit token a later credit-preserving reconnect needs. Each
     /// console's credit is its instruction overshoot at this instant — the master-clock cycles it has already run
@@ -284,6 +264,17 @@ public sealed class AgbLinkSession : IDisposable {
         }
     }
 
+    // The chain as the shared pacer sees it. Cycles and targets are signed, so a console that overshot its target on
+    // its last step reports a negative remainder and is simply not selected.
+    private readonly struct Chain(AdvancedGamingBrickMachine[] machines, long[] targets) : ILinkPacerParticipants {
+        public int Count =>
+            machines.Length;
+
+        public long GetRemaining(int index) =>
+            (targets[index] - machines[index].Cycles);
+        public void StepOnce(int index) =>
+            machines[index].Step();
+    }
     // The fully-validated wiring recipe a private constructor executes without any further checks: which controllers
     // to connect, the machines they belong to, and the pacing target each starts at.
     private readonly record struct LinkPlan(

@@ -602,7 +602,7 @@ Keep the remaining integration on the existing platform. The unified
 application registration, delegated scopes, federated credentials, ingress,
 configuration and monitoring; MCP now extends that deployment and the existing host
 lifecycle. The API and Actors also implement federated OBO through
-[IdentityUtilities](../../src/Puck.Azure.Functions/Utilities/IdentityUtilities.cs);
+[IdentityUtilities](../../src/Puck.Azure/IdentityUtilities.cs);
 the API also has a request-scoped
 [credential context](../../src/Puck.Azure.Functions/UserCredentialContext.cs).
 The Azure operation provider accepts a TokenCredential, while WorldExtensionClient

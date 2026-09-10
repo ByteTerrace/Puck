@@ -226,14 +226,11 @@ stable, and never add a path that reproduces old-wrong behaviour.
   2×2 integer matrix, continued-fraction step, or rate/remainder carrier,
   search for it (route through `content-search` in the main `SKILL.md`). If the
   shape genuinely is missing, add it to the library rather than beside it.
-  This failure mode is present in the tree today, and this paragraph is the
-  surviving record of the finding: an engine-absorption audit found five
-  `AlignUp`/`AlignDown`/`CeilDiv`/`FloorDiv` hand-rollings across
-  `Puck.SdfVm`, `Puck.Platform`, and `Puck.World` — one of them,
-  `WorldQueryBaker`, hash-bearing, which makes the divergence class
-  determinism-adjacent. Their landing site is the `BinaryIntegerFunctions`
-  generics, and the migration awaits the owner's go. Re-derive the exact call
-  sites with `puck search` rather than trusting the count.
+  Signed floor/ceiling division is the one this tree has re-grown most often,
+  and a hash-bearing caller makes the divergence class determinism-adjacent:
+  route every one through `BinaryIntegerFunctions.FloorDivide`/`CeilingDivide`,
+  which are correct for a negative dividend where the built-in `/` truncates
+  toward zero.
 - **Bound an unbounded search from inside it, with two clauses.** A search whose
   termination rests on a theorem rather than on a validation — the Selfridge
   parameter walk, the descent to the smallest non-residue — fails by HANGING,

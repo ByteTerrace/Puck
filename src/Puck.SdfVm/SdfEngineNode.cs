@@ -1,10 +1,8 @@
 using System.Diagnostics;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Text;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Assets;
 using Puck.Hosting;
 using Puck.SignedDistance;
 
@@ -55,6 +53,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     private readonly ISdfFrameSource m_frameSource;
     private readonly uint m_height;
     private readonly int m_instanceCapacity;
+
     private SdfWorldKernels m_kernels;
 
     /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of
@@ -87,7 +86,8 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     private readonly int m_viewportCapacity;
     private readonly uint m_width;
 
-    private bool m_captureUnavailable;
+    private readonly CapturePngWriter m_capturePng = new();
+
     private bool m_captured;
     private byte[]? m_capturedPixels;
     // [frame-timing] CPU-side sub-buckets: plain Stopwatch wall time (never a GPU query), so this digest still prints
@@ -96,7 +96,9 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     // its block rather than an arbitrary modulo-boundary sample, exposing intermittent CPU hitches without per-frame IO.
     private ulong m_cpuTimingFrame;
     private CpuFrameTiming m_cpuTimingWorst;
-    private FrameCaptureRequest? m_debugCapture;
+
+    private readonly CaptureRequestSlot m_debugCapture = new();
+
     private int m_debugMode;
     private IGpuDeviceContext? m_deviceContext;
     private bool m_disposed;
@@ -434,35 +436,6 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             );
         }
     }
-    // Attempts one capture write, surviving (and loudly reporting) an environment that refuses to load Puck.Assets.
-    // Returns false on any such failure so the caller can latch m_captureUnavailable and stop retrying a doomed load.
-    private static bool TryWriteCapturePng(string path, byte[] rgba, int width, int height) =>
-        CapturePngWriteGuard.TryWrite(
-            state: (Path: path, Rgba: rgba, Width: width, Height: height),
-            writeCore: static state => WriteCapturePngCore(
-                height: state.Height,
-                path: state.Path,
-                rgba: state.Rgba,
-                width: state.Width
-            )
-        );
-    // Puck.Assets is an optional subsystem (screenshots/recording), not part of the render contract: an environment
-    // that blocks or cannot load its assembly (an Application Control / code-integrity policy, a missing deployment
-    // file) must not take the render loop down with it. WriteCapturePngCore is the ONLY member touching the
-    // Puck.Assets-typed PngEncoder.Write call, kept non-inlined so the CLR only needs to resolve and load
-    // Puck.Assets.dll when this exact method is JITted — i.e. lazily, on the first actual capture request, not on
-    // every produced frame. CapturePngWriteGuard's try/catch wraps the call one frame up: a failure to load the
-    // assembly surfaces as an exception thrown by that call (the callee never got to run), which is exactly where
-    // the guard's surrounding try/catch can observe and report it.
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void WriteCapturePngCore(string path, byte[] rgba, int width, int height) {
-        PngEncoder.Write(
-            height: height,
-            path: path,
-            rgba: rgba,
-            width: width
-        );
-    }
     // A provider can acquire an externally-written image (the camera shared-target tier). Keep that acquisition with
     // the SDF frame-ring slot whose command buffer samples it, and retire the old contents only after that slot's fence
     // signals. The fixed arrays avoid allocating a closure/list every produced frame.
@@ -511,8 +484,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         }
 
         m_disposed = true;
-        _ = m_debugCapture?.TryFail(new ObjectDisposedException(nameof(SdfEngineNode)));
-        m_debugCapture = null;
+        m_debugCapture.Refuse(error: new ObjectDisposedException(objectName: nameof(SdfEngineNode)));
 
         // Drain before tearing down GPU resources: the per-frame submits are fire-and-forget, so a frame may still be
         // in flight. This also proves every retained external screen-source acquisition is safe to release below.
@@ -750,45 +722,41 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
         if (
             (m_capturePath is not null) &&
             !m_captured &&
-            !m_captureUnavailable &&
+            !m_capturePng.Unavailable &&
             (m_produceFrameIndex > CaptureDelayFrames())
         ) {
             // Retain a copy of the readback (the readback buffer is reused across calls) so a parity gate can diff
             // two backends' output without a second GPU read.
             m_capturedPixels = m_engine.ReadPixels().ToArray();
 
-            if (!TryWriteCapturePng(
+            _ = m_capturePng.TryWrite(
                 height: ((int)m_height),
                 path: m_capturePath,
                 rgba: m_capturedPixels,
                 width: ((int)m_width)
-            )) {
-                m_captureUnavailable = true;
-            }
+            );
 
             m_captured = true;
         }
 
         // The runtime sibling of --capture: a debug verb arms a one-shot capture of whatever frame is produced next.
-        if (m_debugCapture is { } request) {
-            m_debugCapture = null;
-            var result = request.Write(path => {
-                if (m_captureUnavailable || !TryWriteCapturePng(
+        m_debugCapture.Serve(
+            failureLabel: "[debug] capture failed",
+            writer: path => {
+                m_capturePng.ThrowIfUnavailable(path: path);
+
+                if (!m_capturePng.TryWrite(
+                    height: ((int)m_height),
                     path: path,
                     rgba: m_engine.ReadPixels().ToArray(),
-                    width: ((int)m_width),
-                    height: ((int)m_height)
+                    width: ((int)m_width)
                 )) {
-                    m_captureUnavailable = true;
-                    throw new NotSupportedException("PNG capture is unavailable.");
+                    throw new NotSupportedException(message: "PNG capture is unavailable.");
                 }
 
                 Console.Error.WriteLine(value: $"[debug] captured frame {m_produceFrameIndex} -> {path}");
-            });
-            if (result.Error is { } error) {
-                Console.Error.WriteLine(value: $"[debug] capture failed -> {request.Path} ({error.Message})");
             }
-        }
+        );
 
         // Gate the [world-timing] digest on the live arming state (not just availability): a disarmed frame wrote no
         // marks, so TryReadPassTimings would refuse anyway — this skips even the attempt.
@@ -820,13 +788,11 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     }
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) {
-        ArgumentNullException.ThrowIfNull(request);
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-        if (PendingCapturePath is not null || request.Completion.IsCompleted) {
-            throw new InvalidOperationException("A capture is already pending or the request is terminal.");
-        }
-
-        m_debugCapture = request;
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        m_debugCapture.Arm(
+            pendingPath: PendingCapturePath,
+            request: request
+        );
     }
     /// <summary>Reads the cadence gate's per-span diagnostics through the live engine (a passthrough of
     /// <see cref="SdfWorldEngine.CadenceDiagnostics"/>, mirroring the <see cref="TryReadPassTimings"/> forwarder) — the
@@ -1033,7 +999,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <see cref="SdfWorldEngine.PassTimingLabels"/> so a consumer holding only this node names no engine type.</summary>
     public static ReadOnlySpan<string> PassTimingLabels => SdfWorldEngine.PassTimingLabels;
     /// <inheritdoc/>
-    public string? PendingCapturePath => m_debugCapture?.Path;
+    public string? PendingCapturePath => m_debugCapture.PendingPath;
     /// <summary>Gets a value indicating whether the resolved <c>PUCK_RAY_QUERY</c> toggle is enabled: the constructor
     /// argument when given, else the environment/default. See the constructor's <c>rayQueryEnabled</c> parameter doc
     /// for why nothing consumes this yet.</summary>

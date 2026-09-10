@@ -2,24 +2,28 @@ using Azure;
 using Microsoft.AspNetCore.DataProtection;
 using System.Security.Cryptography;
 using Puck.Actors.Services;
+using Puck.Storage;
 
 namespace Puck.Actors.Grains;
 
 [GenerateSerializer]
-public sealed class UserGrainState
-{
+public sealed class UserGrainState {
     [Id(id: 0)] public ProvisioningStep CompletedSteps { get; set; }
+
     [Id(id: 1)] public string Status { get; set; } = ProvisioningStatus.NotOnboarded;
+
     [Id(id: 2)] public DateTimeOffset? UpdatedAt { get; set; }
     [Id(id: 3)] public string? FaultReason { get; set; }
     [Id(id: 4)] public int RetryAttempts { get; set; }
     [Id(id: 5)] public TokenEscrow? Escrow { get; set; }
     [Id(id: 6)] public string? PublicKeysJson { get; set; }
+
     // Observability mirror of the container's CanRead/CanWrite metadata (the ABAC source of
     // truth). Default enabled; ABAC always reads the metadata, so any drift can only mislead a
     // reader of this snapshot, never grant access.
     [Id(id: 7)] public bool StorageReadEnabled { get; set; } = true;
     [Id(id: 8)] public bool StorageWriteEnabled { get; set; } = true;
+
     // Where this user's container actually is. Authoritative — the partitioner says where a user
     // *should* live for the current partition count, but the data only moves when a migration runs,
     // so callers resolve through here. Null until first provisioned.
@@ -29,19 +33,18 @@ public sealed class UserGrainState
     // Pinned at migration start and kept until completion: after Flipped, HomePartition already
     // points at the destination, so this is the ONLY record of where the drain must run.
     [Id(id: 12)] public int? MigrationSourcePartition { get; set; }
+
     // Observability mirror of the container's GuestAccess metadata (the ABAC source of truth):
     // the tenant's lever for non-owner access to their public/ prefix.
     [Id(id: 13)] public string GuestAccess { get; set; } = GuestAccessMode.Read;
 }
-
 public sealed class UserGrain(
     IDataProtectionProvider dataProtectionProvider,
     ILogger<UserGrain> logger,
     IPartitionResolver partitionResolver,
     [PersistentState(stateName: "user", storageName: Constants.UserStateStorageName)] IPersistentState<UserGrainState> state,
     IUserProvisioningService userProvisioningService
-) : Grain, IUserGrain, IRemindable
-{
+) : Grain, IUserGrain, IRemindable {
     private const int MaxRetryAttempts = 20;
     private const string MigrationRetryReminderName = "migration-retry";
     private const string RetryReminderName = "provisioning-retry";
@@ -75,7 +78,6 @@ public sealed class UserGrain(
 
         return Task.CompletedTask;
     }
-
     public async Task<ProvisioningState> EnsureProvisionedAsync(TokenEscrow tokenEscrow) {
         if (state.State.CompletedSteps.HasFlag(flag: ProvisioningStep.Finalized)) {
             // Already provisioned — but the partition count may have grown since, in which case this
@@ -116,16 +118,13 @@ public sealed class UserGrain(
             Partition: partition
         ));
     }
-
     public async Task ReceiveReminder(string reminderName, TickStatus status) {
         if (RetryReminderName == reminderName) {
             await AdvanceAsync(cancellationToken: CancellationToken.None);
-        }
-        else if (MigrationRetryReminderName == reminderName) {
+        } else if (MigrationRetryReminderName == reminderName) {
             if ((ProvisioningStatus.Migrating == state.State.Status) && (state.State.MigrationTargetPartition is not null)) {
                 ArmMigrationTimer();
-            }
-            else {
+            } else {
                 await StopMigrationRetriesAsync();
             }
         }
@@ -181,10 +180,10 @@ public sealed class UserGrain(
                 // Published content is anchored: the user's public/ prefix lives in their container
                 // on the Front Door origin partition regardless of home, so that container must
                 // exist from day one.
-                if (Constants.AnchorPartition != homePartition) {
+                if (PartitioningOptions.AnchorPartition != homePartition) {
                     stepTasks.Add(item: userProvisioningService.CreateStorageAsync(
                         cancellationToken: cancellationToken,
-                        partition: Constants.AnchorPartition,
+                        partition: PartitioningOptions.AnchorPartition,
                         userObjectId: UserObjectId
                     ));
                 }
@@ -193,7 +192,7 @@ public sealed class UserGrain(
             if (0 != stepTasks.Count) {
                 await Task.WhenAll(tasks: stepTasks);
 
-                state.State.CompletedSteps |= (ProvisioningStep.Identity | ProvisioningStep.Storage);
+                state.State.CompletedSteps |= ProvisioningStep.Identity | ProvisioningStep.Storage;
                 state.State.UpdatedAt = DateTimeOffset.UtcNow;
 
                 await state.WriteStateAsync();
@@ -222,10 +221,10 @@ public sealed class UserGrain(
                 userObjectId: UserObjectId
             );
 
-            if (Constants.AnchorPartition != homePartition) {
+            if (PartitioningOptions.AnchorPartition != homePartition) {
                 await userProvisioningService.FinalizeAsync(
                     cancellationToken: cancellationToken,
-                    partition: Constants.AnchorPartition,
+                    partition: PartitioningOptions.AnchorPartition,
                     userObjectId: UserObjectId
                 );
             }
@@ -243,15 +242,13 @@ public sealed class UserGrain(
                 args: UserObjectId,
                 message: "User {UserObjectId} provisioning completed."
             );
-        }
-        catch (CryptographicException e) {
+        } catch (CryptographicException e) {
             // The escrow cannot be unprotected (key-ring or application-name mismatch, or an
             // oid that does not match the grain key); retrying cannot fix it.
             state.State.Escrow = null;
 
             await FaultAsync(reason: $"Escrowed assertion could not be unprotected: {e.Message}");
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             state.State.RetryAttempts += 1;
 
             var isPropagationDelay = ((e as RequestFailedException)?.Status is 403);
@@ -496,13 +493,11 @@ public sealed class UserGrain(
                 args: [UserObjectId, sourcePartition.Value, targetPartition.Value,],
                 message: "User {UserObjectId} migration from partition {SourcePartition} to {TargetPartition} completed."
             );
-        }
-        catch (CryptographicException e) {
+        } catch (CryptographicException e) {
             state.State.Escrow = null;
 
             await PauseMigrationAsync(reason: $"escrowed assertion could not be unprotected: {e.Message}");
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             state.State.RetryAttempts += 1;
 
             if (MaxRetryAttempts <= state.State.RetryAttempts) {
@@ -559,6 +554,7 @@ public sealed class UserGrain(
 
         await state.WriteStateAsync();
     }
+
     /// <summary>
     /// The tenant's own lever: how much of their public/ prefix non-owners get (None | Read |
     /// ReadWrite; the substrate default is Read). Stamped everywhere their public surface can
@@ -595,6 +591,7 @@ public sealed class UserGrain(
 
         return Snapshot();
     }
+
     /// <summary>
     /// Every container that is or will be this user's: their home, the anchor holding their
     /// public/ content, and — once it exists — an in-flight migration destination (before
@@ -603,7 +600,7 @@ public sealed class UserGrain(
     private HashSet<int> GetOwnedPartitions() {
         var partitions = new HashSet<int> {
             state.State.HomePartition!.Value,
-            Constants.AnchorPartition,
+            PartitioningOptions.AnchorPartition,
         };
 
         if (state.State.MigrationSteps.HasFlag(flag: MigrationStep.Prepared) &&
@@ -614,6 +611,7 @@ public sealed class UserGrain(
 
         return partitions;
     }
+
     public async Task<ProvisioningState> SetStorageAccessAsync(bool canRead, bool canWrite) {
         // Suspension acts on a real container; a user still onboarding has no stable storage to
         // gate, so refuse until provisioning has finalized.
@@ -644,6 +642,7 @@ public sealed class UserGrain(
 
         return Snapshot();
     }
+
     private ProvisioningState Snapshot() =>
         new(
             CompletedSteps: state.State.CompletedSteps,
@@ -699,8 +698,7 @@ public sealed class UserGrain(
                     dataProtectionProvider: dataProtectionProvider,
                     userObjectId: UserObjectId
                 );
-            }
-            catch (CryptographicException e) {
+            } catch (CryptographicException e) {
                 logger.LogWarning(
                     args: UserObjectId,
                     exception: e,
@@ -723,8 +721,7 @@ public sealed class UserGrain(
                 args: [UserObjectId, homePartition.Value, computedPartition],
                 message: "User {UserObjectId} migrating from partition {SourcePartition} to {TargetPartition}."
             );
-        }
-        else {
+        } else {
             // Refresh the escrow of an in-flight migration when this sign-in's is usable; an
             // expired or unreadable one changes nothing — host-only steps run without it.
             if (DateTimeOffset.UtcNow < tokenEscrow.ExpiresAt) {
@@ -735,8 +732,7 @@ public sealed class UserGrain(
                     );
 
                     state.State.Escrow = tokenEscrow;
-                }
-                catch (CryptographicException e) {
+                } catch (CryptographicException e) {
                     logger.LogWarning(
                         args: UserObjectId,
                         exception: e,
@@ -781,12 +777,12 @@ public sealed class UserGrain(
     private string? TryGetLiveAssertion() {
         var escrow = state.State.Escrow;
 
-        return ((escrow is null) || (DateTimeOffset.UtcNow >= escrow.ExpiresAt))
+        return (((escrow is null) || (DateTimeOffset.UtcNow >= escrow.ExpiresAt))
             ? null
             : escrow.Unprotect(
                 dataProtectionProvider: dataProtectionProvider,
                 userObjectId: UserObjectId
-            );
+            ));
     }
 }
 

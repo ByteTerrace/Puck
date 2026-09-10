@@ -1,3 +1,5 @@
+using Puck.GamingBricks.Forge;
+
 namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>Specifies one of the SM83's eight 8-bit operand slots (encoded 0..7). <see cref="Memory"/> is the
@@ -33,17 +35,20 @@ public enum Condition : byte { NotZero = 0, Zero = 1, NoCarry = 2, Carry = 3 }
 /// </summary>
 public sealed class Sm83Emitter {
     private readonly List<byte> m_code = [];
-    private readonly Dictionary<int, int> m_labelOffsets = [];
+    private readonly LabelTable m_labels = new();
     private readonly List<(int PatchOffset, int Label)> m_relativeFixups = [];
     private readonly List<(int PatchOffset, int Label)> m_absoluteFixups = [];
 
-    private int m_nextLabel;
-
     // --- Labels. --------------------------------------------------------------------------------------------------------
     /// <summary>Allocates an unbound label id; bind it with <see cref="MarkLabel"/> at the target instruction.</summary>
-    public int NewLabel() => m_nextLabel++;
+    public int NewLabel() =>
+        m_labels.New();
     /// <summary>Binds <paramref name="label"/> to the current position in the stream.</summary>
-    public void MarkLabel(int label) => m_labelOffsets[label] = m_code.Count;
+    public void MarkLabel(int label) =>
+        m_labels.Mark(
+            label: label,
+            offset: m_code.Count
+        );
     // --- The 8-bit register/ALU grid (0x40..0xBF): generated from the operand slot 0..7. --------------------------------
     /// <summary>ld dst, src — copy one 8-bit register (or <c>(hl)</c>) to another. The <c>(hl)→(hl)</c> slot is
     /// <c>halt</c>, not a load — call <see cref="Halt"/> for it.</summary>
@@ -235,17 +240,15 @@ public sealed class Sm83Emitter {
             m_code.Add(item: ((byte)(item >> 8)));
         }
     }
-
     /// <summary>Resolves the fixups and returns the finished machine code. <paramref name="baseAddress"/> is the address
     /// the routine will be loaded at (0 for a position-independent routine); absolute jumps add it to the label offset.</summary>
     public byte[] ToArray(ushort baseAddress = 0) {
         foreach (var (patchOffset, label) in m_relativeFixups) {
-            if (!m_labelOffsets.TryGetValue(key: label, value: out var target)) {
-                throw new InvalidOperationException(message: $"jr targets an unbound label {label}.");
-            }
-
             // A relative jump is measured from the address of the instruction AFTER the offset byte.
-            var delta = (target - (patchOffset + 1));
+            var delta = (m_labels.Resolve(
+                kind: "jr",
+                label: label
+            ) - (patchOffset + 1));
 
             if ((delta < -128) || (delta > 127)) {
                 throw new InvalidOperationException(message: $"jr delta {delta} is out of the signed-byte range; use JumpAbsolute.");
@@ -255,11 +258,10 @@ public sealed class Sm83Emitter {
         }
 
         foreach (var (patchOffset, label) in m_absoluteFixups) {
-            if (!m_labelOffsets.TryGetValue(key: label, value: out var target)) {
-                throw new InvalidOperationException(message: $"jp targets an unbound label {label}.");
-            }
-
-            var address = (baseAddress + target);
+            var address = (baseAddress + m_labels.Resolve(
+                kind: "jp",
+                label: label
+            ));
 
             m_code[patchOffset] = ((byte)(address & 0xFF));
             m_code[(patchOffset + 1)] = ((byte)((address >> 8) & 0xFF));

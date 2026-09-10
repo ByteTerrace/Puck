@@ -1,10 +1,9 @@
 using Azure.Core;
 using Azure.Identity;
 
-namespace Puck.Actors.Utilities;
+namespace Puck.Azure;
 
-public sealed class OnBehalfOfOptions
-{
+public sealed class OnBehalfOfOptions {
     public string? ClientId { get; set; }
     public string? TenantId { get; set; }
 
@@ -13,10 +12,15 @@ public sealed class OnBehalfOfOptions
         tenantId = (TenantId ?? "");
     }
 }
-
-public static class IdentityUtilities
-{
+public static class IdentityUtilities {
     private static readonly string[] Scopes = ["api://AzureADTokenExchange"];
+
+    /// <summary>
+    /// Keyed-service key for the credential that mints the client assertion an on-behalf-of exchange
+    /// signs with. It is a separate registration from the ambient credential because a host may run
+    /// the exchange under a user-assigned identity federated to the shared app registration.
+    /// </summary>
+    public const string ClientAssertionCredentialKey = "ClientAssertionCredential";
 
     public static OnBehalfOfCredential ToOnBehalfOfCredential(
         this TokenCredential tokenCredential,
@@ -45,4 +49,3 @@ public static class IdentityUtilities
         );
     }
 }
-

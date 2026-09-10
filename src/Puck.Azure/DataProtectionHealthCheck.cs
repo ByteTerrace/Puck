@@ -1,12 +1,12 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
-namespace Puck.Actors.HealthChecks;
+namespace Puck.Azure;
 
-public sealed class DataProtectionHealthCheck(IServiceProvider serviceProvider) : IHealthCheck
-{
+public sealed class DataProtectionHealthCheck(IServiceProvider serviceProvider) : IHealthCheck {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default
@@ -22,16 +22,14 @@ public sealed class DataProtectionHealthCheck(IServiceProvider serviceProvider) 
             if (keyManagementOptions.XmlEncryptor is null) {
                 data[key: "xmlEncryptor"] = "Not configured.";
                 status = HealthStatus.Degraded;
-            }
-            else {
+            } else {
                 data[key: "xmlEncryptor"] = keyManagementOptions.XmlEncryptor.GetType().FullName!;
             }
 
             if (keyManagementOptions.XmlRepository is null) {
                 data[key: "xmlRepository"] = "Not configured.";
                 status = HealthStatus.Degraded;
-            }
-            else {
+            } else {
                 data[key: "xmlRepository"] = keyManagementOptions.XmlRepository.GetType().FullName!;
             }
 
@@ -51,8 +49,7 @@ public sealed class DataProtectionHealthCheck(IServiceProvider serviceProvider) 
                 description: description,
                 status: status
             );
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             return new HealthCheckResult(
                 exception: e,
                 status: context.Registration.FailureStatus
@@ -60,4 +57,3 @@ public sealed class DataProtectionHealthCheck(IServiceProvider serviceProvider) 
         }
     }
 }
-

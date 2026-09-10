@@ -190,21 +190,6 @@ internal static class MtsdfGlyphField {
         )) > CornerTurnSine)
         );
     }
-    private static float Median(float r, float g, float b) {
-        return MathF.Max(
-            x: MathF.Min(
-                x: r,
-                y: g
-            ),
-            y: MathF.Min(
-                x: MathF.Max(
-                    x: r,
-                    y: g
-                ),
-                y: b
-            )
-        );
-    }
     // Extends an endpoint-clamped distance along the endpoint tangent; the extension only ever wins when it is
     // closer, which is what lets the median rebuild a corner outside both of its edges.
     private static float PseudoDistance(in FontOutlineSegment segment, Vector2 point, in SegmentDistance trueDistance) {
@@ -632,20 +617,20 @@ internal static class MtsdfGlyphField {
                     segment: blueSegment,
                     trueDistance: bestBlue
                 );
-                var median = Median(
-                    b: blue,
-                    g: green,
-                    r: red
+                var median = MtsdfSampling.Median(
+                    first: red,
+                    second: green,
+                    third: blue
                 );
 
                 if ((median < 0f) != (alpha < 0f)) {
                     red = -red;
                     green = -green;
                     blue = -blue;
-                    median = Median(
-                        b: blue,
-                        g: green,
-                        r: red
+                    median = MtsdfSampling.Median(
+                        first: red,
+                        second: green,
+                        third: blue
                     );
                 }
 

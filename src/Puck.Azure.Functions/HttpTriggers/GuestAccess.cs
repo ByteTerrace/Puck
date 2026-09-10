@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
 using System.Net;
 using System.Net.Http.Json;
+using Puck.Azure.Functions.Utilities;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
@@ -14,44 +15,15 @@ namespace Puck.Azure.Functions.HttpTriggers;
 public sealed class GuestAccess(
     IConfiguration configuration,
     IHttpClientFactory httpClientFactory
-)
-{
-    private const string ActorsBaseUrlKey = "Onboarding:ActorsBaseUrl";
-
+) {
     private sealed record ActorProvisioningState(
         string? Status,
         string? GuestAccess
     );
 
-    public sealed class SetGuestAccessRequest
-    {
+    public sealed class SetGuestAccessRequest {
         public string? GuestAccess { get; set; }
     }
-
-    private static string? GetDelegatedUserObjectId(FunctionContext functionContext) {
-        var user = functionContext
-            .GetHttpContext()!
-            .User;
-        var hasScopes = user
-            .Claims
-            .Any(predicate: static claim =>
-                ("scp" == claim.Type) ||
-                ("http://schemas.microsoft.com/identity/claims/scope" == claim.Type)
-            );
-
-        return hasScopes
-            ? user
-                .Identity
-                ?.Name
-                ?.ToLowerInvariant()
-            : null;
-    }
-
-    private string GetActorsBaseUrl() =>
-        configuration
-            .GetValue<string>(key: ActorsBaseUrlKey)
-            ?.TrimEnd('/')
-            ?? throw new InvalidOperationException(message: $"The \"{ActorsBaseUrlKey}\" configuration value is required.");
 
     [Function(name: nameof(SetGuestAccess))]
     public async Task<HttpResponseData> SetGuestAccess(
@@ -63,7 +35,7 @@ public sealed class GuestAccess(
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
@@ -79,7 +51,7 @@ public sealed class GuestAccess(
             .CreateClient(name: "Actors")
             .PutAsJsonAsync(
                 cancellationToken: cancellationToken,
-                requestUri: $"{GetActorsBaseUrl()}/users/{userObjectId}/guest-access",
+                requestUri: $"{configuration.GetRequiredActorsBaseUrl()}/users/{userObjectId}/guest-access",
                 value: new { guestAccess = request.GuestAccess, }
             );
 

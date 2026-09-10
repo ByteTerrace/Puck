@@ -1,12 +1,12 @@
 using System.Diagnostics;
 
-namespace Puck.Platform.Recording;
+namespace Puck.Abstractions.Recording;
 
 /// <summary>
 /// The recording session's shared wall clock: a single QPC epoch that video frames and every audio source stamp
 /// against, so their nanosecond timestamps share one timeline. The epoch is captured at construction and can be
 /// re-anchored at the true capture start (the frozen <c>IAudioCaptureSourceFactory</c> has no per-session hook, so the
-/// factory is handed this clock and the recording session re-anchors it when it begins — see the handoff note).
+/// factory is handed this clock and the recording session re-anchors it when it begins).
 /// </summary>
 /// <remarks>Backed by <see cref="Stopwatch.GetTimestamp"/> (QPC on Windows), normalized to 100-nanosecond units so a
 /// WASAPI device's QPC position (already 100-ns units) maps in without a second frequency conversion.</remarks>

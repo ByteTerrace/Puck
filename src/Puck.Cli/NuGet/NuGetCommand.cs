@@ -186,19 +186,22 @@ internal static class NuGetCommand {
     private static async Task<string[]> PublishedVersionsAsync(HttpClient http, string id) {
         var uri = $"https://api.nuget.org/v3-flatcontainer/{id.ToLowerInvariant()}/index.json";
 
-        for (var attempt = 0; ; attempt++) {
-            using var response = await http.GetAsync(requestUri: uri);
+        // Throttling and a bad gateway are the index catching its breath; every other status is the answer.
+        return await CliRetry.RetryAsync(
+            action: async Task<string[]> () => {
+                using var response = await http.GetAsync(requestUri: uri);
 
-            if (response.StatusCode == HttpStatusCode.NotFound) { return []; }
-            if ((attempt < 3) && ((response.StatusCode == HttpStatusCode.TooManyRequests) || (((int)response.StatusCode) >= 500))) {
-                await Task.Delay(delay: TimeSpan.FromSeconds(seconds: 2));
-                continue;
-            }
-            response.EnsureSuccessStatusCode();
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                if (response.StatusCode == HttpStatusCode.NotFound) { return []; }
+                response.EnsureSuccessStatusCode();
+                using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
-            return json.RootElement.GetProperty(propertyName: "versions").EnumerateArray().Select(selector: value => value.GetString()!).ToArray();
-        }
+                return json.RootElement.GetProperty(propertyName: "versions").EnumerateArray().Select(selector: value => value.GetString()!).ToArray();
+            },
+            attempts: 4,
+            delay: TimeSpan.FromSeconds(seconds: 2),
+            retryable: static error => ((error is HttpRequestException { StatusCode: { } status })
+                && ((status == HttpStatusCode.TooManyRequests) || (((int)status) >= 500)))
+        );
     }
     private static async Task<(Package[] Ordered, Dependency[] Published)> SelectAsync(
         Dictionary<string, Package> catalog, string selection, string version, Func<string, Task<string[]>> publishedVersions

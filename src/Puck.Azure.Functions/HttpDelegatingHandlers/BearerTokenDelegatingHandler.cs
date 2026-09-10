@@ -3,12 +3,13 @@ using System.Net.Http.Headers;
 
 namespace Puck.Azure.Functions.HttpDelegatingHandlers;
 
-public sealed class ArmAuthorizationHandler(
-    TokenCredential tokenCredential
-) : DelegatingHandler
-{
-    private static readonly TokenRequestContext TokenRequestContext = new(scopes: ["https://management.azure.com/.default"]);
-
+/// <summary>
+/// Stamps every outbound request with an app-only bearer token for one fixed scope.
+/// </summary>
+public sealed class BearerTokenDelegatingHandler(
+    TokenCredential tokenCredential,
+    TokenRequestContext tokenRequestContext
+) : DelegatingHandler {
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken
@@ -17,11 +18,10 @@ public sealed class ArmAuthorizationHandler(
             scheme: "Bearer",
             parameter: (await tokenCredential.GetTokenAsync(
                 cancellationToken: cancellationToken,
-                requestContext: TokenRequestContext
+                requestContext: tokenRequestContext
             )).Token
         );
 
-        return await base.SendAsync(request: request, cancellationToken: cancellationToken);
+        return await base.SendAsync(cancellationToken: cancellationToken, request: request);
     }
 }
-

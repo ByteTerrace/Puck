@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Abstractions.Recording;
-using Puck.Platform.Recording;
 
 namespace Puck.Platform.Windows.Recording;
 

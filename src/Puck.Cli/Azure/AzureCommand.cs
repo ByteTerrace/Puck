@@ -143,14 +143,14 @@ internal static partial class AzureCommand {
         CliGitHub.Mask(value: token);
         return token;
     }
-    private static async Task RetryAsync(Func<Task> action, int attempts = 12, int seconds = 5) {
-        for (var attempt = 0; ; attempt++) {
-            try { await action(); return; } catch (Exception error) when (((attempt + 1) < attempts)) {
-                Console.Error.WriteLine(value: $"Attempt {(attempt + 1)}/{attempts} failed: {error.Message}");
-                await Task.Delay(delay: TimeSpan.FromSeconds(seconds: seconds));
-            }
-        }
-    }
+    // Cloud steps settle at their own pace: every az/docker/puck step this verb drives retries under one policy.
+    private static Task RetryAsync(Func<Task> action, int attempts = 12, int seconds = 5) =>
+        CliRetry.RetryAsync(
+            action: action,
+            attempts: attempts,
+            delay: TimeSpan.FromSeconds(seconds: seconds),
+            report: (error, attempt) => $"Attempt {attempt}/{attempts} failed: {error.Message}"
+        );
     private static async Task<JsonNode> GetJsonAsync(string uri) => (JsonNode.Parse(json: await Http.GetStringAsync(requestUri: uri)) ?? throw new InvalidDataException(message: $"Empty response: {uri}"));
     private static async Task CurrentAsync() {
         var reference = CliGitHub.EnvironmentVariable(name: "GITHUB_REF");

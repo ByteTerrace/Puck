@@ -10,12 +10,12 @@ using Microsoft.Graph.Models.ODataErrors;
 using Microsoft.Kiota.Abstractions.Serialization;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
-using Puck.Actors.Utilities;
+using Puck.Azure;
+using Puck.Storage;
 
 namespace Puck.Actors.Services;
 
-public sealed class OnboardingOptions
-{
+public sealed class OnboardingOptions {
     public string AllUsersGroupObjectId { get; set; } = "6997d638-98e6-4738-a507-7d960bc1e537";
     public string AttributeName { get; set; } = "ObjectId";
     public string AttributeSetName { get; set; } = "ByteTerraceUsers";
@@ -26,8 +26,7 @@ public sealed class OnboardingOptions
 /// ABAC-propagation probe — it fails with 403 until the directory attribute is visible
 /// to storage.
 /// </summary>
-public interface IUserProvisioningService
-{
+public interface IUserProvisioningService {
     Task StampIdentityAsync(
         string userObjectId,
         CancellationToken cancellationToken
@@ -151,9 +150,8 @@ public sealed class DefaultUserProvisioningService(
     IOptionsMonitor<OnBehalfOfOptions> onBehalfOfOptions,
     IPartitionResolver partitionResolver,
     IOptionsMonitor<PublicStorageOptions> publicStorageOptions,
-    [FromKeyedServices(key: Constants.ClientAssertionCredentialKey)] TokenCredential tokenCredential
-) : IUserProvisioningService
-{
+    [FromKeyedServices(key: IdentityUtilities.ClientAssertionCredentialKey)] TokenCredential tokenCredential
+) : IUserProvisioningService {
     // A user's container lives in an explicit partition — never recomputed here, because during a
     // migration the recorded home and the computed partition differ. The host identity reaches every
     // partition account with the same non-private ABAC grant.
@@ -239,9 +237,8 @@ public sealed class DefaultUserProvisioningService(
                         body: new() { OdataId = $"https://graph.microsoft.com/v1.0/users/{memberObjectId}", },
                         cancellationToken: cancellationToken
                     );
-            }
-            catch (ODataError e)
-            when (400 == e.ResponseStatusCode) { } // User is already a member of the group, ignore.
+            } catch (ODataError e)
+              when (400 == e.ResponseStatusCode) { } // User is already a member of the group, ignore.
         }
     }
 
@@ -641,7 +638,7 @@ public sealed class DefaultUserProvisioningService(
                     copySource: sourceContainerClient.GetBlobClient(blobName: blob.Name).Uri,
                     options: new BlobSyncUploadFromUriOptions {
                         CopySourceBlobProperties = true,
-                        SourceAuthentication = new(scheme: "Bearer", parameter: sourceReadToken),
+                        SourceAuthentication = new(parameter: sourceReadToken, scheme: "Bearer"),
                     }
                 );
 
@@ -694,9 +691,8 @@ public sealed class DefaultUserProvisioningService(
                         );
 
                     ++deletedCount;
-                }
-                catch (RequestFailedException e)
-                when ((409 == e.Status) && ("DirectoryIsNotEmpty" == e.ErrorCode)) {
+                } catch (RequestFailedException e)
+                  when ((409 == e.Status) && ("DirectoryIsNotEmpty" == e.ErrorCode)) {
                     // Hierarchical-namespace directory stub whose children are still present.
                     // Directories sort before their children, so the children fall later in this
                     // or a subsequent slice; once they're gone, re-enumeration deletes the stub.

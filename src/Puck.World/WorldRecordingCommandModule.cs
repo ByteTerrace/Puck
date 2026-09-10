@@ -4,7 +4,6 @@ using Puck.Abstractions.Recording;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
 using Puck.Hosting;
-using Puck.Platform.Recording;
 using Puck.Recording.Session;
 
 namespace Puck.World;
@@ -54,13 +53,14 @@ internal sealed class WorldRecordingCommandModule(
             document = document with { Output = args[0].ToString() };
         }
 
-        // B's coordination point: re-anchor the shared audio clock so the WASAPI sources stamp from the same instant the
-        // session's own video epoch is captured (the frozen factory has no per-session hook).
+        // Re-anchor the shared clock at capture start; the session stamps video against the same clock the WASAPI
+        // sources were handed (the frozen factory has no per-session hook).
         m_clock.ResetEpochToNow();
 
         var created = RecordingSession.TryCreate(
             options: new RecordingSessionOptions {
                 AudioSourceFactory = m_audioSources,
+                Clock = m_clock,
                 Document = document,
                 SourceHeight = ((int)m_window.Value.Height),
                 SourceWidth = ((int)m_window.Value.Width),

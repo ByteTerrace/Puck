@@ -21,8 +21,6 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
-        <!-- PngEncoder for the debug-capture readback (SdfEngineNode.RequestCapture). -->
-        <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <!-- The instruction ISA, the packed-word program representation, and the fluent authoring builder — every

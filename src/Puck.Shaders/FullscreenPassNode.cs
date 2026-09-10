@@ -1,9 +1,7 @@
 using System.Buffers.Binary;
-using System.Runtime.CompilerServices;
 
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
-using Puck.Assets;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -38,7 +36,9 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     private readonly ReadOnlyMemory<byte> m_vertexBytecode;
     private readonly uint m_width;
 
-    private bool m_captureUnavailable;
+    private readonly CaptureRequestSlot m_capture = new();
+    private readonly CapturePngWriter m_capturePng = new();
+
     private ShaderConfigValues m_config;
     private nint m_descriptorPool;
     private nint m_descriptorSet;
@@ -49,7 +49,6 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     private nint m_lastImageViewHandle;
     private Dictionary<string, ShaderConfigValue>? m_liveConfig;
     private Dictionary<string, byte[]>? m_liveConfigBytes;
-    private FrameCaptureRequest? m_pendingCapture;
     private IGpuPipeline? m_pipeline;
     private IGpuSurfaceReadback? m_readback;
     private IGpuRenderTarget? m_renderTarget;
@@ -114,7 +113,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     /// <inheritdoc/>
     public NodeDescriptor Descriptor => m_descriptor;
     /// <inheritdoc/>
-    public string? PendingCapturePath => (m_pendingCapture?.Path ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
+    public string? PendingCapturePath => (m_capture.PendingPath ?? (m_inner as ICaptureRequestTarget)?.PendingCapturePath);
 
     /// <inheritdoc/>
     public void Dispose() {
@@ -123,8 +122,7 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         }
 
         m_disposed = true;
-        _ = m_pendingCapture?.TryFail(new ObjectDisposedException(GetType().Name));
-        m_pendingCapture = null;
+        m_capture.Refuse(error: new ObjectDisposedException(objectName: GetType().Name));
         try {
             ReleaseGpuResources();
         } finally {
@@ -186,13 +184,11 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
     }
     /// <inheritdoc/>
     public void RequestCapture(FrameCaptureRequest request) {
-        ArgumentNullException.ThrowIfNull(request);
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-        if (PendingCapturePath is not null || request.Completion.IsCompleted) {
-            throw new InvalidOperationException("A capture is already pending or the request is terminal.");
-        }
-
-        m_pendingCapture = request;
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        m_capture.Arm(
+            pendingPath: PendingCapturePath,
+            request: request
+        );
     }
     /// <summary>Overwrites one scalar-float config field's live value, and — when a push-constant slot sources it —
     /// the slot's bytes for the next frame. The write a presentation binding drives per frame; the manifest's
@@ -245,23 +241,13 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
 
     // Reads back this pass's own render target (the composed result — what the player sees when nothing draws over
     // it) and writes it as a PNG.
-    private void CaptureIfPending() {
-        if (m_pendingCapture is not { } request) {
-            return;
-        }
-
-        m_pendingCapture = null;
-        var result = request.Write(WriteCapture);
-        if (result.Error is { } error) {
-            Console.Error.WriteLine(value: $"[capture] failed -> {request.Path} ({error.Message})");
-        }
-    }
+    private void CaptureIfPending() =>
+        m_capture.Serve(
+            failureLabel: "[capture] failed",
+            writer: WriteCapture
+        );
     private void WriteCapture(string path) {
-        if (m_captureUnavailable) {
-            Console.Error.WriteLine(value: $"[capture] skipped, Puck.Assets is unavailable — no file written to {path}");
-
-            throw new NotSupportedException("PNG capture is unavailable.");
-        }
+        m_capturePng.ThrowIfUnavailable(path: path);
 
         m_readback ??= m_surfaceTransferFactory.CreateReadback(deviceContext: m_deviceContext);
 
@@ -275,31 +261,21 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
             width: m_width
         );
 
-        if (TryWriteCapturePng(
+        if (!m_capturePng.TryWrite(
             height: ((int)m_height),
             path: path,
             rgba: pixels,
             width: ((int)m_width)
         )) {
-            Console.Error.WriteLine(value: $"[capture] {m_manifest.Name} -> {path}");
-        } else {
-            m_captureUnavailable = true;
-            throw new NotSupportedException("PNG capture is unavailable.");
+            throw new NotSupportedException(message: "PNG capture is unavailable.");
         }
+
+        Console.Error.WriteLine(value: $"[capture] {m_manifest.Name} -> {path}");
     }
     // Passing the inner frame through untouched: hand a pending capture down so the readback lands on whatever
     // actually produced the shown frame. Keeping it armed when the inner cannot serve it is what stops a request
     // from vanishing silently — the request remains armed until a node serves it or disposal fails it.
-    private void ForwardPendingCapture() {
-        if (m_pendingCapture is not { } request) {
-            return;
-        }
-
-        if (m_inner is ICaptureRequestTarget target) {
-            target.RequestCapture(request: request);
-            m_pendingCapture = null;
-        }
-    }
+    private void ForwardPendingCapture() => m_capture.Forward(target: (m_inner as ICaptureRequestTarget));
     private void EnsureResources() {
         if (m_resourcesReady) {
             return;
@@ -412,30 +388,6 @@ public sealed class FullscreenPassNode : IRenderNode, ICaptureRequestTarget {
         }
 
         return 1;
-    }
-    // Attempts one capture write, surviving (and loudly reporting) an environment that refuses to load Puck.Assets.
-    // Returns false so the caller can latch m_captureUnavailable and stop retrying a doomed load.
-    private static bool TryWriteCapturePng(string path, ReadOnlyMemory<byte> rgba, int width, int height) =>
-        CapturePngWriteGuard.TryWrite(
-            state: (Path: path, Rgba: rgba, Width: width, Height: height),
-            writeCore: static state => WriteCapturePngCore(
-                height: state.Height,
-                path: state.Path,
-                rgba: state.Rgba,
-                width: state.Width
-            )
-        );
-    // The ONLY member touching the Puck.Assets-typed PngEncoder call, kept non-inlined so the CLR resolves and loads
-    // Puck.Assets.dll on the first actual capture rather than on every produced frame. CapturePngWriteGuard's
-    // try/catch wraps the call one frame up, where a failure to load the assembly is observable.
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void WriteCapturePngCore(string path, ReadOnlyMemory<byte> rgba, int width, int height) {
-        PngEncoder.Write(
-            height: height,
-            path: path,
-            rgba: rgba.Span,
-            width: width
-        );
     }
     private nint RecordPass() {
         var deviceHandle = m_deviceContext.DeviceHandle;

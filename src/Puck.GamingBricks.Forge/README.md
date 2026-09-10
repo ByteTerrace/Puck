@@ -142,6 +142,11 @@ alone determines emitted bytes. The caller owns filesystem I/O and machine
 lifetime. No World service registration, process launch, BIOS download or
 external compiler is required.
 
+`LabelTable` is the shared machine-code label bookkeeping — allocate an id,
+bind it to a byte offset, resolve it at fixup time, and refuse a branch naming
+a label nothing bound. Both `Sm83Emitter` and `ThumbEmitter` hold one; the
+fixup lists and patch encodings stay per-instruction-set.
+
 AGB output uses direct boot without BIOS calls. `forge.play` explicitly selects
 the engine's `stub` option. A retail BIOS/hardware boot needs a valid supplied
 logo; the lower-level AGB cartridge builder accepts it, but this source version

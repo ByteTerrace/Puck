@@ -153,6 +153,7 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 | `FullscreenPassNode` / `IFullscreenPassServices` | The node that runs a graphics set as one pass over an inner `IRenderNode`; its GPU seam. |
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
 | `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.v1` probe kind and the shipped kinds under a directory tree, by id. |
+| `ManifestCatalog<TManifest>` | The suffix-scanning, id-indexed discovery both catalogs derive from. |
 
 ## 👁️ Probe kinds (`puck.probe.v1`)
 

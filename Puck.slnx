@@ -9,6 +9,7 @@
         <Project Path="src/Puck.Assets/Puck.Assets.csproj" />
         <Project Path="src/Puck.Attestation/Puck.Attestation.csproj" />
         <Project Path="src/Puck.Audio/Puck.Audio.csproj" />
+        <Project Path="src/Puck.Azure/Puck.Azure.csproj" />
         <Project Path="src/Puck.Azure.Functions/Puck.Azure.Functions.csproj" />
         <Project Path="src/Puck.Cli/Puck.Cli.csproj" />
         <Project Path="src/Puck.Commands/Puck.Commands.csproj" />

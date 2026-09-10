@@ -12,6 +12,9 @@ namespace Puck.Recording.Session;
 public sealed class RecordingSessionOptions {
     /// <summary>Gets or sets the audio capture source factory, or <see langword="null"/> to record video only.</summary>
     public IAudioCaptureSourceFactory? AudioSourceFactory { get; set; }
+    /// <summary>Gets or sets the shared session clock video frames stamp against — the same one the audio sources
+    /// were handed, so both media share one timeline.</summary>
+    public required RecordingSessionClock Clock { get; set; }
     /// <summary>Gets or sets the recording document that describes the capture.</summary>
     public required RecordingDocument Document { get; set; }
     /// <summary>Gets or sets the encode queue depth (frames buffered between the render and encode threads).</summary>

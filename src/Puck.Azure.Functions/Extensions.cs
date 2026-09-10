@@ -1,7 +1,4 @@
 using Azure.Core;
-using Azure.Storage.Blobs;
-using Microsoft.AspNetCore.DataProtection;
-using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.Azure;
@@ -18,12 +15,9 @@ using System.Reflection;
 using Puck.Azure.Functions.HealthChecks;
 using Puck.Azure.Functions.Middleware;
 
-using CryptographyClient = Azure.Security.KeyVault.Keys.Cryptography.CryptographyClient;
-
 namespace Puck.Azure.Functions;
 
-public static class Extensions
-{
+public static class Extensions {
     private static IFunctionsWorkerApplicationBuilder UseWhenHttpTrigger<T>(
         this IFunctionsWorkerApplicationBuilder builder
     ) where T : class, IFunctionsWorkerMiddleware =>
@@ -38,7 +32,7 @@ public static class Extensions
             attribute = Type
                 .GetType(typeName: entryPoint[..lastSegmentIndex])
                 ?.GetMethod(
-                    bindingAttr: (BindingFlags.Instance | BindingFlags.Public),
+                    bindingAttr: BindingFlags.Instance | BindingFlags.Public,
                     name: entryPoint[(lastSegmentIndex + 1)..]
                 )
                 ?.GetCustomAttribute<T>();
@@ -60,7 +54,7 @@ public static class Extensions
             .FunctionDefinition
             .InputBindings
             .Values
-            .FirstOrDefault(bindingMetadata => bindingMetadata
+            .FirstOrDefault(predicate: bindingMetadata => bindingMetadata
                 .Type
                 .EndsWith(
                     comparisonType: StringComparison.OrdinalIgnoreCase,
@@ -144,87 +138,6 @@ public static class Extensions
 
         return isConfigured;
     }
-    public static bool TryAddDataProtection(
-        this IServiceCollection services,
-        string applicationName,
-        IConfigurationSection configurationSection
-    ) {
-        const string BlobUriKey = "BlobUri";
-        const string ClientName = "DataProtection";
-        const string KeyUriKey = "KeyUri";
-
-        var blobUriIsValid = Uri.TryCreate(
-            result: out var blobUri,
-            uriKind: UriKind.Absolute,
-            uriString: configurationSection.GetValue<string>(key: BlobUriKey)
-        );
-        var keyUriIsValid = Uri.TryCreate(
-            result: out var keyUri,
-            uriKind: UriKind.Absolute,
-            uriString: configurationSection.GetValue<string>(key: KeyUriKey)
-        );
-        var isConfigured = (blobUriIsValid && keyUriIsValid);
-
-        if (isConfigured) {
-            var blobContainer = blobUri!.Segments[1][0..^1];
-            var blobName = string.Join(
-                separator: "",
-                values: blobUri.Segments.Skip(count: 2)
-            );
-
-            services
-                .AddAzureClients(configureClients: clientFactoryBuilder => {
-                    clientFactoryBuilder
-                        .AddBlobServiceClient(serviceUri: new(
-                            baseUri: blobUri,
-                            relativeUri: $"/{blobContainer}"
-                        ))
-                        .WithName(name: ClientName);
-                    clientFactoryBuilder
-                        .AddCryptographyClient(vaultUri: keyUri)
-                        .WithName(name: ClientName);
-                });
-            services
-                .AddDataProtection()
-                .PersistKeysToAzureBlobStorage(
-                    blobClientFactory: serviceProvider =>
-                        serviceProvider
-                            .GetRequiredService<IAzureClientFactory<BlobServiceClient>>()
-                            .CreateClient(name: ClientName)
-                            .GetBlobContainerClient(blobContainerName: blobContainer)
-                            .GetBlobClient(blobName: blobName)
-                )
-                .ProtectKeysWithAzureKeyVault(
-                    keyIdentifier: keyUri,
-                    keyResolverFactory: static serviceProvider =>
-                        new StaticKeyResolver(
-                            keyEncryptionKey: serviceProvider
-                                .GetRequiredService<IAzureClientFactory<CryptographyClient>>()
-                                .CreateClient(name: ClientName)
-                        )
-                )
-                .SetApplicationName(applicationName: applicationName)
-                .UseCryptographicAlgorithms(configuration: new() {
-                    EncryptionAlgorithm = EncryptionAlgorithm.AES_256_GCM,
-                });
-        }
-
-        services
-            .AddHealthChecks()
-            .AddCheck<DataProtectionHealthCheck>(name: ClientName);
-
-        return isConfigured;
-    }
-    public static bool TryAddDataProtection(
-        this IServiceCollection services,
-        string applicationName,
-        IConfiguration configuration,
-        string sectionKey = "DataProtection"
-    ) =>
-        services.TryAddDataProtection(
-            applicationName: applicationName,
-            configurationSection: configuration.GetSection(key: sectionKey)
-        );
     public static bool TryAddRedisCache(
         this IServiceCollection services,
         IConfigurationSection configurationSection,

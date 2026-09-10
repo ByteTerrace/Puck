@@ -5,6 +5,8 @@ using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
+using Puck.Networking.Peers;
+
 namespace Puck.Cli.Automation;
 
 internal static class WorldProbeCommand {
@@ -37,8 +39,8 @@ internal static class WorldProbeCommand {
             DefaultCloseErrorCode = 0,
             DefaultStreamErrorCode = 0,
             ClientAuthenticationOptions = new SslClientAuthenticationOptions {
-                TargetHost = "puck-peer",
-                ApplicationProtocols = [new SslApplicationProtocol(protocol: "puck-peer")],
+                TargetHost = QuicPeerTransport.ServerName,
+                ApplicationProtocols = [QuicPeerTransport.ApplicationProtocol],
                 ClientCertificates = [certificate],
                 RemoteCertificateValidationCallback = (_, presented, _, _) => ((presented is X509Certificate2 peer) &&
                     CryptographicOperations.FixedTimeEquals(left: peer.PublicKey.ExportSubjectPublicKeyInfo(), right: expectedKey)),

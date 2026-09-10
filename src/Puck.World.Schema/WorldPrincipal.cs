@@ -160,6 +160,29 @@ public readonly record struct WorldPrincipal(PrincipalKind Kind, int Index, stri
     /// refusal to interpolate rather than hand-spell.</summary>
     public const string TokenGrammar = "seat1..seat4|console|world|addon:<name>|peer:<n>:<generation>|document:<id>|group:<id>";
 
+    /// <summary>Determines whether this value is a canonical principal — one <see cref="TryParse"/> itself produces
+    /// from this principal's own <see cref="Describe"/> label.</summary>
+    /// <returns><see langword="true"/> when this principal's own label parses back to this exact value.</returns>
+    /// <remarks>An assembled value carrying a field its kind never sets, or one outside the grammar's range (an
+    /// <see cref="Addon"/> with a non-zero index, a <see cref="Peer"/> with a zero generation, a <see cref="Seat"/>
+    /// past slot three), describes to a label naming a different principal or none at all, and is refused. An
+    /// ingress applies this to a caller-supplied value before treating it as an identity, so a non-canonical
+    /// spelling can never key the grant table beside the canonical one it aliases.</remarks>
+    public bool IsCanonical() => (TryParse(
+        token: Describe(),
+        out var parsed
+    ) && (parsed == this));
+    /// <summary>Parses a principal token (<see cref="TokenGrammar"/>) and requires it to be the exact spelling
+    /// <see cref="Describe"/> produces.</summary>
+    /// <remarks>A case variant or a range-violating index is refused rather than silently normalised. A token
+    /// accepted here always names a principal <see cref="IsCanonical"/> accepts too.</remarks>
+    /// <param name="token">The token to parse.</param>
+    /// <param name="principal">The parsed principal, on success.</param>
+    /// <returns><see langword="true"/> when the token parsed and is that principal's own label.</returns>
+    public static bool TryParseCanonical(ReadOnlySpan<char> token, out WorldPrincipal principal) => (TryParse(
+        token: token,
+        out principal
+    ) && token.SequenceEqual(other: principal.Describe()));
     /// <summary>Parses a principal token (<see cref="TokenGrammar"/>) — shared by
     /// <c>Puck.World.WorldPrincipalJsonConverter</c> and <c>Puck.World.WorldGrantCommandModule</c>'s
     /// <c>world.grant</c>/<c>world.revoke</c> console verbs, so a document-sourced principal (a

@@ -345,7 +345,10 @@ keyed tag row from a field comparison at a body's coupled cell), and `Flow`
 optional edge spill into a scalar state row). A reaction's own read/write
 field and state sets are derived once per install and drive the `world.fields`
 read-back's dependency plan — informational only, since `Step` always executes
-in document order regardless. `IFieldLatticeHost` is the body-position and
+in document order regardless. The ordering test itself is
+`ReadWriteHazard.Conflicts`, the one door the document-side field-program
+compiler in `Puck.World.Schema` also resolves its dependency edges through, so
+an edge means the same thing on either side. `IFieldLatticeHost` is the body-position and
 state-row seam a step reaches through, so the kernel never allocates a
 per-call delegate.
 
@@ -451,7 +454,9 @@ thread-safe**.
   `PairwiseGravitySolver`, `FastMonopoleGravitySolver`,
   `AdaptiveFmmGravitySolver`.
 - **Inputs and results** — `GravityBody`, `GravityParameters`,
-  `GravitySolveStatistics`, `FastMonopoleOptions`, `AdaptiveFmmOptions`.
+  `GravitySolveStatistics`, `OctreeGravityOptions` (the shared leaf/depth/angle
+  validation both octree option sets derive their controls from),
+  `FastMonopoleOptions`, `AdaptiveFmmOptions`.
 - **Contact geometry** — `FixedBodyColliderVolume`, `FixedDynamicBodyContacts`,
   `FixedStaticCollider`, `FixedContactPush`.
 - **The contact seam** — `IContactField`, `ContactResolution`,

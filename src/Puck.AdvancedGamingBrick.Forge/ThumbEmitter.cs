@@ -1,3 +1,5 @@
+using Puck.GamingBricks.Forge;
+
 namespace Puck.AdvancedGamingBrick.Forge;
 
 /// <summary>Specifies one of the eight low registers (r0–r7) every 16-bit Thumb data/memory format can address
@@ -64,22 +66,25 @@ public enum LowRegisterMask : byte {
 /// </summary>
 public sealed class ThumbEmitter {
     private readonly List<byte> m_code = [];
-    private readonly Dictionary<int, int> m_labelOffsets = [];
+    private readonly LabelTable m_labels = new();
     private readonly List<(int PatchOffset, int Label)> m_shortBranchFixups = [];
     private readonly List<(int PatchOffset, int Label)> m_longBranchFixups = [];
     private readonly List<(int PatchOffset, int Label)> m_callFixups = [];
     private readonly List<(int PatchOffset, uint Value)> m_pendingLiterals = [];
-
-    private int m_nextLabel;
 
     /// <summary>The current byte length of the emitted stream (used to place data that trails the routine).</summary>
     public int Length => m_code.Count;
 
     // --- Labels. --------------------------------------------------------------------------------------------------------
     /// <summary>Allocates an unbound label id; bind it with <see cref="MarkLabel"/> at the target instruction.</summary>
-    public int NewLabel() => m_nextLabel++;
+    public int NewLabel() =>
+        m_labels.New();
     /// <summary>Binds <paramref name="label"/> to the current position in the stream.</summary>
-    public void MarkLabel(int label) => m_labelOffsets[label] = m_code.Count;
+    public void MarkLabel(int label) =>
+        m_labels.Mark(
+            label: label,
+            offset: m_code.Count
+        );
     // --- Format 1: shift by immediate (also the canonical low-register mov). --------------------------------------------
     /// <summary>&lt;shift&gt; rd, rs, #amount — shift a low register by an immediate. Per the architecture, an
     /// <paramref name="amount"/> of 0 means "shift by 32" for <see cref="ThumbShift.LogicalRight"/> and
@@ -300,7 +305,7 @@ public sealed class ThumbEmitter {
 
     private void ResolveShortBranches() {
         foreach (var (patchOffset, label) in m_shortBranchFixups) {
-            var delta = (ResolveLabel(kind: "b<cond>", label: label) - (patchOffset + 4));
+            var delta = (m_labels.Resolve(kind: "b<cond>", label: label) - (patchOffset + 4));
             var halfSteps = (delta >> 1);
 
             if ((halfSteps < -128) || (halfSteps > 127)) {
@@ -312,7 +317,7 @@ public sealed class ThumbEmitter {
     }
     private void ResolveLongBranches() {
         foreach (var (patchOffset, label) in m_longBranchFixups) {
-            var delta = (ResolveLabel(kind: "b", label: label) - (patchOffset + 4));
+            var delta = (m_labels.Resolve(kind: "b", label: label) - (patchOffset + 4));
             var halfSteps = (delta >> 1);
 
             if ((halfSteps < -1024) || (halfSteps > 1023)) {
@@ -325,7 +330,7 @@ public sealed class ThumbEmitter {
     }
     private void ResolveCalls() {
         foreach (var (patchOffset, label) in m_callFixups) {
-            var delta = (ResolveLabel(kind: "bl", label: label) - (patchOffset + 4));
+            var delta = (m_labels.Resolve(kind: "bl", label: label) - (patchOffset + 4));
 
             if ((delta < -0x400000) || (delta > 0x3FFFFE)) {
                 throw new InvalidOperationException(message: $"A bl delta {delta} exceeds the ±4 MiB reach.");
@@ -339,13 +344,6 @@ public sealed class ThumbEmitter {
             m_code[(patchOffset + 2)] = ((byte)(low & 0xFF));
             m_code[(patchOffset + 3)] = ((byte)(0xF8 | ((low >> 8) & 0x07)));
         }
-    }
-    private int ResolveLabel(string kind, int label) {
-        if (!m_labelOffsets.TryGetValue(key: label, value: out var target)) {
-            throw new InvalidOperationException(message: $"{kind} targets an unbound label {label}.");
-        }
-
-        return target;
     }
     private void EmitHalfWord(ushort value) {
         m_code.Add(item: ((byte)(value & 0xFF)));

@@ -7,14 +7,12 @@ using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Puck.Azure.Functions.Utilities;
 
 namespace Puck.Azure.Functions.Middleware;
 
 public sealed class AuthorizationMiddleware(
     ILogger<AuthorizationMiddleware> logger
-) : IFunctionsWorkerMiddleware
-{
+) : IFunctionsWorkerMiddleware {
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next) {
         try {
             var httpContext = context.GetHttpContext()!;
@@ -24,7 +22,7 @@ public sealed class AuthorizationMiddleware(
                 httpContext.User = authenticateResult.Principal;
 
                 var instanceServices = context.InstanceServices;
-                var clientAssertionCredential = instanceServices.GetKeyedService<TokenCredential>(serviceKey: Constants.ClientAssertionCredentialKey);
+                var clientAssertionCredential = instanceServices.GetKeyedService<TokenCredential>(serviceKey: IdentityUtilities.ClientAssertionCredentialKey);
                 var onBehalfOfOptions = httpContext.RequestServices.GetService<IOptions<OnBehalfOfOptions>>();
 
                 if ((clientAssertionCredential is not null) && (onBehalfOfOptions is not null)) {
@@ -37,12 +35,10 @@ public sealed class AuthorizationMiddleware(
                 }
 
                 await next(context: context);
-            }
-            else {
+            } else {
                 httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             logger.LogError(
                 exception: e,
                 message: "Unhandled error occurred during Authorization middleware execution."

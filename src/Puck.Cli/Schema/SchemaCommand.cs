@@ -133,9 +133,10 @@ internal static class SchemaCommand {
 
         return (root, sections, common, sectionsDirectory);
     }
+
     // Every src/<project>/Assets/Shaders tree is a shipped shader asset tree (the shared shader recipe ships its
     // manifests beside its bytecode), so their manifests are the extension vocabulary the runtime catalog sees.
-    private static List<WorldSchema.PostRenderExtensionSchema> LoadPostRenderExtensions(string repositoryRoot) {
+    internal static List<WorldSchema.PostRenderExtensionSchema> LoadPostRenderExtensions(string repositoryRoot) {
         var extensions = new List<WorldSchema.PostRenderExtensionSchema>();
         var seen = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
@@ -155,6 +156,7 @@ internal static class SchemaCommand {
 
         return extensions;
     }
+
     private static string ToNativePath(string relativePath) =>
         relativePath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/');
     private static int Write(SchemaFile root, SchemaFile projection, SchemaFile silo, IReadOnlyList<SchemaFile> sections, SchemaFile common, string sectionsDirectory) {

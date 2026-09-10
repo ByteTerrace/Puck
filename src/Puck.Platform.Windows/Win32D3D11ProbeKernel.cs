@@ -182,7 +182,10 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
                     throw new ArgumentException(message: "a probe kernel output ring needs at least two shared targets.", paramName: nameof(request));
                 }
 
-                var format = ToDxgiFormat(format: declaredOutput.TargetFormat);
+                var format = Win32SurfaceFormats.ToDxgiFormat(
+                    format: declaredOutput.TargetFormat,
+                    role: "probe output"
+                );
                 var outputDescription = new D3D11_TEXTURE2D_DESC {
                     Width = checked((uint)declaredOutput.Width),
                     Height = checked((uint)declaredOutput.Height),
@@ -497,11 +500,6 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
             Release(value: code);
         }
     }
-    private static DXGI_FORMAT ToDxgiFormat(SurfaceFormat format) => (format switch {
-        SurfaceFormat.R8G8B8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
-        SurfaceFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
-        _ => throw new NotSupportedException(message: $"probe output format {format} is unsupported"),
-    });
     private static void Release<T>(T* value) where T : unmanaged {
         if (value is not null) {
             _ = ((IUnknown*)value)->Release();

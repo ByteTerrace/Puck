@@ -37,18 +37,15 @@ public sealed class QueuedMachineWorker : IDisposable {
     private readonly int m_audioSampleRate;
     private readonly int m_frameByteLength;
     private readonly int m_height;
+    private readonly QueuedWorkerLifecycle<WorkItem> m_lifecycle;
     private readonly int m_maximumPendingSteps;
     private readonly int m_width;
-    private readonly Queue<WorkItem> m_work;
     private readonly string m_workerName;
 
-    private bool m_acceptingWork;
     private int m_audioFrameCount;
     private int m_audioReadFrame;
     private int m_audioWriteFrame;
-    private long m_backpressureEvents;
     private nint m_boundSourceView;
-    private long m_completedSteps;
     private IQueuedMachineCore? m_core;
     private ulong m_cycleRemainder;
     private int m_disposed;
@@ -65,12 +62,9 @@ public sealed class QueuedMachineWorker : IDisposable {
     private byte[] m_rgbaBack;
     private byte[] m_rgbaFront;
     private byte[] m_rgbaSpare;
-    private long m_submittedSteps;
     private MachineTimeTravel<MachinePadState>? m_timeTravel;
     private IGpuSurfaceUpload? m_upload;
     private byte[]? m_uploadingFrame;
-    private Thread? m_worker;
-    private Exception? m_workerFault;
 
     private static readonly Vector128<byte> RepackShuffle = Vector128.Create(
         e0: ((byte)2),
@@ -94,9 +88,6 @@ public sealed class QueuedMachineWorker : IDisposable {
     private readonly Lock m_frameLock = new();
     private readonly Lock m_lifecycleLock = new();
     private readonly Lock m_uploadLock = new();
-    // Condition variable, not a plain gate: Monitor.Wait/Pulse require an object monitor,
-    // which System.Threading.Lock refuses (CS9216).
-    private readonly object m_workLock = new();
     private readonly Lock m_audioLock = new();
     private long m_publishedFrameVersion = -1L;
 
@@ -137,7 +128,11 @@ public sealed class QueuedMachineWorker : IDisposable {
             val2: 1
         ); // one emulated second of stereo frames, unused (empty ring) while detached
         m_workerName = workerName;
-        m_work = new Queue<WorkItem>(capacity: (maximumPendingSteps + 1));
+        m_lifecycle = new QueuedWorkerLifecycle<WorkItem>(
+            maximumPendingSteps: maximumPendingSteps,
+            role: "worker",
+            workerName: workerName
+        );
         m_audioRing = ((audioSampleRate > 0)
             ? new short[(m_audioCapacityFrames * 2)]
             : []
@@ -154,21 +149,11 @@ public sealed class QueuedMachineWorker : IDisposable {
     public int AudioSampleRate =>
         m_audioSampleRate;
     /// <summary>Gets the number of submissions that waited for capacity since the current core was attached.</summary>
-    public long BackpressureEvents {
-        get {
-            lock (m_workLock) {
-                return m_backpressureEvents;
-            }
-        }
-    }
+    public long BackpressureEvents =>
+        m_lifecycle.BackpressureEvents;
     /// <summary>Gets the number of accepted segments whose emulation has completed.</summary>
-    public long CompletedSteps {
-        get {
-            lock (m_workLock) {
-                return m_completedSteps;
-            }
-        }
-    }
+    public long CompletedSteps =>
+        m_lifecycle.CompletedSteps;
     /// <summary>Gets the light the framebuffer emits — its average color, normalized 0..1.</summary>
     public Vector3 EmittedLight {
         get {
@@ -201,27 +186,11 @@ public sealed class QueuedMachineWorker : IDisposable {
     /// device loss).</summary>
     public nint NativeImageViewHandle => m_boundSourceView;
     /// <summary>Gets the number of accepted segments not yet completed, including one currently executing.</summary>
-    public long PendingSteps {
-        get {
-            lock (m_workLock) {
-                return Math.Max(
-                    val1: 0L,
-                    val2: (m_submittedSteps - m_completedSteps)
-                );
-            }
-        }
-    }
+    public long PendingSteps =>
+        m_lifecycle.PendingSteps;
     /// <summary>Gets a worker fault description, or <see langword="null"/> while the queue is healthy.</summary>
-    public string? QueueFault {
-        get {
-            lock (m_workLock) {
-                return ((m_workerFault is { } fault)
-                    ? $"{fault.GetType().Name}: {fault.Message}"
-                    : null
-                );
-            }
-        }
-    }
+    public string? QueueFault =>
+        m_lifecycle.Fault;
     /// <summary>Gets a one-instant read of the time-travel state (marshaled onto the worker thread).</summary>
     public TimeTravelStatus TimeTravelStatus =>
         RunTimeTravel(
@@ -229,37 +198,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             op: TimeTravelOp.Status
         ).Status;
 
-    // Stop accepting, append an ordered stop marker so the worker drains every already-accepted tick/input and flush item
-    // before it acknowledges shutdown (load/eject/dispose never discard deterministic history), then join it. The core
-    // survives: lending keeps it, detaching disposes it.
-    private void StopWorker() {
-        var worker = m_worker;
-
-        if (worker is null) {
-            return;
-        }
-
-        using var completion = new ManualResetEventSlim(initialState: false);
-        var queued = false;
-
-        lock (m_workLock) {
-            m_acceptingWork = false;
-            Monitor.PulseAll(obj: m_workLock);
-
-            if (m_workerFault is null) {
-                m_work.Enqueue(item: WorkItem.Stop(completion: completion));
-                Monitor.Pulse(obj: m_workLock);
-                queued = true;
-            }
-        }
-
-        if (queued) {
-            completion.Wait();
-        }
-
-        worker.Join();
-        m_worker = null;
-    }
     // Stops the worker and disposes the core (a forced final save flush rides its Dispose). A lent core is severed from
     // its link first, so the link never steps a core that is being torn down.
     private void DetachCore() {
@@ -271,7 +209,10 @@ public sealed class QueuedMachineWorker : IDisposable {
             lender?.SeverLink();
         }
 
-        StopWorker();
+        // The stop appends an ordered marker, so the worker drains every already-accepted tick/input and flush item
+        // before it acknowledges shutdown (load/eject/dispose never discard deterministic history). The core survives
+        // it: lending keeps it, detaching disposes it below.
+        m_lifecycle.Stop();
 
         if (m_timeTravel is { } timeTravel) {
             m_timeTravel = null;
@@ -299,74 +240,20 @@ public sealed class QueuedMachineWorker : IDisposable {
             }
         } while (written == scratch.Length);
     }
-    private void DrainWorker() {
-        using var completion = new ManualResetEventSlim(initialState: false);
-
-        lock (m_workLock) {
-            if (
-                (m_workerFault is not null) ||
-                !m_acceptingWork
-            ) {
-                ThrowIfWorkerFaultedLocked();
-
-                return;
-            }
-
-            m_work.Enqueue(item: WorkItem.Barrier(completion: completion));
-            Monitor.Pulse(obj: m_workLock);
-        }
-
-        completion.Wait();
-        ThrowIfWorkerFaulted();
-    }
     private QueuedMachineSubmission EnqueueStep(ulong deltaTicks, in MachinePadState input, bool forceStage) {
         if (
             (0 != Volatile.Read(location: ref m_disposed)) ||
-            (m_worker is null) ||
+            (m_lifecycle.Worker is null) ||
             (0UL == deltaTicks)
         ) {
             return QueuedMachineSubmission.Rejected;
         }
 
-        var backpressured = false;
-
-        lock (m_workLock) {
-            while (
-                m_acceptingWork &&
-                (m_workerFault is null) &&
-                ((m_submittedSteps - m_completedSteps) >= m_maximumPendingSteps)
-            ) {
-                if (!backpressured) {
-                    backpressured = true;
-
-                    if (m_backpressureEvents < long.MaxValue) {
-                        ++m_backpressureEvents;
-                    }
-                }
-
-                Monitor.Wait(obj: m_workLock);
-            }
-
-            if (
-                !m_acceptingWork ||
-                (m_workerFault is not null)
-            ) {
-                return QueuedMachineSubmission.Rejected;
-            }
-
-            m_work.Enqueue(item: WorkItem.Step(
-                deltaTicks: deltaTicks,
-                forceStage: forceStage,
-                input: in input
-            ));
-            ++m_submittedSteps;
-            Monitor.Pulse(obj: m_workLock);
-        }
-
-        return (backpressured
-            ? QueuedMachineSubmission.AcceptedAfterBackpressure
-            : QueuedMachineSubmission.Accepted
-        );
+        return m_lifecycle.Submit(item: WorkItem.Step(
+            deltaTicks: deltaTicks,
+            forceStage: forceStage,
+            input: in input
+        ));
     }
     // Executes one marshaled debug memory access on the worker thread, between steps — so a peek observes a coherent
     // inter-instruction snapshot and a poke never lands mid-instruction or races a load/eject. A poke drops the rewind
@@ -573,31 +460,6 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_audioWriteFrame = 0;
         }
     }
-    // Submits one completion-bearing work item to the worker thread and blocks until the worker has run it: the
-    // shared submit-and-wait shape behind the debug-memory, time-travel, save-flush, and reconfigure seams. Returns
-    // whether the item was accepted; a refused item (the queue is closed, or the worker already faulted) never ran, so
-    // each caller decides its own fallback. The caller owns the completion handle's lifetime, so the handle stays alive
-    // until the caller's own scope ends.
-    private bool EnqueueAndWait(in WorkItem item) {
-        var queued = false;
-
-        lock (m_workLock) {
-            if (
-                m_acceptingWork &&
-                (m_workerFault is null)
-            ) {
-                m_work.Enqueue(item: item);
-                Monitor.Pulse(obj: m_workLock);
-                queued = true;
-            }
-        }
-
-        if (queued) {
-            item.Completion?.Wait();
-        }
-
-        return queued;
-    }
     // Marshals one debug memory access onto the worker thread (the single-producer discipline: peek/poke touch the same
     // core arrays/mapper state the worker mutates while stepping, so they must never be driven cross-thread), blocking
     // until it completes between steps. A no-op leaving the default result (peek 0) when no core is attached.
@@ -615,15 +477,13 @@ public sealed class QueuedMachineWorker : IDisposable {
             return;
         }
 
-        var worker = m_worker;
-
-        if (worker is null) {
+        if (m_lifecycle.Worker is null) {
             return;
         }
 
         using var completion = new ManualResetEventSlim(initialState: false);
 
-        _ = EnqueueAndWait(item: WorkItem.ForMemory(
+        _ = m_lifecycle.EnqueueAndWait(item: WorkItem.ForMemory(
             completion: completion,
             request: request
         ));
@@ -633,15 +493,14 @@ public sealed class QueuedMachineWorker : IDisposable {
     // status when no core is attached.
     private TimeTravelRequest RunTimeTravel(TimeTravelOp op, int arg) {
         var request = new TimeTravelRequest { Arg = arg, Op = op };
-        var worker = m_worker;
 
-        if (worker is null) {
+        if (m_lifecycle.Worker is null) {
             return request;
         }
 
         using var completion = new ManualResetEventSlim(initialState: false);
 
-        _ = EnqueueAndWait(item: WorkItem.ForTimeTravel(
+        _ = m_lifecycle.EnqueueAndWait(item: WorkItem.ForTimeTravel(
             completion: completion,
             request: request
         ));
@@ -691,28 +550,11 @@ public sealed class QueuedMachineWorker : IDisposable {
     }
     // A fresh attach resets the queue counters; resuming a returned core keeps them, so a host's step count survives a
     // cable link rather than appearing to reboot the machine. Either way the pending window reopens empty.
-    private void StartWorker(IQueuedMachineCore core, bool resetCounters = true) {
-        lock (m_workLock) {
-            m_work.Clear();
-            m_workerFault = null;
-
-            if (resetCounters) {
-                m_submittedSteps = 0L;
-                m_completedSteps = 0L;
-                m_backpressureEvents = 0L;
-            } else {
-                m_submittedSteps = m_completedSteps;
-            }
-
-            m_acceptingWork = true;
-        }
-
-        m_worker = new Thread(start: () => WorkerLoop(core: core)) {
-            IsBackground = true,
-            Name = m_workerName,
-        };
-        m_worker.Start();
-    }
+    private void StartWorker(IQueuedMachineCore core, bool resetCounters = true) =>
+        m_lifecycle.Start(
+            body: () => WorkerLoop(core: core),
+            resetCounters: resetCounters
+        );
     // Consume a tick budget against the exact integer accumulator and return the machine-cycle budget it buys under the
     // core's current rate. Carried on the worker thread so a rate that tracks emulated state (a clock-multiplier latch) is
     // read consistently with the cycles it gates.
@@ -723,31 +565,9 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         return (scaled / EngineTicks.PerSecond);
     }
-    private WorkItem TakeWork() {
-        lock (m_workLock) {
-            while (m_work.Count == 0) {
-                Monitor.Wait(obj: m_workLock);
-            }
-
-            return m_work.Dequeue();
-        }
-    }
     private void ThrowIfLent(string operation) {
         if (m_lent) {
             throw new InvalidOperationException(message: $"The {m_workerName} core is lent to a cable link; sever the link before attempting to {operation} it.");
-        }
-    }
-    private void ThrowIfWorkerFaulted() {
-        lock (m_workLock) {
-            ThrowIfWorkerFaultedLocked();
-        }
-    }
-    private void ThrowIfWorkerFaultedLocked() {
-        if (m_workerFault is { } fault) {
-            throw new InvalidOperationException(
-                innerException: fault,
-                message: $"The {m_workerName} worker faulted."
-            );
         }
     }
     private void WorkerLoop(IQueuedMachineCore core) {
@@ -757,7 +577,7 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         try {
             while (true) {
-                current = TakeWork();
+                current = m_lifecycle.TakeWork();
 
                 switch (current.Kind) {
                     case WorkKind.Step:
@@ -811,13 +631,10 @@ public sealed class QueuedMachineWorker : IDisposable {
                             stagedNativeFrame = nativeFrame;
                         }
 
-                        lock (m_workLock) {
-                            ++m_completedSteps;
-                            Monitor.PulseAll(obj: m_workLock);
-                        }
+                        m_lifecycle.CompleteStep();
 
-                        // A3 fix: the interval means native frames, not submitted work items — one native-frame count that
-                        // is independent of how many exact segments each frame took.
+                        // The interval means native frames, not submitted work items — one native-frame count that is
+                        // independent of how many exact segments each frame took.
                         if ((nativeFrame - lastFlushNativeFrame) >= SaveFlushIntervalFrames) {
                             lastFlushNativeFrame = nativeFrame;
                             core.FlushSave(force: false);
@@ -859,20 +676,10 @@ public sealed class QueuedMachineWorker : IDisposable {
                 }
             }
         } catch (Exception exception) {
-            current.Completion?.Set();
-
-            lock (m_workLock) {
-                m_workerFault = exception;
-                m_acceptingWork = false;
-
-                while (m_work.TryDequeue(result: out var abandoned)) {
-                    abandoned.Completion?.Set();
-                }
-
-                Monitor.PulseAll(obj: m_workLock);
-            }
-
-            Console.Error.WriteLine(value: $"[{m_workerName}] worker stopped ({exception.GetType().Name}: {exception.Message})");
+            m_lifecycle.FaultWith(
+                current: current,
+                exception: exception
+            );
         }
     }
 
@@ -916,7 +723,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             return;
         }
 
-        var worker = m_worker;
+        var worker = m_lifecycle.Worker;
 
         if (worker is null) {
             m_core?.FlushSave(force: force);
@@ -926,11 +733,11 @@ public sealed class QueuedMachineWorker : IDisposable {
 
         using var completion = new ManualResetEventSlim(initialState: false);
 
-        if (EnqueueAndWait(item: WorkItem.Flush(
+        if (m_lifecycle.EnqueueAndWait(item: WorkItem.Flush(
             completion: completion,
             force: force
         ))) {
-            ThrowIfWorkerFaulted();
+            m_lifecycle.ThrowIfFaulted();
         } else {
             worker.Join();
             m_core?.FlushSave(force: force);
@@ -986,7 +793,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 return null;
             }
 
-            StopWorker();
+            m_lifecycle.Stop();
 
             if (m_timeTravel is { } timeTravel) {
                 m_timeTravel = null;
@@ -1033,10 +840,7 @@ public sealed class QueuedMachineWorker : IDisposable {
             m_lentStagedNativeFrame = nativeFrame;
         }
 
-        lock (m_workLock) {
-            ++m_completedSteps;
-            Monitor.PulseAll(obj: m_workLock);
-        }
+        m_lifecycle.CompleteStep();
 
         if ((nativeFrame - m_lentFlushNativeFrame) >= SaveFlushIntervalFrames) {
             m_lentFlushNativeFrame = nativeFrame;
@@ -1256,15 +1060,13 @@ public sealed class QueuedMachineWorker : IDisposable {
             return (Ok: request.Ok, Reason: request.Reason);
         }
 
-        var worker = m_worker;
-
-        if (worker is null) {
+        if (m_lifecycle.Worker is null) {
             return (Ok: false, Reason: "no machine to reconfigure");
         }
 
         using var completion = new ManualResetEventSlim(initialState: false);
 
-        _ = EnqueueAndWait(item: WorkItem.ForReconfigure(
+        _ = m_lifecycle.EnqueueAndWait(item: WorkItem.ForReconfigure(
             completion: completion,
             request: request
         ));
@@ -1315,12 +1117,12 @@ public sealed class QueuedMachineWorker : IDisposable {
             forceStage: true,
             input: in input
         ) == QueuedMachineSubmission.Rejected) {
-            ThrowIfWorkerFaulted();
+            m_lifecycle.ThrowIfFaulted();
 
             return false;
         }
 
-        DrainWorker();
+        m_lifecycle.Drain();
 
         return true;
     }
@@ -1385,7 +1187,7 @@ public sealed class QueuedMachineWorker : IDisposable {
         TimeTravelRequest? TimeTravel,
         MemoryRequest? Memory,
         ReconfigureRequest? Reconfigure
-    ) {
+    ) : IQueuedWorkItem<WorkItem> {
         public static WorkItem Barrier(ManualResetEventSlim completion) =>
             new(
                 Completion: completion,

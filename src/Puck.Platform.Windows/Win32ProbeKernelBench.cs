@@ -3,7 +3,6 @@ using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
 using Puck.Platform.Probes;
 using Windows.Win32.Graphics.Direct3D11;
-using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Puck.Platform.Windows;
 
@@ -312,7 +311,10 @@ internal sealed unsafe class Win32ProbeKernelBench {
                     }
 
                     var handles = ringInput.SharedTargetHandles;
-                    var format = ToDxgiFormat(format: ringInput.Format);
+                    var format = Win32SurfaceFormats.ToDxgiFormat(
+                        format: ringInput.Format,
+                        role: "probe ring"
+                    );
                     var openedTextures = new nint[handles.Count];
                     var openedViews = new nint[handles.Count];
 
@@ -389,11 +391,5 @@ internal sealed unsafe class Win32ProbeKernelBench {
                 _ = Interlocked.Exchange(location1: ref m_pendingConstants, value: constants.ToArray());
             }
         }
-
-        private static DXGI_FORMAT ToDxgiFormat(SurfaceFormat format) => (format switch {
-            SurfaceFormat.R8G8B8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
-            SurfaceFormat.B8G8R8A8Unorm => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM,
-            _ => throw new NotSupportedException(message: $"probe ring format {format} is unsupported"),
-        });
     }
 }

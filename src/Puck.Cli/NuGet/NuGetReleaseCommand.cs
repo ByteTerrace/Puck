@@ -11,6 +11,8 @@ namespace Puck.Cli.NuGet;
 /// </summary>
 internal static class NuGetReleaseCommand {
     private const string Package = "byteterrace.puck.cli";
+    // nuget.org indexes a push minutes after it accepts it, so the pin waits the index out rather than failing.
+    private const int PinAttempts = 30;
 
     public static Command Gate() {
         var command = new Command(description: "Refuse a release from any ref other than main or the shared version's own tag, or from a commit outside main's history, or at a version tag bound to another commit.", name: "gate");
@@ -133,12 +135,12 @@ internal static class NuGetReleaseCommand {
             Console.WriteLine(value: "The batch does not publish the CLI; no pin to prepare.");
             return 0;
         }
-        for (var attempt = 1; ; attempt++) {
-            try { await PinAsync(version: version); break; } catch (Exception error) when ((attempt < 30)) {
-                Console.Error.WriteLine(value: $"Publication is not installable yet ({error.Message}); attempt {attempt}/30.");
-                await Task.Delay(delay: TimeSpan.FromSeconds(seconds: 10));
-            }
-        }
+        await CliRetry.RetryAsync(
+            action: () => PinAsync(version: version),
+            attempts: PinAttempts,
+            delay: TimeSpan.FromSeconds(seconds: 10),
+            report: static (error, attempt) => $"Publication is not installable yet ({error.Message}); attempt {attempt}/{PinAttempts}."
+        );
         File.WriteAllText(contents: await GitAsync(root, "diff", "--", ".config/dotnet-tools.json"), path: patch);
         return 0;
     }
