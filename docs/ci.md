@@ -11,6 +11,14 @@ validation-only run.
 All external actions are pinned to full commit SHAs, as required by this
 repository's Actions policy. Keep the adjacent version comments when updating
 the pins; a version tag by itself prevents the workflow from starting.
+The composite actions under `.github/actions/` are the only steps that run before
+a CLI exists: `setup-dotnet` installs the SDK, `setup-dxc` and `setup-quic` the
+pinned native dependencies, `setup-puck` the run's candidate CLI, and
+`azure-login` signs in. The SDK pin, the NuGet cache inputs, the checksums, and
+the OIDC federation therefore each live in one place. Mapping keys in
+workflow and action files are alphabetized, as in the bicep, and steps carry no
+blank lines between them. Release logic runs as `puck` verbs; a workflow step
+holds a shell script only to glue a container or a step summary.
 
 ## Build and validate
 
@@ -138,12 +146,15 @@ branches are not bypassed. A branch shared by multiple open PRs is left alone.
 Only the trusted submission entry point writes GitHub's job summary; unit tests
 capture reports locally so simulated PR actions cannot appear as real CI actions.
 
-The formatter runs with a read-only token. A separate `workflow_run` job runs
-the SDK-only `build/FormatSubmit.cs` from the default branch and reads the
-artifact as data. Its shared `build/FormatSubmission.cs` policy is also compiled
-by the CLI tests. It checks the producing workflow and successful build job,
-limits artifact size and file count, and accepts only ordinary C# files already
-changed by that PR. The write token never reaches the PR's build or formatter.
+The formatter runs with a read-only token. A separate `workflow_run` job checks
+out the default branch, installs the CLI packed from that checkout through
+`setup-puck`, and runs `puck format submit`, which reads the artifact as data.
+Only default-branch code ever runs with the write token. Its
+`src/Puck.Cli/Format/FormatSubmission.cs` policy is covered by
+`tests/Puck.Cli.Tests/FormatSubmissionTests.cs`. It checks the producing workflow
+and successful build job, limits artifact size and file count, and accepts only
+ordinary C# files already changed by that PR. The write token never reaches the
+PR's build or formatter.
 
 After committing, the submitter explicitly dispatches formatting and Release
 Azure with deployment disabled for the updated branch. Azure's shared graph
@@ -181,7 +192,8 @@ It prepares the validated artifact and patch without committing or pushing.
 
 ## Shared repository tooling
 
-Repository tools, verification projects, and C# file apps share `build/RepositoryPaths.cs`.
+Repository tools, verification projects, and the Azure bootstrap file app share
+`build/RepositoryPaths.cs`.
 It finds the checkout by walking from the executable directory, then the working
 directory, to `Puck.slnx`. Runtime data lookup therefore works with CI's mapped
 compiler source paths; it never treats a PDB path such as `/_/` as a disk path.
@@ -224,51 +236,41 @@ It participates in the shared version and selectable package batches. Its tool
 payload contains its runtime dependencies; installing it does not require
 publishing every Puck library in the same batch.
 
-The official CLI version CI consumes lives in `.config/dotnet-tools.json`.
-The default `setup-puck` action installs that exact package into an isolated tool
-directory using the repository's `nuget.config`, then adds it to the job's PATH.
-A failed official restore fails the job. CI never silently replaces a missing
-or broken published package with a local build. Release workflows explicitly
-select `artifact: nuget-packages` instead: every consumer installs the candidate
-that the run's producer has already built. `Toolchain.cs -- install-candidate`
-uses an exclusive local feed and private package cache so a published package
-with the same version cannot replace those bytes. Azure automation refuses to
-bootstrap a missing CLI on a GitHub runner.
+There is no CI CLI pin: every job installs the run's own candidate through the
+`setup-puck` composite action, which takes either `artifact` (this run's
+`nuget-packages`, downloaded and never compiled) or `directory` (a local package
+directory), and with neither packs `src/Puck.Cli` from the checkout. It installs
+into the fresh tool directory `.tmp/puck-ci`, refusing an existing one, checks
+the installed `puck --version` against the package version, and adds it to the
+job's PATH. An exclusive local feed and private package cache keep a published
+package of the same version from replacing those bytes. A failed restore fails
+the job; CI never replaces a missing or broken package with a source build, and
+no consumer recompiles the CLI. `.config/dotnet-tools.json` carries docfx and
+whatever `puck nuget pin` has adopted; no job installs the CLI from it.
 
-Before the first official release, `.config/puck-bootstrap.json` explicitly
-enables source bootstrap and the tool manifest has no Puck entry. In that state,
-`build/Toolchain.cs` restores and packs the CLI directly with the SDK, then
-installs the local package. No Puck command is required to manufacture the first
-CLI. A missing pin with bootstrap disabled is an error.
+The one job without an installed CLI is the artifact producer, which invokes the
+assembly it just built (`dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll`)
+for `nuget pack` and `artifacts capture`.
 
 **Verify package installation** (`pack.yml`) installs the exact candidate package on clean Windows and Linux
 runners and exercises command dispatch, native-backed search, declarations,
-and a Roslyn workspace query. Publishing waits for both installation gates.
-After a batch containing the CLI is uploaded, `publish.yml` verifies NuGet.org
-installation and emits a `puck-cli-pin` patch artifact. Apply that patch in the
-next source change to adopt the release and disable initial bootstrap. The same
-operation can be run locally after the package becomes available:
+and a Roslyn workspace query through `puck nuget smoke`. Publishing waits for
+both installation gates. After a batch containing the CLI is uploaded,
+`publish.yml` verifies NuGet.org installation and emits a `puck-cli-pin` patch
+artifact holding the tool-manifest diff; apply it in the next source change to
+adopt the release. The same operation runs locally once the package is available:
 
 ```sh
-dotnet run -c Release --file build/Toolchain.cs -- pin 0.1.0-alpha
+puck nuget pin 0.1.0-alpha
 ```
 
-The command verifies installation before editing the manifest or bootstrap
-policy. It does not upload packages or commit files. Explicit artifact consumers
-use their run's candidate CLI; standalone setup uses the adopted official pin.
-The candidate adopts the shared version without changing that pin.
+It installs the published version in an empty tool path to prove it before
+editing the manifest, and uploads and commits nothing.
 
 Source-dependent operations use the candidate CLI explicitly. Schema and name
 registry checks and Azure application assembly consume the producer's candidate
 package, and the silo Docker build publishes its Linux composer.
 An older CLI's embedded world model must not validate a new checkout's schema.
-
-For local use after a pin is committed, run `dotnet tool restore --configfile
-nuget.config`, then `dotnet tool run puck -- <command>`. Before that first pin,
-`dotnet run -c Release --file build/Toolchain.cs -- setup` installs a local CLI
-at `.tmp/puck-ci/puck` (`puck.exe` on Windows).
-Both `setup` and `candidate` accept an optional fresh tool-directory argument for
-isolated local checks; they never replace an existing installation directory.
 
 ## Publish
 
@@ -296,8 +298,9 @@ gh workflow run publish.yml --ref main -f packages=all -F publish=true
 ```
 
 Every run builds, tests, packs, and validates documentation for its own commit.
-Preparation installs the candidate CLI from the package batch it already
-downloaded. Packing still checks the full opted-in package set. `puck nuget prepare`
+The `prepare` job checks out full history, installs the candidate CLI from the
+package batch it already downloaded, and runs `puck nuget gate` before
+`puck nuget prepare`. Packing still checks the full opted-in package set. `puck nuget prepare`
 then selects exactly the requested IDs from those artifacts. An omitted internal
 dependency must already be available on NuGet.org at the shared version; otherwise
 preparation fails with the missing ID. Include it and its dependencies, or use
@@ -330,7 +333,11 @@ gh workflow run publish.yml --ref v1.2.0 -f packages=ByteTerrace.Puck.Assets -F 
 ```
 
 Only `main` or that version's tag can release, and its commit must belong to
-`main`'s history. Protect `v*` tags against modification and deletion. NuGet
+`main`'s history; `puck nuget gate` enforces that, `puck nuget tag` binds or
+verifies the tag, `puck nuget release` records the batch, and
+`puck nuget pin-published` waits for the published CLI before pinning it.
+Protect `v*` tags against
+modification and deletion. NuGet
 uploads are not transactional: successful uploads remain if a later upload
 fails. Retrying skips duplicate versions and explicitly retries symbol uploads.
 An existing GitHub Release does not block another batch; each completed batch
@@ -367,12 +374,13 @@ documentation artifact; Azure deploys the website. Desktop builds are downloadab
 
 ## Azure production deployment
 
-`build/Azure.cs` owns cloud orchestration. Run it from the repository root with
-`dotnet run -c Release --file build/Azure.cs -- <command>`; `--help` lists its
-operations. It invokes Puck CLI for world preparation, documentation builds,
-bundle manifests, and QUIC probes. `bootstrap.cs` remains a separate identity-team
-operation. The workflows contain no PowerShell deployment scripts.
-`build/InstallDxc.cs` installs the checksum-pinned compiler before source builds.
+`puck azure` owns cloud orchestration. Run it from the repository root, where it
+reads the repository's artifact files; `puck azure --help` lists its sub-verbs and
+`puck azure <verb> --help` their typed options, `--commit` taking a full 40-hex
+lowercase SHA. It reaches the world preparation, documentation build, bundle
+manifest, and QUIC probe verbs in process. `bootstrap.cs` remains a separate
+identity-team operation. The workflows contain no PowerShell deployment scripts.
+The `setup-dxc` action installs the checksum-pinned compiler before source builds.
 
 
 `azure.yml` builds the Functions payload, the existing Storage/Front Door website
@@ -411,7 +419,7 @@ The `Puck` environment's optional `WORLD_MCP` variable supplies the JSON policy
 document described by [remote MCP deployment](../src/Puck.Azure.Resources/README.md#remote-mcp).
 Both infrastructure compilation and production reconciliation receive that same
 policy. An absent variable disables MCP; it is configuration, not a secret.
-After deployment, a signed-in operator can run `build/Azure.cs -- test-world-mcp`
+After deployment, a signed-in operator can run `puck azure test-world-mcp`
 to verify public TLS, discovery, user authentication, Function onboarding, granted
 ARM observations and World reads. This check uses the operator's Azure CLI token;
 CI workload identity cannot substitute for delegated user authorization.
@@ -534,11 +542,13 @@ Release Azure owns the silo release alongside website and Entra reconciliation.
 Runtime verification runs the compiled Entra admission, silo schema, and lifecycle
 recovery laws on Linux. Container verification boots the saved candidate image
 twice to verify checkpoint recovery and QUIC. Deployment uses the existing `zzz`
-identity and production concurrency group. The runner's QUIC installer is a
-checksum-verified C# app for Ubuntu 24.04; the VM's pre-container host bootstrap
-remains separate because it must run before Docker and the runtime are ready.
-`build/Azure.cs -- deploy-world-platform` creates the
-runtime identity and its scoped grants. Its `deploy-world` command publishes composed
+identity and production concurrency group. The runner's QUIC installer is the
+`setup-quic` action, pinned to Microsoft's checksum-verified Ubuntu 24.04 package
+source; the VM's pre-container host bootstrap (`build/Start-WorldSilo.sh`, which
+`puck azure deploy-world` templates) remains separate because it must run before
+Docker and the runtime are ready.
+`puck azure deploy-world-platform` creates the
+runtime identity and its scoped grants. `puck azure deploy-world` publishes composed
 world definitions, deploys the VMSS model and applies it to existing workers.
 The VM extension pulls the immutable image before declaring the release ready.
 The existing process must finish its drain before published content or configuration

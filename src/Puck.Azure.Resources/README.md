@@ -160,8 +160,8 @@ For an existing World platform, apply MCP policy through the shared
 
 ```powershell
 # Set BICEPPARAM_WORLD_MCP to the participant/observation JSON above.
-dotnet run -c Release --file build/Azure.cs -- deploy-world-mcp --plan-only
-dotnet run -c Release --file build/Azure.cs -- deploy-world-mcp
+puck azure deploy-world-mcp --plan-only
+puck azure deploy-world-mcp
 ```
 
 The command resolves the existing API and World identity from deployed outputs,
@@ -187,7 +187,7 @@ versions and dependency order are recorded in [template-specs.json](./template-s
 Publish changed patterns before updating application deployments:
 
 ```powershell
-dotnet run -c Release --file build/Azure.cs -- publish-template-specs
+puck azure publish-template-specs
 ```
 
 Run that command from the repository root after authenticating Azure CLI and

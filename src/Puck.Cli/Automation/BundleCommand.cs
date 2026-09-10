@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -5,8 +6,24 @@ using System.Text.RegularExpressions;
 
 namespace Puck.Cli.Automation;
 
+/// <summary>
+/// <c>puck bundle</c> — the release manifest a deployment bundle carries: every file with its SHA-256, bound to one
+/// commit, so a consumer can prove it deploys exactly what the producer built.
+/// </summary>
 internal static class BundleCommand {
-    internal static int Create(string directory, string commit) {
+    public static Command Create() {
+        var directoryArgument = new Argument<string>(name: "directory") { Description = "The bundle directory." };
+        var commitArgument = new Argument<string>(name: "commit") { Description = "The full lowercase commit SHA the bundle was built from." };
+        var create = new Command(description: "Write release.json over every file in the directory, then verify it.", name: "create") { directoryArgument, commitArgument };
+        var verify = new Command(description: "Verify release.json names this commit and matches every file in the directory.", name: "verify") { directoryArgument, commitArgument };
+        var command = new Command(description: "Create or verify deployment artifact manifests.", name: "bundle") { create, verify };
+
+        create.SetAction(action: parseResult => CreateManifest(commit: parseResult.GetRequiredValue(argument: commitArgument), directory: parseResult.GetRequiredValue(argument: directoryArgument)));
+        verify.SetAction(action: parseResult => VerifyManifest(commit: parseResult.GetRequiredValue(argument: commitArgument), directory: parseResult.GetRequiredValue(argument: directoryArgument)));
+        return command;
+    }
+
+    internal static int CreateManifest(string directory, string commit) {
         ValidateCommit(commit: commit);
         var root = Path.GetFullPath(path: directory);
 
@@ -21,10 +38,10 @@ internal static class BundleCommand {
         }
         var release = new JsonObject { ["commit"] = commit, ["channel"] = "stable", ["files"] = files };
 
-        File.WriteAllText(path: Path.Combine(path1: root, path2: "release.json"), contents: (release.ToJsonString(options: new JsonSerializerOptions { WriteIndented = true }) + "\n"));
-        return Verify(commit: commit, directory: directory);
+        File.WriteAllText(contents: (release.ToJsonString(options: new JsonSerializerOptions { WriteIndented = true }) + "\n"), path: Path.Combine(path1: root, path2: "release.json"));
+        return VerifyManifest(commit: commit, directory: directory);
     }
-    internal static int Verify(string directory, string commit) {
+    internal static int VerifyManifest(string directory, string commit) {
         ValidateCommit(commit: commit);
         var root = Path.GetFullPath(path: directory);
         var manifestPath = Path.Combine(path1: root, path2: "release.json");

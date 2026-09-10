@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text;
 
 namespace Puck.Cli.Architecture;
@@ -15,46 +16,38 @@ namespace Puck.Cli.Architecture;
 internal static class ArchitectureCommand {
     private const string BackendsLayer = "Backends";
     private const string CompositionRootsLayer = "Composition roots";
-    private const string HelpText =
-        """
-        puck architecture — report on the repository's project-layering policy
-
-        Usage: puck architecture [options]
-
-        Options:
-          --configuration <name>  Which build configuration's assemblies to read for the
-                                  friend-set comparison (default: Release).
-          --map                   Print only the layering block, generated from each project's
-                                  own <PuckLayer> declaration, for docs/project-map.md.
-          -h, --help              This text.
-
-        The build-time gate is the authority; this verb explains it. Policy lives in
-        build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
-        """;
     private const string PresentationLayer = "Presentation";
 
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Flag(name: "map").Value(name: "configuration");
+    public static Command Create() {
+        var configurationOption = new Option<string>(name: "--configuration") {
+            DefaultValueFactory = static _ => "Release",
+            Description = "Which build configuration's assemblies to read for the friend-set comparison.",
+        };
+        var mapOption = new Option<bool>(name: "--map") {
+            Description = "Print only the layering block, generated from each project's own <PuckLayer> declaration, for docs/project-map.md.",
+        };
+        var command = new Command(description: """
+            Report on the repository's project-layering policy.
 
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"architecture: {scanner.Error}");
+            The build-time gate is the authority; this verb explains it. Policy lives in
+            build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
+            """, name: "architecture") { configurationOption, mapOption };
 
-            return 2;
-        }
+        command.SetAction(action: parseResult => Run(
+            configuration: parseResult.GetRequiredValue(option: configurationOption),
+            map: parseResult.GetValue(option: mapOption)));
 
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
+        return command;
+    }
 
-            return 0;
-        }
-
+    private static int Run(string configuration, bool map) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
 
         var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
 
-        if (scanner.Has(name: "map")) {
+        if (map) {
             Console.Out.Write(value: RenderLayeringBlock(model: model));
 
             return 0;
@@ -67,7 +60,7 @@ internal static class ArchitectureCommand {
         ReportLayerGraph(failures: failures, model: model, output: output);
         ReportBackendQuarantine(failures: failures, model: model, output: output);
         ReportProfiles(failures: failures, model: model, output: output);
-        ReportFriends(configuration: (scanner.Get(name: "configuration") ?? "Release"), failures: failures, model: model, output: output);
+        ReportFriends(configuration: configuration, failures: failures, model: model, output: output);
         ReportConfigurationSensitivity(model: model, output: output);
 
         Console.Out.Write(value: output.ToString());
@@ -94,7 +87,6 @@ internal static class ArchitectureCommand {
 
         return 1;
     }
-
     /// <summary>
     /// The layering block for docs/project-map.md, GENERATED from each project's own declaration.
     /// </summary>

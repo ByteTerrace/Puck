@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Net;
 using System.Text.Json;
 
@@ -15,60 +16,29 @@ namespace Puck.Cli.Official;
 // origins.
 internal static class OfficialServeCommand {
     private const int DefaultPort = 61102;
-    private const string HelpText =
-        """
-        puck official serve — a minimal static HTTP server over a puck.official.v1 tree
 
-        Usage: puck official serve --tree <dir> [--port 61102]
+    public static Command Create() {
+        var portOption = new Option<int>(name: "--port") { DefaultValueFactory = _ => DefaultPort, Description = "The port to listen on." };
+        var treeOption = new Option<string>(name: "--tree") { Description = "The official tree's root.", Required = true };
+        var command = new Command(description: """
+            A minimal static HTTP server over a puck.official.v1 tree.
 
-        Required:
-          --tree <dir>   the official tree's root
+            Serves every file under <tree> by its path (a channel or builds manifest.json, and every object under
+            objects/sha256/...). Content-Type comes from the enclosing manifest's own per-object contentType when one
+            names the object; Cache-Control is immutable for an object, max-age=60 for a manifest.json. CORS is
+            permissive (Access-Control-Allow-Origin: *). Prints the base URL and blocks until Ctrl+C.
+            """, name: "serve") { portOption, treeOption };
 
-        Options:
-          --port <n>     the port to listen on (default 61102)
-          -h, --help     this text
+        command.SetAction(action: parseResult => Run(port: parseResult.GetRequiredValue(option: portOption), tree: parseResult.GetRequiredValue(option: treeOption)));
 
-        Serves every file under <tree> by its path (a channel or builds manifest.json, and every object under
-        objects/sha256/...). Content-Type comes from the enclosing manifest's own per-object contentType when one
-        names the object; Cache-Control is immutable for an object, max-age=60 for a manifest.json. CORS is
-        permissive (Access-Control-Allow-Origin: *). Prints the base URL and blocks until Ctrl+C.
-        """;
+        return command;
+    }
 
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Value(name: "tree").Value(name: "port");
-
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"official serve: {scanner.Error}");
-
-            return 2;
-        }
-
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
-
-            return 0;
-        }
-
-        var tree = scanner.Get(name: "tree");
-
-        if (tree is null) {
-            Console.Error.WriteLine(value: "official serve: missing required argument(s): --tree.");
-
-            return 2;
-        }
-
+    private static int Run(int port, string tree) {
         var root = Path.GetFullPath(path: tree);
 
         if (!Directory.Exists(path: root)) {
             Console.Error.WriteLine(value: $"official serve: tree directory '{root}' does not exist.");
-
-            return 2;
-        }
-
-        var port = DefaultPort;
-
-        if (scanner.Has(name: "port") && !scanner.TryGetInt(name: "port", value: out port)) {
-            Console.Error.WriteLine(value: $"official serve: --port '{scanner.Get(name: "port")}' is not an integer.");
 
             return 2;
         }
@@ -101,7 +71,7 @@ internal static class OfficialServeCommand {
                 break;
             }
 
-            HandleRequest(context: context, contentTypesByPath: contentTypesByPath, root: root);
+            HandleRequest(contentTypesByPath: contentTypesByPath, context: context, root: root);
         }
 
         return 0;
@@ -121,7 +91,7 @@ internal static class OfficialServeCommand {
 
             var relative = Uri.UnescapeDataString(stringToUnescape: context.Request.Url!.AbsolutePath.TrimStart(trimChar: '/'));
 
-            if (relative.Length == 0 || relative.Contains(value: "..", comparisonType: StringComparison.Ordinal)) {
+            if ((relative.Length == 0) || relative.Contains(comparisonType: StringComparison.Ordinal, value: "..")) {
                 response.StatusCode = ((int)HttpStatusCode.BadRequest);
 
                 return;
@@ -129,7 +99,7 @@ internal static class OfficialServeCommand {
 
             var fullPath = Path.GetFullPath(path: Path.Combine(path1: root, path2: relative));
 
-            if (!fullPath.StartsWith(value: root, comparisonType: StringComparison.Ordinal) || !File.Exists(path: fullPath)) {
+            if (!fullPath.StartsWith(comparisonType: StringComparison.Ordinal, value: root) || !File.Exists(path: fullPath)) {
                 response.StatusCode = ((int)HttpStatusCode.NotFound);
 
                 return;
@@ -138,7 +108,7 @@ internal static class OfficialServeCommand {
             var bytes = File.ReadAllBytes(path: fullPath);
             var isManifest = string.Equals(a: Path.GetFileName(path: fullPath), b: "manifest.json", comparisonType: StringComparison.Ordinal);
 
-            response.ContentType = (contentTypesByPath.TryGetValue(key: relative.Replace(oldChar: '\\', newChar: '/'), value: out var contentType)
+            response.ContentType = (contentTypesByPath.TryGetValue(key: relative.Replace(newChar: '/', oldChar: '\\'), value: out var contentType)
                 ? contentType
                 : (isManifest ? "application/json" : "application/octet-stream"));
             response.AddHeader(name: "Cache-Control", value: (isManifest ? "max-age=60" : "public, max-age=31536000, immutable"));
@@ -172,22 +142,22 @@ internal static class OfficialServeCommand {
                 continue;
             }
 
-            map[manifest.WorldSchemaBundle.Path.Replace(oldChar: '\\', newChar: '/')] = manifest.WorldSchemaBundle.ContentType;
+            map[manifest.WorldSchemaBundle.Path.Replace(newChar: '/', oldChar: '\\')] = manifest.WorldSchemaBundle.ContentType;
 
             foreach (var file in manifest.Engine.Files) {
-                map[file.Path.Replace(oldChar: '\\', newChar: '/')] = file.ContentType;
+                map[file.Path.Replace(newChar: '/', oldChar: '\\')] = file.ContentType;
             }
 
             foreach (var entry in manifest.Documents) {
-                map[entry.Path.Replace(oldChar: '\\', newChar: '/')] = entry.ContentType;
+                map[entry.Path.Replace(newChar: '/', oldChar: '\\')] = entry.ContentType;
             }
 
             foreach (var entry in manifest.Composed) {
-                map[entry.Path.Replace(oldChar: '\\', newChar: '/')] = entry.ContentType;
+                map[entry.Path.Replace(newChar: '/', oldChar: '\\')] = entry.ContentType;
             }
 
             foreach (var entry in manifest.Assets) {
-                map[entry.Path.Replace(oldChar: '\\', newChar: '/')] = entry.ContentType;
+                map[entry.Path.Replace(newChar: '/', oldChar: '\\')] = entry.ContentType;
             }
         }
 

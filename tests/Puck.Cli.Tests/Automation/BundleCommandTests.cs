@@ -14,7 +14,7 @@ public sealed class BundleCommandTests {
             Directory.CreateDirectory(path: Path.Combine(path1: directory, path2: "functions/.azurefunctions"));
             File.WriteAllText(path: Path.Combine(path1: directory, path2: "functions/host.json"), contents: "{}");
             File.WriteAllText(path: Path.Combine(path1: directory, path2: "functions/.azurefunctions/worker.json"), contents: "{}");
-            Assert.Equal(expected: 0, actual: BundleCommand.Create(directory: directory, commit: commit));
+            Assert.Equal(expected: 0, actual: BundleCommand.CreateManifest(commit: commit, directory: directory));
             var path = Path.Combine(path1: directory, path2: "release.json");
             var original = File.ReadAllText(path: path);
             var manifest = JsonNode.Parse(json: original)!;
@@ -22,21 +22,21 @@ public sealed class BundleCommandTests {
             Assert.Equal(expected: 2, actual: manifest["files"]!.AsArray().Count);
             manifest["files"]![0]!["path"] = ((string)manifest["files"]![0]!["path"]!).Replace(newChar: '\\', oldChar: '/');
             File.WriteAllText(path: path, contents: manifest.ToJsonString());
-            Assert.Equal(expected: 0, actual: BundleCommand.Verify(directory: directory, commit: commit));
+            Assert.Equal(expected: 0, actual: BundleCommand.VerifyManifest(commit: commit, directory: directory));
             foreach (var candidate in new[] { "../outside", "functions/../host.json", "release.json", "/outside" }) {
                 manifest = JsonNode.Parse(json: original)!;
                 manifest["files"]![0]!["path"] = candidate;
                 File.WriteAllText(path: path, contents: manifest.ToJsonString());
-                Assert.Throws<InvalidDataException>(() => BundleCommand.Verify(directory: directory, commit: commit));
+                Assert.Throws<InvalidDataException>(() => BundleCommand.VerifyManifest(commit: commit, directory: directory));
             }
             manifest = JsonNode.Parse(json: original)!;
             manifest["files"]![0]!["sha256"] = new string(c: '0', count: 64);
             File.WriteAllText(path: path, contents: manifest.ToJsonString());
-            Assert.Throws<InvalidDataException>(() => BundleCommand.Verify(directory: directory, commit: commit));
+            Assert.Throws<InvalidDataException>(() => BundleCommand.VerifyManifest(commit: commit, directory: directory));
             File.WriteAllText(contents: original, path: path);
-            Assert.Throws<InvalidDataException>(() => BundleCommand.Verify(directory: directory, commit: new string(c: 'b', count: 40)));
+            Assert.Throws<InvalidDataException>(() => BundleCommand.VerifyManifest(commit: new string(c: 'b', count: 40), directory: directory));
             File.WriteAllText(path: Path.Combine(path1: directory, path2: "unlisted"), contents: "extra");
-            Assert.Throws<InvalidDataException>(() => BundleCommand.Verify(directory: directory, commit: commit));
+            Assert.Throws<InvalidDataException>(() => BundleCommand.VerifyManifest(commit: commit, directory: directory));
         } finally { Directory.Delete(path: directory, recursive: true); }
     }
     [InlineData("nuget")]
@@ -45,10 +45,7 @@ public sealed class BundleCommandTests {
     [InlineData("wasm")]
     [InlineData("bundle")]
     [Theory]
-    public async Task HelpDoesNotRunOperationsAsync(string command) {
-        var result = ((command == "nuget") ? await Puck.Cli.NuGet.NuGetCommand.RunAsync(arguments: ["--help"])
-            : await AutomationCommand.RunAsync(command: command, args: ["--help"]));
-
-        Assert.Equal(expected: 0, actual: result);
+    public void HelpDoesNotRunOperations(string command) {
+        Assert.Equal(expected: 0, actual: PuckRootCommand.Invoke(args: [command, "--help"]));
     }
 }

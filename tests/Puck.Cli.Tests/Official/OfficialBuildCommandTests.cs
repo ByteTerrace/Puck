@@ -18,24 +18,26 @@ public sealed class OfficialBuildFixture : IDisposable {
             return Path.Combine(path1: root!, path2: "src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle");
         }
     }
+
     public const string Channel = "dev";
 
-    public string OutRoot { get; }
     public int ExitCode { get; }
-    public string StdOut { get; }
+    public string OutRoot { get; }
     public string StdErr { get; }
+    public string StdOut { get; }
 
     public OfficialBuildFixture() {
         Assert.True(condition: Directory.Exists(path: AppBundlePath), userMessage: $"the read-only AppBundle at {AppBundlePath} does not exist — build the browser first.");
 
         OutRoot = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-official-tests-{Guid.NewGuid():n}");
-        (ExitCode, StdOut, StdErr) = RunCapturingConsole(run: () => OfficialBuildCommand.Run(args: [
+        (ExitCode, StdOut, StdErr) = RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
             "--out", OutRoot,
             "--channel", Channel,
             "--engine", AppBundlePath,
             "--allow-dirty",
-        ]));
+        ]).Invoke());
     }
+
     public void Dispose() {
         try {
             if (Directory.Exists(path: OutRoot)) {
@@ -45,6 +47,7 @@ public sealed class OfficialBuildFixture : IDisposable {
             // Best-effort cleanup — a locked file from a still-draining stream never fails the suite.
         }
     }
+
     internal static (int ExitCode, string StdOut, string StdErr) RunCapturingConsole(Func<int> run) {
         var originalOut = Console.Out;
         var originalError = Console.Error;
@@ -64,7 +67,6 @@ public sealed class OfficialBuildFixture : IDisposable {
         }
     }
 }
-
 /// <summary>Exercises <c>puck official build</c> and <c>puck official verify</c> end to end against a real tree, and
 /// <see cref="OfficialBuildCommand.IsDirtyPorcelainOutput"/> as a pure unit in isolation (a dirty-tree refusal
 /// cannot be exercised against this checkout's own git status — it is shared, concurrently-mutated state this suite
@@ -104,26 +106,26 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
     }
     [Fact]
     public void Verify_PassesOnTheFreshTree() {
-        var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Run(args: [
+        var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
             "--base", fixture.OutRoot,
             "--channel", OfficialBuildFixture.Channel,
-        ]));
+        ]).Invoke());
 
         Assert.True(condition: (exitCode == 0), userMessage: $"official verify exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}");
     }
     [Fact]
     public void SecondBuild_RewritesNoObjectsAndReproducesTheSameManifestBytes() {
         var objectPaths = Directory.EnumerateFiles(path: Path.Combine(path1: fixture.OutRoot, path2: "objects"), searchOption: SearchOption.AllDirectories, searchPattern: "*").ToList();
-        var mtimesBefore = objectPaths.ToDictionary(keySelector: path => path, elementSelector: File.GetLastWriteTimeUtc);
+        var mtimesBefore = objectPaths.ToDictionary(elementSelector: File.GetLastWriteTimeUtc, keySelector: path => path);
         var channelManifestPath = Path.Combine(path1: fixture.OutRoot, path2: OfficialBuildFixture.Channel, path3: "manifest.json");
         var bytesBefore = File.ReadAllBytes(path: channelManifestPath);
 
-        var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Run(args: [
+        var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
             "--out", fixture.OutRoot,
             "--channel", OfficialBuildFixture.Channel,
             "--engine", OfficialBuildFixture.AppBundlePath,
             "--allow-dirty",
-        ]));
+        ]).Invoke());
 
         Assert.True(condition: (exitCode == 0), userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}");
 
@@ -138,12 +140,12 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
         var secondRoot = Path.Combine(path1: Path.GetTempPath(), path2: $"puck-official-tests-{Guid.NewGuid():n}");
 
         try {
-            var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Run(args: [
+            var (exitCode, stdOut, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialBuildCommand.Create().Parse(args: [
                 "--out", secondRoot,
                 "--channel", OfficialBuildFixture.Channel,
                 "--engine", OfficialBuildFixture.AppBundlePath,
                 "--allow-dirty",
-            ]));
+            ]).Invoke());
 
             Assert.True(condition: (exitCode == 0), userMessage: $"official build exited {exitCode}:\nSTDOUT:\n{stdOut}\nSTDERR:\n{stdErr}");
 
@@ -167,24 +169,24 @@ public sealed class OfficialBuildCommandTests(OfficialBuildFixture fixture) : IC
         var original = File.ReadAllBytes(path: fullObjectPath);
 
         try {
-            File.WriteAllBytes(path: fullObjectPath, bytes: [.. original, ((byte)'!')]);
+            File.WriteAllBytes(bytes: [.. original, ((byte)'!')], path: fullObjectPath);
 
-            var (exitCode, _, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Run(args: [
+            var (exitCode, _, stdErr) = OfficialBuildFixture.RunCapturingConsole(run: () => OfficialVerifyCommand.Create().Parse(args: [
                 "--base", fixture.OutRoot,
                 "--channel", OfficialBuildFixture.Channel,
-            ]));
+            ]).Invoke());
 
-            Assert.Equal(expected: 1, actual: exitCode);
-            Assert.Contains(expectedSubstring: relativeObjectPath, actualString: stdErr);
+            Assert.Equal(actual: exitCode, expected: 1);
+            Assert.Contains(actualString: stdErr, expectedSubstring: relativeObjectPath);
         } finally {
-            File.WriteAllBytes(path: fullObjectPath, bytes: original);
+            File.WriteAllBytes(bytes: original, path: fullObjectPath);
         }
     }
-    [Theory]
     [InlineData("", false)]
     [InlineData("   \n  ", false)]
     [InlineData(" M src/Puck.Cli/Program.cs\n", true)]
     [InlineData("?? new-file.txt\n", true)]
+    [Theory]
     public void IsDirtyPorcelainOutput_ReadsGitPorcelainCorrectly(string porcelain, bool expectedDirty) {
         Assert.Equal(expected: expectedDirty, actual: OfficialBuildCommand.IsDirtyPorcelainOutput(porcelainStdout: porcelain));
     }

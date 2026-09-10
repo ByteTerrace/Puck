@@ -1,0 +1,10 @@
+description: Sign in to Azure with the repository's OIDC federation; call again before a phase that needs a fresh assertion.
+name: Sign in to Azure
+runs:
+  steps:
+    - uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+      with:
+        client-id: ${{ vars.AZURE_CLIENT_ID }}
+        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        tenant-id: ${{ vars.AZURE_TENANT_ID }}
+  using: composite

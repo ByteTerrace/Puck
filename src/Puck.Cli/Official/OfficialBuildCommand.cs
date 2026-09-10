@@ -1,3 +1,5 @@
+using System.CommandLine;
+
 using Puck.Assets.Documents;
 using Puck.Cli.Registry;
 using Puck.Cli.Schema;
@@ -10,74 +12,41 @@ namespace Puck.Cli.Official;
 // document under the worlds directory, the one composed root world, and the off-disk assets it references. No
 // upload, no signing, no GitHub workflow — those are a separate, later concern.
 // Exit 0 wrote the tree, 1 the build refused (ledger drift, a dirty tree without --allow-dirty, a composition or
-// asset-hash mismatch), 2 usage error or an unreadable/unwritable path.
+// asset-hash mismatch), 2 an unreadable/unwritable path.
 internal static class OfficialBuildCommand {
-    private const string HelpText =
-        """
-        puck official build — write a puck.official.v1 tree
+    public static Command Create() {
+        var allowDirtyOption = new Option<bool>(name: "--allow-dirty") { Description = "Proceed even though the working tree carries uncommitted changes." };
+        var channelOption = new Option<string>(name: "--channel") { Description = "The channel this build belongs to (e.g. dev, stable, next).", Required = true };
+        var engineOption = new Option<string>(name: "--engine") { Description = "A browser-wasm AppBundle directory (main.mjs + _framework/).", Required = true };
+        var outOption = new Option<string>(name: "--out") { Description = "The official tree's root, created if missing.", Required = true };
+        var worldsOption = new Option<string?>(name: "--worlds") { Description = "The worlds directory. Absent, src/Puck.World/Assets/worlds under the repository root." };
+        var command = new Command(description: """
+            Write a puck.official.v1 tree from the shipped engine, world documents, and their assets.
 
-        Usage: puck official build --out <dir> --channel <name> --engine <dir> [options]
+            Refuses unless `puck schema --check` and `puck registry --check` both pass in-process first — a document
+            field added without regenerating its ledger never ships. Refuses on a dirty working tree unless
+            --allow-dirty is given. Refuses by name on a composition failure or an asset row whose declared hash does
+            not match its document's recomputed canonical hash.
 
-        Required:
-          --out <dir>       the official tree's root (created if missing)
-          --channel <name>  the channel this build belongs to (e.g. dev, stable, next)
-          --engine <dir>    a browser-wasm AppBundle directory (main.mjs + _framework/)
+            Writes <out>/<channel>/manifest.json, <out>/builds/<commit>/manifest.json (an immutable copy), and every
+            referenced object under <out>/objects/sha256/<hex[0..2]>/<hex64> — objects already present (by hash) are
+            left untouched. A DirectoryReleaseSource-shaped reader and `puck official serve`/`puck official verify` all
+            read this tree as-is.
 
-        Options:
-          --worlds <dir>    the worlds directory (default: src/Puck.World/Assets/worlds)
-          --allow-dirty     proceed even though the working tree carries uncommitted changes
-          -h, --help        this text
+            Exit codes: 0 wrote the tree, 1 the build refused, 2 an unreadable/unwritable path.
+            """, name: "build") { allowDirtyOption, channelOption, engineOption, outOption, worldsOption };
 
-        Refuses unless `puck schema --check` and `puck registry --check` both pass in-process first — a document
-        field added without regenerating its ledger never ships. Refuses on a dirty working tree unless
-        --allow-dirty is given. Refuses by name on a composition failure or an asset row whose declared hash does
-        not match its document's recomputed canonical hash.
+        command.SetAction(action: parseResult => Run(allowDirty: parseResult.GetValue(option: allowDirtyOption), channel: parseResult.GetRequiredValue(option: channelOption), engineDirectory: parseResult.GetRequiredValue(option: engineOption), outRoot: parseResult.GetRequiredValue(option: outOption), worlds: parseResult.GetValue(option: worldsOption)));
 
-        Writes <out>/<channel>/manifest.json, <out>/builds/<commit>/manifest.json (an immutable copy), and every
-        referenced object under <out>/objects/sha256/<hex[0..2]>/<hex64> — objects already present (by hash) are
-        left untouched. A DirectoryReleaseSource-shaped reader and `puck official serve`/`puck official verify` all
-        read this tree as-is.
+        return command;
+    }
 
-        Exit codes: 0 wrote the tree, 1 the build refused, 2 usage error or an unreadable/unwritable path.
-        """;
-
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner()
-            .Flag(name: "h").Flag(name: "help").Flag(name: "allow-dirty")
-            .Value(name: "out").Value(name: "channel").Value(name: "engine").Value(name: "worlds");
-
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"official build: {scanner.Error}");
-
-            return 2;
-        }
-
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
-
-            return 0;
-        }
-
-        var outRoot = scanner.Get(name: "out");
-        var channel = scanner.Get(name: "channel");
-        var engineDirectory = scanner.Get(name: "engine");
-        var missing = new List<string>();
-
-        if (outRoot is null) { missing.Add(item: "--out"); }
-        if (channel is null) { missing.Add(item: "--channel"); }
-        if (engineDirectory is null) { missing.Add(item: "--engine"); }
-
-        if (missing.Count > 0) {
-            Console.Error.WriteLine(value: $"official build: missing required argument(s): {string.Join(separator: ", ", values: missing)}.");
-
-            return 2;
-        }
-
+    private static int Run(bool allowDirty, string channel, string engineDirectory, string outRoot, string? worlds) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
 
-        var worldsDirectory = Path.GetFullPath(path: scanner.Get(name: "worlds") ?? Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "Assets", "worlds"]));
+        var worldsDirectory = Path.GetFullPath(path: (worlds ?? Path.Combine(paths: [repositoryRoot, "src", "Puck.World", "Assets", "worlds"])));
 
         if (!Directory.Exists(path: worldsDirectory)) {
             Console.Error.WriteLine(value: $"official build: worlds directory '{worldsDirectory}' does not exist.");
@@ -87,31 +56,32 @@ internal static class OfficialBuildCommand {
 
         Console.Out.WriteLine(value: "official build: checking generated ledgers (puck schema --check, puck registry --check)...");
 
-        if (SchemaCommand.Run(args: ["--check"]) != 0) {
+        if (SchemaCommand.Create().Parse(args: ["--check"]).Invoke() != 0) {
             Console.Error.WriteLine(value: "official build: refused — 'puck schema --check' found drift; regenerate with 'puck schema' first.");
 
             return 1;
         }
 
-        if (RegistryCommand.Run(args: ["--check"]) != 0) {
+        if (RegistryCommand.Create().Parse(args: ["--check"]).Invoke() != 0) {
             Console.Error.WriteLine(value: "official build: refused — 'puck registry --check' found drift; regenerate with 'puck registry' first.");
 
             return 1;
         }
 
-        if (!TryCheckDirty(allowDirty: scanner.Has(name: "allow-dirty"), dirty: out var dirty, isRefusal: out var isDirtyRefusal, repositoryRoot: repositoryRoot, refusal: out var dirtyRefusal)) {
+        if (!TryCheckDirty(allowDirty: allowDirty, dirty: out var dirty, isRefusal: out var isDirtyRefusal, refusal: out var dirtyRefusal, repositoryRoot: repositoryRoot)) {
             Console.Error.WriteLine(value: $"official build: {dirtyRefusal}");
 
             return (isDirtyRefusal ? 1 : 2);
         }
 
-        Directory.CreateDirectory(path: outRoot!);
+        Directory.CreateDirectory(path: outRoot);
 
-        var writer = new OfficialObjectWriter(root: outRoot!);
+        var writer = new OfficialObjectWriter(root: outRoot);
 
         try {
             var (bundle, commit, generator, worldSchemaId) = OfficialSchemaBundle.Build(repositoryRoot: repositoryRoot);
             var bundleBytes = System.Text.Encoding.UTF8.GetBytes(s: WorldSchema.ToCanonicalText(node: bundle));
+
             var (bundlePath, bundleHash, bundleSize) = writer.Put(bytes: bundleBytes);
             var worldSchemaBundle = new OfficialObjectRef(ContentType: "application/json", Hash: bundleHash, Path: bundlePath, Size: bundleSize);
 
@@ -129,7 +99,7 @@ internal static class OfficialBuildCommand {
                 return 1;
             }
 
-            if (!OfficialEngineScanner.TryScan(appBundleDirectory: engineDirectory!, engine: out var engine, reason: out var engineReason, writer: writer)) {
+            if (!OfficialEngineScanner.TryScan(appBundleDirectory: engineDirectory, engine: out var engine, reason: out var engineReason, writer: writer)) {
                 Console.Error.WriteLine(value: $"official build: refused — {engineReason}");
 
                 return 1;
@@ -138,7 +108,7 @@ internal static class OfficialBuildCommand {
             var manifest = new OfficialManifest(
                 Assets: assets,
                 Build: new OfficialBuildInfo(Commit: commit, Dirty: dirty, Generator: generator, WorldSchema: worldSchemaId),
-                Channel: channel!,
+                Channel: channel,
                 Composed: composed,
                 Documents: documents,
                 Engine: engine!,
@@ -157,12 +127,12 @@ internal static class OfficialBuildCommand {
                 return 1;
             }
 
-            var buildsDirectory = Path.Combine(path1: outRoot!, path2: "builds", path3: commit);
+            var buildsDirectory = Path.Combine(path1: outRoot, path2: "builds", path3: commit);
 
             Directory.CreateDirectory(path: buildsDirectory);
             File.WriteAllBytes(path: Path.Combine(path1: buildsDirectory, path2: "manifest.json"), bytes: canonical.Bytes);
 
-            var channelDirectory = Path.Combine(path1: outRoot!, path2: channel!);
+            var channelDirectory = Path.Combine(path1: outRoot, path2: channel);
 
             Directory.CreateDirectory(path: channelDirectory);
             File.WriteAllBytes(path: Path.Combine(path1: channelDirectory, path2: "manifest.json"), bytes: canonical.Bytes);
@@ -186,7 +156,7 @@ internal static class OfficialBuildCommand {
         CliRawProcessResult result;
 
         try {
-            result = CliProcess.RunCapturedRaw(fileName: "git", arguments: ["-C", repositoryRoot, "status", "--porcelain"]);
+            result = CliProcess.RunCapturedRaw(arguments: ["-C", repositoryRoot, "status", "--porcelain"], fileName: "git");
         } catch (Exception exception) when ((exception is System.ComponentModel.Win32Exception or InvalidOperationException)) {
             refusal = $"cannot run 'git status --porcelain' to check for a dirty tree: {exception.Message}";
 
@@ -210,6 +180,7 @@ internal static class OfficialBuildCommand {
 
         return true;
     }
+
     // The porcelain-output interpretation alone, pulled out of TryCheckDirty so it is testable without shelling out
     // to git or depending on this checkout's own (shared, concurrently-mutated) working-tree state: `git status
     // --porcelain` prints one line per changed/untracked path and nothing at all for a clean tree.

@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Diagnostics;
 using System.Text;
 
@@ -18,15 +19,34 @@ internal static class ParityCommand {
 
     private static readonly TimeSpan SuiteBudget = TimeSpan.FromSeconds(value: 600);
 
-    public static int Run(string[] args) {
-        // Dispatched before the -h/--help check below: 'compare' owns its own usage text and exit code (3, not
-        // this verb's 2), so its help must never fall through to this verb's Usage().
-        if ((args.Length != 0) && (args[0] == "compare")) {
-            return ParityCompareCommand.Run(args: args[1..]);
-        }
-        if ((args.Length != 0) || (Array.IndexOf(array: args, value: "-h") >= 0) || (Array.IndexOf(array: args, value: "--help") >= 0)) {
-            return Usage();
-        }
+    public static Command Create() {
+        var command = new Command(description: """
+            Boot the authored parity world offscreen once per backend and compare the two runs.
+
+            Boots tests/Puck.Parity/parity.world.json offscreen once per backend (vulkan, directx — no
+            window is shown), collects each run's tick-scheduled captures and puck.parity.manifest.v1, and
+            compares the pair under tests/Puck.Parity/parity.contract.json.
+
+            Per capture, three independent verdicts, in order: the content gate (a capture refused
+            as camera-inside-geometry, missing, or below its station's census floor never reaches
+            comparison — agreement between degenerate frames is vacuous), the state verdict
+            (stateHash equality, exact, no envelope), and the pixel verdict (per-tile deltas
+            against the station's contract thresholds — a localized defect cannot dilute itself
+            across a whole-frame mean). Failures write both frames, a delta heatmap, and a
+            per-verdict summary beside the run.
+
+            Requires both a Vulkan and a Direct3D 12 device on this machine; no display is taken over.
+
+            Exit codes: 0 every capture held all three verdicts, 2 a verdict failed or a leg/build
+            refused, 3 malformed manifest or contract.
+            """, name: "parity");
+
+        command.Subcommands.Add(item: ParityCompareCommand.Create());
+        command.SetAction(action: _ => Run());
+        return command;
+    }
+
+    private static int Run() {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -57,14 +77,13 @@ internal static class ParityCommand {
             }
         }
 
-        return ParityCompareCommand.Run(args: [
-            Path.Combine(path1: runDirectory, path2: "captures-vulkan"),
-            Path.Combine(path1: runDirectory, path2: "captures-directx"),
-            "--contract", Path.Combine(path1: repositoryRoot, path2: ContractPath),
-            "--out", Path.Combine(path1: runDirectory, path2: "evidence"),
-        ]);
+        return ParityCompareCommand.Run(
+            contractPath: Path.Combine(path1: repositoryRoot, path2: ContractPath),
+            leftDir: Path.Combine(path1: runDirectory, path2: "captures-vulkan"),
+            outDir: Path.Combine(path1: runDirectory, path2: "evidence"),
+            rightDir: Path.Combine(path1: runDirectory, path2: "captures-directx")
+        );
     }
-
     private static bool TryBuildWorld(string repositoryRoot, Stopwatch suiteClock, out string artifact) {
         var worldProject = Path.Combine(path1: repositoryRoot, path2: "src", path3: "Puck.World", path4: "Puck.World.csproj");
 
@@ -186,35 +205,5 @@ internal static class ParityCommand {
         }
 
         return 0;
-    }
-    private static int Usage() {
-        Console.Error.WriteLine(
-            value:
-                """
-                parity
-                parity compare <leftDir> <rightDir> --contract <file> [--out <dir>]
-
-                  no arguments  boot tests/Puck.Parity/parity.world.json offscreen once per backend
-                                (vulkan, directx — no window is shown), collect each run's
-                                tick-scheduled captures and puck.parity.manifest.v1, and compare the
-                                pair under tests/Puck.Parity/parity.contract.json
-                  compare       gate/state/pixel-verdict comparison of two already-captured manifest
-                                runs (run 'parity compare -h' for its own usage)
-
-                Per capture, three independent verdicts, in order: the content gate (a capture refused
-                as camera-inside-geometry, missing, or below its station's census floor never reaches
-                comparison — agreement between degenerate frames is vacuous), the state verdict
-                (stateHash equality, exact, no envelope), and the pixel verdict (per-tile deltas
-                against the station's contract thresholds — a localized defect cannot dilute itself
-                across a whole-frame mean). Failures write both frames, a delta heatmap, and a
-                per-verdict summary beside the run.
-
-                Requires both a Vulkan and a Direct3D 12 device on this machine; no display is taken over.
-
-                Exit codes: 0 every capture held all three verdicts, 2 a verdict failed or a leg/build
-                refused, 3 malformed manifest or contract.
-                """);
-
-        return 2;
     }
 }

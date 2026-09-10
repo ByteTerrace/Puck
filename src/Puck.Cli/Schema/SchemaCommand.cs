@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text;
 
 using Puck.Shaders;
@@ -16,43 +17,6 @@ namespace Puck.Cli.Schema;
 // config schema splice into render.extensions[] so an entry's config validates by id.
 // Exit 0 wrote/matched, 1 check found drift, 2 usage error or missing repository root.
 internal static class SchemaCommand {
-    private const string HelpText =
-        """
-        puck schema — generate the JSON Schema for puck.world.def.v1
-
-        Usage: puck schema [options] [bundle-path]
-
-        Options:
-          --check          regenerate in memory and compare the root, every section file,
-                            and common.schema.json against what is on disk; write nothing,
-                            exit 1 with a drift report (missing file, orphan file, or a
-                            content difference naming the first differing line) on any
-                            disagreement
-          --stdout          emit the generated ROOT document to stdout instead of writing
-                            the checked-in files (skips --check)
-          --bundle [path]   emit the single-file equivalent with every cross-file $ref
-                            resolved through named $defs — not a checked-in artifact;
-                            written to [path] if given, else stdout
-          -h, --help        this text
-
-        Generated from WorldDefinition (src/Puck.World.Schema/WorldDefinition.cs) over the SAME
-        source-generated WorldJsonContext the engine loads a world document through
-        (System.Text.Json's JsonSchemaExporter) — never hand-maintained. Descriptions are
-        pulled from Puck.World.Schema.xml beside the assembly; when that file is missing the
-        schema still writes, with no descriptions, and this verb says so on stderr.
-        render.extensions[] takes its id vocabulary and per-id config schema from the shipped
-        puck.shader.v1 manifests under src/*/Assets/Shaders (Puck.Shaders.ShaderSetManifest).
-
-        Written to: src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json (root),
-        src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json (the egress
-        document, one unsplit file), src/Puck.World/Assets/worlds/schema/*.schema.json
-        (one file per document section, plus common.schema.json for shapes more than one
-        section references), and src/Puck.World.Silo/Assets/puck.silo.def.v1.schema.json
-        (the silo document, one unsplit file, generated from Puck.World.Schema.WorldSiloDefinition
-        over the same exporter).
-        Exit codes: 0 wrote or matched, 1 check found drift, 2 usage error or missing
-        repository root.
-        """;
     private const string ProjectionRelativePath = "src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json";
     private const string RootRelativePath = "src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json";
     private const string SectionsRelativeDirectory = "src/Puck.World/Assets/worlds/schema";
@@ -60,21 +24,52 @@ internal static class SchemaCommand {
 
     private readonly record struct SchemaFile(string FullPath, string Text);
 
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Flag(name: "check").Flag(name: "stdout").Flag(name: "bundle");
+    public static Command Create() {
+        var bundleOption = new Option<bool>(name: "--bundle") {
+            Description = "Emit the single-file equivalent with every cross-file $ref resolved through named $defs — not a checked-in artifact; written to [bundle-path] if given, else stdout.",
+        };
+        var bundlePathArgument = new Argument<string?>(name: "bundle-path") {
+            Arity = ArgumentArity.ZeroOrOne,
+            Description = "Where --bundle writes; stdout when absent.",
+        };
+        var checkOption = new Option<bool>(name: "--check") {
+            Description = "Regenerate in memory and compare the root, every section file, and common.schema.json against what is on disk; write nothing, exit 1 with a drift report (missing file, orphan file, or a content difference naming the first differing line) on any disagreement.",
+        };
+        var stdoutOption = new Option<bool>(name: "--stdout") {
+            Description = "Emit the generated root document to stdout instead of writing the checked-in files; skips --check.",
+        };
+        var command = new Command(description: """
+            Generate the JSON Schema for puck.world.def.v1.
 
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"schema: {scanner.Error}");
+            Generated from WorldDefinition (src/Puck.World.Schema/WorldDefinition.cs) over the same
+            source-generated WorldJsonContext the engine loads a world document through
+            (System.Text.Json's JsonSchemaExporter) — never hand-maintained. Descriptions are
+            pulled from Puck.World.Schema.xml beside the assembly; when that file is missing the
+            schema still writes, with no descriptions, and this verb says so on stderr.
+            render.extensions[] takes its id vocabulary and per-id config schema from the shipped
+            puck.shader.v1 manifests under src/*/Assets/Shaders (Puck.Shaders.ShaderSetManifest).
 
-            return 2;
-        }
+            Written to: src/Puck.World/Assets/worlds/puck.world.def.v1.schema.json (root),
+            src/Puck.World/Assets/worlds/puck.world.projection.v1.schema.json (the egress
+            document, one unsplit file), src/Puck.World/Assets/worlds/schema/*.schema.json
+            (one file per document section, plus common.schema.json for shapes more than one
+            section references), and src/Puck.World.Silo/Assets/puck.silo.def.v1.schema.json
+            (the silo document, one unsplit file, generated from Puck.World.Schema.WorldSiloDefinition
+            over the same exporter).
+            Exit codes: 0 wrote or matched, 1 check found drift, 2 usage error or missing
+            repository root.
+            """, name: "schema") { bundlePathArgument, bundleOption, checkOption, stdoutOption };
 
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
+        command.SetAction(action: parseResult => Run(
+            bundle: parseResult.GetValue(option: bundleOption),
+            bundlePath: parseResult.GetValue(argument: bundlePathArgument),
+            check: parseResult.GetValue(option: checkOption),
+            toStdout: parseResult.GetValue(option: stdoutOption)));
 
-            return 0;
-        }
+        return command;
+    }
 
+    private static int Run(bool bundle, string? bundlePath, bool check, bool toStdout) {
         if (!WorldSchema.HasXmlDocumentation) {
             Console.Error.WriteLine(value: "schema: Puck.World.Schema.xml not found beside the assembly — the generated schema will carry no descriptions.");
         }
@@ -85,11 +80,11 @@ internal static class SchemaCommand {
         var postRenderExtensions = LoadPostRenderExtensions(repositoryRoot: repositoryRoot);
         var split = WorldSchema.Export(postRenderExtensions: postRenderExtensions);
 
-        if (scanner.Has(name: "bundle")) {
-            return Bundle(split: split, path: ((scanner.Positionals.Count > 0) ? scanner.Positionals[0] : null));
+        if (bundle) {
+            return Bundle(path: bundlePath, split: split);
         }
 
-        if (scanner.Has(name: "stdout")) {
+        if (toStdout) {
             Console.Out.Write(value: WorldSchema.ToCanonicalText(node: split.Root));
 
             return 0;
@@ -103,11 +98,10 @@ internal static class SchemaCommand {
             FullPath: Path.Combine(path1: repositoryRoot, path2: ToNativePath(relativePath: SiloRelativePath)),
             Text: WorldSchema.ToCanonicalText(node: WorldSchema.ExportSilo()));
 
-        return (scanner.Has(name: "check")
+        return (check
             ? Check(common: common, projection: projection, root: root, sections: sections, sectionsDirectory: sectionsDirectory, silo: silo)
             : Write(common: common, projection: projection, root: root, sections: sections, sectionsDirectory: sectionsDirectory, silo: silo));
     }
-
     private static int Bundle(WorldSchema.SplitSchema split, string? path) {
         var text = WorldSchema.ToCanonicalText(node: WorldSchema.Bundle(split: split));
 

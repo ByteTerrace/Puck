@@ -80,12 +80,12 @@ For an operator-driven deployment from a clean, committed checkout, with
 Docker running and Azure CLI signed in, run from the repository root:
 
 ```powershell
-dotnet run -c Release --file build/Azure.cs -- build-actors
+puck azure build-actors
 ```
 
 This builds and pushes a commit-tagged image and updates `bytrccap001` to its
-digest. `-NoRestart` publishes the image without updating the app;
-`-ContainerApp` selects another existing app. The registry retains its ABAC
+digest. `--no-restart` publishes the image without updating the app;
+`--container-app` selects another existing app. The registry retains its ABAC
 mode and disabled ARM-audience authentication throughout.
 
 ## Networking (decided 2026-08-27: public environment + VNet integration)

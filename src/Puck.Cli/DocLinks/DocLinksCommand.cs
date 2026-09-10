@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text.RegularExpressions;
 
 using Puck.Cli.Source;
@@ -40,23 +41,34 @@ internal static class DocLinksCommand {
     private static readonly Regex BareFileName = new(options: RegexOptions.Compiled, pattern: @"^[A-Za-z0-9._\-]+\.(cs|md|json|ps1|csproj|props|slnx|wasm|wat|py)$");
     private static readonly Regex ExternalScheme = new(options: RegexOptions.Compiled | RegexOptions.IgnoreCase, pattern: @"^[a-z][a-z0-9+.\-]*:");
 
-    public static int Run(string[] args) {
-        if ((Array.IndexOf(array: args, value: "-h") >= 0) || (Array.IndexOf(array: args, value: "--help") >= 0)) {
-            return Usage();
-        }
-        if ((args.Length != 0) && (args[0] == "--")) {
-            args = args[1..];
-        }
-        if (args.Any(predicate: static argument => argument.StartsWith(value: '-'))) {
-            Console.Error.WriteLine(value: "ERROR: the only accepted form is: doc-links [<document> ...]");
+    public static Command Create() {
+        var documentsArgument = new Argument<string[]>(name: "document") {
+            Arity = ArgumentArity.ZeroOrMore,
+            DefaultValueFactory = static _ => DefaultDocuments,
+            Description = "Repository-relative markdown files to check; absent, the world-documentation set this verb ships with.",
+        };
+        var command = new Command(description: """
+            Check that every relative markdown link and cited repository path resolves.
 
-            return 2;
-        }
+            Also checks every backticked bare filename against an index swept from src/, docs/,
+            tests/, build/, and .claude/skills/ — enforced for a document under src/, advisory
+            elsewhere. One control runs before any document — a deliberately nonexistent path
+            must fail resolution — so a green run proves the checker can turn red.
+
+            Exit codes: 0 every citation resolved, 1 one or more citations did not resolve,
+            2 usage error or refusal.
+            """, name: "doc-links") { documentsArgument };
+
+        command.SetAction(action: parseResult => Run(documents: parseResult.GetRequiredValue(argument: documentsArgument)));
+
+        return command;
+    }
+
+    private static int Run(string[] documents) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
 
-        var documents = ((args.Length == 0) ? DefaultDocuments : args);
         var fileNameIndex = BuildFileNameIndex(repositoryRoot: repositoryRoot);
 
         if (TryResolve(documentDirectory: repositoryRoot, repositoryRoot: repositoryRoot, target: "src/Puck.World/this-file-does-not-exist.md")
@@ -110,7 +122,7 @@ internal static class DocLinksCommand {
             }
         }
 
-        Console.WriteLine(value: $"---- documents: {documents.Count()}; citations checked: {checkedCount}; failures: {failures.Count}; advisories: {advisories.Count} ----");
+        Console.WriteLine(value: $"---- documents: {documents.Length}; citations checked: {checkedCount}; failures: {failures.Count}; advisories: {advisories.Count} ----");
 
         foreach (var advisory in advisories) {
             Console.WriteLine(value: $"note: {advisory}");
@@ -185,24 +197,5 @@ internal static class DocLinksCommand {
         }
 
         return index;
-    }
-    private static int Usage() {
-        Console.Error.WriteLine(
-            value:
-                """
-                doc-links [<document> ...]
-
-                  no arguments        check the world-documentation set this verb ships with
-                  <document> ...      check exactly the named repository-relative markdown files instead
-
-                Checks every relative markdown link and cited repository path in the checked documents resolves,
-                plus every backticked bare filename against an index swept from src/, docs/, tests/, build/, and
-                .claude/skills/ (enforced for a document under src/, advisory elsewhere). Runs one control first —
-                a deliberately nonexistent path must fail resolution — so a green run proves the checker can fail.
-
-                Exit codes: 0 every citation resolved, 1 one or more citations did not resolve, 2 usage/refusal.
-                """);
-
-        return 2;
     }
 }

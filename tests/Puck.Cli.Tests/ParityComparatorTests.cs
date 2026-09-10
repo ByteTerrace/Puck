@@ -244,7 +244,7 @@ public sealed class ParityComparatorTests : IDisposable {
         Console.SetError(newError: errorWriter);
 
         try {
-            var exitCode = ParityCompareCommand.Run(args: args);
+            var exitCode = PuckRootCommand.Invoke(args: ["parity", "compare", .. args]);
 
             stdout = outWriter.ToString();
             stderr = errorWriter.ToString();

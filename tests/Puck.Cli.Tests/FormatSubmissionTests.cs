@@ -3,6 +3,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 
+using Puck.Cli.Format;
+
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -23,7 +25,7 @@ public sealed class FormatSubmissionTests {
         Assert.Equal(expected: "feature", actual: ((string?)input["branch"]!["refName"]));
         Assert.Single(collection: input["fileChanges"]!["additions"]!.AsArray());
         Assert.Equal(expected: 2, actual: handler.Dispatches.Count);
-        Assert.Single(handler.Dispatches, item => item.Path.Contains("format.yml", StringComparison.Ordinal));
+        Assert.Single(collection: handler.Dispatches, predicate: item => item.Path.Contains(comparisonType: StringComparison.Ordinal, value: "format.yml"));
         Assert.Equal(expected: "false", actual: ((string?)handler.Dispatches.Single(predicate: item => item.Path.Contains(comparisonType: StringComparison.Ordinal, value: "azure.yml")).Body["inputs"]!["deploy"]));
         Assert.Equal(expected: 2, actual: m_reports.Count);
         Assert.StartsWith(expectedStartString: "Applied 1 formatted file(s) to PR #7", actualString: m_reports[0]);

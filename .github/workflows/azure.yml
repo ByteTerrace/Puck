@@ -2,27 +2,27 @@ name: Release Azure
 run-name: Azure ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.deploy)) && 'validation' || 'release' }} — ${{ github.ref_name }}
 
 on:
+  pull_request:
   push:
     branches: [main, codex/azure-ci]
-  pull_request:
   workflow_call:
     inputs:
       deploy:
-        type: boolean
         default: true
+        type: boolean
   workflow_dispatch:
     inputs:
       deploy:
+        default: true
         description: Deploy the verified artifacts and infrastructure to Azure (false validates only)
         type: boolean
-        default: true
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('azure-pr-{0}', github.event.pull_request.number) || format('azure-run-{0}', github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.event_name == 'pull_request' && format('azure-pr-{0}', github.event.pull_request.number) || format('azure-run-{0}', github.run_id) }}
 
 env:
   CI: true
@@ -51,192 +51,167 @@ jobs:
     with:
       prebuilt: true
   infrastructure:
-    name: Validate Azure infrastructure
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    environment: Puck
     env:
       BICEPPARAM_WORLD_MCP: ${{ vars.WORLD_MCP || 'null' }}
+    environment: Puck
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci')
+    name: Validate Azure infrastructure
+    needs: artifacts
     permissions:
       contents: read
       id-token: write
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: ./.github/actions/setup-dotnet
+      - name: Install Puck CLI
+        uses: ./.github/actions/setup-puck
         with:
-          global-json-file: global.json
+          artifact: nuget-packages
       - name: Sign in to Azure with OIDC
-        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        uses: ./.github/actions/azure-login
       - name: Install pinned Bicep
         run: az bicep install --version v0.46.1
       - name: Restore pinned bvm Template Specs and compile infrastructure
-        run: dotnet run -c Release --file build/Azure.cs -- build-infrastructure
+        run: puck azure build-infrastructure
       - name: Upload compiled Azure infrastructure
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          if-no-files-found: error
           name: azure-infrastructure
           path: artifacts/infrastructure
-          if-no-files-found: error
-
+    timeout-minutes: 15
   deploy:
-    name: Deploy and verify Azure production
+    concurrency:
+      cancel-in-progress: false
+      group: azure-production-deployment
+    env:
+      BICEPPARAM_WORLD_MCP: ${{ vars.WORLD_MCP || 'null' }}
+    environment:
+      name: Puck
+      url: https://puck.byteterrace.com
     if: >-
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.deploy &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/azure-ci'))
+    name: Deploy and verify Azure production
     needs: [build, verify, pack, infrastructure, applications, containers]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    environment:
-      name: Puck
-      url: https://puck.byteterrace.com
-    env:
-      BICEPPARAM_WORLD_MCP: ${{ vars.WORLD_MCP || 'null' }}
-    concurrency:
-      group: azure-production-deployment
-      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
-      - name: Skip a superseded commit
-        id: current
-        run: dotnet run -c Release --file build/Azure.cs -- current
+        uses: ./.github/actions/setup-dotnet
       - name: Install Puck CLI
         uses: ./.github/actions/setup-puck
-        if: steps.current.outputs.deploy == 'true'
         with:
           artifact: nuget-packages
-      - name: Download deployment inputs
+      - id: current
+        name: Skip a superseded commit
+        run: puck azure current
+      - if: steps.current.outputs.deploy == 'true'
+        name: Download deployment inputs
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        if: steps.current.outputs.deploy == 'true'
         with:
-          pattern: azure-*
           path: artifacts/source
-      - name: Verify this run's deployment bundle
-        if: steps.current.outputs.deploy == 'true'
-        shell: bash
+          pattern: azure-*
+      - if: steps.current.outputs.deploy == 'true'
+        name: Verify this run's deployment bundle
         run: puck bundle verify artifacts/source/azure-applications "$GITHUB_SHA"
-      - name: Check the runner's AzCopy
-        if: steps.current.outputs.deploy == 'true'
-        run: azcopy --version
-      - name: Sign in to Azure with OIDC
-        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
-        if: steps.current.outputs.deploy == 'true'
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Install pinned Bicep
-        if: steps.current.outputs.deploy == 'true'
-        run: az bicep install --version v0.46.1
-      - name: Reconcile the production platform
-        if: steps.current.outputs.deploy == 'true'
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- deploy-infrastructure --infrastructure-artifacts artifacts/source/azure-infrastructure
-      - name: Install QUIC for production verification
-        if: steps.current.outputs.deploy == 'true'
-        run: dotnet run -c Release --file build/InstallQuic.cs
+      - if: steps.current.outputs.deploy == 'true'
+        name: Check the runner's AzCopy
+        run: azcopy --version
+      - if: steps.current.outputs.deploy == 'true'
+        name: Sign in to Azure with OIDC
+        uses: ./.github/actions/azure-login
+      - if: steps.current.outputs.deploy == 'true'
+        name: Install pinned Bicep
+        run: az bicep install --version v0.46.1
+      - if: steps.current.outputs.deploy == 'true'
+        name: Reconcile the production platform
+        run: puck azure deploy-infrastructure --infrastructure-artifacts artifacts/source/azure-infrastructure
+        shell: bash
+      - if: steps.current.outputs.deploy == 'true'
+        name: Install QUIC for production verification
+        uses: ./.github/actions/setup-quic
       # GitHub's OIDC assertion expires independently of cached Azure access tokens.
       # Refresh before each deployment phase can request a different resource token.
-      - name: Refresh OIDC for application publication
-        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+      - if: steps.current.outputs.deploy == 'true'
+        name: Refresh OIDC for application publication
+        uses: ./.github/actions/azure-login
+      - id: release
         if: steps.current.outputs.deploy == 'true'
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Publish containers and apply application configuration
-        id: release
-        if: steps.current.outputs.deploy == 'true'
+        name: Publish containers and apply application configuration
+        run: puck azure deploy-applications --artifacts-directory artifacts/source --commit "$GITHUB_SHA"
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- deploy-applications --artifacts-directory artifacts/source --commit $GITHUB_SHA
-      - name: Refresh OIDC for World deployment
-        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+      - if: steps.current.outputs.deploy == 'true'
+        name: Refresh OIDC for World deployment
+        uses: ./.github/actions/azure-login
+      - id: vault
         if: steps.current.outputs.deploy == 'true'
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Admit the runner to the signing-key vault
-        id: vault
-        if: steps.current.outputs.deploy == 'true'
+        name: Admit the runner to the signing-key vault
+        run: puck azure vault-access
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- vault-access
-      - name: Deploy the primary Puck world
-        if: steps.current.outputs.deploy == 'true'
+      - if: steps.current.outputs.deploy == 'true'
+        name: Deploy the primary Puck world
+        run: puck azure deploy-world
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- deploy-world
-      - name: Restore signing-key vault restrictions
-        if: always() && steps.vault.outcome != 'skipped'
+      - if: always() && steps.vault.outcome != 'skipped'
+        name: Restore signing-key vault restrictions
+        run: puck azure vault-access --restore
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- vault-access --restore
-      - name: Refresh OIDC for Functions deployment
-        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
+      - if: steps.current.outputs.deploy == 'true'
+        name: Refresh OIDC for Functions deployment
+        uses: ./.github/actions/azure-login
+      - id: scm
         if: steps.current.outputs.deploy == 'true'
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Admit the runner to the Functions deployment endpoint
-        id: scm
-        if: steps.current.outputs.deploy == 'true'
+        name: Admit the runner to the Functions deployment endpoint
+        run: puck azure functions-access
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- functions-access
-      - name: Deploy the prebuilt Functions payload
-        if: steps.current.outputs.deploy == 'true'
+      - if: steps.current.outputs.deploy == 'true'
+        name: Deploy the prebuilt Functions payload
         uses: Azure/functions-action@c5060b3b8bb1ebbcb531abd00c822ecbaa8ea656 # v1.5.7
         with:
           app-name: ${{ steps.release.outputs.function-app-name }}
           package: artifacts/azure/functions
-          sku: flexconsumption
           remote-build: false
-      - name: Restore Functions deployment endpoint restrictions
-        if: always() && steps.scm.outcome != 'skipped'
+          sku: flexconsumption
+      - if: always() && steps.scm.outcome != 'skipped'
+        name: Restore Functions deployment endpoint restrictions
+        run: puck azure functions-access --restore
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- functions-access --restore
-      - name: Require ready services before publishing the website
-        if: steps.current.outputs.deploy == 'true'
+      - if: steps.current.outputs.deploy == 'true'
+        name: Require ready services before publishing the website
+        run: puck azure test-production --before-static-publication --commit "$GITHUB_SHA"
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- test-production --commit $GITHUB_SHA --before-static-publication
-      - name: Refresh OIDC for website publication
-        uses: Azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c # v3.0.2
-        if: steps.current.outputs.deploy == 'true'
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - name: Publish the website and stable official content
-        if: steps.current.outputs.deploy == 'true'
-        shell: bash
-        env:
+      - if: steps.current.outputs.deploy == 'true'
+        name: Refresh OIDC for website publication
+        uses: ./.github/actions/azure-login
+      - env:
           AZCOPY_AUTO_LOGIN_TYPE: AZCLI
-          AZCOPY_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZCOPY_CONCURRENCY_VALUE: AUTO
-          AZCOPY_LOG_LOCATION: ${{ github.workspace }}/artifacts/azcopy
           AZCOPY_JOB_PLAN_LOCATION: ${{ github.workspace }}/artifacts/azcopy
-        run: dotnet run -c Release --file build/Azure.cs -- publish-static
-      - name: Verify production through Front Door
+          AZCOPY_LOG_LOCATION: ${{ github.workspace }}/artifacts/azcopy
+          AZCOPY_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         if: steps.current.outputs.deploy == 'true'
+        name: Publish the website and stable official content
+        run: puck azure publish-static
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- test-production --commit $GITHUB_SHA
-      - name: Upload production verification records
+      - if: steps.current.outputs.deploy == 'true'
+        name: Verify production through Front Door
+        run: puck azure test-production --commit "$GITHUB_SHA"
+        shell: bash
+      - if: always() && steps.current.outputs.deploy == 'true'
+        name: Upload production verification records
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always() && steps.current.outputs.deploy == 'true'
         with:
+          if-no-files-found: error
           name: azure-production-release
           path: |
             artifacts/production-*.json
@@ -245,32 +220,24 @@ jobs:
             artifacts/previous-actor-release.json
             artifacts/functions-scm-*.json
             artifacts/azcopy/*.log
-          if-no-files-found: error
-
+    timeout-minutes: 120
   applications:
     name: Assemble the application bundle
     needs: artifacts
     runs-on: windows-2025
-    timeout-minutes: 60
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        uses: ./.github/actions/setup-dotnet
         with:
-          global-json-file: global.json
-          cache: true
-          cache-dependency-path: |
-            src/*/packages.lock.json
-            tests/*/packages.lock.json
-            global.json
-            .config/dotnet-tools.json
+          cache: "true"
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
           cache: npm
           cache-dependency-path: src/Puck.Dashboard/src/package-lock.json
+          node-version: 24.20.0
       - name: Install Puck CLI
         uses: ./.github/actions/setup-puck
         with:
@@ -285,59 +252,52 @@ jobs:
         with:
           name: compiler-analyzers
           path: src/Puck.Analyzers/bin/Release/netstandard2.0
-
       - name: Build and verify deployment bundle
+        run: puck azure build --runtime-artifacts artifacts/runtime
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- build --runtime-artifacts artifacts/runtime
       - name: Upload the application deployment bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: azure-applications
-          path: artifacts/azure
           if-no-files-found: error
           include-hidden-files: true
-
+          name: azure-applications
+          path: artifacts/azure
+    timeout-minutes: 60
   container-images:
     name: Build container (${{ matrix.image }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - project: Puck.Actors
-            image: web-actors
-          - project: Puck.World.Silo
-            image: world-silo
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build Linux container from the repository root
-        env:
+      - env:
+          IMAGE: ${{ matrix.image }}
           PROJECT: ${{ matrix.project }}
-          IMAGE: ${{ matrix.image }}
+        name: Build Linux container from the repository root
         run: docker build --file "src/$PROJECT/Dockerfile" --tag "puck/$IMAGE:$GITHUB_SHA" .
-      - name: Save the built image
-        env:
+      - env:
           IMAGE: ${{ matrix.image }}
+        name: Save the built image
         run: docker save "puck/$IMAGE:$GITHUB_SHA" | gzip > image.tar.gz
       - name: Upload the ${{ matrix.image }} image
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: azure-${{ matrix.image }}
-          path: image.tar.gz
           compression-level: 0
           if-no-files-found: error
-
+          name: azure-${{ matrix.image }}
+          path: image.tar.gz
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: web-actors
+            project: Puck.Actors
+          - image: world-silo
+            project: Puck.World.Silo
+    timeout-minutes: 45
   containers:
     name: Verify container (${{ matrix.image }})
     needs: [artifacts, container-images]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [web-actors, world-silo]
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -347,27 +307,30 @@ jobs:
           name: azure-${{ matrix.image }}
       - name: Load this run's image
         run: docker load --input image.tar.gz
-      - name: Smoke-test actor startup
-        if: matrix.image == 'web-actors'
+      - if: matrix.image == 'web-actors'
+        name: Smoke-test actor startup
         run: |
           docker run -d --name actors -p 8080:8080 "puck/web-actors:$GITHUB_SHA"
           trap 'docker logs actors; docker rm -f actors' EXIT
           curl --fail --silent --show-error --retry 60 --retry-all-errors \
             --retry-delay 2 --retry-max-time 120 --max-time 5 http://localhost:8080/healthz
-      - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        if: matrix.image == 'world-silo'
-        with:
-          global-json-file: global.json
-      - name: Install QUIC for silo verification
-        if: matrix.image == 'world-silo'
-        run: dotnet run -c Release --file build/InstallQuic.cs
-      - name: Install Puck CLI
+      - if: matrix.image == 'world-silo'
+        name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+      - if: matrix.image == 'world-silo'
+        name: Install QUIC for silo verification
+        uses: ./.github/actions/setup-quic
+      - if: matrix.image == 'world-silo'
+        name: Install Puck CLI
         uses: ./.github/actions/setup-puck
-        if: matrix.image == 'world-silo'
         with:
           artifact: nuget-packages
-      - name: Verify primary Puck activation, QUIC, and checkpoint recovery
-        if: matrix.image == 'world-silo'
+      - if: matrix.image == 'world-silo'
+        name: Verify primary Puck activation, QUIC, and checkpoint recovery
+        run: puck azure test-world-container --image "puck/world-silo:$GITHUB_SHA"
         shell: bash
-        run: dotnet run -c Release --file build/Azure.cs -- test-world-container --image "puck/world-silo:$GITHUB_SHA"
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [web-actors, world-silo]
+    timeout-minutes: 20

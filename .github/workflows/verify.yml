@@ -4,35 +4,35 @@ run-name: Runtime verification — ${{ github.event_name == 'schedule' && 'front
 # The emulator matrix. HGB runs on every change: the Humble GamingBrick battery's self-contained stages plus every
 # ledger row recorded as passing, against the corpora pinned in src/Puck.HumbleGamingBrick.Post/corpora.json, and
 # fails the build on any regression. AGB runs the Advanced GamingBrick battery the same way against its own
-# corpora; its BIOS-dependent stages skip here. The frontier runs nightly and through the manual lane: rows recorded as failing
-# or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded so a
-# ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries are
-# pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check` and
+# corpora; its BIOS-dependent stages skip here. The frontier runs nightly and through the manual lane: rows recorded
+# as failing or inconclusive, re-measured to find ratchets and pixel-count changes, with the candidate ledger uploaded
+# so a ratchet is accepted by `--accept-candidate` on the downloaded file rather than by a second run. Both batteries
+# are pure-CPU console applications; neither needs a GPU or a display. `ledgers` runs `puck schema --check` and
 # `puck registry --check` from the installed producer CLI artifact on every change, so a document field added without
 # regenerating the checked-in schema or the name registry fails the build here rather than only in a manual verb run.
 
 on:
+  schedule:
+    - cron: "17 3 * * *"
   workflow_call:
     inputs:
       prebuilt:
-        type: boolean
         default: false
-  schedule:
-    - cron: "17 3 * * *"
+        type: boolean
   workflow_dispatch:
     inputs:
       lane:
-        description: HGB evidence lane (the other runtime checks also run)
-        type: choice
-        options: [gate, frontier, all]
         default: gate
+        description: HGB evidence lane (the other runtime checks also run)
+        options: [gate, frontier, all]
+        type: choice
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('verify-pr-{0}', github.ref) || format('verify-run-{0}', github.run_id) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
+  group: verify-${{ github.run_id }}
 
 env:
   CI: true
@@ -41,43 +41,24 @@ env:
 
 jobs:
   artifacts:
-    name: Build .NET artifacts
     if: ${{ !inputs.prebuilt && github.event_name != 'schedule' }}
+    name: Build .NET artifacts
     uses: ./.github/workflows/artifacts.yml
   gaming-bricks:
+    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify ${{ matrix.name }} emulation
     needs: artifacts
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ matrix.timeout }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: HGB
-            brick: hgb
-            project: Puck.HumbleGamingBrick.Post
-            timeout: 30
-            arguments: --lane ${{ github.event.inputs.lane || 'gate' }} --require-assets
-            artifact: hgb-post-${{ github.event.inputs.lane || 'gate' }}
-          - name: AGB
-            brick: agb
-            project: Puck.AdvancedGamingBrick.Post
-            timeout: 20
-            arguments: ''
-            artifact: agb-post
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
+        uses: ./.github/actions/setup-dotnet
       - name: Restore corpus cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.local/share/Puck/corpora
           key: corpora-${{ matrix.brick }}-${{ hashFiles(format('src/{0}/corpora.json', matrix.project)) }}
+          path: ~/.local/share/Puck/corpora
       - name: Download HGB and AGB binaries
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -87,81 +68,86 @@ jobs:
         run: dotnet artifacts/batteries/${{ matrix.brick }}/${{ matrix.project }}.dll --fetch-corpora
       - name: Run the ${{ matrix.name }} battery
         run: dotnet artifacts/batteries/${{ matrix.brick }}/${{ matrix.project }}.dll ${{ matrix.arguments }} --artifacts artifacts/${{ matrix.brick }}-post
-      - name: Summarize ${{ matrix.name }} results
-        if: always()
+      - if: always()
+        name: Summarize ${{ matrix.name }} results
         run: |
           {
             echo '```'
             cat artifacts/${{ matrix.brick }}-post/post-report.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload ${{ matrix.name }} results
+      - if: always()
+        name: Upload ${{ matrix.name }} results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
         with:
+          if-no-files-found: error
           name: ${{ matrix.artifact }}
           path: artifacts/${{ matrix.brick }}-post
-          if-no-files-found: error
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arguments: --lane ${{ github.event.inputs.lane || 'gate' }} --require-assets
+            artifact: hgb-post-${{ github.event.inputs.lane || 'gate' }}
+            brick: hgb
+            name: HGB
+            project: Puck.HumbleGamingBrick.Post
+            timeout: 30
+          - arguments: ""
+            artifact: agb-post
+            brick: agb
+            name: AGB
+            project: Puck.AdvancedGamingBrick.Post
+            timeout: 20
+    timeout-minutes: ${{ matrix.timeout }}
   hgb-frontier:
+    if: github.event_name == 'schedule'
     name: Measure unresolved HGB cases
-    if: ${{ github.event_name == 'schedule' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
-
+        uses: ./.github/actions/setup-dotnet
       - name: Restore corpus cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.local/share/Puck/corpora
           key: corpora-hgb-${{ hashFiles('src/Puck.HumbleGamingBrick.Post/corpora.json') }}
-
+          path: ~/.local/share/Puck/corpora
       - name: Build the HGB battery
         run: dotnet build "$HGB_POST" --configuration Release
-
       - name: Fetch pinned HGB corpora
         run: dotnet run --project "$HGB_POST" --configuration Release --no-build -- --fetch-corpora
-
       - name: Run the HGB frontier lane
         run: dotnet run --project "$HGB_POST" --configuration Release --no-build -- --lane frontier --require-assets --artifacts artifacts/hgb-post
-
-      - name: Summarize HGB frontier results
-        if: always()
+      - if: always()
+        name: Summarize HGB frontier results
         run: |
           {
             echo '```'
             cat artifacts/hgb-post/post-report.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload HGB frontier results
+      - if: always()
+        name: Upload HGB frontier results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
         with:
+          if-no-files-found: error
           name: hgb-post-frontier
           path: artifacts/hgb-post
-          if-no-files-found: error
-
+    timeout-minutes: 60
   browser:
+    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify the deployed WebAssembly payload
     needs: artifacts
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "26.5.1"
+          node-version: 24.20.0
       - name: Download Functions and browser payloads
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -173,61 +159,56 @@ jobs:
           cp -R artifacts/runtime/browser src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle
           test -f src/Puck.World.Browser/bin/Release/net10.0/browser-wasm/AppBundle/main.mjs
       - name: Run the Node harness against the AppBundle
-        working-directory: src/Puck.Dashboard/src/portal
         run: node --test tests/engine-wasm.test.cjs
-
+        working-directory: src/Puck.Dashboard/src/portal
+    timeout-minutes: 10
   world:
+    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     name: Verify world authentication and recovery (Linux)
     needs: artifacts
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
+        uses: ./.github/actions/setup-dotnet
       - name: Download World test assemblies
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: world-verification
           path: artifacts/world-tests
       - name: Install QUIC for world verification
-        run: dotnet run -c Release --file build/InstallQuic.cs
-      - name: Run the compiled world authentication and recovery tests
-        run: dotnet run -c Release --file build/BuildArtifacts.cs -- test-world
-      - name: Upload world verification results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: world-test-results-linux
-          path: artifacts/world-test-results
-          if-no-files-found: warn
-
-  ledgers:
-    name: Verify generated schema and registry
-    needs: artifacts
-    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
-
+        uses: ./.github/actions/setup-quic
       - name: Install Puck CLI
         uses: ./.github/actions/setup-puck
         with:
           artifact: nuget-packages
-
+      - name: Run the compiled world authentication and recovery tests
+        run: puck artifacts test-world
+      - if: always()
+        name: Upload world verification results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: warn
+          name: world-test-results-linux
+          path: artifacts/world-test-results
+    timeout-minutes: 15
+  ledgers:
+    if: ${{ !cancelled() && github.event_name != 'schedule' && (needs.artifacts.result == 'success' || (inputs.prebuilt && needs.artifacts.result == 'skipped')) }}
+    name: Verify generated schema and registry
+    needs: artifacts
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+      - name: Install Puck CLI
+        uses: ./.github/actions/setup-puck
+        with:
+          artifact: nuget-packages
       - name: puck schema --check
         run: puck schema --check
-
       - name: puck registry --check
         run: puck registry --check
+    timeout-minutes: 15

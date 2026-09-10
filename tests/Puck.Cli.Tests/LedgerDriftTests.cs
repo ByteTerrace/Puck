@@ -1,6 +1,3 @@
-using Puck.Cli.Registry;
-using Puck.Cli.Schema;
-
 using Xunit;
 
 namespace Puck.Cli.Tests;
@@ -13,16 +10,17 @@ namespace Puck.Cli.Tests;
 public sealed class LedgerDriftTests {
     [Fact]
     public void SchemaCheckMatchesTheCheckedInFiles() {
-        var (exitCode, output) = RunCapturingConsole(run: static () => SchemaCommand.Run(args: ["--check"]));
+        var (exitCode, output) = RunCapturingConsole(run: static () => PuckRootCommand.Invoke(args: ["schema", "--check"]));
 
         Assert.True(condition: (exitCode == 0), userMessage: $"puck schema --check exited {exitCode}:\n{output}");
     }
     [Fact]
     public void RegistryCheckMatchesTheCheckedInFile() {
-        var (exitCode, output) = RunCapturingConsole(run: static () => RegistryCommand.Run(args: ["--check"]));
+        var (exitCode, output) = RunCapturingConsole(run: static () => PuckRootCommand.Invoke(args: ["registry", "--check"]));
 
         Assert.True(condition: (exitCode == 0), userMessage: $"puck registry --check exited {exitCode}:\n{output}");
     }
+
     private static (int ExitCode, string Output) RunCapturingConsole(Func<int> run) {
         var originalOut = Console.Out;
         var originalError = Console.Error;

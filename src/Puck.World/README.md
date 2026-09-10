@@ -100,7 +100,7 @@ peer listening available. `puck canary` creates a run-scoped key for every
 runner-owned authority pair.
 
 **Hosted Puck.** Sign in with a ByteTerrace API Users account and use the
-generated authentication configuration from the deployed [Puck world release](../../build/Azure.cs):
+generated authentication configuration from the deployed [Puck world release](../../docs/ci.md#azure-production-deployment):
 
 ```text
 dotnet run --project src/Puck.World -c Release -- --connect play.puck.byteterrace.com:7825 --authentication-config-file /path/to/world-authentication.json

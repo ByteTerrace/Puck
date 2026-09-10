@@ -194,7 +194,7 @@ loaded world. Failed drain saves can be retried; closed ingress stays frozen.
 An activation's federation subject and `WorldInstance.ListenEndpoint` come from
 the published definition, independently of checkpoint network fields. Reload
 checks that activation binding; moving an endpoint requires a fresh activation.
-`build/Azure.cs test-world-container` boots the primary Puck row, verifies a durable
+`puck azure test-world-container --image <image>` boots the primary Puck row, verifies a durable
 checkpoint and the expected QUIC key, then replaces the container against the
 same store and repeats the checks. Linux requires `libmsquic` and UDP ingress.
 Pinned activation waits for host startup, establishes its initial checkpoint,

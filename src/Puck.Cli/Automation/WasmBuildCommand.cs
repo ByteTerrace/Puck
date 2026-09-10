@@ -1,15 +1,19 @@
 
+using System.CommandLine;
 using Puck.World;
 
 namespace Puck.Cli.Automation;
 
 internal static class WasmBuildCommand {
-    public static async Task<int> RunAsync(string[] args) {
-        if (args is ["-h" or "--help"]) {
-            Console.WriteLine(value: "puck wasm build");
-            return 0;
-        }
-        if (args.Length != 0) { throw new ArgumentException(message: "Usage: puck wasm build"); }
+    public static Command Create() {
+        var build = new Command(description: "Build the addon WASM modules with cargo and refresh the shipped copies.", name: "build");
+        var command = new Command(description: "Build and refresh shipped WASM modules.", name: "wasm") { build };
+
+        build.SetAction(action: (_, _) => RunAsync());
+        return command;
+    }
+
+    private static async Task<int> RunAsync() {
         // Locate the checkout at runtime; CI can map compiler source paths to /_/.
         var scriptDirectory = Puck.RepositoryPaths.Resolve(relativePath: "wasm");
 

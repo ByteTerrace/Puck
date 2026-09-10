@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -13,16 +14,68 @@ internal static partial class CanaryCommand {
 
     private const string ScratchPrefix = "puck-canary-";
 
-    public static int Run(string[] args) {
-        if ((Array.IndexOf(array: args, value: "-h") >= 0) || (Array.IndexOf(array: args, value: "--help") >= 0)) {
-            return Usage();
-        }
+    public static Command Create() {
+        var allOption = new Option<bool>(name: "--all") { Description = "Explicitly run every proof, including any declared environmental requirements; it does not promote any proof into the automatic set." };
+        var capabilityOption = new Option<string>(name: "--capability") { Description = "Filter by automatic, headless, windowed, gpu, audio-output, or input:<hardware-name>." };
+        var idsArgument = new Argument<string[]>(name: "id") { Arity = ArgumentArity.ZeroOrMore, DefaultValueFactory = static _ => [], Description = "Run the named proofs explicitly, regardless of their declared requirements." };
+        var listOption = new Option<bool>(name: "--list") { Description = "Strictly load and list every manifest without building or running." };
+        var command = new Command(description: """
+            Bounded, two-leg behavioral proofs against the real Puck.World executable.
 
-        if (!TryParse(args: args, error: out var parseError, selection: out var selection)) {
-            Console.Error.WriteLine(value: $"ERROR: {parseError}");
+              no selection           run the automatic set: headless shape and no environmental requirements
+              <id> ...               run the named proofs explicitly, regardless of requirements
+              --all                  explicitly run every proof; does not promote any proof into the automatic set
+              --list                 strictly load and list every manifest without building or running
+              --capability <class>   filter by automatic, headless, windowed, gpu, audio-output, or input:<name>
 
-            return 2;
-        }
+            The four selection forms are mutually exclusive. Every execution refuses an empty selection,
+            builds Puck.World once, then runs each positive and discriminating leg sequentially from fresh state.
+
+            Exit codes: 0 all proofs held, 1 an observed proof failed, 2 refusal/infrastructure.
+            """, name: "canary") { idsArgument, allOption, capabilityOption, listOption };
+
+        command.Validators.Add(item: result => {
+            var capability = result.GetValue(option: capabilityOption);
+            var ids = (result.GetValue(argument: idsArgument) ?? []);
+            var forms = ((((result.GetValue(option: allOption) ? 1 : 0) + ((capability is null) ? 0 : 1)) + ((ids.Length == 0) ? 0 : 1)) + (result.GetValue(option: listOption) ? 1 : 0));
+
+            if (forms > 1) {
+                result.AddError(errorMessage: "ids, --all, --list, and --capability <class> are mutually exclusive selection forms.");
+
+                return;
+            }
+            if ((capability is not null) && !IsKnownCapability(capability: capability)) {
+                result.AddError(errorMessage: $"unknown capability filter '{capability}'; use automatic, headless, windowed, gpu, audio-output, or input:<hardware-name>.");
+
+                return;
+            }
+
+            var duplicate = ids.GroupBy(keySelector: static id => id, comparer: StringComparer.Ordinal).FirstOrDefault(predicate: static group => (group.Count() > 1));
+
+            if (duplicate is not null) {
+                result.AddError(errorMessage: $"duplicate canary id '{duplicate.Key}' in the selection; one proof must not be counted twice.");
+            }
+        });
+        command.SetAction(action: parseResult => Run(
+            all: parseResult.GetValue(option: allOption),
+            capability: parseResult.GetValue(option: capabilityOption),
+            ids: (parseResult.GetValue(argument: idsArgument) ?? []),
+            list: parseResult.GetValue(option: listOption)
+        ));
+        return command;
+    }
+
+    // The selection the landing gate runs: no ids, no filter, no --all — the automatic set alone.
+    internal static int RunAutomatic() =>
+        Run(all: false, capability: null, ids: [], list: false);
+
+    private static bool IsKnownCapability(string capability) => (
+        (capability is "automatic" or "headless" or "windowed" or "gpu" or "audio-output")
+        || (capability.StartsWith(comparisonType: StringComparison.Ordinal, value: "input:") && (capability.Length > 6))
+    );
+    private static int Run(bool all, string? capability, string[] ids, bool list) {
+        var selection = ToSelection(all: all, capability: capability, ids: ids, list: list);
+
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -64,6 +117,7 @@ internal static partial class CanaryCommand {
 
         return exit;
     }
+
     // Tolerance is about letting the other proofs run, never about calling the gate green while a manifest went
     // unread. A selection that stands for a whole suite therefore still fails when one was skipped — with every
     // surviving proof's verdict already printed, which is the whole difference from refusing the discovery
@@ -408,7 +462,7 @@ internal static partial class CanaryCommand {
         for (var index = 1; (index < full.Count); index++) {
             var candidate = Path.GetDirectoryName(path: full[index].Resolved)!;
 
-            while (Path.GetRelativePath(path: candidate, relativeTo: root).StartsWith(value: "..", comparisonType: StringComparison.Ordinal)) {
+            while (Path.GetRelativePath(path: candidate, relativeTo: root).StartsWith(comparisonType: StringComparison.Ordinal, value: "..")) {
                 var parent = Path.GetDirectoryName(path: root);
 
                 if (string.IsNullOrEmpty(value: parent)) {
@@ -808,6 +862,7 @@ internal static partial class CanaryCommand {
 
         return results;
     }
+
     // Per-verb command-claim accounting shared by a single-process leg and a federated mesh leg's primary
     // authority: every authored occurrence's response is ResponseEvents' own reading for that verb (either
     // stream; OutputLines carries both, sequence-ordered) — checked against its declared stream (accepted implies
@@ -857,6 +912,7 @@ internal static partial class CanaryCommand {
 
         return results;
     }
+
     // A buffered mutation verb the console layer never registers against WorldDeferredVerbEchoes (WorldServer stays
     // off limits to this task, so the registration gap itself is not this runner's to close) leaves the universal
     // tick-boundary narration — "[world.mutation: <Describe> applied]" accepted, "[world.mutation rejected:
@@ -868,12 +924,14 @@ internal static partial class CanaryCommand {
         ["world.state.cell.remove"] = "RemoveStateCell '",
         ["world.state.cell.set"] = "UpsertStateCell '",
     };
+
     // Refused always answers on stderr; accepted answers on stdout UNLESS the verb is narration-only (above), whose
     // sole signal is engine narration and so is stderr regardless of outcome.
     private static CanaryStream DefaultStream(CanaryCommandOutcome outcome, string verb) =>
         (((outcome == CanaryCommandOutcome.Accepted) && !NarratedMutationVerbs.ContainsKey(key: verb))
             ? CanaryStream.Stdout
             : CanaryStream.Stderr);
+
     // A verb whose space-led answer opens with an inline key ("[world.symmetry node=5 …]") rather than a bracketed
     // name reads the same as any other spaced answer except for one ambiguity BracketResponseEvents cannot resolve
     // on its own: two SEPARATE calls back to back (no other command between them) are indistinguishable from one
@@ -884,6 +942,7 @@ internal static partial class CanaryCommand {
     private static readonly IReadOnlyDictionary<string, string> KeyedSpacedVerbs = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
         ["world.symmetry"] = "node=",
     };
+
     private static List<CliProcessOutputLine> KeyedResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string verb, string keyPrefix) {
         var lead = $"[{verb} {keyPrefix}";
         var events = new List<CliProcessOutputLine>();
@@ -911,7 +970,7 @@ internal static partial class CanaryCommand {
     private static bool TryReadDelimited(string line, string prefix, out string value) {
         value = string.Empty;
 
-        if (!line.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal)) {
+        if (!line.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix)) {
             return false;
         }
 
@@ -921,6 +980,7 @@ internal static partial class CanaryCommand {
 
         return true;
     }
+
     // One event per answer. A verb narrated only through the universal mutation channel (above) is matched by
     // Describe-prefix instead of its own bracket; world.state's own two-tier read-back (a row header opening a run
     // of cell lines) gets its own reading, since a bare cell line can ALSO be a whole answer on its own (the
@@ -938,13 +998,14 @@ internal static partial class CanaryCommand {
             ? WorldStateResponseEvents(outputLines: outputLines)
             : BracketResponseEvents(outputLines: outputLines, verb: verb));
     }
+
     private static List<CliProcessOutputLine> NarratedResponseEvents(IReadOnlyList<CliProcessOutputLine> outputLines, string describePrefix) {
         var accepted = $"[world.mutation: {describePrefix}";
         var rejected = $"[world.mutation rejected: {describePrefix}";
         var events = new List<CliProcessOutputLine>();
 
         foreach (var line in outputLines) {
-            if (line.Line.StartsWith(value: accepted, comparisonType: StringComparison.Ordinal) || line.Line.StartsWith(value: rejected, comparisonType: StringComparison.Ordinal)) {
+            if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: accepted) || line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: rejected)) {
                 events.Add(item: line);
             }
         }
@@ -967,10 +1028,10 @@ internal static partial class CanaryCommand {
         var inRun = false;
 
         foreach (var line in outputLines) {
-            if (line.Line.StartsWith(value: exact, comparisonType: StringComparison.Ordinal)) {
+            if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: exact)) {
                 events.Add(item: line);
                 inRun = true;
-            } else if (line.Line.StartsWith(value: dotted, comparisonType: StringComparison.Ordinal) || line.Line.StartsWith(value: spaced, comparisonType: StringComparison.Ordinal)) {
+            } else if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: dotted) || line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: spaced)) {
                 if (!inRun) {
                     events.Add(item: line);
                 }
@@ -1004,7 +1065,7 @@ internal static partial class CanaryCommand {
         var openRow = string.Empty;
 
         foreach (var line in outputLines) {
-            if (line.Line.StartsWith(value: Exact, comparisonType: StringComparison.Ordinal)) {
+            if (line.Line.StartsWith(comparisonType: StringComparison.Ordinal, value: Exact)) {
                 events.Add(item: line);
                 inRun = true;
                 runIsDump = true;
@@ -1038,7 +1099,7 @@ internal static partial class CanaryCommand {
     private static bool TryReadQuoted(string line, string prefix, out string value) {
         value = string.Empty;
 
-        if (!line.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal)) {
+        if (!line.StartsWith(comparisonType: StringComparison.Ordinal, value: prefix)) {
             return false;
         }
 
@@ -1121,55 +1182,22 @@ internal static partial class CanaryCommand {
 
         return ids.Where(predicate: byId.ContainsKey).Select(selector: id => byId[id]).ToArray();
     }
-    private static bool TryParse(string[] args, out CanarySelection selection, out string error) {
-        selection = new CanarySelection(Capability: null, Ids: [], Kind: CanarySelectionKind.Automatic);
-        error = string.Empty;
-
-        if (args.Length == 0) {
-            return true;
+    // The four selection forms are mutually exclusive at parse time, so at most one of these can be set.
+    private static CanarySelection ToSelection(bool all, string? capability, string[] ids, bool list) {
+        if (list) {
+            return new CanarySelection(Capability: null, Ids: [], Kind: CanarySelectionKind.List);
+        }
+        if (all) {
+            return new CanarySelection(Capability: null, Ids: [], Kind: CanarySelectionKind.All);
+        }
+        if (capability is not null) {
+            return new CanarySelection(Capability: capability, Ids: [], Kind: CanarySelectionKind.Capability);
+        }
+        if (ids.Length != 0) {
+            return new CanarySelection(Capability: null, Ids: ids, Kind: CanarySelectionKind.Ids);
         }
 
-        if ((args.Length == 1) && (args[0] == "--list")) {
-            selection = selection with { Kind = CanarySelectionKind.List };
-
-            return true;
-        }
-        if ((args.Length == 1) && (args[0] == "--all")) {
-            selection = selection with { Kind = CanarySelectionKind.All };
-
-            return true;
-        }
-        if ((args.Length == 2) && (args[0] == "--capability")) {
-            var capability = args[1];
-            var valid = ((capability is "automatic" or "headless" or "windowed" or "gpu" or "audio-output") || (capability.StartsWith(comparisonType: StringComparison.Ordinal, value: "input:") && (capability.Length > 6)));
-
-            if (!valid) {
-                error = $"unknown capability filter '{capability}'; use automatic, headless, windowed, gpu, audio-output, or input:<hardware-name>.";
-
-                return false;
-            }
-
-            selection = new CanarySelection(Capability: capability, Ids: [], Kind: CanarySelectionKind.Capability);
-
-            return true;
-        }
-        if (args.Any(predicate: static argument => argument.StartsWith(comparisonType: StringComparison.Ordinal, value: "-"))) {
-            error = "ids, --all, --list, and --capability <class> are mutually exclusive selection forms.";
-
-            return false;
-        }
-
-        var duplicate = args.GroupBy(keySelector: static id => id, comparer: StringComparer.Ordinal).FirstOrDefault(predicate: static group => (group.Count() > 1));
-
-        if (duplicate is not null) {
-            error = $"duplicate canary id '{duplicate.Key}' in the selection; one proof must not be counted twice.";
-
-            return false;
-        }
-
-        selection = new CanarySelection(Capability: null, Ids: args, Kind: CanarySelectionKind.Ids);
-
-        return true;
+        return new CanarySelection(Capability: null, Ids: [], Kind: CanarySelectionKind.Automatic);
     }
     private static string CreateRunDirectory(string id, string leg) {
         var temp = Path.GetTempPath();
@@ -1203,27 +1231,6 @@ internal static partial class CanaryCommand {
         }
     }
     private static string Verdict(bool value) => (value ? "PASS" : "FAIL");
-    private static int Usage() {
-        Console.Error.WriteLine(
-            value:
-                """
-                canary [<id> ...] | --all | --list | --capability <class>
-
-                  no selection           run the automatic set: headless shape and no environmental requirements
-                  <id> ...               run the named proofs explicitly, regardless of requirements
-                  --all                  explicitly run every proof; does not promote any proof into the automatic set
-                  --list                 strictly load and list every manifest without building or running
-                  --capability <class>   filter by automatic, headless, windowed, gpu, audio-output, or input:<name>
-                  -h / --help            this text
-
-                The four selection forms are mutually exclusive. Every execution refuses an empty selection,
-                builds Puck.World once, then runs each positive and discriminating leg sequentially from fresh state.
-
-                Exit codes: 0 all proofs held, 1 an observed proof failed, 2 refusal/infrastructure/usage.
-                """);
-
-        return 2;
-    }
 
     internal enum CanarySelectionKind {
         Automatic,
@@ -1232,6 +1239,7 @@ internal static partial class CanaryCommand {
         Ids,
         List,
     }
+
     private sealed record CanarySelection(string? Capability, IReadOnlyList<string> Ids, CanarySelectionKind Kind);
     private sealed record CanaryLegRun(
         CanaryEvaluation Assertions,

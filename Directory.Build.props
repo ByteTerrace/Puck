@@ -65,15 +65,9 @@
         >false</RestorePackagesWithLockFile>
     </PropertyGroup>
 
-    <!-- File apps use the same runtime repository lookup as project-based tools.
-         Linking source keeps bootstrap programs independent of the CLI build. -->
+    <!-- File apps share the runtime repository lookup by source, so a bootstrap program needs no CLI build. -->
     <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true'">
         <Compile Include="$(MSBuildThisFileDirectory)build\RepositoryPaths.cs" Link="RepositoryPaths.cs" />
-        <Compile Include="$(MSBuildThisFileDirectory)build\AutomationProcess.cs" Link="AutomationProcess.cs" />
-    </ItemGroup>
-    <ItemGroup Condition="'$(IsFileBasedProgram)' == 'true' AND ('$(MSBuildProjectName)' == 'FormatSubmit.cs' OR '$(MSBuildProjectName)' == 'FormatSubmit')">
-        <!-- Keep the privileged GitHub submitter SDK-only, with its policy also compiled by tests. -->
-        <Compile Include="$(MSBuildThisFileDirectory)build\FormatSubmission.cs" Link="FormatSubmission.cs" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(IsFileBasedProgram)' != 'true' AND ('@(Compile)' == '' OR !$([System.String]::Copy('@(Compile)').Contains('VerifiedCodeAttribute.cs')))">

@@ -1,16 +1,18 @@
 # Puck.Cli (`puck`)
 
 The consolidated Puck **developer CLI**. One console app, one assembly (`puck`),
-with hand-rolled first-positional verb dispatch:
+one System.CommandLine tree (`PuckRootCommand.cs`) every verb hangs off:
 
 | Verb | What it is |
 |---|---|
-| [`puck nuget`](../../docs/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches. |
+| [`puck nuget`](../../docs/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
+| [`puck azure`](../../docs/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
+| [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck docs`](#automation-commands) | build and stage the website documentation. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck world`](#automation-commands) | prepare hosted world documents or probe a QUIC endpoint. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
-| [`puck mcp`](../Puck.Mcp/README.md) | Puck Console tools over local stdio or OAuth-protected HTTP. `--silo <silo.json> --http <remote.json>` installs the optional host extension; standalone silo and World have no MCP dependency. MCP 2026-07-28. |
+| [`puck mcp`](../Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator --attach <attachment file>`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape installs the optional host extension, and standalone silo and World have no MCP dependency. MCP 2026-07-28. |
 | [`puck canary`](#puck-canary--real-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck citations`](#puck-citations--cited-verb-token-check) | checks every verb-shaped token skills and XML docs cite against vocabularies swept from the code, including a live `Puck.World` console boot. |
 | [`puck search`](#puck-search--content-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
@@ -18,7 +20,7 @@ with hand-rolled first-positional verb dispatch:
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
 | [`puck registry`](#puck-registry--world-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
-| [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express. |
+| [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck declarations`](#puck-declarations--declaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
@@ -32,11 +34,13 @@ Unlike its retired `tools/` predecessors, this project is a **first-class member
 of `Puck.slnx`** and joins the full root build regime (warnings-as-errors,
 analyzers, code-metric ceilings, doc generation, committed `packages.lock.json`).
 
-The first argument selects the verb; every remaining argument forwards to the
-verb implementation unchanged — same flags, same output, same exit codes. `puck`
-with no verb (or an unknown one) prints usage and exits 2. Output is UTF-8 on
-both streams regardless of the host console's code page, so a non-ASCII source
-line survives being captured to a file.
+**One parser, one grammar.** `-h`/`--help` answers on the root and on every verb
+and sub-verb; option spellings are exact. A usage error — no verb, an unknown
+verb or option, a missing required option, an option-looking token where a value
+belongs — prints the parse errors and `Run 'puck <verb> --help' for usage.` on
+stderr and exits 2, so verbs keep 1 for a failed check and 0 for success. Output
+is UTF-8 on both streams regardless of the host console's code page, so a
+non-ASCII source line survives being captured to a file.
 
 **Path resolution is uniform.** Every verb resolves a relative path against the
 **working directory**; an absolute path is used as given. (`scan` anchors its
@@ -55,8 +59,8 @@ The installable package is `ByteTerrace.Puck.Cli`, a .NET tool whose command is
 `puck`. Its version comes from the same `build/Packaging.targets` as the libraries.
 `puck --version` reports the running CLI's version and source revision;
 `puck nuget version` reads the release version from the current checkout.
-See [CI tool installation and first-release bootstrap](../../docs/ci.md#the-cli-used-by-ci)
-for official pins, package installation checks, and release adoption.
+See [the CLI used by CI](../../docs/ci.md#the-cli-used-by-ci) for candidate
+installation, package installation checks, and release adoption.
 
 To build the candidate directly for local development:
 
@@ -83,7 +87,7 @@ remove it and break every `references` run.
 ## Automation commands
 
 ```sh
-puck nuget --help
+puck artifacts capture | restore | test-windows | test-world
 puck docs build [output-directory]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
@@ -92,7 +96,10 @@ puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
 
-`docs build` runs the pinned DocFX tool and stages `/reference/` and `/_theme/`;
+`artifacts capture` archives one build's compiled Release outputs with their
+source identity so consumer jobs restore rather than recompile; `restore` extracts
+that archive into place, and the two test sub-verbs run the archived assemblies
+through the producer's manifest. `docs build` runs the pinned DocFX tool and stages `/reference/` and `/_theme/`;
 use an output directory without those prefixes. `bundle create` writes a stable
 deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
@@ -103,8 +110,9 @@ referenced neighbours under canonical hosted file names. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
 and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
 committed default addon, printing the content hash needed by its document rows.
-Azure credentials, deployment ordering, and access restoration remain in the
-[C# deployment app](../../build/Azure.cs).
+Azure credentials, deployment ordering, and access restoration belong to
+[`puck azure`](../../docs/ci.md#azure-production-deployment), which reaches these
+verbs in process.
 
 ## `puck official` — the local official tree producer
 
@@ -348,23 +356,24 @@ linear-time, leftmost-longest, with intersection (`&`), complement (`~(...)`),
 and lookaround; no backreferences. `_` is any character including newline.
 
 ```
-puck search <pattern> [path ...]   content search (default path: cwd)
-  -i            case-insensitive
-  -F            literal string (escape the pattern)
-  -l            files-with-matches only (wins over -c)
-  -c            per-file matching-line counts
-  -n / -N       line numbers on (default) / off
-  -A n          n context lines after
-  -B n          n context lines before
-  -C n          n context lines before and after
-  -g <glob>     include glob (repeatable; no '/' matches basename)
-  --not <glob>  exclude glob (repeatable; no '/' matches a file OR directory basename)
-  -s            span mode: run over whole-file text, print start-end line ranges
-  -M <n>        max results (default 250, 0 = unlimited)
-  --files       enumerate the files that would be searched
-  -q            quiet: exit code only (--files included)
-  --            end of options: every later argument is pattern/paths
-  -h / --help   this text
+puck search <pattern> [path ...]        content search (default path: cwd)
+  -i / --ignore-case                    case-insensitive
+  -F / --fixed-strings                  literal string (escape the pattern)
+  -l / --files-with-matches             files-with-matches only (wins over -c)
+  -c / --count                          per-file matching-line counts
+  -n / --line-number                    line numbers on (the default)
+  -N / --no-line-number                 line numbers off (wins over -n)
+  -A / --after-context <n>              n context lines after
+  -B / --before-context <n>             n context lines before
+  -C / --context <n>                    both sides; an explicit -A or -B overrides that side
+  -g / --glob <glob>                    include glob (repeatable; no '/' matches basename)
+  --not <glob>                          exclude glob (repeatable; no '/' matches a file OR directory basename)
+  -s / --span                           span mode: run over whole-file text, print start-end line ranges
+  -M / --max-results <n>                max results (default 250, 0 = unlimited)
+  --files                               enumerate the files that would be searched
+  -q / --quiet                          quiet: exit code only (--files included)
+  --                                    end of options: every later argument is pattern/paths
+  -h / --help                           this text
 ```
 
 Exit codes: **0** matched, **1** no match, **2** usage/pattern error (the
@@ -467,6 +476,10 @@ puck bench --filter '*SplitNormNarrow.Hand' --filter '*SplitNormNarrow.GenericSt
 puck bench --list flat
 ```
 
+Every token other than the `world` sub-verb reaches BenchmarkDotNet's switcher
+verbatim. `-h`/`--help` there is puck's own, so the switcher's help (whose `-h`
+is its `hide` option) is reached past a separator: `puck bench -- --help`.
+
 (Run against the published executable, e.g.
 `src/Puck.Cli/publish/puck.exe bench --filter '*Norm*'`, or through
 `dotnet run --project src/Puck.Cli -c Release -- bench --filter '*Norm*'`.)
@@ -509,8 +522,8 @@ construction against the shipped world costs tens of seconds
 through the static SDF program) — far past what an iteration-based
 BenchmarkDotNet job can amortize honestly — so this lane is a plain stopwatch
 harness (`WorldBenchmarks.cs`,
-`WorldBenchHarness.cs`) rather than a `[Benchmark]` class, run directly by
-`BenchRunner` before it reaches `BenchmarkSwitcher`:
+`WorldBenchHarness.cs`) rather than a `[Benchmark]` class, and it sits beside the
+switcher as its own sub-verb rather than inside it:
 
 ```sh
 puck bench world
