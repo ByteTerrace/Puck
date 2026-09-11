@@ -16,8 +16,15 @@ namespace Puck.GamingBricks.Forge;
 /// <see cref="CartridgeCostProfile"/>.
 /// </para>
 /// <para>
-/// An operation with no measured weight yields <see cref="CostBound.Unmodeled"/>, and an unmodeled document is refused
-/// rather than admitted against an invented number. Adding a primitive means measuring it, not estimating it.
+/// An operation with no measured weight yields <see cref="CostBound.Unmodeled"/>, so a document using one is reported
+/// as unmodeled rather than against an invented number. Adding a primitive means measuring it, not estimating it.
+/// </para>
+/// <para>
+/// Rules are not simply summed. A set of rules each guarded by one equality of the same variable against a different
+/// constant cannot all run in a frame, so only the dearest of them is charged — the shape a phase machine takes, where
+/// summing would report several times what any frame really costs. The saving is only claimed when the guard variable
+/// cannot change while those rules are being evaluated; a write to it from the first of them through the last gives
+/// the whole group up and sums instead.
 /// </para>
 /// </remarks>
 public static class CartridgeCost {
@@ -50,12 +57,110 @@ public static class CartridgeCost {
             + ((document.Layers?.Length ?? 0) * profile.StepSet * 3)
             + ((document.Raster?.Length ?? 0) == 0 ? 0L : profile.RasterSetup + ((document.Raster?.Length ?? 0) * profile.RasterRow))
             + ((document.Sounds?.Length ?? 0) == 0 ? 0L : profile.Sound));
-        foreach (var rule in document.Rules ?? []) {
+        // A guard is tested whether or not it holds, so every rule's conditions are charged.
+        var rules = document.Rules ?? [];
+        foreach (var rule in rules) {
             total = CostBound.Add(left: total, right: Conditions(conditions: rule?.When, profile: profile));
-            total = CostBound.Add(left: total, right: Statements(statements: rule?.Body, cells: cells, payload: payload, profile: profile));
+        }
+
+        var bodies = new CostBound[rules.Length];
+        for (var index = 0; index < rules.Length; ++index) {
+            bodies[index] = Statements(statements: rules[index]?.Body, cells: cells, payload: payload, profile: profile);
+        }
+
+        var guards = new (string? Name, int Value)[rules.Length];
+        for (var index = 0; index < rules.Length; ++index) {
+            guards[index] = Guard(rule: rules[index]);
+        }
+
+        var exclusive = ExclusiveGuards(rules: rules, guards: guards);
+        for (var index = 0; index < rules.Length; ++index) {
+            if (guards[index].Name is not { } name || !exclusive.Contains(item: name)) {
+                total = CostBound.Add(left: total, right: bodies[index]);
+            }
+        }
+
+        // Each settled guard contributes only its dearest arm: one value of the variable holds for the whole frame,
+        // so the rules keyed to the other values cannot run.
+        foreach (var name in exclusive) {
+            var arms = new Dictionary<int, CostBound>();
+            for (var index = 0; index < rules.Length; ++index) {
+                if (guards[index].Name != name) {
+                    continue;
+                }
+
+                var value = guards[index].Value;
+                arms[key: value] = arms.TryGetValue(key: value, value: out var running)
+                    ? CostBound.Add(left: running, right: bodies[index])
+                    : bodies[index];
+            }
+
+            var dearest = CostBound.Zero;
+            foreach (var arm in arms.Values) {
+                dearest = CostBound.Max(left: dearest, right: arm);
+            }
+
+            total = CostBound.Add(left: total, right: dearest);
         }
 
         return total;
+    }
+
+    // A rule guarded by one equality against a constant — the shape a phase machine's rules take.
+    private static (string? Name, int Value) Guard(CartridgeRule? rule) =>
+        rule?.When is [{ Kind: "compare", Comparison: "eq", Left.Variable: { } name, Right.Constant: { } value }]
+            ? (name, value)
+            : (null, 0);
+
+    // The guard variables whose values genuinely partition a frame. A guard only partitions if nothing can change it
+    // while the rules keyed to it are still being evaluated, so a write to it anywhere from the first such rule
+    // through the last disqualifies it — including a write by a rule that is not itself guarded on it. A write after
+    // the last one is what a phase machine's own advance step is, and it is harmless.
+    private static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards) {
+        var candidates = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach (var guard in guards) {
+            if (guard.Name is { } name) {
+                candidates.Add(item: name);
+            }
+        }
+
+        foreach (var name in candidates.ToArray()) {
+            var first = Array.FindIndex(array: guards, match: guard => guard.Name == name);
+            var last = Array.FindLastIndex(array: guards, match: guard => guard.Name == name);
+            for (var index = first; index <= last; ++index) {
+                if (Writes(statements: rules[index]?.Body, name: name)) {
+                    candidates.Remove(item: name);
+                    break;
+                }
+            }
+        }
+
+        return candidates;
+    }
+
+    private static bool Writes(CartridgeStatement[]? statements, string name) {
+        foreach (var statement in statements ?? []) {
+            if (statement is null) {
+                continue;
+            }
+
+            if (statement.Target?.Variable == name) {
+                return true;
+            }
+
+            // A counted loop writes its own index, which can be a guard variable elsewhere in the document.
+            if (statement.Index == name) {
+                return true;
+            }
+
+            if (Writes(statements: statement.Then, name: name)
+                || Writes(statements: statement.Else, name: name)
+                || Writes(statements: statement.Body, name: name)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
 

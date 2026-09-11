@@ -1091,7 +1091,11 @@
   "variables": [
     {
       "name": "ph",
-      "initial": 5
+      "initial": 6
+    },
+    {
+      "name": "nph",
+      "initial": 6
     },
     {
       "name": "pt",
@@ -1187,6 +1191,14 @@
     },
     {
       "name": "c2",
+      "initial": 0
+    },
+    {
+      "name": "base",
+      "initial": 0
+    },
+    {
+      "name": "wbase",
       "initial": 0
     },
     {
@@ -1586,6 +1598,32 @@
   "layers": [],
   "raster": [],
   "rules": [
+    {
+      "name": "phase-begin",
+      "when": [],
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "variable": "nph"
+          },
+          "operation": "set",
+          "value": {
+            "variable": "ph"
+          }
+        },
+        {
+          "kind": "set",
+          "target": {
+            "variable": "showpiece"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        }
+      ]
+    },
     {
       "name": "steer",
       "when": [
@@ -2496,7 +2534,7 @@
                 {
                   "kind": "set",
                   "target": {
-                    "variable": "ph"
+                    "variable": "nph"
                   },
                   "operation": "set",
                   "value": {
@@ -2772,7 +2810,7 @@
         {
           "kind": "set",
           "target": {
-            "variable": "ph"
+            "variable": "nph"
           },
           "operation": "set",
           "value": {
@@ -2822,6 +2860,26 @@
               }
             },
             {
+              "kind": "set",
+              "target": {
+                "variable": "base"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "cr"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "base"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 10
+              }
+            },
+            {
               "kind": "repeat",
               "count": 10,
               "index": "cc",
@@ -2833,17 +2891,7 @@
                   },
                   "operation": "set",
                   "value": {
-                    "variable": "cr"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "fi"
-                  },
-                  "operation": "mul",
-                  "value": {
-                    "constant": 10
+                    "variable": "base"
                   }
                 },
                 {
@@ -2934,7 +2982,7 @@
             {
               "kind": "set",
               "target": {
-                "variable": "ph"
+                "variable": "nph"
               },
               "operation": "set",
               "value": {
@@ -2946,11 +2994,11 @@
             {
               "kind": "set",
               "target": {
-                "variable": "ph"
+                "variable": "nph"
               },
               "operation": "set",
               "value": {
-                "constant": 5
+                "constant": 6
               }
             }
           ]
@@ -3026,6 +3074,46 @@
               ],
               "then": [
                 {
+                  "kind": "set",
+                  "target": {
+                    "variable": "base"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "variable": "cr"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "base"
+                  },
+                  "operation": "mul",
+                  "value": {
+                    "constant": 10
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "wbase"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "variable": "w"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "wbase"
+                  },
+                  "operation": "mul",
+                  "value": {
+                    "constant": 10
+                  }
+                },
+                {
                   "kind": "repeat",
                   "count": 10,
                   "index": "cc",
@@ -3037,17 +3125,7 @@
                       },
                       "operation": "set",
                       "value": {
-                        "variable": "cr"
-                      }
-                    },
-                    {
-                      "kind": "set",
-                      "target": {
-                        "variable": "fi"
-                      },
-                      "operation": "mul",
-                      "value": {
-                        "constant": 10
+                        "variable": "base"
                       }
                     },
                     {
@@ -3067,17 +3145,7 @@
                       },
                       "operation": "set",
                       "value": {
-                        "variable": "w"
-                      }
-                    },
-                    {
-                      "kind": "set",
-                      "target": {
-                        "variable": "r2"
-                      },
-                      "operation": "mul",
-                      "value": {
-                        "constant": 10
+                        "variable": "wbase"
                       }
                     },
                     {
@@ -3123,6 +3191,43 @@
           ]
         },
         {
+          "kind": "set",
+          "target": {
+            "variable": "lines"
+          },
+          "operation": "add",
+          "value": {
+            "variable": "nfull"
+          }
+        },
+        {
+          "kind": "set",
+          "target": {
+            "variable": "nph"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 4
+          }
+        }
+      ]
+    },
+    {
+      "name": "sweep",
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 4
+          }
+        }
+      ],
+      "body": [
+        {
           "kind": "repeat",
           "count": 18,
           "index": "cr",
@@ -3148,6 +3253,26 @@
               ]
             },
             {
+              "kind": "set",
+              "target": {
+                "variable": "base"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "cr"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "base"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 10
+              }
+            },
+            {
               "kind": "repeat",
               "count": 10,
               "index": "cc",
@@ -3159,17 +3284,7 @@
                   },
                   "operation": "set",
                   "value": {
-                    "variable": "cr"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "fi"
-                  },
-                  "operation": "mul",
-                  "value": {
-                    "constant": 10
+                    "variable": "base"
                   }
                 },
                 {
@@ -3202,16 +3317,6 @@
         {
           "kind": "set",
           "target": {
-            "variable": "lines"
-          },
-          "operation": "add",
-          "value": {
-            "variable": "nfull"
-          }
-        },
-        {
-          "kind": "set",
-          "target": {
             "variable": "rcur"
           },
           "operation": "set",
@@ -3222,11 +3327,11 @@
         {
           "kind": "set",
           "target": {
-            "variable": "ph"
+            "variable": "nph"
           },
           "operation": "set",
           "value": {
-            "constant": 4
+            "constant": 5
           }
         }
       ]
@@ -3241,7 +3346,7 @@
           },
           "comparison": "eq",
           "right": {
-            "constant": 4
+            "constant": 5
           }
         }
       ],
@@ -3427,11 +3532,11 @@
             {
               "kind": "set",
               "target": {
-                "variable": "ph"
+                "variable": "nph"
               },
               "operation": "set",
               "value": {
-                "constant": 5
+                "constant": 6
               }
             }
           ]
@@ -3448,7 +3553,7 @@
           },
           "comparison": "eq",
           "right": {
-            "constant": 5
+            "constant": 6
           }
         }
       ],
@@ -3951,7 +4056,7 @@
             {
               "kind": "set",
               "target": {
-                "variable": "ph"
+                "variable": "nph"
               },
               "operation": "set",
               "value": {
@@ -3963,7 +4068,7 @@
             {
               "kind": "set",
               "target": {
-                "variable": "ph"
+                "variable": "nph"
               },
               "operation": "set",
               "value": {
@@ -4068,7 +4173,18 @@
     },
     {
       "name": "carry",
-      "when": [],
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 0
+          }
+        }
+      ],
       "body": [
         {
           "kind": "set",
@@ -4077,251 +4193,240 @@
           },
           "operation": "set",
           "value": {
-            "constant": 0
+            "constant": 1
           }
         },
         {
-          "kind": "if",
-          "when": [
-            {
-              "kind": "compare",
-              "left": {
-                "variable": "ph"
-              },
-              "comparison": "eq",
-              "right": {
-                "constant": 0
-              }
-            }
-          ],
-          "then": [
+          "kind": "repeat",
+          "count": 4,
+          "index": "k",
+          "body": [
             {
               "kind": "set",
               "target": {
-                "variable": "showpiece"
+                "variable": "si"
               },
               "operation": "set",
               "value": {
-                "constant": 1
+                "variable": "pt"
               }
             },
             {
-              "kind": "repeat",
-              "count": 4,
-              "index": "k",
-              "body": [
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "si"
-                  },
-                  "operation": "set",
-                  "value": {
-                    "variable": "pt"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "si"
-                  },
-                  "operation": "mul",
-                  "value": {
-                    "constant": 4
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "si"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "variable": "pr"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "si"
-                  },
-                  "operation": "mul",
-                  "value": {
-                    "constant": 4
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "si"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "variable": "k"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "s"
-                  },
-                  "operation": "set",
-                  "value": {
-                    "array": "shapes",
-                    "index": {
-                      "variable": "si"
-                    }
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "set",
-                  "value": {
-                    "variable": "s"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "shr",
-                  "value": {
-                    "constant": 2
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "set",
-                  "value": {
-                    "variable": "s"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "and",
-                  "value": {
-                    "constant": 3
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "variable": "py"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "subtract",
-                  "value": {
-                    "constant": 4
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "variable": "px"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "subtract",
-                  "value": {
-                    "constant": 4
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "constant": 0
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "mul",
-                  "value": {
-                    "constant": 8
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "array": "sy",
-                    "index": {
-                      "variable": "k"
-                    }
-                  },
-                  "operation": "set",
-                  "value": {
-                    "variable": "cr"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "constant": 2
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "mul",
-                  "value": {
-                    "constant": 8
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "array": "sx",
-                    "index": {
-                      "variable": "k"
-                    }
-                  },
-                  "operation": "set",
-                  "value": {
-                    "variable": "cc"
-                  }
+              "kind": "set",
+              "target": {
+                "variable": "si"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 4
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "si"
+              },
+              "operation": "add",
+              "value": {
+                "variable": "pr"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "si"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 4
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "si"
+              },
+              "operation": "add",
+              "value": {
+                "variable": "k"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "s"
+              },
+              "operation": "set",
+              "value": {
+                "array": "shapes",
+                "index": {
+                  "variable": "si"
                 }
-              ]
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "s"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "shr",
+              "value": {
+                "constant": 2
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "s"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "and",
+              "value": {
+                "constant": 3
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "add",
+              "value": {
+                "variable": "py"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "subtract",
+              "value": {
+                "constant": 4
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "add",
+              "value": {
+                "variable": "px"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "subtract",
+              "value": {
+                "constant": 4
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 8
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "array": "sy",
+                "index": {
+                  "variable": "k"
+                }
+              },
+              "operation": "set",
+              "value": {
+                "variable": "cr"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 2
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 8
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "array": "sx",
+                "index": {
+                  "variable": "k"
+                }
+              },
+              "operation": "set",
+              "value": {
+                "variable": "cc"
+              }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "phase-end",
+      "when": [],
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "variable": "ph"
+          },
+          "operation": "set",
+          "value": {
+            "variable": "nph"
+          }
         }
       ]
     }

@@ -192,6 +192,15 @@ save block carries the same magic, version and checksum on both, though the stor
 bytes live in each machine's own save window and a saved game does not travel
 between them.
 
+The estimate charges rules that cannot share a frame only once. Rules each
+guarded by one equality of the same variable against a different constant are
+alternatives, so the dearest of them is charged rather than all — which is what a
+phase machine is, and summing it would report several times what any frame
+really costs. The saving depends on the guard holding still: anything that writes
+that variable between the first of those rules and the last gives it up, so a
+phase names its successor in a second variable and one ungated rule, placed after
+every arm, adopts it.
+
 Compilation refuses a document only for what makes the image wrong — a shape the
 machine has no room for — never for what makes it slow. A cartridge that misses
 frames still runs, and the machine absorbs that already, so the per-frame work is

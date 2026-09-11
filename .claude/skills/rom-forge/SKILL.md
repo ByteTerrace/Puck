@@ -98,6 +98,14 @@ native execution tests, not by a hidden special case.
   the reply comes back on falling edges in decimal-coded nibbles. Emit the bit
   work as a runtime loop — fifty-six unrolled exchanges put their constants out
   of reach of a program-counter-relative load.
+- The estimate does not simply sum rules. Rules each guarded by one equality of
+  the same variable against a different constant cannot share a frame, so only
+  the dearest is charged — the phase-machine shape. The saving is given up
+  entirely if anything writes that variable between the first such rule and the
+  last, a counted loop's index included, so a phase must name its successor in a
+  staging variable and a single ungated rule adopts it after every arm. Put that
+  advance step last; moving it before any guarded rule silently triples the
+  estimate.
 - Cost is advice, not a gate. Validation refuses what makes an image wrong — a
   shape the hardware has no room for — never what merely makes it slow: a
   cartridge that misses frames still runs, and the emulator already absorbs that

@@ -16,12 +16,12 @@ public sealed class TetrisCartridgeTests {
         var document = Document();
         Assert.Empty(collection: CartridgeDocuments.Validate(document: document));
 
-        // The estimate sums every rule as though all of them ran together. This cartridge is a phase machine, so the
-        // heavy passes — the row scan, the collapse, the republish — are each other's alternatives and never share a
-        // frame. The estimate is therefore far above what any frame costs, which is why cadence is measured on the
-        // machine below rather than argued from this number. What it must still say is that nothing went unmodeled.
-        var (frame, _) = CartridgeDocuments.Estimate(document: document);
+        // The heavy passes — the row scan, the collapse, the republish — are arms of one phase guard, and the phase
+        // is adopted only after every arm has been passed, so the estimate charges the dearest arm rather than all of
+        // them. That is what has to fit the machine, and the cadence test below is what proves the estimate right.
+        var (frame, reservation) = CartridgeDocuments.Estimate(document: document);
         Assert.True(condition: frame.IsKnown, userMessage: frame.Reason);
+        Assert.True(condition: frame.Cycles <= reservation, userMessage: $"{frame.Cycles} units against {reservation}");
     }
 
     [Fact]
