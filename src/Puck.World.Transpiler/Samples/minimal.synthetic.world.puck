@@ -1,0 +1,9 @@
+schema: "puck.world.def.v1"
+basis: "worlds/standard.basis.json"
+
+host {
+    width: 1280
+    height: 720
+    fullscreen: false
+    targetHertz: 60
+}

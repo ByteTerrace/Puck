@@ -3,6 +3,10 @@ using System.Numerics;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
+    // Header .x packs the count in bits 0..30 and whole-root tracing admission in bit 31.
+    // KEEP IN SYNC with sdfTracePrimary in sdf-primary.hlsli.
+    private const uint IndependentPartTracingFlag = 0x80000000u;
+
     /// <summary>Gets the packed-word reservation including worst-case part-program metadata at this program's
     /// instruction and instance ceilings. Unlike <see cref="Words"/> length, this does not depend on which parts
     /// qualify for compilation or share geometry. Composition capacity probes reserve this value; their existing
@@ -147,13 +151,41 @@ public sealed partial class SdfProgram {
         key.Add(BitConverter.SingleToUInt32Bits(value.W));
     }
 
+    private bool CanTracePartsIndependently() {
+        var depth = 0;
+        foreach (var instruction in m_instructions) {
+            if (instruction.Op == SdfOp.PushField) {
+                // A compiled part inside another field is not necessarily a union operand of the root.
+                if (++depth != 1) {
+                    return false;
+                }
+            } else if (instruction.Op == SdfOp.PopField) {
+                if (depth != 1 || instruction.Blend != (uint)SdfBlendOp.Union) {
+                    return false;
+                }
+                depth--;
+            } else if (depth == 0) {
+                if (instruction.Op == SdfOp.ShapeBlend) {
+                    if (instruction.Blend != (uint)SdfBlendOp.Union) {
+                        return false;
+                    }
+                } else if (instruction.Op is not (SdfOp.ResetPoint or SdfOp.Translate or SdfOp.Rotate
+                    or SdfOp.Scale or SdfOp.TransformDynamic)) {
+                    // Other root operations can carry state or alter the accumulated field. Keep the full march.
+                    return false;
+                }
+            }
+        }
+        return depth == 0;
+    }
+
     private void PackPartPrograms(int offset, int instanceOffset, PartProgramPlan plan) {
         if (plan.CompiledCount == 0) {
             return;
         }
         m_words[instanceOffset * WordsPerVector + 1] = (uint)offset;
         var header = offset * WordsPerVector;
-        m_words[header] = (uint)plan.CompiledCount;
+        m_words[header] = (uint)plan.CompiledCount | (CanTracePartsIndependently() ? IndependentPartTracingFlag : 0u);
         m_words[header + 1] = (uint)plan.Assets.Count;
         m_words[header + 2] = (uint)plan.LeafCount;
         m_words[header + 3] = (uint)plan.BindingCount;

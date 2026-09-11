@@ -1,0 +1,54 @@
+{
+    "name": "vscode-puck",
+    "displayName": "Puck Authoring Language",
+    "description": "Rich language support, syntax highlighting, and snippets for the Puck World Authoring DSL (.puck).",
+    "version": "1.0.0",
+    "publisher": "ByteTerrace",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ByteTerrace/Puck.git"
+    },
+    "engines": {
+        "vscode": "^1.90.0"
+    },
+    "categories": [
+        "Programming Languages",
+        "Snippets"
+    ],
+    "keywords": [
+        "puck",
+        "world",
+        "dsl",
+        "authoring",
+        "simulation"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "puck",
+                "aliases": [
+                    "Puck",
+                    "puck"
+                ],
+                "extensions": [
+                    ".puck",
+                    ".world.puck"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "puck",
+                "scopeName": "source.puck",
+                "path": "./syntaxes/puck.tmLanguage.json"
+            }
+        ],
+        "snippets": [
+            {
+                "language": "puck",
+                "path": "./snippets/puck.json"
+            }
+        ]
+    }
+}

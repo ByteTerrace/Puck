@@ -67,6 +67,7 @@ Engine services          Puck.AdvancedGamingBrick
                          Puck.World.Azure  Puck.World.Client
                          Puck.World.Console  Puck.World.Protocol
                          Puck.World.Schema  Puck.World.Server
+                         Puck.World.Transpiler
 Presentation             Puck.DirectX.Presentation  Puck.Launcher.Linux
                          Puck.Launcher.Windows  Puck.Vulkan.Presentation
 Backends                 Puck.DirectX  Puck.Vulkan
@@ -92,6 +93,7 @@ Leaf contracts and data  Puck.Abstractions  Puck.Assets  Puck.Attestation
                          Puck.World.Agents.Tests  Puck.World.Azure.Tests
                          Puck.World.Browser.Tests  Puck.World.Protocol.Tests
                          Puck.World.Schema.Tests  Puck.World.Tests
+                         Puck.World.Transpiler.Tests
 (Tool)                   Puck.Cli
 (Analyzer)               Puck.Analyzers
 ```

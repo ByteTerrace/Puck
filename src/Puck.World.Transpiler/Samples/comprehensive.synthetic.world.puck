@@ -1,0 +1,112 @@
+schema: "puck.world.def.v1"
+basis: "worlds/standard.basis.json"
+documentId: "comprehensive-synthetic-v1"
+
+// Compile-time constants
+let defaultGravity = [0, -9.81, 0]
+let tickRate = 0.25s
+let targetFps = 60hz
+let turnAngle = 45deg
+let zeroAngle = 0rad
+let feltColor = #1b4d3e
+let accentColor = #ffaa00ff
+let doubleFps = 60 * 2
+
+// Module imports
+import "extensions/rules.world.puck" as rules
+import "modules/arcade.world.json"
+
+// Facet exports
+export read state, scores, tableStatus
+export action step, reset, deal
+export binding input, pointer, pad
+
+// Parametric templates
+template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
+    seatRig rigName {
+        version: "puck.camera.v1"
+        operations: [
+            orbit(distance: dist, pitch: angle, yaw: 0)
+            fov(fieldOfViewRadians: 0.001)
+        ]
+    }
+}
+
+// Host settings block
+host {
+    authority: null
+    backend: "auto"
+    exitAfterSeconds: 0
+    fullscreen: false
+    genlock: null
+    height: 720
+    journalDepth: 2000
+    listen: null
+    presentMode: "Immediate"
+    presentation: "Windowed"
+    rayQuery: true
+    surfaceFormat: "r8g8b8a8"
+    targetHertz: targetFps
+    timing: false
+    width: 1280
+}
+
+// Views section
+views {
+    layout "arena" {
+        seatCount: 2
+        slots: [
+            {
+                camera: null
+                height: 1
+                study: "moth-study"
+                width: 1
+                x: 0
+                y: 0
+            }
+        ]
+        transitionRenderScale: 1
+        transitionSeconds: tickRate
+    }
+
+    seatControl {
+        maxPitch: 0.01
+        minPitch: -0.01
+        yawReference: "World"
+    }
+
+    seatRigPreset("pilot", turnAngle, 2.5m)
+
+    study "moth-study" {
+        camera: null
+        source: "../studies/moth.glsl"
+        timeScale: 1
+    }
+}
+
+// Addon with auto-hashing
+addon "rules-engine" {
+    source: "addons/rules.wasm"
+    hash: "auto"
+}
+
+// State catalog with world cells
+state {
+    world: [
+        {
+            name: "tableState"
+            kind: "Int"
+            capacity: 1
+            cells: [
+                {
+                    key: "feltColor"
+                    value: feltColor
+                }
+                {
+                    key: "activeRound"
+                    value: 1
+                }
+            ]
+        }
+    ]
+}

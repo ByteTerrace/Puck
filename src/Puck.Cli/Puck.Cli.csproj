@@ -51,6 +51,7 @@
         <ProjectReference Include="..\Puck.World.Addons\Puck.World.Addons.csproj" />
         <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
+        <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.Mcp\Puck.Mcp.csproj" />
     </ItemGroup>
     <Target Name="PublishPuckLauncher" AfterTargets="Publish">

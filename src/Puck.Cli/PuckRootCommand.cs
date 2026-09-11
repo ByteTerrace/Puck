@@ -26,6 +26,7 @@ using Puck.Cli.Scan;
 using Puck.Cli.Schema;
 using Puck.Cli.Search;
 using Puck.Cli.Shaders;
+using Puck.Cli.Transpiler;
 using Puck.Cli.WasmStdlib;
 using Puck.Cli.WorktreeBase;
 
@@ -45,7 +46,9 @@ internal static class PuckRootCommand {
             BundleCommand.Create(),
             CanaryCommand.Create(),
             CitationsCommand.Create(),
+            CompileCommand.Create(),
             CreationCommand.Create(),
+            DecompileCommand.Create(),
             DeclarationsCommand.Create(),
             DocLinksCommand.Create(),
             DocsBuildCommand.Create(),
