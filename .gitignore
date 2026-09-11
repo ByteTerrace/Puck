@@ -5,8 +5,6 @@ artifacts/
 
 # puck CLI: published framework-dependent binaries (rebuilt via dotnet publish, never committed)
 src/Puck.Cli/publish/
-# Session-compat shim: the retired standalone rex exe (temporary; slated for removal)
-tools/rex/publish/
 
 # puck bench microscope: BenchmarkDotNet run artifacts, written under the cwd (evidence for a decision, never baselines to commit)
 BenchmarkDotNet.Artifacts/

@@ -84,6 +84,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(WorldSeatViewControl))]
 [JsonSerializable(typeof(WorldViewDefaults))]
 [JsonSerializable(typeof(WorldViewLayout))]
+[JsonSerializable(typeof(WorldViewStudy))]
 [JsonSerializable(typeof(WorldSpawnPoint[]))]
 [JsonSerializable(typeof(WorldMotionDefaults))]
 [JsonSerializable(typeof(WorldRenderDefaults))]
@@ -135,6 +136,19 @@ namespace Puck.World;
 [JsonSerializable(typeof(OverlaySubject.RecentSpeaker), TypeInfoPropertyName = "OverlaySubjectRecentSpeaker")]
 [JsonSerializable(typeof(WorldAnchor.Seat), TypeInfoPropertyName = "WorldAnchorSeat")]
 [JsonSerializable(typeof(WorldAnchor.RecentSpeaker), TypeInfoPropertyName = "WorldAnchorRecentSpeaker")]
+[JsonSerializable(typeof(WorldRenderLight))]
+[JsonSerializable(typeof(WorldRenderLight.Directional), TypeInfoPropertyName = "WorldRenderLightDirectional")]
+[JsonSerializable(typeof(WorldRenderLight.Hemisphere), TypeInfoPropertyName = "WorldRenderLightHemisphere")]
+[JsonSerializable(typeof(WorldRenderLight.Rim), TypeInfoPropertyName = "WorldRenderLightRim")]
+// WorldRenderLight.Point and WorldMarkerSource.Point share a simple name (see the WorldCameraSubject.Placement
+// note above) — named explicitly.
+[JsonSerializable(typeof(WorldRenderLight.Point), TypeInfoPropertyName = "WorldRenderLightPoint")]
+[JsonSerializable(typeof(WorldRenderSkyLayer))]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Gradient), TypeInfoPropertyName = "WorldRenderSkyLayerGradient")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Fog), TypeInfoPropertyName = "WorldRenderSkyLayerFog")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.SunDisc), TypeInfoPropertyName = "WorldRenderSkyLayerSunDisc")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Stars), TypeInfoPropertyName = "WorldRenderSkyLayerStars")]
+[JsonSerializable(typeof(WorldRenderSkyLayer.Clouds), TypeInfoPropertyName = "WorldRenderSkyLayerClouds")]
 [JsonSerializable(typeof(WorldCameraAnchorCandidate))]
 [JsonSerializable(typeof(WorldLookCue))]
 [JsonSerializable(typeof(WorldHudFrameCandidate))]
@@ -383,6 +397,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<ValueExpression> ValueExpression => Get<ValueExpression>();
     /// <summary>Gets the type info for <see cref="WorldViewLayout"/>.</summary>
     public JsonTypeInfo<WorldViewLayout> WorldViewLayout => Get<WorldViewLayout>();
+    /// <summary>Gets the type info for <see cref="WorldViewStudy"/>.</summary>
+    public JsonTypeInfo<WorldViewStudy> WorldViewStudy => Get<WorldViewStudy>();
     /// <summary>Gets the type info for <see cref="WorldTune"/>.</summary>
     public JsonTypeInfo<WorldTune> WorldTune => Get<WorldTune>();
     /// <summary>Gets the type info for <see cref="StatePhase"/>.</summary>

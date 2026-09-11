@@ -1,3 +1,5 @@
+using System.CommandLine;
+
 namespace Puck.Cli.WorktreeBase;
 
 /// <summary>
@@ -5,56 +7,28 @@ namespace Puck.Cli.WorktreeBase;
 /// refusing rather than resetting when that would discard uncommitted work.
 /// </summary>
 internal static class WorktreeBaseCommand {
-    private const string HelpText =
-        """
-        puck worktree-base <sha-or-ref> [options]   put a worktree's HEAD at a base commit
+    public static Command Create() {
+        var baseArgument = new Argument<string>(name: "base") { Description = "The commit, tag, or ref to put HEAD at, resolved as <base>^{commit} in the target worktree." };
+        var pathOption = new Option<string>(name: "--path") { DefaultValueFactory = _ => Directory.GetCurrentDirectory(), Description = "The worktree to act on." };
+        var command = new Command(description: """
+            Put a worktree's HEAD at a base commit, refusing to reset a dirty tree.
 
-        Options:
-          --path <worktree>   the worktree to act on (default: the current directory)
-          -h, --help          this text
+              HEAD already at the base       print "at base", exit 0
+              clean tree, wrong base         git reset --hard <base>, print old -> new, exit 0
+              dirty tree, wrong base         print what is dirty, refuse, exit 1, reset nothing
+              git failure / not a git tree /
+              unresolvable ref               exit 2
 
-        Resolves HEAD and <sha-or-ref>^{commit} in the target worktree.
+            "Dirty" means a tracked modification (git status --porcelain --untracked-files=no is nonempty);
+            untracked files never block a reset. Always prints the worktree's toplevel path it acted on.
+            """, name: "worktree-base") { baseArgument, pathOption };
 
-          HEAD already at the base       print "at base", exit 0
-          clean tree, wrong base         git reset --hard <base>, print old -> new, exit 0
-          dirty tree, wrong base         print what is dirty, REFUSE, exit 1, reset nothing
-          git failure / not a git tree /
-          unresolvable ref               exit 2
+        command.SetAction(action: parseResult => Run(baseRef: parseResult.GetRequiredValue(argument: baseArgument), rawPath: parseResult.GetRequiredValue(option: pathOption)));
+        return command;
+    }
 
-        "Dirty" means a tracked modification (git status --porcelain --untracked-files=no is
-        nonempty); untracked files never block a reset. Always prints the worktree's toplevel
-        path it acted on.
-
-        Exit codes: 0 already at base or reset, 1 refused (dirty), 2 usage or git failure.
-        """;
-
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Value(name: "path");
-
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"worktree-base: {scanner.Error}");
-
-            return 2;
-        }
-
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
-
-            return 0;
-        }
-
-        if (scanner.Positionals.Count != 1) {
-            Console.Error.WriteLine(value: "worktree-base: expected exactly one <sha-or-ref> argument.");
-
-            return 2;
-        }
-
-        var baseRef = scanner.Positionals[0];
-        var rawPath = (scanner.Get(name: "path") ?? Directory.GetCurrentDirectory());
-        var path = (Path.IsPathRooted(path: rawPath)
-            ? rawPath
-            : Path.GetFullPath(path: rawPath)
-        );
+    private static int Run(string baseRef, string rawPath) {
+        var path = (Path.IsPathRooted(path: rawPath) ? rawPath : Path.GetFullPath(path: rawPath));
         var toplevel = WorktreeBaseGit.Run(path: path, arguments: ["rev-parse", "--show-toplevel"]);
 
         if (toplevel.ExitCode != 0) {
@@ -104,7 +78,7 @@ internal static class WorktreeBaseCommand {
                 Console.Error.WriteLine(value: $"  {line.TrimEnd(trimChar: '\r')}");
             }
 
-            Console.Error.WriteLine(value: "worktree-base: REFUSING to reset a dirty tree.");
+            Console.Error.WriteLine(value: "worktree-base: refusing to reset a dirty tree.");
 
             return 1;
         }

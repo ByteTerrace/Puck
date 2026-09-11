@@ -15,35 +15,8 @@
         "type": "string"
       },
       "anchor": {
-        "description": "What the camera rides, or null for the world reference frame (or for Anchors to decide).",
-        "type": [
-          "object",
-          "null"
-        ],
-        "required": [
-          "$type"
-        ],
-        "anyOf": [
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorEntity"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorEntityPart"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorPlacement"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorGroup"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorSeat"
-          },
-          {
-            "$ref": "./common.schema.json#/$defs/WorldAnchorRecentSpeaker"
-          }
-        ],
-        "title": "WorldAnchor"
+        "$ref": "./common.schema.json#/$defs/WorldAnchor",
+        "description": "What the camera rides, or null for the world reference frame (or for Anchors to decide)."
       },
       "rig": {
         "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
@@ -71,7 +44,7 @@
           ],
           "properties": {
             "anchor": {
-              "$ref": "./common.schema.json#/$defs/WorldAnchor",
+              "$ref": "./common.schema.json#/$defs/WorldAnchorNonNullable",
               "description": "What the camera rides while this candidate wins."
             },
             "when": {

@@ -686,4 +686,17 @@ public abstract record WorldMutation(WorldPrincipal Principal) {
             return true;
         }
     }
+    /// <summary>Upserts a <c>views.studies</c> row (whole-row, keyed by name) — the authored intent for a compiled
+    /// shader study; compiling and swapping the live pipeline are console/composition-root concerns, not this
+    /// mutation's.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Study">The whole study row.</param>
+    [MutationKind(ordinal: 82, section: WorldSection.Views)]
+    public sealed record UpsertViewStudy(WorldPrincipal Principal, WorldViewStudy Study) : WorldMutation(Principal);
+    /// <summary>Removes a <c>views.studies</c> row by name. Rejected loudly by full-document revalidation while any
+    /// <c>views.layouts</c> slot (<c>WorldViewSlot.Study</c>) still names it.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The study name to remove.</param>
+    [MutationKind(ordinal: 83, section: WorldSection.Views)]
+    public sealed record RemoveViewStudy(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
 }

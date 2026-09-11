@@ -32,11 +32,25 @@ public sealed partial class SdfWorldEngine {
         // CADENCE GATE: revision-track the REAL decal change (see SetScreenDecal).
         m_decalRevision++;
     }
+    /// <summary>Sets which viewport slots show a hosted child's surface THIS frame (bit <c>v</c> set = viewport
+    /// <c>v</c>): the beam prepass and Stage 1 skip those slots, Stage 2 copies their host-bound source 1:1, and
+    /// <see cref="SetChildSource"/> accepts exactly those slots. Per frame, never frozen — the host derives it from the
+    /// frame's own view bindings, so a layout switch can turn any slot into a child or back. Call it before this
+    /// frame's <see cref="SetChildSource"/> calls.</summary>
+    /// <param name="mask">The child-slot bitmask over <see cref="MaxViewports"/> slots.</param>
+    public void SetChildMask(uint mask) {
+        ObjectDisposedException.ThrowIf(
+            condition: m_disposed,
+            instance: this
+        );
+
+        m_childMask = mask;
+    }
     /// <summary>Supplies the storage-image view a hosted child produced for its viewport slot this frame; the next
     /// frame binds it into the source arrays. The host owns this view's lifetime, so the binding is rewritten every
     /// frame rather than skipped on an unchanged handle value — a retired handle value can be re-issued for a
     /// different image, which a value-keyed skip would bind stale (see <c>BindScreenSources</c>).</summary>
-    /// <param name="slot">The child's viewport slot (a bit the construction <see cref="SdfWorldEngineOptions.ChildMask"/> set).</param>
+    /// <param name="slot">The child's viewport slot (a bit this frame's <see cref="SetChildMask"/> set).</param>
     /// <param name="imageViewHandle">The child's same-device storage-image view (General layout; the child owns it).</param>
     public void SetChildSource(int slot, nint imageViewHandle) {
         if (

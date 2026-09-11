@@ -144,7 +144,7 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
             previous: null
         );
 
-        WorstCaseProgramWordCapacity = probe.Words.Length;
+        WorstCaseProgramWordCapacity = probe.PartCompilationWordCapacity;
         WorstCaseInstanceCapacity = probe.Instances.Count;
         WorstCaseDynamicTransformCapacity = m_transforms.Length;
     }
@@ -169,7 +169,8 @@ public sealed class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets the instance-count floor the engine's mask buffer must reserve (see <see cref="WorstCaseProgramWordCapacity"/>).</summary>
     public int WorstCaseInstanceCapacity { get; }
     /// <summary>Gets the packed-word floor the engine's program buffer must reserve — every registered emitter's probe
-    /// form, combined into one program, measured once at construction.</summary>
+    /// form, combined into one program, measured once at construction with room for part compilation and sharing
+    /// to vary within the probe's instruction and instance ceilings.</summary>
     public int WorstCaseProgramWordCapacity { get; }
 
     // Shared by construction's probe build and every live rebuild: one builder, every emitter's Emit in list order,

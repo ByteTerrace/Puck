@@ -1,6 +1,8 @@
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Configuration;
 using System.Net.Http.Json;
+using Puck.Azure.Functions.Utilities;
+using Puck.Storage;
 
 namespace Puck.Azure.Functions.Services;
 
@@ -9,7 +11,6 @@ public sealed record UserStorageLocation(
     string BlobEndpoint,
     bool IsMigrating
 );
-
 /// <summary>
 /// Resolves where a user's container actually lives. The authority is the user's grain — its
 /// recorded home survives partition-count changes, while the local partitioner only says where a
@@ -17,23 +18,18 @@ public sealed record UserStorageLocation(
 /// locally. Results are cached briefly; correctness does not depend on the TTL, because a stale
 /// endpoint's writes are ABAC-frozen during a migration rather than silently lost.
 /// </summary>
-public interface IUserStorageLocationService
-{
+public interface IUserStorageLocationService {
     Task<UserStorageLocation> GetAsync(
         string userObjectId,
         CancellationToken cancellationToken
     );
 }
-
 public sealed class DefaultUserStorageLocationService(
     IConfiguration configuration,
     HybridCache hybridCache,
     IHttpClientFactory httpClientFactory,
     IPartitionResolver partitionResolver
-) : IUserStorageLocationService
-{
-    private const string ActorsBaseUrlKey = "Onboarding:ActorsBaseUrl";
-
+) : IUserStorageLocationService {
     private static readonly HybridCacheEntryOptions CacheEntryOptions = new() {
         Expiration = TimeSpan.FromSeconds(value: 90),
         LocalCacheExpiration = TimeSpan.FromSeconds(value: 90),
@@ -63,9 +59,7 @@ public sealed class DefaultUserStorageLocationService(
         string userObjectId,
         CancellationToken cancellationToken
     ) {
-        var actorsBaseUrl = configuration
-            .GetValue<string>(key: ActorsBaseUrlKey)
-            ?.TrimEnd('/');
+        var actorsBaseUrl = configuration.GetActorsBaseUrl();
 
         if (actorsBaseUrl is not null) {
             try {
@@ -83,8 +77,7 @@ public sealed class DefaultUserStorageLocationService(
                         Partition: location.Partition
                     );
                 }
-            }
-            catch (HttpRequestException) { } // Silo unreachable: fall through to the local resolver.
+            } catch (HttpRequestException) { } // Silo unreachable: fall through to the local resolver.
             catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { } // Client timeout.
         }
 

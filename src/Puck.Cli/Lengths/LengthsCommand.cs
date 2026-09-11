@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -18,27 +19,28 @@ internal static class LengthsCommand {
     private static readonly Regex GeneratedName = new(options: RegexOptions.Compiled | RegexOptions.IgnoreCase, pattern: @"\.(g|generated|designer|g\.i)\.cs$");
     private static readonly JsonSerializerOptions WriteOptions = new() { IndentSize = 4, WriteIndented = true };
 
-    public static int Run(string[] args) {
-        if ((Array.IndexOf(array: args, value: "-h") >= 0) || (Array.IndexOf(array: args, value: "--help") >= 0)) {
-            return Usage();
-        }
+    public static Command Create() {
+        // --check is the default; naming both leaves --write in force.
+        var checkOption = new Option<bool>(name: "--check") { Description = "Report every stale, grown, and unrecorded-over-ceiling file, and exit 1 on any." };
+        var writeOption = new Option<bool>(name: "--write") { Description = "Rewrite FileLengths.json from the tree: remove stale entries and lower shrunken ones." };
+        var command = new Command(description: """
+            The file-length ledger FileLengthAnalyzer reads.
 
-        var write = false;
+            --check, the default, reports every entry that is stale (file gone, or at or under the
+            ceiling), every recorded file that grew, and every unrecorded file over the ceiling, and
+            exits 1 on any. --write rewrites the ledger from the tree and refuses (exit 1, naming the
+            file) to raise a recorded length or add a new file — the ledger only shrinks.
 
-        foreach (var argument in args) {
-            switch (argument) {
-                case "--check":
-                    break;
-                case "--write":
-                    write = true;
-                    break;
-                default:
-                    Console.Error.WriteLine(value: $"ERROR: unrecognized argument '{argument}'; the accepted forms are: lengths [--check] | lengths --write");
+            The line count is line breaks plus one, what the analyzer counts. Generated files
+            (*.g.cs and auto-generated headers) are outside the rule, as they are for the analyzer.
+            """, name: "lengths") { checkOption, writeOption };
 
-                    return 2;
-            }
-        }
+        command.SetAction(action: parseResult => Run(write: parseResult.GetValue(option: writeOption)));
 
+        return command;
+    }
+
+    private static int Run(bool write) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -105,7 +107,6 @@ internal static class LengthsCommand {
 
         return 0;
     }
-
     private static bool TryReadLedger(string path, out int ceiling, out Dictionary<string, int> recorded, out string? error) {
         ceiling = 0;
         recorded = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
@@ -198,22 +199,5 @@ internal static class LengthsCommand {
         };
 
         File.WriteAllText(path: path, contents: (document.ToJsonString(options: WriteOptions).ReplaceLineEndings(replacementText: "\n") + "\n"), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-    }
-    private static int Usage() {
-        Console.Error.WriteLine(value:
-            """
-            puck lengths — the file-length ledger FileLengthAnalyzer reads
-
-            Usage:
-              puck lengths [--check]   report stale, grown, and unrecorded-over-ceiling files; exit 1 on any
-              puck lengths --write     rewrite FileLengths.json from the tree: remove stale entries, lower shrunken
-                                       ones; refuses to raise a recorded length or record a new file (exit 1)
-
-            The line count is line breaks plus one — what the analyzer counts. Generated files (*.g.cs and
-            auto-generated headers) are outside the rule, as they are for the analyzer.
-            """
-        );
-
-        return 2;
     }
 }

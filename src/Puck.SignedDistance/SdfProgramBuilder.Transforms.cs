@@ -5,43 +5,26 @@ using Puck.Maths;
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgramBuilder {
-    /// <summary>Bends space about the local X axis: the XY plane rotates by <paramref name="rate"/> · x radians.</summary>
-    /// <param name="rate">Radians of rotation per unit of local X.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
-    public SdfProgramBuilder BendX(float rate) {
-        return FiniteScalarTransform(
-            op: SdfOp.BendX,
-            value: rate,
-            paramName: nameof(rate),
-            subject: "A bend rate"
-        );
+    /// <summary>Rotates a coordinate plane by a rate driven by one coordinate.</summary>
+    /// <param name="plane">XY = 0, YZ = 1, XZ = 2.</param>
+    /// <param name="driver">The driving coordinate: X = 0, Y = 1, Z = 2.</param>
+    /// <param name="rate">Radians per unit; positive follows the VM's inverse-domain rotation.</param>
+    /// <param name="origin">The driver coordinate at zero angle.</param>
+    public SdfProgramBuilder RotatePlane(int plane, int driver, float rate, float origin = 0f) {
+        ArgumentOutOfRangeException.ThrowIfNegative(plane);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(plane, 2);
+        ArgumentOutOfRangeException.ThrowIfNegative(driver);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(driver, 2);
+        RequireFinite(rate, nameof(rate), "A plane rotation rate");
+        RequireFinite(origin, nameof(origin), "A plane rotation origin");
+        return Transform(op: SdfOp.RotatePlane, data0: new Vector4(rate, origin, 0f, 0f), shape: (uint)plane, blend: (uint)driver);
     }
-    /// <summary>Bends the XY plane by <paramref name="rate"/> · y radians.</summary>
-    /// <param name="rate">Radians of rotation per unit of local Y.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
-    public SdfProgramBuilder BendY(float rate) {
-        return FiniteScalarTransform(
-            op: SdfOp.BendY,
-            value: rate,
-            paramName: nameof(rate),
-            subject: "A bend rate"
-        );
-    }
-    /// <summary>Rotates the YZ plane by <paramref name="rate"/> · y radians. The three bends are distinct ops, not a
-    /// symmetric family: <see cref="BendX"/> keys on x and rotates XY, <see cref="BendY"/> keys on y and rotates XY, and
-    /// this one keys on y and rotates YZ. Each keys on a coordinate inside the plane it rotates, which is what gives the
-    /// bends their <c>1 + rate·ρ</c> Lipschitz factor (see <c>SdfProgram.BendOperatorNorm</c>) rather than
-    /// <see cref="TwistY"/>'s smaller one.</summary>
-    /// <param name="rate">Radians of rotation per unit of local Y.</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
-    public SdfProgramBuilder BendZ(float rate) {
-        return FiniteScalarTransform(
-            op: SdfOp.BendZ,
-            value: rate,
-            paramName: nameof(rate),
-            subject: "A bend rate"
-        );
-    }
+    /// <summary>Rotates XY driven by X.</summary>
+    public SdfProgramBuilder BendX(float rate) => RotatePlane(0, 0, rate);
+    /// <summary>Rotates XY driven by Y.</summary>
+    public SdfProgramBuilder BendY(float rate) => RotatePlane(0, 1, rate);
+    /// <summary>Rotates YZ driven by Y.</summary>
+    public SdfProgramBuilder BendZ(float rate) => RotatePlane(1, 1, rate);
     /// <summary>Stochastic domain-repeat fold: tiles space into cells of <paramref name="spacing"/> like
     /// <see cref="Repeat"/>, then per cell displaces the point by a hashed offset, optionally tumbles (a hashed
     /// rotation), and optionally recolors by a hashed material variant — scattering the prototype that follows into a
@@ -188,6 +171,217 @@ public sealed partial class SdfProgramBuilder {
                 w: amplitude
             ),
             op: SdfOp.DomainWarp
+        );
+    }
+    /// <summary>Scales the cross-section perpendicular to axis by
+    /// s(t) = startScale + amount*t + bulge*sin(pi*t), where t = clamp((top - p[axis])/span, 0, 1).
+    /// The shader floors s at FlareMinScale. The packed size correction and program's Lipschitz bound jointly
+    /// keep marching conservative. Paired with SDF_OP_AXIAL_PROFILE in sdf-vm.hlsli.</summary>
+    /// <param name="amount">The linear flare rate at t = 1 (s(1) = startScale + amount).</param>
+    /// <param name="bulge">The mid-span sinusoidal bulge amplitude (peaks at t = 0.5).</param>
+    /// <param name="top">The selected coordinate where the profile begins (t = 0).</param>
+    /// <param name="span">The distance the profile runs over (t reaches 1 a full <paramref name="span"/> below
+    /// <paramref name="top"/>); must be finite and strictly positive.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/>, <paramref name="bulge"/> or
+    /// <paramref name="top"/> is not finite, or <paramref name="span"/> is not finite and greater than zero.</exception>
+    /// <param name="axis">The profile coordinate: X=0, Y=1, Z=2.</param>
+    /// <param name="startScale">The positive cross-section scale at t=0.</param>
+    public SdfProgramBuilder AxialProfile(float amount, float bulge, float top, float span, int axis = 1, float startScale = 1f) {
+        ArgumentOutOfRangeException.ThrowIfNegative(axis);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(axis, 2);
+        RequireFinite(startScale, nameof(startScale), "An axial profile start scale");
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(startScale);
+        RequireFinite(
+            value: amount,
+            paramName: nameof(amount),
+            subject: "A flare amount"
+        );
+        RequireFinite(
+            value: bulge,
+            paramName: nameof(bulge),
+            subject: "A flare bulge"
+        );
+        RequireFinite(
+            value: top,
+            paramName: nameof(top),
+            subject: "A flare top"
+        );
+        RequirePositive(
+            value: span,
+            paramName: nameof(span),
+            subject: "A flare span"
+        );
+
+        // The global scale correction is baked once; the Lipschitz analysis includes it.
+        var (_, maxS) = SdfProgram.FlareExtrema(
+            amount: amount,
+            bulge: bulge,
+            startScale: startScale
+        );
+
+        return Transform(
+            data0: new Vector4(
+                w: (1f / span),
+                x: amount,
+                y: bulge,
+                z: top
+            ),
+            data1: new Vector4(
+                w: 0f,
+                x: (1f / maxS),
+                y: startScale,
+                z: 0f
+            ),
+            shape: (uint)axis,
+            op: SdfOp.AxialProfile
+        );
+    }
+    /// <summary>Adds linear*t + quadratic*t² + cubic*t³ to the target coordinate, with t = p[driver].
+    /// Target and driver must differ. The program derives a reach-dependent marching bound; deterministic
+    /// world queries refuse this presentation warp. Paired with SDF_OP_SHEAR in sdf-vm.hlsli.</summary>
+    /// <param name="linear">The linear shear coefficient.</param>
+    /// <param name="quadratic">The quadratic shear coefficient.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="linear"/> or <paramref name="quadratic"/> is not
+    /// finite.</exception>
+    /// <param name="cubic">The cubic coefficient.</param>
+    /// <param name="target">The displaced coordinate, 0..2.</param>
+    /// <param name="driver">The distinct driving coordinate, 0..2.</param>
+    public SdfProgramBuilder Shear(float linear, float quadratic, float cubic = 0f, int target = 0, int driver = 1) {
+        ArgumentOutOfRangeException.ThrowIfNegative(target);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(target, 2);
+        ArgumentOutOfRangeException.ThrowIfNegative(driver);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(driver, 2);
+        if (target == driver) { throw new ArgumentException("A shear's target and driver must differ."); }
+        RequireFinite(cubic, nameof(cubic), "A shear cubic coefficient");
+        RequireFinite(
+            value: linear,
+            paramName: nameof(linear),
+            subject: "A shear linear coefficient"
+        );
+        RequireFinite(
+            value: quadratic,
+            paramName: nameof(quadratic),
+            subject: "A shear quadratic coefficient"
+        );
+
+        return Transform(
+            data0: new Vector4(
+                w: 0f,
+                x: linear,
+                y: quadratic,
+                z: cubic
+            ),
+            op: SdfOp.Shear,
+            shape: (uint)target,
+            blend: (uint)driver
+        );
+    }
+    /// <summary>Applies p -= push*exp(-|(p-center)/radii|²). Three independent radii preserve anisotropy.
+    /// One instruction carries all nine scalars: center/push.x in Data0, radii/push.y in Data1, and push.z
+    /// as float bits in Shape. The program derives a reach-independent gradient bound. Render-only.</summary>
+    /// <param name="center">The bump's local center.</param>
+    /// <param name="radii">The per-axis Gaussian falloff radii (clamped to at least <see cref="GaussianPushMinRadius"/>
+    /// per axis, so the exponent's divisor is never zero).</param>
+    /// <param name="push">The peak displacement at the center, in world units (zero = an exact identity).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="center"/>, <paramref name="radii"/> or
+    /// <paramref name="push"/> is not finite.</exception>
+    public SdfProgramBuilder GaussianPush(Vector3 center, Vector3 radii, Vector3 push) {
+        RequireFinite(
+            value: center,
+            paramName: nameof(center),
+            subject: "A Gaussian push center"
+        );
+        RequireFinite(
+            value: radii,
+            paramName: nameof(radii),
+            subject: "A Gaussian push radii"
+        );
+        RequireFinite(
+            value: push,
+            paramName: nameof(push),
+            subject: "A Gaussian push amount"
+        );
+
+        var clampedRadii = new Vector3(
+            x: MathF.Max(x: MathF.Abs(radii.X), y: GaussianPushMinRadius),
+            y: MathF.Max(x: MathF.Abs(radii.Y), y: GaussianPushMinRadius),
+            z: MathF.Max(x: MathF.Abs(radii.Z), y: GaussianPushMinRadius)
+        );
+
+        return Transform(
+            data0: new Vector4(center, push.X),
+            data1: new Vector4(clampedRadii, push.Y),
+            shape: BitConverter.SingleToUInt32Bits(push.Z),
+            op: SdfOp.GaussianPush
+        );
+    }
+    /// <summary>Per-shape lane-driven erosion: reads the riding
+    /// dynamic slot's <see cref="DynamicTransform.Lanes"/> component named by <paramref name="lane"/> and, as it
+    /// rises from <paramref name="from"/> to <paramref name="to"/>, dilates the shape that immediately follows
+    /// inward by up to <paramref name="reach"/> — modulated by 3D noise so the erosion front is ragged, not a
+    /// uniform shrink — until the shape is skipped entirely (a cheap early-out, no field cost) once the lane reaches
+    /// <paramref name="to"/>. A reversed range (<paramref name="from"/> &gt; <paramref name="to"/>) runs the fold
+    /// the other way: the shape grows IN as the lane rises (a torn-fabric use). Order immediately before the shape
+    /// method it targets — whatever ordinary point ops (Translate/Rotate/Scale/warps) that shape's own chain still
+    /// applies in between are honored normally; a shape under no dynamic slot reads zero. KEEP IN SYNC with
+    /// SDF_OP_LANE_ERODE in Assets/Shaders/Sdf/sdf-vm.hlsli.</summary>
+    /// <param name="lane">Which <see cref="DynamicTransform.Lanes"/> component to read.</param>
+    /// <param name="from">The lane value where erosion begins (t = 0).</param>
+    /// <param name="to">The lane value where the shape is fully eroded (t = 1); may be less than
+    /// <paramref name="from"/> to run the fold in reverse.</param>
+    /// <param name="noiseScale">The erosion front's noise lattice frequency, cells per world unit.</param>
+    /// <param name="reach">The target shape's own bound radius, in world units — the distance the shape erodes
+    /// inward by at t = 1 (typically the same reach a cull-bound probe already computed for that shape).</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="lane"/> is not a defined
+    /// an integer in [0, 3]; <paramref name="from"/>, <paramref name="to"/> or <paramref name="noiseScale"/>
+    /// is not finite; <paramref name="from"/> equals <paramref name="to"/>; or <paramref name="reach"/> is not
+    /// finite and non-negative.</exception>
+    public SdfProgramBuilder LaneErode(int lane, float from, float to, float noiseScale, float reach) {
+        ArgumentOutOfRangeException.ThrowIfNegative(lane);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(lane, 3);
+        RequireFinite(
+            value: from,
+            paramName: nameof(from),
+            subject: "A lane-erode from value"
+        );
+        RequireFinite(
+            value: to,
+            paramName: nameof(to),
+            subject: "A lane-erode to value"
+        );
+
+        if (from == to) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(to),
+                message: "A lane-erode from/to pair must differ, or t = (lane - from) / (to - from) divides by zero."
+            );
+        }
+
+        RequireFinite(
+            value: noiseScale,
+            paramName: nameof(noiseScale),
+            subject: "A lane-erode noise scale"
+        );
+        RequireNonNegative(
+            value: reach,
+            paramName: nameof(reach),
+            subject: "A lane-erode reach"
+        );
+
+        return Transform(
+            data0: new Vector4(
+                w: noiseScale,
+                x: ((float)(uint)lane),
+                y: from,
+                z: to
+            ),
+            data1: new Vector4(
+                w: 0f,
+                x: reach,
+                y: 0f,
+                z: 0f
+            ),
+            op: SdfOp.LaneErode
         );
     }
     /// <summary>Elongates the shape that follows: the point clamps into a box of the given extents, sweeping the
@@ -610,15 +804,7 @@ public sealed partial class SdfProgramBuilder {
     /// Not an isometry — keep rates moderate so the march stays stable.</summary>
     /// <param name="rate">Radians of rotation per unit of local Y.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rate"/> is not finite.</exception>
-    public SdfProgramBuilder TwistY(float rate) {
-        // A signed rate is the whole point (the twist handedness), so only finiteness is refused.
-        return FiniteScalarTransform(
-            op: SdfOp.TwistY,
-            value: rate,
-            paramName: nameof(rate),
-            subject: "A twist rate"
-        );
-    }
+    public SdfProgramBuilder TwistY(float rate) => RotatePlane(2, 1, rate);
     /// <summary>Folds the point's in-plane coordinates onto the fundamental cell of a wallpaper symmetry group — the
     /// shapes that follow repeat under the group's mirrors/rotations across the lattice. Every fold branch is an
     /// isometry, so distances are preserved; like <see cref="Repeat"/>, content must stay clear of cell boundaries

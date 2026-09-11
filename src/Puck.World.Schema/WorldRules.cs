@@ -190,6 +190,8 @@ public static class WorldRuleCapacity {
 public enum WorldRuleRefusal : byte {
     [Refusal(door: "world.rule.compile", condition: "a 'body:<n>' reference names an index outside the document's declared entity-table capacity", kind: RefusalKind.Verdict)]
     BodyIndexUnknown,
+    [Refusal(door: "world.rule.compile", condition: "a '$fact:' channel does not spell '$fact:<bodyRef>:<fact>' with a BodyFacts name", kind: RefusalKind.Verdict)]
+    BodyFactMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel names a fact that is not a cell name, or the channel does not spell '$identity:<bodyRef>:<fact>'", kind: RefusalKind.Verdict)]
     IdentityFactMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'setIdentityFact' effect or a '$identity:' channel is authored in a document declaring no 'identity' lane row in state.world", kind: RefusalKind.Verdict)]

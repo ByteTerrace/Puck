@@ -13,12 +13,12 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\Puck.Azure\Puck.Azure.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
+        <ProjectReference Include="..\Puck.Storage\Puck.Storage.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Blobs" Version="[1.*,2.0)" />
-        <PackageReference Include="Azure.Extensions.AspNetCore.DataProtection.Keys" Version="[1.*,2.0)" />
         <PackageReference Include="Azure.Identity" Version="[1.*,2.0)" />
         <PackageReference Include="Azure.Monitor.OpenTelemetry.Exporter" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="[10.*,11.0)" />

@@ -156,7 +156,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
     private readonly IClipboardService m_clipboardService;
     private readonly NativeWindowOptions m_options;
 
-    private readonly Queue<WindowInputEvent> m_pendingInput = [];
+    private readonly WindowInputQueue m_pendingInput = new();
 
     private readonly GCHandle m_selfHandle;
 
@@ -332,13 +332,7 @@ internal sealed partial class Win32NativeWindow : INativeWindow, IWindowInputSou
             instance: this
         );
 
-        if (m_pendingInput.Count == 0) {
-            inputEvent = default;
-            return false;
-        }
-
-        inputEvent = m_pendingInput.Dequeue();
-        return true;
+        return m_pendingInput.TryDequeue(inputEvent: out inputEvent);
     }
     public void Close() {
         ObjectDisposedException.ThrowIf(

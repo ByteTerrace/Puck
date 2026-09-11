@@ -194,12 +194,12 @@ mutates them in session and no grant subject names them:
   `$drop`/`$replace` refuses at validation, and a JSON `null` under a key in
   a delta deletes the inherited key rather than storing a literal null.
 
-The `WorldSection` enum (`Protocol/WorldGrant.cs`, 32 members, declared
-order): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
+The `WorldSection` enum (`src/Puck.World.Schema/WorldGrant.cs`, declared
+order — read the enum for the current member list): `Kits, Screens, Cameras, Spawns, Motion, Population, Render, Addons,
 Bindings, Creations, Placements, Authoring, Speakers, Tunes, Patches, Audio,
 Collision, Host, Views, Looks, Grants, Hud, State, InputHold, Rules,
 Groups, Properties, Interactions, PlayerDefaults, Probes, Dynamics,
-Curves`.
+Curves, Tables`.
 It is the grant subject vocabulary
 (`section:<name>`) and the mutation dispatch axis — narrower than
 `WorldDefinition`'s own member list above: `Channels`,
@@ -546,6 +546,39 @@ camera height against the primary march's 128-step budget, and the fog
 remnant `exp(−fogDensity·far)` at the far plane. Renderer contract:
 `sdf-world` skill, the FAR DISTANCE row.
 
+`environment` (`WorldRenderEnvironment`, optional) and `tonemap`
+(`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
+definition every frame, alongside `lighting`/`sky`/`cycle`. `environment`
+carries `softboxes[]` (≤ `SdfEnvironment.MaxSoftboxes` 4 of `direction`,
+`size` [w, h], `color`?, `weight`?, `blur`?) and `horizon` ({`low`?, `high`?})
+— analytic studio reflections a GGX specular lobe catches; absent (or an
+all-default section) contributes exactly 0, byte-identical to a world that
+never authored it. `tonemap` absent is `none` — the stylized shaded color,
+unchanged; `filmic` applies an ACES-fit filmic curve (no gamma encode — the
+shading is already display-referred) to the frame's final color, hit or sky
+alike (never a debug view). Read back with `world.lighting`.
+Renderer contract: `sdf-world` skill, the `render.environment` row.
+
+`lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most
+`SdfEnvironment.MaxLights` 8, in slot order — a `render.cycle` key moves a
+light by its slot and may not add, remove, or retype one) and `curvature`.
+Each light's `$type` union:
+
+| `$type` | Carries |
+|---|---|
+| `directional` | `direction`, `color`, `weight`, `angularRadius`, `shadows` — at most one shadowing light per world |
+| `hemisphere` | `color`, `base`, `gradient` |
+| `rim` | `color`, `weight`, `power` — a view-dependent silhouette brighten added after the material shade |
+| `point` | `position`, `radius`, `color`, `weight`, optional `anchor` — inverse-square falloff with a soft core (`intensity = weight / (1 + (distance / radius)^2)`); lambert diffuse plus the material's GGX specular from the light's own direction, both scaled by ambient occlusion like every non-shadow light; no shadow march, and refused alongside `render.cycle` (its position lane cannot ride the arc interpolation every other light's direction lane takes) |
+
+A point light's `anchor` is a `WorldAnchor.Placement` only (every other anchor
+kind is refused by name): its position then rides that placement's — or, with
+`shapeId`, one of the placement's creation shapes' — dynamic transform every
+frame instead of the authored `position`, so the light follows the placement.
+Resolved in `WorldFramePresenter` (`WorldStampPool.TryShapeTransformSlot`),
+fresh every produced frame. Renderer contract: `sdf-world` skill, the
+environment block row.
+
 ### `dynamics` — the personality table
 
 `DynamicsRow` (`Puck.State/DynamicsRow.cs`): named rows of `{name, f, zeta, r}` —
@@ -613,6 +646,34 @@ body-motion program's `curve` target source
 (`Puck.Physics.Motion.BodyTargetSource.CurveFollow`) — a fixed-point, per-tick
 arc-length follower feeding the SAME planar target-consuming op vocabulary a
 `designated`/`sensed` target does.
+
+### `views.studies` — the shader study table
+
+`WorldViewStudy` (`WorldViews.cs`): named rows of `{name, source, camera,
+timeScale}`. `source` is a Shadertoy-dialect GLSL shader (`void
+mainImage(out vec4 fragColor, in vec2 fragCoord)`), resolved relative to the
+DOCUMENT'S OWN directory — never the Content-copied `AppContext.BaseDirectory`
+convention the `tunes`/`patches`/music asset rows use, since an author's study
+demo is a `.glsl` beside its `.world.json` and nothing else. `camera`
+(optional) is the authored camera feeding the paired `iCameraPos`/
+`iCameraTarget`/`iCameraUp`/`iCameraFov` push constants a study reads under
+`#define PUCK_STUDY 1`; absent, the study renders through its own Shadertoy
+`iMouse` orbit — the study sees `iCameraFov` 0 (camera vectors zero) and
+branches on it. `timeScale` (default 1; 0 freezes) scales the study's own
+presentation clock — never simulation state, never in `world.state.hash`.
+`views.studyToolchain` (string?, the section-level sibling of `studies`) is
+the directory holding `glslang`/`spirv-cross`/`dxc`; null resolves each by
+bare name on the search path, and nothing reads an environment variable.
+`WorldViewSlot` gains a `study` field (string?) alongside `camera`: a slot
+names AT MOST ONE of the two (the validator refuses both authored on one
+slot), and a `study` slot renders the named row's compiled shader as a child
+view instead of an SDF camera march — see `sdf-world`'s frame-driven
+child-view row for the render-side mechanics. Authored with `world.row.set
+views.studies {"name":"…","source":"…"}` / `world.row.remove views.studies
+<name>`; the `study.load`/`study.reload`/`study.watch`/`study.time`/
+`study.status` console verbs (`references/console.md`) own compiling a row
+and its live clock/watch state. `moth.world.json`'s `study` layout and
+`study.world.json` (a fullscreen-study-only world) are the worked examples.
 
 ### Kit producer `flock` — bounded local perception
 
@@ -1232,12 +1293,59 @@ completed-document boundary, reference preserved on canonical write-back). A `pr
 coordinates are AUTHOR-frame, not world-frame: `puck.creation.v1` authors with +Z the front a shape
 faces — a half-turn about Y from the engine's −Z-forward — and `CreationFrame.ToEngine` converts once
 at `WorldPrototype.EngineDocument` (authored `[x, y, z]` lands at world `(−x, y, −z)`; pinned by
-`CreationAuthorFrameLawTests`, documented in `Puck.World.Authoring`'s README). A creation also
-carries its own animation, in three composable parts: a creation-level `drivers` list (≤ 8 —
+`CreationAuthorFrameLawTests`, documented in `Puck.World.Authoring`'s README). Every shape modifier
+— `rounding`/`chamfer` (edge radii), `dilate`/`onion` (inflation radius, shell thickness), `smooth`
+(the blend radius against neighboring shapes), and a `panel`'s `inset`/`depth` — is authored in
+creation units and scales with the placement on both emission paths: the static stamper's
+`Scale(transform.Scale)` chain op re-multiplies a modifier baked into the primitive's own local
+geometry (rounding/chamfer/a panel's inset/depth), while `dilate`/`onion`/`smooth` act on the running
+world-space field directly and so are multiplied by the placement scale explicitly before emission;
+the animated stamp pool mirrors both rules against the body look's scale. Pinned by
+`WorldStampPoolShapeUnitsLawTests`/`CreationStampEmitterUnitsLawTests`. A shape's `flare` (`ShapeFlareDocument`) declares `axis` (0..2), positive
+`startScale`, `amount`, `bulge`, `top`, and positive `span`.
+Its perpendicular scale is startScale + amount*t + bulge*sin(pi*t), with
+t=clamp((top-p[axis])/span,0,1). `shear` is an object with `linear`,
+`quadratic`, `cubic`, and distinct `target`/`driver` axes in 0..2.
+`bumps` is a bounded list of `{center,radii,push}` Gaussian displacements;
+all radii are positive. Both emission paths bound the composed inverse warp
+and use a per-shape scope when no outer scope is active.
+
+`blend` accepts Union, SmoothUnion, Subtraction, Intersection, Xor,
+SmoothIntersection, SmoothSubtraction, ChamferUnion, ChamferIntersection,
+ChamferSubtraction, GrooveUnion, and PipeUnion. The round seam blends use
+`smooth` as their single radius. There is no `groove` width field.
+
+`cells { amplitude, frequency, mode, randomness, seed }` adds cellular
+relief in the shape's rigid frame. F1 admits randomness in [0,0.46];
+F2MinusF1 admits [0,0.20]. Frequency is in (0,8], amplitude in [0,4], and
+the derivative factor 1+amplitude*frequency*L must be at most 8
+(L=1 for F1; L=2 for F2MinusF1).
+A closed primitive and per-shape scope are required: Sweep, grouped/detail shapes, and creations requiring
+an outer scope refuse cells. Both emitters scale frequency inversely and
+amplitude directly with placement scale. Bounds include amplitude/2
+outward relief. Worked seam and cell examples live in
+[the authoring README](../../../../src/Puck.World.Authoring/README.md#round-seams-and-cellular-relief).
+
+`erode { lane, from, to, noise? }` selects an integer lane 0..3.
+t=saturate((lane-from)/(to-from)); t>=1 skips the shape. Noise is tapered
+by 4*t*(1-t), leaving both endpoints exact. Unequal finite endpoints are
+required; reversed ranges grow the shape as the lane rises. Unbound lanes
+read zero. Erosion is render-only and uses the same scope as the shape's warps.
+
+A creation's `volumes` list declares `flow` media with `position`,
+`rotation`, positive `halfExtent`, optional `parent`, and a required
+`ramp` of 1..4 ascending `{density,color}` stops. Controls are `axis`,
+`width`, `speed`, `seed`, `steps`, `intensity`, `extinction`,
+`pulseAmplitude`, `pulseFrequency`, and optional `intensityLane`
+(0..3; absent means unit gain). Media composite behind opaque-depth clipping
+and have no collider. See the authoring README's volume reference.
+
+A creation also carries its own animation, in three composable parts: a creation-level `drivers` list (≤ 8 —
 `{name, signal, cadence, when}`, where `signal` is `planarTravel`/`travel`/`time` (integrating) or
 `speed`/`verticalSpeed`/`turnRate` (instantaneous) and `when` is one token or an array of ≤ 4 that
-must all hold — a `Puck.Physics.Motion.BodyFacts` name, `always`, or the client-derived `moving`/
-`still` (eased rendered speed against `WorldGaitDrivers.MovingSpeed`), so a walker gated
+must all hold — a `Puck.Physics.Motion.BodyFacts` name, `always`, the client-derived `moving`/
+`still` (eased rendered speed against `WorldGaitDrivers.MovingSpeed`), or a `state.<row>[.<key>]`
+reference that holds while the cell's STORED value is nonzero — so a walker gated
 `["Grounded", "moving"]` returns its limbs to rest on a stop with no sim fact involved), and
 per-shape `swings`/`slides` (≤ 4 each) naming a driver, an `axis` (plus a
 `pivot` for a swing), an `amplitude`, a `phase`, and a `wave` (`sine`/`halfSine`/`linear`/`constant` —
@@ -1247,8 +1355,20 @@ per-shape `swings`/`slides` (≤ 4 each) naming a driver, an `axis` (plus a
 limb). A driver's `cadence` and a facet's `amplitude`/`phase` may reference a numeric state cell
 (`DocumentScalar`, resolved by the same walk as every document reference — a numeric cell is offered
 as its decimal spelling), and a driver's `signal` may be `state.<row>[.<key>]`, read at the frame's
-tick (a `cycle` row is a shared clock). The world validator refuses an undeclared curve or a
-non-numeric signal row (`ValidateCreationBindings`). One primitive covers a walker's limbs, a climber's, a wheel, a rotor, a
+tick (a `cycle` row is a shared clock; a cell carrying a `dynamics` trait reads its EASED sample, so
+a second-order follower on a rule-written target is a pose blend the simulation owns). In a driver
+signal, a gate token, an effector's `state` target, and a look's `motion.poses`, `$body` in the key is
+the wearing body's 0-based index (`state.airPose.$body` on a row keyed by body); a body with no such
+cell reads 0. A look's `motion.poses` maps a creation frame name to such a reference: the frame holds
+while the cell's STORED value is nonzero (a pose is a truth, never an eased sample) and overrides the
+cue and replay cursor (a blink a `scheduleState`/`generate` rule pair schedules). The world validator refuses an undeclared curve, a non-numeric signal, gate, or pose
+row, and a pose naming no frame (`ValidateCreationBindings`, `ValidateLooks`). A look's `motion.lanes` is an array of up to four optional
+`ValueExpression` entries. Indices 0..3 map directly to
+`DynamicTransform.Lanes` on every dynamic slot owned by the look.
+Interior nulls remain in place; absent and trailing null entries read zero.
+Expressions use eased state. Invalid arithmetic, failed reads, or unsupported
+operators produce zero. Erosion, weathering, and flow intensity select a lane
+explicitly; the engine assigns no semantic names to those indices. One primitive covers a walker's limbs, a climber's, a wheel, a rotor, a
 tail, and a bobbing hull. It is presentation-only: `WorldStampPool.PackTransforms` composes it onto
 the per-frame dynamic transforms and nothing else reads it, so the SDF program, the colliders, the
 solid field, and simulation state are untouched — pinned by `CreationAnimationLawTests`, with the
@@ -1266,7 +1386,60 @@ every probe there misses), `body` (another entity's root plus `offset`, in that 
 `state` (a text cell spelling a world `[x, y, z]`). `when`/`weight` gate and ease it exactly as a
 driver's do, blending the GOAL rather than the pose. `plant` holds the world target where it was
 when the named driver's phase entered `window` — a stance foot, a hand on a hold, one mechanism.
-Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
+Presentation-only on the same terms, pinned by `CreationEffectorLawTests`. A shape's `panel`
+(`ShapePanelDocument`) is a second-material inset face region — a plate that reads as two shapes
+(an ivory inset in a lilac armor plate, say) for the price of one against `CreationDocument.StampShapeCount`'s
+per-stamp budget (a panelled shape charges 2). `inset` erodes a copy of the shape on every local axis (clamped
+to the shape's smallest local half-extent, `SdfSolidGeometry.HalfExtent`); `depth` places it along `face`
+(a local direction, normalized; null = `+Z`; zero-length refused by name) and composes it with `material` —
+positive recesses it (Subtraction, the floor exactly `depth` below the plate's face), negative raises it proud by
+exactly `|depth|` (Union) — clamped to `±2·h′` (`h′` = the eroded copy's own half-extent along `face`; deeper is
+an enclosed void or a detached slab). Both are creation units, scaled by the placement on both emission paths (the
+static stamper's own `Scale(transform.Scale)` chain op reaches them automatically; the animated pool multiplies them
+by the placement scale explicitly before resolving); `ShapePanelDocument.Resolve` is the one derivation both emission
+paths read. Render-only: the deterministic fixed-point contact
+evaluator never reads it, so a panelled solid placement's collider is unchanged. Refused by name on a Plane, a
+domain-folded or grouped shape, and a creation that otherwise needs its own field scope (any other shape's
+non-Union blend, an engraved text run, or a noise facet) — a panel needs a one-deep field scope of its own and
+none of those leave one to nest into. A shape's `trims` (`ShapeTrimDocument[]`, at most 4) paint a second-material
+band on the shape's own surface wherever it sits near another, EARLIER-declared shape (`shape`, matched by name) —
+a Subtraction cutter riding the host's own `group` is the common case, or a plain plane-like Box authored purely to
+mark a seam. Each trim charges 2 against `StampShapeCount` (the host's own copy plus the reference's), opens a
+scope of its own AFTER the host's own emission (one per trim, sequential — never nested), and composes: the host's
+own copy nudged narrowly closer than its own plain (already-present) instance by `inset` (creation units, `[0,
+ShapeTrimDocument.MaxInset]`, default `0.003`) — a real Dilate at a POSITIVE radius, so it loses to the plain
+surface everywhere by default and wins only where the Intersection with the reference's own copy — its own pose,
+scale grown by `width` (creation units, positive) — does not push the candidate past it, i.e. near the reference;
+`max(a, b) >= a` is why a genuine erosion could never win there. Refused by name on a shape carrying `domain` ops
+or a non-zero `group`, and on a creation that otherwise needs its own field scope — the same reasons `panel`
+refuses them; and refused by name when the REFERENCE carries `domain` ops or a non-zero `group`, since its copy is
+re-emitted from its own slot and authored pose alone (a fold's slot carries only its parent's delta frame, a grouped
+member rides its group's chain) and would land in the wrong place. Render-only, like `panel`: the deterministic fixed-point contact evaluator never reads it. A shape's
+`detail` (bool, null = false) marks it SHADING-ONLY: the SDF VM
+skips it entirely during the beam and fine march (so it never carves the silhouette or holds contact geometry —
+`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip a detail shape outright, unlike Panel/Trims,
+which only skip their SECOND copy) and includes it only in the shading evaluation at an already-found hit, where
+its own material and its perturbation of the surface normal paint its footprint — a thin subtraction (a seam) or
+a small union carrying its own material (a rivet) that stays a crisp mark at any distance instead of the dots a
+march-carved groove thinner than the footprint-relative acceptance produces. Refused by name alongside `panel` or
+`trims` on the same shape — both compose a SECOND shape instance detail cannot separately describe. A shape's
+`secondary` (bool, null = true) is `detail`'s OPPOSITE exclusion set: false drops it from ONLY the soft-shadow and
+ambient-occlusion field walks (sdf-world.hlsli's `softShadowVisibility`/`calcAO`/`calcFastAO`, gated on
+`sdfSecondaryMarchActive`) — it still marches for the camera, still carves the silhouette, and
+`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` still hold it as ordinary contact geometry. No Panel/
+Trims restriction, since it packs its own bit on the SAME instruction rather than composing a second shape. A shape's
+`curve` (`ShapeCurveDocument`) is a quadratic Bezier — control points `a`/`b`/`c` (each `state.<row>[.<key>]`-bindable),
+a radius tapering linearly between `radiusStart`/`radiusEnd` plus a mid-span `bulge`, optionally 1-4 `strands` orbiting
+the curve at `strandOffset` with rate `twist` — admitted ONLY on, and required on, `type: sweep` (refused elsewhere,
+and a `sweep` with no `curve`, both by name). The primitive's control points and radii already carry creation-unit
+dimensions directly, so `scale` must be uniform (refused otherwise, by name) and bakes onto them as one multiplier,
+unlike every other primitive's unit-size law (`SdfSolidGeometry`'s dimension table). Refused by name alongside
+`panel`/`trims`/`flare`/`shear`/`bumps`/`domain` on the same shape — a sweep is not a closed solid
+(`CreationStampEmitter.EmitFixed`/`VisitFixedPrimitiveCopies` skip it outright, like `detail`) and needs none of
+their scopes. `bulge`/the radius taper/`strandOffset` are each refused past a ratio to the authored radii
+(`SdfProgramBuilder.MaxSweepBulgeRatio`/`MaxSweepTaperRatio`/`MaxSweepStrandOffsetRatio`) — the envelope the shape's
+conservative margin is numerically calibrated against (see the sdf-world skill's Sweep row). `strands` above 1 is
+render-only, refused for deterministic field contact by name. `body.rig [body]` is the read-back (Immediate, client-local — the values live only on the stamp pool): per driver its phase and eased weight, per effector its weight, whether its latch is holding, and the WORLD point its tip is being asked for (`target=(x, y, z)` or `none`), so a piped run fences twice and asserts a planted foot's target is unchanged while `body.where` moved. A body-rooted part anchor (`WorldStampPool.TryBodyPartAuthoredPose`) reports the COMPOSED pose — drivers, parent chain, effector — so an anchor consumer and the rendered geometry never disagree. Everything else — the
 census, simulation (30 Hz), host (windowed, loopback-default — `--listen` binds
 QUIC), collision, gravity, channels, the `walk` body-motion program, the `walker` kit
 (`defaultSeatKit`), keyboard/gamepad bindings, the chase seat rig, the pip look, and grants — is the
@@ -1936,7 +2109,10 @@ reserved derived-face band (`WorldPlacementPolicy.DerivedFaceBase` +
   Text cell holding the matching array. `WorldStateDocumentValues` resolves
   those only after the whole world parses, retains the reference for canonical
   write-back, and rehydrates a fresh candidate when a referenced state row is
-  mutated so a rejected candidate cannot alter the live value holder.
+  mutated — or when a row write introduces a reference (`WorldServer.TryCompose`;
+  the `creations` arm resolves a private copy of the submitted row first, since
+  its canonicalizer reads bound values) — so a rejected candidate cannot alter
+  the live value holder.
 - **State-backed identifiers** use `DocumentIdentifier`: an ordinary string
   remains literal, while a `state.<row>[.<key>]` string reads its identifier
   from a Text state cell. This includes binding-group identifiers on chord,
@@ -2503,20 +2679,57 @@ zone, and neutral-grace duration.
   bone storage.
 - `WorldHudCapacity` (`WorldHud.cs`): see [hud.md](hud.md).
 - `StateCapacity` (`Puck.State/StateRow.cs`): `MaxRows = 256`,
-  `MaxCellsPerRow = 128` (an authored `capacity` may only narrow it),
+  `MaxCellsPerRow = TopologyCompilation.MaxCells` (an authored `capacity` may only narrow it),
   `MaxTextValueLength = 256` (UTF-16 units, a text cell's value), and
   `MaxBodySlots = 128` across the `body` and `identity` lanes (the fixed
   per-body register/checkpoint width).
 - `WorldDynamicGeometryCeilings.MaxContributedDynamicInstances = 16000`,
   the document-global CPU/instance-grid admission ceiling. The recorded
   GPU-bound measurement is 0 but does not govern admission.
-- `WorldPlacementPolicy`: `MaxShapesPerStamp = 128`,
-  `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128),
-  `TimelineSecondsPerFrame = 8f/60f`, and the reserved derived-face screen
-  band.
+- `WorldPlacementPolicy`: `MaxShapesPerStamp = 367`,
+  `MaxStampRegistrations = WorldBodiesLimits.DetailedRenderBand` (128, an
+  independent value), `TimelineSecondsPerFrame = 8f/60f`, and the reserved
+  derived-face screen band. The stamp pool's worst-case instance draw is
+  `MaxStampRegistrations x MaxShapesPerStamp` (46976) against
+  `Puck.SignedDistance.SdfProgramBuilder.MaxInstances` (65536); 367 is the
+  measured ceiling that keeps the shipped overworld's whole COMPOSED boot
+  probe (the presenter's four emitters: the scene — stamp pool, avatar
+  catalog, static placements, screens — plus the SDF-document, adjacency-band,
+  and field reservations) at least 4096 instances under that cap (61392
+  composed at 367, headroom 4144; 4000 at 368), measured by
+  `WorldRenderEnvelopeLawTests.ShippedWorldBootProbeInstancesFitTheEngineCeilingWithHeadroom`.
 - `WorldRenderEnvelope.cs` — the render-capacity oracle: `Configure` at boot
   from the probe, `TryFit(candidate)` at every apply; unconfigured reads as
   "fits".
+- `CreationDocument.PaletteSize = 16` bounds `puck.creation.v1`'s `palette`
+  array. Each `PaletteEntryDocument` entry: `color` (`#RRGGBB` or a
+  `state.<row>[.<key>]` binding), `emissive` (null = 0), `specular` (null =
+  the `SdfMaterial` default 0; the GGX dielectric reflectance at normal
+  incidence before the `metal` mix), `roughness` (null =
+  `SdfMaterial.DefaultRoughness`; [0, 1], the GGX roughness-floor curve
+  parameter — see the sdf-world skill's material row), `sheen` (null = 0;
+  [0, 1], a fresnel edge-lift strength), `metal` (null = 0; [0, 1], mixes the
+  reflectance toward `color` and scales the diffuse term by `1 - metal`),
+  `coat` (null = 0; [0, 1], a fixed-roughness clearcoat GGX lobe). Each of
+  those four unit-range lanes is refused BY NAME at the canonicalizer when
+  non-finite or outside [0, 1] (`PaletteAdmissionLawTests`) — `SdfMaterial`'s
+  own `RequireUnitRange` would otherwise throw at stamp emission. A document
+  still spelling `shininess` is an unmapped member and is refused. A palette
+  entry's `weathering` declares `edge`, `lines`, `settle`, `reach`,
+  `seed`, `scale`, `floor`, `lane`, up to two ascending `under`
+  threshold/surface entries, and an optional `deposit` surface.
+  Each surface supplies `color`, `roughness`, and `metal`.
+  `inset` declares `origin`, `rotation`, `depth`, `ior`, and
+  `paint`: 1..4 ascending radial `{radius,color}` stops with `softness`,
+  `modulationAmplitude`, `modulationFrequency`, and `seed`.
+  Inset coordinates use the winning dynamic frame, or world space for a
+  static hit. `wrap`, `soften`, and `bounce` retain their shading roles.
+- `WorldRenderLight.Occluder` uses ordinary light rows to attenuate nearby
+  surface illumination. It declares `position`, positive `radius`,
+  `weight`, and an optional entity, entity-part, or placement `anchor`.
+  Anchors resolve each frame; unavailable anchors give weight zero.
+  Point and Occluder positions interpolate linearly through render cycles.
+  `world.lighting` reads back the authored light definitions.
 
 ## Routing map (one line each, all under `src/Puck.World.Schema/`)
 

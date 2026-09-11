@@ -250,7 +250,7 @@ internal static partial class CanaryCommand {
         var dryRunDirectory = Path.Combine(path1: releaseDirectory, path2: "dry-run");
         // ContentAddressedUpdateStager stages the payload whose rid matches this RUNNING process's own
         // RuntimeInformation.RuntimeIdentifier (UpdateService.CurrentRid()) — a fixture rid would never match.
-        var publishExit = PublishCommand.Run(args: [
+        var publishExit = PublishCommand.Create().Parse(args: [
             "--rid", UpdateService.CurrentRid(),
             "--input", payloadDirectory,
             "--out", dryRunDirectory,
@@ -258,7 +258,7 @@ internal static partial class CanaryCommand {
             "--channel", StubReleaseChannel,
             "--version", StubReleaseVersion,
             "--state-generation", "0",
-        ]);
+        ]).Invoke();
 
         if (publishExit != 0) {
             throw new IOException(message: $"puck publish exited {publishExit} building the self-update canary's throwaway release.");

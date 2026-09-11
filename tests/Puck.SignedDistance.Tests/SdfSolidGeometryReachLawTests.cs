@@ -29,7 +29,9 @@ public sealed class SdfSolidGeometryReachLawTests {
 
     [Fact]
     public void ReachReadsScaleMagnitudes() {
-        foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
+        // Sweep's reach/admission depend on its own curve, not (only) scale — this scale-driven law does not
+            // apply to it; SweepLawTests covers its admission/emission agreement separately.
+            foreach (var type in Enum.GetValues<SdfSolidPrimitive>().Where(predicate: (SdfSolidPrimitive candidate) => (candidate != SdfSolidPrimitive.Sweep))) {
             foreach (var signs in new[] {
                 new Vector3(x: -1f, y: 1f, z: 1f),
                 new Vector3(x: 1f, y: -1f, z: 1f),
@@ -94,7 +96,9 @@ public sealed class SdfSolidGeometryReachLawTests {
     public void ReachReadsTheSameEffectiveScaleEmissionDoes() {
         var minimum = new Vector3(value: SdfSolidGeometry.MinimumScale);
 
-        foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
+        // Sweep's reach/admission depend on its own curve, not (only) scale — this scale-driven law does not
+            // apply to it; SweepLawTests covers its admission/emission agreement separately.
+            foreach (var type in Enum.GetValues<SdfSolidPrimitive>().Where(predicate: (SdfSolidPrimitive candidate) => (candidate != SdfSolidPrimitive.Sweep))) {
             var atMinimum = SdfSolidGeometry.Reach(
                 scale: minimum,
                 type: type

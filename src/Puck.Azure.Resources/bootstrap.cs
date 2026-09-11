@@ -636,7 +636,7 @@ var publisher = new System.Diagnostics.ProcessStartInfo(fileName: "dotnet") {
     UseShellExecute = false,
     WorkingDirectory = Puck.RepositoryPaths.FindRoot()!,
 };
-foreach (var argument in new[] { "run", "-c", "Release", "--file", Puck.RepositoryPaths.Resolve(relativePath: "build/Azure.cs"), "--", "publish-template-specs" }) {
+foreach (var argument in new[] { "run", "--project", Puck.RepositoryPaths.Resolve(relativePath: "src/Puck.Cli"), "-c", "Release", "--", "azure", "publish-template-specs" }) {
     publisher.ArgumentList.Add(item: argument);
 }
 using var publication = (System.Diagnostics.Process.Start(startInfo: publisher)

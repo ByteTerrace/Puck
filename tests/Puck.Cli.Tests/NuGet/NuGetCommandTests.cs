@@ -7,9 +7,9 @@ namespace Puck.Cli.Tests.NuGet;
 
 public sealed class NuGetCommandTests {
     [Fact]
-    public async Task PackRejectsDuplicateOrUnknownBuildOptionsBeforeProducingArtifacts() {
-        Assert.Equal(1, await RunAsync(["pack", "--no-build", "--no-build"]));
-        Assert.Equal(1, await RunAsync(["pack", "--unknown"]));
+    public void PackRejectsUnknownOptionsBeforeProducingArtifacts() {
+        Assert.Equal(expected: 2, actual: PuckRootCommand.Invoke(args: ["nuget", "pack", "--unknown"]));
+        Assert.Equal(expected: 2, actual: PuckRootCommand.Invoke(args: ["nuget", "pack", "--no-build", "extra", "positional"]));
     }
     [Fact]
     public void CatalogFindsNestedOptInsAndIgnoresBuildOutputs() {

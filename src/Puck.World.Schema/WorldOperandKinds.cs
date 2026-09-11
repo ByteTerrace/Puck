@@ -1,3 +1,4 @@
+using Puck.Physics.Motion;
 namespace Puck.World;
 
 /// <summary>The operand facts only a world answers. Each reads through <see cref="IWorldRuleReader"/>, the widening
@@ -137,6 +138,21 @@ public sealed class UprightOperand : WorldOperandFact {
     public UprightOperand(CompiledBodyRef bodyA) : base(CellKind.Fixed) => BodyA = bodyA;
 
     public CompiledBodyRef BodyA { get; }
+
+    public override RuleFact Read(IRuleReader reader) => ((IWorldRuleReader)reader).Read(operand: this);
+    public override long Cost(RuleCompileContext context) => 1L;
+}
+
+/// <summary>One live body fact (<see cref="WorldRuleFacts.FactPrefix"/>): <c>1</c> while the body's fact bit holds,
+/// <c>0</c> otherwise or for a reference resolving to no live body.</summary>
+public sealed class BodyFactOperand : WorldOperandFact {
+    public BodyFactOperand(CompiledBodyRef body, BodyFacts fact) : base(CellKind.Int) {
+        Body = body;
+        Fact = fact;
+    }
+
+    public CompiledBodyRef Body { get; }
+    public BodyFacts Fact { get; }
 
     public override RuleFact Read(IRuleReader reader) => ((IWorldRuleReader)reader).Read(operand: this);
     public override long Cost(RuleCompileContext context) => 1L;

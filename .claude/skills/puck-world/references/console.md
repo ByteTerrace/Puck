@@ -291,9 +291,102 @@ exists to prevent. `puck schema` documents payload shapes — cite it, but there
 deliberately NO runtime schema validation (owner deferred the gate; validation
 stays at the full-document revalidation on apply).
 
-Same rule for per-field convenience: a verb that reads a row, changes one field
-and submits the whole row back is a stale read against the same batch's own
-composing writes. That is a defect class, not a shortcut.
+Same rule for per-field convenience: a BESPOKE per-section verb that reads a row,
+changes one field, and submits the whole row back is a stale read against the
+same batch's own composing writes — a defect class, not a shortcut. The general
+literal field/list doors below do exactly this shape, safely, because they share
+ONE window guard (`WorldRowStepWindowGuard`) that refuses a second read-modify-
+whole-row-write against the same row inside one tick window rather than letting
+the later one silently revert the earlier; a bespoke verb reinventing the shape
+without that guard is the regression this rule still targets.
+
+**`creation.sculpt(s)` is not a second door.** `creation.sculpts` lists the
+registered code-authored generators (`Puck.World.Authoring.Sculpting.CreationSculptRegistry`
+— see that project's README); `creation.sculpt <name>` runs the named one's
+patch against a working copy of the live document, echoes that plan
+(`[creation.sculpt: planned=<name> <path>=<verdict> …]`), and composes each
+distinct row it touched through the row door's own section table
+(`WorldRowCommandModule.TryComposeEditedRow`/`TryComposeRemove`, one
+`WorldMutation` per row, stamped with `context.ActingPrincipal()` — a seat's
+sculpt lands as that seat and is refused where that seat lacks `Mutate` over
+the section), claims each row in the shared `WorldRowStepWindowGuard`, and
+submits over the link like any buffered mutation — the same whole-document
+revalidation, tick-boundary apply, recorded tape entry, and deferred
+`[creation.sculpt: …]` verdict echo. It never re-dispatches text lines: a
+nested `Registry.Submit` would stamp the shared injection sink's Console
+identity over the issuer. All-or-nothing: a row that fails to compose, a row
+already claimed this tick window (`row '<identity>' already has an edit
+buffered this tick — fence with world.wait`), or a patch fault refuses by
+name and submits nothing. No `--write`: writing to disk stays `world.save`.
+Laws: `WorldSculptCommandModuleLawTests`.
+
+### Field and list-element doors — one level inside a row
+
+Four more verbs, all in `WorldRowCommandModule`, address ONE FIELD or ONE LIST
+ELEMENT inside a row rather than the whole thing — the same section table
+`world.row.set`/`.remove` resolve against, one level deeper, through a shared
+path grammar (`WorldRowFieldPath`, `internal` — no `InternalsVisibleTo`
+needed, since every consumer lives in this same project):
+
+- **Path grammar**: dot-separated segments, each an optional trailing bracketed
+  selector — a zero-based list INDEX (`shapes[3]`) or a name/id-addressed
+  SELECTOR (`shapes[name=forearmL]`, `shapes[id=42]`) naming any member the
+  list's element type carries, not only `name`/`id`. A selector matching no
+  element or more than one is refused BY NAME, listing every element's own
+  candidate value for that field.
+- **`world.row.set <path> <key> <fieldPath> <json>`** (keyed) / `world.row.set
+  <path> <fieldPath> <json>` (keyless) — the LITERAL sibling of the whole-row
+  form, sharing its verb name: the SECOND token's own shape discriminates them
+  (a bare key/field path never starts with `{`/`[`, the only way a whole-row
+  payload — always a record — can start). Reads the row, replaces one field's
+  value in place (a NAME segment creates an absent optional member; an
+  INDEX/SELECTOR segment must already exist), and resubmits the whole row
+  through the SAME `Upsert` the whole-row form uses — so the spliced value
+  crosses the row's own `JsonTypeInfo` exactly once, at reparse, which is where
+  a bindable field's declared shape (`[x,y,z]` or a `"state.row.key"` string for
+  a `DocumentVector3`; JSON `null` clears a nullable field) is actually
+  validated. A `"state.<row>[.<key>]"` string written into a bindable field
+  keeps the binding: the compose boundary resolves a submitted row's references
+  against the current definition's state (`WorldServer.TryCompose` rehydrates
+  the candidate when the mutation carries one; the `creations` arm resolves a
+  private copy of the row before canonicalizing it), so the installed row
+  carries the reference and re-resolves on every later write to that state
+  row. A reference naming no declared cell is refused at apply by name
+  (`must name a declared state cell`), and the row is unchanged.
+- **`world.row.add <path> <key> <listPath> <json> [after=<selector>]`** (keyed)
+  / `world.row.add <path> <listPath> <json> [after=<selector>]` (keyless) —
+  inserts one element into a list field. `<listPath>` is the dotted/bracketed
+  path TO the list itself (`document.shapes`, `document.shapes[name=
+  forearmL].swings`); omitting `after=` appends, `after=<n>` inserts after that
+  index, `after=<field>=<value>` inserts after the selected element.
+- **`world.row.remove <path> <key> <listPath> <selector>`** (keyed) /
+  `world.row.remove <path> <listPath> <selector>` (keyless) — the list-element
+  sibling of the whole-row `world.row.remove`, discriminated by ARGUMENT COUNT
+  (3 or 4, never 2) rather than payload shape, since neither form here carries
+  JSON. `<selector>` is a bare index or `field=value`.
+- **`world.row <path> <key> [<fieldPath>]`** (keyed) / `world.row <path>
+  [<fieldPath>]` (keyless) — Immediate read-back of a row or one field as
+  canonical JSON; a `<fieldPath>` ending at a bare list field LISTS it instead
+  — one `[world.row <index>: <name-or-id> <compact-json>]` line per element,
+  headed by a `[world.row: … N element(s)]` line. The whole-row echo omits the
+  section's `DropOnEdit` members (a creation's `hash`), so it is exactly what
+  the whole-row `world.row.set` accepts back with a field changed; read the
+  digest itself by field path (`world.row creations moth hash`).
+- **`world.row.step`**'s own `<path>` (`<section>.<key>.<field>` or
+  `<section>.<field>`) resolves the identical `[n]`/`[field=value]` grammar for
+  its numeric/boolean/enum delta (`WorldRowFieldStepper`, over
+  `WorldRowFieldPath`).
+
+Every one of these four (plus `world.row.step`) claims its addressed row in the
+shared `WorldRowStepWindowGuard` for the current tick window before submitting
+— a second edit to the SAME row (by any of the five) inside one window is
+refused by name, naming the row, rather than silently reverting the earlier one.
+A section whose row carries its own derived self-digest alongside its content
+(`creations`' `WorldPrototype.HashRaw`, recomputed from the SAME embedded
+document a field/list edit just changed) is marked `DropOnEdit: ["hash"]` in
+`BuildSections` — stripped before resubmission so the reparsed row reads as
+self-consistent (an absent hash) rather than resubmitting a digest that no
+longer matches its own content.
 
 ## Grammar conventions for new verbs
 
@@ -359,3 +452,23 @@ seat1 sees and what seat2 sees without submitting as either — the read-back
 side of a hidden-hand table (see the garden's `games/poker.world.json` poker table).
 Operators and limits live in the Schema README's discrete-state section rather
 than a second command vocabulary here.
+
+`study.*` (`WorldStudyCommandModule`) is the shader-study verb family, CORE-
+registered (windowed and headless) like `view.override`/`world.view.state`:
+`study.load <name> <path> [camera]` upserts a `views.studies` row (Simulation-
+routed, through the same registered-echo door `world.row.set` uses) so it
+genuinely works headless, and windowed also compiles `<path>` right away and
+registers a new name as a live child (`SdfEngineNode.RegisterChild`), so a
+layout slot naming it shows it once the row applies; `study.reload [name]`,
+`study.watch <name> on|off`, `study.time <name> pause|resume|set <seconds>|scale
+<x>`, and the read-back `study.status` are Immediate and refuse `[study.*:
+requires a windowed boot]` when no render tree exists, the same pattern
+`world.view.pointer` takes toward `WorldCursorFeed`. `study.watch` polls the source's write stamp once per
+produced frame on the pump thread (`WorldStudyRuntime.PumpWatches`, no
+watcher thread) and reloads once the stamp has held still for 150 ms; a
+failed compile echoes every
+diagnostic as `<file>:<line>: <message>` on stderr and leaves the last good
+pipeline rendering. `iMouse` is the process pointer (`WorldPointer`, primary
+button) mapped into the study slot's own pixel space, Shadertoy convention. See
+`documents.md`'s `views.studies` section for the row shape and `sdf-world`'s
+frame-driven child-view row for how a study slot renders.

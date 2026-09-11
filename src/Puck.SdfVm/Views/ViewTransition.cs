@@ -3,10 +3,15 @@ using Puck.Abstractions.Presentation;
 namespace Puck.SdfVm.Views;
 
 /// <summary>One view occupying one region — a single row of a <see cref="ViewLayout"/>. Pure data: which registered
-/// view (see <see cref="ViewStack.Register"/>) sits where, normalized to the frame.</summary>
+/// view (see <see cref="ViewStack.Register"/>) sits where, normalized to the frame — or, when <see cref="Child"/> is
+/// set, a named render-node child instead of a <see cref="ViewStack"/> registration (a closed union: exactly one of
+/// <see cref="View"/>'s ordinary meaning or <see cref="Child"/> applies for a given binding; <see cref="View"/> is
+/// unspecified when <see cref="Child"/> is set).</summary>
 /// <param name="View">The view's id.</param>
 /// <param name="Region">Its normalized screen region.</param>
-public readonly record struct ViewBinding(ViewId View, NormalizedRect Region);
+/// <param name="Child">The named child render node filling this region, or <see langword="null"/> for the ordinary
+/// <paramref name="View"/>-addressed occupant (an SDF camera or a <see cref="ViewStack"/> registration).</param>
+public readonly record struct ViewBinding(ViewId View, NormalizedRect Region, string? Child = null);
 /// <summary>A full frame's slot assignment at one moment — the view-stack analogue of a layout director's per-slot
 /// rect array, generalized to name any registered view (not only a room/pane camera).
 /// <see cref="ViewTransition"/> eases between two of these.</summary>
@@ -79,14 +84,15 @@ public sealed class ViewTransition {
         for (var index = 0; (index < m_scratch.Length); index++) {
             var fromBinding = ((index < m_from.Bindings.Count)
                 ? m_from.Bindings[index]
-                : new ViewBinding(View: m_to.Bindings[index].View, Region: CenterOf(rect: m_to.Bindings[index].Region)));
+                : new ViewBinding(View: m_to.Bindings[index].View, Region: CenterOf(rect: m_to.Bindings[index].Region), Child: m_to.Bindings[index].Child));
             var toBinding = ((index < m_to.Bindings.Count)
                 ? m_to.Bindings[index]
-                : new ViewBinding(View: m_from.Bindings[index].View, Region: CenterOf(rect: m_from.Bindings[index].Region)));
+                : new ViewBinding(View: m_from.Bindings[index].View, Region: CenterOf(rect: m_from.Bindings[index].Region), Child: m_from.Bindings[index].Child));
 
             m_scratch[index] = new ViewBinding(
                 Region: NormalizedRect.Lerp(from: fromBinding.Region, to: toBinding.Region, t: eased),
-                View: (cutToDestination ? toBinding.View : fromBinding.View)
+                View: (cutToDestination ? toBinding.View : fromBinding.View),
+                Child: (cutToDestination ? toBinding.Child : fromBinding.Child)
             );
         }
 

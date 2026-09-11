@@ -226,14 +226,11 @@ stable, and never add a path that reproduces old-wrong behaviour.
   2×2 integer matrix, continued-fraction step, or rate/remainder carrier,
   search for it (route through `content-search` in the main `SKILL.md`). If the
   shape genuinely is missing, add it to the library rather than beside it.
-  This failure mode is present in the tree today, and this paragraph is the
-  surviving record of the finding: an engine-absorption audit found five
-  `AlignUp`/`AlignDown`/`CeilDiv`/`FloorDiv` hand-rollings across
-  `Puck.SdfVm`, `Puck.Platform`, and `Puck.World` — one of them,
-  `WorldQueryBaker`, hash-bearing, which makes the divergence class
-  determinism-adjacent. Their landing site is the `BinaryIntegerFunctions`
-  generics, and the migration awaits the owner's go. Re-derive the exact call
-  sites with `puck search` rather than trusting the count.
+  Signed floor/ceiling division is the one this tree has re-grown most often,
+  and a hash-bearing caller makes the divergence class determinism-adjacent:
+  route every one through `BinaryIntegerFunctions.FloorDivide`/`CeilingDivide`,
+  which are correct for a negative dividend where the built-in `/` truncates
+  toward zero.
 - **Bound an unbounded search from inside it, with two clauses.** A search whose
   termination rests on a theorem rather than on a validation — the Selfridge
   parameter walk, the descent to the smallest non-residue — fails by HANGING,
@@ -310,11 +307,13 @@ at one of these**:
 | You touched | Also run |
 |---|---|
 | A rounding path, a value kernel, an exhaustive claim | the suite again with `--settings tests/Puck.Maths.Tests/deep.runsettings` — Deep is the tier that has to pass before a rounding change lands |
-| `FixedPosition` | `… -- --stage worldcoord3` — the stage kept its pre-rename name; it is the stage a `FixedPosition` change owes |
-| `BinaryPolynomial` / `BinaryField` / `BinaryFields` | `… -- --stage binary-field` |
-| `DigitalNetSampler` / `StratifiedShuffle` / `InvertibleBitMix` | `… -- --stage digital-net` |
-| `MonotonicPartitioner` | `… -- --stage monotonic-partitioner` |
-| `BinaryIntegerFunctions`, `SecureRandom`'s refusal edge | `… -- --stage binary-integer-functions` |
+| `FixedPosition` | the `position.*` law family (`laws/position.json`) — not `laws/world-coord.json`, which despite its name covers only `BinaryIntegerFunctions` |
+| `BinaryPolynomial` | the `polynomial.*` law family (`laws/polynomial.json`) |
+| `BinaryField` / `BinaryFields` | the `binary-field.*` law family (`laws/binary-field.json`) |
+| `DigitalNetSampler` / `StratifiedShuffle` / `InvertibleBitMix` | the `sampling.*` law family — cases live in `laws/sampling.json`, and `DigitalNetSampler`'s also in `laws/digital-net.json` |
+| `MonotonicPartitioner` | the `core.*` law family — cases live in `laws/monotonic-partitioner.json` |
+| `BinaryIntegerFunctions` | the `core.*` law family (`laws/core.json`) |
+| `SecureRandom`'s refusal edge | the `sampling.*` law family (`laws/sampling.json`) |
 | The presented algebra (`Oracle/`) | the `presented.*` law families, which run as Default-tier cases; the Default tier is the gate of record |
 | `QuadraticAlgebra` / `MonogenicAlgebra` / `GeometricAlgebra` / `DoublingAlgebra` | the matching law family — see [Algebra → Verifying changes](../../../../src/Puck.Maths/Algebra/README.md#verifying-changes) |
 | `PrimeField64` / `QuadraticExtensionField64` | the `prime-field.*` and `extension-field.*` law families |

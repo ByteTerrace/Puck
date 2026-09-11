@@ -1,0 +1,274 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Puck",
+    "scopeName": "source.puck",
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#directives"
+        },
+        {
+            "include": "#sections"
+        },
+        {
+            "include": "#templates"
+        },
+        {
+            "include": "#addons"
+        },
+        {
+            "include": "#constants"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#colors"
+        },
+        {
+            "include": "#quantities"
+        },
+        {
+            "include": "#numbers"
+        },
+        {
+            "include": "#functions"
+        },
+        {
+            "include": "#properties"
+        },
+        {
+            "include": "#operators"
+        }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.double-slash.puck",
+                    "match": "//.*$"
+                },
+                {
+                    "name": "comment.block.puck",
+                    "begin": "/\\*",
+                    "end": "\\*/"
+                }
+            ]
+        },
+        "directives": {
+            "patterns": [
+                {
+                    "match": "\\b(schema|basis)\\b",
+                    "name": "keyword.control.directive.puck"
+                },
+                {
+                    "match": "\\b(let)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.declaration.let.puck"
+                        },
+                        "2": {
+                            "name": "variable.other.constant.puck"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(import)\\b(?:\\s+(?:(\"[^\"]*\")|([a-zA-Z_][a-zA-Z0-9_]*)))?(?:\\s+(as)\\s+([a-zA-Z_][a-zA-Z0-9_]*))?",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.import.puck"
+                        },
+                        "2": {
+                            "name": "string.quoted.double.import.puck"
+                        },
+                        "3": {
+                            "name": "variable.other.import.puck"
+                        },
+                        "4": {
+                            "name": "keyword.control.as.puck"
+                        },
+                        "5": {
+                            "name": "entity.name.namespace.alias.puck"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(export)\\s+(read|reads|action|actions|binding|bindings)\\b",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.export.puck"
+                        },
+                        "2": {
+                            "name": "storage.type.facet.puck"
+                        }
+                    }
+                }
+            ]
+        },
+        "templates": {
+            "patterns": [
+                {
+                    "match": "\\b(template)\\b\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(\\()",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.declaration.template.puck"
+                        },
+                        "2": {
+                            "name": "entity.name.function.template.puck"
+                        },
+                        "3": {
+                            "name": "punctuation.definition.parameters.begin.puck"
+                        }
+                    }
+                }
+            ]
+        },
+        "addons": {
+            "patterns": [
+                {
+                    "match": "\\b(addon)\\b\\s+(?:(\"[^\"]*\")|([a-zA-Z_][a-zA-Z0-9_]*))",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.declaration.addon.puck"
+                        },
+                        "2": {
+                            "name": "string.quoted.double.addon.name.puck"
+                        },
+                        "3": {
+                            "name": "entity.name.type.addon.puck"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(request)\\b\\s+([^\\n;]+?)(?:\\s+(from)\\s+(\"[^\"]*\"))?(?=[;\\n]|$)",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.control.addon.request.puck"
+                        },
+                        "2": {
+                            "name": "support.constant.capability.puck"
+                        },
+                        "3": {
+                            "name": "keyword.control.from.puck"
+                        },
+                        "4": {
+                            "name": "string.quoted.double.provider.puck"
+                        }
+                    }
+                },
+                {
+                    "match": "\\b(watchMemory)\\b",
+                    "name": "keyword.control.addon.watch.puck"
+                }
+            ]
+        },
+        "sections": {
+            "patterns": [
+                {
+                    "match": "\\b(host|views|camera|seatRig|seatControl|motion|render|spawnPoints|screens|rules|state|solids|materials|kits|channels|targetRegisters|bodyMotionPrograms)\\b(?=\\s*(?:[a-zA-Z0-9_\"']+\\s*)?\\{)",
+                    "name": "entity.name.tag.section.puck"
+                }
+            ]
+        },
+        "constants": {
+            "patterns": [
+                {
+                    "match": "\\b(true|false)\\b",
+                    "name": "constant.language.boolean.puck"
+                },
+                {
+                    "match": "\\b(null)\\b",
+                    "name": "constant.language.null.puck"
+                }
+            ]
+        },
+        "strings": {
+            "patterns": [
+                {
+                    "name": "string.quoted.double.puck",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.puck",
+                            "match": "\\\\."
+                        }
+                    ]
+                }
+            ]
+        },
+        "colors": {
+            "patterns": [
+                {
+                    "name": "constant.other.color.rgb-hex.puck",
+                    "match": "#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\\b"
+                }
+            ]
+        },
+        "quantities": {
+            "patterns": [
+                {
+                    "match": "(-?\\b\\d+(?:_\\d+)*(?:\\.\\d+(?:_\\d+)*)?)(s|ms|hz|deg|rad|m|cm|mm|px)\\b",
+                    "captures": {
+                        "1": {
+                            "name": "constant.numeric.quantity.puck"
+                        },
+                        "2": {
+                            "name": "keyword.other.unit.puck"
+                        }
+                    }
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.puck",
+                    "match": "\\b0[xX][0-9a-fA-F_]+\\b"
+                },
+                {
+                    "name": "constant.numeric.decimal.puck",
+                    "match": "-?\\b\\d+(?:_\\d+)*(?:\\.\\d+(?:_\\d+)*)?(?:[eE][+-]?\\d+)?\\b"
+                }
+            ]
+        },
+        "functions": {
+            "patterns": [
+                {
+                    "match": "\\b(orbit|fov|matrix|translate|rotate|scale)\\b(?=\\s*\\()",
+                    "name": "support.function.builtin.puck"
+                },
+                {
+                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\b(?=\\s*\\()",
+                    "name": "entity.name.function.call.puck"
+                }
+            ]
+        },
+        "properties": {
+            "patterns": [
+                {
+                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=:)",
+                    "name": "variable.object.property.puck"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "match": "(\\.\\.)",
+                    "name": "keyword.operator.range.puck"
+                },
+                {
+                    "match": "(\\+|-|\\*|\\/)",
+                    "name": "keyword.operator.arithmetic.puck"
+                },
+                {
+                    "match": "(=|:)",
+                    "name": "keyword.operator.assignment.puck"
+                }
+            ]
+        }
+    }
+}

@@ -1,3 +1,4 @@
+using Puck.Physics.Motion;
 namespace Puck.World.Server;
 
 /// <summary>The server as the rule evaluator's host: the state library's <see cref="IRuleHost"/> over the installed
@@ -217,6 +218,10 @@ public sealed partial class WorldServer : IWorldRuleReader, IRuleHost {
         ? RuleFact.Finite(value: remaining, kind: CellKind.Int)
         : RuleFact.Forever(kind: CellKind.Int));
     RuleFact IWorldRuleReader.Read(UprightOperand operand) => RuleFact.Finite(value: ReadBodyUpright(bodyRef: operand.BodyA, tick: m_evaluator.Tick));
+    RuleFact IWorldRuleReader.Read(BodyFactOperand operand) => RuleFact.Finite(
+        value: (((Body(index: ResolveBodyRef(bodyRef: operand.Body, tick: m_evaluator.Tick)) is { } factBody) && BodyFactVocabulary.Holds(gate: operand.Fact, facts: factBody.Facts)) ? 1L : 0L),
+        kind: CellKind.Int
+    );
     RuleFact IWorldRuleReader.Read(LinkStalenessOperand operand) => RuleFact.Finite(value: m_events.LinkStalenessTicks(adjacencyName: operand.AdjacencyName), kind: CellKind.Int);
     RuleFact IWorldRuleReader.Read(ChannelOperand operand) => RuleFact.Finite(value: ReadChannelValue(seat: operand.Seat, ordinal: operand.ChannelOrdinal));
     RuleFact IWorldRuleReader.Read(NearestOperand operand) => RuleFact.Finite(value: ResolveNearestBody(from: operand.BodyA, tagRowHandle: operand.StateHandle, tick: m_evaluator.Tick), kind: CellKind.Int);

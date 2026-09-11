@@ -22,19 +22,19 @@ namespace Puck.HumbleGamingBrick;
 /// the plain offset is the deliberate choice.
 /// </para>
 /// <para>
-/// <b>Resampler.</b> An integer rational accumulator with zero drift: every CPU T-cycle adds the output rate weighted
+/// <b>Resampler.</b> The shared <see cref="RationalRateAccumulator"/>: every CPU T-cycle adds the output rate weighted
 /// by the T-cycle's width in half-dots (two at normal speed, one under Color double speed), and a frame is emitted
-/// each time the accumulator crosses 8388608 (one emulated second of half-dots), subtracting rather than resetting.
-/// At normal speed this is exactly "accumulator += rate per T-cycle, emit at 4194304" with both sides doubled, and
-/// the half-dot weighting keeps the emission rate an exact rational of <em>real</em> emulated time straight through a
-/// speed switch. The stage keeps emitting during stop mode — real time still passes, and the frozen mix is a flat,
-/// pop-free level — so the host stream stays continuous.
+/// each time the phase crosses 8388608 (one emulated second of half-dots). At normal speed this is exactly
+/// "phase += rate per T-cycle, emit at 4194304" with both sides doubled, and the half-dot weighting keeps the emission
+/// rate an exact rational of <em>real</em> emulated time straight through a speed switch. The stage keeps emitting
+/// during stop mode — real time still passes, and the frozen mix is a flat, pop-free level — so the host stream stays
+/// continuous.
 /// </para>
 /// <para>
-/// <b>Snapshots.</b> Nothing here is emulated state: the ring, the accumulator, and the configured rate are
+/// <b>Snapshots.</b> Nothing here is emulated state: the ring, the resampler phase, and the configured rate are
 /// host-facing output plumbing that never feeds back into emulation, so <see cref="SaveState"/> writes nothing (the
 /// snapshot stays bit-identical whatever the host's audio configuration) and <see cref="LoadState"/> clears the ring
-/// and accumulator so a restored machine starts a fresh stream.
+/// and the phase so a restored machine starts a fresh stream.
 /// </para>
 /// </summary>
 public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnapshotable {
@@ -49,9 +49,9 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     private readonly IApu m_apu;
     private readonly IKey1 m_key1;
 
-    private int m_accumulator;
     private int m_capacityFrames;
     private int m_frameCount;
+    private RationalRateAccumulator m_phase;
     private int m_readFrame;
     private short[] m_ring;
     private int m_sampleRate;
@@ -79,28 +79,27 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
     public ClockDomain Domain =>
         ClockDomain.Cpu;
 
-    /// <summary>Returns how many further T-cycles the rate accumulator can absorb before it next emits a frame;
-    /// unbounded with no sink configured.</summary>
+    /// <summary>Returns how many further T-cycles the resampler can absorb before it next emits a frame; unbounded
+    /// with no sink configured.</summary>
     public int QuietCycles() {
         if (m_sampleRate == 0) {
             return int.MaxValue;
         }
 
-        var addend = (m_key1.IsDoubleSpeed
-            ? m_sampleRate
-            : (m_sampleRate << 1));
-
-        return (((HalfDotsPerSecond - 1) - m_accumulator) / addend);
+        return ((int)m_phase.QuietSteps(
+            period: HalfDotsPerSecond,
+            weight: HalfDotAddend()
+        ));
     }
-    /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed into the accumulator.</summary>
+    /// <summary>Absorbs <paramref name="cycles"/> T-cycles that <see cref="QuietCycles"/> allowed into the resampler
+    /// phase.</summary>
     /// <param name="cycles">The T-cycles to absorb.</param>
     public void Skip(int cycles) {
         if (m_sampleRate != 0) {
-            m_accumulator += (cycles * (m_key1.IsDoubleSpeed
-                ? m_sampleRate
-                : (m_sampleRate << 1)));
+            m_phase.Skip(weight: (cycles * HalfDotAddend()));
         }
     }
+
     /// <inheritdoc/>
     public int SampleRate =>
         m_sampleRate;
@@ -113,9 +112,9 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
             other: DotsPerSecond
         );
 
-        m_accumulator = 0;
         m_capacityFrames = sampleRate;
         m_frameCount = 0;
+        m_phase.Reset();
         m_readFrame = 0;
         m_ring = ((sampleRate > 0)
             ? new short[(sampleRate * 2)]
@@ -148,16 +147,12 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
             return;
         }
 
-        // One CPU T-cycle is a whole dot at normal speed and half a dot under double speed; weighting the addend by
-        // the T-cycle's half-dot width keeps the accumulator an exact function of real emulated time, so the output
-        // rate is speed-invariant and a mid-run speed switch carries no drift or discontinuity.
-        m_accumulator += (m_key1.IsDoubleSpeed
-            ? m_sampleRate
-            : (m_sampleRate << 1));
+        var due = m_phase.Advance(
+            period: HalfDotsPerSecond,
+            weight: HalfDotAddend()
+        );
 
-        while (m_accumulator >= HalfDotsPerSecond) {
-            m_accumulator -= HalfDotsPerSecond;
-
+        for (var frame = 0L; (frame < due); ++frame) {
             EmitFrame();
         }
     }
@@ -173,12 +168,19 @@ public sealed class AudioOutputComponent : IAudioSink, IClockedComponent, ISnaps
 
         // Nothing was saved; a restore resets the stream so a rewound machine does not replay stale output. The
         // configured sample rate is host configuration and survives untouched.
-        m_accumulator = 0;
         m_frameCount = 0;
+        m_phase.Reset();
         m_readFrame = 0;
         m_writeFrame = 0;
     }
 
+    // One CPU T-cycle is a whole dot at normal speed and half a dot under double speed; weighting the addend by the
+    // T-cycle's half-dot width keeps the phase an exact function of real emulated time, so the output rate is
+    // speed-invariant and a mid-run speed switch carries no drift or discontinuity.
+    private int HalfDotAddend() =>
+        (m_key1.IsDoubleSpeed
+            ? m_sampleRate
+            : (m_sampleRate << 1));
     // One side of the mix law: recenter the gated 0-60 channel sum around zero at the x512 scale, then apply the
     // side's NR50 volume as (volume + 1) / 8. The extremes land at -16384 and +14336, comfortably inside 16 bits.
     private static short MixSide(int gatedSum, int volume) =>

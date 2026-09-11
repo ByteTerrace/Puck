@@ -65,6 +65,29 @@ public static class SdfDomainExpansion {
     // The product of the two reflections H(a)H(b) as a unit quaternion (b × a, b · a) — the integer-only route from a
     // mirror to the proper rotation left once H(x̂) is factored out, with no matrix-to-quaternion reconstruction and so
     // no platform sqrt.
+    // Conjugates a branch by a translation to origin — Translate(origin) ∘ branch ∘ Translate(-origin) — the
+    // rigid-copy mirror of SdfDomainOps.ApplyOne's Translate(origin)/op/Translate(-origin) point-fold sandwich, so a
+    // solid placement's colliders land at the physical positions the render's fold produces. Zero origin returns the
+    // branch unchanged (and, for a pure-translation Repeat branch, any origin does: conjugating a translation by a
+    // translation leaves it unchanged — only a rotating/mirroring branch's pivot actually moves).
+    private static SdfRigidFrame ConjugateByOrigin(SdfRigidFrame branch, FixedVector3 origin) {
+        if (origin == FixedVector3.Zero) {
+            return branch;
+        }
+
+        var toOrigin = new SdfRigidFrame(
+            Mirrored: false,
+            Position: origin,
+            Rotation: FixedQuaternion.Identity
+        );
+        var fromOrigin = new SdfRigidFrame(
+            Mirrored: false,
+            Position: -origin,
+            Rotation: FixedQuaternion.Identity
+        );
+
+        return toOrigin.Compose(inner: branch.Compose(inner: fromOrigin));
+    }
     private static FixedQuaternion MirrorRemainder(FixedVector3 unitNormal) {
         var vector = FixedVector3.Cross(
             left: UnitX,
@@ -198,16 +221,21 @@ public static class SdfDomainExpansion {
                         return false;
                     }
 
+                    var repeatOrigin = FixedVector3.FromVector3(value: repeat.Origin);
+
                     for (var cellX = -limitX; (cellX <= limitX); cellX++) {
                         for (var cellY = -limitY; (cellY <= limitY); cellY++) {
                             for (var cellZ = -limitZ; (cellZ <= limitZ); cellZ++) {
-                                branches.Add(item: SdfRigidFrame.Identity with {
-                                    Position = new FixedVector3(
-                                        X: (spacing.X * FixedQ4816.FromInteger(value: cellX)),
-                                        Y: (spacing.Y * FixedQ4816.FromInteger(value: cellY)),
-                                        Z: (spacing.Z * FixedQ4816.FromInteger(value: cellZ))
-                                    ),
-                                });
+                                branches.Add(item: ConjugateByOrigin(
+                                    branch: SdfRigidFrame.Identity with {
+                                        Position = new FixedVector3(
+                                            X: (spacing.X * FixedQ4816.FromInteger(value: cellX)),
+                                            Y: (spacing.Y * FixedQ4816.FromInteger(value: cellY)),
+                                            Z: (spacing.Z * FixedQ4816.FromInteger(value: cellZ))
+                                        ),
+                                    },
+                                    origin: repeatOrigin
+                                ));
                             }
                         }
                     }
@@ -223,6 +251,7 @@ public static class SdfDomainExpansion {
                     );
                     // The sector fold rotates a point by -angle·sector, so its branches are the +angle·sector rotations.
                     var mirrorRemainder = MirrorRemainder(unitNormal: UnitAxis(index: v));
+                    var polarOrigin = FixedVector3.FromVector3(value: polar.Origin);
 
                     if (!WithinBudget(
                         accumulated: accumulated,
@@ -242,17 +271,23 @@ public static class SdfDomainExpansion {
                             axis: axis
                         ).Normalize();
 
-                        branches.Add(item: new SdfRigidFrame(
-                            Mirrored: false,
-                            Position: FixedVector3.Zero,
-                            Rotation: rotation
+                        branches.Add(item: ConjugateByOrigin(
+                            branch: new SdfRigidFrame(
+                                Mirrored: false,
+                                Position: FixedVector3.Zero,
+                                Rotation: rotation
+                            ),
+                            origin: polarOrigin
                         ));
 
                         if (polar.Mirror) {
-                            branches.Add(item: new SdfRigidFrame(
-                                Mirrored: true,
-                                Position: FixedVector3.Zero,
-                                Rotation: (rotation * mirrorRemainder).Normalize()
+                            branches.Add(item: ConjugateByOrigin(
+                                branch: new SdfRigidFrame(
+                                    Mirrored: true,
+                                    Position: FixedVector3.Zero,
+                                    Rotation: (rotation * mirrorRemainder).Normalize()
+                                ),
+                                origin: polarOrigin
                             ));
                         }
                     }

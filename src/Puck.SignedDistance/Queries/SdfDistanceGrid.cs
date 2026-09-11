@@ -17,10 +17,10 @@ namespace Puck.SignedDistance.Queries;
 /// threshold reads the bound; one that needs the value itself reads the exact evaluator.</para>
 /// </remarks>
 public sealed class SdfDistanceGrid {
-    private const int BlockShift = 3;
+    private const int BlockCornerCount = ((BlockEdge * BlockEdge) * BlockEdge);
     private const int BlockEdge = (1 << BlockShift);
     private const int BlockMask = (BlockEdge - 1);
-    private const int BlockCornerCount = (BlockEdge * BlockEdge * BlockEdge);
+    private const int BlockShift = 3;
     // Two sentinels below any distance the evaluator can answer: an unbaked corner, and a corner the evaluator could
     // not answer at all (a point outside the program's signed frame).
     private const long UnbakedCorner = long.MinValue;
@@ -35,6 +35,7 @@ public sealed class SdfDistanceGrid {
     private readonly long[]?[] m_distances;
     private readonly SdfFieldEvaluator m_exact;
     private readonly int[]?[] m_materials;
+
     private long m_bakedCornerCount;
 
     private SdfDistanceGrid(SdfFieldEvaluator exact, FixedVector3 origin, FixedQ4816 cellSize, int cornerCountX, int cornerCountY, int cornerCountZ) {
@@ -66,7 +67,7 @@ public sealed class SdfDistanceGrid {
     /// <summary>Gets the corner count along Z.</summary>
     public int CornerCountZ { get; }
     /// <summary>Gets the total corner count.</summary>
-    public long CornerCount => (((long)CornerCountX * CornerCountY) * CornerCountZ);
+    public long CornerCount => ((((long)CornerCountX) * CornerCountY) * CornerCountZ);
     /// <summary>Gets the program's Lipschitz bound the slack is derived from.</summary>
     public FixedQ4816 LipschitzBound { get; }
     /// <summary>Gets the world-space position of corner (0, 0, 0).</summary>
@@ -187,12 +188,12 @@ public sealed class SdfDistanceGrid {
         }
 
         var edge = cellSize.Value;
-        var firstX = FloorDivide(numerator: min.X.Value, denominator: edge);
-        var firstY = FloorDivide(numerator: min.Y.Value, denominator: edge);
-        var firstZ = FloorDivide(numerator: min.Z.Value, denominator: edge);
-        var countX = ((FloorDivide(numerator: ((max.X.Value + edge) - 1L), denominator: edge) - firstX) + 1L);
-        var countY = ((FloorDivide(numerator: ((max.Y.Value + edge) - 1L), denominator: edge) - firstY) + 1L);
-        var countZ = ((FloorDivide(numerator: ((max.Z.Value + edge) - 1L), denominator: edge) - firstZ) + 1L);
+        var firstX = min.X.Value.FloorDivide(divisor: edge);
+        var firstY = min.Y.Value.FloorDivide(divisor: edge);
+        var firstZ = min.Z.Value.FloorDivide(divisor: edge);
+        var countX = ((((max.X.Value + edge) - 1L).FloorDivide(divisor: edge) - firstX) + 1L);
+        var countY = ((((max.Y.Value + edge) - 1L).FloorDivide(divisor: edge) - firstY) + 1L);
+        var countZ = ((((max.Z.Value + edge) - 1L).FloorDivide(divisor: edge) - firstZ) + 1L);
 
         if (
             (countX <= 1L) ||
@@ -278,9 +279,9 @@ public sealed class SdfDistanceGrid {
 
         var edge = CellSize.Value;
         var half = (edge >> 1);
-        var x = FloorDivide(numerator: ((world.X.Value - Origin.X.Value) + half), denominator: edge);
-        var y = FloorDivide(numerator: ((world.Y.Value - Origin.Y.Value) + half), denominator: edge);
-        var z = FloorDivide(numerator: ((world.Z.Value - Origin.Z.Value) + half), denominator: edge);
+        var x = ((world.X.Value - Origin.X.Value) + half).FloorDivide(divisor: edge);
+        var y = ((world.Y.Value - Origin.Y.Value) + half).FloorDivide(divisor: edge);
+        var z = ((world.Z.Value - Origin.Z.Value) + half).FloorDivide(divisor: edge);
 
         if (
             (((ulong)x) >= ((ulong)CornerCountX)) ||
@@ -307,8 +308,8 @@ public sealed class SdfDistanceGrid {
     }
 
     private long Corner(int x, int y, int z, out int material) {
-        var block = ((((z >> BlockShift) * m_blockCountY) + (y >> BlockShift)) * m_blockCountX) + (x >> BlockShift);
-        var inner = ((((z & BlockMask) << BlockShift) + (y & BlockMask)) << BlockShift) + (x & BlockMask);
+        var block = (((((z >> BlockShift) * m_blockCountY) + (y >> BlockShift)) * m_blockCountX) + (x >> BlockShift));
+        var inner = (((((z & BlockMask) << BlockShift) + (y & BlockMask)) << BlockShift) + (x & BlockMask));
         var distances = m_distances[block];
         var materials = m_materials[block];
 
@@ -343,14 +344,5 @@ public sealed class SdfDistanceGrid {
         material = materials![inner];
 
         return raw;
-    }
-    // Integer division rounding toward negative infinity, for a positive denominator.
-    private static long FloorDivide(long numerator, long denominator) {
-        var quotient = (numerator / denominator);
-
-        return (((numerator % denominator) < 0L)
-            ? (quotient - 1L)
-            : quotient
-        );
     }
 }

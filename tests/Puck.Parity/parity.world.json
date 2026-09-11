@@ -1,230 +1,1083 @@
 {
-  "schema": "puck.world.def.v1",
-  "documentId": "parity-vocabulary",
-  "host": {
-    "presentation": "offscreen",
-    "backend": "auto",
-    "width": 640,
-    "height": 480,
-    "surfaceFormat": "r8g8b8a8",
-    "fullscreen": false,
-    "presentMode": "Immediate",
-    "targetHertz": 0,
-    "exitAfterSeconds": 0,
-    "rayQuery": true,
-    "timing": false,
-    "genlock": null,
-    "listen": null
-  },
-  "simulation": {
-    "rateHz": 240
-  },
-  "generation": {
-    "worldSeed": 424242
-  },
-  "collision": {
-    "requirements": ["SmoothUnionContact"],
-    "contactSkin": 0.02,
-    "maxIterations": 4,
-    "maxSlopeDegrees": 60.0,
-    "gradientProbe": 0.0
-  },
-  "state": {
-    "world": [
-      { "name": "station", "kind": "Int", "value": 0 },
-      {
-        "name": "bump",
-        "kind": "Fixed",
-        "domain": { "$type": "cellsOf", "topology": "parityLattice" },
-        "field": {
-          "initial": 0,
-          "min": 0,
-          "max": 1,
-          "heightScale": 2.0,
-          "color": "#3FAF6F",
-          "paint": [
-            { "$type": "rect", "value": 1, "minX": 284, "minZ": -4, "maxX": 292, "maxZ": 4 }
-          ]
-        }
-      }
-    ],
-    "lattices": [
-      {
-        "$type": "field",
-        "name": "parityLattice",
-        "origin": [280, 0, -8],
-        "cellSize": 1.0,
-        "width": 16,
-        "depth": 16,
-        "layers": 1,
-        "stepEveryTicks": 240,
-        "reactions": []
-      }
-    ]
-  },
-  "rules": [
+  "cameras": [
     {
-      "name": "toMaterials",
-      "mode": "Edge",
-      "gate": { "$type": "compareState", "state": "$tick", "comparison": "GreaterOrEqual", "value": 700 },
-      "effects": [ { "$type": "setState", "state": "station", "value": 1 } ]
+      "anchor": null,
+      "name": "sky-cam",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "sky-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                80,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                60,
+                -300
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.9
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
     },
     {
-      "name": "toLattice",
-      "mode": "Edge",
-      "gate": { "$type": "compareState", "state": "$tick", "comparison": "GreaterOrEqual", "value": 850 },
-      "effects": [ { "$type": "setState", "state": "station", "value": 2 } ]
+      "anchor": null,
+      "name": "materials-cam",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "materials-cam",
+        "operations": [
+          {
+            "$type": "offset",
+            "value": [
+              0,
+              1.9,
+              12
+            ],
+            "worldAxes": true
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.9,
+                20.6
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.75
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
     },
     {
-      "name": "toNoise",
-      "mode": "Edge",
-      "gate": { "$type": "compareState", "state": "$tick", "comparison": "GreaterOrEqual", "value": 1000 },
-      "effects": [ { "$type": "setState", "state": "station", "value": 3 } ]
+      "anchor": null,
+      "name": "lattice-cam",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "lattice-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                288,
+                6,
+                -10
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                288,
+                0.5,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "noise-cam",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "noise-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                400,
+                1,
+                -4
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                400,
+                1,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 0.75
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "vocabulary-cam",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "vocabulary-cam",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                604,
+                9,
+                -26
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                604,
+                2,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fov",
+            "fieldOfViewRadians": 1.4
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "parity-select",
+      "renderHeight": 480,
+      "renderWidth": 640,
+      "rig": {
+        "name": "parity-select",
+        "operations": [
+          {
+            "$type": "select",
+            "cases": [
+              {
+                "program": "sky-cam",
+                "value": 0
+              },
+              {
+                "program": "materials-cam",
+                "value": 1
+              },
+              {
+                "program": "lattice-cam",
+                "value": 2
+              },
+              {
+                "program": "noise-cam",
+                "value": 3
+              },
+              {
+                "program": "vocabulary-cam",
+                "value": 4
+              }
+            ],
+            "default": "sky-cam",
+            "key": "state.station"
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
     }
   ],
   "captures": {
     "directory": "captures",
     "rows": [
       {
+        "palette": [
+          {
+            "color": "#000000",
+            "material": 0
+          },
+          {
+            "color": "#FFFFFF",
+            "material": 1
+          }
+        ],
         "station": "sky",
-        "ticks": [600, 620],
-        "palette": [
-          { "material": 0, "color": "#000000" },
-          { "material": 1, "color": "#FFFFFF" }
+        "ticks": [
+          600,
+          620
         ]
       },
       {
+        "palette": [
+          {
+            "color": "#2E333D",
+            "material": 0
+          },
+          {
+            "color": "#EBC74C",
+            "material": 1
+          }
+        ],
         "station": "materials",
-        "ticks": [720, 740],
-        "palette": [
-          { "material": 0, "color": "#2E333D" },
-          { "material": 1, "color": "#EBC74C" }
+        "ticks": [
+          720,
+          740
         ]
       },
       {
+        "palette": [
+          {
+            "color": "#3FAF6F",
+            "material": 0
+          },
+          {
+            "color": "#101010",
+            "material": 1
+          }
+        ],
         "station": "lattice",
-        "ticks": [860, 880],
-        "palette": [
-          { "material": 0, "color": "#3FAF6F" },
-          { "material": 1, "color": "#101010" }
+        "ticks": [
+          860,
+          880
         ]
       },
       {
-        "station": "noise",
-        "ticks": [1010, 1030],
         "palette": [
-          { "material": 0, "color": "#D8594D" },
-          { "material": 1, "color": "#101010" }
+          {
+            "color": "#D8594D",
+            "material": 0
+          },
+          {
+            "color": "#101010",
+            "material": 1
+          }
+        ],
+        "station": "noise",
+        "ticks": [
+          1010,
+          1030
+        ]
+      },
+      {
+        "palette": [
+          {
+            "color": "#20242C",
+            "material": 0
+          },
+          {
+            "color": "#8C7A5D",
+            "material": 1
+          }
+        ],
+        "station": "vocabulary",
+        "ticks": [
+          1110,
+          1150
         ]
       }
     ]
   },
-  "cameras": [
-    {
-      "name": "sky-cam",
-      "anchor": null,
-      "renderWidth": 640,
-      "renderHeight": 480,
-      "rig": {
-        "name": "sky-cam",
-        "version": "puck.camera.v1",
-        "operations": [
-          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [0, 80, 0] } },
-          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [0, 60, -300] } },
-          { "$type": "fov", "fieldOfViewRadians": 0.9 }
-        ]
+  "collision": {
+    "contactSkin": 0.02,
+    "gradientProbe": 0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "requirements": [
+      "SmoothUnionContact"
+    ]
+  },
+  "documentId": "parity-vocabulary",
+  "generation": {
+    "worldSeed": 424242
+  },
+  "host": {
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 480,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "offscreen",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 0,
+    "timing": false,
+    "width": 640
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "vocabScale1",
+        "position": [
+          588,
+          0,
+          0
+        ],
+        "prototypeId": "vocabRig",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "vocabScale2",
+        "position": [
+          615,
+          0,
+          0
+        ],
+        "prototypeId": "vocabRig",
+        "scale": 2,
+        "yawDegrees": 0
+      },
+      {
+        "id": "grooveSeam",
+        "position": [
+          592,
+          1.5,
+          -7
+        ],
+        "prototypeId": "grooveSeam",
+        "scale": 1.5,
+        "yawDegrees": 0
+      },
+      {
+        "id": "pipeSeam",
+        "position": [
+          599,
+          1.5,
+          -7
+        ],
+        "prototypeId": "pipeSeam",
+        "scale": 1.5,
+        "yawDegrees": 0
+      },
+      {
+        "id": "cellsF1",
+        "position": [
+          606,
+          1.5,
+          -7
+        ],
+        "prototypeId": "cellsF1",
+        "scale": 1.5,
+        "yawDegrees": 0
+      },
+      {
+        "id": "cellsF2",
+        "position": [
+          613,
+          1.5,
+          -7
+        ],
+        "prototypeId": "cellsF2",
+        "scale": 1.5,
+        "yawDegrees": 0
       }
-    },
+    ]
+  },
+  "prototypes": [
     {
-      "name": "materials-cam",
-      "anchor": null,
-      "renderWidth": 640,
-      "renderHeight": 480,
-      "rig": {
-        "name": "materials-cam",
-        "version": "puck.camera.v1",
-        "operations": [
-          { "$type": "offset", "value": [0, 1.9, 12], "worldAxes": true },
-          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [0, 1.9, 20.6] } },
-          { "$type": "fov", "fieldOfViewRadians": 0.75 }
-        ]
-      }
-    },
-    {
-      "name": "lattice-cam",
-      "anchor": null,
-      "renderWidth": 640,
-      "renderHeight": 480,
-      "rig": {
-        "name": "lattice-cam",
-        "version": "puck.camera.v1",
-        "operations": [
-          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [288, 6, -10] } },
-          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [288, 0.5, 0] } },
-          { "$type": "fov", "fieldOfViewRadians": 0.85 }
-        ]
-      }
-    },
-    {
-      "name": "noise-cam",
-      "anchor": null,
-      "renderWidth": 640,
-      "renderHeight": 480,
-      "rig": {
-        "name": "noise-cam",
-        "version": "puck.camera.v1",
-        "operations": [
-          { "$type": "anchor", "subject": { "$type": "worldPoint", "point": [400, 1, -4] } },
-          { "$type": "lookAt", "subject": { "$type": "worldPoint", "point": [400, 1, 0] } },
-          { "$type": "fov", "fieldOfViewRadians": 0.75 }
-        ]
-      }
-    },
-    {
-      "name": "parity-select",
-      "anchor": null,
-      "renderWidth": 640,
-      "renderHeight": 480,
-      "rig": {
-        "name": "parity-select",
-        "version": "puck.camera.v1",
-        "operations": [
+      "document": {
+        "drivers": [
           {
-            "$type": "select",
-            "key": "state.station",
-            "cases": [
-              { "value": 0, "program": "sky-cam" },
-              { "value": 1, "program": "materials-cam" },
-              { "value": 2, "program": "lattice-cam" },
-              { "value": 3, "program": "noise-cam" }
+            "cadence": 1.4,
+            "name": "sway",
+            "signal": "time"
+          }
+        ],
+        "frames": [
+          {
+            "name": "idle",
+            "transforms": []
+          }
+        ],
+        "name": "vocabRig",
+        "palette": [
+          {
+            "color": "#8C7A5D",
+            "roughness": 0.55,
+            "sheen": 0,
+            "specular": 0.25
+          },
+          {
+            "color": "#3E8FB0",
+            "roughness": 0.35,
+            "sheen": 0.15,
+            "specular": 0.4
+          },
+          {
+            "color": "#C0455E",
+            "roughness": 0.45,
+            "sheen": 0.05,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "chamfer": 0.3,
+            "id": 0,
+            "material": 0,
+            "name": "chamferedBox",
+            "position": [
+              -4,
+              0.8,
+              0
             ],
-            "default": "sky-cam"
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.8,
+              0.8,
+              0.8
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "panelPrism",
+            "panel": {
+              "depth": 0.15,
+              "inset": 0.15,
+              "material": 1
+            },
+            "position": [
+              -2,
+              0.8,
+              0
+            ],
+            "profile": {
+              "cornerRadius": 0.25,
+              "kind": "ChamferedRectangle"
+            },
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.8,
+              0.8,
+              0.6
+            ],
+            "smooth": 0,
+            "type": "Prism"
+          },
+          {
+            "blend": "Union",
+            "chamfer": 0.2,
+            "id": 2,
+            "material": 0,
+            "name": "panelCylinder",
+            "panel": {
+              "depth": -0.15,
+              "inset": 0.18,
+              "material": 1
+            },
+            "position": [
+              0,
+              0.8,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.7,
+              0.8,
+              0.7
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 2,
+            "name": "wingHinge",
+            "position": [
+              2.2,
+              1.6,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.15,
+              0.15,
+              0.15
+            ],
+            "smooth": 0,
+            "swings": [
+              {
+                "amplitude": 0.45,
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "driver": "sway",
+                "phase": 0,
+                "pivot": [
+                  2.2,
+                  1.6,
+                  0
+                ],
+                "wave": "sine"
+              }
+            ],
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "symmetry",
+                "normal": [
+                  1,
+                  0,
+                  0
+                ]
+              }
+            ],
+            "id": 4,
+            "material": 2,
+            "name": "wingPanel",
+            "parent": "wingHinge",
+            "position": [
+              2.6,
+              1.6,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.5,
+              0.06,
+              0.3
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "domain": [
+              {
+                "$type": "repeat",
+                "limit": [
+                  3,
+                  0,
+                  0
+                ],
+                "origin": [
+                  0.5,
+                  0,
+                  0
+                ],
+                "spacing": [
+                  0.5,
+                  0.5,
+                  0.5
+                ]
+              }
+            ],
+            "id": 5,
+            "material": 0,
+            "name": "repeatPlate",
+            "position": [
+              0,
+              0.2,
+              1.8
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.18,
+              0.15,
+              0.04
+            ],
+            "smooth": 0,
+            "type": "Box"
           }
         ]
-      }
+      },
+      "id": "vocabRig"
+    },
+    {
+      "document": {
+        "name": "grooveSeam",
+        "palette": [
+          {
+            "color": "#D19D50",
+            "roughness": 0.42,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "position": [
+              -0.65,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "GrooveUnion",
+            "id": 1,
+            "material": 0,
+            "position": [
+              0.65,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0.18,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "grooveSeam"
+    },
+    {
+      "document": {
+        "name": "pipeSeam",
+        "palette": [
+          {
+            "color": "#65BDD0",
+            "roughness": 0.42,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "position": [
+              -0.65,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "PipeUnion",
+            "id": 1,
+            "material": 0,
+            "position": [
+              0.65,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0.25,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "pipeSeam"
+    },
+    {
+      "document": {
+        "name": "cellsF1",
+        "palette": [
+          {
+            "color": "#8BB879",
+            "roughness": 0.42,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "cells": {
+              "amplitude": 0.28,
+              "frequency": 4,
+              "mode": "F1",
+              "randomness": 0.46,
+              "seed": 3751
+            },
+            "id": 0,
+            "material": 0,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "cellsF1"
+    },
+    {
+      "document": {
+        "name": "cellsF2",
+        "palette": [
+          {
+            "color": "#C177A3",
+            "roughness": 0.42,
+            "specular": 0.3
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "cells": {
+              "amplitude": 0.24,
+              "frequency": 4,
+              "mode": "F2MinusF1",
+              "randomness": 0.2,
+              "seed": 3751
+            },
+            "id": 0,
+            "material": 0,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1,
+              1,
+              1
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          }
+        ]
+      },
+      "id": "cellsF2"
     }
   ],
-  "views": {
-    "seatControl": { "yawReference": "World", "minPitch": -0.35, "maxPitch": 1.2 },
-    "seatRig": {
-      "name": "unusedSeatRig",
-      "version": "puck.camera.v1",
-      "operations": [
-        { "$type": "orbit", "distance": 5, "yaw": 0, "pitch": 0.3 },
-        { "$type": "lookAt", "subject": { "$type": "reference" } },
-        { "$type": "fov", "fieldOfViewRadians": 0.9 }
+  "render": {
+    "lighting": {
+      "lights": [
+        {
+          "$type": "directional",
+          "shadows": true
+        },
+        {
+          "$type": "hemisphere"
+        },
+        {
+          "$type": "point",
+          "color": "#29C8FF",
+          "position": [
+            0,
+            2.6,
+            19.4
+          ],
+          "radius": 1.4,
+          "weight": 1.6
+        }
       ]
+    }
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "station",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 700
+      },
+      "mode": "Edge",
+      "name": "toMaterials"
     },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "station",
+          "value": 2
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 850
+      },
+      "mode": "Edge",
+      "name": "toLattice"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "station",
+          "value": 3
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 1000
+      },
+      "mode": "Edge",
+      "name": "toNoise"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "station",
+          "value": 4
+        }
+      ],
+      "gate": {
+        "$type": "compareState",
+        "comparison": "GreaterOrEqual",
+        "state": "$tick",
+        "value": 1100
+      },
+      "mode": "Edge",
+      "name": "toVocabulary"
+    }
+  ],
+  "schema": "puck.world.def.v1",
+  "simulation": {
+    "rateHz": 240
+  },
+  "state": {
+    "lattices": [
+      {
+        "$type": "field",
+        "cellSize": 1,
+        "depth": 16,
+        "layers": 1,
+        "name": "parityLattice",
+        "origin": [
+          280,
+          0,
+          -8
+        ],
+        "reactions": [],
+        "stepEveryTicks": 240,
+        "width": 16
+      }
+    ],
+    "world": [
+      {
+        "kind": "Int",
+        "name": "station",
+        "value": 0
+      },
+      {
+        "domain": {
+          "$type": "cellsOf",
+          "topology": "parityLattice"
+        },
+        "field": {
+          "color": "#3FAF6F",
+          "heightScale": 2,
+          "initial": 0,
+          "max": 1,
+          "min": 0,
+          "paint": [
+            {
+              "$type": "rect",
+              "maxX": 292,
+              "maxZ": 4,
+              "minX": 284,
+              "minZ": -4,
+              "value": 1
+            }
+          ]
+        },
+        "kind": "Fixed",
+        "name": "bump"
+      }
+    ]
+  },
+  "views": {
     "layouts": [
       {
         "name": "parity",
         "seatCount": 0,
         "slots": [
-          { "x": 0, "y": 0, "width": 1, "height": 1, "camera": "parity-select" }
+          {
+            "camera": "parity-select",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
         ],
-        "transitionSeconds": 0,
-        "transitionRenderScale": 1
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0
       }
-    ]
+    ],
+    "seatControl": {
+      "maxPitch": 1.2,
+      "minPitch": -0.35,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "unusedSeatRig",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 5,
+          "pitch": 0.3,
+          "yaw": 0
+        },
+        {
+          "$type": "lookAt",
+          "subject": {
+            "$type": "reference"
+          }
+        },
+        {
+          "$type": "fov",
+          "fieldOfViewRadians": 0.9
+        }
+      ],
+      "version": "puck.camera.v1"
+    }
   }
 }

@@ -620,7 +620,10 @@ public sealed class AudioMixer {
     public static int FramesPerStep(uint simulationRateHz) {
         ArgumentOutOfRangeException.ThrowIfZero(value: simulationRateHz);
 
-        return checked((int)(((SampleRate + simulationRateHz) - 1) / simulationRateHz));
+        return checked((int)BinaryIntegerFunctions.CeilingDivide<uint>(
+            divisor: simulationRateHz,
+            value: SampleRate
+        ));
     }
     /// <summary>Mixes one block from the given snapshot into interleaved stereo s16 — synchronous, pure, owning
     /// no thread. The span length fixes the block size (<c>2·frames</c> samples, frames ≤

@@ -214,7 +214,7 @@
         <!-- The headless P1 split's server row (docs/project-map.md's Puck.World.Server row) — everything
              Puck.World.Protocol's profile carries (Server references both Schema and Protocol), plus Puck.Storage
              (the owned-world cloud sync substrate WorldOwnedWorldSync reads through). Puck.Attestation also arrives
-             directly (WorldTcpHost/WorldTcpWireFormat frame the admission handshake's attestation bytes).
+             directly (WorldPeerHost/WorldPeerWireFormat frame the admission handshake's attestation bytes).
              Puck.Shaders arrives for WorldProbeKinds (the probe-kind manifest scan) and Puck.SignedDistance for the
              solid-field bake (WorldColliderSet/WorldSolidField) — neither is the emulator/renderer surface this row
              is deliberately WITHOUT: the screen-machine host (WorldMachineHost) and its shipped engines

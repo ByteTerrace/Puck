@@ -13,6 +13,11 @@ choices supersede the island-ranger palette and helmet defaults below. The
 [Moth studio guide](../src/Puck.World/Assets/worlds/moth.md) owns the current authored
 model, controls, and live iteration recipe; the quality priorities here still apply.
 
+The [Moth concept pack](art/moth-concept-pack-2026-09-09/README.md) expands the selected
+source into character views, facial and armor details, proposed wing mechanics,
+and movement studies. Its guide distinguishes the owner-selected design from
+generated mechanical proposals.
+
 The selected movement personality is nimble, with visible weight and function in
 the wings. Prioritize a convincing idle → run → takeoff → bank → land sequence.
 Design the articulation and clearance for the refined armor as the motion is

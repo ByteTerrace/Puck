@@ -1,11 +1,19 @@
 
+using System.CommandLine;
+
 namespace Puck.Cli.Automation;
 
 internal static class DocsBuildCommand {
-    public static async Task<int> RunAsync(string[] args) {
-        if (args is ["-h" or "--help"]) { Console.WriteLine(value: "puck docs build [output-directory]"); return 0; }
-        if (args.Length > 1) { throw new ArgumentException(message: "Usage: puck docs build [output-directory]"); }
-        var output = Path.GetFullPath(path: ((args.Length == 0) ? "artifacts/docs" : args[0]));
+    public static Command Create() {
+        var outputArgument = new Argument<string>(name: "output-directory") { Arity = ArgumentArity.ZeroOrOne, DefaultValueFactory = _ => "artifacts/docs", Description = "Where the reference site and its theme are staged." };
+        var build = new Command(description: "Generate the DocFX reference and stage it beside the site theme.", name: "build") { outputArgument };
+        var command = new Command(description: "Build and stage the website documentation.", name: "docs") { build };
+
+        build.SetAction(action: (parseResult, _) => RunAsync(output: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: outputArgument))));
+        return command;
+    }
+
+    private static async Task<int> RunAsync(string output) {
         var root = (RepositoryPaths.FindRoot() ?? throw new DirectoryNotFoundException(message: "Run within the Puck checkout."));
 
         foreach (var prefix in new[] { "reference", "_theme" }) {
@@ -16,19 +24,9 @@ internal static class DocsBuildCommand {
         await CliProcess.RunCheckedAsync(root: root, executable: "dotnet", arguments: ["tool", "restore", "--configfile", Path.Combine(root, "nuget.config")]);
         await CliProcess.RunCheckedAsync(root: root, executable: "dotnet", arguments: ["tool", "run", "docfx", "--", "docs/api/docfx.json", "--warningsAsErrors"]);
         if (!File.Exists(path: Path.Combine(root, "docs/api/_site/index.html"))) { throw new IOException(message: "DocFX omitted its entry point."); }
-        CopyDirectory(source: Path.Combine(root, "docs/api/_site"), destination: Path.Combine(path1: output, path2: "reference"));
-        File.Copy(sourceFileName: Path.Combine(root, "docs/site/index.html"), destFileName: Path.Combine(path1: output, path2: "reference/overview.html"));
-        CopyDirectory(source: Path.Combine(root, "docs/site/_theme"), destination: Path.Combine(path1: output, path2: "_theme"));
+        CliFiles.CopyDirectory(destination: Path.Combine(path1: output, path2: "reference"), source: Path.Combine(path1: root, path2: "docs/api/_site"));
+        File.Copy(destFileName: Path.Combine(path1: output, path2: "reference/overview.html"), sourceFileName: Path.Combine(path1: root, path2: "docs/site/index.html"));
+        CliFiles.CopyDirectory(destination: Path.Combine(path1: output, path2: "_theme"), source: Path.Combine(path1: root, path2: "docs/site/_theme"));
         return 0;
-    }
-
-    private static void CopyDirectory(string source, string destination) {
-        Directory.CreateDirectory(path: destination);
-        foreach (var file in Directory.EnumerateFiles(path: source, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
-            var target = Path.Combine(path1: destination, path2: Path.GetRelativePath(path: file, relativeTo: source));
-
-            Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-            File.Copy(destFileName: target, sourceFileName: file);
-        }
     }
 }

@@ -105,6 +105,21 @@ public sealed class WorldStateDocumentValuesLawTests {
         Assert.NotNull(@object: missing.Right.Reference);
     }
 
+    [Fact]
+    public void ResolveAgainstASourceFillsTheValueAndKeepsTheReference() {
+        var bound = Bound();
+        var graph = new Pair<object, DocumentIdentifier>(new Boxed(bound), new DocumentIdentifier(value: "untouched"));
+
+        Assert.True(condition: WorldStateDocumentValues.TryResolveGraph(source: Source(), graph: graph, reason: out var reason), userMessage: reason);
+        Assert.Equal(expected: "resolved", actual: bound.Value);
+        Assert.Equal(expected: "state.label", actual: bound.Reference);
+        Assert.True(condition: WorldStateDocumentValues.HasReference(graph: graph));
+
+        var missing = new Pair<int, DocumentIdentifier>(0, Bound(reference: "state.missing"));
+        Assert.False(condition: WorldStateDocumentValues.TryResolveGraph(source: Source(), graph: missing, reason: out reason));
+        Assert.Contains(expectedSubstring: "document.right reference 'state.missing'", actualString: reason);
+    }
+
     private sealed record Pair<TLeft, TRight>(TLeft Left, TRight Right);
     private sealed class Expanding<T> {
         public Expanding<Expanding<T>>? Next { get; set; }

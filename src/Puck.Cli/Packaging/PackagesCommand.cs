@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text;
 using System.Xml.Linq;
 
@@ -10,40 +11,36 @@ namespace Puck.Cli.Packaging;
 // regeneration shape `puck schema --check`/`puck schema` establishes for the checked-in JSON Schema files.
 // docs/site/index.html carries the one checked-in GENERATED instance today; a hand-maintained list next to
 // a generated one is the same second source docs/project-map.md's layering block exists to avoid.
-// Exit 0 listed/wrote/matched, 1 check found drift, 2 usage error or missing repository root.
+// Exit 0 listed/wrote/matched, 1 check found drift, 2 missing repository root.
 internal static class PackagesCommand {
     private const string GeneratedBegin = "<!-- GENERATED: puck packages -->";
     private const string GeneratedEnd = "<!-- /GENERATED -->";
-    private const string HelpText =
-        """
-        puck packages — report the published ByteTerrace.Puck.* NuGet packages
-
-        Usage: puck packages [options]
-
-        Options:
-          --check <path>   compare <path>'s GENERATED package section against the current
-                            packable-project list; write nothing, exit 1 with a drift
-                            report on disagreement
-          --write <path>   regenerate the GENERATED package section in <path> from the
-                            current packable-project list
-          -h, --help       this text
-
-        With neither option, lists every project under src/ declaring
-        <IsPackable>true</IsPackable> — package id, description, and tags — sorted by
-        package id.
-
-        The GENERATED section is delimited by a comment pair:
-          <!-- GENERATED: puck packages -->
-          ...
-          <!-- /GENERATED -->
-        --write replaces everything between and including that pair; the rest of the file
-        is untouched. docs/site/index.html carries the one checked-in instance today.
-
-        Exit codes: 0 listed/wrote/matched, 1 check found drift, 2 usage error or missing
-        repository root.
-        """;
 
     private readonly record struct PackageEntry(string Description, string File, string Id, IReadOnlyList<string> Tags);
+
+    public static Command Create() {
+        var checkOption = new Option<string?>(name: "--check") { Description = "Compare this path's GENERATED package section against the current packable-project list; write nothing, exit 1 with a drift report on disagreement." };
+        var writeOption = new Option<string?>(name: "--write") { Description = "Regenerate the GENERATED package section in this path from the current packable-project list." };
+        var command = new Command(description: """
+            Report the published ByteTerrace.Puck.* NuGet packages.
+
+            With neither option, lists every project under src/ declaring <IsPackable>true</IsPackable> — package id,
+            description, and tags — sorted by package id.
+
+            The GENERATED section is delimited by a comment pair:
+              <!-- GENERATED: puck packages -->
+              ...
+              <!-- /GENERATED -->
+            --write replaces everything between and including that pair; the rest of the file is untouched.
+            docs/site/index.html carries the one checked-in instance today.
+
+            Exit codes: 0 listed/wrote/matched, 1 check found drift, 2 missing repository root.
+            """, name: "packages") { checkOption, writeOption };
+
+        command.SetAction(action: parseResult => Run(checkPath: parseResult.GetValue(option: checkOption), writePath: parseResult.GetValue(option: writeOption)));
+
+        return command;
+    }
 
     private static int Check(string repositoryRoot, string relativePath, IReadOnlyList<PackageEntry> packages) {
         var fullPath = Path.Combine(
@@ -270,32 +267,12 @@ internal static class PackagesCommand {
 
         return 0;
     }
-
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Value(name: "check").Value(name: "write");
-
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"packages: {scanner.Error}");
-
-            return 2;
-        }
-
-        if (
-            scanner.Has(name: "h") ||
-            scanner.Has(name: "help")
-        ) {
-            Console.Out.WriteLine(value: HelpText);
-
-            return 0;
-        }
-
+    private static int Run(string? checkPath, string? writePath) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
 
         var packages = Discover(repositoryRoot: repositoryRoot);
-        var checkPath = scanner.Get(name: "check");
-        var writePath = scanner.Get(name: "write");
 
         if (checkPath is not null) {
             return Check(

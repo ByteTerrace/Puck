@@ -52,6 +52,9 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     private readonly WorldPerceptionAnchor m_anchor;
     private readonly WorldStampPool m_animator;
     private readonly IWorldAudioCueSink m_audio;
+    // The bounded volumes the latest live build's static placements baked (WorldPlacementStamper.EmitStatic);
+    // WorldFramePresenter.Dress composes them with the pool's per-frame volumes onto SdfFrame.Volumes.
+    private readonly List<SdfVolume> m_staticVolumes = new(capacity: SdfProgramBuilder.MaxVolumes);
     private readonly int m_authoringHeadroomPlacements;
     // BOOT-CONSUMED authoring policy (WorldPlacementPolicyDefaults): captured ONCE at construction from the boot definition's
     // Authoring row — never re-read live. These feed the frozen render-envelope probe (screen-slot/
@@ -198,6 +201,8 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     /// this emitter itself registered. The scene emits no positional stride today, so the clamp is inert and the
     /// composed words are byte-identical to the unscoped build.</summary>
     public bool OwnsMaterialScope => true;
+    /// <summary>Gets the bounded volumes the latest live build's static placements baked into world space.</summary>
+    public IReadOnlyList<SdfVolume> StaticVolumes => m_staticVolumes;
     /// <inheritdoc/>
     public int RevisionComponentCount => (WorldClient.RevisionComponentCount + 1);
 
@@ -282,13 +287,15 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
                 )
             );
         } else {
+            m_staticVolumes.Clear();
             WorldPlacementStamper.EmitStatic(
                 builder: builder,
                 definition: client.Definition,
                 creations: creations,
                 placements: placements,
                 textCatalog: m_text.Catalog,
-                tintFor: null
+                tintFor: null,
+                volumes: m_staticVolumes
             );
         }
 

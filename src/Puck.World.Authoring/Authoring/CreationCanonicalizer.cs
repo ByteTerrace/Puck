@@ -11,7 +11,7 @@ namespace Puck.World.Authoring;
 /// canonicalizes an upserted creation row through <see cref="Canonicalize"/> and validates a loaded one through
 /// <see cref="Validate"/>; nothing anywhere deserializes a creation without crossing it.
 /// </summary>
-public static class CreationCanonicalizer {
+public static partial class CreationCanonicalizer {
     // The default extrude half-depth a text run relies on when it declares none, and the floors every run clamps to —
     // a zero-depth glyph slab has no relief (it would be coplanar with the surface), so the depth is floored positive.
     private const float DefaultTextDepth = 0.02f;
@@ -250,9 +250,7 @@ public static class CreationCanonicalizer {
             )
                 ? TextRunDocument.ModeEngrave
                 : TextRunDocument.ModeEmboss),
-                Rotation = ((run.Rotation == default)
-                ? Quaternion.Identity
-                : Quaternion.Normalize(value: run.Rotation)),
+                Rotation = NormalizeRotation(rotation: run.Rotation),
                 Text = text,
                 Tracking = ((run.Tracking is { } tracking)
                 ? Math.Clamp(
@@ -577,7 +575,7 @@ public static class CreationCanonicalizer {
             }
             if (shapes[index].Domain is { Count: > 0 }) {
                 errors.Add(item: new(
-                    Message: $"bone '{chain[i]}' carries domain operators, so it rides the placement root's transform and a solve could not move it.",
+                    Message: $"bone '{chain[i]}' carries domain operators — a fold rides its parent's frame and never its own solve, so it cannot be a bone.",
                     Path: $"{path}.chain[{i}]"
                 ));
             }
@@ -866,12 +864,10 @@ public static class CreationCanonicalizer {
                     Path: $"{path}.parent"
                 ));
             }
-            if (shape.Domain is { Count: > 0 }) {
-                errors.Add(item: new(
-                    Message: "a shape carrying domain operators rides the placement root's transform, so a parent's motion could not carry it.",
-                    Path: $"{path}.parent"
-                ));
-            }
+            // A domain-bearing shape with no own swing/slide (refused below) rides its own per-shape slot with the
+            // parent's chained rigid delta instead of the identity — WorldStampPool.PackTransforms/EmitShape — so
+            // its fold plane travels with the parent. CreationStampEmitter's static stamp never reads Parent at
+            // all: a static placement carries no dynamic-transform buffer for a delta to ride.
         }
 
         if ((swings.Count + slides.Count) == 0) {
@@ -892,7 +888,7 @@ public static class CreationCanonicalizer {
         }
         if (shape.Domain is { Count: > 0 }) {
             errors.Add(item: new(
-                Message: "a shape carrying domain operators rides the placement root's transform, so an animated facet on it would compose onto a transform its geometry does not read.",
+                Message: "a fold rides its parent's frame, never its own swing — a shape carrying domain operators may not also carry an animated facet of its own.",
                 Path: path
             ));
         }
@@ -937,6 +933,184 @@ public static class CreationCanonicalizer {
                 phase: slide.Phase,
                 wave: slide.Wave
             );
+        }
+    }
+    // A panel needs its own one-deep field scope around [plate primitive, panel copy] (SdfProgramBuilder's
+    // MaxFieldScopeDepth is 1), so it is refused wherever that scope has nowhere to nest: a Plane (no meaningful
+    // face), a domain-folded shape (the fold already owns the point/field), a grouped shape (the animated pool's
+    // group scope leaves none spare for a member), and a creation that CreationStampEmitter.RequiresScope already
+    // scopes as a whole (the static path then shares one scope across every shape). The clamp checks (inset against
+    // the smallest local half-extent, depth against the full extent along face) reuse the same
+    // SdfSolidGeometry.HalfExtent a valid panel's own emission reads, so a document that passes here emits cleanly.
+    private static void ValidatePanel(CreationDocument document, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+        if (shape.Panel is not { } panel) {
+            return;
+        }
+
+        if (shape.Type == SdfSolidPrimitive.Plane) {
+            errors.Add(item: new(Message: "a Plane has no meaningful local face to panel.", Path: path));
+        }
+        if (shape.Domain is { Count: > 0 }) {
+            errors.Add(item: new(Message: "a shape carrying domain operators folds the point before its own pose and its fold already owns the point/field, so a panel has no scope of its own to nest into.", Path: path));
+        }
+        if ((shape.Group ?? 0) != 0) {
+            errors.Add(item: new(Message: $"a panel on a grouped shape (group {shape.Group}) would need a field scope nested past the builder's depth-{SdfProgramBuilder.MaxFieldScopeDepth} cap; ungroup the shape or drop its panel.", Path: path));
+        }
+        if (CreationStampEmitter.RequiresScope(document: document)) {
+            errors.Add(item: new(Message: "the creation already needs its own field scope (a non-Union shape blend, an engraved text run, or a noise facet elsewhere in it), which a panel's scope cannot nest inside; remove the panel or the scope-forcing facet.", Path: path));
+        }
+
+        var faceIsFinite = ((panel.Face is not { } face) || IsFinite(vector: face));
+        var faceIsDirection = (faceIsFinite && ((panel.Face is not { } authored) || (authored.Value != Vector3.Zero)));
+
+        if (!faceIsFinite) {
+            errors.Add(item: new(Message: "face is non-finite.", Path: $"{path}.face"));
+        } else if (!faceIsDirection) {
+            errors.Add(item: new(Message: "face is zero-length and names no direction; omit it for the default +Z or author a unit direction.", Path: $"{path}.face"));
+        }
+        if (!float.IsFinite(f: panel.Inset) || (panel.Inset < 0f)) {
+            errors.Add(item: new(Message: "inset must be finite and non-negative.", Path: $"{path}.inset"));
+        }
+        if (!float.IsFinite(f: panel.Depth)) {
+            errors.Add(item: new(Message: "depth must be finite.", Path: $"{path}.depth"));
+        }
+
+        if (
+            (shape.Type == SdfSolidPrimitive.Plane) ||
+            !faceIsDirection ||
+            !float.IsFinite(f: panel.Inset) ||
+            (panel.Inset < 0f) ||
+            !float.IsFinite(f: panel.Depth)
+        ) {
+            return;
+        }
+
+        var lift = (shape.Lift ?? SdfLift.Extrude);
+        var faceAxis = ((panel.Face is { } authoredFace)
+            ? NormalizeDirection(value: authoredFace.Value)
+            : ShapePanelDocument.DefaultFace
+        );
+        var minHalfExtent = MathF.Min(
+            x: SdfSolidGeometry.HalfExtent(type: shape.Type, scale: shape.Scale, lift: lift, axis: Vector3.UnitX),
+            y: MathF.Min(
+                x: SdfSolidGeometry.HalfExtent(type: shape.Type, scale: shape.Scale, lift: lift, axis: Vector3.UnitY),
+                y: SdfSolidGeometry.HalfExtent(type: shape.Type, scale: shape.Scale, lift: lift, axis: Vector3.UnitZ)
+            )
+        );
+
+        if (panel.Inset > minHalfExtent) {
+            errors.Add(item: new(Message: $"inset {panel.Inset} exceeds the shape's smallest local half-extent {minHalfExtent}, which would erode the panel to nothing.", Path: $"{path}.inset"));
+
+            return;
+        }
+
+        // KEEP IN SYNC with ShapePanelDocument.Resolve: the copy's own full extent along the face (2·h′, read from
+        // the eroded scale) is the deepest a recess floor can sit before the copy's far face drops inside the plate
+        // (an enclosed void), and the farthest a raise can stand before the copy's near face clears the plate's own
+        // (a detached slab) — past it the panel is a silent no-op on the surface.
+        var placement = ShapePanelDocument.Resolve(
+            depth: panel.Depth,
+            faceAxis: faceAxis,
+            inset: panel.Inset,
+            lift: lift,
+            scale: shape.Scale,
+            type: shape.Type
+        );
+        var copyHalfExtent = SdfSolidGeometry.HalfExtent(type: shape.Type, scale: placement.ErodedScale, lift: lift, axis: faceAxis);
+        var maxDepth = (2f * copyHalfExtent);
+
+        if (MathF.Abs(x: panel.Depth) > maxDepth) {
+            errors.Add(item: new(Message: $"depth {panel.Depth} exceeds the eroded panel copy's full extent {maxDepth} along its face (the plate's own less twice the inset); a recess deeper than that carves an enclosed void and a raise that tall floats detached.", Path: $"{path}.depth"));
+        }
+    }
+    // A trim's own scope opens AFTER the host shape's own emission closes, so it never has to nest inside one the
+    // host's own emission already opened — but it is still ONE MORE depth-1 scope, refused wherever that scope would
+    // have nowhere to open: a domain-folded shape (its fold already owns the point/field, the same reason it refuses
+    // Swings/Slides/Parent/Panel), a grouped shape (the animated pool's group scope leaves none spare), and a
+    // creation CreationStampEmitter.RequiresScope already scopes as a whole (the static path then shares one scope
+    // across every shape, with none left for a trim). Mirrors ValidatePanel's own refusal set for the same reason.
+    private static void ValidateTrims(CreationDocument document, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+        if (shape.Trims is not { Count: > 0 } trims) {
+            return;
+        }
+
+        if (trims.Count > ShapeTrimDocument.MaxTrims) {
+            errors.Add(item: new(Message: $"{trims.Count} entries exceeds the {ShapeTrimDocument.MaxTrims}-trim list.", Path: path));
+        }
+        if (shape.Domain is { Count: > 0 }) {
+            errors.Add(item: new(Message: "a shape carrying domain operators folds the point before its own pose and its fold already owns the point/field, so a trim has no scope of its own to open.", Path: path));
+        }
+        if ((shape.Group ?? 0) != 0) {
+            errors.Add(item: new(Message: $"a trim on a grouped shape (group {shape.Group}) would need a field scope nested past the builder's depth-{SdfProgramBuilder.MaxFieldScopeDepth} cap; ungroup the shape or drop its trims.", Path: path));
+        }
+        if (CreationStampEmitter.RequiresScope(document: document)) {
+            errors.Add(item: new(Message: "the creation already needs its own field scope (a non-Union shape blend, an engraved text run, or a noise facet elsewhere in it), which a trim's scope cannot nest inside; remove the trims or the scope-forcing facet.", Path: path));
+        }
+
+        var shapes = (document.Shapes ?? []);
+        var hostIndex = 0;
+
+        while ((hostIndex < shapes.Count) && !ReferenceEquals(objA: shapes[hostIndex], objB: shape)) {
+            hostIndex++;
+        }
+
+        for (var i = 0; (i < trims.Count); i++) {
+            var trim = trims[i];
+            var trimPath = $"{path}[{i}]";
+            var referenceIndex = -1;
+
+            for (var candidate = 0; (candidate < shapes.Count); candidate++) {
+                if (string.Equals(
+                    a: shapes[candidate].Name?.Value,
+                    b: trim.Shape,
+                    comparisonType: StringComparison.Ordinal
+                )) {
+                    referenceIndex = candidate;
+
+                    break;
+                }
+            }
+
+            if (referenceIndex < 0) {
+                errors.Add(item: new(Message: $"names no shape '{trim.Shape}'.", Path: $"{trimPath}.shape"));
+            } else if (referenceIndex >= hostIndex) {
+                errors.Add(item: new(Message: $"reference '{trim.Shape}' must be declared before the shape it trims.", Path: $"{trimPath}.shape"));
+            } else {
+                // The reference is re-emitted from its OWN dynamic slot (WorldStampPool.EmitTrims) and its own authored
+                // pose (CreationStampEmitter.EmitTrim), without its fold or its group's chain: a domain-bearing shape's
+                // slot carries only its parent's delta frame (its geometry sits wherever the fold carries it), and a
+                // grouped member rides its group's instance — either would re-emit the reference at the wrong place.
+                var reference = shapes[referenceIndex];
+
+                if (reference.Domain is { Count: > 0 }) {
+                    errors.Add(item: new(Message: $"reference '{trim.Shape}' carries domain operators, whose fold images a trim's copy of it could not follow.", Path: $"{trimPath}.shape"));
+                }
+                if ((reference.Group ?? 0) != 0) {
+                    errors.Add(item: new(Message: $"reference '{trim.Shape}' is a grouped shape (group {reference.Group}), whose group chain a trim's copy of it could not follow.", Path: $"{trimPath}.shape"));
+                }
+            }
+            if (!float.IsFinite(f: trim.Width) || (trim.Width <= 0f)) {
+                errors.Add(item: new(Message: "width must be finite and positive.", Path: $"{trimPath}.width"));
+            }
+            if (!float.IsFinite(f: trim.Inset) || (trim.Inset < 0f) || (trim.Inset > ShapeTrimDocument.MaxInset)) {
+                errors.Add(item: new(Message: $"inset must be finite and in [0, {ShapeTrimDocument.MaxInset}].", Path: $"{trimPath}.inset"));
+            }
+        }
+    }
+    // Detail needs no field scope of its own (it packs a flag bit on the shape's own instruction, not a second
+    // shape), so it carries none of Panel/Trims' scope-nesting refusals. It IS refused alongside either: both emit a
+    // second, independently-composed copy of the shape, and one Detail bit cannot describe two instructions' shading
+    // visibility.
+    private static void ValidateDetail(ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+        if (shape.Detail != true) {
+            return;
+        }
+
+        if (shape.Panel is not null) {
+            errors.Add(item: new(Message: "a detail shape cannot also carry a panel; the panel's own copy has no detail visibility of its own.", Path: path));
+        }
+        if (shape.Trims is { Count: > 0 }) {
+            errors.Add(item: new(Message: "a detail shape cannot also carry trims; a trim's own copy has no detail visibility of its own.", Path: path));
         }
     }
     private static void ValidateAnimationFacet(CreationDocument document, List<DocumentValidationError> errors, string path, string driver, DocumentVector3 axis, DocumentScalar amplitude, float maxAmplitude, string amplitudeUnit, DocumentScalar? phase, string? wave) {
@@ -1051,6 +1225,15 @@ public static class CreationCanonicalizer {
                                 ));
                             }
                         }
+                        if (
+                            (repeat.Origin is { } origin) &&
+                            !IsFinite(vector: origin)
+                        ) {
+                            errors.Add(item: new(
+                                Message: "origin is non-finite.",
+                                Path: $"{opPath}.origin"
+                            ));
+                        }
 
                         break;
                     }
@@ -1070,6 +1253,15 @@ public static class CreationCanonicalizer {
                             errors.Add(item: new(
                                 Message: $"count {polar.Count} exceeds the {SdfProgramBuilder.MaxExactFloatSectorCount} sectors the packed program represents exactly.",
                                 Path: $"{opPath}.count"
+                            ));
+                        }
+                        if (
+                            (polar.Origin is { } origin) &&
+                            !IsFinite(vector: origin)
+                        ) {
+                            errors.Add(item: new(
+                                Message: "origin is non-finite.",
+                                Path: $"{opPath}.origin"
                             ));
                         }
 
@@ -1120,6 +1312,14 @@ public static class CreationCanonicalizer {
             return;
         }
 
+        var domainShapeIds = new HashSet<int>();
+
+        foreach (var shape in (document.Shapes ?? [])) {
+            if (shape.Domain is { Count: > 0 }) {
+                _ = domainShapeIds.Add(item: shape.Id);
+            }
+        }
+
         for (var i = 0; (i < frames.Count); i++) {
             var frame = frames[i];
 
@@ -1142,6 +1342,14 @@ public static class CreationCanonicalizer {
                     errors.Add(item: new(
                         Path: $"frames[{i}].transforms[{j}].id",
                         Message: $"references missing shape id {transform.Id}."
+                    ));
+                }
+                // A domain-bearing shape rides its own slot with its parent's rigid delta (or the identity), never a
+                // frame's captured pose — the same reason a frame is refused beside an animated facet.
+                if (domainShapeIds.Contains(item: transform.Id)) {
+                    errors.Add(item: new(
+                        Path: $"frames[{i}].transforms[{j}].id",
+                        Message: $"shape id {transform.Id} carries domain operators, so its frame pose is never read."
                     ));
                 }
                 if (!seenShapeIds.Add(item: transform.Id)) {
@@ -1216,15 +1424,38 @@ public static class CreationCanonicalizer {
                     Path: $"palette[{i}].specular"
                 ));
             }
-            if (
-                (entry.Shininess is { } shininess) &&
-                !float.IsFinite(f: shininess)
-            ) {
-                errors.Add(item: new(
-                    Message: "shininess is non-finite.",
-                    Path: $"palette[{i}].shininess"
-                ));
-            }
+            // The four unit-range lanes: SdfMaterial (AddMaterial's RequireUnitRange) refuses a value outside [0, 1]
+            // with a throw at emission, which a document door must never let a shipped creation reach.
+            ValidateUnitRange(value: entry.Roughness, name: "roughness", errors: errors, path: $"palette[{i}].roughness");
+            ValidateUnitRange(value: entry.Sheen, name: "sheen", errors: errors, path: $"palette[{i}].sheen");
+            ValidateUnitRange(value: entry.Metal, name: "metal", errors: errors, path: $"palette[{i}].metal");
+            ValidateUnitRange(value: entry.Coat, name: "coat", errors: errors, path: $"palette[{i}].coat");
+            ValidatePaletteShading(
+                entry: entry,
+                errors: errors,
+                index: i
+            );
+            ValidatePaletteLayers(
+                entry: entry,
+                errors: errors,
+                index: i
+            );
+        }
+    }
+    private static void ValidateUnitRange(float? value, string name, List<DocumentValidationError> errors, string path) {
+        if (value is not { } authored) {
+            return;
+        }
+        if (!float.IsFinite(f: authored)) {
+            errors.Add(item: new(
+                Message: $"{name} is non-finite.",
+                Path: path
+            ));
+        } else if ((authored < 0f) || (authored > 1f)) {
+            errors.Add(item: new(
+                Message: $"{name} must be in [0, 1].",
+                Path: path
+            ));
         }
     }
     private static void ValidateParts(CreationDocument document, List<DocumentValidationError> errors, HashSet<int> shapeIds) {
@@ -1582,6 +1813,7 @@ public static class CreationCanonicalizer {
             ),
             ShapeDomainOp.Repeat repeat => new ShapeDomainOp.Repeat(
                 Limit: NormalizeCellLimit(value: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))),
+                Origin: NormalizeOptionalOrigin(value: repeat.Origin),
                 Spacing: NormalizeSpacing(value: repeat.Spacing)
             ),
             ShapeDomainOp.Polar polar => new ShapeDomainOp.Polar(
@@ -1590,7 +1822,8 @@ public static class CreationCanonicalizer {
                 : SdfPolarAxis.Y),
                 Count: Math.Clamp(value: polar.Count, min: 1, max: SdfProgramBuilder.MaxExactFloatSectorCount),
                 MaterialStride: Math.Max(val1: (polar.MaterialStride ?? 0), val2: 0),
-                Mirror: (polar.Mirror ?? false)
+                Mirror: (polar.Mirror ?? false),
+                Origin: NormalizeOptionalOrigin(value: polar.Origin)
             ),
             ShapeDomainOp.Wallpaper wallpaper => new ShapeDomainOp.Wallpaper(
                 Cell: new Vector2(
@@ -1774,6 +2007,105 @@ public static class CreationCanonicalizer {
             y: Math.Max(val1: (float.IsFinite(f: value.Y) ? value.Y : 0f), val2: 0.001f),
             z: Math.Max(val1: (float.IsFinite(f: value.Z) ? value.Z : 0f), val2: 0.001f)
         );
+    // Absent stays absent so an origin-free domain op keeps its canonical bytes and hash; a non-finite literal
+    // floors to the creation origin (Validate refuses it by name — this is the same defensive fallback
+    // NormalizeSpacing/NormalizeAmplitude take when Normalize runs ahead of validation).
+    private static DocumentVector3? NormalizeOptionalOrigin(DocumentVector3? value) {
+        if (value is not { } origin) {
+            return null;
+        }
+
+        return (IsFinite(vector: origin)
+            ? origin
+            : new DocumentVector3(value: Vector3.Zero));
+    }
+    // A finite, non-zero Face normalizes to unit length like a domain op's normal; absent stays absent so a
+    // default-face panel keeps its canonical bytes, and a zero or non-finite one is left as authored for Validate to
+    // refuse by name (NormalizeDirection would silently turn it into +X). Inset/Depth are left as authored (Validate
+    // refuses what is out of range, mirroring Rounding's own posture) — only Material, a plain palette-slot clamp,
+    // needs resolving here.
+    // A bound rotation keeps its reference: normalizing it would store the cell's value of the moment as a literal
+    // and drop the binding from every later canonical write-back. Written as statements on purpose — a conditional
+    // whose arms are the holder and a Quaternion takes Quaternion as its natural type and re-wraps a literal.
+    private static DocumentQuaternion NormalizeRotation(DocumentQuaternion? rotation) {
+        if (rotation is null) {
+            return Quaternion.Identity;
+        }
+
+        if (rotation.Reference is not null) {
+            return rotation;
+        }
+
+        return Quaternion.Normalize(value: rotation.Value);
+    }
+    // Shape/Inset/Width are left as authored (Validate refuses what is out of range, mirroring Panel's own
+    // posture); only Material, a plain palette-slot clamp, needs resolving here.
+    private static IReadOnlyList<ShapeTrimDocument>? NormalizeTrims(IReadOnlyList<ShapeTrimDocument>? trims) {
+        if (trims is not { Count: > 0 }) {
+            return null;
+        }
+
+        var normalized = new ShapeTrimDocument[trims.Count];
+
+        for (var i = 0; (i < trims.Count); i++) {
+            normalized[i] = trims[i] with {
+                Material = Math.Clamp(
+                value: trims[i].Material,
+                max: (CreationDocument.PaletteSize - 1),
+                min: 0
+            ),
+            };
+        }
+
+        return normalized;
+    }
+    private static ShapePanelDocument? NormalizePanel(ShapePanelDocument? panel) {
+        if (panel is null) {
+            return null;
+        }
+
+        return panel with {
+            Face = ((panel.Face is { } face)
+                ? ((IsFinite(vector: face) && (face.Value != Vector3.Zero))
+                    ? NormalizeDirection(value: face.Value)
+                    : face.Value)
+                : null),
+            Inset = (float.IsFinite(f: panel.Inset) ? panel.Inset : 0f),
+            Depth = (float.IsFinite(f: panel.Depth) ? panel.Depth : 0f),
+            Material = Math.Clamp(
+                value: panel.Material,
+                max: (CreationDocument.PaletteSize - 1),
+                min: 0
+            ),
+        };
+    }
+    // Amount/Bulge clamp like Bend/Twist; Span is left to Validate's hard refusal (no sensible default exists for a
+    // missing profile length) but still floored defensively here so a direct Normalize() call on already-invalid
+    // data — bypassing Validate — cannot hand SdfProgramBuilder.AxialProfile a non-positive span. Top defaults to 0.
+    private static ShapeFlareDocument? NormalizeFlare(ShapeFlareDocument? flare) {
+        if (flare is null) {
+            return null;
+        }
+
+        return flare with {
+            Amount = Math.Clamp(
+                value: (float.IsFinite(f: flare.Amount) ? flare.Amount : 0f),
+                max: ShapeFlareDocument.MaxAmount,
+                min: ShapeFlareDocument.MinAmount
+            ),
+            Bulge = Math.Clamp(
+                value: (float.IsFinite(f: flare.Bulge) ? flare.Bulge : 0f),
+                max: ShapeFlareDocument.MaxBulge,
+                min: -ShapeFlareDocument.MaxBulge
+            ),
+            Span = MathF.Max(
+                x: (float.IsFinite(f: flare.Span) ? flare.Span : 0f),
+                y: 0.001f
+            ),
+            StartScale = Math.Clamp(flare.StartScale, SdfProgramBuilder.FlareMinScale, ShapeFlareDocument.MaxStartScale),
+            Top = (float.IsFinite(f: (flare.Top ?? 0f)) ? (flare.Top ?? 0f) : 0f),
+        };
+    }
 
     /// <summary>Normalizes an already-schema-valid document: clamps/defaults every optional member so the in-memory
     /// model never sees a null or an out-of-range value it has to reason about (the load-time half of the document
@@ -1818,9 +2150,9 @@ public static class CreationCanonicalizer {
                 max: ShapeDocument.MaxOnion,
                 min: 0f
             ),
-                Rotation = ((shape.Rotation == default)
-                ? Quaternion.Identity
-                : Quaternion.Normalize(value: shape.Rotation)),
+                Panel = NormalizePanel(panel: shape.Panel),
+                Trims = NormalizeTrims(trims: shape.Trims),
+                Rotation = NormalizeRotation(rotation: shape.Rotation),
                 Scale = ((shape.Scale == default)
                 ? Vector3.One
                 : shape.Scale),
@@ -1834,6 +2166,9 @@ public static class CreationCanonicalizer {
                 max: ShapeDocument.MaxTwist,
                 min: -ShapeDocument.MaxTwist
             ),
+                Flare = NormalizeFlare(flare: shape.Flare),
+                Bumps = NormalizeBumps(bumps: shape.Bumps),
+                Shear = NormalizeShear(shear: shape.Shear),
             });
             _ = shapeIds.Add(item: shape.Id);
         }
@@ -1946,6 +2281,40 @@ public static class CreationCanonicalizer {
             if (shape.Profile is { } profile && (shape.Type != SdfSolidPrimitive.Prism || !profile.IsValid())) {
                 errors.Add(new(Path: $"shapes[{i}].profile", Message: "profile requires Prism, a defined kind, cornerRadius in [0, 1], and sides in [3, 32]."));
             }
+            if (shape.Lift is { } lift && (shape.Type != SdfSolidPrimitive.Prism || !Enum.IsDefined(value: lift))) {
+                errors.Add(new(Path: $"shapes[{i}].lift", Message: "lift requires Prism and one of extrude or revolve."));
+            }
+            if (shape.Rounding is { } rounding && ((shape.Type is not (SdfSolidPrimitive.Prism or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Cone)) || !float.IsFinite(rounding) || rounding < 0f)) {
+                errors.Add(new(Path: $"shapes[{i}].rounding", Message: "rounding requires Prism, Cylinder or Cone and a finite value of at least zero."));
+            }
+            if (shape.Chamfer is { } chamfer && ((shape.Type is not (SdfSolidPrimitive.Box or SdfSolidPrimitive.Cylinder or SdfSolidPrimitive.Prism)) || !float.IsFinite(chamfer) || chamfer < 0f)) {
+                errors.Add(new(Path: $"shapes[{i}].chamfer", Message: "chamfer requires Box, Cylinder or Prism and a finite value of at least zero."));
+            }
+            if ((shape.Chamfer ?? 0f) != 0f && (shape.Rounding ?? 0f) != 0f) {
+                errors.Add(new(Path: $"shapes[{i}].chamfer", Message: "chamfer and rounding cannot both be nonzero on one shape."));
+            }
+            if (shape.Flare is { } flare && (!float.IsFinite(flare.Amount) || !float.IsFinite(flare.Bulge) || !float.IsFinite(flare.Span) || (flare.Span <= 0f) || !float.IsFinite(flare.Top ?? 0f) || (uint)flare.Axis > 2u || !float.IsFinite(flare.StartScale) || flare.StartScale <= 0f)) {
+                errors.Add(new(Path: $"shapes[{i}].flare", Message: "flare requires a finite amount, bulge and top, and a finite span greater than zero."));
+            }
+            ValidateShapeErode(
+                errors: errors,
+                index: i,
+                shape: shape
+            );
+            ValidateCells(document, shape, errors, $"shapes[{i}].cells");
+            ValidateShear(
+                errors: errors,
+                path: $"shapes[{i}].shear",
+                shape: shape
+            );
+            ValidateBumps(
+                errors: errors,
+                path: $"shapes[{i}].bumps",
+                shape: shape
+            );
+            if (shape.Exponent is { } exponent && (shape.Type != SdfSolidPrimitive.Superellipsoid || !float.IsFinite(exponent) || exponent < SdfProgramBuilder.MinSuperellipsoidExponent || exponent > SdfProgramBuilder.MaxSuperellipsoidExponent)) {
+                errors.Add(new(Path: $"shapes[{i}].exponent", Message: $"exponent requires Superellipsoid and a finite value in [{SdfProgramBuilder.MinSuperellipsoidExponent}, {SdfProgramBuilder.MaxSuperellipsoidExponent}]."));
+            }
             if (
                 (shape.Blend is { } blend) &&
                 !Enum.IsDefined(value: blend)
@@ -1988,7 +2357,11 @@ public static class CreationCanonicalizer {
                     scale: shape.Scale,
                     type: shape.Type,
                     taper: shape.Taper ?? 0.5f,
-                    profile: shape.Profile
+                    profile: shape.Profile,
+                    lift: (shape.Lift ?? SdfLift.Extrude),
+                    rounding: (shape.Rounding ?? 0f),
+                    chamfer: (shape.Chamfer ?? 0f),
+                    exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent)
                 )
                 ) {
                     errors.Add(item: new(
@@ -2022,6 +2395,28 @@ public static class CreationCanonicalizer {
                 document: document,
                 errors: errors,
                 path: $"shapes[{i}]",
+                shape: shape
+            );
+            ValidatePanel(
+                document: document,
+                errors: errors,
+                path: $"shapes[{i}].panel",
+                shape: shape
+            );
+            ValidateTrims(
+                document: document,
+                errors: errors,
+                path: $"shapes[{i}].trims",
+                shape: shape
+            );
+            ValidateDetail(
+                errors: errors,
+                path: $"shapes[{i}].detail",
+                shape: shape
+            );
+            ValidateCurve(
+                errors: errors,
+                path: $"shapes[{i}].curve",
                 shape: shape
             );
         }
@@ -2074,6 +2469,10 @@ public static class CreationCanonicalizer {
             errors: errors
         );
         ValidatePolarStride(
+            document: document,
+            errors: errors
+        );
+        ValidateVolumes(
             document: document,
             errors: errors
         );

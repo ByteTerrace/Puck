@@ -462,80 +462,593 @@
             "null"
           ],
           "properties": {
-            "sun": {
-              "description": "The directional sun.",
+            "lights": {
+              "description": "The lights, at most SdfEnvironment.MaxLights, in slot order (a render.cycle key moves a light by its slot). At most one directional may shadow: the soft-shadow march runs once per lit pixel.",
               "type": [
-                "object",
+                "array",
                 "null"
               ],
-              "properties": {
-                "direction": {
-                  "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload).",
-                  "default": null,
-                  "title": "DocumentVector3",
-                  "anyOf": [
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "number"
+              "items": {
+                "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its lane semantics in SdfEnvironment.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "$type"
+                ],
+                "anyOf": [
+                  {
+                    "description": "A Lambert directional light.",
+                    "properties": {
+                      "$type": {
+                        "const": "directional"
                       },
-                      "minItems": 3,
-                      "maxItems": 3
+                      "direction": {
+                        "description": "The direction from a lit surface toward the light, any nonzero length (normalized host-side before upload). Absent is the pinned sun direction.",
+                        "default": null,
+                        "title": "DocumentVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      },
+                      "color": {
+                        "description": "The light\u0027s linear colour.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "weight": {
+                        "description": "The diffuse weight. Absent is the pinned sun weight.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "angularRadius": {
+                        "description": "The light\u0027s angular radius in radians, in [0, atan 0.3]: the penumbra half-slope is its tangent, so 0 casts a hard shadow. Read only when the light shadows. Absent is the pinned penumbra.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "shadows": {
+                        "description": "Whether this light drives the soft-shadow march (at most one light per world). Absent is false. An unshadowed directional is scaled by ambient occlusion instead.",
+                        "type": [
+                          "boolean",
+                          "null"
+                        ],
+                        "default": null
+                      }
                     },
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                    }
-                  ]
-                },
-                "weight": {
-                  "description": "The sun\u0027s diffuse weight.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "color": {
-                  "description": "The sun\u0027s linear color \u2014 a #RRGGBB/#RRGGBBAA literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding naming a Text cell that holds one (alpha is ignored; the render path is opaque).",
-                  "default": null,
-                  "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightDirectional"
+                  },
+                  {
+                    "description": "A hemisphere ambient: a floor plus a gradient on the surface normal\u0027s Y (sky above, darker below), scaled by ambient occlusion.",
+                    "properties": {
+                      "$type": {
+                        "const": "hemisphere"
+                      },
+                      "color": {
+                        "description": "The ambient\u0027s linear colour.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "base": {
+                        "description": "The floor. Absent is the pinned ambient floor.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "gradient": {
+                        "description": "The hemisphere gradient. Absent is the pinned gradient.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightHemisphere"
+                  },
+                  {
+                    "description": "A view-dependent silhouette brighten: weight \u00B7 color \u00B7 pow(1 \u2212 saturate(dot(normal, \u2212rayDirection)), power), added after the material shade.",
+                    "properties": {
+                      "$type": {
+                        "const": "rim"
+                      },
+                      "color": {
+                        "description": "The rim\u0027s linear colour.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "weight": {
+                        "description": "The strength. Absent is zero, which adds nothing.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "power": {
+                        "description": "The falloff exponent \u2014 larger confines the highlight nearer the silhouette. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightRim"
+                  },
+                  {
+                    "description": "A point light with inverse-square falloff and a soft core: intensity = weight / (1 \u002B (distance / radius)^2). No shadow march in v1 \u2014 a point light never occludes and is never occluded.",
+                    "properties": {
+                      "$type": {
+                        "const": "point"
+                      },
+                      "position": {
+                        "description": "The world-space position for a static (unanchored) light. Absent is the world origin. An offset in the anchor frame when an anchor is authored.",
+                        "default": null,
+                        "title": "DocumentVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      },
+                      "radius": {
+                        "description": "The falloff radius. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "anchor": {
+                        "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "required": [
+                          "$type"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+                            "properties": {
+                              "$type": {
+                                "const": "entity"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "index"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntity"
+                          },
+                          {
+                            "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+                            "properties": {
+                              "$type": {
+                                "const": "entityPart"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index.",
+                                "type": "integer"
+                              },
+                              "partId": {
+                                "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "index",
+                              "partId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntityPart"
+                          },
+                          {
+                            "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+                            "properties": {
+                              "$type": {
+                                "const": "placement"
+                              },
+                              "placementId": {
+                                "description": "The referenced Id (must resolve).",
+                                "type": "string"
+                              },
+                              "shapeId": {
+                                "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "placementId",
+                              "shapeId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorPlacement"
+                          },
+                          {
+                            "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+                            "properties": {
+                              "$type": {
+                                "const": "group"
+                              },
+                              "indices": {
+                                "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity.",
+                                "type": [
+                                  "array",
+                                  "null"
+                                ],
+                                "items": {
+                                  "type": "integer"
+                                }
+                              },
+                              "smoothRate": {
+                                "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "indices",
+                              "smoothRate"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorGroup"
+                          },
+                          {
+                            "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+                            "properties": {
+                              "$type": {
+                                "const": "seat"
+                              },
+                              "number": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorSeat"
+                          },
+                          {
+                            "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+                            "properties": {
+                              "$type": {
+                                "const": "recentSpeaker"
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorRecentSpeaker"
+                          }
+                        ],
+                        "default": null,
+                        "title": "WorldAnchor"
+                      },
+                      "color": {
+                        "description": "The light\u0027s linear colour.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "weight": {
+                        "description": "The strength. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightPoint"
+                  },
+                  {
+                    "description": "A smooth attenuation field. Position is world space, or an offset in an anchored entity/part/placement frame. Missing anchors disable it. Radius is positive; Weight is in [0, 1]. It shares the eight-light capacity.",
+                    "properties": {
+                      "$type": {
+                        "const": "occluder"
+                      },
+                      "position": {
+                        "default": null,
+                        "title": "DocumentVector3",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      },
+                      "radius": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "anchor": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "required": [
+                          "$type"
+                        ],
+                        "anyOf": [
+                          {
+                            "description": "Rides one population entity\u0027s ROOT pose \u2014 a walking avatar\u0027s whole-body position and orientation.",
+                            "properties": {
+                              "$type": {
+                                "const": "entity"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index, bounded by the world\u0027s authored population capacity.",
+                                "type": "integer"
+                              }
+                            },
+                            "required": [
+                              "index"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntity"
+                          },
+                          {
+                            "description": "Rides one entity look\u0027s authored part pose rather than its whole-body root. The active look publishes the mapping from PartId to its packed transform slot; the slot remains an engine detail.",
+                            "properties": {
+                              "$type": {
+                                "const": "entityPart"
+                              },
+                              "index": {
+                                "description": "The 0-based entity index.",
+                                "type": "integer"
+                              },
+                              "partId": {
+                                "description": "The ordinal, case-sensitive part identifier published by the entity\u0027s active look.",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "index",
+                              "partId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorEntityPart"
+                          },
+                          {
+                            "description": "Rides a placement INSTANCE\u0027s stamped transform \u2014 a creation stamped into the world by reference (the same placement-reference shape CreationCameraDocument uses), optionally narrowed to one of its own authored shapes rather than the stamp\u0027s root.",
+                            "properties": {
+                              "$type": {
+                                "const": "placement"
+                              },
+                              "placementId": {
+                                "description": "The referenced Id (must resolve).",
+                                "type": "string"
+                              },
+                              "shapeId": {
+                                "description": "The referenced creation\u0027s ShapeDocument.Id to ride, or null for the placement\u0027s own stamped root transform.",
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "placementId",
+                              "shapeId"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorPlacement"
+                          },
+                          {
+                            "description": "Rides the smoothed CENTROID of a set of population entities \u2014 the establishing-shot anchor. Also publishes the set\u0027s SPREAD (mean distance from the centroid), which a camera program\u0027s Offset consumes through its SpreadPullback. A group has no facing, so its orientation resolves to identity.",
+                            "properties": {
+                              "$type": {
+                                "const": "group"
+                              },
+                              "indices": {
+                                "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/anchor/anyOf/3/properties/indices"
+                              },
+                              "smoothRate": {
+                                "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "indices",
+                              "smoothRate"
+                            ],
+                            "additionalProperties": false,
+                            "title": "WorldAnchorGroup"
+                          },
+                          {
+                            "description": "Rides a local seat\u0027s avatar \u2014 the body the seat perceives as its own, so possession follows \u2014 at its root or at a named part. Numbernull is the enclosing seat scope (the seat a HUD frame or view is being resolved for), an explicit number is 1-based. Presentation-only: a camera or speaker on this anchor is resolved per seat.",
+                            "properties": {
+                              "$type": {
+                                "const": "seat"
+                              },
+                              "number": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorSeat"
+                          },
+                          {
+                            "description": "Rides the body that most recently spoke (see OverlayPredicate.Speaking), at its root or a named part; resolves nothing until something has spoken.",
+                            "properties": {
+                              "$type": {
+                                "const": "recentSpeaker"
+                              },
+                              "partId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              }
+                            },
+                            "additionalProperties": false,
+                            "title": "WorldAnchorRecentSpeaker"
+                          }
+                        ],
+                        "default": null,
+                        "title": "WorldAnchor"
+                      },
+                      "weight": {
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderLightOccluder"
+                  }
+                ],
+                "title": "WorldRenderLight"
               },
-              "additionalProperties": false,
-              "default": null,
-              "title": "WorldRenderSun"
+              "default": null
             },
-            "ambient": {
-              "description": "The ambient (hemisphere) term.",
+            "curvature": {
+              "description": "The stylized curvature enrichment \u2014 cavity darkening, curvature rim light, and an ink outline. Optional; absent (and all-zero) shades exactly as a world that declares none.",
               "type": [
                 "object",
                 "null"
               ],
               "properties": {
-                "base": {
-                  "description": "The ambient floor.",
+                "cavity": {
+                  "description": "How far a concave crease darkens, in [0, 1] at a cavity whose curvature reaches InkLow. Zero darkens none.",
                   "type": [
                     "number",
                     "null"
                   ],
                   "default": null
                 },
-                "hemisphere": {
-                  "description": "The hemisphere gradient, scaling surface normal Y.",
+                "rim": {
+                  "description": "How far a convex ridge brightens, in [0, 1] at a ridge whose curvature reaches InkLow. Zero brightens none.",
                   "type": [
                     "number",
                     "null"
                   ],
                   "default": null
                 },
-                "color": {
-                  "description": "The ambient linear color \u2014 BindableColor\u0027s grammar, on the same terms as Color.",
+                "ink": {
+                  "description": "The ink outline\u0027s strength where the curvature magnitude spikes. Zero draws none.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "inkLow": {
+                  "description": "The curvature magnitude (1 / fillet radius, in world units) at which the outline starts and the ridge and cavity terms saturate.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "inkHigh": {
+                  "description": "The curvature magnitude at which the outline saturates.",
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "inkColor": {
+                  "description": "BindableColor\u0027s grammar: the outline colour.",
                   "default": null,
                   "title": "BindableColor",
                   "type": [
@@ -546,7 +1059,7 @@
               },
               "additionalProperties": false,
               "default": null,
-              "title": "WorldRenderAmbient"
+              "title": "WorldRenderCurvature"
             }
           },
           "additionalProperties": false,
@@ -560,221 +1073,301 @@
             "null"
           ],
           "properties": {
-            "zenith": {
-              "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
-              "default": null,
-              "title": "BindableColor",
+            "layers": {
+              "description": "The layers.",
               "type": [
-                "string",
-                "null"
-              ]
-            },
-            "horizon": {
-              "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "ground": {
-              "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
-              "default": null,
-              "title": "BindableColor",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "fogDensity": {
-              "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
-              "type": [
-                "number",
+                "array",
                 "null"
               ],
-              "default": null
-            },
-            "sun": {
-              "description": "The visible sun disc, drawn about the lighting sun\u0027s direction. Optional; absent draws no disc.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "discRadians": {
-                  "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Controls the falloff sharpness: a smaller disc reads sharper.",
-                  "type": "number"
-                },
-                "intensity": {
-                  "description": "The disc\u0027s peak additive brightness.",
-                  "type": "number"
-                }
-              },
-              "required": [
-                "discRadians",
-                "intensity"
-              ],
-              "additionalProperties": false,
-              "default": null,
-              "title": "WorldRenderSkySun"
-            },
-            "stars": {
-              "description": "The procedural star field. Optional; absent draws no stars.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "density": {
-                  "description": "The star grid\u0027s cell count per octahedral axis. A higher value packs more, smaller stars.",
-                  "type": "number"
-                },
-                "brightness": {
-                  "description": "The peak per-star brightness.",
-                  "type": "number"
-                },
-                "seed": {
-                  "description": "The hash seed folded into every cell \u2014 a different seed reshuffles the field.",
-                  "type": "integer"
-                },
-                "twinkle": {
-                  "description": "Scintillation for a share of the stars. Optional; absent twinkles none.",
-                  "type": [
-                    "object",
-                    "null"
-                  ],
-                  "properties": {
-                    "share": {
-                      "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
-                      "type": "number"
+              "items": {
+                "description": "One sky layer. The $type string is the JSON discriminator.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "$type"
+                ],
+                "anyOf": [
+                  {
+                    "description": "The colour gradient over elevation: piecewise-linear between stops, clamped to the end stops.",
+                    "properties": {
+                      "$type": {
+                        "const": "gradient"
+                      },
+                      "stops": {
+                        "description": "Two to SdfEnvironment.MaxSkyStops stops, strictly ascending in elevation. A render.cycle key moves a stop by its index and may not add or remove one.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "description": "One gradient stop.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "elevation": {
+                              "description": "The direction\u0027s Y component this stop sits at, in [\u22121, 1].",
+                              "type": [
+                                "number",
+                                "null"
+                              ],
+                              "default": null
+                            },
+                            "color": {
+                              "description": "BindableColor\u0027s grammar: the colour at this elevation. Absent (in a cycle key) keeps the previous key\u0027s colour.",
+                              "default": null,
+                              "title": "BindableColor",
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "additionalProperties": false,
+                          "title": "WorldRenderSkyStop"
+                        },
+                        "default": null
+                      }
                     },
-                    "depth": {
-                      "description": "How far a twinkling star dips below its steady brightness, in [0, 1]: 0 holds steady, 1 dips to black.",
-                      "type": "number"
-                    },
-                    "rate": {
-                      "description": "The fundamental scintillation rate in hertz; each star twinkles at a small harmonic of it.",
-                      "type": "number"
-                    }
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerGradient"
                   },
-                  "required": [
-                    "share",
-                    "depth",
-                    "rate"
-                  ],
-                  "additionalProperties": false,
-                  "default": null,
-                  "title": "WorldRenderSkyTwinkle"
-                }
-              },
-              "required": [
-                "density",
-                "brightness",
-                "seed"
-              ],
-              "additionalProperties": false,
-              "default": null,
-              "title": "WorldRenderSkyStars"
-            },
-            "clouds": {
-              "description": "The procedural cloud layer. Optional; absent draws no clouds.",
-              "type": [
-                "object",
-                "null"
-              ],
-              "properties": {
-                "coverage": {
-                  "description": "The fraction of the sky the layer covers, in [0, 1]. Zero draws none.",
-                  "type": "number"
-                },
-                "softness": {
-                  "description": "The width of a cloud\u0027s edge, in (0, 1]: small is hard-edged cumulus, large is a diffuse haze.",
-                  "type": "number"
-                },
-                "scale": {
-                  "description": "The size of one cloud cell in layer units (the layer sits at unit height, so a scale of 1 spans about 45\u00B0 overhead). Larger is broader clouds.",
-                  "type": "number"
-                },
-                "seed": {
-                  "description": "The hash seed folded into the lattice \u2014 a different seed reshapes the layer.",
-                  "type": "integer"
-                },
-                "color": {
-                  "description": "BindableColor\u0027s grammar: the cloud colour. Optional; absent is white.",
-                  "default": null,
-                  "title": "BindableColor",
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "drift": {
-                  "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Optional; absent holds still.",
-                  "default": null,
-                  "title": "DocumentVector2",
-                  "anyOf": [
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "number"
+                  {
+                    "description": "The exponential distance fog fading toward the sky gradient.",
+                    "properties": {
+                      "$type": {
+                        "const": "fog"
                       },
-                      "minItems": 2,
-                      "maxItems": 2
+                      "density": {
+                        "description": "The density per world unit. Absent is the pinned density.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
                     },
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                    }
-                  ]
-                },
-                "spin": {
-                  "description": "The layer\u0027s rotation about the zenith in radians per second \u2014 the planetary-scale turning a rotating frame gives a broad flow; positive is counter-clockwise seen from below. Optional; absent is none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "curl": {
-                  "description": "The Coriolis twist: how far, in radians, the layer is wound about the zenith at 45\u00B0 elevation, the winding falling off toward the horizon and the zenith so bands spiral in rather than shear apart. Positive winds counter-clockwise. Optional; absent is none.",
-                  "type": [
-                    "number",
-                    "null"
-                  ],
-                  "default": null
-                },
-                "shear": {
-                  "description": "The wind of the SHAPING field relative to the cloud field, in layer units per second: the two slide past each other, so clouds boil and re-form as they drift rather than glide as a fixed picture. Optional; absent holds their shapes.",
-                  "default": null,
-                  "title": "DocumentVector2",
-                  "anyOf": [
-                    {
-                      "type": "array",
-                      "items": {
-                        "type": "number"
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerFog"
+                  },
+                  {
+                    "description": "The visible sun disc \u2014 an additive highlight about one directional light\u0027s direction.",
+                    "properties": {
+                      "$type": {
+                        "const": "sunDisc"
                       },
-                      "minItems": 2,
-                      "maxItems": 2
+                      "light": {
+                        "description": "The Lights slot of a directional light. Absent is the shadow light, or the first directional when none shadows.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "radius": {
+                        "description": "The disc\u0027s angular half-radius in radians, in (0, \u03C0/2]. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "intensity": {
+                        "description": "The peak additive brightness. Absent is zero, which draws nothing.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      }
                     },
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
-                    }
-                  ]
-                }
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerSunDisc"
+                  },
+                  {
+                    "description": "The procedural star field: a deterministic per-cell hash over an octahedral sky projection.",
+                    "properties": {
+                      "$type": {
+                        "const": "stars"
+                      },
+                      "density": {
+                        "description": "The star grid\u0027s cell count per octahedral axis. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "brightness": {
+                        "description": "The peak per-star brightness. Absent is zero, which draws nothing.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "seed": {
+                        "description": "The hash seed folded into every cell.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "twinkle": {
+                        "description": "Scintillation for a share of the stars. Optional; absent twinkles none.",
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "share": {
+                            "description": "The fraction of stars that twinkle, in [0, 1]. Zero twinkles none.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "depth": {
+                            "description": "How far a twinkling star dips below its steady brightness, in [0, 1].",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          },
+                          "rate": {
+                            "description": "The fundamental scintillation rate in hertz.",
+                            "type": [
+                              "number",
+                              "null"
+                            ],
+                            "default": null
+                          }
+                        },
+                        "additionalProperties": false,
+                        "default": null,
+                        "title": "WorldRenderSkyTwinkle"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerStars"
+                  },
+                  {
+                    "description": "The procedural cloud layer: a deterministic hashed-lattice noise on a plane above the camera, thresholded by coverage, drawn over the gradient, stars and sun disc and fading into the horizon.",
+                    "properties": {
+                      "$type": {
+                        "const": "clouds"
+                      },
+                      "coverage": {
+                        "description": "The fraction of the sky the layer covers, in [0, 1]. Absent is zero.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "softness": {
+                        "description": "The width of a cloud\u0027s edge, in (0, 1]. Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "scale": {
+                        "description": "The size of one cloud cell in layer units (the layer sits at unit height). Absent is the engine default.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "seed": {
+                        "description": "The hash seed folded into the lattice.",
+                        "type": [
+                          "integer",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "color": {
+                        "description": "BindableColor\u0027s grammar: the cloud colour. Absent is white.",
+                        "default": null,
+                        "title": "BindableColor",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "drift": {
+                        "description": "The layer\u0027s wind, in layer units per second along world X and Z, integrated on the tick clock. Absent holds still.",
+                        "default": null,
+                        "title": "DocumentVector2",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      },
+                      "spin": {
+                        "description": "The layer\u0027s rotation about the zenith in radians per second; positive is counter-clockwise seen from below. Absent is none.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "curl": {
+                        "description": "The Coriolis twist in radians at 45\u00B0 elevation, falling off toward the horizon and the zenith. Positive winds counter-clockwise. Absent is none.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "shear": {
+                        "description": "The wind of the shaping field relative to the cloud field, in layer units per second. Absent holds the shapes.",
+                        "default": null,
+                        "title": "DocumentVector2",
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 2,
+                            "maxItems": 2
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRenderSkyLayerClouds"
+                  }
+                ],
+                "title": "WorldRenderSkyLayer"
               },
-              "required": [
-                "coverage",
-                "softness",
-                "scale",
-                "seed"
-              ],
-              "additionalProperties": false,
-              "default": null,
-              "title": "WorldRenderSkyClouds"
+              "default": null
             }
           },
           "additionalProperties": false,
@@ -813,12 +1406,12 @@
                       "null"
                     ],
                     "properties": {
-                      "sun": {
-                        "$ref": "#/properties/render/properties/lighting/properties/sun",
+                      "lights": {
+                        "$ref": "#/properties/render/properties/lighting/properties/lights",
                         "default": null
                       },
-                      "ambient": {
-                        "$ref": "#/properties/render/properties/lighting/properties/ambient",
+                      "curvature": {
+                        "$ref": "#/properties/render/properties/lighting/properties/curvature",
                         "default": null
                       }
                     },
@@ -833,51 +1426,8 @@
                       "null"
                     ],
                     "properties": {
-                      "zenith": {
-                        "description": "BindableColor\u0027s grammar: the straight-up sky color. Optional; absent takes the pinned zenith.",
-                        "default": null,
-                        "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "horizon": {
-                        "description": "BindableColor\u0027s grammar: the horizon-band color (the gradient\u0027s middle stop). Optional; absent takes the midpoint between the pinned ground and zenith.",
-                        "default": null,
-                        "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "ground": {
-                        "description": "BindableColor\u0027s grammar: the straight-down (nadir) color. Optional; absent takes the pinned ground.",
-                        "default": null,
-                        "title": "BindableColor",
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      },
-                      "fogDensity": {
-                        "description": "The exponential distance-fog density fading toward the sky color. Optional; absent takes the pinned 0.015 \u2014 the exact value the fog term used before this field existed.",
-                        "type": [
-                          "number",
-                          "null"
-                        ],
-                        "default": null
-                      },
-                      "sun": {
-                        "$ref": "#/properties/render/properties/sky/properties/sun",
-                        "default": null
-                      },
-                      "stars": {
-                        "$ref": "#/properties/render/properties/sky/properties/stars",
-                        "default": null
-                      },
-                      "clouds": {
-                        "$ref": "#/properties/render/properties/sky/properties/clouds",
+                      "layers": {
+                        "$ref": "#/properties/render/properties/sky/properties/layers",
                         "default": null
                       }
                     },
@@ -901,6 +1451,144 @@
           "additionalProperties": false,
           "default": null,
           "title": "WorldRenderCycle"
+        },
+        "environment": {
+          "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "softboxes": {
+              "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "description": "One analytic studio-reflection softbox: a soft, angularly-extended highlight a GGX lobe catches in its mirror direction, widened by the surface\u0027s own roughness.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "direction": {
+                    "description": "From a reflecting surface toward the softbox, any nonzero length (normalized before upload).",
+                    "title": "DocumentVector3",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
+                  },
+                  "size": {
+                    "description": "The angular half-extent (width, height) the falloff widens by, both strictly positive.",
+                    "title": "DocumentVector2",
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                      }
+                    ]
+                  },
+                  "color": {
+                    "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
+                    "default": null,
+                    "title": "BindableColor",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "weight": {
+                    "description": "The strength. Absent is 1.",
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  },
+                  "blur": {
+                    "description": "Additional falloff softening, in the same units as Size. Absent is 0.",
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "direction",
+                  "size"
+                ],
+                "additionalProperties": false,
+                "title": "WorldRenderSoftbox"
+              },
+              "default": null
+            },
+            "horizon": {
+              "description": "The reflection horizon gradient. Absent is black \u2014 contributes nothing.",
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "low": {
+                  "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
+                  "default": null,
+                  "title": "BindableColor",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "high": {
+                  "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
+                  "default": null,
+                  "title": "BindableColor",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "default": null,
+              "title": "WorldRenderHorizon"
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderEnvironment"
+        },
+        "tonemap": {
+          "description": "The tonemap applied to the frame\u0027s final color. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
+          "enum": [
+            "None",
+            "Filmic",
+            null
+          ],
+          "default": null,
+          "title": "WorldTonemap"
         },
         "farDistance": {
           "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
@@ -2120,14 +2808,7 @@
                     "const": "group"
                   },
                   "indices": {
-                    "description": "The 0-based entity indices in the set, or null for the whole live population (every active entity). Each index is validated against the authored population capacity.",
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "type": "integer"
-                    }
+                    "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/anchor/anyOf/3/properties/indices"
                   },
                   "smoothRate": {
                     "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
@@ -3259,7 +3940,7 @@
                           "const": "group"
                         },
                         "indices": {
-                          "$ref": "#/properties/cameras/items/properties/anchor/anyOf/3/properties/indices"
+                          "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/anchor/anyOf/3/properties/indices"
                         },
                         "smoothRate": {
                           "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
@@ -9238,11 +9919,234 @@
                         "null"
                       ]
                     },
-                    "shininess": {
+                    "roughness": {
                       "type": [
                         "number",
                         "null"
                       ]
+                    },
+                    "sheen": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "metal": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "coat": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "weathering": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "edge": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "lines": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "settle": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "reach": {
+                          "type": "number",
+                          "default": 1
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "scale": {
+                          "type": "number",
+                          "default": 1
+                        },
+                        "floor": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "lane": {
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "under": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "items": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "threshold": {
+                                "type": "number"
+                              },
+                              "surface": {
+                                "type": "object",
+                                "properties": {
+                                  "color": {
+                                    "type": "string"
+                                  },
+                                  "roughness": {
+                                    "type": "number"
+                                  },
+                                  "metal": {
+                                    "type": "number"
+                                  }
+                                },
+                                "required": [
+                                  "color",
+                                  "roughness",
+                                  "metal"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "threshold",
+                              "surface"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "default": null
+                        },
+                        "deposit": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "color": {
+                              "type": "string"
+                            },
+                            "roughness": {
+                              "type": "number"
+                            },
+                            "metal": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "color",
+                            "roughness",
+                            "metal"
+                          ],
+                          "additionalProperties": false,
+                          "default": null
+                        }
+                      },
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "wrap": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "soften": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "bounce": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "inset": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "origin": true,
+                        "rotation": true,
+                        "depth": {
+                          "type": "number"
+                        },
+                        "ior": {
+                          "type": "number"
+                        },
+                        "paint": {
+                          "type": "object",
+                          "properties": {
+                            "stops": {
+                              "type": "array",
+                              "items": {
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "radius": {
+                                    "type": "number"
+                                  },
+                                  "color": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "radius",
+                                  "color"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "softness": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "modulationAmplitude": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "modulationFrequency": {
+                              "type": "number",
+                              "default": 0
+                            },
+                            "seed": {
+                              "type": "integer",
+                              "default": 0
+                            }
+                          },
+                          "required": [
+                            "stops"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "origin",
+                        "rotation",
+                        "depth",
+                        "ior",
+                        "paint"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
                     }
                   },
                   "required": [
@@ -9277,7 +10181,9 @@
                         "RoundCone",
                         "Plane",
                         "Cone",
-                        "Prism"
+                        "Prism",
+                        "Superellipsoid",
+                        "Sweep"
                       ]
                     },
                     "position": true,
@@ -9301,6 +10207,13 @@
                         "ChamferUnion",
                         "ChamferIntersection",
                         "ChamferSubtraction",
+                        "GrooveUnion",
+                        "PipeUnion",
+                        "Morph",
+                        "GrooveSubtraction",
+                        "PipeSubtraction",
+                        "StairsUnion",
+                        "StairsSubtraction",
                         null
                       ]
                     },
@@ -9385,6 +10298,9 @@
                               "spacing": true,
                               "limit": {
                                 "default": null
+                              },
+                              "origin": {
+                                "default": null
                               }
                             },
                             "required": [
@@ -9421,6 +10337,9 @@
                                   "integer",
                                   "null"
                                 ],
+                                "default": null
+                              },
+                              "origin": {
                                 "default": null
                               }
                             },
@@ -9595,7 +10514,9 @@
                             "Trapezoid",
                             "RoundedRectangle",
                             "Polygon",
-                            "Ellipse"
+                            "Ellipse",
+                            "ChamferedRectangle",
+                            "Convex"
                           ]
                         },
                         "cornerRadius": {
@@ -9605,10 +10526,336 @@
                         "sides": {
                           "type": "integer",
                           "default": 6
+                        },
+                        "vertices": {
+                          "type": [
+                            "array",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [
                         "kind"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "lift": {
+                      "enum": [
+                        "Revolve",
+                        "Extrude",
+                        null
+                      ],
+                      "default": null
+                    },
+                    "rounding": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "panel": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "inset": {
+                          "type": "number"
+                        },
+                        "depth": {
+                          "type": "number"
+                        },
+                        "material": {
+                          "type": "integer"
+                        },
+                        "face": {
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "inset",
+                        "depth",
+                        "material"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "chamfer": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "trims": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "shape": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "material": {
+                            "type": "integer"
+                          },
+                          "inset": {
+                            "type": "number",
+                            "default": 0.003
+                          }
+                        },
+                        "required": [
+                          "shape",
+                          "width",
+                          "material"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": null
+                    },
+                    "detail": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "flare": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "amount": {
+                          "type": "number"
+                        },
+                        "bulge": {
+                          "type": "number"
+                        },
+                        "span": {
+                          "type": "number"
+                        },
+                        "top": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "axis": {
+                          "type": "integer",
+                          "default": 1
+                        },
+                        "startScale": {
+                          "type": "number",
+                          "default": 1
+                        }
+                      },
+                      "required": [
+                        "amount",
+                        "bulge",
+                        "span"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "exponent": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "secondary": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "bumps": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "center": true,
+                          "radii": true,
+                          "push": true
+                        },
+                        "required": [
+                          "center",
+                          "radii",
+                          "push"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": null
+                    },
+                    "shear": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "linear": {
+                          "type": "number"
+                        },
+                        "quadratic": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "cubic": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "target": {
+                          "type": "integer",
+                          "default": 0
+                        },
+                        "driver": {
+                          "type": "integer",
+                          "default": 1
+                        }
+                      },
+                      "required": [
+                        "linear"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "curve": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "a": true,
+                        "b": true,
+                        "c": true,
+                        "radiusStart": {
+                          "type": "number"
+                        },
+                        "radiusEnd": {
+                          "type": "number"
+                        },
+                        "bulge": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "strands": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "twist": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        },
+                        "strandOffset": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "a",
+                        "b",
+                        "c",
+                        "radiusStart",
+                        "radiusEnd"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "erode": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "lane": {
+                          "type": "integer"
+                        },
+                        "from": {
+                          "type": "number"
+                        },
+                        "to": {
+                          "type": "number"
+                        },
+                        "noise": {
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "lane",
+                        "from",
+                        "to"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    },
+                    "cells": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "frequency": {
+                          "type": "number"
+                        },
+                        "amplitude": {
+                          "type": "number"
+                        },
+                        "seed": {
+                          "type": "integer"
+                        },
+                        "mode": {
+                          "enum": [
+                            "F1",
+                            "F2MinusF1"
+                          ]
+                        },
+                        "randomness": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "frequency",
+                        "amplitude",
+                        "seed",
+                        "mode",
+                        "randomness"
                       ],
                       "additionalProperties": false,
                       "default": null
@@ -10291,6 +11538,155 @@
                     "chain",
                     "tip",
                     "target"
+                  ],
+                  "additionalProperties": false
+                },
+                "default": null
+              },
+              "volumes": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "position": true,
+                    "rotation": true,
+                    "halfExtent": true,
+                    "ramp": {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "density": {
+                            "type": "number"
+                          },
+                          "color": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "density",
+                          "color"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "parent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "axis": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "width": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "speed": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "seed": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "steps": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "intensity": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "extinction": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "pulseAmplitude": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "pulseFrequency": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "intensityLane": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "enabled": {
+                      "type": "boolean",
+                      "default": true
+                    },
+                    "coverage": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "softness": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "isKnownKind": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "position",
+                    "rotation",
+                    "halfExtent",
+                    "ramp"
                   ],
                   "additionalProperties": false
                 },
@@ -11832,7 +13228,7 @@
                         "const": "group"
                       },
                       "indices": {
-                        "$ref": "#/properties/cameras/items/properties/anchor/anyOf/3/properties/indices"
+                        "$ref": "#/properties/render/properties/lighting/properties/lights/items/anyOf/3/properties/anchor/anyOf/3/properties/indices"
                       },
                       "smoothRate": {
                         "description": "The exponential smoothing rate (per second) the centroid/spread ease at (validated positive and finite) \u2014 seeded un-smoothed on first resolve so a camera does not fly in from the origin.",
@@ -12548,6 +13944,14 @@
           "default": null,
           "title": "WorldCameraProgram"
         },
+        "studyToolchain": {
+          "description": "The directory holding the study compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
         "layouts": {
           "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
           "type": "array",
@@ -12578,7 +13982,7 @@
                 "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
                 "type": "array",
                 "items": {
-                  "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera is null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect.",
+                  "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Study are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named study (a WorldViewStudy row) renders that compiled Shadertoy-dialect study into the rect instead \u2014 a slot names at most one of the two (the validator refuses both authored together).",
                   "type": "object",
                   "properties": {
                     "x": {
@@ -12598,7 +14002,14 @@
                       "type": "number"
                     },
                     "camera": {
-                      "description": "The authored camera name filling this slot, or null for the seat that owns it.",
+                      "description": "The authored camera name filling this slot, or null for the seat that owns it (or the study named by Study).",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "study": {
+                      "description": "The authored views.studies row name filling this slot with a compiled shader study, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
                       "type": [
                         "string",
                         "null"
@@ -12620,6 +14031,50 @@
             "additionalProperties": false,
             "title": "WorldViewLayout"
           }
+        },
+        "studies": {
+          "description": "Gets the authored views.studies rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One views.studies row \u2014 an authored Shadertoy-dialect fragment shader, compiled and rendered as a paired-camera child view a Study names (see the study push-constant/toolchain contract in AGENTS.md and the Puck.Shaders.Study family). This record is the authored intent only \u2014 compiling the source, swapping the live pipeline, and driving the per-frame push constants are console/composition-root concerns, not schema ones.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "name": {
+                "description": "The study\u0027s stable name (a SafeName, unique within the section) \u2014 what a Study names and a study.* console verb addresses.",
+                "type": "string"
+              },
+              "source": {
+                "description": "The study\u0027s GLSL source file, resolved relative to the document\u0027s own directory (an author\u0027s document may point this at any path relative to itself \u2014 never the Content-copied BaseDirectory convention WorldAssetRowLoader\u0027s asset rows use).",
+                "type": "string"
+              },
+              "camera": {
+                "description": "The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_STUDY, or null for the study\u0027s own iMouse orbit (the Shadertoy-dialect default).",
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "default": null
+              },
+              "timeScale": {
+                "description": "The study clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
+                "type": "number",
+                "default": 1
+              }
+            },
+            "required": [
+              "name",
+              "source"
+            ],
+            "additionalProperties": false,
+            "title": "WorldViewStudy"
+          },
+          "default": null
         }
       },
       "required": [
@@ -12776,6 +14231,40 @@
                   "type": [
                     "string",
                     "null"
+                  ]
+                }
+              },
+              "poses": {
+                "description": "A creation frame name to state.\u003Crow\u003E[.\u003Ckey\u003E] map ($body in the key is the wearing body\u0027s index): the frame holds while its cell\u0027s stored value is nonzero, and the first holding frame in declaration order overrides the cue and replay cursor \u2014 a blink, a wince, a mouth shape the simulation schedules. Legitimate only on a creation source.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "lanes": {
+                "description": "Up to four optional expressions, in x/y/z/w order. Missing entries read zero. Expressions read eased state; each consumer defines its own numeric range.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "title": "ValueExpression",
+                  "anyOf": [
+                    {
+                      "description": "The infix spelling: C precedence over \u002B - * / % \u0026 | ^ ~ \u003C\u003C \u003E\u003E \u003E\u003E\u003E == != \u003C \u003C= \u003E \u003E= and condition ? whenTrue : whenFalse; named forms as calls (min, max, clamp, abs, sign, popCount, leadingZeroCount, trailingZeroCount, lowestSetBit, clearLowestSetBit, byteSwap, bitReverse, replicationMask(width), repeatBits(pattern, width), rotateLeft, rotateRight, parallelBitExtract, parallelBitDeposit, bitField, bitInsert, boardShift(mask, topology, direction), boardImage(mask, topology, element), select); a state read as its row name, keyed as row[key], backquoted when not a bare name; decimal or 0x-hexadecimal literals.",
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    {
+                      "$ref": "#/properties/kits/items/properties/motion/properties/shaping/items/properties/when/anyOf/1/properties/left/anyOf/1"
+                    }
                   ]
                 }
               }

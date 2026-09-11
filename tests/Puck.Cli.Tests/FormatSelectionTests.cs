@@ -38,7 +38,7 @@ public sealed class FormatSelectionTests : IDisposable {
     }
     [Fact]
     public void AnEmptyDirectoryArgumentStillReturnsAUsageError() {
-        Assert.Equal(expected: 2, actual: FormatCommand.Run(args: [""]));
+        Assert.Equal(expected: 2, actual: PuckRootCommand.Invoke(args: ["format", ""]));
     }
     [InlineData("src/Puck.Cli/Format/FormatCommand.cs", true)]
     [InlineData("tests/Puck.Cli.Tests/FormatSelectionTests.cs", true)]

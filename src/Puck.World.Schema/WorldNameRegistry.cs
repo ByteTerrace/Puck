@@ -297,6 +297,8 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldKit), nameof(WorldKit.Name), "a kit name"),
         new(typeof(WorldKit), nameof(WorldKit.BodyMotionProgram), "a body motion program name"),
         new(typeof(WorldViewLayout), nameof(WorldViewLayout.Name), "a view layout name"),
+        new(typeof(WorldViewStudy), nameof(WorldViewStudy.Name), "a view study name"),
+        new(typeof(WorldViewStudy), nameof(WorldViewStudy.Source), "a view study's source is a document path"),
         new(typeof(WorldCameraProgram), nameof(WorldCameraProgram.Name), "a camera program name"),
         new(typeof(WorldGroupRole), nameof(WorldGroupRole.Name), "a group role name"),
         new(typeof(WorldGroupKind), nameof(WorldGroupKind.Name), "a group kind name"),

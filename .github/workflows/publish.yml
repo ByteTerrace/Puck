@@ -7,244 +7,143 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: 'Package selection: all, or full IDs separated by commas (for example ByteTerrace.Puck.Maths)'
-        type: string
-        required: true
         default: all
-      publish:
-        description: Publish the verified packages to NuGet.org (false validates and prepares artifacts only)
-        type: boolean
+        description: "Package selection: all, or full IDs separated by commas (for example ByteTerrace.Puck.Maths)"
         required: true
+        type: string
+      publish:
         default: false
+        description: Publish the verified packages to NuGet.org (false validates and prepares artifacts only)
+        required: true
+        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: nuget-publish
   cancel-in-progress: false
+  group: nuget-publish
   queue: max
 
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+
 jobs:
-  gate:
-    name: Validate release source and version
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      version: ${{ steps.read.outputs.version }}
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
-
-      - name: Read the shared package version
-        id: read
-        run: dotnet run -c Release --file build/Toolchain.cs -- version
-
-      - name: Validate source and any existing version tag
-        env:
-          VERSION: ${{ steps.read.outputs.version }}
-        run: |
-          set -euo pipefail
-          tag="v$VERSION"
-          if [[ "$GITHUB_REF" != refs/heads/main && "$GITHUB_REF" != "refs/tags/$tag" ]]; then
-            echo '::error::Release from main, or the existing version tag for retries and additional batches.'
-            exit 1
-          fi
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-          if git show-ref --verify --quiet "refs/tags/$tag"; then
-            if [[ "$(git rev-parse "$tag^{commit}")" != "$GITHUB_SHA" ]]; then
-              echo "::error::Version $VERSION is already bound to another commit. Run from $tag or bump the shared version."
-              exit 1
-            fi
-          fi
-
   artifacts:
     name: Build .NET artifacts
-    needs: gate
     uses: ./.github/workflows/artifacts.yml
-
   pack:
     name: Verify package installation
     needs: artifacts
     uses: ./.github/workflows/pack.yml
     with:
       prebuilt: true
-
   build:
     name: Test .NET artifacts
     needs: artifacts
     uses: ./.github/workflows/build.yml
     with:
       prebuilt: true
-
   verify:
     name: Verify runtime artifacts
     needs: artifacts
     uses: ./.github/workflows/verify.yml
     with:
       prebuilt: true
-
   docs:
     name: Build API documentation
     needs: artifacts
     uses: ./.github/workflows/docs.yml
     with:
       prebuilt: true
-
   prepare:
-    name: Prepare the selected package batch
-    needs: [gate, pack]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Download NuGet packages
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: nuget-packages
-          path: packages
-
-      - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          global-json-file: global.json
-
-      - name: Install Puck CLI
-        uses: ./.github/actions/setup-puck
-        with:
-          artifact: nuget-packages
-
-      - name: Select and validate the release batch
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
-          PACKAGES: ${{ inputs.packages }}
-        run: puck nuget prepare packages release "$PACKAGES"
-
-      - name: Upload the prepared NuGet batch
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: nuget-release
-          path: release/
-          if-no-files-found: error
-
-  publish:
-    name: Publish the verified package batch
-    needs: [gate, prepare, build, verify, docs]
-    if: inputs.publish
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: write
-      id-token: write
-    environment:
-      name: NuGet
-      url: https://www.nuget.org/profiles/ByteTerrace
+    name: Validate the release source and prepare the selected package batch
+    needs: pack
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Install the pinned .NET SDK
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - name: Download NuGet packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          global-json-file: global.json
-
+          name: nuget-packages
+          path: packages
+      - name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+      - name: Install the CLI from the downloaded package batch
+        uses: ./.github/actions/setup-puck
+        with:
+          directory: packages
+      - name: Validate the release source and any existing version tag
+        run: puck nuget gate
+      - env:
+          PACKAGES: ${{ inputs.packages }}
+        name: Select and validate the release batch
+        run: puck nuget prepare packages release "$PACKAGES"
+      - name: Upload the prepared NuGet batch
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          if-no-files-found: error
+          name: nuget-release
+          path: release/
+    timeout-minutes: 10
+  publish:
+    environment:
+      name: NuGet
+      url: https://www.nuget.org/profiles/ByteTerrace
+    if: inputs.publish
+    name: Publish the verified package batch
+    needs: [prepare, build, verify, docs]
+    permissions:
+      contents: write
+      id-token: write
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
       - name: Download the prepared NuGet batch
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: nuget-release
           path: release
-
       - name: Install Puck CLI
         uses: ./.github/actions/setup-puck
         with:
           artifact: nuget-packages
-
       - name: Verify the prepared artifacts
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
         run: puck nuget verify release
-
-      - name: Pin the package version to this validated commit
-        env:
+      - env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.gate.outputs.version }}
-        run: |
-          set -euo pipefail
-          tag="v$VERSION"
-          if git show-ref --verify --quiet "refs/tags/$tag"; then
-            test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
-          else
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              --raw-field "ref=refs/tags/$tag" --raw-field "sha=$GITHUB_SHA"
-          fi
-
-      - name: NuGet login (Trusted Publishing)
-        id: nuget-login
+        name: Pin the package version to this validated commit
+        run: puck nuget tag
+      - id: nuget-login
+        name: NuGet login (Trusted Publishing)
         uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
         with:
           user: ByteTerrace
-
-      - name: Push the selected packages and symbols in dependency order
-        env:
+      - env:
           NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
-          VERSION: ${{ needs.gate.outputs.version }}
+        name: Push the selected packages and symbols in dependency order
         run: puck nuget push release
-
-      - name: Record this batch on the GitHub Release
-        env:
+      - env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.gate.outputs.version }}
-        run: |
-          set -euo pipefail
-          tag="v$VERSION"
-          if ! gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" >release-info.json 2>release-error.txt; then
-            if ! grep -q 'HTTP 404' release-error.txt; then
-              cat release-error.txt >&2
-              exit 1
-            fi
-            prerelease=()
-            case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
-            gh release create "$tag" --verify-tag --title "$tag" --generate-notes "${prerelease[@]}"
-          fi
-          # Existing releases can receive additional batches from the same tag.
-          manifest="release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
-          cp release/release.json "$manifest"
-          gh release upload "$tag" "$manifest"
-
+        name: Record this batch on the GitHub Release
+        run: puck nuget release release/release.json
       - name: Verify published CLI availability and prepare its CI pin
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
-        shell: bash
-        run: |
-          if [[ -f "release/ByteTerrace.Puck.Cli.$VERSION.nupkg" ]]; then
-            for attempt in $(seq 1 30); do
-              if dotnet run -c Release --file build/Toolchain.cs -- pin "$VERSION"; then
-                git diff -- .config/dotnet-tools.json .config/puck-bootstrap.json > puck-cli-pin.patch
-                exit 0
-              fi
-              sleep 10
-            done
-            echo '::error::CLI publication has not become installable; retry this run before adopting the pin.'
-            exit 1
-          fi
+        run: puck nuget pin-published release puck-cli-pin.patch
       - name: Upload the CLI pin update
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          if-no-files-found: ignore
           name: puck-cli-pin
           path: puck-cli-pin.patch
-          if-no-files-found: ignore
+    timeout-minutes: 20

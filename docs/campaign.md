@@ -14,6 +14,11 @@ For the main character's visual implementation, use the
 chunky anime armor direction into proposed art defaults, staged work, and rendered
 acceptance evidence; it does not change the campaign's world model.
 
+For the cooperative group-finder work, use the [groups and matchmaking design](group-finder.md).
+It plans portable membership, recoverable group operations and the complete in-world finder over
+the existing authority, storage and transfer systems. This is requested work, not shipped behavior;
+engine prerequisites precede the cooperative experience, with other activity types sharing its foundation.
+
 ## The charter (owner-ratified 2026-08-06, binding)
 
 **Amended 2026-09-06 (owner ruling): one world.** Everything the charter below names, and everything the

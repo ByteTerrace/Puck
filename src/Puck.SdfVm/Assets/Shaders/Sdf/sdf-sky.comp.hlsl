@@ -8,9 +8,9 @@
 //
 // SHARES Stage 1's descriptor-set layout: SdfWorldEngine builds this kernel's pipeline from the SAME bindings array
 // sdf-world-views.comp.hlsl uses, so it binds against the SAME per-slot descriptor set Stage 1 already has — no new
-// descriptor set, no second binding layout. Only `viewports` (binding 2) and `sdfScreenLights` (binding 11, the
-// sky/lighting rows SdfWorldEngine.PackSkyFrame writes) are actually read; every other slot in the shared layout
-// goes untouched here. SDF_SCREEN_SOURCES is required even though this kernel never samples a screen source: it is
+// descriptor set, no second binding layout. Reads viewports, sky/lighting rows, bounded volumes, and the dynamic
+// transforms their frames and optional intensity lanes use. SDF_SCREEN_SOURCES is required even though this
+// kernel never samples a screen source: it is
 // the only configuration under which sdfScreenLights — and the real (non-pinned-literal) skyColor/lighting
 // accessors — are declared at all (sdf-world.hlsli's #else half returns the pinned defaults unconditionally, which
 // would make worldSkyEnabled() always false here). SDF_DYNAMIC_TRANSFORMS is required too: sdf-world.hlsli's
@@ -47,16 +47,22 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float3 rayDirection = cameraRayDirection(view, localUv);
     float3 color = skyColor(rayDirection);
 
+    // Empty SDF tiles can still contain participating media. Match renderView's miss branch; a live tile replaces
+    // this result with its own integration clipped to the surface, so emission is never added twice.
+    color = shadeVolumes(color, view.position.xyz, rayDirection, worldFarDistance(view), id.xy, view.position.w);
+
+    // render.tonemap: the SAME curve renderView applies to its own miss-branch sky (sdf-world.hlsli), in the same
+    // place in the pixel's op order (before the dither), so a beam-culled tile's sky and a live tile's sky stay
+    // bit-identical across the tile seam under Filmic exactly as they do under None.
+    if (worldTonemapMode() == SdfTonemapFilmic) {
+        color = sdfFilmicTonemap(color);
+    }
+
     // The SAME dither, on the SAME render-space pixel coordinate Stage 1 dithers its own miss-branch sky with
     // (sdf-world-views.comp.hlsl's `pixel`, which for this kernel's un-offset dispatch is exactly id.xy) — so a sky
     // pixel this pass alone produces (a beam-culled tile) and a sky pixel Stage 1's own miss branch produces (a live
     // tile's ray that clears the field) are bit-identical, and a screenshot across the tile seam shows no step.
     color += ((sdfR2Dither(id.xy) - 0.5) * DitherQuantum);
 
-    // Read-modify-write to preserve the alpha lane: it carries the soft-shadow temporal accumulator's history
-    // (sdf-world-views.comp.hlsl's sdfShadowHistoryIn), which Stage 1 reads from this same texture immediately after
-    // this pass runs. Overwriting it here would hand Stage 1 this frame's freshly written value instead of the
-    // prior frame's real history on every live-tile pixel, resetting shadow accumulation every frame. A tile that
-    // stays empty this frame keeps whatever alpha its last live frame left, unchanged.
-    sources[id.z][id.xy] = float4(color, sources[id.z][id.xy].a);
+    sources[id.z][id.xy] = float4(color, 1.0);
 }

@@ -400,6 +400,11 @@ public static partial class WorldDefinitionValidator {
             return;
         }
 
+        // A key over an unauthored section moves the PINNED topology (the sun and hemisphere; the two-stop gradient
+        // and the fog), which is what the cycle track resolves it against.
+        var lightingShape = ResolvedLightingShape(lighting: definition.Render.Lighting);
+        var skyShape = (definition.Render.Sky ?? WorldRenderSky.Pinned);
+
         for (var index = 0; (index < cycle.Keys.Count); index++) {
             var key = cycle.Keys[index];
             var path = $"render.cycle.keys[{index}]";
@@ -421,14 +426,96 @@ public static partial class WorldDefinitionValidator {
                 definition: definition,
                 errors: errors,
                 lighting: key.Lighting,
-                path: $"{path}.lighting"
+                path: $"{path}.lighting",
+                shape: lightingShape
             );
             ValidateRenderSky(
                 definition: definition,
                 errors: errors,
                 path: $"{path}.sky",
-                sky: key.Sky
+                sky: key.Sky,
+                shape: skyShape,
+                lighting: lightingShape
             );
+        }
+
+        ValidateRenderCycleResolution(
+            cycle: cycle,
+            errors: errors,
+            lightingShape: lightingShape,
+            skyShape: skyShape
+        );
+    }
+    // The fields a key may leave to inheritance are judged where they RESOLVE, not where they are written: each key
+    // holds every field the previous key left it, the first inherits from the statics and then from the last key
+    // (the wrap), so a stop order or an ink band that is fine in every fragment can still resolve inverted. Walks
+    // the keys twice exactly as WorldRenderCycleTrack.Rebuild does and judges the resolved values after each key.
+    // The lighting topology a cycle key moves: the authored list, or the pinned sun and hemisphere when the statics
+    // author no list (a curvature-only section keeps the pinned lights, exactly as the cycle track resolves it).
+    private static WorldRenderLighting ResolvedLightingShape(WorldRenderLighting? lighting) => (lighting switch {
+        { Lights: not null } authored => authored,
+        { } curvatureOnly => (curvatureOnly with { Lights = WorldRenderLighting.Pinned.Lights }),
+        null => WorldRenderLighting.Pinned,
+    });
+    private static void ValidateRenderCycleResolution(WorldRenderCycle cycle, List<string> errors, WorldRenderLighting lightingShape, WorldRenderSky skyShape) {
+        var stops = ((skyShape.Layers?.OfType<WorldRenderSkyLayer.Gradient>().FirstOrDefault()?.Stops)
+            ?.Select(selector: static stop => (stop?.Elevation ?? 0f))
+            .ToArray()
+            ?? []);
+        var lights = (lightingShape.Lights ?? []);
+        var shadows = lights.Select(selector: static light => ((light as WorldRenderLight.Directional)?.Shadows ?? false)).ToArray();
+        var inkLow = (lightingShape.Curvature?.InkLow ?? SdfEnvironment.DefaultCurvatureInkLow);
+        var inkHigh = (lightingShape.Curvature?.InkHigh ?? SdfEnvironment.DefaultCurvatureInkHigh);
+
+        // Two passes exactly as WorldRenderCycleTrack.Rebuild walks them: the first only establishes what the last
+        // key hands the first (the wrap), the second is what every key RETAINS and renders — so only the second
+        // pass is judged, and a value the first pass passes through on its way round is never refused.
+        for (var pass = 0; (pass < 2); pass++) {
+            for (var index = 0; (index < cycle.Keys.Count); index++) {
+                var key = cycle.Keys[index];
+                var path = $"render.cycle.keys[{index}]";
+
+                if (key?.Sky?.Layers?.OfType<WorldRenderSkyLayer.Gradient>().FirstOrDefault()?.Stops is { } moved) {
+                    for (var stopIndex = 0; ((stopIndex < moved.Count) && (stopIndex < stops.Length)); stopIndex++) {
+                        if (moved[stopIndex]?.Elevation is { } elevation) {
+                            stops[stopIndex] = elevation;
+                        }
+                    }
+                }
+
+                if (key?.Lighting?.Lights is { } movedLights) {
+                    for (var light = 0; ((light < movedLights.Count) && (light < shadows.Length)); light++) {
+                        if ((movedLights[light] as WorldRenderLight.Directional)?.Shadows is { } flag) {
+                            shadows[light] = flag;
+                        }
+                    }
+                }
+
+                if (key?.Lighting?.Curvature is { } curvature) {
+                    inkLow = (curvature.InkLow ?? inkLow);
+                    inkHigh = (curvature.InkHigh ?? inkHigh);
+                }
+
+                if (pass == 0) {
+                    continue;
+                }
+
+                for (var stopIndex = 1; (stopIndex < stops.Length); stopIndex++) {
+                    if (stops[stopIndex] <= stops[(stopIndex - 1)]) {
+                        errors.Add(item: $"{path}.sky resolves gradient stops [{string.Join(separator: ", ", values: stops)}] once the fields it leaves unset are inherited; stops must stay strictly ascending in elevation at every key.");
+
+                        break;
+                    }
+                }
+
+                if (shadows.Count(predicate: static flag => flag) > 1) {
+                    errors.Add(item: $"{path}.lighting resolves {shadows.Count(predicate: static flag => flag)} shadowing lights once the flags it leaves unset are inherited; at most one light shadows at every key.");
+                }
+
+                if (inkLow >= inkHigh) {
+                    errors.Add(item: $"{path}.lighting.curvature resolves an ink band {inkLow}..{inkHigh} once the field it leaves unset is inherited; inkLow must stay below inkHigh at every key.");
+                }
+            }
         }
     }
     // definition null = identity scope: a document authored independent of any world cannot resolve a placement id
@@ -930,6 +1017,12 @@ public static partial class WorldDefinitionValidator {
         ValidateRenderSky(
             definition: definition,
             sky: definition.Render.Sky,
+            errors: errors,
+            lighting: ResolvedLightingShape(lighting: definition.Render.Lighting)
+        );
+        ValidateRenderEnvironment(
+            definition: definition,
+            environment: definition.Render.Environment,
             errors: errors
         );
         ValidateRenderCycle(
@@ -1506,6 +1599,7 @@ public static partial class WorldDefinitionValidator {
         // returns) and BEFORE ValidatePlacements (a future Inhabit facet will resolve its Look against the look-name set
         // this returns) — the same forward-threading prototypeIds already rides.
         var lookNames = ValidateLooks(
+            definition: definition,
             creations: definition.Creations,
                 looks: definition.Looks,
             prototypeIds: prototypeIds,

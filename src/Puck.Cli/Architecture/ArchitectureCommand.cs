@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text;
 
 namespace Puck.Cli.Architecture;
@@ -15,49 +16,103 @@ namespace Puck.Cli.Architecture;
 internal static class ArchitectureCommand {
     private const string BackendsLayer = "Backends";
     private const string CompositionRootsLayer = "Composition roots";
-    private const string HelpText =
-        """
-        puck architecture — report on the repository's project-layering policy
-
-        Usage: puck architecture [options]
-
-        Options:
-          --configuration <name>  Which build configuration's assemblies to read for the
-                                  friend-set comparison (default: Release).
-          --map                   Print only the layering block, generated from each project's
-                                  own <PuckLayer> declaration, for docs/project-map.md.
-          -h, --help              This text.
-
-        The build-time gate is the authority; this verb explains it. Policy lives in
-        build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
-        """;
+    private const string LayeringFenceClose = "```";
+    private const string LayeringFenceOpen = "```text";
+    private const string LayeringHeading = "## Layering";
     private const string PresentationLayer = "Presentation";
+    private const string ProjectMapRelativePath = "docs/project-map.md";
 
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Flag(name: "map").Value(name: "configuration");
+    /// <summary>
+    /// Compares the generated layering block with the first <c>```text</c> fence under the Layering heading of
+    /// docs/project-map.md and returns the exit code: 0 when they match, 1 on drift or a missing block.
+    /// </summary>
+    private static int CheckProjectMap(string generated, string repositoryRoot) {
+        var path = Path.Combine(path1: repositoryRoot, path2: ProjectMapRelativePath);
 
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"architecture: {scanner.Error}");
+        if (!File.Exists(path: path)) {
+            Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} is missing.");
 
-            return 2;
+            return 1;
         }
 
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
+        var lines = File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n").Split(separator: '\n');
+        var heading = Array.IndexOf(array: lines, value: LayeringHeading);
+        var open = ((heading < 0) ? -1 : Array.IndexOf(array: lines, startIndex: heading, value: LayeringFenceOpen));
+        var close = ((open < 0) ? -1 : Array.IndexOf(array: lines, startIndex: (open + 1), value: LayeringFenceClose));
 
-            return 0;
+        if (close < 0) {
+            Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} has no `{LayeringFenceOpen}` block under `{LayeringHeading}`; paste the output of `puck architecture --map` there.");
+
+            return 1;
         }
 
+        var onDisk = lines[(open + 1)..close];
+        var expected = generated.ReplaceLineEndings(replacementText: "\n").TrimEnd(trimChar: '\n').Split(separator: '\n');
+        var count = Math.Max(val1: onDisk.Length, val2: expected.Length);
+
+        for (var index = 0; (index < count); index++) {
+            var onDiskLine = ((index < onDisk.Length) ? onDisk[index] : "(end of block)");
+            var expectedLine = ((index < expected.Length) ? expected[index] : "(end of block)");
+
+            if (string.Equals(a: onDiskLine, b: expectedLine, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            Console.Error.WriteLine(value: $"architecture: {ProjectMapRelativePath} layering block disagrees with the project declarations at line {((open + index) + 2)}; paste the output of `puck architecture --map` over it.");
+            Console.Error.WriteLine(value: $"  on disk:   {onDiskLine}");
+            Console.Error.WriteLine(value: $"  generated: {expectedLine}");
+
+            return 1;
+        }
+
+        Console.Out.WriteLine(value: $"architecture: {ProjectMapRelativePath} layering block matches the project declarations.");
+
+        return 0;
+    }
+
+    public static Command Create() {
+        var configurationOption = new Option<string>(name: "--configuration") {
+            DefaultValueFactory = static _ => "Release",
+            Description = "Which build configuration's assemblies to read for the friend-set comparison.",
+        };
+        var mapOption = new Option<bool>(name: "--map") {
+            Description = "Print only the layering block, generated from each project's own <PuckLayer> declaration, for docs/project-map.md.",
+        };
+        var checkOption = new Option<bool>(name: "--check") {
+            Description = $"Compare the generated layering block with the one checked in under {ProjectMapRelativePath}; exit 1 on drift.",
+        };
+        var command = new Command(description: $"""
+            Report on the repository's project-layering policy.
+
+            The build-time gate is the authority; this verb explains it. Policy lives in
+            build/Architecture.props; every project declares its own <PuckKind> and <PuckLayer>.
+            --map prints the layering block for {ProjectMapRelativePath}; --check fails when the
+            checked-in block no longer matches the declarations.
+            """, name: "architecture") { configurationOption, mapOption, checkOption };
+
+        command.SetAction(action: parseResult => Run(
+            check: parseResult.GetValue(option: checkOption),
+            configuration: parseResult.GetRequiredValue(option: configurationOption),
+            map: parseResult.GetValue(option: mapOption)));
+
+        return command;
+    }
+
+    private static int Run(bool check, string configuration, bool map) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
 
         var model = ArchitectureModel.Load(repositoryRoot: repositoryRoot);
 
-        if (scanner.Has(name: "map")) {
+        if (map) {
             Console.Out.Write(value: RenderLayeringBlock(model: model));
 
             return 0;
+        }
+
+        if (check) {
+            return CheckProjectMap(generated: RenderLayeringBlock(model: model), repositoryRoot: repositoryRoot);
         }
 
         var failures = new List<string>();
@@ -67,7 +122,7 @@ internal static class ArchitectureCommand {
         ReportLayerGraph(failures: failures, model: model, output: output);
         ReportBackendQuarantine(failures: failures, model: model, output: output);
         ReportProfiles(failures: failures, model: model, output: output);
-        ReportFriends(configuration: (scanner.Get(name: "configuration") ?? "Release"), failures: failures, model: model, output: output);
+        ReportFriends(configuration: configuration, failures: failures, model: model, output: output);
         ReportConfigurationSensitivity(model: model, output: output);
 
         Console.Out.Write(value: output.ToString());
@@ -94,7 +149,6 @@ internal static class ArchitectureCommand {
 
         return 1;
     }
-
     /// <summary>
     /// The layering block for docs/project-map.md, GENERATED from each project's own declaration.
     /// </summary>

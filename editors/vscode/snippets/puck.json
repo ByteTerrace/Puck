@@ -1,0 +1,111 @@
+{
+    "Puck World Definition": {
+        "prefix": "world",
+        "body": [
+            "schema: \"puck.world.def.v1\"",
+            "basis: \"${1:worlds/standard.basis.json}\"",
+            "documentId: \"${2:world-id-v1}\"",
+            "",
+            "host {",
+            "    backend: \"auto\"",
+            "    presentMode: \"Immediate\"",
+            "    presentation: \"Windowed\"",
+            "    width: 1280",
+            "    height: 720",
+            "}",
+            "",
+            "views {",
+            "    seatRig mainCamera {",
+            "        version: \"puck.camera.v1\"",
+            "        operations: [",
+            "            orbit(distance: 2.5m, pitch: 45deg, yaw: 0rad)",
+            "            fov(fieldOfViewRadians: 0.8rad)",
+            "        ]",
+            "    }",
+            "}",
+            "",
+            "$0"
+        ],
+        "description": "Initialize a new Puck World document"
+    },
+    "Host Configuration": {
+        "prefix": "host",
+        "body": [
+            "host {",
+            "    backend: \"${1|auto,vulkan,d3d12|}\"",
+            "    presentMode: \"${2|Immediate,Mailbox,Fifo|}\"",
+            "    presentation: \"${3|Windowed,Fullscreen|}\"",
+            "    width: ${4:1280}",
+            "    height: ${5:720}",
+            "    rayQuery: ${6:true}",
+            "    surfaceFormat: \"${7:r8g8b8a8}\"",
+            "}"
+        ],
+        "description": "Puck host rendering and engine configuration block"
+    },
+    "Views Block": {
+        "prefix": "views",
+        "body": [
+            "views {",
+            "    seatRig ${1:primaryCamera} {",
+            "        version: \"puck.camera.v1\"",
+            "        operations: [",
+            "            orbit(distance: ${2:3.0m}, pitch: ${3:30deg}, yaw: ${4:0rad})",
+            "            fov(fieldOfViewRadians: ${5:0.75rad})",
+            "        ]",
+            "    }",
+            "}"
+        ],
+        "description": "Puck views and camera rig configuration block"
+    },
+    "Addon Declaration": {
+        "prefix": "addon",
+        "body": [
+            "addon \"${1:addon_name}\" {",
+            "    source: \"${2:addons/module.wasm}\"",
+            "    fuel: ${3:1_000_000}",
+            "    enabled: true",
+            "    hash: \"${4:auto}\"",
+            "    request ${5:Observe}, ${6:Mutate} from \"${7:puck.storage.v1}\"",
+            "    watchMemory ${8:0x1000..0x2000} as \"${9:buffer}\"",
+            "}"
+        ],
+        "description": "Declare a WebAssembly game addon with capability requests and memory watches"
+    },
+    "Template Declaration": {
+        "prefix": "template",
+        "body": [
+            "template ${1:presetName}(${2:param1}, ${3:dist} = 2.5m) {",
+            "    seatRig ${1:presetName} {",
+            "        version: \"puck.camera.v1\"",
+            "        operations: [",
+            "            orbit(distance: ${3:dist}, pitch: 45deg, yaw: 0rad)",
+            "            fov(fieldOfViewRadians: 0.001)",
+            "        ]",
+            "    }",
+            "}"
+        ],
+        "description": "Define a reusable parameterized template"
+    },
+    "Let Constant": {
+        "prefix": "let",
+        "body": [
+            "let ${1:constantName} = ${2:value}"
+        ],
+        "description": "Compile-time constant declaration"
+    },
+    "Import Module": {
+        "prefix": "import",
+        "body": [
+            "import \"${1:modules/rules.world.puck}\" as ${2:alias}"
+        ],
+        "description": "Import an external Puck world module"
+    },
+    "Export Facets": {
+        "prefix": "export",
+        "body": [
+            "export ${1|read,action,binding|} ${2:facetName}"
+        ],
+        "description": "Export world facet symbols"
+    }
+}

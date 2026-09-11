@@ -88,7 +88,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         foreach (var reader in readers) {
-            if (!WorldPrincipal.TryParse(reader, out var actor) || actor.Kind is PrincipalKind.World or PrincipalKind.Group || actor.Describe() != reader || !seen.Add(reader)) {
+            if (!WorldPrincipal.TryParseCanonical(token: reader, principal: out var actor) || actor.Kind is PrincipalKind.World or PrincipalKind.Group || !seen.Add(reader)) {
                 errors.Add($"state row '{name}': visibility readers must be distinct canonical authenticated principals.");
             }
         }

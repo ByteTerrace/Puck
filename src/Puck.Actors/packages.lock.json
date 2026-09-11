@@ -2,26 +2,6 @@
   "version": 1,
   "dependencies": {
     "net10.0": {
-      "Azure.Extensions.AspNetCore.DataProtection.Blobs": {
-        "type": "Direct",
-        "requested": "[1.*, 2.0.0)",
-        "resolved": "1.5.4",
-        "contentHash": "5D9McHLGA7riU1z2Mtpt3nPq9rAcsc11hIm3Cb/In+wB2w+Osyvd03EjAS08c3UqiNIFOsAXCo37srPT6NH8uA==",
-        "dependencies": {
-          "Azure.Core": "1.61.0",
-          "Azure.Storage.Blobs": "12.26.0"
-        }
-      },
-      "Azure.Extensions.AspNetCore.DataProtection.Keys": {
-        "type": "Direct",
-        "requested": "[1.*, 2.0.0)",
-        "resolved": "1.6.4",
-        "contentHash": "7uKgk1WzELt5Pbp09liae8HBL3XOe0x/+DGYYC5DCiCKGRxrGi0BfmVCqzvzXGMOxITL4THEYf1GklzmAuJRTQ==",
-        "dependencies": {
-          "Azure.Core": "1.61.0",
-          "Azure.Security.KeyVault.Keys": "4.10.0"
-        }
-      },
       "Azure.Identity": {
         "type": "Direct",
         "requested": "[1.*, 2.0.0)",
@@ -206,6 +186,24 @@
           "Azure.Core": "1.44.1"
         }
       },
+      "Azure.Extensions.AspNetCore.DataProtection.Blobs": {
+        "type": "Transitive",
+        "resolved": "1.5.4",
+        "contentHash": "5D9McHLGA7riU1z2Mtpt3nPq9rAcsc11hIm3Cb/In+wB2w+Osyvd03EjAS08c3UqiNIFOsAXCo37srPT6NH8uA==",
+        "dependencies": {
+          "Azure.Core": "1.61.0",
+          "Azure.Storage.Blobs": "12.26.0"
+        }
+      },
+      "Azure.Extensions.AspNetCore.DataProtection.Keys": {
+        "type": "Transitive",
+        "resolved": "1.6.4",
+        "contentHash": "7uKgk1WzELt5Pbp09liae8HBL3XOe0x/+DGYYC5DCiCKGRxrGi0BfmVCqzvzXGMOxITL4THEYf1GklzmAuJRTQ==",
+        "dependencies": {
+          "Azure.Core": "1.61.0",
+          "Azure.Security.KeyVault.Keys": "4.10.0"
+        }
+      },
       "Azure.Messaging.EventGrid": {
         "type": "Transitive",
         "resolved": "5.0.0",
@@ -241,20 +239,20 @@
       },
       "Azure.Storage.Blobs": {
         "type": "Transitive",
-        "resolved": "12.27.0",
-        "contentHash": "zI5rg1tTtnA8T2g2/21l+1iIUdDjpEQQ0FI1BabJVEQJ1JUyTQKrc41eNabAHs0SBHprl6pu/6OqIMK9Ve+4tQ==",
+        "resolved": "12.29.2",
+        "contentHash": "NeZmk7bphspT2BYn8XaNCTV4/9vQG+ea79F85MBTi2o2WiXIIJNsRBtFyeBrzK2HIk476rfSqLNwPt4vXgOEkQ==",
         "dependencies": {
-          "Azure.Core": "1.50.0",
-          "Azure.Storage.Common": "12.26.0"
+          "Azure.Core": "1.55.0",
+          "Azure.Storage.Common": "12.28.0"
         }
       },
       "Azure.Storage.Common": {
         "type": "Transitive",
-        "resolved": "12.26.0",
-        "contentHash": "XaT6CDcSshZb7KaCTwc6m4EouZbLBg7ciOEpsJSdJCvkNsZJQCvPKw7V5TtXno19AA1NpwtsZriYque8mzbQVg==",
+        "resolved": "12.28.0",
+        "contentHash": "5l8YhNrks38zKLGFW2BBFLwieyamH/xauABSASsdpZv79G0f+n2n22IjkRmUqCmALSupkwRHh2LOhbW3yj5Qgw==",
         "dependencies": {
-          "Azure.Core": "1.50.0",
-          "System.IO.Hashing": "10.0.1"
+          "Azure.Core": "1.55.0",
+          "System.IO.Hashing": "10.0.3"
         }
       },
       "DnsClient": {
@@ -308,11 +306,10 @@
       },
       "Microsoft.Extensions.Azure": {
         "type": "Transitive",
-        "resolved": "1.12.0",
-        "contentHash": "3sIvazPesPdEn5t2yT+pwVWKm1LyN/LB31Wh52giRNf2ckcKmaxW2KOA5uNZHSaqABhMDPAYGMeGBFQreZ7uUg==",
+        "resolved": "1.14.1",
+        "contentHash": "und84BbwPu9u9GCOZ5WcqXctk+cqbY8vyXGKKU8a6VbZ5rFV19v7DA3EzDUkl0kb4TWtMEYqgMOPgMcsvBYq0Q==",
         "dependencies": {
-          "Azure.Core": "1.46.2",
-          "Azure.Identity": "1.13.1"
+          "Azure.Core": "1.61.0"
         }
       },
       "Microsoft.Extensions.Configuration.AzureAppConfiguration": {
@@ -763,6 +760,24 @@
       },
       "ByteTerrace.Puck.Maths": {
         "type": "Project"
+      },
+      "puck.azure": {
+        "type": "Project",
+        "dependencies": {
+          "Azure.Extensions.AspNetCore.DataProtection.Blobs": "[1.*, 2.0.0)",
+          "Azure.Extensions.AspNetCore.DataProtection.Keys": "[1.*, 2.0.0)",
+          "Azure.Identity": "[1.*, 2.0.0)",
+          "Azure.Storage.Blobs": "[12.*, 13.0.0)",
+          "Microsoft.Extensions.Azure": "[1.*, 2.0.0)"
+        }
+      },
+      "puck.storage": {
+        "type": "Project",
+        "dependencies": {
+          "Azure.Identity": "[1.*, )",
+          "Azure.Storage.Blobs": "[12.*, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
       }
     }
   }

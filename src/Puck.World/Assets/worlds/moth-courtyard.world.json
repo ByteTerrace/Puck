@@ -1,0 +1,2249 @@
+{
+  "schema": "puck.world.def.v1",
+  "basis": "moth.world.json",
+  "documentId": "moth-courtyard",
+  "metadata": {
+    "title": "Moth courtyard",
+    "description": "Eight shared-model pose stations, an isolated inspection bay, and a repeatable multi-hero GPU workload.",
+    "custom": {
+      "stations": [
+        {
+          "index": 0,
+          "name": "isolated",
+          "p": [
+            0,
+            0,
+            0
+          ],
+          "yaw": 0,
+          "stride": 0,
+          "flight": 0,
+          "wings": 0,
+          "bank": 0,
+          "cruise": 0,
+          "crouch": 0,
+          "salute": 0
+        },
+        {
+          "index": 1,
+          "name": "signal",
+          "p": [
+            11,
+            0,
+            8
+          ],
+          "yaw": -18,
+          "stride": 0,
+          "flight": 0,
+          "wings": 0.15,
+          "bank": 0,
+          "cruise": 0,
+          "crouch": 0,
+          "salute": 1
+        },
+        {
+          "index": 2,
+          "name": "banked-flight",
+          "p": [
+            16,
+            3.2,
+            6.2
+          ],
+          "yaw": 110,
+          "stride": 0.5,
+          "flight": 1,
+          "wings": 1,
+          "bank": 1.7,
+          "cruise": 1.8,
+          "crouch": 0.15,
+          "salute": 0
+        },
+        {
+          "index": 3,
+          "name": "hover-rear",
+          "p": [
+            12.5,
+            1.9,
+            4.5
+          ],
+          "yaw": 175,
+          "stride": 0,
+          "flight": 1,
+          "wings": 1,
+          "bank": -0.4,
+          "cruise": 0,
+          "crouch": 0,
+          "salute": 0
+        },
+        {
+          "index": 4,
+          "name": "lift-off",
+          "p": [
+            9,
+            1.15,
+            4
+          ],
+          "yaw": 72,
+          "stride": 0.2,
+          "flight": 0.75,
+          "wings": 0.7,
+          "bank": 0,
+          "cruise": 0.2,
+          "crouch": 0.25,
+          "salute": 0
+        },
+        {
+          "index": 5,
+          "name": "touchdown",
+          "p": [
+            16,
+            0,
+            1
+          ],
+          "yaw": -38,
+          "stride": 0,
+          "flight": 0.12,
+          "wings": 0.55,
+          "bank": 0,
+          "cruise": 0,
+          "crouch": 0.9,
+          "salute": 0
+        },
+        {
+          "index": 6,
+          "name": "stride",
+          "p": [
+            13,
+            0.08,
+            -0.4
+          ],
+          "yaw": 38,
+          "stride": 1.05,
+          "flight": 0,
+          "wings": 0,
+          "bank": 0,
+          "cruise": 0,
+          "crouch": 0,
+          "salute": 0
+        },
+        {
+          "index": 7,
+          "name": "ready",
+          "p": [
+            10,
+            0,
+            0
+          ],
+          "yaw": -24,
+          "stride": 0,
+          "flight": 0,
+          "wings": 0.1,
+          "bank": 0,
+          "cruise": 0,
+          "crouch": 0.18,
+          "salute": 0
+        }
+      ]
+    }
+  },
+  "host": {
+    "width": 1440,
+    "height": 900,
+    "targetHertz": 60,
+    "timing": true
+  },
+  "bodies": {
+    "capacity": 8,
+    "localSeats": 1,
+    "networkPlayers": 0
+  },
+  "bodyMotionPrograms": [
+    {
+      "version": "puck.body-motion.v1",
+      "name": "display",
+      "kind": "Motion",
+      "operations": [
+        "ResolveYawAttitudeAndPlanarFrame",
+        "CommitPose"
+      ]
+    }
+  ],
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Overlap",
+        "bodyMotionProgram": "display",
+        "collider": null,
+        "mass": 0,
+        "motion": {
+          "facingSnap": false,
+          "groundStick": 2,
+          "holds": [
+            {
+              "bond": "Surface",
+              "cone": [
+                0,
+                60
+              ],
+              "driveAlignment": 0,
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "forward": "Heading",
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Gravity",
+              "lift": 0,
+              "name": "ground",
+              "onDrive": false,
+              "pull": 0,
+              "reach": 1.2,
+              "thrust": 1,
+              "upLean": 0
+            },
+            {
+              "bond": "Free",
+              "driveAlignment": 0,
+              "forward": "Heading",
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Lift",
+              "lift": 1,
+              "name": "air",
+              "onDrive": false,
+              "pull": 0,
+              "reach": 0,
+              "thrust": 1,
+              "upLean": 0
+            }
+          ],
+          "moveFrame": "World",
+          "shaping": [
+            {
+              "along": {},
+              "turnScale": 1
+            }
+          ],
+          "speed": {
+            "value": 2.4
+          },
+          "turn": {
+            "falloff": 1,
+            "maxPitch": 1.2,
+            "pitchRate": 0,
+            "rate": 2.5
+          }
+        },
+        "name": "display"
+      }
+    ]
+  },
+  "looks": {
+    "rows": [
+      {
+        "name": "moth",
+        "motion": {
+          "poses": null
+        }
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "id": "moth",
+      "document": {
+        "drivers": [
+          {
+            "name": "stride",
+            "signal": "state.stageStride.$body",
+            "when": [
+              "always"
+            ],
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          },
+          {
+            "name": "breath",
+            "signal": "state.stageBreath.$body",
+            "when": [
+              "always"
+            ],
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          },
+          {
+            "name": "flight",
+            "signal": "state.airPose.$body",
+            "when": [
+              "always"
+            ],
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          },
+          {
+            "name": "wings",
+            "signal": "state.airWings.$body",
+            "when": [
+              "always"
+            ],
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          },
+          {
+            "name": "bank",
+            "signal": "state.stageBank.$body",
+            "when": [
+              "always"
+            ],
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          },
+          {
+            "name": "cruise",
+            "signal": "state.stageCruise.$body",
+            "when": [
+              "always"
+            ],
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          },
+          {
+            "name": "stage-crouch",
+            "signal": "state.stageCrouch.$body",
+            "when": [
+              "always"
+            ],
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          },
+          {
+            "name": "stage-salute",
+            "signal": "state.stageSalute.$body",
+            "when": [
+              "always"
+            ],
+            "cadence": 1,
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0
+          }
+        ],
+        "shapes": [
+          {
+            "id": 1,
+            "slides": [
+              {
+                "driver": "stage-crouch",
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "amplitude": -0.15,
+                "phase": 0,
+                "wave": "linear"
+              }
+            ]
+          },
+          {
+            "id": 148,
+            "swings": [
+              {
+                "driver": "stride",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.34,
+                "pivot": [
+                  0.295,
+                  1.4515,
+                  0
+                ],
+                "wave": "sine",
+                "phase": 3.1415927
+              },
+              {
+                "driver": "flight",
+                "axis": [
+                  0,
+                  0,
+                  1
+                ],
+                "amplitude": 0.28,
+                "pivot": [
+                  0.295,
+                  1.4515,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              },
+              {
+                "driver": "stage-salute",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -1,
+                "pivot": [
+                  0.295,
+                  1.4515,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              }
+            ]
+          },
+          {
+            "id": 159,
+            "swings": [
+              {
+                "driver": "flight",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.25,
+                "pivot": [
+                  0.39,
+                  1.1765,
+                  0.005
+                ],
+                "wave": "linear",
+                "phase": 0
+              },
+              {
+                "driver": "stage-salute",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -1.1,
+                "pivot": [
+                  0.39,
+                  1.1765,
+                  0.005
+                ],
+                "wave": "linear",
+                "phase": 0
+              }
+            ]
+          },
+          {
+            "id": 174,
+            "swings": [
+              {
+                "driver": "stride",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.44,
+                "pivot": [
+                  0.145,
+                  1.0265,
+                  0
+                ],
+                "wave": "sine",
+                "phase": 0
+              },
+              {
+                "driver": "flight",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.2,
+                "pivot": [
+                  0.145,
+                  1.0265,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              },
+              {
+                "driver": "stage-crouch",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.6,
+                "pivot": [
+                  0.145,
+                  1.0265,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              }
+            ]
+          },
+          {
+            "id": 180,
+            "swings": [
+              {
+                "driver": "stride",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.88,
+                "pivot": [
+                  0.19,
+                  0.7465,
+                  0
+                ],
+                "wave": "halfSine",
+                "phase": 3.1415927
+              },
+              {
+                "driver": "flight",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.44,
+                "pivot": [
+                  0.19,
+                  0.7465,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              },
+              {
+                "driver": "stage-crouch",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 1.2,
+                "pivot": [
+                  0.19,
+                  0.7465,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              }
+            ]
+          },
+          {
+            "id": 195,
+            "swings": [
+              {
+                "driver": "stride",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.18,
+                "pivot": [
+                  0.2,
+                  0.1715,
+                  0.0075
+                ],
+                "wave": "halfSine",
+                "phase": 3.1415927
+              },
+              {
+                "driver": "flight",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.12,
+                "pivot": [
+                  0.2,
+                  0.1715,
+                  0.0075
+                ],
+                "wave": "linear",
+                "phase": 0
+              },
+              {
+                "driver": "stage-crouch",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.6,
+                "pivot": [
+                  0.2,
+                  0.1715,
+                  0.0075
+                ],
+                "wave": "linear",
+                "phase": 0
+              }
+            ]
+          },
+          {
+            "id": 242,
+            "swings": [
+              {
+                "driver": "stride",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.44,
+                "pivot": [
+                  -0.145,
+                  1.0265,
+                  0
+                ],
+                "wave": "sine",
+                "phase": 3.1415927
+              },
+              {
+                "driver": "flight",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.2,
+                "pivot": [
+                  -0.145,
+                  1.0265,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              },
+              {
+                "driver": "stage-crouch",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.6,
+                "pivot": [
+                  -0.145,
+                  1.0265,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              }
+            ]
+          },
+          {
+            "id": 248,
+            "swings": [
+              {
+                "driver": "stride",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.88,
+                "pivot": [
+                  -0.19,
+                  0.7465,
+                  0
+                ],
+                "wave": "halfSine",
+                "phase": 6.2831853
+              },
+              {
+                "driver": "flight",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.44,
+                "pivot": [
+                  -0.19,
+                  0.7465,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              },
+              {
+                "driver": "stage-crouch",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 1.2,
+                "pivot": [
+                  -0.19,
+                  0.7465,
+                  0
+                ],
+                "wave": "linear",
+                "phase": 0
+              }
+            ]
+          },
+          {
+            "id": 263,
+            "swings": [
+              {
+                "driver": "stride",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.18,
+                "pivot": [
+                  -0.2,
+                  0.1715,
+                  0.0075
+                ],
+                "wave": "halfSine",
+                "phase": 6.2831853
+              },
+              {
+                "driver": "flight",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": 0.12,
+                "pivot": [
+                  -0.2,
+                  0.1715,
+                  0.0075
+                ],
+                "wave": "linear",
+                "phase": 0
+              },
+              {
+                "driver": "stage-crouch",
+                "axis": [
+                  1,
+                  0,
+                  0
+                ],
+                "amplitude": -0.6,
+                "pivot": [
+                  -0.2,
+                  0.1715,
+                  0.0075
+                ],
+                "wave": "linear",
+                "phase": 0
+              }
+            ]
+          }
+        ],
+        "effectors": []
+      }
+    },
+    {
+      "id": "court-plinth",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "court-plinth",
+        "palette": [
+          {
+            "color": "#5E626E",
+            "roughness": 0.62
+          },
+          {
+            "color": "#C5B186",
+            "roughness": 0.45
+          }
+        ],
+        "shapes": [
+          {
+            "id": 0,
+            "name": "base",
+            "type": "Cylinder",
+            "position": [
+              0,
+              -0.07,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.85,
+              0.07,
+              0.85
+            ],
+            "rounding": 0.025,
+            "material": 0,
+            "blend": "Union",
+            "smooth": 0
+          },
+          {
+            "id": 1,
+            "name": "rim",
+            "type": "Cylinder",
+            "position": [
+              0,
+              -0.012,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.86,
+              0.009,
+              0.86
+            ],
+            "rounding": 0.008,
+            "material": 1,
+            "blend": "Union",
+            "smooth": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "floor",
+      "document": {
+        "shapes": [
+          {
+            "id": 0,
+            "position": [
+              8,
+              -0.2,
+              3
+            ],
+            "scale": [
+              64,
+              0.2,
+              64
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "cloud-bank",
+      "document": {
+        "schema": "puck.creation.v1",
+        "name": "cloud-bank",
+        "shapes": [],
+        "volumes": [
+          {
+            "kind": "cloud",
+            "enabled": false,
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "halfExtent": [
+              7,
+              2.5,
+              4
+            ],
+            "width": 1.25,
+            "speed": 0.08,
+            "seed": 139,
+            "steps": 40,
+            "intensity": 1.4,
+            "extinction": 0.7,
+            "coverage": 0.37,
+            "softness": 0.07,
+            "ramp": [
+              {
+                "density": 0,
+                "color": "#8493AE"
+              },
+              {
+                "density": 0.45,
+                "color": "#D7E3ED"
+              },
+              {
+                "density": 1,
+                "color": "#FFF8EE"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "placements": {
+    "rows": [
+      {
+        "id": "moth-ready",
+        "prototypeId": "moth",
+        "position": [
+          10,
+          0,
+          0
+        ],
+        "yawDegrees": -24,
+        "scale": 1,
+        "inhabit": {
+          "kit": "display",
+          "look": "moth",
+          "source": "Idle",
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "moth-stride",
+        "prototypeId": "moth",
+        "position": [
+          13,
+          0.08,
+          -0.4
+        ],
+        "yawDegrees": 38,
+        "scale": 1,
+        "inhabit": {
+          "kit": "display",
+          "look": "moth",
+          "source": "Idle",
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "moth-touchdown",
+        "prototypeId": "moth",
+        "position": [
+          16,
+          0,
+          1
+        ],
+        "yawDegrees": -38,
+        "scale": 1,
+        "inhabit": {
+          "kit": "display",
+          "look": "moth",
+          "source": "Idle",
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "moth-lift-off",
+        "prototypeId": "moth",
+        "position": [
+          9,
+          1.15,
+          4
+        ],
+        "yawDegrees": 72,
+        "scale": 1,
+        "inhabit": {
+          "kit": "display",
+          "look": "moth",
+          "source": "Idle",
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "moth-hover-rear",
+        "prototypeId": "moth",
+        "position": [
+          12.5,
+          1.9,
+          4.5
+        ],
+        "yawDegrees": 175,
+        "scale": 1,
+        "inhabit": {
+          "kit": "display",
+          "look": "moth",
+          "source": "Idle",
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "moth-banked-flight",
+        "prototypeId": "moth",
+        "position": [
+          16,
+          3.2,
+          6.2
+        ],
+        "yawDegrees": 110,
+        "scale": 1,
+        "inhabit": {
+          "kit": "display",
+          "look": "moth",
+          "source": "Idle",
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "moth-signal",
+        "prototypeId": "moth",
+        "position": [
+          11,
+          0,
+          8
+        ],
+        "yawDegrees": -18,
+        "scale": 1,
+        "inhabit": {
+          "kit": "display",
+          "look": "moth",
+          "source": "Idle",
+          "count": 1,
+          "distribution": {
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            },
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "plinth-isolated",
+        "prototypeId": "court-plinth",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1
+      },
+      {
+        "id": "plinth-ready",
+        "prototypeId": "court-plinth",
+        "position": [
+          10,
+          0,
+          0
+        ],
+        "yawDegrees": 0,
+        "scale": 1
+      },
+      {
+        "id": "plinth-touchdown",
+        "prototypeId": "court-plinth",
+        "position": [
+          16,
+          0,
+          1
+        ],
+        "yawDegrees": 0,
+        "scale": 1
+      },
+      {
+        "id": "plinth-signal",
+        "prototypeId": "court-plinth",
+        "position": [
+          11,
+          0,
+          8
+        ],
+        "yawDegrees": 0,
+        "scale": 1
+      },
+      {
+        "id": "cloud-0",
+        "prototypeId": "cloud-bank",
+        "position": [
+          -3,
+          9,
+          14
+        ],
+        "yawDegrees": 0,
+        "scale": 1
+      },
+      {
+        "id": "cloud-1",
+        "prototypeId": "cloud-bank",
+        "position": [
+          13,
+          11,
+          20
+        ],
+        "yawDegrees": 43,
+        "scale": 1.2
+      },
+      {
+        "id": "cloud-2",
+        "prototypeId": "cloud-bank",
+        "position": [
+          27,
+          8,
+          13
+        ],
+        "yawDegrees": 86,
+        "scale": 1
+      }
+    ]
+  },
+  "cameras": [
+    {
+      "name": "ensemble",
+      "renderWidth": 1440,
+      "renderHeight": 900,
+      "rig": {
+        "version": "puck.camera.v1",
+        "name": "courtyard-ensemble",
+        "operations": [
+          {
+            "$type": "anchor",
+            "opcode": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                16,
+                6,
+                -14
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "opcode": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                8,
+                1.7,
+                3
+              ]
+            },
+            "focusDistance": 10
+          },
+          {
+            "$type": "fov",
+            "opcode": "fov",
+            "fieldOfViewRadians": 0.76
+          }
+        ]
+      },
+      "anchor": null
+    },
+    {
+      "name": "group",
+      "renderWidth": 1440,
+      "renderHeight": 900,
+      "rig": {
+        "version": "puck.camera.v1",
+        "name": "courtyard-group",
+        "operations": [
+          {
+            "$type": "anchor",
+            "opcode": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                18,
+                4.5,
+                -7
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "opcode": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                12.6,
+                1.8,
+                3.5
+              ]
+            },
+            "focusDistance": 10
+          },
+          {
+            "$type": "fov",
+            "opcode": "fov",
+            "fieldOfViewRadians": 0.8
+          }
+        ]
+      },
+      "anchor": null
+    },
+    {
+      "name": "group-rear",
+      "renderWidth": 1440,
+      "renderHeight": 900,
+      "rig": {
+        "version": "puck.camera.v1",
+        "name": "courtyard-group-rear",
+        "operations": [
+          {
+            "$type": "anchor",
+            "opcode": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                7,
+                4.2,
+                15
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "opcode": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                12.5,
+                1.9,
+                3
+              ]
+            },
+            "focusDistance": 10
+          },
+          {
+            "$type": "fov",
+            "opcode": "fov",
+            "fieldOfViewRadians": 0.83
+          }
+        ]
+      },
+      "anchor": null
+    },
+    {
+      "name": "clouds",
+      "renderWidth": 1440,
+      "renderHeight": 900,
+      "rig": {
+        "version": "puck.camera.v1",
+        "name": "courtyard-clouds",
+        "operations": [
+          {
+            "$type": "anchor",
+            "opcode": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                6,
+                4,
+                -6
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "opcode": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                12,
+                10,
+                12
+              ]
+            },
+            "focusDistance": 10
+          },
+          {
+            "$type": "fov",
+            "opcode": "fov",
+            "fieldOfViewRadians": 0.85
+          }
+        ]
+      },
+      "anchor": null
+    }
+  ],
+  "views": {
+    "layouts": [
+      {
+        "$replace": true
+      },
+      {
+        "name": "ensemble",
+        "seatCount": 0,
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1,
+        "slots": [
+          {
+            "camera": "ensemble",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      {
+        "name": "isolated",
+        "seatCount": 0,
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1,
+        "slots": [
+          {
+            "camera": "three-quarter",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      {
+        "name": "group",
+        "seatCount": 0,
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1,
+        "slots": [
+          {
+            "camera": "group",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      {
+        "name": "group-rear",
+        "seatCount": 0,
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1,
+        "slots": [
+          {
+            "camera": "group-rear",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      {
+        "name": "clouds",
+        "seatCount": 0,
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1,
+        "slots": [
+          {
+            "camera": "clouds",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      {
+        "name": "face",
+        "seatCount": 0,
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1,
+        "slots": [
+          {
+            "camera": "face",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      {
+        "name": "back-close",
+        "seatCount": 0,
+        "transitionSeconds": 0,
+        "transitionRenderScale": 1,
+        "slots": [
+          {
+            "camera": "back-close",
+            "x": 0,
+            "y": 0,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      }
+    ],
+    "studies": [
+      {
+        "$replace": true
+      }
+    ]
+  },
+  "rules": [
+    {
+      "$replace": true
+    },
+    {
+      "name": "toggle-sky",
+      "mode": "Edge",
+      "gate": {
+        "$type": "compareState",
+        "state": "$channel:1:skyToggle",
+        "comparison": "Equal",
+        "value": 1
+      },
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "skyMode",
+          "expression": "0.5 - skyMode"
+        }
+      ]
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "name": "stageStride",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "0.5"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0.2"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "1.05"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "stageBreath",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "0"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "stageBank",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "1.7"
+          },
+          {
+            "key": "3",
+            "value": "-0.4"
+          },
+          {
+            "key": "4",
+            "value": "0"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "stageCruise",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "1.8"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0.2"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "stageCrouch",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "0.15"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0.25"
+          },
+          {
+            "key": "5",
+            "value": "0.9"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0.18"
+          }
+        ]
+      },
+      {
+        "name": "stageSalute",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "1"
+          },
+          {
+            "key": "2",
+            "value": "0"
+          },
+          {
+            "key": "3",
+            "value": "0"
+          },
+          {
+            "key": "4",
+            "value": "0"
+          },
+          {
+            "key": "5",
+            "value": "0"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "airPose",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "$replace": true
+          },
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0"
+          },
+          {
+            "key": "2",
+            "value": "1"
+          },
+          {
+            "key": "3",
+            "value": "1"
+          },
+          {
+            "key": "4",
+            "value": "0.75"
+          },
+          {
+            "key": "5",
+            "value": "0.12"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "airWings",
+        "kind": "Fixed",
+        "cells": [
+          {
+            "$replace": true
+          },
+          {
+            "key": "0",
+            "value": "0"
+          },
+          {
+            "key": "1",
+            "value": "0.15"
+          },
+          {
+            "key": "2",
+            "value": "1"
+          },
+          {
+            "key": "3",
+            "value": "1"
+          },
+          {
+            "key": "4",
+            "value": "0.7"
+          },
+          {
+            "key": "5",
+            "value": "0.55"
+          },
+          {
+            "key": "6",
+            "value": "0"
+          },
+          {
+            "key": "7",
+            "value": "0.1"
+          }
+        ]
+      },
+      {
+        "name": "skyMode",
+        "kind": "Fixed",
+        "value": "0.5"
+      }
+    ]
+  },
+  "render": {
+    "farDistance": 100,
+    "sky": {
+      "layers": [
+        {
+          "$type": "gradient",
+          "stops": [
+            {
+              "elevation": -1,
+              "color": "#9AABB7"
+            },
+            {
+              "elevation": -0.05,
+              "color": "#D5DCE0"
+            },
+            {
+              "elevation": 0.35,
+              "color": "#7CA7C6"
+            },
+            {
+              "elevation": 1,
+              "color": "#3C658F"
+            }
+          ]
+        },
+        {
+          "$type": "fog",
+          "density": 0.004
+        },
+        {
+          "$type": "sunDisc",
+          "light": 0,
+          "radius": 0.018,
+          "intensity": 1.5
+        }
+      ]
+    },
+    "cycle": {
+      "state": "skyMode",
+      "keys": [
+        {
+          "at": 0,
+          "sky": {
+            "layers": [
+              {
+                "$type": "gradient",
+                "stops": [
+                  {
+                    "elevation": -1,
+                    "color": "#B6B2BA"
+                  },
+                  {
+                    "elevation": -0.05,
+                    "color": "#B6B2BA"
+                  },
+                  {
+                    "elevation": 0.35,
+                    "color": "#B6B2BA"
+                  },
+                  {
+                    "elevation": 1,
+                    "color": "#B6B2BA"
+                  }
+                ]
+              },
+              {
+                "$type": "fog",
+                "density": 0
+              },
+              {
+                "$type": "sunDisc",
+                "intensity": 0
+              }
+            ]
+          }
+        },
+        {
+          "at": 0.5,
+          "sky": {
+            "layers": [
+              {
+                "$type": "gradient",
+                "stops": [
+                  {
+                    "elevation": -1,
+                    "color": "#9AABB7"
+                  },
+                  {
+                    "elevation": -0.05,
+                    "color": "#D5DCE0"
+                  },
+                  {
+                    "elevation": 0.35,
+                    "color": "#7CA7C6"
+                  },
+                  {
+                    "elevation": 1,
+                    "color": "#3C658F"
+                  }
+                ]
+              },
+              {
+                "$type": "fog",
+                "density": 0.004
+              },
+              {
+                "$type": "sunDisc",
+                "intensity": 1.5
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "bindingOverlays": [
+    {
+      "id": "bare",
+      "document": {
+        "version": "puck.bindings.v1",
+        "modifiers": [],
+        "chords": [
+          {
+            "chord": [],
+            "group": "play",
+            "page": {
+              "id": "base",
+              "entries": [
+                {
+                  "activateOn": null,
+                  "channel": "forward",
+                  "command": null,
+                  "id": null,
+                  "label": null,
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.w",
+                    "keyboard.arrowUp"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": "forward",
+                  "command": null,
+                  "id": null,
+                  "label": null,
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.s",
+                    "keyboard.arrowDown"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": "strafe",
+                  "command": null,
+                  "id": null,
+                  "label": null,
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.a"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": "strafe",
+                  "command": null,
+                  "id": null,
+                  "label": null,
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.d"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": "turn",
+                  "command": null,
+                  "id": null,
+                  "label": null,
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.arrowLeft"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": "turn",
+                  "command": null,
+                  "id": null,
+                  "label": null,
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.arrowRight"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": null,
+                  "command": "player.move.strafe",
+                  "id": null,
+                  "label": null,
+                  "scale": null,
+                  "sources": [
+                    "gamepad.leftStick"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": null,
+                  "command": "player.look.steer",
+                  "id": null,
+                  "label": null,
+                  "scale": null,
+                  "sources": [
+                    "gamepad.rightStick"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": null,
+                  "command": "player.orbit",
+                  "id": null,
+                  "label": null,
+                  "scale": null,
+                  "sources": [
+                    "mouse.button1"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": null,
+                  "command": "player.steer",
+                  "id": null,
+                  "label": "Steer",
+                  "scale": null,
+                  "sources": [
+                    "mouse.button2"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": "rise",
+                  "command": null,
+                  "id": null,
+                  "label": null,
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.space",
+                    "gamepad.buttonSouth"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "activateOn": null,
+                  "channel": "rise",
+                  "command": null,
+                  "id": null,
+                  "label": null,
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.controlLeft",
+                    "keyboard.controlRight",
+                    "gamepad.buttonEast"
+                  ],
+                  "text": null,
+                  "value": null
+                },
+                {
+                  "sources": [
+                    "keyboard.1"
+                  ],
+                  "command": "view.override",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.2"
+                  ],
+                  "command": "view.override",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      2,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.3"
+                  ],
+                  "command": "view.override",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      3,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.4"
+                  ],
+                  "command": "view.override",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      4,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.5"
+                  ],
+                  "command": "view.override",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      5,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.6"
+                  ],
+                  "command": "view.override",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      6,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": [
+                    "keyboard.7"
+                  ],
+                  "command": "view.override",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      7,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                },
+                {
+                  "sources": null,
+                  "activator": {
+                    "sequence": ["keyboard.8"],
+                    "mode": "Tapped"
+                  },
+                  "channel": "skyToggle"
+                },
+                {
+                  "sources": [
+                    "keyboard.9"
+                  ],
+                  "command": "world.row.step",
+                  "text": "creations.cloud-bank.document.volumes[0].enabled 1",
+                  "value": {
+                    "kind": "Axis1D",
+                    "raw": [
+                      1,
+                      0,
+                      0,
+                      0
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "channels": [
+    {
+      "name": "skyToggle",
+      "shape": "Binary",
+      "composition": true
+    }
+  ]
+}

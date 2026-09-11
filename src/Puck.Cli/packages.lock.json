@@ -75,6 +75,12 @@
         "resolved": "1.0.5",
         "contentHash": "2gnMKbuDxRxlnkMkl8w7aC+Nzkc2qxAOZd5FUKjgpgT2S7nOrf2ooYjp0zL7yRk2DUYLDpj+ewH/awxsGlXKsA=="
       },
+      "System.CommandLine": {
+        "type": "Direct",
+        "requested": "[2.*, )",
+        "resolved": "2.0.12",
+        "contentHash": "FpW672e6qqrTd1EfKqsvUtFZaJWlTlszUR1o8tdakXhkzKbnEZVndtpfd4K3fUPCFcIs9UmcswMyYGJP1zp/rg=="
+      },
       "Azure.Core": {
         "type": "Transitive",
         "resolved": "1.62.0",
@@ -361,18 +367,12 @@
       },
       "Microsoft.Extensions.Azure": {
         "type": "Transitive",
-        "resolved": "1.12.0",
-        "contentHash": "3sIvazPesPdEn5t2yT+pwVWKm1LyN/LB31Wh52giRNf2ckcKmaxW2KOA5uNZHSaqABhMDPAYGMeGBFQreZ7uUg==",
+        "resolved": "1.14.1",
+        "contentHash": "und84BbwPu9u9GCOZ5WcqXctk+cqbY8vyXGKKU8a6VbZ5rFV19v7DA3EzDUkl0kb4TWtMEYqgMOPgMcsvBYq0Q==",
         "dependencies": {
-          "Azure.Core": "1.46.2",
-          "Azure.Identity": "1.13.1",
-          "Microsoft.Extensions.Configuration": "8.0.0",
-          "Microsoft.Extensions.Configuration.Abstractions": "8.0.0",
-          "Microsoft.Extensions.Configuration.Binder": "8.0.2",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.2",
-          "Microsoft.Extensions.Logging": "8.0.1",
-          "Microsoft.Extensions.Logging.Abstractions": "8.0.3",
-          "Microsoft.Extensions.Options": "8.0.2"
+          "Azure.Core": "1.61.0",
+          "Microsoft.Extensions.Configuration.Binder": "10.0.10",
+          "Microsoft.Extensions.Logging": "10.0.10"
         }
       },
       "Microsoft.Extensions.Caching.Abstractions": {
@@ -1340,6 +1340,11 @@
           "OpenTelemetry.PersistentStorage.Abstractions": "1.1.1"
         }
       },
+      "Parlot": {
+        "type": "Transitive",
+        "resolved": "1.5.9",
+        "contentHash": "Vro4ZKVZLBoPdCftyMUlzhlRpegI3N6TlT0zpyn79a42mH214VDqzkAdV70vu578W6NKS84hBA9H6j81cz0dLg=="
+      },
       "Perfolizer": {
         "type": "Transitive",
         "resolved": "0.6.1",
@@ -1396,11 +1401,6 @@
         "type": "Transitive",
         "resolved": "9.0.5",
         "contentHash": "cuzLM2MWutf9ZBEMPYYfd0DXwYdvntp7VCT6a/wvbKCa2ZuvGmW74xi+YBa2mrfEieAXqM4TNKlMmSnfAfpUoQ=="
-      },
-      "System.CommandLine": {
-        "type": "Transitive",
-        "resolved": "2.0.12",
-        "contentHash": "FpW672e6qqrTd1EfKqsvUtFZaJWlTlszUR1o8tdakXhkzKbnEZVndtpfd4K3fUPCFcIs9UmcswMyYGJP1zp/rg=="
       },
       "System.Composition": {
         "type": "Transitive",
@@ -1581,6 +1581,7 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )"
         }
@@ -1661,8 +1662,6 @@
       "puck.actors": {
         "type": "Project",
         "dependencies": {
-          "Azure.Extensions.AspNetCore.DataProtection.Blobs": "[1.*, 2.0.0)",
-          "Azure.Extensions.AspNetCore.DataProtection.Keys": "[1.*, 2.0.0)",
           "Azure.Identity": "[1.*, 2.0.0)",
           "Azure.Monitor.OpenTelemetry.Exporter": "[1.*, 2.0.0)",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
@@ -1675,7 +1674,19 @@
           "Microsoft.Orleans.Server": "[10.*, )",
           "OpenTelemetry.Extensions.Hosting": "[1.*, 2.0.0)",
           "OpenTelemetry.Instrumentation.AspNetCore": "[1.*, 2.0.0)",
-          "OpenTelemetry.Instrumentation.Http": "[1.*, 2.0.0)"
+          "OpenTelemetry.Instrumentation.Http": "[1.*, 2.0.0)",
+          "Puck.Azure": "[1.0.0, )",
+          "Puck.Storage": "[1.0.0, )"
+        }
+      },
+      "puck.azure": {
+        "type": "Project",
+        "dependencies": {
+          "Azure.Extensions.AspNetCore.DataProtection.Blobs": "[1.*, 2.0.0)",
+          "Azure.Extensions.AspNetCore.DataProtection.Keys": "[1.*, 2.0.0)",
+          "Azure.Identity": "[1.*, 2.0.0)",
+          "Azure.Storage.Blobs": "[12.*, 13.0.0)",
+          "Microsoft.Extensions.Azure": "[1.*, 2.0.0)"
         }
       },
       "puck.input": {
@@ -1710,7 +1721,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
@@ -1721,7 +1731,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )"
@@ -1732,7 +1741,9 @@
         "dependencies": {
           "Azure.Identity": "[1.*, )",
           "Azure.Storage.Blobs": "[12.*, )",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
+          "Microsoft.Extensions.Options": "[10.*, )"
         }
       },
       "puck.world.addons": {
@@ -1856,6 +1867,14 @@
           "Puck.World.Schema": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )",
           "System.CommandLine": "[2.*, )"
+        }
+      },
+      "puck.world.transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "Parlot": "[1.5.*, )",
+          "Puck.World.Schema": "[1.0.0, )"
         }
       }
     }

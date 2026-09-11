@@ -9,8 +9,22 @@ namespace Puck.World.Authoring;
 /// <param name="Color">The base color as <c>#RRGGBB</c> (see <see cref="HexColor"/>).</param>
 /// <param name="Emissive">The emissive strength (null = 0 — optional members are nullable and normalized at load).</param>
 /// <param name="Specular">The specular strength (null = the material default).</param>
-/// <param name="Shininess">The specular exponent (null = the material default).</param>
-public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Shininess);
+/// <param name="Roughness">The GGX roughness in [0, 1] (null = <see cref="SdfMaterial.DefaultRoughness"/>) — see
+/// <see cref="SdfMaterial"/> for the roughness-floor formula. A document still spelling <c>shininess</c> is an
+/// unmapped member and is refused.</param>
+/// <param name="Sheen">The fresnel edge-lift strength in [0, 1] (null = 0 — no lift) — see
+/// <see cref="SdfMaterial"/>.</param>
+/// <param name="Metal">The metalness in [0, 1] (null = 0 — dielectric) — see <see cref="SdfMaterial"/>.</param>
+/// <param name="Coat">The clearcoat strength in [0, 1] (null = 0 — no coat) — see <see cref="SdfMaterial"/>.</param>
+/// <param name="Weathering">Optional generic coverage and reveal surfaces.</param>
+/// <param name="Wrap">The wrap-lighting share in [0, 1] (null = 0 — the plain Lambert term) — see
+/// <see cref="SdfMaterial.Wrap"/>.</param>
+/// <param name="Soften">The shading-normal broadening in [0, 1] (null = 0 — no broadening) — see
+/// <see cref="SdfMaterial.Soften"/>.</param>
+/// <param name="Bounce">The bounce tint as <c>#RRGGBB</c> or a state binding (null = black — no bounce) — see
+/// <see cref="SdfMaterial.Bounce"/>.</param>
+/// <param name="Inset">Optional refractive paint layer.</param>
+public sealed record PaletteEntryDocument(string Color, float? Emissive, float? Specular, float? Roughness, float? Sheen = null, float? Metal = null, float? Coat = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteWeatheringDocument? Weathering = null, float? Wrap = null, float? Soften = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bounce = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteInsetDocument? Inset = null);
 /// <summary>The persisted form of a placed shape. <see cref="Position"/> and
 /// <see cref="Rotation"/> are authored in the creation's author frame — see <see cref="CreationFrame"/> — and
 /// <see cref="Scale"/> is the primitive's size directly: see <see cref="CreationGeometry"/>'s unit table.</summary>
@@ -38,8 +52,9 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// <see cref="MaxSlides"/> (null = none). Applied after every swing, along the authored axis.
 /// <para>Both facets are presentation-only — composed onto the shape's per-frame dynamic transform and read nowhere
 /// else, so the SDF program, the colliders, the solid field, and simulation state are all blind to them. A shape
-/// carrying <paramref name="Domain"/> rides the placement root's transform rather than its own, leaving nowhere for
-/// either to compose, so they are refused alongside a domain list at validation.</para></param>
+/// carrying <paramref name="Domain"/> rides its own slot packed with its <paramref name="Parent"/> chain's rigid
+/// delta (the identity with no parent), leaving nowhere for its OWN swing/slide to compose, so they are refused
+/// alongside a domain list at validation.</para></param>
 /// <param name="Parent">The <see cref="Name"/> of the shape this one hangs from (null = the creation root): the
 /// parent's animated motion carries this shape and its own pivots with it, so a forearm swung at the elbow also rides
 /// the upper arm's swing at the shoulder. The parent must be declared earlier in <c>shapes</c> (so a chain resolves
@@ -53,6 +68,60 @@ public sealed record PaletteEntryDocument(string Color, float? Emissive, float? 
 /// half-height and extrusion half-depth. Rotate the prism to reverse its taper.</param>
 /// <param name="Profile">Optional Prism cross-section controls. Null uses a trapezoid; other profiles expose
 /// rounded rectangles, polygons, and ellipses with flat extruded caps.</param>
+/// <param name="Lift">Only for Prism: how the XY profile becomes a solid. Null or <c>extrude</c> sweeps it along
+/// local Z to <c>scale.z</c>. <c>revolve</c> sweeps it about the local Y axis with <c>scale.z</c> as the radial
+/// offset — zero gives a solid of revolution (a cowl, a boot cuff, a pauldron dome), a positive offset a ring.
+/// Renderable for every profile; a solid placement refuses it, because both contact compilers read a per-axis-scaled
+/// local box and a revolve reads <c>scale.z</c> as an offset rather than an extent.</param>
+/// <param name="Rounding">Only for Prism, Cylinder and Cone: the edge-rounding radius in the creation's own units,
+/// finite and non-negative. The profile (and, for an extruded prism, its half-depth) insets by it and the field
+/// offsets back out, so the shape keeps its authored extent and its edges fillet. Refused by name past
+/// <see cref="SdfSolidGeometry.MaxRounding"/>.</param>
+/// <param name="Panel">The shape's second-material inset face region (null = none) — see
+/// <see cref="ShapePanelDocument"/>. Render-only; refused by name on a <see cref="SdfSolidPrimitive.Plane"/>, on a
+/// shape carrying <see cref="Domain"/> ops or a non-zero <see cref="Group"/>, and on a creation that otherwise needs
+/// its own field scope.</param>
+/// <param name="Chamfer">Only for Box, Cylinder and Prism (an extruded prism only — a revolve has no cap seam to
+/// bevel): the 45-degree edge-chamfer radius in the creation's own units, finite and non-negative. Refused by name
+/// past <see cref="SdfSolidGeometry.MaxChamfer"/>, and refused by name alongside a nonzero <see cref="Rounding"/> on
+/// the same shape.</param>
+/// <param name="Trims">The shape's second-material surface bands against other, earlier-declared shapes (null =
+/// none), at most <see cref="ShapeTrimDocument.MaxTrims"/> — see <see cref="ShapeTrimDocument"/>. Render-only, like
+/// <see cref="Panel"/>; refused by name on a shape carrying <see cref="Domain"/> ops, a non-zero
+/// <see cref="Group"/>, or on a creation that otherwise needs its own field scope.</param>
+/// <param name="Detail">Whether this shape is SHADING-ONLY (null = false): skipped by the beam and fine march (so it
+/// never carves the silhouette, the contact field, or the collider) and included only in the shading evaluation at
+/// an already-found hit, where its own material and its perturbation of the surface normal paint its footprint — a
+/// seam (a thin subtraction) or a rivet (a small union, its own material) that stays a crisp mark at any distance
+/// instead of dotting out. Refused by name alongside <see cref="Panel"/> or <see cref="Trims"/> on the same
+/// shape.</param>
+/// <param name="Flare">The shape's radial flare warp (null = none) — see <see cref="ShapeFlareDocument"/>. Admitted
+/// on every primitive; applies to the shape's own local point after <see cref="Twist"/>/<see cref="Bend"/>, in that
+/// order (twist, then bend, then flare), before the primitive's own scale. Render-only, like
+/// <see cref="Twist"/>/<see cref="Bend"/>.</param>
+/// <param name="Exponent">Only for <see cref="SdfSolidPrimitive.Superellipsoid"/>: the generalizing exponent, finite
+/// in [<see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>, <see cref="SdfProgramBuilder.MaxSuperellipsoidExponent"/>]
+/// (null = <see cref="SdfProgramBuilder.MinSuperellipsoidExponent"/>, the ellipsoid limit — an unauthored
+/// Superellipsoid is a plain ellipsoid).</param>
+/// <param name="Secondary">Whether this shape casts soft shadows and contributes ambient occlusion (null = true).
+/// False excludes it from ONLY the soft-shadow and ambient-occlusion field walks — it still carves the silhouette,
+/// the contact field, and the collider like any ordinary shape, unlike <see cref="Detail"/> (which excludes from
+/// every march). For a small part whose own penumbra/AO cost outweighs its visual contribution (an eyelid, a rivet,
+/// a groove) — see <see cref="SdfInstruction.Secondary"/>.</param>
+/// <param name="Bumps">The shape's Gaussian domain-push bumps (null = none), at most
+/// <see cref="ShapeBumpDocument.MaxBumps"/> — see <see cref="ShapeBumpDocument"/>. Applied to the shape's own local
+/// point after <see cref="Shear"/>, before the primitive's own scale. Render-only, like
+/// <see cref="Twist"/>/<see cref="Bend"/>/<see cref="Flare"/>.</param>
+/// <param name="Shear">A polynomial point shear with explicit target and driver axes.</param>
+/// <param name="Curve">The shape's swept-curve geometry (null = none) — see <see cref="ShapeCurveDocument"/>.
+/// Admitted only, and required, on <see cref="SdfSolidPrimitive.Sweep"/> (refused elsewhere, by name; a Sweep with
+/// no curve is refused, by name); refused alongside <see cref="Panel"/>, <see cref="Trims"/>, <see cref="Flare"/>,
+/// <see cref="Shear"/>, <see cref="Bumps"/>, or <see cref="Domain"/> on the same shape.</param>
+/// <param name="Erode">The shape's per-instance lane-driven erosion (null = none) — see
+/// <see cref="ShapeErodeDocument"/>. Admitted on every primitive; its reach is this shape's own
+/// <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, System.Numerics.Vector3, SdfLift)"/>, so it needs no
+/// separate authored magnitude.</param>
+/// <param name="Cells">Shape-local cellular relief, evaluated after geometry within its own field scope.</param>
 public sealed record ShapeDocument(
     int Id,
     DocumentIdentifier? Name,
@@ -74,7 +143,21 @@ public sealed record ShapeDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Parent = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Joint = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Taper = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfPrismProfile? Profile = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfPrismProfile? Profile = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfLift? Lift = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Rounding = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapePanelDocument? Panel = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Chamfer = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeTrimDocument>? Trims = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Detail = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeFlareDocument? Flare = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Exponent = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Secondary = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ShapeBumpDocument>? Bumps = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeShearDocument? Shear = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeErodeDocument? Erode = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCellsDocument? Cells = null
 ) {
     /// <summary>The largest bend rate, in radians per unit of local Y, moderated below <see cref="MaxTwist"/>'s
     /// ceiling: the bend operator's Lipschitz factor is worse than twist's (see
@@ -86,6 +169,8 @@ public sealed record ShapeDocument(
     /// <c>SdfInstruction</c>, so this bounds a shape's domain-op instruction cost for capacity probes
     /// (<c>Puck.World.Client.WorldStampPool</c>'s <c>probeWorstCase</c> sizing).</summary>
     public const int MaxDomainOps = 4;
+    /// <summary>The largest authored magnitude of <see cref="Shear"/>'s X (linear) or Y (quadratic) component.</summary>
+    public const float MaxShear = 4f;
     /// <summary>The largest onion shell thickness a shape's clamp normalizes to.</summary>
     public const float MaxOnion = 0.2f;
     /// <summary>The largest smooth-blend radius a shape's clamp normalizes to.</summary>
@@ -409,6 +494,10 @@ public sealed record CreationBehaviorDocument(
 /// <param name="Effectors">The inverse-kinematics effectors (null = none), at most <see cref="MaxEffectors"/> — see
 /// <see cref="CreationEffectorDocument"/>. Each corrects a chain of this creation's own shapes so its tip reaches a
 /// target, composing after the drivers and the parent chain. Presentation-only, like the drivers.</param>
+/// <param name="Volumes">The bounded participating volumes (null = none), at most
+/// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxVolumes"/> — see <see cref="VolumeDocument"/>. Each rides the
+/// creation root's or a named shape's dynamic slot; a static placement bakes its frame in. Presentation-only: no
+/// distance field, no collider.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,
@@ -427,7 +516,9 @@ public sealed record CreationDocument(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<CreationDriverDocument>? Drivers = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    IReadOnlyList<CreationEffectorDocument>? Effectors = null
+    IReadOnlyList<CreationEffectorDocument>? Effectors = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<VolumeDocument>? Volumes = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";
@@ -447,12 +538,22 @@ public sealed record CreationDocument(
     [System.Text.Json.Serialization.JsonExtensionData]
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
-    /// <summary>The creation's total per-stamp shape budget: its authored shapes plus every text run's expanded glyph
-    /// count (a run counts as its letters — a world stamps text as real Glyph geometry, so it competes for the same
-    /// per-stamp shape budget the boxes do).</summary>
+    /// <summary>The creation's total per-stamp shape budget: its authored shapes (a panelled shape counts as 2 — its
+    /// eroded copy is a second emitted primitive; each of a shape's trims counts 2 more — the host's own eroded copy
+    /// plus the reference's own dilated copy) plus every text run's expanded glyph count (a run counts as its
+    /// letters — a world stamps text as real Glyph geometry, so it competes for the same per-stamp shape budget the
+    /// boxes do).</summary>
     /// <returns>The total shape count a placement of this creation emits.</returns>
     public int StampShapeCount() {
-        var count = (Shapes?.Count ?? 0);
+        var count = 0;
+
+        foreach (var shape in (Shapes ?? [])) {
+            count += ((shape.Panel is not null)
+                ? 2
+                : 1
+            );
+            count += (2 * (shape.Trims?.Count ?? 0));
+        }
 
         foreach (var run in (TextRuns ?? [])) {
             count += run.GlyphCount;

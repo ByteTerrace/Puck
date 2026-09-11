@@ -9,12 +9,12 @@
           {
             "color": "#8C6A47",
             "specular": 0.15,
-            "shininess": 6
+            "roughness": 0.875
           },
           {
             "color": "#5A4530",
             "specular": 0.1,
-            "shininess": 4
+            "roughness": 0.911
           }
         ],
         "shapes": [
@@ -274,12 +274,12 @@
           {
             "color": "#4E86B8",
             "specular": 0.3,
-            "shininess": 40
+            "roughness": 0.613
           },
           {
             "color": "#2C5A7E",
             "specular": 0.3,
-            "shininess": 40
+            "roughness": 0.613
           }
         ],
         "shapes": [

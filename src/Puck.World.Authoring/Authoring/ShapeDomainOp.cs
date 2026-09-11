@@ -39,7 +39,10 @@ public abstract record ShapeDomainOp {
     /// builder's own floor).</param>
     /// <param name="Limit">The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null =
     /// <see cref="UnboundedLimit"/> per axis, far past any authored reach).</param>
-    public sealed record Repeat(DocumentVector3 Spacing, DocumentVector3? Limit = null) : ShapeDomainOp {
+    /// <param name="Origin">The point the lattice folds around, creation units (null = the creation origin, the
+    /// fold this op has always used). Cell selection centres on this point instead of the creation root — the
+    /// lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.</param>
+    public sealed record Repeat(DocumentVector3 Spacing, DocumentVector3? Limit = null, DocumentVector3? Origin = null) : ShapeDomainOp {
         /// <summary>The per-axis repeat-cell limit an absent <see cref="Limit"/> means.</summary>
         public const float UnboundedLimit = 1000000f;
     }
@@ -49,7 +52,9 @@ public abstract record ShapeDomainOp {
     /// <param name="Axis">The rotation axis (null = Y, the XZ ground plane).</param>
     /// <param name="Mirror">Whether adjacent sectors mirror across their shared bisector (null = false).</param>
     /// <param name="MaterialStride">The per-sector palette stride (null = 0, geometric only).</param>
-    public sealed record Polar(int Count, SdfPolarAxis? Axis = null, bool? Mirror = null, int? MaterialStride = null) : ShapeDomainOp;
+    /// <param name="Origin">The point the sector fold pivots around, creation units (null = the creation origin,
+    /// the pivot this op has always used). A null origin is byte-identical to today's fold.</param>
+    public sealed record Polar(int Count, SdfPolarAxis? Axis = null, bool? Mirror = null, int? MaterialStride = null, DocumentVector3? Origin = null) : ShapeDomainOp;
     /// <summary>Wallpaper-group lattice fold — <see cref="SdfDomainOp.Wallpaper"/>. Render only: it has no rigid-copy
     /// expansion, so a solid placement carrying one is refused by name at validation.</summary>
     /// <param name="Group">The wallpaper group.</param>
@@ -78,16 +83,21 @@ public abstract record ShapeDomainOp {
 /// <remarks>Every meaning past this boundary belongs to <see cref="SdfDomainOps"/> (the fold) and
 /// <see cref="SdfDomainExpansion"/> (the copies); this type only reads the document.</remarks>
 public static class ShapeDomainOps {
-    /// <summary>A worst-case domain list — <see cref="ShapeDocument.MaxDomainOps"/> symmetry entries — for capacity
-    /// probes: every domain op costs exactly one <c>SdfInstruction</c> regardless of kind, so probing with any single
-    /// kind repeated to the cap covers the instruction-word cost of any real authored combination.</summary>
+    /// <summary>A worst-case domain list — <see cref="ShapeDocument.MaxDomainOps"/> entries — for capacity probes.
+    /// A repeat or polar op with an origin costs three <c>SdfInstruction</c>s (a translate to and from the origin
+    /// bracketing the fold itself); every other kind, or an origin-free repeat/polar, costs one. Probing with an
+    /// origin-bearing repeat repeated to the cap covers the instruction-word cost of any real authored
+    /// combination.</summary>
     public static readonly IReadOnlyList<ShapeDomainOp> ProbeWorstCase = BuildProbeWorstCase();
 
     private static IReadOnlyList<ShapeDomainOp> BuildProbeWorstCase() {
         var probe = new ShapeDomainOp[ShapeDocument.MaxDomainOps];
 
         for (var index = 0; (index < probe.Length); index++) {
-            probe[index] = new ShapeDomainOp.Symmetry(Normal: Vector3.UnitX);
+            probe[index] = new ShapeDomainOp.Repeat(
+                Origin: Vector3.UnitX,
+                Spacing: Vector3.One
+            );
         }
 
         return probe;
@@ -100,13 +110,15 @@ public static class ShapeDomainOps {
             ),
             ShapeDomainOp.Repeat repeat => new SdfDomainOp.Repeat(
                 Limit: (repeat.Limit ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit)),
+                Origin: (repeat.Origin?.Value ?? Vector3.Zero),
                 Spacing: repeat.Spacing
             ),
             ShapeDomainOp.Polar polar => new SdfDomainOp.Polar(
                 Axis: (polar.Axis ?? SdfPolarAxis.Y),
                 Count: polar.Count,
                 MaterialStride: (polar.MaterialStride ?? 0),
-                Mirror: (polar.Mirror ?? false)
+                Mirror: (polar.Mirror ?? false),
+                Origin: (polar.Origin?.Value ?? Vector3.Zero)
             ),
             ShapeDomainOp.Wallpaper wallpaper => new SdfDomainOp.Wallpaper(
                 Cell: wallpaper.Cell,
@@ -144,9 +156,12 @@ public static class ShapeDomainOps {
     /// <summary>Returns a conservative bound on how far a shape's domain ops can carry its geometry from the
     /// creation origin, in creation units — the term a render bound adds so a folded lattice is not culled down to
     /// the un-folded shape's own sphere. Ops compose, so each op's displacement bound is summed: a symmetry plane
-    /// through the origin and a polar fold are origin-preserving isometries (0); an offset plane displaces by twice
-    /// its offset; a repeat/wallpaper lattice reaches its per-axis limit times its spacing (an unbounded limit
-    /// yields a bound far past any camera, disabling the cull rather than lying to it).</summary>
+    /// through the origin is an origin-preserving isometry (0); an offset plane displaces by twice its offset; a
+    /// repeat lattice reaches its per-axis limit times its spacing, unaffected by its own origin (a repeat's fold is
+    /// a pure translation, so its physical copies sit at the same offsets from the shape's own position regardless
+    /// of where cell selection centres — only a polar fold's rotation pivot moves the copies, by twice the pivot's
+    /// distance from the creation origin); a wallpaper lattice reaches its per-axis limit times its spacing (an
+    /// unbounded limit yields a bound far past any camera, disabling the cull rather than lying to it).</summary>
     /// <param name="domain">The shape's domain ops, or null/empty for 0.</param>
     /// <returns>The displacement bound, creation units.</returns>
     public static float Reach(IReadOnlyList<ShapeDomainOp>? domain) {
@@ -163,7 +178,7 @@ public static class ShapeDomainOps {
             reach += op switch {
                 ShapeDomainOp.Symmetry symmetry => (2f * MathF.Abs(x: (symmetry.Offset ?? 0f))),
                 ShapeDomainOp.Repeat repeat => (repeat.Spacing.Value * (repeat.Limit?.Value ?? new Vector3(value: ShapeDomainOp.Repeat.UnboundedLimit))).Length(),
-                ShapeDomainOp.Polar => 0f,
+                ShapeDomainOp.Polar polar => (2f * (polar.Origin?.Length() ?? 0f)),
                 ShapeDomainOp.Wallpaper wallpaper => WallpaperReach(wallpaper: wallpaper),
                 _ => 0f,
             };

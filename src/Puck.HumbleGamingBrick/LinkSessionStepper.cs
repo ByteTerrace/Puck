@@ -1,11 +1,8 @@
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>The pacing contract <see cref="IrLinkSession"/> and <see cref="SerialLinkSession"/> share, independent of
-/// the medium connecting the pair: the furthest-behind interleave that advances two linked machines through a budget
-/// — always step whichever machine is further behind its own cumulative target, one instruction at a time, ties going
-/// to the first machine, a fixed, state-free rule that depends on nothing but the two machines' states and the budget,
-/// so a linked run is deterministic and replay-identical — and the guard a resume token's credit must pass before it
-/// re-anchors a target.</summary>
+/// the medium connecting the pair: the pair case of the shared <see cref="LinkPacer"/> furthest-behind interleave,
+/// and the guard a resume token's credit must pass before it re-anchors a target.</summary>
 internal static class LinkSessionStepper {
     /// <summary>Returns <paramref name="instance"/> after checking that a resume token's <paramref name="credit"/> fits
     /// inside the machine's own cycle count. Call as a constructor-initializer argument, before the plain constructor
@@ -56,43 +53,43 @@ internal static class LinkSessionStepper {
         firstTarget += tCycles;
         secondTarget += tCycles;
 
-        while (true) {
-            var firstRemaining = Remaining(
-                machine: first,
-                target: firstTarget
-            );
-            var secondRemaining = Remaining(
-                machine: second,
-                target: secondTarget
-            );
+        LinkPacer.Run(participants: new Pair(
+            first: first,
+            firstTarget: firstTarget,
+            second: second,
+            secondTarget: secondTarget
+        ));
+    }
 
-            if (
-                (firstRemaining == 0UL) &&
-                (secondRemaining == 0UL)
-            ) {
-                return;
-            }
+    // The pair as the shared pacer sees it. Cycle counts and targets are unsigned here, so an overshoot is reported as
+    // a plain zero remainder rather than an unsigned subtraction wrapping into a target billions of cycles away.
+    private readonly struct Pair(Machine first, ulong firstTarget, Machine second, ulong secondTarget) : ILinkPacerParticipants {
+        public int Count =>
+            2;
 
-            if (firstRemaining >= secondRemaining) {
-                StepOnce(machine: first);
-            } else {
-                StepOnce(machine: second);
-            }
+        public long GetRemaining(int index) {
+            var machine = ((index == 0)
+                ? first
+                : second);
+            var target = ((index == 0)
+                ? firstTarget
+                : secondTarget);
+            var elapsed = machine.Clock.CycleCount;
+
+            return ((elapsed < target)
+                ? ((long)(target - elapsed))
+                : 0L);
         }
-    }
+        public void StepOnce(int index) {
+            var machine = ((index == 0)
+                ? first
+                : second);
 
-    private static ulong Remaining(Machine machine, ulong target) {
-        var elapsed = machine.Clock.CycleCount;
-
-        return ((elapsed < target)
-            ? (target - elapsed)
-            : 0UL);
-    }
-    private static void StepOnce(Machine machine) {
-        if (machine.HasBusMaster) {
-            machine.StepInstruction();
-        } else {
-            machine.StepTick();
+            if (machine.HasBusMaster) {
+                machine.StepInstruction();
+            } else {
+                machine.StepTick();
+            }
         }
     }
 }

@@ -1,25 +1,29 @@
 # Puck.Cli (`puck`)
 
 The consolidated Puck **developer CLI**. One console app, one assembly (`puck`),
-with hand-rolled first-positional verb dispatch:
+one System.CommandLine tree (`PuckRootCommand.cs`) every verb hangs off:
 
 | Verb | What it is |
 |---|---|
-| [`puck nuget`](../../docs/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches. |
+| [`puck nuget`](../../docs/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `pin`, `pin-published`, `smoke`. |
+| [`puck azure`](../../docs/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
+| [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck docs`](#automation-commands) | build and stage the website documentation. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck world`](#automation-commands) | prepare hosted world documents or probe a QUIC endpoint. |
 | [`puck wasm`](../../wasm/README.md) | build and refresh the shipped WASM modules. |
-| [`puck mcp`](../Puck.Mcp/README.md) | Puck Console tools over local stdio or OAuth-protected HTTP. `--silo <silo.json> --http <remote.json>` installs the optional host extension; standalone silo and World have no MCP dependency. MCP 2026-07-28. |
+| [`puck mcp`](../Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator --attach <attachment file>`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape installs the optional host extension, and standalone silo and World have no MCP dependency. MCP 2026-07-28. |
 | [`puck canary`](#puck-canary--real-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
 | [`puck citations`](#puck-citations--cited-verb-token-check) | checks every verb-shaped token skills and XML docs cite against vocabularies swept from the code, including a live `Puck.World` console boot. |
 | [`puck search`](#puck-search--content-search) | ripgrep-shaped content search over a linear-time symbolic-derivatives regex engine ([RE#](../../ACKNOWLEDGMENTS.md)). |
 | [`puck bench`](#puck-bench--the-puckmaths-microscope) | the on-demand `Puck.Maths` micro-benchmark microscope, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` is the `Puck.World.Server` tick-path stopwatch lane. |
 | [`puck scan`](#puck-scan--source-sweep) | source sweep over the parsed tree: comments, comment smells, synchronization sites, clones. |
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
+| [`puck creation`](#puck-creation--code-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck registry`](#puck-registry--world-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
-| [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express. |
+| [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
+| [`puck shaders`](#puck-shaders--shader-studies) | `shaders study`: compiles one Shadertoy-dialect study source to both backend compute kernels through `glslang`, `spirv-cross`, and `dxc`. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck declarations`](#puck-declarations--declaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck lengths`](#puck-lengths--file-length-ledger) | checks or regenerates `FileLengths.json`, the ledger the file-length build error (LEN001–LEN004) reads; the ledger only shrinks. |
@@ -32,11 +36,13 @@ Unlike its retired `tools/` predecessors, this project is a **first-class member
 of `Puck.slnx`** and joins the full root build regime (warnings-as-errors,
 analyzers, code-metric ceilings, doc generation, committed `packages.lock.json`).
 
-The first argument selects the verb; every remaining argument forwards to the
-verb implementation unchanged — same flags, same output, same exit codes. `puck`
-with no verb (or an unknown one) prints usage and exits 2. Output is UTF-8 on
-both streams regardless of the host console's code page, so a non-ASCII source
-line survives being captured to a file.
+**One parser, one grammar.** `-h`/`--help` answers on the root and on every verb
+and sub-verb; option spellings are exact. A usage error — no verb, an unknown
+verb or option, a missing required option, an option-looking token where a value
+belongs — prints the parse errors and `Run 'puck <verb> --help' for usage.` on
+stderr and exits 2, so verbs keep 1 for a failed check and 0 for success. Output
+is UTF-8 on both streams regardless of the host console's code page, so a
+non-ASCII source line survives being captured to a file.
 
 **Path resolution is uniform.** Every verb resolves a relative path against the
 **working directory**; an absolute path is used as given. (`scan` anchors its
@@ -55,8 +61,8 @@ The installable package is `ByteTerrace.Puck.Cli`, a .NET tool whose command is
 `puck`. Its version comes from the same `build/Packaging.targets` as the libraries.
 `puck --version` reports the running CLI's version and source revision;
 `puck nuget version` reads the release version from the current checkout.
-See [CI tool installation and first-release bootstrap](../../docs/ci.md#the-cli-used-by-ci)
-for official pins, package installation checks, and release adoption.
+See [the CLI used by CI](../../docs/ci.md#the-cli-used-by-ci) for candidate
+installation, package installation checks, and release adoption.
 
 To build the candidate directly for local development:
 
@@ -83,7 +89,7 @@ remove it and break every `references` run.
 ## Automation commands
 
 ```sh
-puck nuget --help
+puck artifacts capture | restore | test-windows | test-world
 puck docs build [output-directory]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
@@ -92,7 +98,10 @@ puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
 
-`docs build` runs the pinned DocFX tool and stages `/reference/` and `/_theme/`;
+`artifacts capture` archives one build's compiled Release outputs with their
+source identity so consumer jobs restore rather than recompile; `restore` extracts
+that archive into place, and the two test sub-verbs run the archived assemblies
+through the producer's manifest. `docs build` runs the pinned DocFX tool and stages `/reference/` and `/_theme/`;
 use an output directory without those prefixes. `bundle create` writes a stable
 deployment manifest containing the source commit and every file's SHA-256.
 `bundle verify` checks provenance, containment, hashes, and the complete inventory,
@@ -103,8 +112,9 @@ referenced neighbours under canonical hosted file names. `world probe` checks
 QUIC reachability and the endpoint's expected public key; it requires QUIC support
 and contacts the supplied host. `wasm build` invokes Cargo and refreshes the
 committed default addon, printing the content hash needed by its document rows.
-Azure credentials, deployment ordering, and access restoration remain in the
-[C# deployment app](../../build/Azure.cs).
+Azure credentials, deployment ordering, and access restoration belong to
+[`puck azure`](../../docs/ci.md#azure-production-deployment), which reaches these
+verbs in process.
 
 ## `puck official` — the local official tree producer
 
@@ -161,6 +171,25 @@ default design coordinates. Complex-script shaping remains a separate layer;
 generated atlases preserve source glyph IDs for it.
 
 ---
+
+## `puck shaders` — shader studies
+
+```sh
+puck shaders study <glsl> --out <directory> [--name <name>] [--toolchain <directory>]
+```
+
+Wraps the source in `StudyPrelude` (`Puck.Shaders.Study`) and runs
+`glslang`/`glslangValidator` (GLSL to SPIR-V), `spirv-cross` (SPIR-V to
+HLSL), then `dxc -T cs_6_6` (HLSL to DXIL), writing `<name>.comp.spv` and
+`<name>.comp.dxil` (`--name` defaults to the source file's stem). Every
+diagnostic prints as `<file>:<line>: <message>` with `<line>` already mapped
+back onto the author's file; exit 1 on an error diagnostic, and on a missing
+tool naming the tool and the directory searched. `--toolchain` is the only
+way to point at a tool directory — with it absent each tool is resolved by
+bare name on the search path; no environment variable is read. The same
+compiler runs inside `Puck.World` for a `views.studies` row (see that
+project's README); successful compiles are cached beside the output under
+`.puck-study-cache`, keyed by prelude plus source.
 
 ## `puck canary` — real-World behavioral proofs
 
@@ -246,6 +275,10 @@ future transport arm, not a reshape of `authorities`' current members.
 ---
 
 ## `puck parity` — cross-backend parity over the authored parity world
+
+The runner builds into its own scratch directory before starting either
+backend. An open world using the normal build output does not block this
+build. Build stdout and stderr remain beside the capture transcripts.
 
 `puck parity` boots `tests/Puck.Parity/parity.world.json` once per graphics
 backend (Vulkan, Direct3D 12) with `host.presentation: offscreen` — no window
@@ -348,23 +381,24 @@ linear-time, leftmost-longest, with intersection (`&`), complement (`~(...)`),
 and lookaround; no backreferences. `_` is any character including newline.
 
 ```
-puck search <pattern> [path ...]   content search (default path: cwd)
-  -i            case-insensitive
-  -F            literal string (escape the pattern)
-  -l            files-with-matches only (wins over -c)
-  -c            per-file matching-line counts
-  -n / -N       line numbers on (default) / off
-  -A n          n context lines after
-  -B n          n context lines before
-  -C n          n context lines before and after
-  -g <glob>     include glob (repeatable; no '/' matches basename)
-  --not <glob>  exclude glob (repeatable; no '/' matches a file OR directory basename)
-  -s            span mode: run over whole-file text, print start-end line ranges
-  -M <n>        max results (default 250, 0 = unlimited)
-  --files       enumerate the files that would be searched
-  -q            quiet: exit code only (--files included)
-  --            end of options: every later argument is pattern/paths
-  -h / --help   this text
+puck search <pattern> [path ...]        content search (default path: cwd)
+  -i / --ignore-case                    case-insensitive
+  -F / --fixed-strings                  literal string (escape the pattern)
+  -l / --files-with-matches             files-with-matches only (wins over -c)
+  -c / --count                          per-file matching-line counts
+  -n / --line-number                    line numbers on (the default)
+  -N / --no-line-number                 line numbers off (wins over -n)
+  -A / --after-context <n>              n context lines after
+  -B / --before-context <n>             n context lines before
+  -C / --context <n>                    both sides; an explicit -A or -B overrides that side
+  -g / --glob <glob>                    include glob (repeatable; no '/' matches basename)
+  --not <glob>                          exclude glob (repeatable; no '/' matches a file OR directory basename)
+  -s / --span                           span mode: run over whole-file text, print start-end line ranges
+  -M / --max-results <n>                max results (default 250, 0 = unlimited)
+  --files                               enumerate the files that would be searched
+  -q / --quiet                          quiet: exit code only (--files included)
+  --                                    end of options: every later argument is pattern/paths
+  -h / --help                           this text
 ```
 
 Exit codes: **0** matched, **1** no match, **2** usage/pattern error (the
@@ -467,6 +501,10 @@ puck bench --filter '*SplitNormNarrow.Hand' --filter '*SplitNormNarrow.GenericSt
 puck bench --list flat
 ```
 
+Every token other than the `world` sub-verb reaches BenchmarkDotNet's switcher
+verbatim. `-h`/`--help` there is puck's own, so the switcher's help (whose `-h`
+is its `hide` option) is reached past a separator: `puck bench -- --help`.
+
 (Run against the published executable, e.g.
 `src/Puck.Cli/publish/puck.exe bench --filter '*Norm*'`, or through
 `dotnet run --project src/Puck.Cli -c Release -- bench --filter '*Norm*'`.)
@@ -509,8 +547,8 @@ construction against the shipped world costs tens of seconds
 through the static SDF program) — far past what an iteration-based
 BenchmarkDotNet job can amortize honestly — so this lane is a plain stopwatch
 harness (`WorldBenchmarks.cs`,
-`WorldBenchHarness.cs`) rather than a `[Benchmark]` class, run directly by
-`BenchRunner` before it reaches `BenchmarkSwitcher`:
+`WorldBenchHarness.cs`) rather than a `[Benchmark]` class, and it sits beside the
+switcher as its own sub-verb rather than inside it:
 
 ```sh
 puck bench world
@@ -599,6 +637,37 @@ would let a define cited in a comment resolve against that very comment, which
 makes the check a tautology rather than evidence.
 
 ---
+
+## `puck creation` — code-authored sculpts
+
+The offline twin of the in-engine `creation.sculpt(s)` console verbs (see
+`Puck.World.Authoring`'s README for the sculpting library itself —
+`CreationBuilder`/`StateHoisting`/`SculptPatch`/`ICreationSculpt`):
+
+- `puck creation sculpts` — lists every registered sculpt (`CreationSculptRegistry.All`) by name and description.
+- `puck creation sculpt <name> --world <path>` — reads the world file, runs the named sculpt's `SculptPatch` against it, echoes every operation's `(kind, path, verdict)`, then parses and validates the PATCHED document through `WorldDefinitionSerialization`/`WorldDefinitionValidator` before writing it back canonically. A refusal (unknown sculpt, malformed JSON, a patch fault, a validation failure) leaves the file untouched. Exit codes: 0 wrote, 1 the patch faulted or the patched document was refused, 2 a usage error (unknown sculpt, missing file).
+- `puck creation stats --world <path> [--prototype <id>]` — reports a creation's shape count against `WorldPlacementPolicy.MaxShapesPerStamp`, counts by primitive and blend op, and which shapes use domain ops, onion, twist, bend, rounding, dilate, lift, chamfer, or a panel, plus palette slot usage and named flare/shear/bumps/erode/cells shapes. It builds unit-scale static and pooled rest geometry through the live stampers and lists the global step scale plus every non-unit field-scope clamp, its instance/instruction range, and how many shapes share it. Animated prototypes use the pooled path. Text-bearing prototypes report clamp inspection unavailable because the offline command has no resolved font atlas; inspect `world.budget` in the render host. Field bounds are not measured GPU-time or march-count multipliers. Defaults to every prototype carrying a creation document; a geometry inspection failure exits 1.
+
+`creation stats` also constructs the whole world's deterministic contact field
+through the runtime builder, including solid placements and screens. This runs
+even with `--prototype` or when text prevents render-clamp inspection. It reports
+`contact: accepted` on success; a contact compilation refusal exits 1 and names
+the unsupported operation, including residual nonuniform `Scale`. Non-solid
+placements and unplaced prototypes need no contact representation. Acceptance
+does not imply render/contact parity: presentation-only facets remain omitted.
+
+`puck creation sculpt` writing to disk goes through the SAME canonical
+serializer `world.save` does, so an UNTOUCHED section of the file (one the
+named sculpt's patch never references) can still change shape — every
+optional field the schema declares gets written out explicitly rather than
+omitted, and every derived field (a camera program operation's `opcode`, a
+rule effect's default `target`) gets filled in. This is not specific to a
+sculpt; it is what routing a document through the typed `WorldDefinition`
+model at all does.
+
+The shipped `CreationSculptRegistry` carries no sculpts — `puck creation
+sculpts` reports "none registered" until a composition root or a test
+registers one.
 
 ## `puck schema` — world.def JSON Schema
 

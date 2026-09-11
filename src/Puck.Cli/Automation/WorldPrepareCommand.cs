@@ -1,22 +1,21 @@
+using System.CommandLine;
 using System.Text.Json.Nodes;
 using Puck.World;
 
 namespace Puck.Cli.Automation;
 
 internal static class WorldPrepareCommand {
-    public static int Run(string[] args) {
-        if (args is ["-h" or "--help"]) {
-            Console.WriteLine(value: "puck world prepare <worlds-directory> <output-directory>");
-            return 0;
-        }
-        // Compose the primary world and its referenced neighbours with the engine's own composer.
-        // Hosted storage addresses worlds by canonical file name, independently of repository directories.
-        if (args.Length != 2) {
-            Console.Error.WriteLine(value: "Usage: puck world prepare <worlds-directory> <output-directory>");
-            return 1;
-        }
-        var root = Path.GetFullPath(path: args[0]);
-        var output = Path.GetFullPath(path: args[1]);
+    public static Command Create() {
+        var worldsArgument = new Argument<string>(name: "worlds-directory") { Description = "The directory of authored *.world.json documents." };
+        var outputArgument = new Argument<string>(name: "output-directory") { Description = "Where the composed hosted documents are written, one per canonical world name." };
+        var command = new Command(description: "Compose the primary world and its referenced neighbours with the engine's own composer.", name: "prepare") { worldsArgument, outputArgument };
+
+        command.SetAction(action: parseResult => Run(output: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: outputArgument)), root: Path.GetFullPath(path: parseResult.GetRequiredValue(argument: worldsArgument))));
+        return command;
+    }
+
+    // Hosted storage addresses worlds by canonical file name, independently of repository directories.
+    private static int Run(string output, string root) {
 
         Puck.World.Client.WorldSchemaVocabularyHooks.Install(
             postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,

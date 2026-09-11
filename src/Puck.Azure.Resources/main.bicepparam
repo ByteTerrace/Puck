@@ -37,7 +37,6 @@ param tags = {
   ManagedBy: 'Bicep'
 }
 param website = {
-  hostNames: [apexDomainName, 'docs.${apexDomainName}', 'puck.${apexDomainName}']
   officialContentBaseUrl: 'https://puck.${apexDomainName}/official'
 }
 param resources = {

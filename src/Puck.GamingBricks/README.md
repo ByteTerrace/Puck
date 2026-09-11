@@ -26,9 +26,20 @@ of its own — that lives in each brick that references it.
   producer instead of dropping or coalescing authoritative input history;
   `QueuedMachineHost` forwards the neutral `IScreenMachine`/`IQueuedScreenMachine`/
   `IAudioMachine`/`IFeedbackMachine`/`ITimeTravelMachine` surfaces to one worker.
+  `QueuedWorkerLifecycle<TWorkItem>` is the one thread/queue/backpressure/fault
+  lifecycle behind both that worker and `LinkedMachineGroup`, so the stop, drain
+  and fault ordering has a single definition.
 - *Machine-neutral time travel:* `MachineTimeTravel<TInput>` builds bounded
   rewind, persistent-fork runahead, and capped fast-forward over the small
   `ITimeTravelMachineCore<TInput>` adapter.
+- *One deterministic interleave:* `LinkPacer` is the furthest-behind pacer every
+  cable link steps through — always advance whichever machine is furthest behind
+  its cumulative target, one CPU step at a time, ties to the lowest cable
+  position — shared by the SM83 pair sessions and the 2–4 console GBA session.
+- *One exact-rational resampler:* `RationalRateAccumulator` carries both audio
+  output stages' emit cadence in integer arithmetic, so the emitted rate is an
+  exact rational of emulated time rather than a truncated cycles-per-sample
+  constant.
 - *Owned cable links:* `LinkedMachineGroup` takes ownership of two or more
   workers' cores, steps them as one group through an `IMachineGroupCore`
   medium, and publishes each member back through its own worker — with the
@@ -231,9 +242,10 @@ this project reaches beyond the process.
 | Serialization | `StateWriter`, `StateReader`, `SnapshotSection`, `ISnapshotable`, `SnapshotImage` | Little-endian whole-state capture/restore |
 | Divergence | `SnapshotDivergence` | Section-localized first-difference report |
 | Fork lifecycle | `ISnapshotableMachine`, `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine, TConfiguration>`, `MachineInstancePool<TMachine, TConfiguration>` | Pooled, ABA-safe forked-instance rentals |
-| Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore` | Ordered off-thread emulation and complete-frame publication |
+| Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore`, `QueuedWorkerLifecycle<TWorkItem>`, `IQueuedWorkItem<TSelf>` | Ordered off-thread emulation and complete-frame publication |
 | Time travel | `MachineTimeTravel<TInput>`, `ITimeTravelMachineCore<TInput>`, `ITimeTravelLookahead<TInput>` | Bounded rewind, persistent runahead, and fast-forward |
-| Cable links | `LinkedMachineGroup`, `IMachineGroupCore`, `IMachineCoreLender`, `MachineLinkPads` | Group-owned cores, per-seat input, and coupled time travel |
+| Cable links | `LinkedMachineGroup`, `IMachineGroupCore`, `IMachineCoreLender`, `MachineLinkPads`, `LinkPacer`, `ILinkPacerParticipants` | Group-owned cores, per-seat input, the shared interleave, and coupled time travel |
+| Output resampling | `RationalRateAccumulator` | Drift-free integer sample-rate accumulation for both audio stages |
 | Contract proof | `QueuedHostContractProbe`, `QueuedHostProbeResult` | Shared observable checks for concrete queued hosts |
 
 Each brick re-exposes the closed generics under its own bare name through a

@@ -13,7 +13,8 @@ using OpenTelemetry.Trace;
 using Puck.Actors;
 using Puck.Actors.Grains;
 using Puck.Actors.Services;
-using Puck.Actors.Utilities;
+using Puck.Azure;
+using Puck.Storage;
 
 using Constants = Puck.Actors.Constants;
 
@@ -21,13 +22,11 @@ var builder = WebApplication.CreateBuilder(args: args);
 var configuration = builder.Configuration;
 var services = builder.Services;
 var tokenCredential = new DefaultAzureCredential();
-
 var configurationStoreIsConfigured = services.TryAddConfigurationStore(
     configurationManager: configuration,
     optional: true,
     tokenCredential: tokenCredential
 );
-
 services.AddAzureClients(configureClients: clientFactoryBuilder => {
     clientFactoryBuilder.UseCredential(tokenCredential: tokenCredential);
     clientFactoryBuilder
@@ -38,7 +37,7 @@ services.AddAzureClients(configureClients: clientFactoryBuilder => {
                     .CurrentValue
                     .Endpoint;
 
-                return !Uri.TryCreate(
+                return (!Uri.TryCreate(
                         result: out var endpointUri,
                         uriKind: UriKind.Absolute,
                         uriString: endpoint
@@ -48,7 +47,7 @@ services.AddAzureClients(configureClients: clientFactoryBuilder => {
                         credential: tokenCredential,
                         options: blobClientOptions,
                         serviceUri: endpointUri
-                    );
+                    ));
             }
         )
         .WithName(name: "PublicStorage");
@@ -57,7 +56,6 @@ services.AddAzureClients(configureClients: clientFactoryBuilder => {
             new(tokenCredential: tokenCredential)
         );
 });
-
 if (!string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "APPLICATIONINSIGHTS_CONNECTION_STRING"))) {
     builder
         .Logging
@@ -84,7 +82,6 @@ if (!string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "APPLI
                 ]);
         });
 }
-
 services.AddHealthChecks();
 services.TryAddDataProtection(
     applicationName: (configuration.GetValue<string>(key: "DataProtection:ApplicationName") ?? builder.Environment.ApplicationName),
@@ -92,25 +89,22 @@ services.TryAddDataProtection(
 );
 services
     .AddOptions<OnboardingOptions>()
-    .Bind(configuration.GetSection(key: "Onboarding"));
+    .Bind(config: configuration.GetSection(key: "Onboarding"));
 services
     .AddOptions<OnBehalfOfOptions>()
-    .Bind(configuration.GetSection(key: "OnBehalfOf"));
+    .Bind(config: configuration.GetSection(key: "OnBehalfOf"));
 services
     .AddOptions<PublicStorageOptions>()
-    .Bind(configuration.GetSection(key: "PublicStorage"));
+    .Bind(config: configuration.GetSection(key: "PublicStorage"));
 services
     .AddOptions<PartitioningOptions>()
-    .Bind(configuration.GetSection(key: "Partitioning"));
+    .Bind(config: configuration.GetSection(key: "Partitioning"));
 services.TryAddSingleton<IPartitionResolver, DefaultPartitionResolver>();
-
 services.TryAddKeyedSingleton<TokenCredential>(
     instance: tokenCredential,
     serviceKey: "Default"
 );
-
 var umiClientAssertionId = configuration.GetValue<string>(key: "OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID");
-
 if (!string.IsNullOrWhiteSpace(value: umiClientAssertionId)) {
     services.TryAddKeyedSingleton<TokenCredential>(
         instance: new ManagedIdentityCredential(
@@ -118,16 +112,14 @@ if (!string.IsNullOrWhiteSpace(value: umiClientAssertionId)) {
                 id: umiClientAssertionId
             )
         ),
-        serviceKey: Constants.ClientAssertionCredentialKey
+        serviceKey: IdentityUtilities.ClientAssertionCredentialKey
     );
-}
-else {
+} else {
     services.TryAddKeyedSingleton<TokenCredential>(
         instance: tokenCredential,
-        serviceKey: Constants.ClientAssertionCredentialKey
+        serviceKey: IdentityUtilities.ClientAssertionCredentialKey
     );
 }
-
 services.TryAddSingleton<GraphServiceClient>(implementationFactory: static serviceProvider =>
     serviceProvider
         .GetRequiredService<IAzureClientFactory<GraphServiceClient>>()
@@ -135,7 +127,6 @@ services.TryAddSingleton<GraphServiceClient>(implementationFactory: static servi
 );
 services.TryAddSingleton<IKeyPairService, DefaultKeyPairService>();
 services.TryAddSingleton<IUserProvisioningService, DefaultUserProvisioningService>();
-
 var privateBlobEndpointIsValid = Uri.TryCreate(
     result: out var privateBlobEndpointUri,
     uriKind: UriKind.Absolute,
@@ -147,14 +138,12 @@ var privateTableEndpointIsValid = Uri.TryCreate(
     uriString: configuration.GetValue<string>(key: "PrivateStorage:TableEndpoint")
 );
 var isAzureHosted = (privateBlobEndpointIsValid && privateTableEndpointIsValid);
-
 // The internal API is Entra-secured: the Functions edge sends an app-only token for the shared
 // application registration carrying the "Actors.Invoke" app role. No shared secrets. Local
 // development (no Azure fabric configured) runs open.
 if (isAzureHosted && string.IsNullOrWhiteSpace(value: configuration.GetValue<string>(key: "Authorization:JwtBearer:Authority"))) {
     throw new InvalidOperationException(message: "Authorization:JwtBearer must be configured when Azure-hosted.");
 }
-
 services
     .AddAuthorization(configure: static authorizationOptions => {
         authorizationOptions.AddPolicy(
@@ -167,15 +156,13 @@ services
                             .User
                             .Claims
                             .Any(predicate: static claim =>
-                                (("roles" == claim.Type) || (System.Security.Claims.ClaimTypes.Role == claim.Type)) &&
-                                ("Actors.Invoke" == claim.Value)
+                                ((("roles" == claim.Type) || (System.Security.Claims.ClaimTypes.Role == claim.Type)) &&
+                                ("Actors.Invoke" == claim.Value))
                             )
                     );
             }
         );
     });
-
-
 builder
     .Host
     .UseOrleans(configureDelegate: (_, siloBuilder) => {
@@ -184,8 +171,6 @@ builder
             tokenCredential: tokenCredential
         );
     });
-
-
 // MUST come after UseOrleans: registering the JwtBearer authentication scheme before Orleans
 // breaks grain-manifest resolution at silo startup ("Could not find an implementation for
 // interface Orleans.IReminderTableGrain").
@@ -196,24 +181,17 @@ services
             .GetSection(key: "Authorization:JwtBearer")
             .Bind(instance: jwtBearerOptions);
     });
-
 var app = builder.Build();
-
 if (configurationStoreIsConfigured) {
     app.UseAzureAppConfiguration();
 }
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapHealthChecks(pattern: "/healthz");
-
 var usersApi = app.MapGroup(prefix: "/users");
-
 if (isAzureHosted) {
     usersApi.RequireAuthorization(policyNames: Constants.InternalApiPolicyName);
 }
-
 usersApi.MapPost(
     handler: async (
         Guid oid,
@@ -238,8 +216,7 @@ usersApi.MapPost(
                 ));
 
             return Results.Ok(value: ProvisioningStateResponse.From(provisioningState: provisioningState));
-        }
-        catch (InvalidOperationException e) {
+        } catch (InvalidOperationException e) {
             return Results.BadRequest(error: new { Detail = e.Message, });
         }
     },
@@ -280,8 +257,7 @@ usersApi.MapPut(
                 .SetGuestAccessAsync(guestAccess: request.GuestAccess);
 
             return Results.Ok(value: ProvisioningStateResponse.From(provisioningState: provisioningState));
-        }
-        catch (InvalidOperationException e) {
+        } catch (InvalidOperationException e) {
             return Results.BadRequest(error: new { Detail = e.Message, });
         }
     },
@@ -302,14 +278,12 @@ usersApi.MapPut(
                 );
 
             return Results.Ok(value: ProvisioningStateResponse.From(provisioningState: provisioningState));
-        }
-        catch (InvalidOperationException e) {
+        } catch (InvalidOperationException e) {
             return Results.BadRequest(error: new { Detail = e.Message, });
         }
     },
     pattern: "/{oid:guid}/storage-access"
 );
-
 app.Run();
 
 public sealed record EnsureProvisionedRequest(
@@ -332,15 +306,14 @@ public sealed record ProvisioningStateResponse(
     bool StorageReadEnabled,
     bool StorageWriteEnabled,
     string GuestAccess
-)
-{
+) {
     public static ProvisioningStateResponse From(ProvisioningState provisioningState) =>
         new(
             CompletedSteps: Enum
                 .GetValues<ProvisioningStep>()
                 .Where(predicate: step =>
-                    (ProvisioningStep.None != step) &&
-                    provisioningState.CompletedSteps.HasFlag(flag: step)
+                    ((ProvisioningStep.None != step) &&
+                    provisioningState.CompletedSteps.HasFlag(flag: step))
                 )
                 .Select(selector: static step => step.ToString())
                 .ToArray(),

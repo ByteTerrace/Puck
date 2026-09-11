@@ -108,12 +108,16 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
     private readonly nint m_connection;
     private readonly uint m_deleteWindowAtom;
     private readonly NativeWindowOptions m_options;
-    private readonly Queue<WindowInputEvent> m_pendingInput = [];
+
+    private readonly WindowInputQueue m_pendingInput = new();
+
     private readonly uint m_window;
 
     private bool m_disposed;
     private bool m_hasPainted;
+
     private bool m_isOpen = true;
+
     private bool m_isVisible;
     private int? m_lastPointerX;
     private int? m_lastPointerY;
@@ -286,13 +290,7 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             instance: this
         );
 
-        if (m_pendingInput.Count == 0) {
-            inputEvent = default;
-            return false;
-        }
-
-        inputEvent = m_pendingInput.Dequeue();
-        return true;
+        return m_pendingInput.TryDequeue(inputEvent: out inputEvent);
     }
 
     private void ApplyTitle() {

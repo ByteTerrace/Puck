@@ -186,7 +186,7 @@
           {
             "color": "#2A2631",
             "specular": 0.08,
-            "shininess": 6
+            "roughness": 0.875
           },
           {
             "color": "#17141C"
@@ -281,7 +281,7 @@
           {
             "color": "#1A1417",
             "specular": 0.15,
-            "shininess": 10
+            "roughness": 0.823
           },
           {
             "color": "#0B0A0D"
@@ -293,7 +293,7 @@
           {
             "color": "#4A4650",
             "specular": 0.3,
-            "shininess": 14
+            "roughness": 0.783
           }
         ],
         "shapes": [
@@ -429,7 +429,7 @@
           {
             "color": "#1A1417",
             "specular": 0.15,
-            "shininess": 10
+            "roughness": 0.823
           },
           {
             "color": "#0B0A0D"
@@ -441,7 +441,7 @@
           {
             "color": "#4A4650",
             "specular": 0.3,
-            "shininess": 14
+            "roughness": 0.783
           }
         ],
         "shapes": [
@@ -577,7 +577,7 @@
           {
             "color": "#3B3540",
             "specular": 0.2,
-            "shininess": 10
+            "roughness": 0.823
           },
           {
             "color": "#6E6878"
@@ -692,7 +692,7 @@
           {
             "color": "#B9B4C4",
             "specular": 0.25,
-            "shininess": 12
+            "roughness": 0.802
           },
           {
             "color": "#1A1417"

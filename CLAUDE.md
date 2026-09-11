@@ -39,7 +39,7 @@ These are kept current — read them before deep work.
 
 | Doc | Answers |
 |---|---|
-| [docs/project-map.md](docs/project-map.md) | What each `Puck.*` project is for, how they layer, the dependency rules. Its layering block is GENERATED from per-project declarations (`puck architecture --map`) — do not hand-edit it. |
+| [docs/project-map.md](docs/project-map.md) | What each `Puck.*` project is for, how they layer, the dependency rules. Its layering block is GENERATED from per-project declarations (`puck architecture --map`) and gated by `puck architecture --check` — do not hand-edit it. |
 | [docs/agent-guide.md](docs/agent-guide.md) | How to verify, env vars, hardware gotchas, conventions. **Read before touching GPU or emulator code.** |
 | [docs/vision.md](docs/vision.md) then [docs/campaign.md](docs/campaign.md) | What Puck is and refuses to be; what we are collectively building, where it stands, and what is next. Read before picking up work. |
 | [docs/world-runtime-consolidation.md](docs/world-runtime-consolidation.md) | The engine plan beneath the game: the consolidation doctrine, the folds and the facade still owed, and what is deliberately excluded. It states no status — the campaign holds what is verified. |
@@ -220,37 +220,37 @@ correct them where they live.
 
 ## Repository automation
 
-Use Puck CLI for repository operations it already owns. When automation must run
-without a built CLI, use a C# file-based app on the pinned .NET SDK, following
-`src/Puck.Azure.Resources/bootstrap.cs`. Do not introduce PowerShell scripts or
+Repository automation is Puck CLI. Every operation is a verb on the one
+System.CommandLine root (`src/Puck.Cli/PuckRootCommand.cs`), so automation is
+written as a verb, never as a script. Do not introduce PowerShell scripts or
 move script logic into inline PowerShell workflow steps. Keep workflows as
-orchestration around executable commands. This also applies when replacing or
-extending existing script-based tooling.
+orchestration around `puck` verbs and the bash composite actions under
+`.github/actions/` — `setup-dotnet`, `setup-dxc`, `setup-quic`, `setup-puck`,
+`azure-login` — which are the only steps that run before a CLI exists. This also
+applies when replacing or extending existing script-based tooling.
 
-CI's adopted CLI version is pinned in `.config/dotnet-tools.json`; the explicit
-initial bootstrap policy lives in `.config/puck-bootstrap.json`. Use
-`build/Toolchain.cs -- pin <version>` after publication to verify installation and
-prepare adoption. Never replace a failed official restore with a source build.
-Source-dependent schema, registry, and world composition commands must use the
-candidate CLI. Release workflows build that candidate once in `artifacts.yml`;
-consumers install its immutable package artifact and must not bootstrap or
-recompile it. Runtime payloads and container images likewise pass from producers
-to verification and deployment without rebuilding. PR formatting also uses the candidate CLI so it checks the rules
+Every CI job installs the run's own candidate CLI through `setup-puck`, from the
+`nuget-packages` artifact its producer built, a local package directory, or a
+pack of the checkout; no job installs the CLI from `.config/dotnet-tools.json`.
+Never replace a failed restore with a source build. Runtime payloads and container
+images likewise pass from producers to verification and deployment without
+rebuilding. PR formatting also uses the candidate CLI so it checks the rules
 under review. See [CI tooling](docs/ci.md#the-cli-used-by-ci).
 
 PR formatting is automated by CI, which appends a bot commit on repository
 branches and reruns validation. Do not install Git hooks or mutate Git
 configuration during builds. See [automatic PR formatting](docs/ci.md#automatic-pr-formatting).
 
-File-based apps follow `.editorconfig` and the same Puck formatter conventions
-as project code: named arguments where compiler resolution and evaluation order
-permit, declaration spacing, explicit braces, PascalCase constants, and `Async`
-suffixes for task-returning helpers. Keep their SDK/package/project directives
-intact and package versions pinned. Use the linked `Puck.RepositoryPaths` helper
-for checkout-relative paths; do not infer runtime paths from compiler source paths
-or duplicate repository walkers. Use `ProcessStartInfo.ArgumentList` and check
-child exit codes. Compile every changed app in Release without executing its
-operational body; run only its safe local verification path. See
+`src/Puck.Azure.Resources/bootstrap.cs` is the repository's one C# file-based
+app, an identity-team operation run outside CI. It follows `.editorconfig` and
+the same Puck formatter conventions as project code: named arguments where
+compiler resolution and evaluation order permit, declaration spacing, explicit
+braces, PascalCase constants, and `Async` suffixes for task-returning helpers.
+Keep its SDK/package/project directives intact and package versions pinned. Use
+the linked `Puck.RepositoryPaths` helper for checkout-relative paths; do not
+infer runtime paths from compiler source paths or duplicate repository walkers.
+Use `ProcessStartInfo.ArgumentList` and check child exit codes. Compile it in
+Release without executing its operational body. See
 [file-app verification](docs/agent-guide.md#c-file-apps) for formatting and build commands.
 
 ## The game — where intent lives

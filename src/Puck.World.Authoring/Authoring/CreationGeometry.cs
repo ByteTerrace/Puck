@@ -59,12 +59,19 @@ public static class CreationGeometry {
         var any = false;
 
         foreach (var shape in (document.Shapes ?? [])) {
+            // A Sweep carries no SdfSolidGeometry.Reach unit-scale law — its own control points already carry
+            // creation-unit dimensions (see SdfSolidPrimitive.Sweep's remarks); its own uniform scale bakes on
+            // directly, matching CreationStampEmitter.RenderReach's identical branch.
+            var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
+                ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
+                : SdfSolidGeometry.Reach(
+                scale: shape.Scale,
+                type: shape.Type
+            ));
+
             reach = MathF.Max(
                 x: reach,
-                y: (shape.Position.Length() + SdfSolidGeometry.Reach(
-                    scale: shape.Scale,
-                    type: shape.Type
-                ))
+                y: (shape.Position.Length() + primitiveReach)
             );
             any = true;
         }

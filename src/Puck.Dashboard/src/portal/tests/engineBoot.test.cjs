@@ -25,13 +25,14 @@ const { bootEngineFromOfficial, bootEngineFromLocalBundle } = require('../src/na
 const { bootEngineFromOfficialFiles } = require('../src/native/workerBoot.ts');
 
 const root = findRepositoryRoot(__dirname);
-const officialTreeDir = path.join(root, 'artifacts', 'official');
+const officialManifest = process.env.PUCK_TEST_OFFICIAL_MANIFEST || path.join(root, 'artifacts', 'official', 'dev', 'manifest.json');
+const officialTreeDir = path.dirname(path.dirname(officialManifest));
 const pckExe = puckCommand(root);
 const appBundleDir = path.join(root, 'src', 'Puck.World.Browser', 'bin', 'Release', 'net10.0', 'browser-wasm', 'AppBundle');
-const CHANNEL = 'dev';
+const CHANNEL = path.basename(path.dirname(officialManifest));
 
 const ready = fs.existsSync(path.join(officialTreeDir, CHANNEL, 'manifest.json'));
-if (!ready && process.env.GITHUB_ACTIONS === 'true') throw new Error(`CI requires the official tree at ${officialTreeDir}.`);
+if (!ready && (process.env.GITHUB_ACTIONS === 'true' || process.env.PUCK_TEST_OFFICIAL_MANIFEST)) throw new Error(`The release requires the official tree at ${officialTreeDir}.`);
 
 if (!ready) {
   test(`engineBoot (SKIPPED: no official tree at ${officialTreeDir} — run 'puck official build')`, { skip: true }, () => {});

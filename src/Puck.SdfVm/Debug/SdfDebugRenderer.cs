@@ -88,9 +88,9 @@ public sealed class SdfDebugRenderer {
     // subject only shrinks as carves bite it, so it stays in frame at SingleShapeDistance — see SdfBenchScene).
     private const float BenchCarveSubjectRadius = 1.6f;
     private const float BenchScatterExtent = 12f;   // the scatter cube's full side (empty-space + floor spread, subject-dwarfing)
-    private const float BenchShininess = 40f;
+    private const float BenchRoughness = 0.613f; // = 1 - sqrt((40 - 2) / 254), the roughness whose exponent is 40
     private const float BenchSpecular = 0.35f;
-    private const float SubjectShininess = 40f;
+    private const float SubjectRoughness = 0.613f; // = 1 - sqrt((40 - 2) / 254), the roughness whose exponent is 40
     private const float SubjectSpecular = 0.35f;
 
     // Appends ONE primitive from the shared catalog: `kind`/`parameters` select it (shape 1 or shape 2 — same
@@ -709,7 +709,7 @@ public sealed class SdfDebugRenderer {
         var subjectMaterial = builder.AddMaterial(material: new SdfMaterial(
             Albedo: SubjectAlbedo,
             Specular: SubjectSpecular,
-            Shininess: SubjectShininess
+            Roughness: SubjectRoughness
         ));
         var scoped = scene.Scope;
         var chain = builder.ResetPoint();
@@ -757,7 +757,7 @@ public sealed class SdfDebugRenderer {
             var secondMaterial = builder.AddMaterial(material: new SdfMaterial(
                 Albedo: Shape2Albedo,
                 Specular: SubjectSpecular,
-                Shininess: SubjectShininess
+                Roughness: SubjectRoughness
             ));
 
             chain = chain.ResetPoint().Translate(offset: scene.Offset2);
@@ -812,7 +812,7 @@ public sealed class SdfDebugRenderer {
             var carveMaterial = builder.AddMaterial(material: new SdfMaterial(
                 Albedo: CarveAlbedo,
                 Specular: SubjectSpecular,
-                Shininess: SubjectShininess
+                Roughness: SubjectRoughness
             ));
 
             // Route through the scene's carve-bake planner: it emits one SampledRegion per adopted
@@ -835,7 +835,7 @@ public sealed class SdfDebugRenderer {
         var material = builder.AddMaterial(material: new SdfMaterial(
             Albedo: BenchAlbedo,
             Specular: BenchSpecular,
-            Shininess: BenchShininess
+            Roughness: BenchRoughness
         ));
 
         switch (config.Workload) {
@@ -973,9 +973,9 @@ public sealed class SdfDebugRenderer {
     /// instances of the wordiest single shape (a lifted Star bakes the most constants) — so <c>sdf.bench instances 4096</c>
     /// always fits the frozen program/instance envelope. Never rendered.
     /// <para>Storm does not grow this probe. Its worst rung is 4096 dynamic spheres
-    /// (<see cref="SdfBenchScene.MaxStormInstances"/>); 4096 &lt; 32768 (MaxInstances) on the instance axis, and a
+    /// (<see cref="SdfBenchScene.MaxStormInstances"/>); 4096 &lt; 65536 (MaxInstances) on the instance axis, and a
     /// dynamic sphere instance (BeginInstanceDynamic + ResetPoint + TransformDynamic + Sphere) is fewer words than a
-    /// lifted Star, so 32768 Stars dominates both the word and instance dimensions this probe already reserves. The one
+    /// lifted Star, so 65536 Stars dominates both the word and instance dimensions this probe already reserves. The one
     /// axis storm does grow is dynamic-transform capacity — 4096 moving slots vs the room's few dozen — but that floor
     /// is a separate render-assembly reservation (the frame source's WorstCaseDynamicTransformCapacity →
     /// SdfWorldRenderSpec.DynamicTransformCapacity), not this word/instance probe, so nothing here changes for it.</para></summary>
@@ -985,7 +985,7 @@ public sealed class SdfDebugRenderer {
         var material = builder.AddMaterial(material: new SdfMaterial(
             Albedo: BenchAlbedo,
             Specular: BenchSpecular,
-            Shininess: BenchShininess
+            Roughness: BenchRoughness
         ));
 
         EmitInstances(
@@ -997,7 +997,7 @@ public sealed class SdfDebugRenderer {
 
         // The sdf.carves workload can adopt up to MaxBricks bricks on top of its analytic carves;
         // fold that worst mixed case into the bench probe so a baked carves rung fits the frozen envelope. Negligible
-        // against the 32768 Star instances above, which already dominate both the word and instance dimensions.
+        // against the 65536 Star instances above, which already dominate both the word and instance dimensions.
         SdfCarveBakePlanner.EmitWorstCaseBricks(
             builder: builder,
             material: material
@@ -1075,7 +1075,7 @@ public sealed class SdfDebugRenderer {
         var material = builder.AddMaterial(material: new SdfMaterial(
             Albedo: SubjectAlbedo,
             Specular: SubjectSpecular,
-            Shininess: SubjectShininess
+            Roughness: SubjectRoughness
         ));
 
         switch (exhibit) {
@@ -1272,7 +1272,7 @@ public sealed class SdfDebugRenderer {
         var subjectMaterial = builder.AddMaterial(material: new SdfMaterial(
             Albedo: SubjectAlbedo,
             Specular: SubjectSpecular,
-            Shininess: SubjectShininess
+            Roughness: SubjectRoughness
         ));
         var floorMaterial = builder.AddMaterial(material: new SdfMaterial(Albedo: FloorAlbedo));
 
@@ -1313,7 +1313,7 @@ public sealed class SdfDebugRenderer {
         var secondMaterial = builder.AddMaterial(material: new SdfMaterial(
             Albedo: Shape2Albedo,
             Specular: SubjectSpecular,
-            Shininess: SubjectShininess
+            Roughness: SubjectRoughness
         ));
 
         chain = chain.ResetPoint().Translate(offset: new Vector3(
@@ -1341,16 +1341,16 @@ public sealed class SdfDebugRenderer {
         // ENVELOPE MATH. Each carve = 1 instance (BeginInstance/EndInstance) + 3 instructions (ResetPoint, Translate,
         // Sphere) + one instance-directory entry (2 vectors = 8 words). The debug subject + floor are WORLD-level (0
         // instances), so the LIVE debug program tops out at MaxCarves = 4096 instances — well inside MaxInstances =
-        // 32768. This probe over-covers by folding the 4096 carves ON TOP OF the room's own instances (a few dozen), so
-        // the subject probe is (room + 4096) << 32768. The BENCH probe (EmitBenchProbe: 32768 lifted-Star instances) is
+        // 65536. This probe over-covers by folding the 4096 carves ON TOP OF the room's own instances (a few dozen), so
+        // the subject probe is (room + 4096) << 65536. The BENCH probe (EmitBenchProbe: 65536 lifted-Star instances) is
         // a SEPARATE probe MAX-folded against this one (OverworldFrameSource.MeasureWorstCaseEnvelope) and DOMINATES
-        // both dimensions — 32768 > room + 4096 instances, and 32768 wordy Stars > 4096 carve spheres + the op stack —
+        // both dimensions — 65536 > room + 4096 instances, and 65536 wordy Stars > 4096 carve spheres + the op stack —
         // so the frozen envelope stays bench-bound and carves do not grow it. Folding them here keeps the subject probe
         // honest regardless of which probe wins the MAX.
         var carveMaterial = builder.AddMaterial(material: new SdfMaterial(
             Albedo: CarveAlbedo,
             Specular: SubjectSpecular,
-            Shininess: SubjectShininess
+            Roughness: SubjectRoughness
         ));
         var worstCarves = new List<SdfCarve>(capacity: SdfDebugScene.MaxCarves);
 

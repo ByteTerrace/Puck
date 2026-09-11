@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text;
 
 using Puck.World;
@@ -10,44 +11,33 @@ namespace Puck.Cli.Registry;
 // registers nor excludes, so a document field added without a registration cannot pass.
 // Exit 0 wrote or matched, 1 check found drift or an uncovered member, 2 usage error or missing repository root.
 internal static class RegistryCommand {
-    private const string HelpText =
-        """
-        puck registry — the world name registry, generated and checked
-
-        Usage: puck registry [--check]
-
-        Options:
-          --check      regenerate in memory and compare against docs/world-name-registry.md;
-                       write nothing, exit 1 naming the first differing line, and exit 1 with
-                       every name-shaped document member the registry neither registers nor
-                       excludes
-          -h, --help   this text
-
-        Generated from Puck.World.WorldNameRegistry (src/Puck.World.Schema) over the same
-        source-generated WorldJsonContext the engine loads a world document through: every
-        document field carrying a state, zone, rule, table, pattern, topology, generator,
-        field, or dynamics name, with the role it carries the name in. WorldModuleNamespace
-        reads the same registry to prefix an aliased import's names at compose time.
-
-        Written to: docs/world-name-registry.md.
-        """;
     private const string RelativePath = "docs/world-name-registry.md";
 
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Flag(name: "check");
+    public static Command Create() {
+        var checkOption = new Option<bool>(name: "--check") {
+            Description = "Regenerate in memory and compare against docs/world-name-registry.md; write nothing, and exit 1 naming the first differing line.",
+        };
+        var command = new Command(description: """
+            The world name registry, generated and checked.
 
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"registry: {scanner.Error}");
+            Generated from Puck.World.WorldNameRegistry (src/Puck.World.Schema) over the same
+            source-generated WorldJsonContext the engine loads a world document through: every
+            document field carrying a state, zone, rule, table, pattern, topology, generator,
+            field, or dynamics name, with the role it carries the name in. WorldModuleNamespace
+            reads the same registry to prefix an aliased import's names at compose time.
 
-            return 2;
-        }
+            Both modes first exit 1 with every name-shaped document member the registry neither
+            registers nor excludes, so a document field added without a registration cannot pass.
 
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
+            Written to: docs/world-name-registry.md.
+            """, name: "registry") { checkOption };
 
-            return 0;
-        }
+        command.SetAction(action: parseResult => Run(check: parseResult.GetValue(option: checkOption)));
 
+        return command;
+    }
+
+    private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -64,10 +54,10 @@ internal static class RegistryCommand {
             return 1;
         }
 
-        var path = Path.Combine(path1: repositoryRoot, path2: RelativePath.Replace(oldChar: '/', newChar: Path.DirectorySeparatorChar));
+        var path = Path.Combine(path1: repositoryRoot, path2: RelativePath.Replace(newChar: Path.DirectorySeparatorChar, oldChar: '/'));
         var text = WorldNameRegistry.Render();
 
-        if (!scanner.Has(name: "check")) {
+        if (!check) {
             File.WriteAllText(path: path, contents: text, encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             Console.Out.WriteLine(value: $"registry: wrote {RelativePath} ({WorldNameRegistry.Sites.Count} sites).");
 

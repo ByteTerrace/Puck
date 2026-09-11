@@ -1,3 +1,5 @@
+using System.CommandLine;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
@@ -11,65 +13,133 @@ namespace Puck.Cli.Analysis;
 // blind to any file the project system does not compile. Exit 0 when a declaration matched, 1 when none
 // did, 2 on a usage error or a workspace failure.
 internal static class ReferencesCommand {
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner()
-            .Flag(name: "declarations").Flag(name: "implementers").Flag(name: "overrides").Flag(name: "derived")
-            .Value(name: "containing").Flag(name: "contains").Flag(name: "i").Value(name: "kind")
-            .Value(name: "solution").Value(name: "project").Value(name: "configuration")
-            .Flag(name: "metadata").Flag(name: "nodoc").Flag(name: "strict").Flag(name: "allowpartial")
-            .Flag(name: "json").Flag(name: "q").Flag(name: "h").Flag(name: "help");
+    public static Command Create() {
+        var allowPartialOption = new Option<bool>(name: "--allow-partial") { Description = "Report anyway after a workspace load failure, accepting an incomplete answer." };
+        var configurationOption = new Option<string>(name: "--configuration") { DefaultValueFactory = static _ => "Debug", Description = "Build configuration the design-time load runs under." };
+        var containingOption = new Option<string?>(name: "--containing") { Description = "Keep declarations whose display string contains this fragment (ordinal)." };
+        var containsOption = new Option<bool>(name: "--contains") { Description = "Treat the name as a substring rather than an exact simple name; source-only, so it refuses --metadata." };
+        var declarationsOption = new Option<bool>(name: "--declarations") { Description = "Declarations only, no reference search." };
+        var derivedOption = new Option<bool>(name: "--derived") { Description = "Derived types." };
+        var ignoreCaseOption = new Option<bool>(name: "-i") { Description = "Case-insensitive name match." };
+        var implementersOption = new Option<bool>(name: "--implementers") { Description = "Implementations of an interface or interface member." };
+        var jsonOption = new Option<bool>(name: "--json") { Description = "One JSON object per line instead of text." };
+        var kindOption = new Option<string?>(name: "--kind") { Description = "Comma-separated symbol kinds: type, member, namespace. Absent means type,member." };
+        var metadataOption = new Option<bool>(name: "--metadata") { Description = "Also match declarations from referenced assemblies." };
+        var nameArgument = new Argument<string>(name: "name") { Description = "The simple symbol name to resolve." };
+        var noDocOption = new Option<bool>(name: "--no-doc") { Description = "Drop locations inside documentation trivia." };
+        var overridesOption = new Option<bool>(name: "--overrides") { Description = "Overrides of a virtual or abstract member." };
+        var projectOption = new Option<string?>(name: "--project") { Description = "Load one project instead of a solution, which narrows the closure." };
+        var quietOption = new Option<bool>(name: "-q") { Description = "Quiet: exit code only." };
+        var solutionOption = new Option<string?>(name: "--solution") { Description = "The solution to load; absent, the nearest .slnx walking up from the working directory." };
+        var strictOption = new Option<bool>(name: "--strict") { Description = "Keep only locations whose group definition is the queried symbol." };
+        var command = new Command(description: """
+            References to a source symbol, solution-wide.
 
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"references: {scanner.Error}");
+            Output is `path:line:col decl|ref <symbol kind> <resolved definition>`, grouped
+            by definition and sorted by position within a group. The symbol on a `ref` line
+            is the definition the compiler resolved, which is not always the one queried:
+            constructing a type reports under its constructor, and an interface-dispatched
+            call reports under the interface. `<see cref="..."/>` targets are ordinary
+            references — pass --no-doc for dead-code work.
 
-            return 2;
-        }
+            This tier sees only what the project system compiles. Files removed from
+            compilation and files in no project are invisible to it; `puck search` and
+            `puck declarations` see them. Loading runs a design-time build, which writes
+            obj/ in every project and needs the solution restored.
+            Exit codes: 0 a declaration matched, 1 none did, 2 usage error or load failure.
+            """, name: "references") {
+            nameArgument,
+            allowPartialOption,
+            configurationOption,
+            containingOption,
+            containsOption,
+            declarationsOption,
+            derivedOption,
+            ignoreCaseOption,
+            implementersOption,
+            jsonOption,
+            kindOption,
+            metadataOption,
+            noDocOption,
+            overridesOption,
+            projectOption,
+            quietOption,
+            solutionOption,
+            strictOption,
+        };
 
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
+        command.SetAction(action: (parseResult, cancellationToken) => RunAsync(
+            allowPartial: parseResult.GetValue(option: allowPartialOption),
+            configuration: parseResult.GetRequiredValue(option: configurationOption),
+            containing: parseResult.GetValue(option: containingOption),
+            contains: parseResult.GetValue(option: containsOption),
+            declarations: parseResult.GetValue(option: declarationsOption),
+            derived: parseResult.GetValue(option: derivedOption),
+            ignoreCase: parseResult.GetValue(option: ignoreCaseOption),
+            implementers: parseResult.GetValue(option: implementersOption),
+            json: parseResult.GetValue(option: jsonOption),
+            kind: parseResult.GetValue(option: kindOption),
+            metadata: parseResult.GetValue(option: metadataOption),
+            name: parseResult.GetRequiredValue(argument: nameArgument),
+            noDoc: parseResult.GetValue(option: noDocOption),
+            overrides: parseResult.GetValue(option: overridesOption),
+            projectPath: parseResult.GetValue(option: projectOption),
+            quiet: parseResult.GetValue(option: quietOption),
+            solutionPath: parseResult.GetValue(option: solutionOption),
+            strict: parseResult.GetValue(option: strictOption)));
 
-            return 0;
-        }
+        return command;
+    }
 
-        if (scanner.Positionals.Count != 1) {
-            Console.Error.WriteLine(value: "references: expected exactly one symbol name (try -h)");
-
-            return 2;
-        }
-
-        var filter = ParseFilter(raw: scanner.Get(name: "kind"));
+    private static async Task<int> RunAsync(
+        bool allowPartial,
+        string configuration,
+        string? containing,
+        bool contains,
+        bool declarations,
+        bool derived,
+        bool ignoreCase,
+        bool implementers,
+        bool json,
+        string? kind,
+        bool metadata,
+        string name,
+        bool noDoc,
+        bool overrides,
+        string? projectPath,
+        bool quiet,
+        string? solutionPath,
+        bool strict) {
+        var filter = ParseFilter(raw: kind);
 
         if (filter is null) {
             return 2;
         }
 
-        if (scanner.Has(name: "contains") && scanner.Has(name: "metadata")) {
+        if (contains && metadata) {
             Console.Error.WriteLine(value: "references: --contains is source-only; drop --metadata or spell the name exactly.");
 
             return 2;
         }
 
-        var options = new ReferencesOptions {
-            AllowPartial = scanner.Has(name: "allowpartial"),
-            Configuration = (scanner.Get(name: "configuration") ?? "Debug"),
-            Containing = scanner.Get(name: "containing"),
-            Contains = scanner.Has(name: "contains"),
+        return await RunAsync(options: new ReferencesOptions {
+            AllowPartial = allowPartial,
+            Configuration = configuration,
+            Containing = containing,
+            Contains = contains,
             Filter = filter.Value,
-            IgnoreCase = scanner.Has(name: "i"),
-            Json = scanner.Has(name: "json"),
-            Metadata = scanner.Has(name: "metadata"),
-            Mode = ParseMode(scanner: scanner),
-            Name = scanner.Positionals[0],
-            NoDoc = scanner.Has(name: "nodoc"),
-            ProjectPath = scanner.Get(name: "project"),
-            Quiet = scanner.Has(name: "q"),
-            SolutionPath = scanner.Get(name: "solution"),
-            Strict = scanner.Has(name: "strict"),
-        };
-
-        return RunAsync(options: options).GetAwaiter().GetResult();
+            IgnoreCase = ignoreCase,
+            Json = json,
+            Metadata = metadata,
+            Mode = ParseMode(declarations: declarations, derived: derived, implementers: implementers, overrides: overrides),
+            Name = name,
+            NoDoc = noDoc,
+            ProjectPath = projectPath,
+            Quiet = quiet,
+            SolutionPath = solutionPath,
+            Strict = strict,
+        });
     }
-
     private static async Task<int> RunAsync(ReferencesOptions options) {
         var target = ResolveTarget(options: options);
 
@@ -359,20 +429,21 @@ internal static class ReferencesCommand {
 
         return (token.Parent?.FirstAncestorOrSelf<DocumentationCommentTriviaSyntax>() is not null);
     }
-    private static ReferencesMode ParseMode(ArgScanner scanner) {
-        if (scanner.Has(name: "declarations")) {
+    // The mode flags are not mutually exclusive at the parser; the first set one in this order wins.
+    private static ReferencesMode ParseMode(bool declarations, bool derived, bool implementers, bool overrides) {
+        if (declarations) {
             return ReferencesMode.Declarations;
         }
 
-        if (scanner.Has(name: "implementers")) {
+        if (implementers) {
             return ReferencesMode.Implementers;
         }
 
-        if (scanner.Has(name: "overrides")) {
+        if (overrides) {
             return ReferencesMode.Overrides;
         }
 
-        return (scanner.Has(name: "derived") ? ReferencesMode.Derived : ReferencesMode.References);
+        return (derived ? ReferencesMode.Derived : ReferencesMode.References);
     }
     private static SymbolFilter? ParseFilter(string? raw) {
         if (raw is null) {
@@ -471,41 +542,4 @@ internal static class ReferencesCommand {
             }
         }
     }
-
-    private const string HelpText =
-        """
-        references <name>   references to a source symbol, solution-wide
-
-          --declarations      declarations only, no reference search
-          --implementers      implementations of an interface or interface member
-          --overrides         overrides of a virtual/abstract member
-          --derived           derived types
-          --containing <frag> keep declarations whose display string contains frag (ordinal)
-          --contains          treat <name> as a substring, not an exact simple name
-          -i                  case-insensitive name match
-          --kind <k,k>        type, member, namespace (default: type,member)
-          --solution <path>   default: the nearest .slnx walking up from the cwd
-          --project <path>    load one project instead (narrows the closure; see below)
-          --configuration <c> build configuration (default Debug)
-          --metadata          also match declarations from referenced assemblies
-          --no-doc            drop locations inside documentation trivia
-          --strict            keep only locations whose group definition IS the queried symbol
-          --allow-partial     report anyway after a workspace load failure
-          --json              one JSON object per line instead of text
-          -q                  quiet: exit code only
-          -h / --help         this text
-
-        Output is `path:line:col decl|ref <symbol kind> <resolved definition>`, grouped
-        by definition and sorted by position within a group. The symbol on a `ref` line
-        is the definition the compiler resolved, which is not always the one queried:
-        constructing a type reports under its constructor, and an interface-dispatched
-        call reports under the interface. `<see cref="..."/>` targets are ordinary
-        references — pass --no-doc for dead-code work.
-
-        This tier sees only what the project system compiles. Files removed from
-        compilation and files in no project are invisible to it; `puck search` and
-        `puck declarations` see them. Loading runs a design-time build, which writes obj/ in
-        every project and needs the solution restored.
-        Exit codes: 0 a declaration matched, 1 none did, 2 usage error or load failure.
-        """;
 }

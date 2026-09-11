@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     build: {
+      emptyOutDir: true,
       outDir: "../../dist/portal",
       target: "esnext",
     },

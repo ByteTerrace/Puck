@@ -519,19 +519,16 @@ screens, cameras, spawns, motion, population, render, addons,
 bindings, creations, placements, authoring, speakers, tunes, patches, audio,
 collision, host, views, looks, grants, hud, state, input hold, rules,
 groups, properties, interactions, player defaults, probes,
-dynamics, curves). Worlds live as data
-under `../Puck.World/Assets/worlds/`. Four are the four-world charter's whole
-game roster: `nexus` (the overworld hub — a floating island above a field of
-planetoids, and the shipped boot default; carries the `references` section
-naming the other three plus `studio` by document path, and one portal-arch
-placement per named world), `dive` (underwater), `kart` (racing), `jump`
-(platformer). `studio` is a non-game dev canvas for character work (neutral
-floor, no scenery or crowd, four anchored camera eyes and a `sheet` layout)
-reached with `--world` or through the nexus's mapped archway. Five quilt
-documents (`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, and `quilt-island`)
-are non-game adjacency/federation stress content — each a `basis` delta over
-the `quilt-base` template (see "Document composition" below). Reusable defaults
-live in `standard.basis.json`. The movement platform
+dynamics, curves, tables). Worlds live as data
+under `../Puck.World/Assets/worlds/`. There is one shipped world,
+`puck.world.json` (the island, the boot default), a `basis` delta over
+`standard.basis.json`. Its districts — `dive`, `kart`, `jump`, `studio`,
+`arena`, `arcade`, `granaries` — are imported `puck.world.def.v1` module
+fragments under `worlds/modules/` (see `modules/README.md`); tabletop games
+live as imported fragments under `worlds/games/`. The corner shards
+(`quilt-nw`, `quilt-ne`, `quilt-se`, `quilt-sw`, plus `quilt-nw-gap`) under
+`worlds/shards/` are non-game adjacency/federation stress content, each a
+`basis` delta over the island (see "Document composition" below). The movement platform
 every kit rides is documented on its kit's `WorldMotion`
 row (`Speed`/`Turn`, `MoveFrame`/`FacingSnap`, the up-axis steering ceilings
 `upTurn` (field/contact) and the obstruction-witness latch `obstruction`
@@ -1503,9 +1500,9 @@ against the hosting world: creation palette entries, a screen text source's
 names no declared text cell, or one whose text is not a hex color; the
 `CreationCanonicalizer` admits only the binding's syntax (a creation on its own
 has no world to resolve against — the world validator resolves it at the
-placement). `render.lighting`/`render.sky` colors and every `render.cycle`
-key's speak `BindableColor` instead — the theme vocabulary's generalized form
-of the identical binding grammar (an accepted `#RRGGBBAA` alpha is ignored;
+placement). `render.lighting`/`render.sky`/`render.environment` colors and
+every `render.cycle` key's speak `BindableColor` instead — the theme
+vocabulary's generalized form of the identical binding grammar (an accepted `#RRGGBBAA` alpha is ignored;
 the render path is opaque), resolved at emit by `WorldRenderCycleTrack`
 against the routed definition with no re-bake, so a cell write recolors the
 sky on the next frame. Identity, profile, and `seatDefaults` neutral colors

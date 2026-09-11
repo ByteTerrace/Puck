@@ -37,14 +37,14 @@ public sealed partial class AgbApu : IAgbApu {
     private int m_outputWrite;
     private int m_outputRead;
     private int m_sampleRate;
-    private long m_samplePhase;
+    private RationalRateAccumulator m_samplePhase;
 
     /// <inheritdoc/>
     public void ConfigureOutput(int sampleRate) {
         if (sampleRate <= 0) {
             m_outputRing = Array.Empty<short>();
             m_sampleRate = 0;
-            m_samplePhase = 0L;
+            m_samplePhase.Reset();
             m_outputWrite = 0;
             m_outputRead = 0;
 
@@ -53,7 +53,7 @@ public sealed partial class AgbApu : IAgbApu {
 
         m_outputRing = new short[(sampleRate * 2)]; // ~1 second of stereo headroom
         m_sampleRate = sampleRate;
-        m_samplePhase = 0L;
+        m_samplePhase.Reset();
         m_outputWrite = 0;
         m_outputRead = 0;
     }
@@ -92,18 +92,15 @@ public sealed partial class AgbApu : IAgbApu {
         }
 
         if (m_sampleRate > 0) {
-            // An exact-rational accumulator (the HGB output-stage pattern): every emulated cycle weights the phase
-            // by the configured rate against the master clock, and a sample emits each time the phase crosses one
-            // whole master-clock second, subtracting rather than resetting — so there is no truncated
-            // cycles-per-sample constant to drift against the true (irrational-looking) ratio. `cycles * m_sampleRate`
-            // is computed in `long` because a single Step span (up to a full frame) times a high sample rate can
-            // exceed `int.MaxValue` before the loop below brings the phase back under `MasterClock`. Exact for
-            // power-of-two rates: at 32768 Hz the phase crosses MasterClock (2^24) every exactly 512 cycles.
-            m_samplePhase += (((long)cycles) * m_sampleRate);
+            // The weight is computed in `long` because a single Step span (up to a full frame) times a high sample
+            // rate can exceed `int.MaxValue` before the phase comes back under MasterClock. Exact for power-of-two
+            // rates: at 32768 Hz the phase crosses MasterClock (2^24) every exactly 512 cycles.
+            var due = m_samplePhase.Advance(
+                period: MasterClock,
+                weight: (((long)cycles) * m_sampleRate)
+            );
 
-            while (m_samplePhase >= MasterClock) {
-                m_samplePhase -= MasterClock;
-
+            for (var sample = 0L; (sample < due); ++sample) {
                 GenerateSample();
             }
         }
@@ -147,6 +144,7 @@ public sealed partial class AgbApu : IAgbApu {
 
     // A non-consuming readiness check lets an idle CPU bus access avoid both FIFO callbacks.
     internal bool HasPendingFifoRefill => (m_fifoARefill || m_fifoBRefill);
+
     /// <inheritdoc/>
     public bool ConsumeFifoBRefill() {
         var requested = m_fifoBRefill;

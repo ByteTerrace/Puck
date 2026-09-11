@@ -223,6 +223,14 @@ public sealed partial class SdfWorldEngine {
                 viewsPipeline: m_viewsFoldsPipeline
             );
             SdfShaderSetVerification.ValidateReport(report: report.Span, viewsVariant: "fold views");
+            report = DispatchIsaReport(
+                initializeImages: false,
+                readback: readback,
+                reportImage: reportImage,
+                sampledImage: sampledImage,
+                viewsPipeline: m_primaryPipeline
+            );
+            SdfShaderSetVerification.ValidateReport(report: report.Span, viewsVariant: "primary traversal");
         } finally {
             Array.Clear(array: m_pushConstant);
         }

@@ -23,11 +23,11 @@ public sealed record SdfWorldRenderSpec(
     /// frozen at construction. Defaults to <see cref="SdfWorldEngine.DefaultBrickPoolVoxelCapacity"/> (64 MB); a host
     /// whose scene never bakes carves sets 0 to allocate no pool.</summary>
     public int BrickPoolVoxelCapacity { get; init; } = SdfWorldEngine.DefaultBrickPoolVoxelCapacity;
-    /// <summary>An optional PNG path; the first rendered frame is read back and written there.</summary>
-    public string? CapturePath { get; init; }
-    /// <summary>Child render nodes keyed by viewport slot (each supplies its slot's surface instead of an SDF
-    /// camera).</summary>
-    public IReadOnlyDictionary<int, IRenderNode>? Children { get; init; }
+    /// <summary>Child render nodes keyed by name (each <see cref="SdfViewSnapshot.Child"/> naming one supplies that
+    /// frame's slot surface instead of an SDF camera render). The name is the registry key a <see cref="SdfFrame"/>'s
+    /// per-view bindings resolve against, not a fixed viewport slot — see <see cref="SdfEngineNode"/>'s remarks for the
+    /// per-frame slot derivation.</summary>
+    public IReadOnlyDictionary<string, IRenderNode>? Children { get; init; }
     /// <summary>An optional factory for the output image (export mode when it returns an exportable image).</summary>
     public Func<IGpuDeviceContext, IGpuStorageImage>? CreateOutputImage { get; init; }
     /// <summary>An optional render-node decorator wrapped around the producer (e.g. the unified overlay). Applied on
@@ -51,10 +51,10 @@ public sealed record SdfWorldRenderSpec(
     /// <summary>A floor on the program buffer's packed-word capacity — the capacity envelope for a frame source
     /// that hot-swaps programs larger than the first frame's.</summary>
     public int ProgramWordCapacity { get; init; }
-    /// <summary>The resolved <c>PUCK_RAY_QUERY</c> toggle, or <see langword="null"/> to let <see cref="SdfEngineNode"/>
-    /// fall back to the environment/default. Parallel to <see cref="Timing"/>; see
-    /// <see cref="SdfEngineNode"/>'s constructor doc for why no current render path consults it yet.</summary>
-    public bool? RayQuery { get; init; }
+    /// <summary>The resolved <c>host.rayQuery</c> document toggle (permitted by default). Parallel to
+    /// <see cref="Timing"/>; see <see cref="SdfEngineNode"/>'s constructor doc for why no current render path consults
+    /// it yet.</summary>
+    public bool RayQuery { get; init; } = true;
     /// <summary>Screen-light color providers, parallel to <see cref="ScreenSources"/>: the colored glow each screen
     /// emits into the room (its framebuffer average), keyed by screen index.</summary>
     public IReadOnlyDictionary<int, Func<Vector3>>? ScreenLights { get; init; }

@@ -416,6 +416,11 @@
           "Microsoft.IdentityModel.Logging": "8.22.0"
         }
       },
+      "Parlot": {
+        "type": "Transitive",
+        "resolved": "1.5.9",
+        "contentHash": "Vro4ZKVZLBoPdCftyMUlzhlRpegI3N6TlT0zpyn79a42mH214VDqzkAdV70vu578W6NKS84hBA9H6j81cz0dLg=="
+      },
       "System.ClientModel": {
         "type": "Transitive",
         "resolved": "1.11.0",
@@ -538,6 +543,7 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )"
         }
@@ -681,7 +687,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
@@ -722,7 +727,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )"
@@ -733,7 +737,9 @@
         "dependencies": {
           "Azure.Identity": "[1.*, )",
           "Azure.Storage.Blobs": "[12.*, )",
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )"
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[10.*, )",
+          "Microsoft.Extensions.Options": "[10.*, )"
         }
       },
       "puck.vulkan.presentation": {
@@ -846,6 +852,14 @@
           "ByteTerrace.Puck.SignedDistance": "[0.1.0-alpha, )",
           "Puck.Storage": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
+          "Puck.World.Schema": "[1.0.0, )"
+        }
+      },
+      "puck.world.transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "Parlot": "[1.5.*, )",
           "Puck.World.Schema": "[1.0.0, )"
         }
       }

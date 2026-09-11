@@ -3,17 +3,21 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 
+using Puck.Cli.Format;
+
 using Xunit;
 
 namespace Puck.Cli.Tests;
 
 public sealed class FormatSubmissionTests {
+    private readonly List<string> m_reports = [];
+
     [Fact]
     public async Task AFormattingCommitUsesAnExpectedHeadAndDispatchesTheSharedVerificationGraphOnce() {
         using var handler = new GitHubHandler(scenario: "apply");
         using var client = new HttpClient(handler: handler) { BaseAddress = new Uri(uriString: "https://api.invalid/") };
 
-        await new FormatSubmission(client: client).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql");
+        await new FormatSubmission(client: client, report: m_reports.Add).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql");
         Assert.Single(collection: handler.Commits);
         var input = handler.Commits[0]["variables"]!["input"]!;
 
@@ -21,8 +25,11 @@ public sealed class FormatSubmissionTests {
         Assert.Equal(expected: "feature", actual: ((string?)input["branch"]!["refName"]));
         Assert.Single(collection: input["fileChanges"]!["additions"]!.AsArray());
         Assert.Equal(expected: 2, actual: handler.Dispatches.Count);
-        Assert.Single(handler.Dispatches, item => item.Path.Contains("format.yml", StringComparison.Ordinal));
+        Assert.Single(collection: handler.Dispatches, predicate: item => item.Path.Contains(comparisonType: StringComparison.Ordinal, value: "format.yml"));
         Assert.Equal(expected: "false", actual: ((string?)handler.Dispatches.Single(predicate: item => item.Path.Contains(comparisonType: StringComparison.Ordinal, value: "azure.yml")).Body["inputs"]!["deploy"]));
+        Assert.Equal(expected: 2, actual: m_reports.Count);
+        Assert.StartsWith(expectedStartString: "Applied 1 formatted file(s) to PR #7", actualString: m_reports[0]);
+        Assert.StartsWith(expectedStartString: "Dispatched formatting", actualString: m_reports[1]);
     }
     [InlineData("stale")]
     [InlineData("fork")]
@@ -34,9 +41,10 @@ public sealed class FormatSubmissionTests {
         using var handler = new GitHubHandler(scenario: scenario);
         using var client = new HttpClient(handler: handler) { BaseAddress = new Uri(uriString: "https://api.invalid/") };
 
-        await new FormatSubmission(client: client).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql");
+        await new FormatSubmission(client: client, report: m_reports.Add).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql");
         Assert.Empty(collection: handler.Commits);
         Assert.Empty(collection: handler.Dispatches);
+        Assert.Single(collection: m_reports);
     }
     [InlineData("non-pr-file")]
     [InlineData("duplicate")]
@@ -49,7 +57,7 @@ public sealed class FormatSubmissionTests {
         using var handler = new GitHubHandler(scenario: scenario);
         using var client = new HttpClient(handler: handler) { BaseAddress = new Uri(uriString: "https://api.invalid/") };
 
-        await Assert.ThrowsAsync<InvalidDataException>(testCode: () => new FormatSubmission(client: client).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql"));
+        await Assert.ThrowsAsync<InvalidDataException>(testCode: () => new FormatSubmission(client: client, report: m_reports.Add).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql"));
         Assert.Empty(collection: handler.Commits);
         Assert.Empty(collection: handler.Dispatches);
     }
@@ -58,7 +66,7 @@ public sealed class FormatSubmissionTests {
         using var handler = new GitHubHandler(scenario: "race");
         using var client = new HttpClient(handler: handler) { BaseAddress = new Uri(uriString: "https://api.invalid/") };
 
-        await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => new FormatSubmission(client: client).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql"));
+        await Assert.ThrowsAsync<InvalidOperationException>(testCode: () => new FormatSubmission(client: client, report: m_reports.Add).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql"));
         Assert.Empty(collection: handler.Dispatches);
     }
     [Fact]
@@ -66,7 +74,7 @@ public sealed class FormatSubmissionTests {
         using var handler = new GitHubHandler(scenario: "retry");
         using var client = new HttpClient(handler: handler) { BaseAddress = new Uri(uriString: "https://api.invalid/") };
 
-        await new FormatSubmission(client: client).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql");
+        await new FormatSubmission(client: client, report: m_reports.Add).RunAsync(repository: "owner/Puck", runId: 12, graphUrl: "https://api.invalid/graphql");
         Assert.Empty(collection: handler.Commits);
         Assert.Equal(expected: 2, actual: handler.Dispatches.Count);
     }

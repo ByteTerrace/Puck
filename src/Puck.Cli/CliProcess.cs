@@ -7,27 +7,56 @@ namespace Puck.Cli;
 // both streams without merging them. The captured shape owns the pipe lifecycle because waiting for a child before
 // draining both streams can deadlock, and returning before the pumps finish loses the tail that often names a crash.
 internal static class CliProcess {
-    internal static async Task<string> RunCheckedAsync(string root, string executable, IEnumerable<string> arguments, bool capture = false) {
+    // A credential may travel on stdin (docker login --password-stdin), never in an argument or a shell expression.
+    internal static async Task<string> RunCheckedAsync(string root, string executable, IEnumerable<string> arguments, bool capture = false, string? input = null) {
+        var command = arguments.ToList();
+
+        // The cmd.exe launchers behind az and npm re-parse their arguments; their interpreters take a clean vector.
+        if (OperatingSystem.IsWindows() && (executable is "az" or "npm")) {
+            var home = Path.GetDirectoryName(path: FindOnPath(name: (executable + ".cmd")))!;
+
+            if (executable == "az") {
+                executable = Path.GetFullPath(path: Path.Combine(path1: home, path2: "../python.exe"));
+                command.InsertRange(collection: ["-I", "-B", "-X", "utf8", "-m", "azure.cli"], index: 0);
+            } else {
+                executable = Path.Combine(path1: home, path2: "node.exe");
+                command.Insert(index: 0, item: Path.Combine(path1: home, path2: "node_modules/npm/bin/npm-cli.js"));
+            }
+        }
         var info = new ProcessStartInfo(fileName: executable) {
             RedirectStandardError = capture,
+            RedirectStandardInput = (input is not null),
             RedirectStandardOutput = capture,
             UseShellExecute = false,
             WorkingDirectory = root,
         };
 
-        foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
+        if (capture) { info.StandardErrorEncoding = Encoding.UTF8; info.StandardOutputEncoding = Encoding.UTF8; }
+        foreach (var argument in command) { info.ArgumentList.Add(item: argument); }
         using var process = (Process.Start(startInfo: info) ?? throw new InvalidOperationException(message: $"Cannot start {executable}."));
         var output = (capture ? process.StandardOutput.ReadToEndAsync() : Task.FromResult(result: ""));
         var errors = (capture ? process.StandardError.ReadToEndAsync() : Task.FromResult(result: ""));
 
+        if (input is not null) { await process.StandardInput.WriteAsync(value: input); process.StandardInput.Close(); }
         await process.WaitForExitAsync();
         var text = await output;
         var errorText = await errors;
 
+        // Captured standard output can be a token (`az account get-access-token`), so a failure repeats only the diagnostics stream.
         if (process.ExitCode != 0) {
-            throw new InvalidOperationException(message: $"{executable} exited with code {process.ExitCode}. {text}{errorText}");
+            throw new InvalidOperationException(message: $"{Path.GetFileName(path: executable)} exited with code {process.ExitCode}. {errorText}".TrimEnd());
         }
+        if (capture && !string.IsNullOrWhiteSpace(value: errorText)) { Console.Error.WriteLine(value: errorText); }
         return text;
+    }
+
+    private static string FindOnPath(string name) {
+        foreach (var directory in (Environment.GetEnvironmentVariable(variable: "PATH") ?? "").Split(Path.PathSeparator)) {
+            var path = Path.Combine(path1: directory.Trim(trimChar: '"'), path2: name);
+
+            if (File.Exists(path: path)) { return path; }
+        }
+        throw new FileNotFoundException(message: $"Cannot find {name} on PATH.");
     }
 
     public static int RunStreamed(string fileName, params string[] arguments) {
@@ -48,6 +77,7 @@ internal static class CliProcess {
 
         return process.ExitCode;
     }
+
     public static CliProcessResult RunCaptured(string fileName, IReadOnlyList<string> arguments, string input, TimeSpan timeout) =>
         RunCapturedAsync(arguments: arguments, fileName: fileName, input: input, timeout: timeout).GetAwaiter().GetResult();
     /// <summary>Spawns <paramref name="fileName"/>, drains both streams to their end exactly as read (no line

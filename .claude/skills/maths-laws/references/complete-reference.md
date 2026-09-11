@@ -115,14 +115,19 @@ Where things live, and nothing crosses:
 | `Coverage.cs` | member surface, waivers, ratchet | law logic |
 | `Legs.cs`, `LegLedger.cs` | leg vocabulary + gates | law logic |
 
-**Ids.** `<family>.<kebab-statement>`, ordinal-sorted in the ledger. Families
-in use: `scalar`, `unsigned-scalar`, `closed-unit`, `unit-fraction16`,
-`unit-fraction32`, `integer`, `complex`, `split`, `dual`, `quaternion`,
-`vector`, `rigid`, `position`, `rate`, `algebra`, `mobius`, `presented`,
-`certified`, `quasicrystal`, `sampling`, `core`, `binary-field`, `polynomial`,
-`prime-field`, `reed-solomon`, `ntt`, `fft`. Mirrors take the **tier** as their prefix instead:
-`smoke.*` and `deep.*`. Reuse a family; do not invent one for a type that has
-one.
+**Ids.** `<family>.<kebab-statement>`, ordinal-sorted in the ledger. The family
+set is the distinct prefixes before that first dot — not the file list under
+`laws/`, since a file groups cases by topic and a file's name need not match
+the family its cases declare (a `core.*` case can live in a topic file named
+for the type it covers, not for `core`). Derive the live set rather than
+trusting a pasted list:
+
+```
+grep -hoE '"Id": "[A-Za-z0-9-]+\.' tests/Puck.Maths.Tests/laws/*.json | sed -E 's/"Id": "|\.$//g' | sort -u
+```
+
+Mirrors take the **tier** as their prefix instead: `smoke.*` and `deep.*`.
+Reuse a family; do not invent one for a type that has one.
 
 ### The combinators (`Laws.cs`) — instantiate, never re-implement
 

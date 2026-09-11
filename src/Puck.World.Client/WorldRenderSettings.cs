@@ -32,9 +32,7 @@ public sealed class WorldRenderSettings {
     private bool m_farBound;
     private float m_renderScale;
     private int m_revision;
-    private bool m_shadowAccumulation;
     private float m_shadowCrowdRadius;
-    private bool m_shadowFarExit;
     private ShadowMarchMode m_shadowMarch;
     private ShadowMaskMode m_shadowMask;
     private float m_shadowReach;
@@ -57,8 +55,6 @@ public sealed class WorldRenderSettings {
         RenderScale = WorldRenderScaleTiers.Scale(tier: defaults.RenderScale);
         UpscaleSharpness = defaults.UpscaleSharpness;
         FarBound = true;
-        ShadowFarExit = true;
-        ShadowAccumulation = true;
 
     }
 
@@ -84,13 +80,6 @@ public sealed class WorldRenderSettings {
     /// <summary>A monotonic counter advanced by every lever write — the cheap watch the editor HUD keys its
     /// live-session-act tag and drift refresh on (no per-frame drift recompute).</summary>
     public int Revision => m_revision;
-    /// <summary>Whether the area-light shadow estimator's TEMPORAL ACCUMULATION is active (default
-    /// <see langword="true"/>). Set <see langword="false"/> (via <c>world.shadow.accumulate off</c>) to shade each
-    /// frame's raw two-sample stochastic estimate directly — deliberately noisy, an A/B isolator rather than a quality
-    /// tier. Session state, never durable config. Rides the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowAccumulation"/> lane <c>WorldFramePresenter</c> inverts
-    /// each frame, so no rebuild.</summary>
-    public bool ShadowAccumulation { get => m_shadowAccumulation; set { m_shadowAccumulation = value; m_revision++; } }
     /// <summary>The soft-shadow crowd radius (world units): an avatar within this distance of any joined local seat casts
     /// soft shadows; beyond it, it is suppressed from the soft-shadow march only (still rendered, still self-lit). Boots
     /// at the definition's default; the <c>world.shadows</c> verb's optional second arg moves it live (it rides the
@@ -98,11 +87,6 @@ public sealed class WorldRenderSettings {
     /// per frame, so no rebuild). 0 = only the local seats cast; a value ≥ the world's diameter = everyone casts. Bounding
     /// who casts is how the population scales, since soft shadows dominate the GPU cost.</summary>
     public float ShadowCrowdRadius { get => m_shadowCrowdRadius; set { m_shadowCrowdRadius = value; m_revision++; } }
-    /// <summary>Whether the soft-shadow light-side early exit is active (default <see langword="true"/>). Set
-    /// <see langword="false"/> (via <c>world.far-field shadow off</c>) to run the full shadow step budget/reach — a
-    /// march-path change, session state, not durable config. Rides the per-frame
-    /// <see cref="Puck.SdfVm.SdfFrame.DisableShadowEscapeExit"/> lane <c>WorldFramePresenter</c> inverts each frame.</summary>
-    public bool ShadowFarExit { get => m_shadowFarExit; set { m_shadowFarExit = value; m_revision++; } }
     /// <summary>The live soft-shadow march policy. Auto selects the bounded-cost path at 16 or more simulated stand-ins;
     /// exact and fast are explicit A/B overrides.</summary>
     public ShadowMarchMode ShadowMarch { get => m_shadowMarch; set { m_shadowMarch = value; m_revision++; } }

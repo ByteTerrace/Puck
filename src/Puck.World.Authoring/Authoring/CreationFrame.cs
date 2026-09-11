@@ -105,6 +105,17 @@ public static class CreationFrame {
                     }
                     : run)
             ),
+            // A volume riding a shape is expressed in that shape's local frame, which the shape's own conversion
+            // carries; a root-riding one converts like a shape.
+            Volumes = ConvertList(
+                source: document.Volumes,
+                convert: volume => ((volume.Parent is null)
+                    ? volume with {
+                        Position = Flip(value: volume.Position),
+                        Rotation = Flip(value: volume.Rotation),
+                    }
+                    : volume)
+            ),
         };
     }
 

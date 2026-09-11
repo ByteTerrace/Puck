@@ -6,6 +6,8 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Configuration;
 using System.Net;
 using Puck.Azure.Functions.Services;
+using Puck.Azure.Functions.Utilities;
+using Puck.Storage;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
@@ -14,8 +16,7 @@ public sealed class Publishing(
     IPartitionResolver partitionResolver,
     IUserCredentialContext userCredentialContext,
     IUserStorageLocationService userStorageLocationService
-)
-{
+) {
     // Published files are ANCHORED: they live under public/ in the user's oid-named container on
     // the anchor partition — Front Door's only blob origin — regardless of which partition the
     // user's home (private/, system/) is on. Front Door rewrites /public/<tenant>/<path> to
@@ -28,34 +29,14 @@ public sealed class Publishing(
     private const string PrivatePrefix = "private/";
     private const string PublicPrefix = "public/";
 
-    public sealed class PublishRequest
-    {
+    public sealed class PublishRequest {
         public string? BlobName { get; set; }
-    }
-
-    private static string? GetDelegatedUserObjectId(FunctionContext functionContext) {
-        var user = functionContext
-            .GetHttpContext()!
-            .User;
-        var hasScopes = user
-            .Claims
-            .Any(predicate: static claim =>
-                ("scp" == claim.Type) ||
-                ("http://schemas.microsoft.com/identity/claims/scope" == claim.Type)
-            );
-
-        return hasScopes
-            ? user
-                .Identity
-                ?.Name
-                ?.ToLowerInvariant()
-            : null;
     }
 
     private BlobContainerClient GetAnchorContainerClient(string userObjectId) =>
         new(
             blobContainerUri: new Uri(
-                baseUri: partitionResolver.GetBlobEndpoint(partition: Constants.AnchorPartition),
+                baseUri: partitionResolver.GetBlobEndpoint(partition: PartitioningOptions.AnchorPartition),
                 relativeUri: userObjectId
             ),
             credential: userCredentialContext.UserContext
@@ -72,7 +53,7 @@ public sealed class Publishing(
             credential: userCredentialContext.UserContext
         );
     private string GetPublicBaseUrl() =>
-        (configuration.GetValue<string>(key: "Publishing:PublicBaseUrl") ?? DefaultPublicBaseUrl).TrimEnd('/');
+        (configuration.GetValue<string>(key: "Publishing:PublicBaseUrl") ?? DefaultPublicBaseUrl).TrimEnd(trimChar: '/');
     private static async Task<HttpResponseData> CreateMigratingResponseAsync(
         HttpRequestData httpRequestData,
         CancellationToken cancellationToken
@@ -96,14 +77,13 @@ public sealed class Publishing(
     ) {
         var blobName = request?.BlobName?.Trim();
 
-        return (string.IsNullOrWhiteSpace(value: blobName) ||
+        return ((string.IsNullOrWhiteSpace(value: blobName) ||
             !blobName.StartsWith(value: PrivatePrefix) ||
             blobName.Contains(value: "..")
         )
             ? ("", httpRequestData.CreateResponse(statusCode: HttpStatusCode.BadRequest))
-            : (blobName[PrivatePrefix.Length..], null);
+            : (blobName[PrivatePrefix.Length..], null));
     }
-
     // Move between the tenant's own containers: private/<path> in their home becomes
     // public/<path> in their anchor container (unpublish is the exact inverse). The copy is a
     // native server-side operation (Put Blob From URL) — the storage service reads the source and
@@ -150,13 +130,14 @@ public sealed class Publishing(
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
         }
 
         var request = await httpRequestData.ReadFromJsonAsync<PublishRequest>(cancellationToken: cancellationToken);
+
         var (relativePath, error) = ParseBlobName(
             httpRequestData: httpRequestData,
             request: request
@@ -202,7 +183,6 @@ public sealed class Publishing(
 
         return response;
     }
-
     [Function(name: nameof(Unpublish))]
     public async Task<HttpResponseData> Unpublish(
         [HttpTrigger(
@@ -213,13 +193,14 @@ public sealed class Publishing(
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
         }
 
         var request = await httpRequestData.ReadFromJsonAsync<PublishRequest>(cancellationToken: cancellationToken);
+
         var (relativePath, error) = ParseBlobName(
             httpRequestData: httpRequestData,
             request: request
@@ -263,7 +244,6 @@ public sealed class Publishing(
 
         return response;
     }
-
     [Function(name: nameof(ListPublicFiles))]
     public async Task<HttpResponseData> ListPublicFiles(
         [HttpTrigger(
@@ -274,7 +254,7 @@ public sealed class Publishing(
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
@@ -285,10 +265,10 @@ public sealed class Publishing(
         var files = new List<object>();
 
         await foreach (var blob in GetAnchorContainerClient(userObjectId: userObjectId).GetBlobsAsync(
-            BlobTraits.None,
-            BlobStates.None,
-            prefix,
-            cancellationToken
+            cancellationToken: cancellationToken,
+            prefix: prefix,
+            states: BlobStates.None,
+            traits: BlobTraits.None
         )) {
             var relativePath = blob.Name[prefix.Length..];
 

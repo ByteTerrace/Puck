@@ -73,6 +73,107 @@ public sealed class SdfTrapezoidProfileLawTests {
             new SdfProgramBuilder(), SdfSolidPrimitive.Prism, Vector3.One, 0, taper: taper));
     }
 
+    [Fact]
+    public void ARevolvedPrismIsASolidOfRevolutionAboutY() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+
+        // A revolved rectangle profile at offset 0: radial half-extent 1, axial half-extent 0.5 — a disc, not a slab.
+        _ = SdfSolidGeometry.AppendScaledPrimitive(builder, SdfSolidPrimitive.Prism, new Vector3(1f, .5f, 0f), material,
+            taper: 1f, lift: SdfLift.Revolve);
+
+        var evaluator = new SdfFieldEvaluator(builder.Build());
+
+        // Rotational symmetry is the whole claim: the same radius reads the same distance on every azimuth.
+        foreach (var (x, z) in new[] { (0.9d, 0d), (0d, 0.9d), (-0.9d, 0d), (0.6364d, 0.6364d) }) {
+            Assert.True(evaluator.TryDistance(Position(x, 0, z), out var inside, out _));
+            Assert.True(inside < FixedQ4816.Zero, userMessage: $"({x}, 0, {z}) read {(double)inside} outside the disc");
+        }
+
+        foreach (var (x, z) in new[] { (1.2d, 0d), (0d, 1.2d), (0.8485d, 0.8485d) }) {
+            Assert.True(evaluator.TryDistance(Position(x, 0, z), out var outside, out _));
+            Assert.True(outside > FixedQ4816.Zero, userMessage: $"({x}, 0, {z}) read {(double)outside} inside the disc");
+        }
+
+        // An extrusion of the same profile would be solid out to z = 0 only over |x| <= 1 and hollow nowhere; the
+        // discriminating point is above the disc, which a revolve leaves empty and a slab of depth 0 also would —
+        // so the axial cap is what separates them.
+        Assert.True(evaluator.TryDistance(Position(0, .7, 0), out var above, out _));
+        Assert.True(above > FixedQ4816.Zero);
+    }
+
+    [Fact]
+    public void ARevolvedPrismAtAPositiveOffsetIsARing() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+
+        _ = SdfSolidGeometry.AppendScaledPrimitive(builder, SdfSolidPrimitive.Prism, new Vector3(.25f, .25f, 2f), material,
+            taper: 1f, lift: SdfLift.Revolve);
+
+        var evaluator = new SdfFieldEvaluator(builder.Build());
+
+        Assert.True(evaluator.TryDistance(Position(2, 0, 0), out var onRing, out _));
+        Assert.True(onRing < FixedQ4816.Zero);
+        // The hole at the axis is what makes it a ring rather than a disc.
+        Assert.True(evaluator.TryDistance(Position(0, 0, 0), out var hole, out _));
+        Assert.True(hole > FixedQ4816.Zero);
+    }
+
+    [Fact]
+    public void RoundingFilletsThePrismRimWithoutMovingItsFaces() {
+        var scale = new Vector3(1f, 1f, 1f);
+        var sharp = Prism(scale, 0f);
+        var rounded = Prism(scale, .25f);
+
+        // The faces stay where they were authored: a mid-face point sits on both surfaces.
+        foreach (var probe in new[] { Position(0, 0, 1), Position(1, 0, 0) }) {
+            Assert.True(sharp.TryDistance(probe, out var sharpFace, out _));
+            Assert.True(rounded.TryDistance(probe, out var roundedFace, out _));
+            Assert.InRange((double)sharpFace, -.002, .002);
+            Assert.InRange((double)roundedFace, -.002, .002);
+        }
+
+        // The rim corner the fillet cuts away: inside the sharp prism, outside the rounded one.
+        Assert.True(sharp.TryDistance(Position(.99, 0, .99), out var sharpRim, out _));
+        Assert.True(rounded.TryDistance(Position(.99, 0, .99), out var roundedRim, out _));
+        Assert.True(sharpRim < FixedQ4816.Zero, userMessage: $"the sharp rim read {(double)sharpRim}");
+        Assert.True(roundedRim > FixedQ4816.Zero, userMessage: $"the rounded rim read {(double)roundedRim}");
+    }
+
+    [Fact]
+    public void RoundingIsRefusedPastTheShapeItFits() {
+        var scale = new Vector3(1f, 1f, .2f);
+        var ceiling = SdfSolidGeometry.MaxRounding(SdfSolidPrimitive.Prism, scale);
+
+        // An extrude spends its half-depth as well as the profile inradius, so 0.2 is the binding constraint here.
+        Assert.Equal(.2f, ceiling, tolerance: 1e-6f);
+        Assert.True(SdfSolidGeometry.TryValidateScaledPrimitive(SdfSolidPrimitive.Prism, scale, out _, rounding: (ceiling - .01f)));
+        Assert.False(SdfSolidGeometry.TryValidateScaledPrimitive(SdfSolidPrimitive.Prism, scale, out var refusal, rounding: (ceiling + .01f)));
+        Assert.Contains("edge-rounding", refusal);
+    }
+
+    [Fact]
+    public void AnUnroundedShapeLeavesTheRoundingLaneAtZero() {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+
+        _ = SdfSolidGeometry.AppendScaledPrimitive(builder, SdfSolidPrimitive.Prism, new Vector3(1f, .5f, .25f), material);
+        _ = builder.Cylinder(1f, 2f, material);
+
+        foreach (var instruction in builder.Build().Instructions.Where(instruction => instruction.Op == SdfOp.ShapeBlend)) {
+            Assert.Equal(0f, instruction.Data1.W);
+        }
+    }
+
+    private static SdfFieldEvaluator Prism(Vector3 scale, float rounding) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+
+        _ = SdfSolidGeometry.AppendScaledPrimitive(builder.ResetPoint(), SdfSolidPrimitive.Prism, scale, material,
+            taper: 1f, rounding: rounding);
+
+        return new SdfFieldEvaluator(builder.Build());
+    }
     private static FixedPosition Position(double x, double y, double z) =>
         FixedPosition.FromLocal(local: new FixedVector3(
             X: FixedQ4816.FromDouble(value: x),
@@ -231,7 +332,9 @@ public sealed class SdfTrapezoidProfileLawTests {
         // primitive, is what keeps them from drifting apart silently.
         float[] steps = [0f, 0.00005f, 0.0001f, 0.0005f, 0.001f, 0.002f, 0.003f, 0.01f, 0.5f, 1f, 7f];
 
-        foreach (var type in Enum.GetValues<SdfSolidPrimitive>()) {
+        // Sweep's reach/admission depend on its own curve, not (only) scale — this scale-driven law does not
+            // apply to it; SweepLawTests covers its admission/emission agreement separately.
+            foreach (var type in Enum.GetValues<SdfSolidPrimitive>().Where(predicate: (SdfSolidPrimitive candidate) => (candidate != SdfSolidPrimitive.Sweep))) {
             foreach (var radial in steps) {
                 foreach (var axial in steps) {
                     var scale = new Vector3(
@@ -267,5 +370,52 @@ public sealed class SdfTrapezoidProfileLawTests {
                 }
             }
         }
+    }
+
+    [Fact]
+    public void RoundingNeverGrowsAThinProfilePastItsAuthoredWidth() {
+        // A profile thinner than it is tall: the half-height would admit 0.5, but the inset width reaches zero at 0.1,
+        // and flooring it there while offsetting back out by 0.5 would put a point 0.3 off the axis INSIDE a 0.1-wide
+        // solid. Both the door's ceiling and the builder's clamp bind at the width.
+        var scale = new Vector3(.1f, 1f, 1f);
+
+        Assert.Equal(.1f, SdfSolidGeometry.MaxRounding(SdfSolidPrimitive.Prism, scale, taper: 1f), tolerance: 1e-5f);
+        Assert.Equal(.1f, SdfProgramBuilder.TrapezoidRoundingCeiling(.1f, .1f, 1f), tolerance: 1e-5f);
+        // A triangle's apex has no room at all.
+        Assert.Equal(0f, SdfProgramBuilder.TrapezoidRoundingCeiling(1f, 0f, 1f));
+
+        var sharp = Prism(scale, 0f);
+        var rounded = Prism(scale, .5f);
+
+        Assert.True(sharp.TryDistance(Position(.3, 0, 0), out var sharpOutside, out _));
+        Assert.True(rounded.TryDistance(Position(.3, 0, 0), out var roundedOutside, out _));
+        Assert.InRange((double)sharpOutside, .19, .21);
+        Assert.True(roundedOutside > FixedQ4816.Zero, userMessage: $"the rounded prism grew past its width: {(double)roundedOutside}");
+        // The clamped fillet still cuts the rim corner the sharp prism keeps.
+        Assert.True(sharp.TryDistance(Position(.09, 0, .99), out var sharpRim, out _));
+        Assert.True(rounded.TryDistance(Position(.09, 0, .99), out var roundedRim, out _));
+        Assert.True(sharpRim < FixedQ4816.Zero, userMessage: $"sharp rim {(double)sharpRim}, rounded rim {(double)roundedRim}, rounded outside {(double)roundedOutside}");
+        Assert.True(roundedRim > FixedQ4816.Zero, userMessage: $"sharp rim {(double)sharpRim}, rounded rim {(double)roundedRim}");
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    public void ANonFiniteRoundingIsRefusedByEveryProfileBuilder(float rounding) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.Ellipse(1f, .5f, SdfLift.Extrude, 1f, material, rounding: rounding));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.RegularPolygon(6, 1f, SdfLift.Extrude, 1f, material, rounding: rounding));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.Trapezoid(1f, .5f, 1f, SdfLift.Extrude, 1f, material, rounding: rounding));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.RoundedRectangle(1f, .5f, .1f, SdfLift.Extrude, 1f, material, rounding: rounding));
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.ChamferedRectangle(1f, .5f, .1f, SdfLift.Extrude, 1f, material, rounding: rounding));
+        // The control: the same calls with a finite radius emit.
+        _ = builder.Ellipse(1f, .5f, SdfLift.Extrude, 1f, material, rounding: .1f);
+        _ = builder.RegularPolygon(6, 1f, SdfLift.Extrude, 1f, material, rounding: .1f);
+        _ = builder.Trapezoid(1f, .5f, 1f, SdfLift.Extrude, 1f, material, rounding: .1f);
+        _ = builder.RoundedRectangle(1f, .5f, .1f, SdfLift.Extrude, 1f, material, rounding: .1f);
+        _ = builder.ChamferedRectangle(1f, .5f, .1f, SdfLift.Extrude, 1f, material, rounding: .1f);
+        Assert.Equal(5, builder.Build().Instructions.Count(instruction => instruction.Op == SdfOp.ShapeBlend));
     }
 }

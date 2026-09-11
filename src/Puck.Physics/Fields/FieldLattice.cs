@@ -57,6 +57,7 @@ public sealed class FieldLattice {
         Y: FixedQ4816.One,
         Z: FixedQ4816.Zero
     );
+
     private readonly FixedQ4816 m_cellSize;
     private readonly int m_depth;
     private readonly List<int> m_deltas = [];
@@ -73,7 +74,6 @@ public sealed class FieldLattice {
     private readonly FixedQ4816[] m_min;
     private readonly string[] m_names;
     private readonly FixedVector3 m_origin;
-
     private readonly FixedQ4816[] m_scratch;
     private readonly Int128[] m_flowDelta;
     private readonly FixedQ4816[] m_flowHeights;
@@ -97,6 +97,7 @@ public sealed class FieldLattice {
     /// <param name="Field">The field ordinal.</param>
     /// <param name="Raw">The cell's raw <see cref="FixedQ4816"/> bits after the change.</param>
     public readonly record struct Delta(int Cell, byte Field, long Raw);
+
     // The canonical field/state read and write sets one compiled reaction carries — computed once per install, from
     // the plain reaction records, the same shape the document-side compiler derives for its own dependency plan.
     private readonly record struct ReactionSets(bool IsCellWork, int[] FieldReads, int[] FieldWrites, StateHandle[] StateReads, StateHandle[] StateWrites);
@@ -198,12 +199,12 @@ public sealed class FieldLattice {
     public FixedVector3 Origin => m_origin;
     /// <summary>Gets a counter that moves on every cell write.</summary>
     public int Revision => m_revision;
+
     /// <summary>Gets a derived invalidation stamp for one field, not simulation truth — a caller compares it against
     /// a value it last observed rather than reading it as a value in its own right. Restore stamps it anew after
     /// installing the saved values.</summary>
     /// <param name="field">The field index.</param>
     public ulong ValueRevision(int field) => m_valueRevisions[field];
-
     // The field portion of the host's authoritative state-hash boundary. Field-major/cell-major is the same
     // canonical order Capture and the checkpoint codec use, without allocating a checkpoint-shaped jagged array.
     /// <summary>Folds every field's declared name and cell value into a running hash, in field-major/cell-major
@@ -221,7 +222,6 @@ public sealed class FieldLattice {
             }
         }
     }
-
     /// <summary>Describes the exact structural field-program work performed on one cadence step.</summary>
     /// <param name="activeBodyCount">The number of active body slots.</param>
     /// <param name="bodyCapacity">The body-table capacity every body node scans.</param>
@@ -383,26 +383,16 @@ public sealed class FieldLattice {
         .Distinct()
         .OrderBy(keySelector: static handle => handle.Ordinal)];
     private static StateHandle[] StateReads(FieldScalarInput input) => (input.IsState ? [input.State] : []);
-    private static bool Conflicts(ReactionSets earlier, ReactionSets later) => (
-        Intersects(left: earlier.FieldWrites, right: later.FieldReads) ||
-        Intersects(left: earlier.FieldWrites, right: later.FieldWrites) ||
-        Intersects(left: earlier.FieldReads, right: later.FieldWrites) ||
-        Intersects(left: earlier.StateWrites, right: later.StateReads) ||
-        Intersects(left: earlier.StateWrites, right: later.StateWrites) ||
-        Intersects(left: earlier.StateReads, right: later.StateWrites)
+    private static bool Conflicts(ReactionSets earlier, ReactionSets later) => ReadWriteHazard.Conflicts(
+        earlierFieldReads: earlier.FieldReads,
+        earlierFieldWrites: earlier.FieldWrites,
+        earlierStateReads: earlier.StateReads,
+        earlierStateWrites: earlier.StateWrites,
+        laterFieldReads: later.FieldReads,
+        laterFieldWrites: later.FieldWrites,
+        laterStateReads: later.StateReads,
+        laterStateWrites: later.StateWrites
     );
-    private static bool Intersects<T>(IReadOnlyList<T> left, IReadOnlyList<T> right) where T : IEquatable<T> {
-        for (var leftIndex = 0; (leftIndex < left.Count); leftIndex++) {
-            for (var rightIndex = 0; (rightIndex < right.Count); rightIndex++) {
-                if (left[leftIndex].Equals(other: right[rightIndex])) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
     private int CellIndex(int x, int y, int z) => ((((z * m_layers) + y) * m_width) + x);
     private FixedQ4816 Clamp(int field, FixedQ4816 value) => FixedQ4816.Clamp(
         maximum: m_max[field],
@@ -484,7 +474,7 @@ public sealed class FieldLattice {
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative or
     /// <paramref name="operation"/> is not defined.</exception>
     public int PaintSphere(string fieldName, int centerX, int centerY, int centerZ, int radius, FieldWriteOp operation, FixedQ4816 value) {
-        if (!TryFieldIndex(name: fieldName, field: out var field)) {
+        if (!TryFieldIndex(field: out var field, name: fieldName)) {
             return 0;
         }
         ArgumentOutOfRangeException.ThrowIfNegative(value: radius);
@@ -492,22 +482,25 @@ public sealed class FieldLattice {
             throw new ArgumentOutOfRangeException(paramName: nameof(operation), actualValue: operation, message: "The field write operation is not defined.");
         }
 
-        var minimumX = Math.Max(0, centerX - radius);
-        var maximumX = Math.Min(m_width - 1, centerX + radius);
-        var minimumY = Math.Max(0, centerY - radius);
-        var maximumY = Math.Min(m_layers - 1, centerY + radius);
-        var minimumZ = Math.Max(0, centerZ - radius);
-        var maximumZ = Math.Min(m_depth - 1, centerZ + radius);
-        var radiusSquared = checked(radius * radius);
+        var minimumX = Math.Max(val1: 0, val2: (centerX - radius));
+        var maximumX = Math.Min(val1: (m_width - 1), val2: (centerX + radius));
+        var minimumY = Math.Max(val1: 0, val2: (centerY - radius));
+        var maximumY = Math.Min(val1: (m_layers - 1), val2: (centerY + radius));
+        var minimumZ = Math.Max(val1: 0, val2: (centerZ - radius));
+        var maximumZ = Math.Min(val1: (m_depth - 1), val2: (centerZ + radius));
+        var radiusSquared = checked((radius * radius));
         var changed = 0;
 
-        for (var z = minimumZ; z <= maximumZ; z++) {
+        for (var z = minimumZ; (z <= maximumZ); z++) {
             var dz = (z - centerZ);
-            for (var y = minimumY; y <= maximumY; y++) {
+
+            for (var y = minimumY; (y <= maximumY); y++) {
                 var dy = (y - centerY);
-                for (var x = minimumX; x <= maximumX; x++) {
+
+                for (var x = minimumX; (x <= maximumX); x++) {
                     var dx = (x - centerX);
-                    if (checked((dx * dx) + (dy * dy) + (dz * dz)) > radiusSquared) {
+
+                    if (checked((((dx * dx) + (dy * dy)) + (dz * dz))) > radiusSquared) {
                         continue;
                     }
 
@@ -517,7 +510,8 @@ public sealed class FieldLattice {
                         ? AddClamped(field: field, x: before, y: value)
                         : value
                     );
-                    Write(field: field, cell: cell, value: requested);
+
+                    Write(cell: cell, field: field, value: requested);
                     if (m_values[field][cell] != before) {
                         changed++;
                     }
@@ -527,7 +521,6 @@ public sealed class FieldLattice {
 
         return changed;
     }
-
     /// <summary>Resolves the cell a BODY couples to for the <see cref="FieldReactionInput.Emit"/>/
     /// <see cref="FieldReactionInput.Expose"/> reactions: the column under the body, with Y admitted up to the
     /// lattice's derived coupling ceiling (the volume's top plus the tallest surface any height-bearing field can
@@ -672,7 +665,7 @@ public sealed class FieldLattice {
     /// and body-coupling ceiling <see cref="MediumSurface"/> resolves through, narrowed to one field rather than
     /// the tallest wet one; medium-constrained navigation uses it to keep swimmer routes in their fluid.</summary>
     public bool IsInsideMedium(string name, in FixedVector3 position) {
-        return TryFieldIndex(name: name, field: out var field) && IsInsideMedium(field: field, position: in position);
+        return (TryFieldIndex(field: out var field, name: name) && IsInsideMedium(field: field, position: in position));
     }
     /// <summary>Reports whether a point lies inside one compiled live medium-field ordinal. This is the hot-path
     /// counterpart of <see cref="IsInsideMedium(string, in FixedVector3)"/>: navigation resolves the authored name
@@ -684,46 +677,51 @@ public sealed class FieldLattice {
     /// must be in [0, half a lattice cell]. Every intersected voxel and its local free surface are checked; wet corners
     /// alone cannot prove the interior wet. The cube conservatively encloses an agent sphere.</summary>
     public bool IsInsideMedium(int field, in FixedVector3 position, FixedQ4816 clearance) {
-        if (clearance < FixedQ4816.Zero || clearance.Value > m_cellSize.Value / 2) {
+        if ((clearance < FixedQ4816.Zero) || (clearance.Value > (m_cellSize.Value / 2))) {
             return false;
         }
-        return IsMediumBox(field, (Int128)position.X.Value - clearance.Value, (Int128)position.Y.Value - clearance.Value,
-            (Int128)position.Z.Value - clearance.Value, (Int128)position.X.Value + clearance.Value,
-            (Int128)position.Y.Value + clearance.Value, (Int128)position.Z.Value + clearance.Value);
+        return IsMediumBox(field, (((Int128)position.X.Value) - clearance.Value), (((Int128)position.Y.Value) - clearance.Value),
+            (((Int128)position.Z.Value) - clearance.Value), (((Int128)position.X.Value) + clearance.Value),
+            (((Int128)position.Y.Value) + clearance.Value), (((Int128)position.Z.Value) + clearance.Value));
     }
+
     // A field's free surface (value * heightScale over the origin) is unbounded by its own topology's layer count
     // — the same reach TryBodyCellOf already admits for reaction coupling — so the coupled cell is resolved through
     // it (clamped onto the top layer) rather than through a bare TryCellOf, which would refuse any column whose
     // surface rises past one voxel.
     private bool IsInsideMediumPoint(int field, in FixedVector3 position) {
-        if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field] || !TryBodyCellOf(position: in position, cell: out var cell)) {
+        if ((((uint)field) >= ((uint)m_isMedium.Length)) || !m_isMedium[field] || !TryBodyCellOf(cell: out var cell, position: in position)) {
             return false;
         }
         var value = m_values[field][cell];
-        return value > FixedQ4816.Zero && position.Y <= (m_origin.Y + (value * m_heightScale[field]));
+
+        return ((value > FixedQ4816.Zero) && (position.Y <= (m_origin.Y + (value * m_heightScale[field]))));
     }
+
     /// <summary>Conservatively proves an entire clearance-cube sweep inside one live medium's free surface. Each
     /// half-cell-or-shorter piece checks its swept bounding box against the coupled column's surface height, not
     /// just sample points. Clearance above half a cell, an invalid field, or a segment exceeding the caller's
     /// subdivision ceiling refuses. Outward-rounded endpoints cannot leave a sub-quantum gap in the proof.</summary>
     public bool IsSegmentInsideMedium(int field, in FixedVector3 from, in FixedVector3 to, FixedQ4816 clearance, int maximumSubdivisions) {
-        if (maximumSubdivisions <= 0 || clearance < FixedQ4816.Zero || clearance.Value > m_cellSize.Value / 2 ||
-            (uint)field >= (uint)m_isMedium.Length || !m_isMedium[field]) {
+        if ((maximumSubdivisions <= 0) || (clearance < FixedQ4816.Zero) || (clearance.Value > (m_cellSize.Value / 2)) ||
+            (((uint)field) >= ((uint)m_isMedium.Length)) || !m_isMedium[field]) {
             return false;
         }
-        var maximum = Int128.Max(Int128.Abs((Int128)to.X.Value - from.X.Value),
-            Int128.Max(Int128.Abs((Int128)to.Y.Value - from.Y.Value), Int128.Abs((Int128)to.Z.Value - from.Z.Value)));
-        var interval = Math.Max(1, m_cellSize.Value / 2);
-        var subdivisions = maximum / interval + (maximum % interval == 0 ? 0 : 1);
+        var maximum = Int128.Max(x: Int128.Abs(value: (((Int128)to.X.Value) - from.X.Value)),
+            y: Int128.Max(x: Int128.Abs(value: (((Int128)to.Y.Value) - from.Y.Value)), y: Int128.Abs(value: (((Int128)to.Z.Value) - from.Z.Value))));
+        var interval = Math.Max(val1: 1, val2: (m_cellSize.Value / 2));
+        var subdivisions = ((maximum / interval) + (((maximum % interval) == 0) ? 0 : 1));
+
         if (subdivisions > maximumSubdivisions) {
             return false;
         }
-        var count = Math.Max(1, checked((int)subdivisions));
-        for (var index = 0; index < count; index++) {
+        var count = Math.Max(val1: 1, val2: checked((int)subdivisions));
+
+        for (var index = 0; (index < count); index++) {
             SegmentAxisBounds(from.X.Value, to.X.Value, index, count, clearance.Value, out var minX, out var maxX);
             SegmentAxisBounds(from.Y.Value, to.Y.Value, index, count, clearance.Value, out var minY, out var maxY);
             SegmentAxisBounds(from.Z.Value, to.Z.Value, index, count, clearance.Value, out var minZ, out var maxZ);
-            if (!IsMediumBox(field, minX, minY, minZ, maxX, maxY, maxZ)) {
+            if (!IsMediumBox(field: field, maxX: maxX, maxY: maxY, maxZ: maxZ, minX: minX, minY: minY, minZ: minZ)) {
                 return false;
             }
         }
@@ -732,15 +730,15 @@ public sealed class FieldLattice {
 
     private static void SegmentAxisBounds(long from, long to, int piece, int count, long clearance, out Int128 minimum, out Int128 maximum) {
         // Keep the segment parameter rational until the final outward round. Multiplication is at most 96 bits.
-        var delta = (Int128)to - from;
-        var first = (Int128)from * count + delta * piece;
-        var second = first + delta;
-        var low = Int128.Min(first, second);
-        var high = Int128.Max(first, second);
-        minimum = low / count - (low % count < 0 ? 1 : 0) - clearance;
-        maximum = high / count + (high % count > 0 ? 1 : 0) + clearance;
-    }
+        var delta = (((Int128)to) - from);
+        var first = ((((Int128)from) * count) + (delta * piece));
+        var second = (first + delta);
+        var low = Int128.Min(x: first, y: second);
+        var high = Int128.Max(x: first, y: second);
 
+        minimum = (((low / count) - (((low % count) < 0) ? 1 : 0)) - clearance);
+        maximum = (((high / count) + (((high % count) > 0) ? 1 : 0)) + clearance);
+    }
     // Every voxel layer the box actually spans is checked on its own value: a dry cap between wet layers must
     // still refuse. Only the TOP visited layer is special: a field's free surface (value * heightScale over the
     // origin) is unbounded by its own topology's layer count — the same reach TryBodyCellOf admits for reaction
@@ -748,28 +746,33 @@ public sealed class FieldLattice {
     // layer's value against the box's true top rather than the layer's own slab top; every layer below it must
     // be wet clear to ITS own slab top, since the box continues past it regardless of what lies above.
     private bool IsMediumBox(int field, Int128 minX, Int128 minY, Int128 minZ, Int128 maxX, Int128 maxY, Int128 maxZ) {
-        if ((uint)field >= (uint)m_isMedium.Length || !m_isMedium[field]) { return false; }
+        if ((((uint)field) >= ((uint)m_isMedium.Length)) || !m_isMedium[field]) { return false; }
         minX -= m_origin.X.Value; maxX -= m_origin.X.Value;
         minY -= m_origin.Y.Value; maxY -= m_origin.Y.Value;
         minZ -= m_origin.Z.Value; maxZ -= m_origin.Z.Value;
         var size = m_cellSize.Value;
-        if (minX < 0 || minY < 0 || minZ < 0 || maxX >= (Int128)size * m_width ||
-            maxY > m_bodyCouplingCeiling.Value || maxZ >= (Int128)size * m_depth) { return false; }
-        var x0 = (int)(minX / size); var x1 = (int)(maxX / size);
-        var z0 = (int)(minZ / size); var z1 = (int)(maxZ / size);
-        var y0 = (int)Int128.Min(minY / size, m_layers - 1);
-        var y1 = (int)Int128.Min(maxY / size, m_layers - 1);
-        for (var z = z0; z <= z1; z++) {
-            for (var y = y0; y <= y1; y++) {
-                var requiredHeight = (y == m_layers - 1) ? maxY : Int128.Min(maxY, (Int128)(y + 1) * size);
-                for (var x = x0; x <= x1; x++) {
-                    var value = m_values[field][CellIndex(x, y, z)];
-                    if (value <= FixedQ4816.Zero || requiredHeight > (value * m_heightScale[field]).Value) { return false; }
+
+        if ((minX < 0) || (minY < 0) || (minZ < 0) || (maxX >= (((Int128)size) * m_width)) ||
+            (maxY > m_bodyCouplingCeiling.Value) || (maxZ >= (((Int128)size) * m_depth))) { return false; }
+        var x0 = ((int)(minX / size)); var x1 = ((int)(maxX / size));
+        var z0 = ((int)(minZ / size)); var z1 = ((int)(maxZ / size));
+        var y0 = ((int)Int128.Min(x: (minY / size), y: (m_layers - 1)));
+        var y1 = ((int)Int128.Min(x: (maxY / size), y: (m_layers - 1)));
+
+        for (var z = z0; (z <= z1); z++) {
+            for (var y = y0; (y <= y1); y++) {
+                var requiredHeight = ((y == (m_layers - 1)) ? maxY : Int128.Min(x: maxY, y: (((Int128)(y + 1)) * size)));
+
+                for (var x = x0; (x <= x1); x++) {
+                    var value = m_values[field][CellIndex(x: x, y: y, z: z)];
+
+                    if ((value <= FixedQ4816.Zero) || (requiredHeight > (value * m_heightScale[field]).Value)) { return false; }
                 }
             }
         }
         return true;
     }
+
     /// <summary>Resolves a declared field's index by name.</summary>
     /// <param name="name">The field name.</param>
     /// <param name="field">The field index.</param>
@@ -818,7 +821,6 @@ public sealed class FieldLattice {
 
         return best;
     }
-
     /// <summary>Writes one whole-field pass of drawn cell values — <paramref name="raw"/> holds one raw
     /// <see cref="FixedQ4816"/> value per cell in cell-index order — then reapplies every later authored paint for
     /// the same field, preserving document order. Every changed cell is marked for the next snapshot delta.</summary>
@@ -862,6 +864,7 @@ public sealed class FieldLattice {
             }
         }
     }
+
     /// <summary>Gets the lattice's width in cells.</summary>
     public int Width => m_width;
     /// <summary>Gets the lattice's depth in cells.</summary>
@@ -903,8 +906,7 @@ public sealed class FieldLattice {
                 field: field,
                 value: value
             );
-        }
-        else {
+        } else {
             m_values[field][cell] = value;
             m_valueRevisions[field]++;
         }
@@ -1508,7 +1510,7 @@ public sealed class FieldLattice {
 
         ClearDeltas();
         m_fullResync = true;
-        for (var field = 0; field < m_valueRevisions.Length; field++) { m_valueRevisions[field]++; }
+        for (var field = 0; (field < m_valueRevisions.Length); field++) { m_valueRevisions[field]++; }
         m_revision++;
     }
     /// <summary>Describes the lattice for a console read-back.</summary>

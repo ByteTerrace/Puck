@@ -6,6 +6,7 @@ using Microsoft.Extensions.Configuration;
 using System.Net;
 using System.Net.Http.Json;
 using Puck.Azure.Functions.Middleware;
+using Puck.Azure.Functions.Utilities;
 
 namespace Puck.Azure.Functions.HttpTriggers;
 
@@ -13,9 +14,7 @@ public sealed class SelfOnboard(
     IConfiguration configuration,
     IDataProtectionProvider dataProtectionProvider,
     IHttpClientFactory httpClientFactory
-)
-{
-    private const string ActorsBaseUrlKey = "Onboarding:ActorsBaseUrl";
+) {
     private const string MigratingState = "Migrating";
     private const string NotOnboardedState = "NotOnboarded";
     private const string OnboardingState = "Onboarding";
@@ -28,27 +27,6 @@ public sealed class SelfOnboard(
         string? FaultReason
     );
 
-    // App-only tokens (e.g. the Front Door origin identity, which the worker's JwtBearer
-    // fallback accepts on anonymous edge requests) carry no scope claim; onboarding must
-    // only ever run for a delegated user principal.
-    private static string? GetDelegatedUserObjectId(FunctionContext functionContext) {
-        var user = functionContext
-            .GetHttpContext()!
-            .User;
-        var hasScopes = user
-            .Claims
-            .Any(predicate: static claim =>
-                ("scp" == claim.Type) ||
-                ("http://schemas.microsoft.com/identity/claims/scope" == claim.Type)
-            );
-
-        return hasScopes
-            ? user
-                .Identity
-                ?.Name
-                ?.ToLowerInvariant()
-            : null;
-    }
     private static async Task<HttpResponseData> CreateStateResponseAsync(
         HttpRequestData httpRequestData,
         string state,
@@ -66,14 +44,8 @@ public sealed class SelfOnboard(
 
         return response;
     }
-
     private HttpClient CreateActorsClient() =>
         httpClientFactory.CreateClient(name: "Actors");
-    private string GetActorsBaseUrl() =>
-        configuration
-            .GetValue<string>(key: ActorsBaseUrlKey)
-            ?.TrimEnd('/')
-            ?? throw new InvalidOperationException(message: $"The \"{ActorsBaseUrlKey}\" configuration value is required.");
 
     [FeatureGate(features: nameof(SelfOnboard))]
     [Function(name: nameof(SelfOnboard))]
@@ -87,7 +59,7 @@ public sealed class SelfOnboard(
     ) {
         var cancellationToken = functionContext.CancellationToken;
         var httpContext = functionContext.GetHttpContext()!;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
@@ -99,7 +71,7 @@ public sealed class SelfOnboard(
         );
         var actorResponse = await CreateActorsClient().PostAsJsonAsync(
             cancellationToken: cancellationToken,
-            requestUri: $"{GetActorsBaseUrl()}/users/{userObjectId}/ensure-provisioned",
+            requestUri: $"{configuration.GetRequiredActorsBaseUrl()}/users/{userObjectId}/ensure-provisioned",
             value: new {
                 assertionExpiresAt = DateTimeOffset.UtcNow.Add(timeSpan: escrow.TokenDiscriminator.TimeToLive),
                 protectedAssertion = escrow.Value,
@@ -135,7 +107,6 @@ public sealed class SelfOnboard(
             ),
         };
     }
-
     [FeatureGate(features: nameof(SelfOnboard))]
     [Function(name: nameof(SelfOnboardStatus))]
     public async Task<HttpResponseData> SelfOnboardStatus(
@@ -147,7 +118,7 @@ public sealed class SelfOnboard(
         FunctionContext functionContext
     ) {
         var cancellationToken = functionContext.CancellationToken;
-        var userObjectId = GetDelegatedUserObjectId(functionContext: functionContext);
+        var userObjectId = functionContext.GetDelegatedUserObjectId();
 
         if (userObjectId is null) {
             return httpRequestData.CreateResponse(statusCode: HttpStatusCode.Forbidden);
@@ -155,7 +126,7 @@ public sealed class SelfOnboard(
 
         var actorState = await CreateActorsClient().GetFromJsonAsync<ActorProvisioningState>(
             cancellationToken: cancellationToken,
-            requestUri: $"{GetActorsBaseUrl()}/users/{userObjectId}/provisioning-state"
+            requestUri: $"{configuration.GetRequiredActorsBaseUrl()}/users/{userObjectId}/provisioning-state"
         );
 
         return await CreateStateResponseAsync(

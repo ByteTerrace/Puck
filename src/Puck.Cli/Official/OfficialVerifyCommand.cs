@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -11,63 +12,33 @@ namespace Puck.Cli.Official;
 
 // The `puck official verify` verb: re-hashes and re-checks a puck.official.v1 tree's own claims, so a mirrored or
 // hand-edited tree is caught before a client trusts it. Reads only — never writes.
-// Exit 0 every check passed, 1 one or more checks failed (every discrepancy named), 2 usage error or an unreadable
-// path.
+// Exit 0 every check passed, 1 one or more checks failed (every discrepancy named), 2 an unreadable path.
 internal static class OfficialVerifyCommand {
-    private const string HelpText =
-        """
-        puck official verify — re-hash and re-check a puck.official.v1 tree
+    public static Command Create() {
+        var baseOption = new Option<string>(name: "--base") { Description = "The official tree's root.", Required = true };
+        var channelOption = new Option<string>(name: "--channel") { Description = "The channel to verify.", Required = true };
+        var expectCommitOption = new Option<string?>(name: "--expect-commit") { Description = "Refuse unless build.commit equals this." };
+        var command = new Command(description: """
+            Re-hash and re-check a puck.official.v1 tree's own claims. Reads only — never writes.
 
-        Usage: puck official verify --base <dir> --channel <name> [--expect-commit <hex>]
+            Checks: every object the manifest names re-hashes and re-sizes to what it claims; every document/composed
+            pin recomputes to what WorldDefinitionFileSource.ComputeContentHash mints for that object's own bytes; every
+            asset row's pin recomputes to its family's own canonical document hash; the world schema bundle's own
+            x-puck.commit equals build.commit; and builds/<commit>/manifest.json is byte-identical to the channel
+            manifest.
 
-        Required:
-          --base <dir>          the official tree's root
-          --channel <name>      the channel to verify
+            Exit codes: 0 every check passed, 1 one or more checks failed (every discrepancy named), 2 an unreadable
+            path.
+            """, name: "verify") { baseOption, channelOption, expectCommitOption };
 
-        Options:
-          --expect-commit <hex> refuse unless build.commit equals this
-          -h, --help            this text
+        command.SetAction(action: parseResult => Run(baseDirectory: parseResult.GetRequiredValue(option: baseOption), channel: parseResult.GetRequiredValue(option: channelOption), expectCommit: parseResult.GetValue(option: expectCommitOption)));
 
-        Checks: every object the manifest names re-hashes and re-sizes to what it claims; every document/composed
-        pin recomputes to what WorldDefinitionFileSource.ComputeContentHash mints for that object's own bytes; every
-        asset row's pin recomputes to its family's own canonical document hash; the world schema bundle's own
-        x-puck.commit equals build.commit; and builds/<commit>/manifest.json is byte-identical to the channel
-        manifest.
+        return command;
+    }
 
-        Exit codes: 0 every check passed, 1 one or more checks failed (every discrepancy named), 2 usage error or an
-        unreadable path.
-        """;
-
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Value(name: "base").Value(name: "channel").Value(name: "expect-commit");
-
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"official verify: {scanner.Error}");
-
-            return 2;
-        }
-
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.Out.WriteLine(value: HelpText);
-
-            return 0;
-        }
-
-        var baseDirectory = scanner.Get(name: "base");
-        var channel = scanner.Get(name: "channel");
-        var missing = new List<string>();
-
-        if (baseDirectory is null) { missing.Add(item: "--base"); }
-        if (channel is null) { missing.Add(item: "--channel"); }
-
-        if (missing.Count > 0) {
-            Console.Error.WriteLine(value: $"official verify: missing required argument(s): {string.Join(separator: ", ", values: missing)}.");
-
-            return 2;
-        }
-
-        var root = Path.GetFullPath(path: baseDirectory!);
-        var manifestPath = Path.Combine(path1: root, path2: channel!, path3: "manifest.json");
+    private static int Run(string baseDirectory, string channel, string? expectCommit) {
+        var root = Path.GetFullPath(path: baseDirectory);
+        var manifestPath = Path.Combine(path1: root, path2: channel, path3: "manifest.json");
 
         if (!File.Exists(path: manifestPath)) {
             Console.Error.WriteLine(value: $"official verify: no manifest at '{manifestPath}'.");
@@ -89,7 +60,7 @@ internal static class OfficialVerifyCommand {
 
         var problems = new List<string>();
 
-        if ((scanner.Get(name: "expect-commit") is { Length: > 0 } expectCommit) && !string.Equals(a: manifest.Build.Commit, b: expectCommit, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if ((expectCommit is { Length: > 0 }) && !string.Equals(a: manifest.Build.Commit, b: expectCommit, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             problems.Add(item: $"build.commit '{manifest.Build.Commit}' does not match --expect-commit '{expectCommit}'.");
         }
 

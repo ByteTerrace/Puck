@@ -36,14 +36,12 @@ internal static class FormatFileProject {
             // once in the project, regardless of which helpers a particular file app imports.
             items.Add(content: new XElement(name: "Compile", content: new XAttribute(name: "Remove", value: "@(Compile->HasMetadata('Link'))")));
 
-            // These are the same linked BCL sources the repository gives real file apps. Local copies
-            // let the semantic phases see them without expanding the selected write set.
-            foreach (var name in new[] { "RepositoryPaths.cs", "AutomationProcess.cs" }) {
-                var helper = Path.Combine(path1: repository, path2: "build", path3: name);
+            // The same linked source the repository gives file apps, copied locally so the semantic
+            // phases see it without expanding the selected write set.
+            const string Helper = "RepositoryPaths.cs";
 
-                if (Path.GetFileName(path: source) != name) {
-                    File.Copy(sourceFileName: helper, destFileName: Path.Combine(path1: scratch, path2: name), overwrite: true);
-                }
+            if (Path.GetFileName(path: source) != Helper) {
+                File.Copy(destFileName: Path.Combine(path1: scratch, path2: Helper), overwrite: true, sourceFileName: Path.Combine(path1: repository, path2: "build", path3: Helper));
             }
             document.Root!.Add(content: items);
             document.Root.Add(content: new XElement(name: "PropertyGroup", content: new XElement(content: "false", name: "PublishAot")));

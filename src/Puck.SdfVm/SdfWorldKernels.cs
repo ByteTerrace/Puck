@@ -1,25 +1,20 @@
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The compiled compute kernels of the SDF world pipeline, in chain order: <c>sdf-sky.comp</c> (the sky pre-pass —
-/// fills every source pixel with the authored sky before any tile is culled, dispatched directly against Stage 1's
-/// own bindings array, so a beam-culled tile's compositor copy is never stale device memory),
-/// <c>sdf-beam.comp</c> (tile-cull cone-march prepass), <c>sdf-instance-cull.comp</c> (the per-tile instance-mask
-/// pass — its own kernel so its cell walk's register footprint never taxes the cone march's occupancy),
-/// <c>sdf-cull-args.comp</c> (GPU-written indirect dispatch args: the surviving-tile bbox), <c>sdf-world-views.comp</c>
-/// (per-view render, dispatched indirectly from those args) plus its core-ops compiled variant
-/// <c>sdf-world-views-core.comp</c> (the exotic-ISA strip <see cref="SdfWorldEngine.UploadProgram"/> selects per
-/// program — see <see cref="SdfViewsKernelVariant"/>), and <c>sdf-world-composite.comp</c> (source-agnostic region
-/// composite). One backend's set — SPIR-V for Vulkan, DXIL for Direct3D 12; <see cref="Load(string)"/> reads whichever
-/// the extension selects from the deployed assets.
+/// The compiled compute kernels of the SDF world pipeline. Frame upload precedes sky, instance-mask culling,
+/// beam cone marching, indirect-argument generation, primary traversal, views shading, and composition. Views has
+/// full, folds, and core variants selected from the program's operations by <see cref="SdfViewsKernelVariants"/>. Brick baking and
+/// upload run separately when requested. One backend's set uses SPIR-V for Vulkan or DXIL for Direct3D 12;
+/// <see cref="Load(string)"/> reads the selected extension from the deployed assets.
 /// </summary>
 /// <param name="Sky">The sky pre-pass kernel.</param>
 /// <param name="Beam">The tile-cull prepass kernel.</param>
 /// <param name="InstanceCull">The per-tile instance-mask kernel.</param>
 /// <param name="CullArgs">The cull-args reduction kernel.</param>
-/// <param name="Views">The Stage 1 per-view SDF kernel (the full-ISA reference variant).</param>
-/// <param name="ViewsCore">The Stage 1 core-ops variant (exotic op/shape cases compiled out).</param>
-/// <param name="ViewsFolds">The Stage 1 fold-ops variant (folds/scopes kept, the heavy warp/noise family compiled out).</param>
+/// <param name="Primary">The primary traversal kernel, writing hit records for the views pass.</param>
+/// <param name="Views">The per-view shading kernel (the full-ISA reference variant).</param>
+/// <param name="ViewsCore">The shading core-ops variant (exotic op/shape cases compiled out).</param>
+/// <param name="ViewsFolds">The shading fold-ops variant (folds/scopes kept, the heavy warp/noise family compiled out).</param>
 /// <param name="Composite">The Stage 2 source-agnostic compositor kernel.</param>
 /// <param name="BrickBake">The standalone carve-union brick baker (<c>sdf-brick-bake.comp</c>) — dispatched only when
 /// the engine provisions a brick pool.</param>
@@ -33,6 +28,7 @@ public readonly record struct SdfWorldKernels(
     ReadOnlyMemory<byte> Beam,
     ReadOnlyMemory<byte> InstanceCull,
     ReadOnlyMemory<byte> CullArgs,
+    ReadOnlyMemory<byte> Primary,
     ReadOnlyMemory<byte> Views,
     ReadOnlyMemory<byte> ViewsCore,
     ReadOnlyMemory<byte> ViewsFolds,
@@ -68,6 +64,7 @@ public readonly record struct SdfWorldKernels(
             CullArgs: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-cull-args.comp{bytecodeExtension}")),
             FrameUpload: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-frame-upload.comp{bytecodeExtension}")),
             InstanceCull: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-instance-cull.comp{bytecodeExtension}")),
+            Primary: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-primary.comp{bytecodeExtension}")),
             Sky: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-sky.comp{bytecodeExtension}")),
             Views: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views.comp{bytecodeExtension}")),
             ViewsCore: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: $"sdf-world-views-core.comp{bytecodeExtension}")),

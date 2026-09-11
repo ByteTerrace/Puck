@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Immutable;
 
 using Puck.Maths;
+using Puck.Physics.Fields;
 
 namespace Puck.World;
 
@@ -495,26 +496,16 @@ public sealed class WorldFieldProgram {
 
         return dependencies.ToArray();
     }
-    private static bool Conflicts(WorldFieldNode earlier, WorldFieldNode later) => (
-        Intersects(left: earlier.FieldWrites, right: later.FieldReads) ||
-        Intersects(left: earlier.FieldWrites, right: later.FieldWrites) ||
-        Intersects(left: earlier.FieldReads, right: later.FieldWrites) ||
-        Intersects(left: earlier.StateWrites, right: later.StateReads) ||
-        Intersects(left: earlier.StateWrites, right: later.StateWrites) ||
-        Intersects(left: earlier.StateReads, right: later.StateWrites)
+    private static bool Conflicts(WorldFieldNode earlier, WorldFieldNode later) => ReadWriteHazard.Conflicts(
+        earlierFieldReads: earlier.FieldReads.AsSpan(),
+        earlierFieldWrites: earlier.FieldWrites.AsSpan(),
+        earlierStateReads: earlier.StateReads.AsSpan(),
+        earlierStateWrites: earlier.StateWrites.AsSpan(),
+        laterFieldReads: later.FieldReads.AsSpan(),
+        laterFieldWrites: later.FieldWrites.AsSpan(),
+        laterStateReads: later.StateReads.AsSpan(),
+        laterStateWrites: later.StateWrites.AsSpan()
     );
-    private static bool Intersects<T>(IReadOnlyList<T> left, IReadOnlyList<T> right)
-        where T : IEquatable<T> {
-        for (var leftIndex = 0; (leftIndex < left.Count); leftIndex++) {
-            for (var rightIndex = 0; (rightIndex < right.Count); rightIndex++) {
-                if (left[leftIndex].Equals(other: right[rightIndex])) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
     private static ImmutableArray<StateHandle> CanonicalStates(IEnumerable<WorldFieldScalarInput> inputs) => inputs
         .Where(predicate: static input => input.IsState)
         .Select(selector: static input => input.State)

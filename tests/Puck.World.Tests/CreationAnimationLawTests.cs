@@ -879,7 +879,7 @@ public sealed class CreationAnimationLawTests {
                 )
             )),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "rides the placement root's transform"
+            expectedSubstring: "a fold rides its parent's frame, never its own swing"
         );
     }
     /// <summary>Every <see cref="ActionFact"/> the simulation publishes has a <see cref="BodyFacts"/> bit of the

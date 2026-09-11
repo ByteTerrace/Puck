@@ -56,11 +56,234 @@
                     "null"
                   ]
                 },
-                "shininess": {
+                "roughness": {
                   "type": [
                     "number",
                     "null"
                   ]
+                },
+                "sheen": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "metal": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "coat": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "weathering": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "edge": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "lines": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "settle": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "reach": {
+                      "type": "number",
+                      "default": 1
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "scale": {
+                      "type": "number",
+                      "default": 1
+                    },
+                    "floor": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "lane": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "under": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "items": {
+                        "type": [
+                          "object",
+                          "null"
+                        ],
+                        "properties": {
+                          "threshold": {
+                            "type": "number"
+                          },
+                          "surface": {
+                            "type": "object",
+                            "properties": {
+                              "color": {
+                                "type": "string"
+                              },
+                              "roughness": {
+                                "type": "number"
+                              },
+                              "metal": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "color",
+                              "roughness",
+                              "metal"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "threshold",
+                          "surface"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "default": null
+                    },
+                    "deposit": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "color": {
+                          "type": "string"
+                        },
+                        "roughness": {
+                          "type": "number"
+                        },
+                        "metal": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "color",
+                        "roughness",
+                        "metal"
+                      ],
+                      "additionalProperties": false,
+                      "default": null
+                    }
+                  },
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "wrap": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "soften": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "bounce": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "inset": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "origin": true,
+                    "rotation": true,
+                    "depth": {
+                      "type": "number"
+                    },
+                    "ior": {
+                      "type": "number"
+                    },
+                    "paint": {
+                      "type": "object",
+                      "properties": {
+                        "stops": {
+                          "type": "array",
+                          "items": {
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "radius": {
+                                "type": "number"
+                              },
+                              "color": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "radius",
+                              "color"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "softness": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "modulationAmplitude": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "modulationFrequency": {
+                          "type": "number",
+                          "default": 0
+                        },
+                        "seed": {
+                          "type": "integer",
+                          "default": 0
+                        }
+                      },
+                      "required": [
+                        "stops"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "origin",
+                    "rotation",
+                    "depth",
+                    "ior",
+                    "paint"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
                 }
               },
               "required": [
@@ -95,7 +318,9 @@
                     "RoundCone",
                     "Plane",
                     "Cone",
-                    "Prism"
+                    "Prism",
+                    "Superellipsoid",
+                    "Sweep"
                   ]
                 },
                 "position": true,
@@ -119,6 +344,13 @@
                     "ChamferUnion",
                     "ChamferIntersection",
                     "ChamferSubtraction",
+                    "GrooveUnion",
+                    "PipeUnion",
+                    "Morph",
+                    "GrooveSubtraction",
+                    "PipeSubtraction",
+                    "StairsUnion",
+                    "StairsSubtraction",
                     null
                   ]
                 },
@@ -203,6 +435,9 @@
                           "spacing": true,
                           "limit": {
                             "default": null
+                          },
+                          "origin": {
+                            "default": null
                           }
                         },
                         "required": [
@@ -239,6 +474,9 @@
                               "integer",
                               "null"
                             ],
+                            "default": null
+                          },
+                          "origin": {
                             "default": null
                           }
                         },
@@ -413,7 +651,9 @@
                         "Trapezoid",
                         "RoundedRectangle",
                         "Polygon",
-                        "Ellipse"
+                        "Ellipse",
+                        "ChamferedRectangle",
+                        "Convex"
                       ]
                     },
                     "cornerRadius": {
@@ -423,10 +663,336 @@
                     "sides": {
                       "type": "integer",
                       "default": 6
+                    },
+                    "vertices": {
+                      "type": [
+                        "array",
+                        "null"
+                      ],
+                      "default": null
                     }
                   },
                   "required": [
                     "kind"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "lift": {
+                  "enum": [
+                    "Revolve",
+                    "Extrude",
+                    null
+                  ],
+                  "default": null
+                },
+                "rounding": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "panel": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "inset": {
+                      "type": "number"
+                    },
+                    "depth": {
+                      "type": "number"
+                    },
+                    "material": {
+                      "type": "integer"
+                    },
+                    "face": {
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "inset",
+                    "depth",
+                    "material"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "chamfer": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "trims": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "shape": {
+                        "type": "string"
+                      },
+                      "width": {
+                        "type": "number"
+                      },
+                      "material": {
+                        "type": "integer"
+                      },
+                      "inset": {
+                        "type": "number",
+                        "default": 0.003
+                      }
+                    },
+                    "required": [
+                      "shape",
+                      "width",
+                      "material"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": null
+                },
+                "detail": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "flare": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "amount": {
+                      "type": "number"
+                    },
+                    "bulge": {
+                      "type": "number"
+                    },
+                    "span": {
+                      "type": "number"
+                    },
+                    "top": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "axis": {
+                      "type": "integer",
+                      "default": 1
+                    },
+                    "startScale": {
+                      "type": "number",
+                      "default": 1
+                    }
+                  },
+                  "required": [
+                    "amount",
+                    "bulge",
+                    "span"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "exponent": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "secondary": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "bumps": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "center": true,
+                      "radii": true,
+                      "push": true
+                    },
+                    "required": [
+                      "center",
+                      "radii",
+                      "push"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "default": null
+                },
+                "shear": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "linear": {
+                      "type": "number"
+                    },
+                    "quadratic": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "cubic": {
+                      "type": "number",
+                      "default": 0
+                    },
+                    "target": {
+                      "type": "integer",
+                      "default": 0
+                    },
+                    "driver": {
+                      "type": "integer",
+                      "default": 1
+                    }
+                  },
+                  "required": [
+                    "linear"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "curve": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "a": true,
+                    "b": true,
+                    "c": true,
+                    "radiusStart": {
+                      "type": "number"
+                    },
+                    "radiusEnd": {
+                      "type": "number"
+                    },
+                    "bulge": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "strands": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "twist": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "strandOffset": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "a",
+                    "b",
+                    "c",
+                    "radiusStart",
+                    "radiusEnd"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "erode": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "lane": {
+                      "type": "integer"
+                    },
+                    "from": {
+                      "type": "number"
+                    },
+                    "to": {
+                      "type": "number"
+                    },
+                    "noise": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    }
+                  },
+                  "required": [
+                    "lane",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false,
+                  "default": null
+                },
+                "cells": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "frequency": {
+                      "type": "number"
+                    },
+                    "amplitude": {
+                      "type": "number"
+                    },
+                    "seed": {
+                      "type": "integer"
+                    },
+                    "mode": {
+                      "enum": [
+                        "F1",
+                        "F2MinusF1"
+                      ]
+                    },
+                    "randomness": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "frequency",
+                    "amplitude",
+                    "seed",
+                    "mode",
+                    "randomness"
                   ],
                   "additionalProperties": false,
                   "default": null
@@ -1109,6 +1675,155 @@
                 "chain",
                 "tip",
                 "target"
+              ],
+              "additionalProperties": false
+            },
+            "default": null
+          },
+          "volumes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "position": true,
+                "rotation": true,
+                "halfExtent": true,
+                "ramp": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "density": {
+                        "type": "number"
+                      },
+                      "color": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "density",
+                      "color"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "parent": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "axis": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "width": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "speed": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "seed": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "steps": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "intensity": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "extinction": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "pulseAmplitude": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "pulseFrequency": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "intensityLane": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "coverage": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "softness": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "isKnownKind": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "position",
+                "rotation",
+                "halfExtent",
+                "ramp"
               ],
               "additionalProperties": false
             },

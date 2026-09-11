@@ -1250,6 +1250,41 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        var studyNames = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var studies = views.Studies;
+
+        for (var index = 0; (index < studies.Count); index++) {
+            var study = studies[index];
+            var path = $"views.studies[{index}]";
+
+            if (study is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (!SafeName.TryParse(candidate: study.Name, name: out _, reason: out var nameReason)) {
+                errors.Add(item: $"{path}.name {nameReason}");
+            } else if (!studyNames.Add(item: study.Name)) {
+                errors.Add(item: $"{path}.name '{study.Name}' is duplicated.");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: study.Source)) {
+                errors.Add(item: $"{path}.source is required.");
+            }
+
+            if (
+                (study.Camera is { } studyCamera) &&
+                !cameras.Contains(item: studyCamera)
+            ) {
+                errors.Add(item: $"{path}.camera '{studyCamera}' names no camera row.");
+            }
+
+            if (!float.IsFinite(f: study.TimeScale) || (study.TimeScale < 0f)) {
+                errors.Add(item: $"{path}.timeScale {study.TimeScale} must be finite and non-negative.");
+            }
+        }
+
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         var layouts = views.Layouts;
 
@@ -1316,10 +1351,20 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 if (
+                    (slot.Camera is not null) &&
+                    (slot.Study is not null)
+                ) {
+                    errors.Add(item: $"{slotPath} must author at most one of camera/study, never both.");
+                } else if (
                     (slot.Camera is { } camera) &&
                     !cameras.Contains(item: camera)
                 ) {
                     errors.Add(item: $"{slotPath}.camera '{camera}' names no camera row.");
+                } else if (
+                    (slot.Study is { } study) &&
+                    !studyNames.Contains(item: study)
+                ) {
+                    errors.Add(item: $"{slotPath}.study '{study}' names no views.studies row.");
                 }
             }
         }

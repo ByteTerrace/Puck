@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -44,30 +45,6 @@ namespace Puck.Cli.Citations;
 // or the enumeration boot/build refused, 3 the enumeration is provably incomplete and nothing was reported
 // against it.
 internal static class CitationsCommand {
-    private const string HelpText =
-        """
-        puck citations — check cited verb tokens against vocabularies swept from the code
-
-        Usage: puck citations [options]
-
-        Options:
-          --enumeration <path>  The console verb list, one name per line, as the runtime `help`
-                                enumerates them. Absent, this verb builds Puck.World (Release) and
-                                boots it headless and windowed, piping `help` over stdin to each and
-                                unioning the two vocabularies — there is no default file.
-          -h, --help            This text.
-
-        Scans .claude/skills/**/*.md for `backticked` tokens and src/**/*.cs for <c>…</c> tokens,
-        keeps those shaped like a console verb, and resolves each against: the enumeration, verb
-        names spelled literally in registrations, every other verb-shaped string literal in src/ (a
-        refusal door, a HUD binding token — names the code really knows), and every world-document
-        field path the generated section schemas declare (`storage.userId`).
-
-        Exits 3 without reporting if a literally-registered verb is missing from the enumeration:
-        that proves the enumeration under-reports the live surface, and reporting citations against
-        an incomplete vocabulary produces confident accusations of correct documentation.
-        """;
-
     // The families the console actually uses. A dotted token outside them is some other kind of name and
     // is not this verb's business.
     private static readonly Regex Family = new(
@@ -99,27 +76,34 @@ internal static class CitationsCommand {
         options: RegexOptions.Compiled,
         pattern: @"""([a-z][A-Za-z0-9]*(?:\.[a-z][A-Za-z0-9-]*)+)""");
 
-    public static int Run(string[] args) {
-        var scanner = new ArgScanner().Flag(name: "h").Flag(name: "help").Value(name: "enumeration");
+    public static Command Create() {
+        var enumerationOption = new Option<string?>(name: "--enumeration") {
+            Description = "The console verb list, one name per line, as the runtime `help` enumerates them. Absent, this verb builds Puck.World (Release) and boots it headless and windowed, piping `help` over stdin to each and unioning the two vocabularies — there is no default file.",
+        };
+        var command = new Command(description: """
+            Check cited verb tokens against vocabularies swept from the code.
 
-        if (!scanner.Parse(args: args)) {
-            Console.Error.WriteLine(value: $"citations: {scanner.Error}");
-            Console.Error.WriteLine(value: HelpText);
+            Scans .claude/skills/**/*.md for `backticked` tokens and src/**/*.cs for <c>…</c> tokens,
+            keeps those shaped like a console verb, and resolves each against: the enumeration, verb
+            names spelled literally in registrations, every other verb-shaped string literal in src/ (a
+            refusal door, a HUD binding token — names the code really knows), and every world-document
+            field path the generated section schemas declare (`storage.userId`).
 
-            return 2;
-        }
+            Exits 3 without reporting if a literally-registered verb is missing from the enumeration:
+            that proves the enumeration under-reports the live surface, and reporting citations against
+            an incomplete vocabulary produces confident accusations of correct documentation.
+            """, name: "citations") { enumerationOption };
 
-        if (scanner.Has(name: "h") || scanner.Has(name: "help")) {
-            Console.WriteLine(value: HelpText);
+        command.SetAction(action: parseResult => Run(enumerationPath: parseResult.GetValue(option: enumerationOption)));
 
-            return 0;
-        }
+        return command;
+    }
 
+    private static int Run(string? enumerationPath) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root)) {
             return 2;
         }
 
-        var enumerationPath = scanner.Get(name: "enumeration");
         HashSet<string> enumerated;
         string enumerationSource;
 
@@ -202,7 +186,6 @@ internal static class CitationsCommand {
 
         return 1;
     }
-
     // Every citation whose token resolves in no vocabulary, in file then line order.
     private static List<Citation> Scan(string root, IReadOnlyList<string> sourceFiles, HashSet<string> enumerated, HashSet<string> literals) {
         var unresolved = new List<Citation>();

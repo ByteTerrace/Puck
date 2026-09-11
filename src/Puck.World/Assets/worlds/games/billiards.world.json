@@ -392,7 +392,7 @@
         "palette": [
           {
             "color": "state.billiardsColors.ball",
-            "shininess": 60,
+            "roughness": 0.522,
             "specular": 0.4
           }
         ],
@@ -427,7 +427,7 @@
         "palette": [
           {
             "color": "state.billiardsColors.tray",
-            "shininess": 5,
+            "roughness": 0.891,
             "specular": 0.05
           }
         ],

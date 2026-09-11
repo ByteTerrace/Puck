@@ -153,6 +153,7 @@ any non-`float` type by return value. `pass.Config` reads the live values back.
 | `FullscreenPassNode` / `IFullscreenPassServices` | The node that runs a graphics set as one pass over an inner `IRenderNode`; its GPU seam. |
 | `IShaderModuleLoader` / `ShaderModuleLoader` / `ShaderStageInfo` / `ShaderStage` | Per-stage bytecode loading with content-hash caching. |
 | `ProbeKindManifest` / `ProbeKindCatalog` | A `puck.probe.v1` probe kind and the shipped kinds under a directory tree, by id. |
+| `ManifestCatalog<TManifest>` | The suffix-scanning, id-indexed discovery both catalogs derive from. |
 
 ## 👁️ Probe kinds (`puck.probe.v1`)
 
@@ -254,13 +255,72 @@ image terms, in `faerie`'s `paintingX0..paintingY3` config order, so a
 `marker` probe's channels bind directly onto a `faerie` probe's painting
 quad — retroreflective tape on a real wall becomes a tracked painting frame.
 
+## 🎨 Studies (`Puck.Shaders.Study`)
+
+A study is a Shadertoy-dialect source — `void mainImage(out vec4 fragColor,
+in vec2 fragCoord)`, reading `iResolution`/`iTime`/`iTimeDelta`/`iFrame`/
+`iMouse`/`iDate` — compiled against Puck's own toolchain rather than
+`build/Shaders.targets`, since GLSL never reaches `dxc` directly:
+`glslang`/`glslangValidator` (GLSL to SPIR-V), `spirv-cross` (SPIR-V to
+HLSL), then `dxc` (HLSL to DXIL, `cs_6_6`). `StudyPrelude.Text`/`Postlude`
+wrap the author's source into a COMPUTE kernel — 8×8 workgroups writing one
+`rgba8` storage image at binding 0, the same-device general-layout image a
+hosted child owes the world compositor — with a 112-byte `PuckStudy`
+push-constant block (the C# mirror is `StudyPushConstants`; both must move
+together field-for-field), `#define`s that alias the `iXxx` names onto it,
+and a fixed `main()` that calls `mainImage` once per pixel with Shadertoy's
+bottom-left, pixel-centred `fragCoord` (row 0 of the image is the top of the
+pane, so the prelude flips Y). Under `#define PUCK_STUDY 1` a study can also
+read `iCameraPos`/`iCameraTarget`/`iCameraUp`/`iCameraFov` — Puck's own
+paired camera, absent from stock Shadertoy; `iCameraFov` is 0 (vectors zero)
+when the host pairs no camera, the signal a study branches on to keep its
+own `iMouse` orbit. No `iChannelN` texture input in v1;
+`StudyShaderCompiler.Compile` refuses one by name, quoting the source line,
+before any tool runs.
+
+```csharp
+using Puck.Shaders.Study;
+
+var compiler = new StudyShaderCompiler(cacheDirectory: cacheDirectory, toolchainDirectory: null);
+StudyProgram program = compiler.Compile(name: "moth-study", sourcePath: glslPath, sourceText: File.ReadAllText(glslPath));
+
+if (program.IsError) {
+    foreach (var diagnostic in program.Diagnostics) { Console.Error.WriteLine($"{glslPath}:{diagnostic.Line}: {diagnostic.Message}"); }
+} else {
+    // program.Spirv / program.Dxil are the compute kernel StudyPassNode dispatches.
+}
+```
+
+`Compile` never throws for a mistake in the author's own source — a failed
+compile comes back as a `StudyProgram` with empty bytecode and at least one
+`StudyDiagnostic` with `IsError` true, `Line` already mapped past the
+prelude back onto the author's file. It throws `StudyToolMissingException`
+only when a tool itself cannot be found. Tool discovery takes an explicit
+directory (constructor argument, or `puck shaders study --toolchain`); with
+none, each tool is looked up by bare name through the OS's own executable
+search — never an environment variable, not even `VULKAN_SDK`. A successful
+compile is cached under `cacheDirectory`, keyed by a hash of the prelude
+plus the author's source, so a repeat `Compile` of byte-identical text skips
+every tool. `puck shaders study <glsl> --out <dir> [--name] [--toolchain]`
+runs the same compiler from the command line, writing `<name>.comp.spv` and
+`<name>.comp.dxil` and printing every diagnostic as `<file>:<line>:
+<message>`; exit 1 on an error diagnostic. `StudyPassNode` is the render-side
+consumer — one compute dispatch per frame over its own storage image through
+`IGpuComputeServices`, holding a placeholder kernel up during the first
+compile so a study slot is never a black pane.
+
 ## 🧪 Verification
 
 `dotnet test tests/Puck.Shaders.Tests -c Release`: the packing law against
 the compiled fixture, manifest loading and refusals, config binding and
-schema emission, catalog lookup, `FullscreenPassNode.TrySetConfig`, and the
-same for `ProbeKindManifest`/`ProbeKindCatalog`. `puck parity` holds the
-film-grain pass to cross-backend agreement on the real windowed game.
+schema emission, catalog lookup, `FullscreenPassNode.TrySetConfig`, the same
+for `ProbeKindManifest`/`ProbeKindCatalog`, and `StudyShaderCompiler` —
+compiling the shipped Moth study end to end, an undeclared-symbol error
+mapped back to its source line, the `iChannel` refusal, and a cache hit
+invoking no tool. The toolchain-dependent cases skip (naming the tool and
+directory searched) rather than fail when `glslang`/`spirv-cross`/`dxc`
+aren't on the search path. `puck parity` holds the film-grain pass to
+cross-backend agreement on the real windowed game.
 
 ## 📦 Packaging
 

@@ -52,18 +52,6 @@ public sealed record TrustListEntry(
     TimeSpan? RootBindingMaximumAge = null,
     TimeSpan? SubjectBindingMaximumAge = null
 ) {
-    private static void ValidateOptionalDuration(TimeSpan? value, string name) {
-        if (
-            (value is not null) &&
-            ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
-        ) {
-            throw new ArgumentOutOfRangeException(
-                message: "An attestation maximum age must be positive and expressible as whole wire seconds.",
-                paramName: name
-            );
-        }
-    }
-
     /// <summary>
     /// Validates that <see cref="PublicKeySubjectPublicKeyInfo"/> actually hashes to <see cref="PinnedId"/>,
     /// that the pinned algorithm is a known signing algorithm (a sealing key can never admit a claim), that
@@ -74,17 +62,20 @@ public sealed record TrustListEntry(
     /// </summary>
     /// <exception cref="ArgumentException">The entry is not self-consistent.</exception>
     public void ValidateShape() {
-        ValidateOptionalDuration(
+        TrustList.ValidateOptionalDuration(
             value: MaximumAge,
-            name: nameof(MaximumAge)
+            name: nameof(MaximumAge),
+            subject: "maximum age"
         );
-        ValidateOptionalDuration(
+        TrustList.ValidateOptionalDuration(
             value: RootBindingMaximumAge,
-            name: nameof(RootBindingMaximumAge)
+            name: nameof(RootBindingMaximumAge),
+            subject: "maximum age"
         );
-        ValidateOptionalDuration(
+        TrustList.ValidateOptionalDuration(
             value: SubjectBindingMaximumAge,
-            name: nameof(SubjectBindingMaximumAge)
+            name: nameof(SubjectBindingMaximumAge),
+            subject: "maximum age"
         );
 
         if (!string.Equals(
@@ -210,19 +201,23 @@ public sealed record TrustList {
     ) {
         ValidateOptionalDuration(
             value: defaultMaximumAge,
-            name: nameof(defaultMaximumAge)
+            name: nameof(defaultMaximumAge),
+            subject: "maximum age"
         );
         ValidateOptionalDuration(
             value: defaultRootBindingMaximumAge,
-            name: nameof(defaultRootBindingMaximumAge)
+            name: nameof(defaultRootBindingMaximumAge),
+            subject: "maximum age"
         );
         ValidateOptionalDuration(
             value: defaultSubjectBindingMaximumAge,
-            name: nameof(defaultSubjectBindingMaximumAge)
+            name: nameof(defaultSubjectBindingMaximumAge),
+            subject: "maximum age"
         );
         ValidateOptionalDuration(
             value: replayAcceptanceHorizon,
-            name: nameof(replayAcceptanceHorizon)
+            name: nameof(replayAcceptanceHorizon),
+            subject: "replay horizon"
         );
 
         var seen = new HashSet<(string Domain, string? Subject, AttestationTrustMode Mode)>();
@@ -323,13 +318,16 @@ public sealed record TrustList {
     private static TrustListEntry CreateDetachedEntry(TrustListEntry entry) => entry with {
         PublicKeySubjectPublicKeyInfo = entry.PublicKeySubjectPublicKeyInfo.ToArray(),
     };
-    private static void ValidateOptionalDuration(TimeSpan? value, string name) {
+
+    // Both the entry's own durations and the verifier's defaults are wire-seconds windows, so one guard serves both;
+    // `subject` names which family the caller is validating so the refusal still says what it refused.
+    internal static void ValidateOptionalDuration(TimeSpan? value, string name, string subject) {
         if (
             (value is not null) &&
             ((value.Value <= TimeSpan.Zero) || ((value.Value.Ticks % TimeSpan.TicksPerSecond) != 0))
         ) {
             throw new ArgumentOutOfRangeException(
-                message: "An attestation maximum age or replay horizon must be positive and expressible as whole wire seconds.",
+                message: $"An attestation {subject} must be positive and expressible as whole wire seconds.",
                 paramName: name
             );
         }

@@ -98,6 +98,7 @@ var document = RecordingDocument.CreateDefault() with {
 if (!RecordingSession.TryCreate(
     options: new RecordingSessionOptions {
         AudioSourceFactory = audioSourceFactory,   // from Puck.Platform.AddRecordingPlatform
+        Clock = clock,                             // the RecordingSessionClock the same registration shares
         Document = document,
         SourceHeight = 1080,
         SourceWidth = 1920,

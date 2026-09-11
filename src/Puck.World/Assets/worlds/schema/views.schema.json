@@ -130,6 +130,14 @@
       "default": null,
       "title": "WorldCameraProgram"
     },
+    "studyToolchain": {
+      "description": "The directory holding the study compiler\u0027s glslang/spirv-cross/dxc tools, or null to resolve each by bare name through the ordinary executable search path \u2014 never an environment variable.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
     "layouts": {
       "description": "Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
       "type": "array",
@@ -160,7 +168,7 @@
             "description": "Gets the slots, in order. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
             "type": "array",
             "items": {
-              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera is null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect.",
+              "description": "One slot of a WorldViewLayout \u2014 a normalized rect (origin top-left, Y down) plus what fills it. A slot whose Camera and Study are both null shows the seat that owns this slot (the next joined seat in slot order); a named camera renders that authored view into the rect; a named study (a WorldViewStudy row) renders that compiled Shadertoy-dialect study into the rect instead \u2014 a slot names at most one of the two (the validator refuses both authored together).",
               "type": "object",
               "properties": {
                 "x": {
@@ -180,7 +188,14 @@
                   "type": "number"
                 },
                 "camera": {
-                  "description": "The authored camera name filling this slot, or null for the seat that owns it.",
+                  "description": "The authored camera name filling this slot, or null for the seat that owns it (or the study named by Study).",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "study": {
+                  "description": "The authored views.studies row name filling this slot with a compiled shader study, or null for an ordinary seat/camera slot. Mutually exclusive with Camera.",
                   "type": [
                     "string",
                     "null"
@@ -202,6 +217,50 @@
         "additionalProperties": false,
         "title": "WorldViewLayout"
       }
+    },
+    "studies": {
+      "description": "Gets the authored views.studies rows. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "One views.studies row \u2014 an authored Shadertoy-dialect fragment shader, compiled and rendered as a paired-camera child view a Study names (see the study push-constant/toolchain contract in AGENTS.md and the Puck.Shaders.Study family). This record is the authored intent only \u2014 compiling the source, swapping the live pipeline, and driving the per-frame push constants are console/composition-root concerns, not schema ones.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The study\u0027s stable name (a SafeName, unique within the section) \u2014 what a Study names and a study.* console verb addresses.",
+            "type": "string"
+          },
+          "source": {
+            "description": "The study\u0027s GLSL source file, resolved relative to the document\u0027s own directory (an author\u0027s document may point this at any path relative to itself \u2014 never the Content-copied BaseDirectory convention WorldAssetRowLoader\u0027s asset rows use).",
+            "type": "string"
+          },
+          "camera": {
+            "description": "The authored camera feeding the paired iCameraPos/iCameraTarget/iCameraUp/ iCameraFov push constants under PUCK_STUDY, or null for the study\u0027s own iMouse orbit (the Shadertoy-dialect default).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "timeScale": {
+            "description": "The study clock\u0027s rate multiplier \u2014 presentation only, never simulation state. Default 1; 0 freezes the clock.",
+            "type": "number",
+            "default": 1
+          }
+        },
+        "required": [
+          "name",
+          "source"
+        ],
+        "additionalProperties": false,
+        "title": "WorldViewStudy"
+      },
+      "default": null
     }
   },
   "required": [

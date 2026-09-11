@@ -14,19 +14,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 
 | Path | Kind | Role | Facet | Member |
 |---|---|---|---|---|
-| `render.lighting.sun.color` | State | Binding | Binding | `WorldRenderSun.Color` |
-| `render.lighting.ambient.color` | State | Binding | Binding | `WorldRenderAmbient.Color` |
-| `render.sky.zenith` | State | Binding | Binding | `WorldRenderSky.Zenith` |
-| `render.sky.horizon` | State | Binding | Binding | `WorldRenderSky.Horizon` |
-| `render.sky.ground` | State | Binding | Binding | `WorldRenderSky.Ground` |
-| `render.sky.clouds.color` | State | Binding | Binding | `WorldRenderSkyClouds.Color` |
+| `render.lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
+| `render.lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
+| `render.lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
+| `render.lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
+| `render.lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
+| `render.sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
+| `render.sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
 | `render.cycle.state` | State | Names | Read | `WorldRenderCycle.State` |
-| `render.cycle.keys[].lighting.sun.color` | State | Binding | Binding | `WorldRenderSun.Color` |
-| `render.cycle.keys[].lighting.ambient.color` | State | Binding | Binding | `WorldRenderAmbient.Color` |
-| `render.cycle.keys[].sky.zenith` | State | Binding | Binding | `WorldRenderSky.Zenith` |
-| `render.cycle.keys[].sky.horizon` | State | Binding | Binding | `WorldRenderSky.Horizon` |
-| `render.cycle.keys[].sky.ground` | State | Binding | Binding | `WorldRenderSky.Ground` |
-| `render.cycle.keys[].sky.clouds.color` | State | Binding | Binding | `WorldRenderSkyClouds.Color` |
+| `render.cycle.keys[].lighting.lights[][directional].color` | State | Binding | Binding | `WorldRenderLight.Directional.Color` |
+| `render.cycle.keys[].lighting.lights[][hemisphere].color` | State | Binding | Binding | `WorldRenderLight.Hemisphere.Color` |
+| `render.cycle.keys[].lighting.lights[][rim].color` | State | Binding | Binding | `WorldRenderLight.Rim.Color` |
+| `render.cycle.keys[].lighting.lights[][point].color` | State | Binding | Binding | `WorldRenderLight.Point.Color` |
+| `render.cycle.keys[].lighting.curvature.inkColor` | State | Binding | Binding | `WorldRenderCurvature.InkColor` |
+| `render.cycle.keys[].sky.layers[][gradient].stops[].color` | State | Binding | Binding | `WorldRenderSkyStop.Color` |
+| `render.cycle.keys[].sky.layers[][clouds].color` | State | Binding | Binding | `WorldRenderSkyLayer.Clouds.Color` |
+| `render.environment.softboxes[].color` | State | Binding | Binding | `WorldRenderSoftbox.Color` |
+| `render.environment.horizon.low` | State | Binding | Binding | `WorldRenderHorizon.Low` |
+| `render.environment.horizon.high` | State | Binding | Binding | `WorldRenderHorizon.High` |
 | `screens[].memory[].row` | State | Names | Read | `WorldScreenMemory.Row` |
 | `screens[].memory[].key` | State | Key | Read | `WorldScreenMemory.Key` |
 | `cameras[].rig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
@@ -1310,6 +1315,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.cameraRig.operations[][select].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
 | `views.cameraRig.operations[][select].default` | `WorldCameraProgramOp.Select.Default` | a camera program name |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
+| `views.studies[].name` | `WorldViewStudy.Name` | a view study name |
+| `views.studies[].source` | `WorldViewStudy.Source` | a view study's source is a document path |
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |
 | `hud.panels[].elements[].id` | `WorldHudElement.Id` | a HUD element id |

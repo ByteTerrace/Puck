@@ -46,36 +46,34 @@ Prefer the cheapest correct tool:
 
 ## C# file apps
 
-Standalone C# entry points use the same `.editorconfig`, compiler warnings, and
-Puck formatting conventions as the project-based code. Their file directives
-declare their dependencies; keep package versions pinned. `Directory.Build.props`
-links `build/RepositoryPaths.cs` and `build/AutomationProcess.cs` into these apps so they can locate checkout data
-at runtime without building Puck CLI. Invoke them from within the checkout.
-Compiler source paths can be remapped by CI and are not runtime file locations.
+Repository automation is Puck CLI: `puck --help` lists the verbs and
+`puck <verb> --help` its options. Deployment, publishing, QUIC probes, and WASM
+refresh are `puck` verbs, not scripts and not file apps.
 
-Compile an app without executing its operational code:
+`src/Puck.Azure.Resources/bootstrap.cs` is the repository's one C# file app, an
+identity-team operation run outside CI. It uses the same `.editorconfig`,
+compiler warnings, and Puck formatting conventions as the project-based code;
+its file directives declare its dependencies, so keep package versions pinned.
+`Directory.Build.props` links `build/RepositoryPaths.cs` into it so it can locate
+checkout data at runtime without building Puck CLI. Invoke it from within the
+checkout. Compiler source paths can be remapped by CI and are not runtime file
+locations.
+
+Compile it without executing its operational code:
 
 ```sh
-dotnet build build/Azure.cs -c Release
+dotnet build src/Puck.Azure.Resources/bootstrap.cs -c Release
 ```
-
-Run a safe verification entry point separately when one exists:
-
-```sh
-dotnet run -c Release --file build/Azure.cs -- --help
-```
-
-Deployment, publishing, QUIC probes, and WASM refresh commands are operational
-actions, so a formatting check should compile them without running them.
 
 Use `puck format . -Files files.json` with a JSON array of repository-relative
-paths, such as `["build/Azure.cs"]`. The CLI converts each standalone app to a
-disposable SDK project, preserves its references and linked helpers, compiles
-and formats the copy, then copies back only the selected source with its file
-directives restored. `-WhatIf` and `-Verify` leave the original source untouched.
-Ordinary project files still need their owning projects restored and built.
-See [automatic PR formatting](ci.md#automatic-pr-formatting) for the CI bot and
-the fork-PR patch path. Never run a repository-wide sweep to fix one entry point.
+paths, such as `["src/Puck.Azure.Resources/bootstrap.cs"]`. The CLI converts a
+standalone app to a disposable SDK project, preserves its references and linked
+helpers, compiles and formats the copy, then copies back only the selected source
+with its file directives restored. `-WhatIf` and `-Verify` leave the original
+source untouched. Ordinary project files still need their owning projects restored
+and built. See [automatic PR formatting](ci.md#automatic-pr-formatting) for the CI
+bot and the fork-PR patch path. Never run a repository-wide sweep to fix one entry
+point.
 
 ## Verification
 
@@ -177,20 +175,16 @@ see its project README.
 
 ### Performance changes
 
-**There is no way to score engine performance today, and no code in the build
-that could.** `Puck.Bench` was quarantined to `experimental/Puck.Bench` on
-2026-08-02 — it had been compiling on every build while ZERO projects referenced
-it: nothing implemented its scene controller, nothing registered its
-`bench.list`/`bench.run`/`bench.abort`/`bench.sweep` verbs. Its host, the
-headless `--bench` entry point, and the suite registration went with `Puck.Demo`;
-the plan that scheduled re-homing them and the benchmark plan itself were
-deleted. So the suite, the scoring formula, and the reference configuration are
-not written down anywhere.
+There is no maintained cross-engine benchmark score. `Puck.Bench` remains
+quarantined under `experimental/`; do not build or revive its old suite.
 
-**Treat every engine-performance claim as unmeasurable.** Do not quote historical
-numbers as current — they were taken on a machine and a suite nothing in the tree
-can reproduce. If performance work becomes necessary, the honest first step is
-building an instrument in a real project, not reviving a quarantined one.
+For a live World workload, use `world.timing on`, wait for rendered frames,
+then sample `world.gpu` and `world.fps`. `world.budget` distinguishes live
+program size from reserved capacity. Compare the same document, camera,
+resolution, quality settings, backend and build configuration before and after
+the change. Report these conditions and repeated samples with the result;
+GPU-pass time alone is not the delivered frame rate. See
+[World graphics options](../src/Puck.World/README.md#graphics-options).
 
 ### Browser engine changes (`Puck.World.Browser`)
 
@@ -264,12 +258,10 @@ the command line; see their READMEs):
 
 | Variable | Purpose |
 |---|---|
-| `PUCK_RAY_QUERY` | Permit or deny the ray-query path. |
 | `PUCK_GENLOCK=0` | Disable the launcher genlock control law. The document equivalent is `host.genlock`. |
 | `PUCK_PRESENT_TIMING` | Log measured present intervals. |
 | `PUCK_TEST_DEVICE_LOSS=<seconds>` | Request synthetic device loss for live verification. |
 | `PUCK_D3D12_DEBUG` | Opt in to the Direct3D 12 debug layer. |
-| `PUCK_CAPTURE_FRAME=<number>` | Delay one-shot capture for a world-document run. |
 | `PUCK_FLAGSHIPS_REGENERATE=1` | Regenerate committed flagship creation documents. |
 | `PUCK_AGB_BIOS`, `PUCK_ARES_COSIM`, `PUCK_AGB_FULLBOOT`, `PUCK_AGS_TRACE`, `PUCK_AGB_SUITE_FOCUS` | Read only by the Advanced battery's diagnostic modes (lockstep co-simulation, full-boot renders, AGS tracing, suite focus); the battery itself takes every input on the command line. |
 
@@ -425,7 +417,7 @@ all verification work here. Each keeps one compressed instance as evidence.
 - `*Options` denotes configuration-bound data. `*CliSeams` owns a command-line
   surface that must stay out of the main composition method.
 - Command-module conventions are documented on `ICommandModule`; screen claim
-  arbitration is documented on `ScreenSlotLedger`; GPU-host ordering is
+  arbitration is documented on `WorldScreenBinder`; GPU-host ordering is
   documented on `GpuHostComposition`.
 - CA1502, CA1505, and CA1506 are suggestion-level design signals. Simplify a
   design when they identify real coupling; do not add facades solely to change

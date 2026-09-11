@@ -61,8 +61,8 @@ void writeInstanceMaskSummary(uint maskBase, uint maskWordCount) {
 // accumulation array: a dynamically indexed uint[SDF_MAX_INSTANCES/32] local allocates 512 B of thread scratch for
 // EVERY invocation, and the measured occupancy loss dwarfed the few dozen buffer RMWs a tile's passing instances
 // cost. Two sources, each setting a bit by the SAME sdfInstancePassesTileCone test the flat loop uses:
-//   (1) the ALWAYS-tested list — dynamic and unmaskable instances the frozen grid cannot bin (an unmaskable instance's
-//       1e30 bound passes every tile, so it just sets its bit; a parked one is rejected inside the test).
+//   (1) the ALWAYS-tested list — unmaskable and oversized bounds, plus dynamic instances in the frozen program grid.
+//       The frame grid bins ordinary dynamic bounds. An unmaskable bound passes every tile; parked bounds are rejected.
 //   (2) the grid cells the tile's cone FOOTPRINT overlaps — a conservative swept-cone rasterization CLAMPED to the
 //       ray∩grid interval. The march parameter is first clipped against the grid AABB inflated by the largest query
 //       pad (chord*tFar + footprintPad) via the robust slabs method — a cone that misses the grid laterally walks ZERO

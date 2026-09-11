@@ -4,6 +4,23 @@ Puck addresses a blob by an object ID and a relative key. The host chooses the
 storage target; the same routed store supports local directories and Azure Blob
 Storage. Callers do not need to know where a blob lives.
 
+## Route an oid to its storage account
+
+`IPartitionResolver` answers which storage account owns a user's container.
+`DefaultPartitionResolver` runs `Puck.Maths`' `MonotonicPartitioner` over
+`PartitioningOptions`, so the silo, the edge, and the browser's WASM build all
+land on the same account without coordinating; the monotonic invariant means
+raising `Count` only migrates the users who fall into a new bucket.
+
+`PartitioningOptions.AnchorPartition` is the exception to routing: a user's
+published `public/` content lives in their oid-named container on that partition
+whatever their home partition is, so published URLs survive a migration.
+
+The resolver reports where a user *should* live for the current partition count.
+During a migration the recorded home and the computed partition differ and the
+data is still in the home, so a caller that must reach real bytes resolves
+through the owning grain rather than through this.
+
 ## Give callers a namespace
 
 Keep the routed store, target, and journal address in the composition root.

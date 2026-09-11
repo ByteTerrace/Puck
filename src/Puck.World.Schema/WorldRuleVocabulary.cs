@@ -396,6 +396,7 @@ public static class WorldRuleVocabulary {
             $"{WorldRuleFacts.DistancePrefix}<a>:<b>",
             $"{WorldRuleFacts.LineOfSightPrefix}<a>:<b>",
             $"{WorldRuleFacts.UprightPrefix}<bodyRef>",
+            $"{WorldRuleFacts.FactPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.IdentityPrefix}<bodyRef>:<fact>",
             $"{WorldRuleFacts.NavigationPrefix}<bodyRef>:<facet>",
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
@@ -480,6 +481,14 @@ public static class WorldRuleVocabulary {
                     throw new RuleException(refusal: WorldRuleRefusal.SpatialChannelMalformed, ruleName: ruleName, detail: $"'{name}' does not spell '{WorldRuleFacts.UprightPrefix}<bodyRef>' ({WorldRuleCompileContext.BodyRefVocabulary})");
                 }
                 fact = new UprightOperand(bodyA: world.ResolveBodyRef(tokens: tokens, start: 0, ruleName: ruleName, channel: name));
+            } else if (name.StartsWith(value: WorldRuleFacts.FactPrefix, comparisonType: StringComparison.Ordinal)) {
+                RuleCompiler.RefuseKeyOnReservedChannel(key: key, ruleName: ruleName, name: name, keyFieldLabel: site.KeyFieldLabel);
+                var tokens = name[WorldRuleFacts.FactPrefix.Length..].Split(separator: ':');
+                var width = WorldRuleCompileContext.BodyRefTokenWidth(tokens: tokens, start: 0);
+                if ((tokens.Length != (width + 1)) || !BodyFactVocabulary.TryResolve(name: tokens[width], gate: out var factBit) || (factBit == BodyFacts.None)) {
+                    throw new RuleException(refusal: WorldRuleRefusal.BodyFactMalformed, ruleName: ruleName, detail: $"'{name}' does not spell '{WorldRuleFacts.FactPrefix}<bodyRef>:<fact>' ({WorldRuleCompileContext.BodyRefVocabulary}, then a BodyFacts name)");
+                }
+                fact = new BodyFactOperand(body: world.ResolveBodyRef(tokens: tokens, start: 0, ruleName: ruleName, channel: name), fact: factBit);
             } else if (name.StartsWith(value: WorldRuleFacts.IdentityPrefix, comparisonType: StringComparison.Ordinal)) {
                 RuleCompiler.RefuseKeyOnReservedChannel(key: key, ruleName: ruleName, name: name, keyFieldLabel: site.KeyFieldLabel);
                 var tokens = name[WorldRuleFacts.IdentityPrefix.Length..].Split(separator: ':');

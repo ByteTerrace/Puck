@@ -52,7 +52,7 @@
             "const": "anchored"
           },
           "anchor": {
-            "$ref": "./common.schema.json#/$defs/WorldAnchor",
+            "$ref": "./common.schema.json#/$defs/WorldAnchorNonNullable",
             "description": "What the speaker rides (see WorldAnchor)."
           },
           "offset": {

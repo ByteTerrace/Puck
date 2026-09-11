@@ -24,8 +24,8 @@ public sealed partial class SdfWorldEngine {
 
         m_timingPools = timingPools;
     }
-    // sky → barrier → mask → barrier → beam → barrier → cull-args → barrier + indirect-args transition → views
-    // (INDIRECT) → barrier → composite (INDIRECT), with the output handed off in its consumer layout.
+    // upload → sky → mask → beam → cull-args → primary → views → composite, with barriers between consumers.
+    // Primary and views share the indirect bbox; the output is handed off in its consumer layout.
     private void Record(uint viewportCount) {
         var recorder = m_gpu.ComputeRecorder;
         var commandBuffer = m_commandPools[m_currentSlot].CommandBufferHandle;
@@ -102,7 +102,7 @@ public sealed partial class SdfWorldEngine {
         }
 
         // FRAME-RING cross-frame gate: the GPU-written device-local scratch (tile / instance-mask / indirect-args /
-        // cull-bounds buffers, the per-view source textures) is SHARED across ring slots, so with FrameRingSize
+        // cull-bounds / primary-hit buffers, the per-view source textures) is SHARED across ring slots, so with FrameRingSize
         // frames in flight this frame's first write must order after the PREVIOUS frame's last read of that scratch —
         // an execution dependency on all prior compute (and the indirect-args fetch), queue-scoped like every Vulkan
         // barrier. This serializes GPU frames against each other (the natural order anyway — the ring overlaps CPU
@@ -424,7 +424,9 @@ public sealed partial class SdfWorldEngine {
                 sourceStageMask: GpuComputeStage.ComputeShader
             );
 
-            // Stage 1: render each viewport's SDF camera into its own source texture — dispatched INDIRECTLY from the
+            RecordPrimary(commandBuffer: commandBuffer, timingPool: timingPool);
+
+            // Stage 1: shade each viewport's primary hits into its own source texture — dispatched INDIRECTLY from the
             // GPU-computed surviving-tile bbox; the all-empty margins are never dispatched; the kernel offsets each
             // invocation by the bbox origin (binding 8). The pipeline is the variant UploadProgram selected for the LIVE
             // program (full ISA vs core-ops — the stripped cases are unreachable under core, so the field is the same;
@@ -473,7 +475,7 @@ public sealed partial class SdfWorldEngine {
 
             WriteTimingMark(
                 commandBuffer: commandBuffer,
-                queryIndex: 6,
+                queryIndex: 7,
                 timingPool: timingPool
             ); // close: Stage 1 views
 
@@ -487,7 +489,7 @@ public sealed partial class SdfWorldEngine {
                 sourceStageMask: GpuComputeStage.ComputeShader
             );
         } else {
-            // SKIPPED FRAME: no render passes ran, so close their five timing marks (queries 2..6) back-to-back — each
+            // SKIPPED FRAME: no render passes ran, so close their six timing marks (queries 2..7) back-to-back — each
             // reports ~0 ms, the honest cost of a skipped pass — and fall through to the composite. The retained tile
             // buffer + source textures (single, ring-shared, left in General by the previous rendered frame) are ordered
             // for this frame's composite reads by the top-of-frame cross-frame barrier, so no extra barrier is needed.
@@ -516,6 +518,11 @@ public sealed partial class SdfWorldEngine {
             WriteTimingMark(
                 commandBuffer: commandBuffer,
                 queryIndex: 6,
+                timingPool: timingPool
+            ); // close: primary traversal (skipped)
+            WriteTimingMark(
+                commandBuffer: commandBuffer,
+                queryIndex: 7,
                 timingPool: timingPool
             ); // close: Stage 1 views (skipped)
         }
@@ -570,7 +577,7 @@ public sealed partial class SdfWorldEngine {
 
         WriteTimingMark(
             commandBuffer: commandBuffer,
-            queryIndex: 7,
+            queryIndex: 8,
             timingPool: timingPool
         ); // close: Stage 2 composite
 

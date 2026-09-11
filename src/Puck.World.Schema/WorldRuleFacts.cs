@@ -92,6 +92,10 @@ public static class WorldRuleFacts {
     /// resolved cell. A body reference resolving to no live body reads <c>1</c> (perfectly upright) — the neutral
     /// value for an absent body, since nothing about "no body" should ever read as knocked over.</summary>
     public const string UprightPrefix = "$upright:";
+    /// <summary>The prefix; <c>$fact:&lt;bodyRef&gt;:&lt;fact&gt;</c> reads <c>1</c> while the named body's live
+    /// <c>BodyFacts</c> bit holds (<c>Grounded</c>, <c>Airborne</c>, <c>Rising</c>, <c>Falling</c>, …) and <c>0</c>
+    /// otherwise; a reference resolving to no live body reads <c>0</c>.</summary>
+    public const string FactPrefix = "$fact:";
     /// <summary>The reserved channel reading one fact on the identity a body drives under:
     /// <c>$identity:&lt;bodyRef&gt;:&lt;fact&gt;</c>, answered from the world's <see cref="WorldIdentityFactLane"/>.</summary>
     public const string IdentityPrefix = "$identity:";

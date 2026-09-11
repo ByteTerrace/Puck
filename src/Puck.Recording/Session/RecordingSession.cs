@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Puck.Abstractions.Capture;
 using Puck.Abstractions.Recording;
 using Puck.Recording.Audio;
@@ -34,11 +33,10 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
     private readonly RecordingClock m_clock;
     private readonly OverlayCompositor m_compositor;
     private readonly Thread? m_encodeThread;
-    private readonly double m_epochNanosecondsPerStopwatchTick;
-    private readonly long m_epochStopwatch;
     private readonly FrameSlotQueue? m_frameQueue;
     private readonly MatroskaMuxer m_muxer;
     private readonly FileStream m_output;
+    private readonly RecordingSessionClock m_sessionClock;
     private readonly bool m_stripAv1Td;
     private readonly IVideoEncoder? m_videoEncoder;
 
@@ -56,7 +54,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
     private readonly int m_videoWidth;
 
     private (long SessionNanoseconds, long SimNanoseconds) ComputeTimestamps(in CaptureFrame frame) {
-        var sessionNs = ((long)((Stopwatch.GetTimestamp() - m_epochStopwatch) * m_epochNanosecondsPerStopwatchTick));
+        // The same clock the audio sources stamp against, so video and audio share one epoch and one exact rescale.
+        var sessionNs = m_sessionClock.NowNanoseconds();
 
         if (!m_haveFirstTick) {
             m_haveFirstTick = true;
@@ -547,9 +546,8 @@ public sealed class RecordingSession : ICaptureSink, IAudioPacketSink {
         m_audioLane = audioLane;
         m_clock = document.Clock;
         m_compositor = new OverlayCompositor(overlays: (document.Overlays ?? []));
-        m_epochStopwatch = Stopwatch.GetTimestamp();
-        m_epochNanosecondsPerStopwatchTick = (((double)NanosecondsPerSecond) / Stopwatch.Frequency);
         m_muxer = muxer;
+        m_sessionClock = options.Clock;
         m_output = output;
         m_videoEncoder = videoEncoder;
         // The MF AV1 MFT emits a leading temporal-delimiter OBU per frame; strip it from the block payload for a

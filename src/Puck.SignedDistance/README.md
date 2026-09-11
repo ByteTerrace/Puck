@@ -21,10 +21,14 @@ shade it; this library never names a device, a window, or a shader.
 - *Deterministic to the bit:* the CPU evaluator is `FixedQ4816`/`FixedVector3`
   throughout, with no float, wall-clock, or RNG in its walk; identical ordered
   inputs return identical results on every machine.
-- *Sound instance culling:* bounded primitives contribute exact or conservative
-  bounds for `SdfProgram`'s packing pass. Shapes for which no finite sound bound
-  exists, including planes and the approximate ellipsoid path, deliberately stay
-  always-tested instead of claiming a false finite envelope.
+- *Sound instance culling:* geometric spheres narrow camera-tile candidates.
+  Per-query rejection needs a lower bound on the returned field as well;
+  approximate ellipsoids and unsupported expressions retain full evaluation
+  where a geometric sphere cannot prove that their distance loses.
+- *Mixed-scale spatial indexing:* `SdfInstanceGrid` separates unusually large
+  bounds from the fine grid before choosing its extent and query padding. A large
+  floor therefore cannot make every query scan a character-sized population.
+  The separate list still tests those bounds normally; it does not discard them.
 - *One fold, two readings:* an isometric domain operator is a point transform
   to a marcher and a set of rigid copies to anything that places geometry
   instead. `SdfDomainExpansion` derives the copies in fixed point, so an
@@ -40,10 +44,13 @@ what each one measures, so an authored scale of `(1,1,1)` is its unit size. It
 also answers whether a given scale emits at all —
 `SdfSolidGeometry.TryValidateScaledPrimitive` is the predicate a document
 validator asks before an authoring path reaches an emission that would throw.
+`Sweep` is the one member outside that unit-size law: its curve's own control
+points and radii already carry creation-unit dimensions directly (see
+`SdfSolidGeometry.SweepReach`), so only a uniform scale bakes onto it.
 
 `SdfProgramBuilder` builds an `SdfProgram` as an ordered stream of point
 transforms, field operations, shapes, and materials — reset/translate/rotate,
-union/subtraction/intersection blends (with smooth and chamfer variants),
+union/subtraction/intersection blends (with smooth, chamfer, and round seam variants),
 domain folds (repeat, wallpaper, polar repeat, symmetry planes), warps (bend,
 twist, log-spherical, cell jitter, displacement, domain warp), and the shape
 vocabulary (primitives, the 2D-primitive-lift family, glyphs, screen slabs,
@@ -62,6 +69,57 @@ half-extents), finite non-negative material values and instance bounds, finite
 screen origins, the screen frame's orthonormality, instance ranges that
 partition the instructions they claim rather than overlapping, and balanced
 one-deep field scopes that never cross an instance boundary.
+
+`SdfProgram.StepScale` is the global clamp. `FieldScopeClamps` separately
+reports every non-unit scale baked into `PopField`, with its instruction
+range, owning instance, and number of shapes sharing the bound. A global
+scale of one does not mean scopes are unclamped. These are conservative
+field bounds, not measured march counts or GPU time.
+
+`SdfProgram` also compiles eligible whole field scopes into shared part programs:
+short lists of primitive queries with separate pose and material bindings for
+each placement. Equal geometry shares the list even when those bindings differ.
+The first implementation accepts hard-union scopes whose leaves each reset the
+point, optionally select a dynamic pose, optionally apply one Scale, AxialProfile
+or Shear, then evaluate a shape. Internal blend order, participation flags and
+the scope's distance correction remain intact. Unsupported chains and Sweep
+retain the original instruction stream. Polygon identity includes its vertices,
+not its packed table address. The CPU evaluator continues to use the typed stream.
+
+Capacity probes use `PartCompilationWordCapacity`, which reserves room for part
+metadata at the probe's instruction and instance ceilings. `Words.Length` only
+describes the current representation: later geometry can share less, or qualify
+for compilation when the probe did not. The part table follows the existing
+payload tables; the instance-directory header's second lane points to it.
+
+Rigid hard-union Sweeps use the existing shape, segment and rigid-leaf sphere
+tests. Their spheres enclose the control-point hull, profile and strand orbit,
+plus the margin subtracted by the field. This bounds the evaluated candidate
+even when its closest-point approximation is imperfect. Margins above 16 retain
+full evaluation because Sweep caps its strand minimum at 1e9 before subtracting
+the margin. Both GPU walks bypass sphere rejection when the accumulator exceeds
+that cap. This changes culling metadata, not the curve, materials or step scale.
+
+Round seams use the existing smooth-radius lane: `GrooveUnion` carves the
+complement of sqrt(a²+b²)-r from the union, and `PipeUnion` adds that tube;
+`GrooveSubtraction` and `PipeSubtraction` do the same against `max(a, -b)`.
+Their derivative bounds compose as hypot(La,Lb) at each blend.
+
+`Morph` and the two `Stairs` blends compose only at a `PopField`. A morph reads
+its weight from an instance render lane through the same (lane, from, to)
+mapping `LaneErode` uses; this evaluator has no dynamic transform table, so it
+reads every lane as zero and a morphed scope resolves at the weight that lane
+value maps to. A stairs pop carries its integer step count in Data1.z; Data1.y
+is the analyzer's candidate scale on every pop.
+
+`CellDisplace` adds amplitude*(F-0.5) to the running field. A fixed 27-cell
+PCG3D search evaluates F1 or F2MinusF1, with conservative centered-randomness
+ceilings 0.46 and 0.20. The fixed-point evaluator shares feature identity and
+visit order with the shader. Its coordinate derivative is bounded separately
+from a primitive's distance correction; restore a rigid frame before relief
+when a preceding fold cannot supply a global continuous bound.
+[Shape authoring examples](../Puck.World.Authoring/README.md#round-seams-and-cellular-relief)
+show the higher-level scope and placement rules.
 
 ## 🔍 The CPU query layer (`Puck.SignedDistance.Queries`)
 
@@ -115,12 +173,25 @@ every op/shape is in the supported rigid subset — it throws naming the first
 excluded one rather than silently approximating. Excluded: `TransformDynamic`
 (no per-frame transform table in this evaluator's signature), the runtime-trig
 warps (`BendX/Y/Z`, `TwistY`, `LogSphere`, `CellJitter`, `RepeatPolar`,
-`Displace`, `DomainWarp`, `NoiseDisplace`), `WallpaperFold`, and the shapes needing runtime
+`Displace`, `DomainWarp`, `NoiseDisplace`, `FlareY`), `WallpaperFold`, and the shapes needing runtime
 transcendentals or texture sampling (`RegularPolygon`, `Star`, `Ellipse`,
 `Glyph`), plus `SampledRegion` (its brick pool is an engine resource unavailable
-to the headless evaluator). `RoundedRectangle`, `Repeat`/`RepeatLimited`/
-`SymmetryPlane`/`Elongate`/`Onion`/`Dilate` and isotropic `Scale` interpret
-directly as 1-Lipschitz operations.
+to the headless evaluator). `RoundedRectangle`, `ChamferedRectangle`,
+`Superellipsoid`, `ConvexPolygon`, `Sweep` (strands == 1 only — a strand count
+above 1 is render-only and refused for deterministic field contact by name),
+`Repeat`/`RepeatLimited`/`SymmetryPlane`/`Elongate`/`Onion`/`Dilate` and
+isotropic `Scale` interpret directly as 1-Lipschitz operations.
+
+A `ShapeBlend` instruction carrying `SdfInstruction.Detail` composes nothing —
+this evaluator has no shade-mode counterpart to the GPU's hit-only
+re-evaluation, so a detail shape (a shading-only seam or rivet) is simply
+absent from every field it walks; a program whose only shape is flagged
+`Detail` reads exactly as shape-free.
+
+`SdfInstruction.Secondary` is the opposite exclusion set (false marks a shape
+that skips only the GPU's soft-shadow/AO field walks) and has no counterpart
+here either — this evaluator has no shadow/AO concept, so it composes a
+non-secondary shape exactly like an ordinary one.
 
 `TryDistance` culls an instance (`SdfProgram.Instances`) whose whole compose
 chain is a plain `SdfBlendOp.Union`: its authored world-space bound proves the

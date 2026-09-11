@@ -189,10 +189,10 @@ WorldHostPresentation? presentationOverride = (parseResult.GetValue(option: head
 // by DI from the roster, population, frame source, render settings, and the world.quality verb; the resolved source is
 // registered so world.save knows its default target. Any path that will not load ends the boot here — a typo or missing
 // shipped document must never quietly run a different world.
-if (!WorldDefinitionLoader.TryResolve(
+if (!PuckWorldLoader.TryResolveWorld(
     explicitPath: parseResult.GetValue(option: worldOption),
-    source: out var worldSource,
-    failure: out var worldFailure
+    failure: out var worldFailure,
+    source: out var worldSource
 )) {
     Console.Error.WriteLine(value: worldFailure);
 

@@ -309,6 +309,114 @@
       "default": null,
       "title": "WorldRenderCycle"
     },
+    "environment": {
+      "description": "The analytic studio-reflection softboxes and horizon gradient a GGX specular lobe reflects. Optional; absent (no softboxes, a black horizon) contributes nothing to the shaded color.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "softboxes": {
+          "description": "The reflection softboxes, at most SdfEnvironment.MaxSoftboxes. Absent or empty contributes nothing.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "description": "One analytic studio-reflection softbox: a soft, angularly-extended highlight a GGX lobe catches in its mirror direction, widened by the surface\u0027s own roughness.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "direction": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                "description": "From a reflecting surface toward the softbox, any nonzero length (normalized before upload)."
+              },
+              "size": {
+                "$ref": "./common.schema.json#/$defs/DocumentVector2",
+                "description": "The angular half-extent (width, height) the falloff widens by, both strictly positive."
+              },
+              "color": {
+                "description": "BindableColor\u0027s grammar: the softbox\u0027s linear colour. Absent is white.",
+                "default": null,
+                "title": "BindableColor",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "weight": {
+                "description": "The strength. Absent is 1.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              },
+              "blur": {
+                "description": "Additional falloff softening, in the same units as Size. Absent is 0.",
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "default": null
+              }
+            },
+            "required": [
+              "direction",
+              "size"
+            ],
+            "additionalProperties": false,
+            "title": "WorldRenderSoftbox"
+          },
+          "default": null
+        },
+        "horizon": {
+          "description": "The reflection horizon gradient. Absent is black \u2014 contributes nothing.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "low": {
+              "description": "The ground-ward (direction.y = \u22121) colour. Absent is black.",
+              "default": null,
+              "title": "BindableColor",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "high": {
+              "description": "The sky-ward (direction.y = 1) colour. Absent is black.",
+              "default": null,
+              "title": "BindableColor",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldRenderHorizon"
+        }
+      },
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldRenderEnvironment"
+    },
+    "tonemap": {
+      "description": "The tonemap applied to the frame\u0027s final color. Optional; absent is None \u2014 the stylized shaded color, unchanged.",
+      "enum": [
+        "None",
+        "Filmic",
+        null
+      ],
+      "default": null,
+      "title": "WorldTonemap"
+    },
     "farDistance": {
       "description": "The far distance in world units: the depth at which every camera march ends \u2014 the far plane the renderer\u0027s fine march exits at, the reach of the beam\u0027s cone proofs, and the depth the fog and depth ramps are measured against. Geometry beyond it is never marched, so an infinite plane ends on a visible horizon curve at this depth unless the sky fog has absorbed it (render.sky.fogDensity). Optional; absent resolves to the engine\u0027s pinned 40 \u2014 exactly the value every world marched to before this field existed. Must lie within [MinFarDistance, MaxFarDistance]. Re-read on every definition revision (a world.row.set render lands on the next frame); world.budget echoes it with its derived costs.",
       "type": [

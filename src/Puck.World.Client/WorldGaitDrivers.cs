@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using Puck.Maths;
 using Puck.Physics.Motion;
@@ -116,7 +117,10 @@ public static class WorldGaitDrivers {
             var holds = GateHolds(
                 facts: facts,
                 gate: driver.When,
-                moving: moving
+                moving: moving,
+                definition: definition,
+                tick: tick,
+                bodyIndex: address.Index
             );
 
             var seconds = holds ? driver.BlendInSeconds : driver.BlendOutSeconds;
@@ -137,7 +141,8 @@ public static class WorldGaitDrivers {
                     definition: definition,
                     reference: driver.Signal!,
                     tick: tick,
-                    value: out var stateValue
+                    value: out var stateValue,
+                    bodyIndex: address.Index
                 ))
                     ? (driver.Cadence.Value * stateValue)
                     : 0f
@@ -328,32 +333,101 @@ public static class WorldGaitDrivers {
 
         return ((float)((double)sample.Position.Z));
     }
-    /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> numeric cell at a tick as a float.</summary>
+    /// <summary>The cell-key token a presentation state reference spells the wearing body's own index with:
+    /// <c>state.&lt;row&gt;.$body</c> reads the cell keyed by that body's 0-based index.</summary>
+    public const string BodyKeyToken = "$body";
+    /// <summary>Resolves a reference's cell key against the body reading it: every <see cref="BodyKeyToken"/> becomes
+    /// the body's decimal index.</summary>
+    /// <param name="key">The parsed key, or <see langword="null"/> for the slot cell.</param>
+    /// <param name="bodyIndex">The reading body's 0-based index, or negative for no body.</param>
+    /// <param name="resolved">The key to read.</param>
+    /// <returns><see langword="false"/> when the key names the body but no body is reading.</returns>
+    public static bool TryResolveBodyKey(string? key, int bodyIndex, out string? resolved) {
+        resolved = key;
+
+        if ((key is null) || !key.Contains(value: BodyKeyToken, comparisonType: StringComparison.Ordinal)) {
+            return true;
+        }
+
+        if (bodyIndex < 0) {
+            return false;
+        }
+
+        resolved = key.Replace(oldValue: BodyKeyToken, newValue: bodyIndex.ToString(provider: CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal);
+
+        return true;
+    }
+    /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> numeric cell at a tick as a float — the eased sample
+    /// when the cell carries a dynamics trait, else its stored value.</summary>
+    /// <param name="definition">The live definition.</param>
+    /// <param name="reference">The state reference.</param>
+    /// <param name="tick">The tick an advancing, cycling, or eased row is read at.</param>
+    /// <param name="value">The cell's value; zero when the cell is absent or not numeric.</param>
+    /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/> in the key.</param>
+    /// <returns><see langword="true"/> when a numeric cell answered.</returns>
+    public static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, out float value, int bodyIndex = -1) => TryReadStateNumber(
+        bodyIndex: bodyIndex,
+        definition: definition,
+        eased: true,
+        reference: reference,
+        tick: tick,
+        value: out value
+    );
+    /// <summary>Reads a <c>state.&lt;row&gt;[.&lt;key&gt;]</c> numeric cell's STORED value at a tick — the truth a rule
+    /// reads, never an eased sample.</summary>
     /// <param name="definition">The live definition.</param>
     /// <param name="reference">The state reference.</param>
     /// <param name="tick">The tick an advancing or cycling row is read at.</param>
     /// <param name="value">The cell's value; zero when the cell is absent or not numeric.</param>
+    /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/> in the key.</param>
     /// <returns><see langword="true"/> when a numeric cell answered.</returns>
-    public static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, out float value) {
+    public static bool TryReadStateTruth(WorldDefinition definition, string reference, ulong tick, out float value, int bodyIndex = -1) => TryReadStateNumber(
+        bodyIndex: bodyIndex,
+        definition: definition,
+        eased: false,
+        reference: reference,
+        tick: tick,
+        value: out value
+    );
+    private static bool TryReadStateNumber(WorldDefinition definition, string reference, ulong tick, bool eased, int bodyIndex, out float value) {
         value = 0f;
 
         if (
             !WorldColor.TryParseBinding(
-            key: out var key,
+            key: out var authoredKey,
             row: out var rowName,
             value: reference
         ) ||
-            !WorldStateReader.TryRead(
-            definition: definition,
-            key: key,
-            rawValue: out var raw,
-            row: out var row,
-            rowName: rowName,
-            text: out _,
-            tick: tick
-        ) ||
-            (raw is not { } bits)
+            !TryResolveBodyKey(
+            bodyIndex: bodyIndex,
+            key: authoredKey,
+            resolved: out var key
+        )
         ) {
+            return false;
+        }
+
+        var resolved = (eased
+            ? WorldStateReader.TryReadEased(
+                definition: definition,
+                key: key,
+                rawValue: out var raw,
+                row: out var row,
+                rowName: rowName,
+                text: out _,
+                tick: tick
+            )
+            : WorldStateReader.TryRead(
+                definition: definition,
+                key: key,
+                rawValue: out raw,
+                row: out row,
+                rowName: rowName,
+                text: out _,
+                tick: tick
+            ));
+
+        if (!resolved || (row is null) || (raw is not { } bits)) {
             return false;
         }
 
@@ -390,17 +464,23 @@ public static class WorldGaitDrivers {
     /// <param name="reference">The state reference.</param>
     /// <param name="tick">The tick an advancing or cycling row is read at.</param>
     /// <param name="value">The parsed point; zero when the cell is absent, not text, or not three numbers.</param>
+    /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/> in the key.</param>
     /// <returns><see langword="true"/> when a text cell parsed as three numbers.</returns>
     /// <remarks>Parses off the cell's own string rather than deserializing, so a per-frame read allocates
     /// nothing.</remarks>
-    public static bool TryReadStateVector(WorldDefinition definition, string reference, ulong tick, out Vector3 value) {
+    public static bool TryReadStateVector(WorldDefinition definition, string reference, ulong tick, out Vector3 value, int bodyIndex = -1) {
         value = Vector3.Zero;
 
         if (
             !WorldColor.TryParseBinding(
-            key: out var key,
+            key: out var authoredKey,
             row: out var rowName,
             value: reference
+        ) ||
+            !TryResolveBodyKey(
+            bodyIndex: bodyIndex,
+            key: authoredKey,
+            resolved: out var key
         ) ||
             !WorldStateReader.TryRead(
             definition: definition,
@@ -459,19 +539,44 @@ public static class WorldGaitDrivers {
         return true;
     }
     /// <summary>Returns whether a driver's gate holds — every token must, and an absent or empty gate is ungated.
-    /// The world validator refuses a token naming no fact before a document reaches here; one that still arrives
-    /// fails the conjunction, so the driver rests rather than running unconditionally.</summary>
+    /// A <c>state.&lt;row&gt;[.&lt;key&gt;]</c> token holds while the cell's STORED value is nonzero (the truth a rule
+    /// reads, never an eased sample). The world validator refuses a token naming no fact or row before a document
+    /// reaches here; one that still arrives fails the conjunction, so the driver rests rather than running
+    /// unconditionally.</summary>
     /// <param name="gate">The authored gate tokens.</param>
     /// <param name="facts">The body's sim facts this frame.</param>
     /// <param name="moving">Whether the body's eased speed is above <see cref="MovingSpeed"/>.</param>
+    /// <param name="definition">The live definition a state token reads, or <see langword="null"/> (a state token
+    /// then fails).</param>
+    /// <param name="tick">The tick a state token reads at.</param>
+    /// <param name="bodyIndex">The reading body's index, substituted for <see cref="BodyKeyToken"/>.</param>
     /// <returns><see langword="true"/> when every token holds.</returns>
-    public static bool GateHolds(IReadOnlyList<string>? gate, BodyFacts facts, bool moving) {
+    public static bool GateHolds(IReadOnlyList<string>? gate, BodyFacts facts, bool moving, WorldDefinition? definition = null, ulong tick = 0UL, int bodyIndex = -1) {
         if (gate is not { Count: > 0 } tokens) {
             return true;
         }
 
         for (var index = 0; (index < tokens.Count); index++) {
             var token = tokens[index];
+
+            if (CreationDriverDocument.IsStateSignal(signal: token)) {
+                if (
+                    (definition is null) ||
+                    !TryReadStateNumber(
+                    bodyIndex: bodyIndex,
+                    definition: definition,
+                    eased: false,
+                    reference: token,
+                    tick: tick,
+                    value: out var truth
+                ) ||
+                    (truth == 0f)
+                ) {
+                    return false;
+                }
+
+                continue;
+            }
 
             if (string.Equals(
                 a: token,

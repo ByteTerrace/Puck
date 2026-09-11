@@ -1,3 +1,4 @@
+using System.CommandLine;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
@@ -11,13 +12,31 @@ internal static class FormatCiCommand {
         && !path.Split('/').Any(predicate: static part => (part is "experimental" or "obj" or "bin" or "artifacts" or ".tmp" or ".git" or "node_modules" or "avm-temp" or "publish"))
         && !path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".g.cs")
         && !path.EndsWith(comparisonType: StringComparison.Ordinal, value: ".generated.cs"));
-    internal static async Task<int> RunAsync(string[] args) {
-        if ((args is not [var baseSha, var headSha, var output])
-            || !Regex.IsMatch(input: baseSha, pattern: "\\A[0-9a-f]{40}\\z")
-            || !Regex.IsMatch(input: headSha, pattern: "\\A[0-9a-f]{40}\\z")) {
-            Console.Error.WriteLine(value: "Usage: puck format ci <base-sha> <head-sha> <empty-output-directory>");
-            return 2;
-        }
+    internal static Command Create() {
+        var baseArgument = new Argument<string>(name: "base-sha") { Description = "The full 40-hex-digit commit the pull request is measured from." };
+        var headArgument = new Argument<string>(name: "head-sha") { Description = "The full 40-hex-digit commit the checkout must already be at." };
+        var outputArgument = new Argument<string>(name: "output") { Description = "A fresh output directory for files.json, format.patch, and format.json." };
+        var command = new Command(description: "Prepare a validated pull-request formatting artifact from a clean disposable checkout.", name: "ci") { baseArgument, headArgument, outputArgument };
+
+        command.Validators.Add(item: result => {
+            foreach (var argument in ((Argument<string>[])[baseArgument, headArgument])) {
+                var sha = result.GetValue(argument: argument);
+
+                if ((sha is null) || !Regex.IsMatch(input: sha, pattern: "\\A[0-9a-f]{40}\\z")) {
+                    result.AddError(errorMessage: $"<{argument.Name}> must be a full 40-hex-digit commit sha.");
+
+                    return;
+                }
+            }
+        });
+        command.SetAction(action: (parseResult, _) => RunAsync(
+            baseSha: parseResult.GetRequiredValue(argument: baseArgument),
+            headSha: parseResult.GetRequiredValue(argument: headArgument),
+            output: parseResult.GetRequiredValue(argument: outputArgument)
+        ));
+        return command;
+    }
+    internal static async Task<int> RunAsync(string baseSha, string headSha, string output) {
         try {
             var root = (RepositoryPaths.FindRoot() ?? throw new InvalidOperationException(message: "Run in a Puck checkout."));
 

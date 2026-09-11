@@ -170,7 +170,7 @@ public sealed partial class SdfProgramBuilder {
         // ShapeBlend uses, because the shader treats a POP as just another candidate through the shared blend tail.
         m_instructions.Add(item: new SdfInstruction(
             Blend: ((uint)scope.Blend),
-            Data0: default,
+            Data0: scope.Data0,
             Data1: new Vector4(
                 w: 0f,
                 x: MathF.Max(
@@ -178,7 +178,7 @@ public sealed partial class SdfProgramBuilder {
                     y: scope.Smooth
                 ),
                 y: 0f,
-                z: 0f
+                z: scope.StepCount
             ),
             Material: 0,
             Op: SdfOp.PopField,
@@ -186,6 +186,87 @@ public sealed partial class SdfProgramBuilder {
         ));
 
         return this;
+    }
+    /// <summary>Closes the scope and composes its field via linear morphing interpolation driven by an instance render lane.</summary>
+    /// <param name="laneIndex">The render lane index in [0, 3].</param>
+    /// <param name="from">The lane threshold for t = 0.</param>
+    /// <param name="to">The lane threshold for t = 1.</param>
+    public SdfProgramBuilder PopFieldMorph(int laneIndex, float from, float to) {
+        if (m_fieldScope is not { } scope) {
+            throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(value: laneIndex, paramName: nameof(laneIndex));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: laneIndex, other: 3, paramName: nameof(laneIndex));
+        RequireFinite(value: from, paramName: nameof(from), subject: "A morph from value");
+        RequireFinite(value: to, paramName: nameof(to), subject: "A morph to value");
+
+        if (from == to) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(to),
+                message: "A morph from/to pair must differ, or t = (lane - from) / (to - from) divides by zero."
+            );
+        }
+
+        m_fieldScope = (
+            SdfBlendOp.Morph,
+            0f,
+            scope.ShapeCountAtOpen,
+            new Vector4(x: ((float)(uint)laneIndex), y: from, z: to, w: 0f),
+            0f
+        );
+
+        return PopField();
+    }
+    /// <summary>Closes the scope and composes its field via continuous stairs union.</summary>
+    /// <param name="radius">The blend radius.</param>
+    /// <param name="steps">The integer step count (>= 1).</param>
+    public SdfProgramBuilder PopFieldStairsUnion(float radius, int steps) {
+        if (m_fieldScope is not { } scope) {
+            throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
+        }
+
+        RequireFinite(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+
+        if (steps < 1) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(steps), message: "A stairs blend step count must be at least 1.");
+        }
+
+        m_fieldScope = (
+            SdfBlendOp.StairsUnion,
+            radius,
+            scope.ShapeCountAtOpen,
+            default,
+            ((float)steps)
+        );
+
+        return PopField();
+    }
+    /// <summary>Closes the scope and composes its field via continuous stairs subtraction.</summary>
+    /// <param name="radius">The blend radius.</param>
+    /// <param name="steps">The integer step count (>= 1).</param>
+    public SdfProgramBuilder PopFieldStairsSubtraction(float radius, int steps) {
+        if (m_fieldScope is not { } scope) {
+            throw new InvalidOperationException(message: "PopField was called with no open field scope (unbalanced PushField/PopField).");
+        }
+
+        RequireFinite(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+
+        if (steps < 1) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(steps), message: "A stairs blend step count must be at least 1.");
+        }
+
+        m_fieldScope = (
+            SdfBlendOp.StairsSubtraction,
+            radius,
+            scope.ShapeCountAtOpen,
+            default,
+            ((float)steps)
+        );
+
+        return PopField();
     }
     /// <summary>Opens a scoped field accumulator (<see cref="SdfOp.PushField"/>): every accumulator-reading op emitted
     /// until the matching <see cref="PopField"/> — the intersection family, and the <see cref="Onion"/>/
@@ -202,6 +283,7 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="smooth">The smooth/chamfer radius of the <paramref name="compose"/> blend (ignored by the hard blends).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="smooth"/> is not finite, or
     /// <paramref name="compose"/> is not a defined <see cref="SdfBlendOp"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="compose"/> requires dedicated scope parameters.</exception>
     /// <exception cref="InvalidOperationException">The scope would nest deeper than <see cref="MaxFieldScopeDepth"/>.</exception>
     public SdfProgramBuilder PushField(SdfBlendOp compose = SdfBlendOp.Union, float smooth = 0f) {
         // PopField bakes MathF.Max(0f, smooth) onto the POP instruction, which absorbs a negative radius but not NaN.
@@ -217,6 +299,13 @@ public sealed partial class SdfProgramBuilder {
             paramName: nameof(compose)
         );
 
+        if (compose is SdfBlendOp.Morph or SdfBlendOp.StairsUnion or SdfBlendOp.StairsSubtraction) {
+            throw new ArgumentException(
+                message: $"Blend operation '{compose}' requires dedicated parameters; use PushFieldMorph or PushFieldStairs instead.",
+                paramName: nameof(compose)
+            );
+        }
+
         // The depth guard reads MaxFieldScopeDepth (rather than just testing m_fieldScope is not null) so raising the
         // cap past 1 stays a localized change to this field + guard (see m_fieldScope's doc).
         var openDepth = ((m_fieldScope is null)
@@ -228,7 +317,7 @@ public sealed partial class SdfProgramBuilder {
             throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
         }
 
-        m_fieldScope = (compose, smooth, m_shapeCount);
+        m_fieldScope = (compose, smooth, m_shapeCount, default, 0f);
 
         // A bare marker: the compose blend + smooth ride the POP instruction (a POP is the candidate), so the PUSH
         // carries no data — the shader only saves the accumulator and reseeds. Not routed through Transform() because
@@ -244,4 +333,99 @@ public sealed partial class SdfProgramBuilder {
 
         return this;
     }
+    /// <summary>Opens a field scope that will compose back into the parent via continuous linear morphing interpolation.</summary>
+    /// <param name="laneIndex">The render lane index in [0, 3].</param>
+    /// <param name="from">The lane threshold for t = 0.</param>
+    /// <param name="to">The lane threshold for t = 1.</param>
+    public SdfProgramBuilder PushFieldMorph(int laneIndex, float from, float to) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: laneIndex, paramName: nameof(laneIndex));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: laneIndex, other: 3, paramName: nameof(laneIndex));
+        RequireFinite(value: from, paramName: nameof(from), subject: "A morph from value");
+        RequireFinite(value: to, paramName: nameof(to), subject: "A morph to value");
+
+        if (from == to) {
+            throw new ArgumentOutOfRangeException(
+                paramName: nameof(to),
+                message: "A morph from/to pair must differ, or t = (lane - from) / (to - from) divides by zero."
+            );
+        }
+
+        var openDepth = ((m_fieldScope is null)
+            ? 0
+            : 1
+        );
+
+        if (openDepth >= MaxFieldScopeDepth) {
+            throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
+        }
+
+        m_fieldScope = (
+            SdfBlendOp.Morph,
+            0f,
+            m_shapeCount,
+            new Vector4(x: ((float)(uint)laneIndex), y: from, z: to, w: 0f),
+            0f
+        );
+
+        m_instructions.Add(item: new SdfInstruction(
+            Blend: 0,
+            Data0: default,
+            Data1: default,
+            Material: 0,
+            Op: SdfOp.PushField,
+            Shape: 0
+        ));
+
+        return this;
+    }
+    /// <summary>Opens a field scope that will compose back into the parent via continuous stairs.</summary>
+    /// <param name="radius">The blend radius.</param>
+    /// <param name="steps">The integer step count (>= 1).</param>
+    /// <param name="subtraction">Whether the stairs compose is subtraction (true) or union (false).</param>
+    public SdfProgramBuilder PushFieldStairs(float radius, int steps, bool subtraction = false) {
+        RequireFinite(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+        RequireNonNegative(value: radius, paramName: nameof(radius), subject: "A stairs blend radius");
+
+        if (steps < 1) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(steps), message: "A stairs blend step count must be at least 1.");
+        }
+
+        var openDepth = ((m_fieldScope is null)
+            ? 0
+            : 1
+        );
+
+        if (openDepth >= MaxFieldScopeDepth) {
+            throw new InvalidOperationException(message: $"PushField would nest a field scope deeper than the depth-{MaxFieldScopeDepth} cap. Close the open scope (PopField) before opening another.");
+        }
+
+        m_fieldScope = (
+            subtraction ? SdfBlendOp.StairsSubtraction : SdfBlendOp.StairsUnion,
+            radius,
+            m_shapeCount,
+            default,
+            ((float)steps)
+        );
+
+        m_instructions.Add(item: new SdfInstruction(
+            Blend: 0,
+            Data0: default,
+            Data1: default,
+            Material: 0,
+            Op: SdfOp.PushField,
+            Shape: 0
+        ));
+
+        return this;
+    }
+    /// <summary>Opens a field scope that will compose back into the parent via continuous stairs union.</summary>
+    /// <param name="radius">The blend radius.</param>
+    /// <param name="steps">The integer step count (>= 1).</param>
+    public SdfProgramBuilder PushFieldStairsUnion(float radius, int steps) =>
+        PushFieldStairs(radius: radius, steps: steps, subtraction: false);
+    /// <summary>Opens a field scope that will compose back into the parent via continuous stairs subtraction.</summary>
+    /// <param name="radius">The blend radius.</param>
+    /// <param name="steps">The integer step count (>= 1).</param>
+    public SdfProgramBuilder PushFieldStairsSubtraction(float radius, int steps) =>
+        PushFieldStairs(radius: radius, steps: steps, subtraction: true);
 }

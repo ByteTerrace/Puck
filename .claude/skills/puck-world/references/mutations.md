@@ -203,7 +203,7 @@ nested records, which are the authority:
 | Spawns | SetSpawns 8 |
 | Motion | SetMotion 9 |
 | Properties | SetProperty 10 |
-| Population | SetPopulationDefaults 11 |
+| Population | SetPopulationDefaults 11, SetPopulationDistribution 76, SetPopulationCensus 77 |
 | Render | SetRenderDefaults 12 |
 | Addons | UpsertAddon 13, RemoveAddon 14 |
 | Bindings | UpsertBindingOverlay 15, RemoveBindingOverlay 16 |
@@ -216,16 +216,16 @@ nested records, which are the authority:
 | Authoring | SetAuthoringDefaults 28 |
 | Collision | SetCollision 29 |
 | Host | SetHostDefaults 30 |
-| Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33 |
+| Views | SetViewDefaults 31, UpsertViewLayout 32, RemoveViewLayout 33, SetViewSeatRig 78, SetViewSeatControl 79 |
 | Looks | UpsertLook 34, RemoveLook 35, SetLookAssignment 36 |
 | Grants | UpsertGrant 39, RemoveGrant 40 |
 | Hud | UpsertHudPanel 41, RemoveHudPanel 42, UpsertHudElement 43, RemoveHudElement 44, SetHudDefaults 45 |
-| State | UpsertStateRow 46, RemoveStateRow 47 (whole row), UpsertStateCell 49, RemoveStateCell 50 (one cell), Generate 51 (one draw at a draw SITE) |
+| State | UpsertStateRow 46, RemoveStateRow 47 (whole row), UpsertStateCell 49, RemoveStateCell 50 (one cell), Generate 51 (one draw at a draw SITE), TransformState 75, Batch 81 |
 | InputHold | SetInputHold 48 |
 | Rules | UpsertWorldRule 52, RemoveWorldRule 53 |
 | Interactions | UpsertInteraction 54, RemoveInteraction 55 |
 | Groups | UpsertGroupKind 56, RemoveGroupKind 57, FormGroup 58, JoinGroup 59, LeaveGroup 60, KickMember 61, OfferOwnership 62, SettleOwnership 63 |
-| PlayerDefaults | SetPlayerDefaults 64 |
+| PlayerDefaults | SetPlayerDefaults 64, SetPlayerSeatLook 80 |
 | Dynamics | UpsertDynamics 71, RemoveDynamics 72 |
 | Curves | UpsertCurve 73, RemoveCurve 74 |
 
@@ -283,8 +283,10 @@ Rules the catalog encodes:
 
 ## Adding a mutation kind, end to end
 
-**FIRST — the catalog declares 68 kinds on a 128-bit lane (0–75 with 37/38 and
-65-70 retired).** Ordinals 76–127 are free; a colliding ordinal is still a boot failure, not an
+**FIRST — the catalog runs on a 128-bit lane; `puck search "\[MutationKind\(" src -M 0`
+against `WorldMutation.cs` gives the current kind count and declared ordinals (37/38 and
+65-70 are retired and never reused).** Ordinals above the highest declared one are free; a
+colliding ordinal is still a boot failure, not an
 option. A genuinely new kind is
 a SUBSTRATE decision, not a lane's, and must SURVIVE CONSOLIDATION REVIEW first:
 is this an existing kind's payload? Most proposals are — a new section reuses

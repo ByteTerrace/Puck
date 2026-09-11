@@ -7846,12 +7846,12 @@
         "palette": [
           {
             "color": "state.fishColors.body",
-            "shininess": 40,
+            "roughness": 0.613,
             "specular": 0.3
           },
           {
             "color": "state.fishColors.tail",
-            "shininess": 40,
+            "roughness": 0.613,
             "specular": 0.3
           }
         ],
@@ -8202,17 +8202,17 @@
         "palette": [
           {
             "color": "state.islandColors.meadow",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.04
           },
           {
             "color": "state.islandColors.plaza",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.08
           },
           {
             "color": "state.islandColors.soil",
-            "shininess": 6,
+            "roughness": 0.875,
             "specular": 0.03
           }
         ],
@@ -8285,12 +8285,12 @@
         "palette": [
           {
             "color": "state.islandColors.meadow",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.04
           },
           {
             "color": "state.islandColors.soil",
-            "shininess": 6,
+            "roughness": 0.875,
             "specular": 0.03
           }
         ],
@@ -8350,12 +8350,12 @@
         "palette": [
           {
             "color": "state.islandColors.rock",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.05
           },
           {
             "color": "state.islandColors.rockDeep",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.05
           }
         ],
@@ -8576,12 +8576,12 @@
         "palette": [
           {
             "color": "state.islandColors.rock",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.05
           },
           {
             "color": "state.islandColors.meadow",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.04
           }
         ],
@@ -8678,12 +8678,12 @@
         "palette": [
           {
             "color": "state.islandColors.rock",
-            "shininess": 6,
+            "roughness": 0.875,
             "specular": 0.05
           },
           {
             "color": "state.islandColors.rockDeep",
-            "shininess": 10,
+            "roughness": 0.823,
             "specular": 0.08
           }
         ],
@@ -8753,19 +8753,19 @@
         "palette": [
           {
             "color": "state.islandColors.archStone",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.2
           },
           {
             "color": "state.islandColors.archScreen",
             "emissive": 0.12,
-            "shininess": 24,
+            "roughness": 0.706,
             "specular": 0.4
           },
           {
             "color": "state.districtColors.dive",
             "emissive": 0.55,
-            "shininess": 18,
+            "roughness": 0.749,
             "specular": 0.3
           }
         ],
@@ -8904,19 +8904,19 @@
         "palette": [
           {
             "color": "state.islandColors.archStone",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.2
           },
           {
             "color": "state.islandColors.archScreen",
             "emissive": 0.12,
-            "shininess": 24,
+            "roughness": 0.706,
             "specular": 0.4
           },
           {
             "color": "state.districtColors.kart",
             "emissive": 0.55,
-            "shininess": 18,
+            "roughness": 0.749,
             "specular": 0.3
           }
         ],
@@ -9055,19 +9055,19 @@
         "palette": [
           {
             "color": "state.islandColors.archStone",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.2
           },
           {
             "color": "state.islandColors.archScreen",
             "emissive": 0.12,
-            "shininess": 24,
+            "roughness": 0.706,
             "specular": 0.4
           },
           {
             "color": "state.districtColors.jump",
             "emissive": 0.55,
-            "shininess": 18,
+            "roughness": 0.749,
             "specular": 0.3
           }
         ],
@@ -9206,19 +9206,19 @@
         "palette": [
           {
             "color": "state.islandColors.archStone",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.2
           },
           {
             "color": "state.islandColors.archScreen",
             "emissive": 0.12,
-            "shininess": 24,
+            "roughness": 0.706,
             "specular": 0.4
           },
           {
             "color": "state.districtColors.studio",
             "emissive": 0.55,
-            "shininess": 18,
+            "roughness": 0.749,
             "specular": 0.3
           }
         ],
@@ -9348,7 +9348,7 @@
         "palette": [
           {
             "color": "state.islandColors.plaza",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.08
           }
         ],
@@ -9383,17 +9383,17 @@
         "palette": [
           {
             "color": "state.islandColors.plaza",
-            "shininess": 12,
+            "roughness": 0.802,
             "specular": 0.08
           },
           {
             "color": "state.islandColors.timber",
-            "shininess": 8,
+            "roughness": 0.846,
             "specular": 0.05
           },
           {
             "color": "state.islandColors.roof",
-            "shininess": 6,
+            "roughness": 0.875,
             "specular": 0.04
           }
         ],

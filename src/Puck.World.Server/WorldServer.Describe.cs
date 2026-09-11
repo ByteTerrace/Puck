@@ -157,6 +157,8 @@ public sealed partial class WorldServer {
         WorldMutation.SetPlayerSeatLook => "SetPlayerSeatLook",
         WorldMutation.UpsertViewLayout m => $"UpsertViewLayout '{m.Layout.Name}'",
         WorldMutation.RemoveViewLayout m => $"RemoveViewLayout '{m.Name}'",
+        WorldMutation.UpsertViewStudy m => $"UpsertViewStudy '{m.Study.Name}'",
+        WorldMutation.RemoveViewStudy m => $"RemoveViewStudy '{m.Name}'",
         WorldMutation.UpsertLook m => $"UpsertLook '{m.Look.Name}'",
         WorldMutation.RemoveLook m => $"RemoveLook '{m.Name}'",
         WorldMutation.UpsertDynamics m => $"UpsertDynamics '{m.Row.Name}'",

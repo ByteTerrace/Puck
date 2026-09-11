@@ -326,12 +326,10 @@ be questioned: [`docs/agent-guide.md`](../../../../docs/agent-guide.md) §
 
 **The name** uses lowercase letters, digits, and hyphens, stays within 64
 characters, and matches the directory. Within this repository, preserve the
-established short kebab noun-phrase convention: `content-search`,
-`symbol-analysis`, `sdf-world`, `gaming-bricks`, `rom-forge`, `maths-usage`,
-`maths-laws`, `boy-scout`, `dotnet10-performance`, `documentation`. Avoid an
-unnecessary `puck-` prefix. Gerund and action-oriented names are valid Agent
-Skills names, but do not rename this repository's existing roster merely to
-change naming style.
+established short kebab noun-phrase convention — list the directories under
+`.claude/skills/` to see the current roster. Avoid an unnecessary `puck-`
+prefix. Gerund and action-oriented names are valid Agent Skills names, but do
+not rename this repository's existing roster merely to change naming style.
 
 **The frontmatter** uses exactly two keys in this repository, `name` and
 `description`. Write the description in third person. Include the capability,
