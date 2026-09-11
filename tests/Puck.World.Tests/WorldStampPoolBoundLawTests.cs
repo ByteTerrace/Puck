@@ -233,7 +233,7 @@ public sealed class WorldStampPoolBoundLawTests {
         var program = EmitPool();
         var active = program.Instances.Where(predicate: instance => instance.Active).ToArray();
 
-        // One live instance per authored shape (the ungrouped pass), in document order, ahead of the parked pool slots.
+        // One live instance per authored shape (the ungrouped pass), in document order.
         Assert.True(
             condition: (active.Length >= Shapes.Length),
             userMessage: $"expected at least {Shapes.Length} live instances, found {active.Length}"

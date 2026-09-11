@@ -538,7 +538,7 @@ public sealed class ShapePanelLawTests {
 
         return builder.Build(buildInstanceGrid: false);
     }
-    // The one field scope a live pool program opens for its single panelled slot (parked slots open none), or the
+    // The one field scope a live pool program opens for its single panelled shape, or the
     // first one a probe opens: the instructions from its PushField through its PopField.
     private static SdfInstruction[] FirstScope(SdfProgram program) {
         var instructions = program.Instructions;

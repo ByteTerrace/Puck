@@ -1,0 +1,167 @@
+{
+  "evals": [
+    {
+      "assertions": [
+        "The edited document validates and fits the budget; text-free creation stats emission inspection also succeeds",
+        "Curvature comes from a curved primitive (including an ellipsoid shell), a prism profile, or a warp rather than additional visible boxes",
+        "An appropriate curvature or edge operation appears, including chamfer composition",
+        "Shape count stays at or below 367",
+        "Positions stay in the author frame convention (no silent axis flip introduced)"
+      ],
+      "expected_output": "An edited copy of blocky-pauldron.world.json whose plates read as curved armor: superellipsoid masses with an exponent in the sleek 2.5-4 band, or profiled prisms, plus chamfer or rounding on the edges and optionally a flare for the swell. Not more boxes.",
+      "files": [
+        "fixtures/blocky-pauldron.world.json"
+      ],
+      "id": 1,
+      "prompt": "this shoulder pauldron i blocked out is three stacked boxes and it reads exactly like three stacked boxes. i want it to look like a real curved armor plate - a shell that swells over the shoulder and tapers down toward the arm, with proper broken edges. the fixture is at fixtures/blocky-pauldron.world.json, prototype id is 'subject'. can you sculpt it properly?"
+    },
+    {
+      "assertions": [
+        "The edited document validates and fits the budget; text-free creation stats emission inspection also succeeds",
+        "The inhabited body's look binds a render lane to a supported expression reading the existing bare hp row, not state.hp",
+        "Every plate erodes bottom-to-top as hp decreases, whether staged by lanes or erode ranges; no hp value leaves all three mid-erosion",
+        "palette[].weathering appears with an `under` stage present (edge or lines above zero requires it)",
+        "No new engine-side or renderer-side notion of health is introduced — the meaning stays in the state cell and the lane expression"
+      ],
+      "expected_output": "Body look lanes read bare hp. Weathering begins before erosion. Three plates erode bottom-to-top across distinct hp stages, authored either in the expressions or from/to ranges; the existing undersuit remains.",
+      "files": [
+        "fixtures/damage-plates.world.json"
+      ],
+      "id": 2,
+      "prompt": "i want these chest plates to come apart as the character takes damage - scuffs and scratches showing up first, then the plates crumbling and falling off one at a time from the bottom up, and underneath you just see the black undersuit thats already there. theres an hp cell in the world state (Int, starts at 100). fixture is fixtures/damage-plates.world.json, prototype 'subject'. how do i author that?"
+    },
+    {
+      "assertions": [
+        "Names the author frame's 180 degree yaw about +Y as the cause of the wrong side, and states that author +X is screen-right / the subject's own left",
+        "Explains possible shared group/creation clamps versus unscoped global scale and asks to inspect actual clamp diagnostics before asserting the cause",
+        "Does not assert that any flare necessarily softens the whole program"
+      ],
+      "expected_output": "Two distinct diagnoses with the real mechanisms: the author-frame yaw for the mirrored placement, and the warp scope / step scale interaction for the model-wide softening.",
+      "files": [],
+      "id": 3,
+      "prompt": "two things went wrong on my sculpt today. i added a shoulder pad at position [0.4, 1.6, 0.2] parented to the torso and it came out on the wrong shoulder. and separately, the moment i put a flare on that pad the WHOLE model went soft and mushy looking, not just the pad. whats going on with each of those?"
+    },
+    {
+      "assertions": [
+        "The edited document validates and fits the budget; text-free creation stats emission inspection also succeeds",
+        "The armor palette entry gains metal, coat, and a roughness in a plausible painted-metal band",
+        "The eye material uses palette inset with a radial paint ramp of ordered stops, rather than a flat dark color",
+        "Mentions render.environment softboxes or an equivalent, since a coat has nothing to reflect without them",
+        "Every unit-range field stays within [0, 1] — roughness, sheen, metal, coat, wrap, soften are refused by name outside it"
+      ],
+      "expected_output": "A palette rewrite: painted-metal armor via specular/roughness/metal/coat, eyes via an inset layer with pupil, iris, and limbus stops under a refracting cornea, and a note that softboxes are what make the coat read.",
+      "files": [
+        "fixtures/flat-plastic.world.json"
+      ],
+      "id": 4,
+      "prompt": "the armor on this bust looks like cheap flat plastic and the eyes are just two black spheres, its lifeless. i want the shell to read like automotive painted metal with a clearcoat on it, and the eyes to actually look like eyes. fixtures/flat-plastic.world.json, prototype 'subject'. what do i change?"
+    },
+    {
+      "assertions": [
+        "The edited document validates and fits the budget; text-free creation stats emission inspection also succeeds",
+        "The blend histogram shows a groove blend (GrooveUnion or GrooveSubtraction)",
+        "The hand-built seamCutter shape is gone — shape count drops",
+        "Does NOT claim that swapping the subtraction for a groove restores panels/trims/cells: RequiresScope admits only Union and SmoothUnion, so a groove forces the creation-wide scope exactly as the subtraction did",
+        "If it addresses the panel complaint at all, the remedy is splitting the creation or dropping the carve — not the blend swap"
+      ],
+      "expected_output": "The cutter box and its subtraction are replaced by a GrooveUnion between the two hull masses, which fixes the seam quality and drops a shape. The panel complaint is NOT fixed by that swap — any blend outside Union and SmoothUnion forces the creation-wide scope — so the honest answer separates the two problems.",
+      "files": [
+        "fixtures/hull-seam.world.json"
+      ],
+      "id": 5,
+      "prompt": "i've got two hull masses that meet in the middle and i wanted a recessed panel line where they join, so i built a thin box and subtracted it. it works but the seam doesn't follow the curve of the join properly and now i can't put panels on anything in this creation. fixtures/hull-seam.world.json, prototype 'subject'. is there a better way to do this?"
+    },
+    {
+      "assertions": [
+        "The edited document validates and fits the budget; text-free creation stats emission inspection also succeeds",
+        "Shape count drops substantially — the twelve hand-placed fins collapse to roughly one shape",
+        "A domain fold appears (repeat) with a whole-number limit, or an equivalent data-driven repetition",
+        "The visible fin count is preserved"
+      ],
+      "expected_output": "Preserve the twelve fin positions using a bounded fold composition: for example eleven repeated fins plus one endpoint, or two disjoint odd repeats, or a correctly centred symmetric half-pattern. A repeat limit of 12 produces 25 cells and is wrong.",
+      "files": [
+        "fixtures/fin-stack.world.json"
+      ],
+      "id": 6,
+      "prompt": "this heatsink has twelve fin shapes that i placed by hand one at a time and its painful to adjust - every time i want to change the spacing i have to edit all twelve. fixtures/fin-stack.world.json, prototype 'subject'. is there a way to make this less awful?"
+    },
+    {
+      "assertions": [
+        "The edited document validates and is now under budget: `creation stats` exits 0 and reports at or below 367",
+        "Reduction uses shape-count levers such as folds or fewer panel/trim copies, preserving the stud wall; detail flags alone do not save stamp budget",
+        "The answer shows awareness that a panelled shape charges 2 and a trim charges 2"
+      ],
+      "expected_output": "The stud wall gets under 367 charged shapes, most cheaply by folding the repetition and/or dropping panels, with the budget arithmetic stated correctly.",
+      "files": [
+        "fixtures/over-budget.world.json"
+      ],
+      "id": 7,
+      "prompt": "this thing wont load, i get 'stamps 371 shapes, exceeding the 367-shape per-stamp budget'. i dont really want to lose any of the detail. fixtures/over-budget.world.json, prototype 'subject'. what are my options and whats the cheapest fix?"
+    },
+    {
+      "assertions": [
+        "Identifies the creation-wide scope rule: a shape blend outside Union and SmoothUnion forces one scope for the whole creation, and panels, trims, and cells are then refused on every shape in it",
+        "Points at the `bore` Subtraction as the specific cause, not at the panel's own fields",
+        "Offers an explicit cutter replacing panel shorthand, an all-union/panel design, or split prototypes; does not claim a groove or trim bypasses the creation scope"
+      ],
+      "expected_output": "The bore subtraction forces a creation scope and blocks panel shorthand. Keep the bore and use explicit cutters for the panel, remove the non-union operation if acceptable, or split prototypes. Groove and pipe still force the outer scope; trims also require admission.",
+      "files": [
+        "fixtures/subtraction-trap.world.json"
+      ],
+      "id": 8,
+      "prompt": "this refuses to load and the error is pointing at my panel: 'the creation already needs its own field scope (a non-Union shape blend, an engraved text run, or a noise facet elsewhere in it), which a panel's scope cannot nest inside'. but the panel looks fine to me and theres no text or noise in this thing at all. fixtures/subtraction-trap.world.json, prototype 'subject'. what is it actually complaining about?"
+    },
+    {
+      "assertions": [
+        "Identifies that Polygon and Ellipse prism profiles have no deterministic field-contact evaluator and so are refused on a placement carrying a solid row",
+        "Preserves the requested octagonal obstacle using an eight-vertex convex extrusion with an appropriate pose and retains the solid placement",
+        "Does not suggest that the renderer is at fault"
+      ],
+      "expected_output": "Use an eight-vertex clockwise Convex prism, posed with its extrusion axis along the bollard's height, retaining the solid row. Polygon lacks the needed deterministic field evaluator.",
+      "files": [
+        "fixtures/contact-mismatch.world.json"
+      ],
+      "id": 9,
+      "prompt": "i made an octagonal bollard with a Polygon prism profile and the world refuses to load as soon as i mark the placement solid. i want it to be a real obstacle that things bump into. fixtures/contact-mismatch.world.json, prototype 'subject'. how do i keep the octagon shape and still have collision?"
+    },
+    {
+      "assertions": [
+        "States that Morph, StairsUnion, and StairsSubtraction compose only at a field-scope pop and are not valid on a shape",
+        "Explains that the document accepts them because they are defined enum values, and that the failure arrives later at emission",
+        "Does not claim the blend does not exist"
+      ],
+      "expected_output": "Morph is a PopField-only compose; the document validates it and emission throws. The author should use a shape-level blend instead. Current text-free creation stats emits a rest-pose inspection and also catches the error; raw schema validation alone does not.",
+      "files": [],
+      "id": 10,
+      "prompt": "i set blend to \"Morph\" on one of my shapes because i wanted to lerp between two forms. the document validates fine but the thing blows up when it actually tries to render. is Morph real or did i imagine it?"
+    },
+    {
+      "assertions": [
+        "The edited document validates and fits the budget; text-free creation stats emission inspection also succeeds",
+        "A Sweep primitive with a curve appears in the primitive histogram",
+        "The curve's radii are strictly positive and its taper, bulge, and strand offset stay inside their ratio limits",
+        "The sweep's scale is uniform — a non-uniform scale on a Sweep is refused by name"
+      ],
+      "expected_output": "A Sweep shape with a quadratic Bezier curve running between the two brackets, tapered radius, and optionally multiple strands for a braided cable.",
+      "files": [
+        "fixtures/sweep-cable.world.json"
+      ],
+      "id": 11,
+      "prompt": "i have two mounting brackets on this thing and i need a thick braided cable running between them that sags a bit in the middle. i was going to chain a bunch of capsules together but that seems dumb. fixtures/sweep-cable.world.json, prototype 'subject'. whats the right way?"
+    },
+    {
+      "assertions": [
+        "Gives the row mutation verb with the `creations` section name and a working selector, not the on-disk `prototypes` spelling",
+        "States that world.screenshot only arms a capture and must be fenced with world.wait, with the confirmation arriving on stderr",
+        "Mentions creation stats or an equivalent structural check",
+        "Every verb named actually exists",
+        "Uses whole-array row.set for vector scale/position and four-component rotation; does not suggest row.step on a vector"
+      ],
+      "expected_output": "The live loop: world.row.set against creations with a name selector, world.row to read back, world.wait to fence, world.screenshot to capture, and creation stats offline.",
+      "files": [],
+      "id": 12,
+      "prompt": "im tweaking proportions on a character and restarting the game after every single change is killing me. is there a way to nudge a shape's scale while its running and actually see the result? and how do i grab a picture of it to compare?"
+    }
+  ],
+  "skill_name": "sdf-authoring"
+}

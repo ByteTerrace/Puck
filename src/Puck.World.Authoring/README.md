@@ -405,6 +405,20 @@ These conservative ceilings keep both nearest features inside a fixed
 and 1 + amplitude*frequency*L must not exceed 8, with L=1 for F1 and
 L=2 for F2MinusF1. Invalid fields are refused by name.
 
+Flare, shear, bumps, and erode take a per-shape clamp when a field scope is
+available. Inside a creation or group scope, the same warp stays on its own
+shape chain, while the enclosing scope's clamp applies to all its siblings.
+Panels, trims, and cells require field isolation for their operation and are
+refused when that scope is unavailable. This is a semantic restriction;
+warps sharing a conservative bound remain valid.
+
+`puck creation stats --world <path> --prototype <id>` lists warp-bearing
+shapes and the actual global and scoped clamps for unit-scale static and
+pooled rest geometry. `world.budget` reports the live global scale, count of
+scoped/shared clamps, and the worst scope's scale, instruction range,
+instance, and shape count. A global scale of one can coexist with strong
+shared clamps; their factors are field bounds, not measured GPU cost.
+
 Cells require a closed primitive and a per-shape field scope. Sweep,
 grouped shapes, detail-only shapes,
 and creations that need an outer field scope are refused; use separate

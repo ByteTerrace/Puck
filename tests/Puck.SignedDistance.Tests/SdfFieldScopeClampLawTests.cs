@@ -28,18 +28,19 @@ public sealed class SdfFieldScopeClampLawTests {
     }
 
     [Fact]
-    public void FieldOnlyScopeHasAClampWithoutAShapeBinder() {
+    public void FieldOnlyChainContributesToTheScopeWithoutAShapeBinder() {
         var builder = new SdfProgramBuilder();
-        builder.AddMaterial(new SdfMaterial(Vector3.One));
-        builder.PushField().CellDisplace(1f, 2f, 0, SdfCellMode.F2MinusF1, .2f).PopField();
+        var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
+        builder.PushField().Sphere(1f, material).ResetPoint()
+            .CellDisplace(1f, 2f, 0, SdfCellMode.F2MinusF1, .2f).PopField();
         var program = builder.Build(buildInstanceGrid: false);
 
         Assert.Equal(1f, program.StepScale);
         Assert.Null(program.StepScaleBinder);
         var clamp = Assert.Single(program.FieldScopeClamps);
         Assert.Equal(-1, clamp.InstanceIndex);
-        Assert.Equal(0, clamp.ShapeCount);
-        Assert.Equal(.25f, clamp.StepScale);
+        Assert.Equal(1, clamp.ShapeCount);
+        Assert.Equal(.2f, clamp.StepScale);
     }
 
     [Fact]

@@ -13,7 +13,8 @@ namespace Puck.Cli.Creation;
 /// verbs: <c>sculpts</c> lists the registry, <c>sculpt &lt;name&gt; --world &lt;path&gt;</c> applies a sculpt's
 /// <see cref="SculptPatch"/> to a world file on disk (refusing and leaving it untouched on a validation failure),
 /// and <c>stats --world &lt;path&gt; [--prototype &lt;id&gt;]</c> reports a creation's shape budget and feature
-/// usage. Exit codes: 0 succeeded, 1 the patched document was refused (sculpt) or the file failed to load (stats),
+/// usage and field-scope clamps. Exit codes: 0 succeeded, 1 the patched document was refused (sculpt) or the file
+/// failed to load or its geometry inspection failed (stats),
 /// 2 a usage error (unknown sculpt/prototype name, missing file).
 /// </summary>
 internal static partial class CreationCommand {

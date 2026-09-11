@@ -40,10 +40,10 @@ internal static partial class CreationCommand {
 
     private static void ReportProgramClamps(string path, SdfProgram program) {
         Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"    {path}: globalStepScale {program.StepScale:0.######}, scoped clamps {program.FieldScopeClamps.Count} ({program.FieldScopeClamps.Count(static clamp => clamp.ShapeCount > 1)} shared)"));
+            $"    {path}: globalStepScale {program.StepScale:G6}, scoped clamps {program.FieldScopeClamps.Count} ({program.FieldScopeClamps.Count(static clamp => clamp.ShapeCount > 1)} shared)"));
         foreach (var clamp in program.FieldScopeClamps.OrderBy(static clamp => clamp.StepScale)) {
             Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"      scope instance {clamp.InstanceIndex}, instructions {clamp.PushInstructionIndex}..{clamp.PopInstructionIndex}: stepScale {clamp.StepScale:0.######}, field bound {1f / clamp.StepScale:0.###}x, {clamp.ShapeCount} shape(s){(clamp.ShapeCount > 1 ? " sharing one clamp" : string.Empty)}"));
+                $"      scope instance {clamp.InstanceIndex}, instructions {clamp.PushInstructionIndex}..{clamp.PopInstructionIndex}: stepScale {clamp.StepScale:G6}, field bound {1f / clamp.StepScale:G6}x, {clamp.ShapeCount} shape(s){(clamp.ShapeCount > 1 ? " sharing one clamp" : string.Empty)}"));
         }
     }
 }

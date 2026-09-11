@@ -175,20 +175,16 @@ see its project README.
 
 ### Performance changes
 
-**There is no way to score engine performance today, and no code in the build
-that could.** `Puck.Bench` was quarantined to `experimental/Puck.Bench` on
-2026-08-02 — it had been compiling on every build while ZERO projects referenced
-it: nothing implemented its scene controller, nothing registered its
-`bench.list`/`bench.run`/`bench.abort`/`bench.sweep` verbs. Its host, the
-headless `--bench` entry point, and the suite registration went with `Puck.Demo`;
-the plan that scheduled re-homing them and the benchmark plan itself were
-deleted. So the suite, the scoring formula, and the reference configuration are
-not written down anywhere.
+There is no maintained cross-engine benchmark score. `Puck.Bench` remains
+quarantined under `experimental/`; do not build or revive its old suite.
 
-**Treat every engine-performance claim as unmeasurable.** Do not quote historical
-numbers as current — they were taken on a machine and a suite nothing in the tree
-can reproduce. If performance work becomes necessary, the honest first step is
-building an instrument in a real project, not reviving a quarantined one.
+For a live World workload, use `world.timing on`, wait for rendered frames,
+then sample `world.gpu` and `world.fps`. `world.budget` distinguishes live
+program size from reserved capacity. Compare the same document, camera,
+resolution, quality settings, backend and build configuration before and after
+the change. Report these conditions and repeated samples with the result;
+GPU-pass time alone is not the delivered frame rate. See
+[World graphics options](../src/Puck.World/README.md#graphics-options).
 
 ### Browser engine changes (`Puck.World.Browser`)
 

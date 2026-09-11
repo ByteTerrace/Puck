@@ -25,6 +25,20 @@ in the per-shape floor. The floors are conservative GPU capacity reservations,
 not a strict count of editable rows. This keeps newly discovered or authored
 simple creations inside the same frozen envelope as scoped creations.
 
+The animated stamp pool also separates capacity from live geometry. Its boot
+probe reserves every registration and shape slot, while the running program
+emits only registered shapes and groups. Empty capacity adds no placeholder
+instances or mask bits. Dynamic-transform addresses stay fixed when another
+registration disappears; a later edit rebuilds the compact program inside the
+same reserved capacity.
+
+Blend groups whose members inherit the same rigid animation transform use a
+bound centered on their first member. Union members, authored frames, smoothing,
+and outward field operations determine its radius; remote cutters do not enlarge
+the solid. Independent motion, followers, chains, and domain operations retain
+the conservative creation-root envelope. Primitive transform addresses stay the
+same in both cases.
+
 ## Seats and input
 
 - `PlayerRoster.cs` — seat metadata: which devices sit at which of the four

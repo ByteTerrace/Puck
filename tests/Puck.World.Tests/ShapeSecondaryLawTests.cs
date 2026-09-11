@@ -155,7 +155,7 @@ public sealed class ShapeSecondaryLawTests {
 
         var program = builder.Build(buildInstanceGrid: false);
 
-        // Every unfilled pool slot emits a parked unit Sphere; the one authored shape is the only Box.
+        // The compact live pool emits only the authored Box.
         return program.Instructions.Single(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape == ((uint)SdfShapeType.Box))));
     }
 

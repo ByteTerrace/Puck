@@ -51,6 +51,13 @@ Verify profile admission and surfaces with
 `AuthoredShapeAdmissionLawTests` / `SdfTrapezoidProfileLawTests`, and capacity with
 `WorldRenderEnvelopeLawTests` plus a real rendered world.
 
+`WorldStampPool` keeps fixed dynamic-transform addresses but emits only live
+registrations and authored shapes/groups. Empty capacity does not add parked
+instances or widen live masks. The worst-case boot probe still emits every
+reserved slot. `WorldStampPoolCompactionLawTests` covers removal, slot reuse,
+and grouped geometry growing after a rebuild; `world.budget` shows the live
+instance count separately from the reserved capacity.
+
 A shape's `panel` (`ShapePanelDocument`) is a second-material inset face region: an eroded copy of
 the same primitive, offset along a local `face` (a direction, normalized; null = `+Z`; zero-length
 refused by name) and composed with its own `material` — `depth` positive recesses it (Subtraction,

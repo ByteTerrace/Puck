@@ -66,6 +66,12 @@ screen origins, the screen frame's orthonormality, instance ranges that
 partition the instructions they claim rather than overlapping, and balanced
 one-deep field scopes that never cross an instance boundary.
 
+`SdfProgram.StepScale` is the global clamp. `FieldScopeClamps` separately
+reports every non-unit scale baked into `PopField`, with its instruction
+range, owning instance, and number of shapes sharing the bound. A global
+scale of one does not mean scopes are unclamped. These are conservative
+field bounds, not measured march counts or GPU time.
+
 Round seams use the existing smooth-radius lane: `GrooveUnion` carves the
 complement of sqrt(a²+b²)-r from the union, and `PipeUnion` adds that tube;
 `GrooveSubtraction` and `PipeSubtraction` do the same against `max(a, -b)`.

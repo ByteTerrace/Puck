@@ -1,6 +1,9 @@
 using Xunit;
 
 using Puck.World;
+using Puck.World.Authoring;
+using Puck.SignedDistance;
+using System.Numerics;
 
 namespace Puck.Cli.Tests.Creation;
 
@@ -110,6 +113,38 @@ public sealed class CreationCommandTests {
             File.Delete(path: path);
         }
     }
+    [Fact]
+    public void StatsExposesSharedFlareClampsInsteadOfOnlyTheUnitGlobalScale() {
+        var path = TempWorldCopy();
+        try {
+            var definition = WorldDefinitionSerialization.Deserialize(File.ReadAllBytes(path));
+            var shape = new ShapeDocument(
+                Id: 0, Name: "flared", Type: SdfSolidPrimitive.Sphere,
+                Position: Vector3.Zero, Rotation: Quaternion.Identity, Scale: Vector3.One,
+                Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 1,
+                Flare: new ShapeFlareDocument(2f, 0f, 1f));
+            var document = new CreationDocument(
+                Schema: CreationDocument.CurrentSchema, Name: "scope-proof", Palette: null,
+                Shapes: [shape, shape with { Id = 1, Name = "cutter", Flare = null, Blend = SdfBlendOp.Subtraction }],
+                Frames: null, Noise: null);
+            var canonical = CreationCanonicalizer.Canonicalize(document);
+            WorldDefinitionSerialization.Save(definition with {
+                CreationsRaw = [.. definition.Creations, new WorldPrototype("scope-proof", canonical.Document, canonical.Hash)],
+            }, path);
+            var before = File.ReadAllBytes(path);
+            var (exitCode, output) = Invoke("creation", "stats", "--world", path, "--prototype", "scope-proof");
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("shape 0 (flared): flare", output, StringComparison.Ordinal);
+            Assert.Contains("static: globalStepScale 1, scoped clamps 1 (1 shared)", output, StringComparison.Ordinal);
+            Assert.Contains("pooled: globalStepScale 1, scoped clamps 1 (1 shared)", output, StringComparison.Ordinal);
+            Assert.Contains("2 shape(s) sharing one clamp", output, StringComparison.Ordinal);
+            Assert.Equal(before, File.ReadAllBytes(path));
+        } finally {
+            File.Delete(path);
+        }
+    }
+
     /// <summary>An unknown prototype id is refused, naming that it names no such prototype.</summary>
     [Fact]
     public void StatsRefusesAnUnknownPrototypeId() {

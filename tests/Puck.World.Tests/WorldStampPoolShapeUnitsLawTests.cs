@@ -64,7 +64,7 @@ public sealed class WorldStampPoolShapeUnitsLawTests {
     private static SdfInstruction ShapeInstruction(ShapeDocument shape, float bodyScale) {
         var program = Program(shapes: [shape], bodyScale: bodyScale);
 
-        // Every unfilled pool slot emits a parked unit Sphere; the one authored shape is the only other primitive.
+        // The compact live pool emits only the authored primitive and its modifiers.
         return program.Instructions.Single(predicate: static instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Shape != ((uint)SdfShapeType.Sphere))));
     }
 

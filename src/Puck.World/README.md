@@ -1254,9 +1254,10 @@ state (an advancing `state` row — deterministic, replayed, settable with
 - `SdfProgramBuilder.MaxInstances = 65536`: per-tile mask width scales with
   DECLARED instances, which is why this project emits active avatars only and
   probes capacity floors at construction.
-- The exact soft-shadow gather addresses all 65536 instance slots, including
-  reserved pools. Camera-tile masking is a separate approximation selected by
-  the quality policy or `world.shadow-mask camera-tile`.
+- The exact soft-shadow gather scans the live program's instance range, up to
+  the 65536-instance ceiling. Empty stamp capacity emits no live instances.
+  Camera-tile masking is a separate approximation selected by the quality
+  policy or `world.shadow-mask camera-tile`.
 - `OffscreenRenderBudget.RegisteredViews = 64`: do not register a rendered view per
   population entry.
 - XInput caps at 4 Xbox-family pads locally; HID pads are uncapped.

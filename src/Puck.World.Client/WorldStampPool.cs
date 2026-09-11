@@ -34,9 +34,9 @@ namespace Puck.World.Client;
 /// <c>Follower4</c>); a part named in <see cref="WorldLookMotion.PartDynamics"/> gets its own position-only follower
 /// chasing the composed (already-followed) root — a secondary lag on top of the root's.
 /// </summary>
-/// <remarks>The pool is emitted on every rebuild with a constant slot count
-/// (<see cref="WorldPlacementPolicy.MaxStampRegistrations"/> × <see cref="SlotsPerPlacement"/>); an unused slot draws a
-/// parked placeholder hidden below the floor, exactly like the avatar catalog's inactive-slot story. The probe path
+/// <remarks>The pool reserves a constant dynamic-transform slot range
+/// (<see cref="WorldPlacementPolicy.MaxStampRegistrations"/> × <see cref="SlotsPerPlacement"/>). Live programs emit
+/// only registered geometry; unused transform slots do not need placeholder instances. The probe path
 /// emits every slot in its worst-case form (full modifier envelope, worst placement scale) — the frame source measures
 /// it once at construction, so a body-rooted stamp never grows the frozen floor. Single-threaded on the window-pump
 /// thread, like every editor/render type here.</remarks>
@@ -199,12 +199,9 @@ public sealed partial class WorldStampPool {
     /// <summary>The dynamic-transform slots one registration reserves: its root + its full shape-slot pool.</summary>
     public static int SlotsPerPlacement => (1 + WorldPlacementPolicy.MaxAnimatedStampShapes);
 
-    // follows widens the group's root-anchored cull bound for a member riding its own part follower: the bound
-    // sphere is fixed at the root slot with the creation's static reach, but a followed member's own transform slot
-    // carries the LAGGED world position, which can leave that fixed sphere once the lag exceeds GroupBoundMargin.
-    // Doubling reach is a cull-only cost (no geometry moves), so it is charged only when this registration actually
-    // has a part follower.
-    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, float reach, bool follows) {
+    // Geometry keeps its authored transform slots; the bound may ride a member shared by the group's motion.
+    // Groups with independent motion or followers retain the conservative creation-root bound.
+    private static void EmitGroup(SdfProgramBuilder builder, IReadOnlyList<ShapeDocument> shapes, int groupId, int fromIndex, int rootSlot, int[] paletteIds, float placementScale, bool probeWorstCase, int boundSlot, float boundRadius) {
         var groupNeedsScope = GroupNeedsScope(
             fromIndex: fromIndex,
             groupId: groupId,
@@ -212,9 +209,9 @@ public sealed partial class WorldStampPool {
         );
 
         _ = builder.BeginInstanceDynamic(
-            slot: rootSlot,
+            slot: boundSlot,
             boundOffset: Vector3.Zero,
-            boundRadius: ((follows ? (2f * reach) : reach) + GroupBoundMargin)
+            boundRadius: boundRadius
         );
 
         if (groupNeedsScope) {
@@ -280,7 +277,7 @@ public sealed partial class WorldStampPool {
 
         _ = builder.EndInstance();
     }
-    // One pool slot's emission: palette, Pass 1 ungrouped shapes / parked placeholders, Pass 2 blend groups, then the
+    // One pool slot's emission: palette, Pass 1 authored ungrouped shapes, Pass 2 blend groups, then the
     // creation's text runs as ONE root-anchored dynamic instance.
     private static void EmitOne(SdfProgramBuilder builder, WorldDefinition definition, Registration? live, bool probeWorstCase, int rootSlot, float maxPlacementScale, PackedFontAtlasCatalog? textCatalog) {
         var document = live?.Creation.EngineDocument;
@@ -343,20 +340,16 @@ public sealed partial class WorldStampPool {
             )
         );
 
-        // Pass 1 — ungrouped shapes and unused slots: one tight dynamic instance per shape slot; parked when absent
-        // (the beam cull skips it with one branch). The probe stays fully active with the full modifier envelope.
+        // Pass 1 — one tight dynamic instance per authored ungrouped shape. Slot addresses remain stable even
+        // though unused shapes emit nothing. The probe still emits every slot with the full modifier envelope.
         for (var index = 0; (index < WorldPlacementPolicy.MaxAnimatedStampShapes); index++) {
             var placed = ((index < shapes.Count)
                 ? shapes[index]
                 : null
             );
 
-            if (
-                hasText &&
-                (placed is null) &&
-                (index == (WorldPlacementPolicy.MaxAnimatedStampShapes - 1))
-            ) {
-                continue; // The text instance below spends this parked placeholder's slot in the probed envelope.
+            if (!probeWorstCase && (placed is null)) {
+                continue;
             }
 
             if (placed is { Group: not null and not 0 }) {
@@ -480,12 +473,8 @@ public sealed partial class WorldStampPool {
             _ = builder.EndInstance();
         }
 
-        // Pass 2 — blend groups, first-appearance order: ONE dynamic instance anchored on the ROOT slot (the
-        // travelling bound), members in document order, wrapped in a field scope when the group needs one (the
-        // Intersection-wipe fix; see the accumulator rule on SdfBlendOp). Resolved once (Reconcile's ApplyMotion
-        // already ran, so live.PartFollows reflects this frame's followers) rather than per group — precise
-        // per-group membership is not worth a second scan since widening a group without a follower only relaxes
-        // its cull, never its geometry.
+        // Pass 2 — one instance per blend group. A group sharing one rigid animation delta can use a member's
+        // tight traveling bound. Independent motion and followers retain the creation-root envelope.
         var anyPartFollows = ((live is not null) && (Array.IndexOf(array: live.PartFollows, value: true) >= 0));
         Span<int> emittedGroups = stackalloc int[WorldPlacementPolicy.MaxAnimatedStampShapes];
         var emittedCount = 0;
@@ -501,15 +490,23 @@ public sealed partial class WorldStampPool {
             }
 
             emittedGroups[emittedCount++] = groupId;
+            var boundSlot = rootSlot;
+            var boundRadius = ((anyPartFollows ? (2f * reach) : reach) + GroupBoundMargin);
+            if (!probeWorstCase && !anyPartFollows && (live is not null) &&
+                TryTightGroupRadius(live: live, document: document!, fromIndex: index, groupId: groupId, radius: out var localRadius)) {
+                boundSlot = (rootSlot + 1 + index);
+                boundRadius = (localRadius * placementScale);
+            }
+
             EmitGroup(
+                boundRadius: boundRadius,
+                boundSlot: boundSlot,
                 builder: builder,
-                follows: anyPartFollows,
                 fromIndex: index,
                 groupId: groupId,
                 paletteIds: paletteIds,
                 placementScale: placementScale,
                 probeWorstCase: probeWorstCase,
-                reach: reach,
                 rootSlot: rootSlot,
                 shapes: shapes
             );
@@ -1305,9 +1302,10 @@ public sealed partial class WorldStampPool {
         return false;
     }
 
-    /// <summary>Emits the whole pool (constant slot count): per live registration its palette, ungrouped shapes as
-    /// per-slot dynamic instances, and blend groups as root-anchored scoped instances (a traveling bound for the
-    /// group); parked placeholders elsewhere. The probe path takes the largest legal form.</summary>
+    /// <summary>Emits registered geometry: each live palette, ungrouped shapes as per-slot dynamic instances, and
+    /// blend groups as bounded scoped instances. Rigid groups use a traveling member bound; other groups retain
+    /// the creation-root envelope. Unused registrations and shape slots emit no instances;
+    /// dynamic-transform addresses remain fixed. The probe path still takes the largest legal form.</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="definition">The live definition a registration's state-bound palette color resolves against.</param>
     /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
@@ -1327,6 +1325,11 @@ public sealed partial class WorldStampPool {
                 ? null
                 : m_pool[index]
             );
+
+            if (!probeWorstCase && (live is null)) {
+                continue;
+            }
+
             var rootSlot = (slotBase + (index * SlotsPerPlacement));
 
             EmitOne(
