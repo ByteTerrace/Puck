@@ -1,4 +1,5 @@
 using System.Text;
+using Puck.State;
 
 namespace Puck.World.Transpiler.Formatting;
 
@@ -366,64 +367,13 @@ public static class PuckFormatter {
 
     // Length of the reserved-channel token starting at a '$' in `text[start]`, or 0 when `start` is not one (an
     // isolated '$' with no following name characters at all still returns 1, so callers always advance past it).
+    // The name grammar itself — ':' segments, signed offsets, and a folded `$zones[...]` index — is
+    // ExpressionSpelling's, read through its own scanner rather than copied here (rule 8).
     private static int ReservedChannelTokenLength(string text, int start) {
         if (start >= text.Length || text[start] != '$') {
             return 0;
         }
 
-        var pos = start + 1;
-        while (pos < text.Length) {
-            var c = text[pos];
-            if (char.IsLetterOrDigit(c) || c is '_' or '$' or '.') {
-                pos++;
-                continue;
-            }
-            if (c == ':' && pos + 1 < text.Length) {
-                var next = text[pos + 1];
-                if (char.IsLetterOrDigit(next) || next is '_' or '$' or '.') {
-                    pos++;
-                    continue;
-                }
-                if (next == '-' && pos + 2 < text.Length && char.IsAsciiDigit(text[pos + 2])) {
-                    pos += 2;
-                    continue;
-                }
-            }
-            if (c == '[') {
-                var close = LiveZoneIndexEnd(text, start, pos);
-                if (close > 0) {
-                    pos = close + 1;
-                    continue;
-                }
-            }
-            break;
-        }
-
-        return pos - start;
-    }
-
-    // A "$zones[" segment inside a reserved name folds its whole bracketed index — colons, nested brackets and all —
-    // into the name. KEEP IN SYNC with ExpressionSpelling.LiveZoneIndexEnd and PuckParser.ReservedLiveZoneIndexEnd.
-    private static int LiveZoneIndexEnd(string text, int start, int bracket) {
-        const string prefix = "$zones[";
-        var prefixLength = prefix.Length - 1;
-        if (text[bracket] != '[' || (bracket - start) < prefixLength
-            || string.CompareOrdinal(text, bracket - prefixLength, prefix, 0, prefixLength) != 0) {
-            return -1;
-        }
-        if ((bracket - prefixLength) != start && text[bracket - prefixLength - 1] != ':') {
-            return -1;
-        }
-
-        var depth = 0;
-        for (var index = bracket; index < text.Length; index++) {
-            if (text[index] == '[') {
-                depth++;
-            } else if (text[index] == ']' && --depth == 0) {
-                return index;
-            }
-        }
-
-        return -1;
+        return Math.Max(1, ExpressionSpelling.ScanBareName(text: text, start: start));
     }
 }

@@ -1,9 +1,11 @@
 namespace Puck.World.Transpiler.Lowering;
 
-/// <summary>The field-dimension table (§5 of the sugar wave): which JSON field names admit which unit suffixes, and
-/// how each converts. Shared by the emitter (this project's own <c>WorldDocumentEmitter.LowerUnitLiteral</c>) and,
-/// symmetrically, by the decompiler when it decides whether to print a unit back onto a field's numeric value —
-/// both consult this one table rather than each carrying its own copy.</summary>
+/// <summary>The field-dimension table: which JSON field names admit which unit suffixes, and how each converts.
+/// The emitter converts against it and the decompiler classifies against it when deciding whether to print a unit
+/// back onto a field's numeric value, so neither side carries its own copy.</summary>
+/// <remarks>A call argument is classified by its qualified <c>call.argument</c> key, an ordinary block property by
+/// its bare name. Two fields can therefore share a bare name without sharing a dimension — <c>orbit(yaw:)</c> is
+/// radians, a <c>yaw:</c> property on a pose row is not, and only the qualified form converts.</remarks>
 public static class WorldDocumentEmitterUnits {
     /// <summary>Which dimension a field belongs to, or <see cref="Unknown"/> when the field admits no unit at all.</summary>
     public enum FieldDimensionKind {
@@ -19,6 +21,8 @@ public static class WorldDocumentEmitterUnits {
         Meters,
         /// <summary>Any `…Hertz` field: `hz` passes through.</summary>
         Hertz,
+        /// <summary>A field authored as a 0..1 fraction: `%`/`pct` divides by 100.</summary>
+        Fraction,
     }
 
     private static readonly string[] s_degreesUnits = ["deg"];
@@ -26,35 +30,54 @@ public static class WorldDocumentEmitterUnits {
     private static readonly string[] s_secondsUnits = ["s", "ms"];
     private static readonly string[] s_metersUnits = ["m", "cm", "mm"];
     private static readonly string[] s_hertzUnits = ["hz"];
+    private static readonly string[] s_fractionUnits = ["%", "pct"];
 
     private static readonly HashSet<string> s_degreesNativeFields = new(StringComparer.Ordinal) {
         "yawDegrees", "localYawDegrees", "outwardYawDegrees", "outwardPitchDegrees",
     };
 
-    private static readonly HashSet<string> s_radiansFields = new(StringComparer.Ordinal) {
-        "pitch", "yaw",
+    // Qualified `call.argument` keys only: `pitch`/`yaw` are radians as `orbit` arguments and degrees-or-anything
+    // as a bare property elsewhere, so a bare name must never reach the radians conversion.
+    private static readonly HashSet<string> s_radiansCallArguments = new(StringComparer.Ordinal) {
+        "orbit.pitch", "orbit.yaw",
     };
 
     private static readonly HashSet<string> s_metersFields = new(StringComparer.Ordinal) {
-        "position", "scale", "radius", "margin", "reach", "standoff", "cellSize", "spacing",
+        "position", "scale", "radius", "margin", "reach", "standoff", "cellSize", "spacing", "distance",
+    };
+
+    private static readonly HashSet<string> s_fractionFields = new(StringComparer.Ordinal) {
+        "alpha", "opacity", "fraction", "ratio", "percent", "chance", "probability",
     };
 
     /// <summary>Classifies a field name into the dimension whose accepted units and conversion govern it.</summary>
     public static FieldDimensionKind Classify(string fieldKey) {
-        if (s_degreesNativeFields.Contains(fieldKey) || fieldKey.EndsWith("YawDegrees", StringComparison.Ordinal) || fieldKey.EndsWith("PitchDegrees", StringComparison.Ordinal)) {
-            return FieldDimensionKind.DegreesNative;
-        }
-        if (s_radiansFields.Contains(fieldKey) || fieldKey.EndsWith("Radians", StringComparison.Ordinal)) {
+        ArgumentNullException.ThrowIfNull(fieldKey);
+
+        if (s_radiansCallArguments.Contains(fieldKey)) {
             return FieldDimensionKind.Radians;
         }
-        if (fieldKey.EndsWith("Seconds", StringComparison.Ordinal)) {
+
+        var separator = fieldKey.LastIndexOf('.');
+        var bare = (separator >= 0) ? fieldKey[(separator + 1)..] : fieldKey;
+
+        if (s_degreesNativeFields.Contains(bare) || bare.EndsWith("YawDegrees", StringComparison.Ordinal) || bare.EndsWith("PitchDegrees", StringComparison.Ordinal)) {
+            return FieldDimensionKind.DegreesNative;
+        }
+        if (bare.EndsWith("Radians", StringComparison.Ordinal)) {
+            return FieldDimensionKind.Radians;
+        }
+        if (bare.EndsWith("Seconds", StringComparison.Ordinal)) {
             return FieldDimensionKind.Seconds;
         }
-        if (s_metersFields.Contains(fieldKey) || fieldKey.EndsWith("Meters", StringComparison.Ordinal)) {
+        if (s_metersFields.Contains(bare) || bare.EndsWith("Meters", StringComparison.Ordinal)) {
             return FieldDimensionKind.Meters;
         }
-        if (fieldKey.EndsWith("Hertz", StringComparison.Ordinal)) {
+        if (bare.EndsWith("Hertz", StringComparison.Ordinal)) {
             return FieldDimensionKind.Hertz;
+        }
+        if (s_fractionFields.Contains(bare) || bare.EndsWith("Fraction", StringComparison.Ordinal) || bare.EndsWith("Ratio", StringComparison.Ordinal) || bare.EndsWith("Percent", StringComparison.Ordinal)) {
+            return FieldDimensionKind.Fraction;
         }
         return FieldDimensionKind.Unknown;
     }
@@ -66,6 +89,7 @@ public static class WorldDocumentEmitterUnits {
         FieldDimensionKind.Seconds => s_secondsUnits,
         FieldDimensionKind.Meters => s_metersUnits,
         FieldDimensionKind.Hertz => s_hertzUnits,
+        FieldDimensionKind.Fraction => s_fractionUnits,
         _ => [],
     };
 
@@ -123,6 +147,13 @@ public static class WorldDocumentEmitterUnits {
             case FieldDimensionKind.Hertz:
                 if (lowerUnit == "hz") {
                     converted = numericValue;
+                    return true;
+                }
+                break;
+
+            case FieldDimensionKind.Fraction:
+                if (lowerUnit is "%" or "pct") {
+                    converted = numericValue / 100.0;
                     return true;
                 }
                 break;

@@ -21,12 +21,12 @@ public static class WorldSemanticValidator {
 
         var jsonString = loweredJson.ToJsonString();
         if (!WorldDefinitionFileSource.TryParseDocument(jsonString, "document", out var definition, out var parseReason)) {
-            diagnostics.ReportError("PUCK031", $"Document structure rejected by engine schema: {parseReason}", SourceSpan.None);
+            diagnostics.ReportError(PuckDiagnosticCodes.SchemaRejected, $"Document structure rejected by engine schema: {parseReason}", SourceSpan.None);
             return false;
         }
 
         if (definition is null) {
-            diagnostics.ReportError("PUCK032", "Failed to deserialize lowered world definition for validation.", SourceSpan.None);
+            diagnostics.ReportError(PuckDiagnosticCodes.DeserializeForValidation, "Failed to deserialize lowered world definition for validation.", SourceSpan.None);
             return false;
         }
 
@@ -35,7 +35,7 @@ public static class WorldSemanticValidator {
 
         foreach (var error in errors) {
             var span = ExtractSpanFromError(error, sourceMap);
-            diagnostics.ReportError("PUCK030", error, span);
+            diagnostics.ReportError(PuckDiagnosticCodes.SemanticValidation, error, span);
         }
 
         return errors.Count == 0;
@@ -60,7 +60,8 @@ public static class WorldSemanticValidator {
         var rootBytes = Encoding.UTF8.GetBytes(loweredJson.ToJsonString());
 
         if (!PuckDocumentComposer.TryComposeWorldDocument(sourcePath, rootBytes, out var composed, out _, out var composeReason)) {
-            diagnostics.ReportError("PUCK033", $"Basis/import composition refused: {composeReason}", SourceSpan.None);
+            var span = (sourceMap is not null && sourceMap.TryGetSpan("/basis", out var basisSpan)) ? basisSpan : SourceSpan.None;
+            diagnostics.ReportError(PuckDiagnosticCodes.CompositionRefused, $"Basis/import composition refused: {composeReason}", span);
             return false;
         }
 
@@ -78,8 +79,18 @@ public static class WorldSemanticValidator {
 
         // Convert dot notation "views.layouts[0]" to JSON pointer "/views/layouts/0"
         var jsonPointer = ConvertTojsonPointer(pathToken);
-        if (sourceMap.TryGetSpan(jsonPointer, out var span)) {
-            return span;
+
+        // The map registers the nodes the emitter lowered, which are rarely the leaf the engine names; walking back
+        // up the pointer finds the nearest enclosing node that does carry a span.
+        while (jsonPointer.Length > 1) {
+            if (sourceMap.TryGetSpan(jsonPointer, out var span)) {
+                return span;
+            }
+            var lastSegment = jsonPointer.LastIndexOf('/');
+            if (lastSegment <= 0) {
+                break;
+            }
+            jsonPointer = jsonPointer[..lastSegment];
         }
 
         return SourceSpan.None;

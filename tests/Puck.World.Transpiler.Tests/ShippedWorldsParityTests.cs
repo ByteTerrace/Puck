@@ -24,6 +24,11 @@ public class ShippedWorldsParityTests {
         "games/solitaire.world.json",
         "games/spider.world.json",
         "games/tictactoe.world.json",
+        "moth-courtyard.world.json",
+        "shards/quilt-ne.world.json",
+        "shards/quilt-nw.world.json",
+        "shards/quilt-se.world.json",
+        "shards/quilt-sw.world.json",
         "study.world.json",
     ];
 
@@ -65,6 +70,18 @@ public class ShippedWorldsParityTests {
     [Fact]
     public void TestTictactoeParity() {
         TestShippedWorldRoundTripParity("games/tictactoe.world.json");
+    }
+
+    // Carries a `{"$replace": true}` basis-merge directive row in `rules`, which is not a rule.
+    [Fact]
+    public void TestMothCourtyardParity() {
+        TestShippedWorldRoundTripParity("moth-courtyard.world.json");
+    }
+
+    // Carries the same directive as its first `placements` row, plus placement rows a basis completes.
+    [Fact]
+    public void TestQuiltShardParity() {
+        TestShippedWorldRoundTripParity("shards/quilt-ne.world.json");
     }
 
     [Theory]

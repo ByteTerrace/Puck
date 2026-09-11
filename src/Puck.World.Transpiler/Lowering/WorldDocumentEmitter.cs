@@ -36,7 +36,7 @@ public static partial class WorldDocumentEmitter {
 
         if (document.Basis is not null) {
             root["basis"] = document.Basis;
-            sourceMap.Register("/basis", document.Span);
+            sourceMap.Register("/basis", document.BasisSpan);
         }
 
         var scope = new EvaluationScope(basePath, sourceMap: sourceMap, diagnostics: diagnostics, schema: document.Schema);
@@ -416,7 +416,9 @@ public static partial class WorldDocumentEmitter {
                         }
                     }
 
-                    jsonObj[key] = LowerExpression(arg.Value, scope, key);
+                    // Classified by the qualified `call.argument` key, so a unit reads against the argument's own
+                    // dimension rather than whatever a same-named block property elsewhere means.
+                    jsonObj[key] = LowerExpression(arg.Value, scope, $"{call.Name}.{key}");
                     positionalIndex++;
                 }
                 return jsonObj;
@@ -474,16 +476,10 @@ public static partial class WorldDocumentEmitter {
         return JsonValue.Create(numVal);
     }
 
-    // A percentage suffix converts to a 0..1 fraction on any field — the DSL's one dimension-table exception,
-    // since no field name in the corpus is dedicated to a 0..1 quantity. Every other unit is checked against
-    // WorldDocumentEmitterUnits' field-dimension table (§5): a field absent from it is PUCK024, a unit the field
-    // does not accept is PUCK025.
+    // Every unit is checked against WorldDocumentEmitterUnits' field-dimension table, `%`/`pct` included: a field
+    // absent from the table is PUCK024, a unit the field's own dimension does not accept is PUCK025. No unit
+    // converts outside the table, so a suffix can never silently change a value the table says nothing about.
     private static JsonNode LowerUnitLiteral(double numVal, string unit, string? fieldKey, SourceSpan span, EvaluationScope scope) {
-        var lowerUnit = unit.ToLowerInvariant();
-        if (lowerUnit is "%" or "pct") {
-            return JsonValue.Create(numVal / 100.0);
-        }
-
         if (fieldKey is not null && WorldDocumentEmitterUnits.TryConvert(fieldKey, numVal, unit, out var converted)) {
             if (Math.Abs(converted % 1) < double.Epsilon) {
                 return JsonValue.Create((long)converted);
@@ -493,10 +489,10 @@ public static partial class WorldDocumentEmitter {
 
         var kind = (fieldKey is null) ? WorldDocumentEmitterUnits.FieldDimensionKind.Unknown : WorldDocumentEmitterUnits.Classify(fieldKey);
         if (kind == WorldDocumentEmitterUnits.FieldDimensionKind.Unknown) {
-            scope.Diagnostics.ReportError("PUCK024", $"'{fieldKey ?? "this field"}' admits no unit — remove the '{unit}' suffix", span);
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.UnitOnUnknownField, $"'{fieldKey ?? "this field"}' admits no unit — remove the '{unit}' suffix", span);
         } else {
             var accepted = string.Join("/", WorldDocumentEmitterUnits.AcceptedUnitsFor(kind));
-            scope.Diagnostics.ReportError("PUCK025", $"'{fieldKey}' accepts {accepted}, not '{unit}'", span);
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.UnitNotAdmitted, $"'{fieldKey}' accepts {accepted}, not '{unit}'", span);
         }
         return JsonValue.Create(numVal);
     }

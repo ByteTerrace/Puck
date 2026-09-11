@@ -21,6 +21,7 @@ public static partial class PuckParser {
         var context = CreateContext(source);
         var schema = defaultSchema;
         string? basis = null;
+        var basisSpan = SourceSpan.None;
         var statements = new List<StatementNode>();
 
         SkipWhiteSpace(context);
@@ -38,30 +39,33 @@ public static partial class PuckParser {
                     continue;
                 }
                 var (sLine, sCol) = GetLineAndColumn(source, context.Scanner.Cursor.Offset);
-                diagnostics.ReportError("PUCK001", "Expected schema identifier or string after 'schema'", new SourceSpan(context.Scanner.Cursor.Offset, 1, sLine, sCol));
+                diagnostics.ReportError(PuckDiagnosticCodes.Syntax, "Expected schema identifier or string after 'schema'", new SourceSpan(context.Scanner.Cursor.Offset, 1, sLine, sCol));
                 SynchronizeToStatementBoundary(context);
                 continue;
             }
 
             if (TryMatchKeyword(context, "basis")) {
+                var basisStart = context.Scanner.Cursor.Offset - "basis".Length;
+                var (basisLine, basisCol) = GetLineAndColumn(source, basisStart);
                 SkipWhiteSpace(context);
                 TryConsume(context, ':');
                 TryConsume(context, '=');
                 SkipWhiteSpace(context);
                 if (TryReadString(context, out var basisVal)) {
                     basis = basisVal;
+                    basisSpan = new SourceSpan(basisStart, context.Scanner.Cursor.Offset - basisStart, basisLine, basisCol);
                     ConsumeSeparator(context);
                     continue;
                 }
                 var (bLine, bCol) = GetLineAndColumn(source, context.Scanner.Cursor.Offset);
-                diagnostics.ReportError("PUCK001", "Expected string path after 'basis'", new SourceSpan(context.Scanner.Cursor.Offset, 1, bLine, bCol));
+                diagnostics.ReportError(PuckDiagnosticCodes.Syntax, "Expected string path after 'basis'", new SourceSpan(context.Scanner.Cursor.Offset, 1, bLine, bCol));
                 SynchronizeToStatementBoundary(context);
                 continue;
             }
 
             if (context.Scanner.Cursor.Current == '}') {
                 var (bLine, bCol) = GetLineAndColumn(source, context.Scanner.Cursor.Offset);
-                diagnostics.ReportError("PUCK001", "Unexpected closing brace '}' at document level", new SourceSpan(context.Scanner.Cursor.Offset, 1, bLine, bCol));
+                diagnostics.ReportError(PuckDiagnosticCodes.Syntax, "Unexpected closing brace '}' at document level", new SourceSpan(context.Scanner.Cursor.Offset, 1, bLine, bCol));
                 context.Scanner.Cursor.Advance();
                 SkipWhiteSpace(context);
                 continue;
@@ -84,7 +88,9 @@ public static partial class PuckParser {
             Length: source.Length,
             Line: line,
             Column: col
-        );
+        ) {
+            BasisSpan = (basisSpan.Line > 0) ? basisSpan : new SourceSpan(0, source.Length, line, col),
+        };
 
         return new CompilationResult<DocumentNode>(doc, diagnostics);
     }
@@ -137,7 +143,7 @@ public static partial class PuckParser {
             if (diagnostics is null) {
                 throw;
             }
-            diagnostics.ReportError("PUCK001", ex.Message, new SourceSpan(ex.Offset, Math.Max(1, cursor.Offset - ex.Offset), ex.Line, ex.Column));
+            diagnostics.ReportError(ex.Code, ex.Message, new SourceSpan(ex.Offset, Math.Max(1, cursor.Offset - ex.Offset), ex.Line, ex.Column));
             SynchronizeToStatementBoundary(context);
             var len = Math.Max(1, cursor.Offset - startOffset);
             return new ErrorStatementNode(ex.Message, startOffset, len, line, col);
@@ -145,7 +151,7 @@ public static partial class PuckParser {
             if (diagnostics is null) {
                 throw;
             }
-            diagnostics.ReportError("PUCK001", ex.Message, new SourceSpan(startOffset, Math.Max(1, cursor.Offset - startOffset), line, col));
+            diagnostics.ReportError(PuckDiagnosticCodes.Syntax, ex.Message, new SourceSpan(startOffset, Math.Max(1, cursor.Offset - startOffset), line, col));
             SynchronizeToStatementBoundary(context);
             var len = Math.Max(1, cursor.Offset - startOffset);
             return new ErrorStatementNode(ex.Message, startOffset, len, line, col);
@@ -339,6 +345,8 @@ public static partial class PuckParser {
         var afterFirstIdPosition = cursor.Position;
         var afterFirstIdOffset = cursor.Offset;
 
+        RefuseMisplacedConstruct(context, firstId, afterFirstIdOffset, startOffset, line, col);
+
         SkipWhiteSpace(context);
 
         // Check if invocation: name(...)
@@ -424,7 +432,7 @@ public static partial class PuckParser {
             var sawBareSolid = statements.Exists(static s => s is FlagStatementNode { Name: "solid" });
             var sawSolidProperty = statements.Exists(static s => s is PropertyNode { Name: "solid" });
             if (sawBareSolid && sawSolidProperty) {
-                diagnostics?.ReportError("PUCK028", $"placement '{name}' authors both the bare 'solid' flag and an explicit 'solid: {{ }}' override", new SourceSpan(startOffset, context.Scanner.Cursor.Offset - startOffset, line, col));
+                diagnostics?.ReportError(PuckDiagnosticCodes.SolidSpelledTwice, $"placement '{name}' authors both the bare 'solid' flag and an explicit 'solid: {{ }}' override", new SourceSpan(startOffset, context.Scanner.Cursor.Offset - startOffset, line, col));
             }
         }
 
@@ -717,10 +725,29 @@ public static partial class PuckParser {
             throw CreateException(context, "Expected number digits");
         }
 
+        // Scientific notation is part of the number, never a unit suffix: a canonical document holds small
+        // magnitudes as "8.57E-05", and reading the 'E' as a unit both loses the exponent and mis-reports the field.
+        var hasExponent = false;
+        if (!cursor.Eof && (cursor.Current is 'e' or 'E')) {
+            var afterExponent = cursor.Offset + 1;
+            var buffer = context.Scanner.Buffer;
+            if (afterExponent < buffer.Length && (buffer[afterExponent] is '+' or '-')) {
+                afterExponent++;
+            }
+            if (afterExponent < buffer.Length && char.IsAsciiDigit(buffer[afterExponent])) {
+                hasExponent = true;
+                cursor.Advance(afterExponent - cursor.Offset);
+                while (!cursor.Eof && char.IsAsciiDigit(cursor.Current)) {
+                    cursor.Advance();
+                }
+                numLength = cursor.Offset - numStart;
+            }
+        }
+
         var cleanNumStr = context.Scanner.Buffer.Substring(numStart, numLength).Replace("_", "");
         var signedNumStr = isNegative ? "-" + cleanNumStr : cleanNumStr;
         object numVal;
-        if (hasDecimalPoint) {
+        if (hasDecimalPoint || hasExponent) {
             if (!double.TryParse(signedNumStr, System.Globalization.CultureInfo.InvariantCulture, out var d)) {
                 throw CreateException(context, $"Invalid floating point literal '{signedNumStr}'");
             }
@@ -1028,6 +1055,48 @@ public static partial class PuckParser {
         }
 
         return (Line: (lineIdx + 1), Column: (offset - starts[lineIdx] + 1));
+    }
+
+    // A construct that only exists inside one enclosing block, the block it needs, and the code that names its
+    // misplacement. `Quoted` marks the ones followed by a quoted name; the rest open with an operand. Both shapes
+    // are distinguishable from an ordinary property or block of the same name (`when: 120` in a capture row,
+    // `transform { }` as a nested object), which stay legal wherever they appear.
+    private static readonly (string Keyword, string Owner, string Code, bool Quoted)[] MisplacedConstructs = [
+        ("option", "decision", PuckDiagnosticCodes.DecisionStructure, true),
+        ("when", "rule", PuckDiagnosticCodes.DecisionStructure, false),
+        ("bind", "rule", PuckDiagnosticCodes.DecisionStructure, false),
+        ("interrupt", "decision", PuckDiagnosticCodes.DecisionStructure, false),
+        ("push", "rule", PuckDiagnosticCodes.EffectOutsideEffectsBody, false),
+        ("countdown", "rule", PuckDiagnosticCodes.EffectOutsideEffectsBody, false),
+        ("remove", "rule", PuckDiagnosticCodes.EffectOutsideEffectsBody, false),
+        ("schedule", "rule", PuckDiagnosticCodes.EffectOutsideEffectsBody, false),
+    ];
+
+    // Refuses a rule-body-only keyword found where an ordinary statement belongs, naming the block it needs instead
+    // of letting the generic statement grammar fail further along the line on an unrelated token.
+    private static void RefuseMisplacedConstruct(ParseContext context, string identifier, int nextOffset, int startOffset, int line, int col) {
+        var buffer = context.Scanner.Buffer;
+        var probe = nextOffset;
+        while (probe < buffer.Length && (buffer[probe] == ' ' || buffer[probe] == '\t')) {
+            probe++;
+        }
+        if (probe >= buffer.Length) {
+            return;
+        }
+        var next = buffer[probe];
+
+        foreach (var (keyword, owner, code, quoted) in MisplacedConstructs) {
+            if (!string.Equals(identifier, keyword, StringComparison.Ordinal)) {
+                continue;
+            }
+            var shapeMatches = quoted ? (next == '"') : (char.IsLetter(next) || next is '_' or '$' or '`');
+            if (!shapeMatches) {
+                return;
+            }
+            throw new PuckParseException($"'{keyword}' is only valid inside a '{owner}' body", startOffset, line, col) {
+                Code = code,
+            };
+        }
     }
 
     private static PuckParseException CreateException(ParseContext context, string message) {

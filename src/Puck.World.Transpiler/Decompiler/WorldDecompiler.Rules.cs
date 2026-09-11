@@ -12,6 +12,19 @@ namespace Puck.World.Transpiler.Decompiler;
 // dedicated sugar below does not cover (every `Puck.World.Schema` extension arm, every `StateTransform` sub-arm)
 // falls through to `FormatCallForm` — the same escape hatch `FormatValue` uses everywhere else in the document.
 public static partial class WorldDecompiler {
+    // Whether every row in a `rules` array is a rule the `rule "name" { }` grammar can carry. A row with no `name`
+    // is a WorldDocumentBasis merge directive, not a rule: it has no name to quote and no effects to author, and
+    // routing it through the sugar emits a rule the compiler then refuses. When any row is one of those, the whole
+    // section prints through the generic value path, which carries every row unchanged.
+    private static bool CanSugarRules(JsonArray rules) {
+        foreach (var item in rules) {
+            if (item is not JsonObject rule || rule["name"] is not JsonValue nameVal || !nameVal.TryGetValue<string>(out _)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static void DecompileRulesBlock(StringBuilder sb, JsonArray rules, int indentLevel) {
         var first = true;
         foreach (var item in rules) {
@@ -40,10 +53,14 @@ public static partial class WorldDecompiler {
             AppendGateProperty(sb, gate, indentLevel + 1);
         }
         if (rule["bindings"] is JsonArray bindings) {
-            foreach (var b in bindings) {
-                if (b is JsonObject bindObj) {
-                    AppendBindStatement(sb, bindObj, indentLevel + 1);
+            if (CanSugarBindings(bindings)) {
+                foreach (var b in bindings) {
+                    if (b is JsonObject bindObj) {
+                        AppendBindStatement(sb, bindObj, indentLevel + 1);
+                    }
                 }
+            } else {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}bindings: {FormatValue(bindings, indentLevel + 1)}");
             }
         }
         if (rule["mode"] is { } mode) {
@@ -74,10 +91,25 @@ public static partial class WorldDecompiler {
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
     }
 
+    // `RuleBinding.Kind` is a required positional parameter with no default, so a row omitting it — or spelling it
+    // as a kind the `bind` grammar does not admit — is off-contract; inventing one here would author a binding the
+    // source never asked for, so the whole array falls back to a plain `bindings:` property instead.
+    private static bool CanSugarBindings(JsonArray bindings) {
+        foreach (var item in bindings) {
+            if (item is not JsonObject bind
+                || !PuckDslVocabulary.TryParseComparisonKind(bind["kind"]?.ToString(), out _)
+                || bind["name"] is null
+                || bind["expression"] is null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static void AppendBindStatement(StringBuilder sb, JsonObject bind, int indentLevel) {
         var inner = new string(' ', indentLevel * 4);
         var name = bind["name"]?.ToString() ?? "";
-        var kind = bind["kind"]?.ToString() ?? "Int";
+        var kind = bind["kind"]?.ToString() ?? "";
         var expression = bind["expression"]?.ToString() ?? "";
         sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}bind {name} : {kind} = {expression}");
     }
@@ -108,11 +140,11 @@ public static partial class WorldDecompiler {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}seed: {FormatValue(seed, indentLevel + 1)}");
         }
         if (decision["interrupt"] is JsonObject interrupt) {
-            // Unlike `gate` (an ordinary rule-body property when it cannot be sugared, §2.2's generic-property
-            // fallback), `interrupt` is a dedicated keyword whose only grammar is `interrupt Gate` — there is no
-            // object/call-form alternative to fall back to, so this prints bare even when unsafe for the same
-            // leading-paren reason `gate` guards against.
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}interrupt {FormatPredicate(interrupt)}");
+            if (IsPredicateSafeForGateSugar(interrupt)) {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}interrupt {FormatPredicate(interrupt)}");
+            } else {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}interrupt: {FormatValue(interrupt, indentLevel + 1)}");
+            }
         }
         if (decision["onNoChoice"] is JsonArray onNoChoice) {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}onNoChoice {{");
@@ -139,11 +171,7 @@ public static partial class WorldDecompiler {
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}option \"{EscapeString(name)}\" {{");
 
         if (option["gate"] is JsonObject gate) {
-            // Unlike a rule body (§2.2's generic-property fallback covers an unrecognized `gate:` property), the
-            // emitter's option-body lowering recognizes only `when`/`score`/`neighbors`/effect statements — a plain
-            // `gate:` property here would lower to nothing at all. `when` is the only spelling that reaches this
-            // field, so it prints bare even on the rare unsafe predicate shape §1.2/A11 describes.
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}when {FormatPredicate(gate)}");
+            AppendGateProperty(sb, gate, indentLevel + 1);
         }
         if (option["score"] is { } score) {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}score: {score}");
@@ -180,10 +208,18 @@ public static partial class WorldDecompiler {
     }
 
     private static bool IsPredicateSafeForGateSugar(JsonObject node) => node["$type"]?.ToString() switch {
-        "compareState" => RowRefRoundTrips(node["state"]?.ToString() ?? "", node["key"]?.ToString())
+        // `comparison` and `kind` must be spelled exactly as their own enum members: the engine's converter accepts
+        // any casing, but the sugar can only reproduce the canonical spelling, and printing a different one back
+        // changes the document. `value` and `comparandState` together contradict `CompareState`'s own
+        // exactly-one-of contract and the sugar carries only one of them, so that shape stays call-form too.
+        "compareState" => PuckDslVocabulary.TryParseCanonicalComparisonName(node["comparison"]?.ToString(), out _)
+            && ((node["value"] is null) != (node["comparandState"] is null))
+            && RowRefRoundTrips(node["state"]?.ToString() ?? "", node["key"]?.ToString())
             && (node["comparandState"] is not { } comparandState
                 || RowRefRoundTrips(comparandState.ToString() ?? "", node["comparandKey"]?.ToString())),
-        "compareValue" => !(node["left"]?.ToString() ?? "").TrimStart().StartsWith('('),
+        "compareValue" => PuckDslVocabulary.TryParseCanonicalComparisonName(node["comparison"]?.ToString(), out _)
+            && (node["kind"] is null || PuckDslVocabulary.TryParseComparisonKind(node["kind"]!.ToString(), out _))
+            && !(node["left"]?.ToString() ?? "").TrimStart().StartsWith('('),
         // A single-child (or empty) `all`/`any` has no bare-sugar spelling at all: `AndGate`/`OrGate` only ever
         // build the `All`/`Any` wrapper when MORE than one operand was matched at the same keyword — one operand
         // (or zero) collapses to that operand directly (or nothing), so the wrapper itself is unrecoverable from
@@ -267,20 +303,18 @@ public static partial class WorldDecompiler {
         var left = node["left"]?.ToString() ?? "";
         var right = node["right"]?.ToString() ?? "";
         var symbol = ComparisonToSymbol(node["comparison"]?.ToString());
-        var kind = node["kind"]?.ToString();
-        var suffix = string.Equals(kind, "Int", StringComparison.Ordinal) ? " : Int" : "";
+        var suffix = (PuckDslVocabulary.TryParseComparisonKind(node["kind"]?.ToString(), out var kind) && (kind == CellKind.Int))
+            ? $" : {Enum.GetName(CellKind.Int)}"
+            : "";
         return $"{left} {symbol} {right}{suffix}";
     }
 
-    private static string ComparisonToSymbol(string? comparison) => comparison switch {
-        "Equal" => "==",
-        "NotEqual" => "!=",
-        "Less" => "<",
-        "LessOrEqual" => "<=",
-        "Greater" => ">",
-        "GreaterOrEqual" => ">=",
-        _ => "==",
-    };
+    // Only ever reached for a node `IsPredicateSafeForGateSugar` already accepted, which is what guarantees the wire
+    // spelling names an enum member exactly.
+    private static string ComparisonToSymbol(string? comparison) =>
+        PuckDslVocabulary.TryParseCanonicalComparisonName(comparison, out var parsed)
+            ? PuckDslVocabulary.SymbolFor(parsed)
+            : throw new InvalidOperationException($"'{comparison}' does not name an ActionStateComparison member");
 
     // ---- Effect statement inverse (§2) ---------------------------------------------------------------------
 

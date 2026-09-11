@@ -1,0 +1,19 @@
+{
+  "schema": "puck.world.def.v1",
+  "documentId": "comprehensive-synthetic-arcade-v1",
+  "state": {
+    "world": [
+      {
+        "name": "arcadeCredits",
+        "kind": "Int",
+        "capacity": 1,
+        "cells": [
+          {
+            "key": "count",
+            "value": 0
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Puck.SignedDistance;
 using Puck.World.Transpiler.Ast;
+using Puck.World.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -30,7 +31,7 @@ public static partial class WorldDocumentEmitter {
 
         if (type is not null) {
             if (!Enum.TryParse<SdfSolidPrimitive>(type, ignoreCase: false, out _)) {
-                scope.Diagnostics.ReportError("PUCK027", $"'{type}' is not a recognized shape type", block.Span);
+                scope.Diagnostics.ReportError(PuckDiagnosticCodes.UnknownShapeType, $"'{type}' is not a recognized shape type", block.Span);
             }
             shapeObj["type"] = type;
         }
@@ -38,23 +39,10 @@ public static partial class WorldDocumentEmitter {
             shapeObj["name"] = shapeName;
         }
 
-        if (!shapeObj.ContainsKey("id")) {
-            shapeObj["id"] = shapeIdx;
-        }
-        if (!shapeObj.ContainsKey("blend")) {
-            shapeObj["blend"] = "Union";
-        }
-        if (!shapeObj.ContainsKey("smooth")) {
-            shapeObj["smooth"] = 0;
-        }
-        if (!shapeObj.ContainsKey("rotation")) {
-            shapeObj["rotation"] = new JsonArray(0, 0, 0, 1);
-        }
-        if (!shapeObj.ContainsKey("scale")) {
-            shapeObj["scale"] = new JsonArray(1, 1, 1);
-        }
-        if (!shapeObj.ContainsKey("group")) {
-            shapeObj["group"] = 0;
+        foreach (var key in WorldDocumentRowDefaults.ShapeKeys) {
+            if (!shapeObj.ContainsKey(key)) {
+                shapeObj[key] = WorldDocumentRowDefaults.ShapeDefault(key, shapeIdx);
+            }
         }
 
         shapesArr.AppendNode(shapeObj);
@@ -94,7 +82,7 @@ public static partial class WorldDocumentEmitter {
 
         // Deviates from the addon/shape precedent of mapping a block's quoted name to "name": WorldPlacement's
         // identity field is literally Id.
-        if (!rowObj.ContainsKey("id") && row.Name is not null) {
+        if (!rowObj.ContainsKey("id") && !string.IsNullOrEmpty(row.Name)) {
             rowObj["id"] = row.Name;
         }
 
@@ -110,14 +98,18 @@ public static partial class WorldDocumentEmitter {
         // refused authoring both spellings on the same row; the explicit object wins when it did.
         var sawBareSolid = row.Statements.Any(static s => s is FlagStatementNode { Name: "solid" });
         if (sawBareSolid && !rowObj.ContainsKey("solid")) {
-            rowObj["solid"] = new JsonObject { ["margin"] = 0 };
+            rowObj["solid"] = WorldDocumentRowDefaults.BareSolid();
         }
 
-        if (!rowObj.ContainsKey("yawDegrees")) {
-            rowObj["yawDegrees"] = 0;
-        }
-        if (!rowObj.ContainsKey("scale")) {
-            rowObj["scale"] = 1;
+        // Only a row carrying its own prototypeId is a whole placement; one without it is either a basis-merge
+        // directive or a partial row a basis chain completes, and filling a default there would override the value
+        // composition was about to supply. The decompiler elides these two fields on exactly the same condition.
+        if (rowObj.ContainsKey("prototypeId")) {
+            foreach (var key in WorldDocumentRowDefaults.PlacementKeys) {
+                if (!rowObj.ContainsKey(key)) {
+                    rowObj[key] = WorldDocumentRowDefaults.PlacementDefault(key);
+                }
+            }
         }
 
         return rowObj;

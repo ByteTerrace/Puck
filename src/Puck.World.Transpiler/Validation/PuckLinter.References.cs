@@ -11,8 +11,14 @@ namespace Puck.World.Transpiler.Validation;
 // dotted (import-alias) name is never checked against a declared-row set, and a document declaring `basis` skips
 // every family outright, since its own rows may live in a basis chain this pass cannot see.
 public static partial class PuckLinter {
+    // Read from RuleFacts' own constants, trimmed of their trailing ':'/'[' separator, so a channel added there is
+    // known here without a second edit.
     private static readonly string[] KnownChannelPrefixes = [
-        "$match", "$history", "$cell", "$zone", "$zones", "$expr", "$bind", "$table", "$reduce", "$symmetry", "$tick",
+        .. new[] {
+            RuleFacts.MatchPrefix, RuleFacts.HistoryPrefix, RuleFacts.CellKeyPrefix, RuleFacts.ZoneKeyPrefix,
+            RuleFacts.LiveZonePrefix, RuleFacts.ForEachZones, RuleFacts.ExpressionKeyPrefix, RuleFacts.BindPrefix,
+            RuleFacts.TablePrefix, RuleFacts.ReducePrefix, RuleFacts.SymmetryPrefix, RuleFacts.Tick,
+        }.Select(static prefix => prefix.TrimEnd(':', '[')).Distinct(StringComparer.Ordinal),
     ];
 
     /// <summary>Lints a canonical lowered <c>puck.world.def.v1</c> document for unresolved symbolic references.</summary>
@@ -25,7 +31,7 @@ public static partial class PuckLinter {
 
         if (document["basis"] is not null) {
             diagnostics.ReportInformation(
-                "PUCK_LINT_005",
+                PuckDiagnosticCodes.LintUnresolvedState,
                 "Symbol resolution skipped: this document declares a 'basis' — rows may be inherited from the basis chain, which this pass cannot see.",
                 SourceSpan.None
             );
@@ -124,7 +130,7 @@ public static partial class PuckLinter {
             if (shapes[index] is JsonObject shapeObj
                 && TryGetString(shapeObj, "parent", out var parentName)
                 && !siblingNames.Contains(parentName)) {
-                Report(sourceMap, diagnostics, $"{pointer}/{index}/parent", "PUCK034", DiagnosticSeverity.Warning,
+                Report(sourceMap, diagnostics, $"{pointer}/{index}/parent", PuckDiagnosticCodes.UnresolvedParent, DiagnosticSeverity.Warning,
                     $"Shape parent '{parentName}' does not resolve to a sibling shape name in this collection.");
             }
         }
@@ -134,11 +140,11 @@ public static partial class PuckLinter {
         // A placement row (identified by its own required prototypeId) — parent names a sibling placement id.
         if (TryGetString(obj, "prototypeId", out var prototypeId)) {
             if (!catalog.Prototypes.Contains(prototypeId)) {
-                Report(sourceMap, diagnostics, $"{pointer}/prototypeId", "PUCK_LINT_006", DiagnosticSeverity.Information,
+                Report(sourceMap, diagnostics, $"{pointer}/prototypeId", PuckDiagnosticCodes.LintUnresolvedPrototype, DiagnosticSeverity.Information,
                     $"Unresolved prototypeId '{prototypeId}'.");
             }
             if (TryGetString(obj, "parent", out var placementParent) && !catalog.Placements.Contains(placementParent)) {
-                Report(sourceMap, diagnostics, $"{pointer}/parent", "PUCK_LINT_007", DiagnosticSeverity.Information,
+                Report(sourceMap, diagnostics, $"{pointer}/parent", PuckDiagnosticCodes.LintUnresolvedPlacementParent, DiagnosticSeverity.Information,
                     $"Unresolved placement parent '{placementParent}'.");
             }
         }
@@ -154,11 +160,11 @@ public static partial class PuckLinter {
         CheckOperandField(obj, "score", pointer, catalog, sourceMap, diagnostics);
 
         if (TryGetString(obj, "camera", out var cameraName) && cameraName.Length > 0 && !catalog.Cameras.Contains(cameraName)) {
-            Report(sourceMap, diagnostics, $"{pointer}/camera", "PUCK_LINT_008", DiagnosticSeverity.Information,
+            Report(sourceMap, diagnostics, $"{pointer}/camera", PuckDiagnosticCodes.LintUnresolvedView, DiagnosticSeverity.Information,
                 $"Unresolved camera reference '{cameraName}'.");
         }
         if (TryGetString(obj, "spawnPoint", out var spawnPointId) && !catalog.SpawnPoints.Contains(spawnPointId)) {
-            Report(sourceMap, diagnostics, $"{pointer}/spawnPoint", "PUCK_LINT_008", DiagnosticSeverity.Information,
+            Report(sourceMap, diagnostics, $"{pointer}/spawnPoint", PuckDiagnosticCodes.LintUnresolvedView, DiagnosticSeverity.Information,
                 $"Unresolved spawn point reference '{spawnPointId}'.");
         }
     }
@@ -167,7 +173,7 @@ public static partial class PuckLinter {
         if (!TryGetString(obj, field, out var name) || IsSkippableName(name) || catalog.State.Contains(name)) {
             return;
         }
-        Report(sourceMap, diagnostics, $"{pointer}/{field}", "PUCK_LINT_005", DiagnosticSeverity.Information,
+        Report(sourceMap, diagnostics, $"{pointer}/{field}", PuckDiagnosticCodes.LintUnresolvedState, DiagnosticSeverity.Information,
             $"Unresolved state row '{name}'.");
     }
 
@@ -185,7 +191,7 @@ public static partial class PuckLinter {
                 continue;
             }
             if (!catalog.State.Contains(state.Name)) {
-                Report(sourceMap, diagnostics, fieldPointer, "PUCK_LINT_005", DiagnosticSeverity.Information,
+                Report(sourceMap, diagnostics, fieldPointer, PuckDiagnosticCodes.LintUnresolvedState, DiagnosticSeverity.Information,
                     $"Unresolved state row '{state.Name}'.");
             }
         }
@@ -205,7 +211,7 @@ public static partial class PuckLinter {
         }
         foreach (var known in KnownChannelPrefixes) {
             if (IsOneEditApart(prefix, known)) {
-                Report(sourceMap, diagnostics, atPointer, "PUCK_LINT_009", DiagnosticSeverity.Information,
+                Report(sourceMap, diagnostics, atPointer, PuckDiagnosticCodes.LintUnknownChannelPrefix, DiagnosticSeverity.Information,
                     $"'{prefix}' does not match any known reserved-channel prefix — did you mean '{known}'?");
                 return;
             }

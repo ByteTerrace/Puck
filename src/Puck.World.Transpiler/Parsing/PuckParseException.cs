@@ -11,6 +11,9 @@ public sealed class PuckParseException : Exception {
     /// <summary>Gets the 1-based column number in the source text.</summary>
     public int Column { get; }
 
+    /// <summary>Gets the diagnostic code this failure is reported under.</summary>
+    public string Code { get; init; } = Diagnostics.PuckDiagnosticCodes.Syntax;
+
     /// <summary>Initializes a new instance of the <see cref="PuckParseException"/> class.</summary>
     /// <param name="message">The error message describing the syntax violation.</param>
     /// <param name="offset">The character offset in source text.</param>

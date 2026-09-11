@@ -91,7 +91,7 @@ public static class WasmModuleInspector {
         ArgumentNullException.ThrowIfNull(diagnostics);
 
         if (!result.IsValid) {
-            diagnostics.ReportError("PUCK020", $"Module '{modulePath}' is not a valid WebAssembly binary (invalid header).", span);
+            diagnostics.ReportError(PuckDiagnosticCodes.Template, $"Module '{modulePath}' is not a valid WebAssembly binary (invalid header).", span);
             return;
         }
 
@@ -99,7 +99,7 @@ public static class WasmModuleInspector {
         if (!string.IsNullOrEmpty(pinnedHash) && !string.Equals(pinnedHash, "auto", StringComparison.OrdinalIgnoreCase)) {
             if (!string.Equals(pinnedHash, result.ContentHash, StringComparison.OrdinalIgnoreCase)) {
                 diagnostics.ReportWarning(
-                    "PUCK023",
+                    PuckDiagnosticCodes.AddonHash,
                     $"Pinned hash '{pinnedHash}' does not match computed hash '{result.ContentHash}' of module '{modulePath}'.",
                     span
                 );
@@ -113,7 +113,7 @@ public static class WasmModuleInspector {
                 var found = declaredCapabilities.Any(c => string.Equals(c, import.Name, StringComparison.OrdinalIgnoreCase));
                 if (!found && declaredCapabilities.Count > 0) {
                     diagnostics.ReportWarning(
-                        "PUCK021",
+                        PuckDiagnosticCodes.AddonPayload,
                         $"Addon '{modulePath}' imports host function '{import.Module}.{import.Name}' which may require undeclared capability requests.",
                         span
                     );

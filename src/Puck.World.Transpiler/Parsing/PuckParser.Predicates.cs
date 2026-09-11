@@ -111,7 +111,8 @@ public static partial class PuckParser {
         var rightText = ScanOperandSpan(context, GateReservedWords, stopAtComparator: true, out var rightSawComparator);
         var rightSpan = new SourceSpan(rightStart, cursor.Offset - rightStart, rightLine, rightCol);
         if (rightSawComparator) {
-            diagnostics?.ReportError("PUCK004", "chained comparisons are not supported — join two comparisons with 'and'", new SourceSpan(cursor.Offset, 1, rightLine, rightCol));
+            diagnostics?.ReportError(PuckDiagnosticCodes.ChainedComparison, "chained comparisons are not supported - join two comparisons with 'and'", new SourceSpan(cursor.Offset, 1, rightLine, rightCol));
+            SkipToEndOfStatement(context);
         }
 
         string? kind = null;
@@ -119,16 +120,20 @@ public static partial class PuckParser {
         if (TryMatchKeyword(context, "as")) {
             SkipWhiteSpace(context);
             var (kindLine, kindCol) = GetLineAndColumn(context.Scanner.Buffer, cursor.Offset);
-            if (TryMatchKeyword(context, "Int")) {
-                kind = "Int";
-            } else if (TryMatchKeyword(context, "Fixed")) {
-                kind = "Fixed";
-            } else {
-                diagnostics?.ReportError("PUCK005", "expected 'Int' or 'Fixed' after 'as'", new SourceSpan(cursor.Offset, 1, kindLine, kindCol));
+            kind = TryMatchKindKeyword(context);
+            if (kind is null) {
+                diagnostics?.ReportError(PuckDiagnosticCodes.UnknownKindAnnotation, $"expected {DescribeAdmittedKinds()} after 'as'", new SourceSpan(cursor.Offset, 1, kindLine, kindCol));
+                SkipToEndOfStatement(context);
             }
         } else if (TryStripTrailingColonKind(rightText, out var stripped, out var strippedKind)) {
             rightText = stripped;
             kind = strippedKind;
+        } else if (TrailingColonWord(rightText) is { } unknownKind) {
+            // The `: Kind` spelling is what the decompiler writes and what the editor snippets teach, so a wrong word
+            // after the colon gets the same named diagnostic the `as Kind` spelling does rather than falling through
+            // to a parse failure about a stray colon.
+            diagnostics?.ReportError(PuckDiagnosticCodes.UnknownKindAnnotation, $"expected {DescribeAdmittedKinds()} after ':', found '{unknownKind}'", rightSpan);
+            rightText = rightText[..rightText.LastIndexOf(':')].TrimEnd();
         }
 
         ValidateOperandText(rightText, rightSpan, diagnostics);

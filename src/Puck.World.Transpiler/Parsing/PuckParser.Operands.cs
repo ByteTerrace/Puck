@@ -112,7 +112,7 @@ public static partial class PuckParser {
         exprText = text;
         kind = null;
         var trimmed = text.TrimEnd();
-        foreach (var candidate in (string[])["Int", "Fixed"]) {
+        foreach (var candidate in PuckDslVocabulary.ComparisonKindNames) {
             if (!trimmed.EndsWith(candidate, StringComparison.Ordinal)) {
                 continue;
             }
@@ -138,7 +138,7 @@ public static partial class PuckParser {
         if (ExpressionSpelling.TryParse(text, out _, out var error)) {
             return true;
         }
-        diagnostics?.ReportError("PUCK002", $"'{text}' {error}", span);
+        diagnostics?.ReportError(PuckDiagnosticCodes.OperandParse, $"'{text}' {error}", span);
         return false;
     }
 
@@ -182,24 +182,33 @@ public static partial class PuckParser {
     /// re-derives that split itself.</summary>
     private static RowRefNode ResolveRowRef(string text, SourceSpan span, DiagnosticBag? diagnostics) {
         if (!ExpressionSpelling.TryParse(text, out var tokens, out var error)) {
-            diagnostics?.ReportError("PUCK002", $"'{text}' {error}", span);
+            diagnostics?.ReportError(PuckDiagnosticCodes.OperandParse, $"'{text}' {error}", span);
             return new RowRefNode(text, null, span.Offset, span.Length, span.Line, span.Column);
         }
         if (tokens.Count != 1 || tokens[0] is not ValueToken.State state) {
-            diagnostics?.ReportError("PUCK003", $"expected a single state-row reference here, not an expression ('{text}')", span);
+            diagnostics?.ReportError(PuckDiagnosticCodes.RowReferenceExpected, $"expected a single state-row reference here, not an expression ('{text}')", span);
             return new RowRefNode(text, null, span.Offset, span.Length, span.Line, span.Column);
         }
         return new RowRefNode(state.Name, state.Key, span.Offset, span.Length, span.Line, span.Column);
     }
 
-    /// <summary>Reads and eagerly resolves a row reference, for the unconditional contexts (<c>countdown</c>,
-    /// <c>remove</c>, <c>schedule</c>) where nothing else could follow the keyword.</summary>
-    private static bool TryReadRowRef(ParseContext context, DiagnosticBag? diagnostics, out RowRefNode? rowRef) {
-        if (!TryReadRowRefSpanRaw(context, out var text, out var span)) {
+    /// <summary>Reads and eagerly resolves a row reference in the unconditional contexts (<c>countdown</c>,
+    /// <c>remove</c>, <c>schedule</c>) where nothing else could follow the keyword. The whole operand span is
+    /// captured, not just a name and its brackets, so text that is an expression rather than a row reference is
+    /// named as such (PUCK003) instead of tripping a generic syntax error further along the line.</summary>
+    private static bool TryReadRowRefOperand(ParseContext context, DiagnosticBag? diagnostics, IReadOnlySet<string>? stopKeywords, out RowRefNode? rowRef) {
+        var cursor = context.Scanner.Cursor;
+        SkipWhiteSpace(context);
+        var start = cursor.Offset;
+        var (line, col) = GetLineAndColumn(context.Scanner.Buffer, start);
+        var text = ScanOperandSpan(context, stopKeywords, stopAtComparator: false, out _);
+
+        if (text.Length == 0) {
             rowRef = null;
             return false;
         }
-        rowRef = ResolveRowRef(text, span, diagnostics);
+
+        rowRef = ResolveRowRef(text, new SourceSpan(start, cursor.Offset - start, line, col), diagnostics);
         return true;
     }
 
@@ -235,83 +244,22 @@ public static partial class PuckParser {
     /// <summary>Reads a name on the same terms <c>ExpressionSpelling</c>'s own lexer does for a reserved channel:
     /// letters/digits/<c>_</c>/<c>$</c>/<c>.</c>, plus, once the name starts with <c>$</c>, <c>:name</c>
     /// continuations, signed <c>:-N</c> segments, and a <c>$zones[...]</c> group folded whole into the name (§9-A8).
-    /// Duplicated from <c>ExpressionSpelling</c>'s private lexer (Puck.State is outside this stage's file scope —
-    /// see the parser-owner notes) rather than exposed there; keep the two in sync by hand.</summary>
+    /// The walk itself is <c>ExpressionSpelling.ScanBareName</c>'s — the owner of that grammar — never a copy of it
+    /// (rule 8).</summary>
     private static bool TryReadExtendedName(ParseContext context, out string name) {
         var buffer = context.Scanner.Buffer;
         var cursor = context.Scanner.Cursor;
         var start = cursor.Offset;
+        var length = ExpressionSpelling.ScanBareName(text: buffer, start: start);
 
-        if (start >= buffer.Length) {
+        if (length == 0) {
             name = string.Empty;
             return false;
         }
 
-        var first = buffer[start];
-        if (!char.IsLetter(first) && first != '_' && first != '$') {
-            name = string.Empty;
-            return false;
-        }
-
-        var reserved = (first == '$');
-        var pos = start + 1;
-
-        while (pos < buffer.Length) {
-            var c = buffer[pos];
-            if (char.IsLetterOrDigit(c) || c == '_' || c == '$' || c == '.') {
-                pos++;
-                continue;
-            }
-            if (reserved && c == ':' && pos + 1 < buffer.Length) {
-                var next = buffer[pos + 1];
-                if (char.IsLetterOrDigit(next) || next == '_' || next == '$' || next == '.') {
-                    pos++;
-                    continue;
-                }
-                if (next == '-' && pos + 2 < buffer.Length && char.IsAsciiDigit(buffer[pos + 2])) {
-                    pos += 2;
-                    continue;
-                }
-            }
-            if (reserved && c == '[') {
-                var close = ReservedLiveZoneIndexEnd(buffer, start, pos);
-                if (close > 0) {
-                    pos = close + 1;
-                    continue;
-                }
-            }
-            break;
-        }
-
-        name = buffer[start..pos];
-        cursor.Advance(pos - start);
+        name = buffer[start..(start + length)];
+        cursor.Advance(length);
         return true;
-    }
-
-    // Mirrors ExpressionSpelling's private LiveZoneIndexEnd: a "$zones[" segment folds its whole bracketed index —
-    // colons, nested brackets and all — into the enclosing reserved name. Returns the closing bracket's offset, or
-    // -1 when the bracket at `bracket` does not open a live-zone index or never closes.
-    private static int ReservedLiveZoneIndexEnd(string text, int start, int bracket) {
-        const string livezonePrefix = "$zones[";
-        var prefixLength = livezonePrefix.Length - 1;
-        if (text[bracket] != '[' || (bracket - start) < prefixLength) {
-            return -1;
-        }
-        if (string.CompareOrdinal(text, bracket - prefixLength, livezonePrefix, 0, prefixLength) != 0) {
-            return -1;
-        }
-        if ((bracket - prefixLength) != start && text[bracket - prefixLength - 1] != ':') {
-            return -1;
-        }
-        var depth = 0;
-        for (var index = bracket; index < text.Length; index++) {
-            if (text[index] == '[') {
-                depth++;
-            } else if (text[index] == ']' && --depth == 0) {
-                return index;
-            }
-        }
-        return -1;
     }
 
     private static string? LongestMatchingPunctuation(string buffer, int offset, string[] candidates) {
@@ -362,5 +310,65 @@ public static partial class PuckParser {
             return true;
         }
         return (i + 1 < buffer.Length && buffer[i] == '/' && buffer[i + 1] == '/');
+    }
+    /// <summary>Matches one cell-kind keyword a <c>: Kind</c>/<c>as Kind</c> annotation or a <c>bind</c> admits,
+    /// spelled from the enum through <see cref="PuckDslVocabulary.ComparisonKindNames"/>. Returns
+    /// <see langword="null"/>, consuming nothing, when the next word is not one.</summary>
+    private static string? TryMatchKindKeyword(ParseContext context) {
+        foreach (var candidate in PuckDslVocabulary.ComparisonKindNames) {
+            if (TryMatchKeyword(context, candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Returns the bare word a trailing <c>: word</c> names, or <see langword="null"/> when
+    /// <paramref name="text"/> does not end in one. Used to tell a mis-spelled kind annotation apart from a colon
+    /// that belongs to the operand itself (a ternary, a reserved channel segment).</summary>
+    private static string? TrailingColonWord(string text) {
+        var trimmed = text.TrimEnd();
+        var colon = trimmed.LastIndexOf(':');
+        if (colon < 0 || colon == (trimmed.Length - 1)) {
+            return null;
+        }
+        var word = trimmed[(colon + 1)..].TrimStart();
+        if (word.Length == 0 || !char.IsLetter(word[0])) {
+            return null;
+        }
+        foreach (var c in word) {
+            if (!IsNameContinuationCharacter(c)) {
+                return null;
+            }
+        }
+        // A reserved channel carries its own colons inside one unbroken name ("$cell:row:key"); only a colon that
+        // stands apart from the text before it can be a kind annotation.
+        return char.IsWhiteSpace(trimmed[colon - 1]) ? word : null;
+    }
+
+    /// <summary>Names the cell kinds an annotation admits, for a diagnostic message.</summary>
+    private static string DescribeAdmittedKinds() =>
+        string.Join(" or ", PuckDslVocabulary.ComparisonKindNames.Select(static name => $"'{name}'"));
+
+    /// <summary>Advances to the end of the current statement — the next newline, <c>;</c>, <c>,</c> or the enclosing
+    /// <c>}</c>, whichever comes first, without consuming the terminator. A diagnostic that has already named the
+    /// real defect resynchronizes here so the rest of the statement cannot raise a second, misleading one.</summary>
+    private static void SkipToEndOfStatement(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
+        var depth = 0;
+        while (!cursor.Eof) {
+            var c = cursor.Current;
+            if (c is '(' or '[') {
+                depth++;
+            } else if (c is ')' or ']') {
+                if (depth == 0) {
+                    return;
+                }
+                depth--;
+            } else if (depth == 0 && c is '\n' or '\r' or ';' or ',' or '}') {
+                return;
+            }
+            cursor.Advance();
+        }
     }
 }

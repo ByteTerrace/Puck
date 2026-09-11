@@ -21,7 +21,7 @@ public static partial class PuckLinter {
             if (statement is LetNode letNode) {
                 if (declaredLets.TryGetValue(letNode.Name, out var existing)) {
                     diagnostics.ReportWarning(
-                        code: "PUCK_LINT_002",
+                        code: PuckDiagnosticCodes.LintDuplicateKey,
                         message: $"Constant '{letNode.Name}' shadows a previous declaration on line {existing.Line}",
                         span: letNode.Span
                     );
@@ -31,7 +31,7 @@ public static partial class PuckLinter {
             } else if (statement is TemplateNode templateNode) {
                 if (declaredTemplates.TryGetValue(templateNode.Name, out var existing)) {
                     diagnostics.ReportWarning(
-                        code: "PUCK_LINT_002",
+                        code: PuckDiagnosticCodes.LintDuplicateKey,
                         message: $"Template '{templateNode.Name}' shadows a previous declaration on line {existing.Line}",
                         span: templateNode.Span
                     );
@@ -50,7 +50,7 @@ public static partial class PuckLinter {
         foreach (var (name, node) in declaredLets) {
             if (!referencedIdentifiers.Contains(name)) {
                 diagnostics.ReportInformation(
-                    code: "PUCK_LINT_001",
+                    code: PuckDiagnosticCodes.LintUnusedLet,
                     message: $"Constant '{name}' is declared but its value is never used",
                     span: node.Span
                 );
@@ -60,7 +60,7 @@ public static partial class PuckLinter {
         foreach (var (name, node) in declaredTemplates) {
             if (!referencedIdentifiers.Contains(name)) {
                 diagnostics.ReportInformation(
-                    code: "PUCK_LINT_001",
+                    code: PuckDiagnosticCodes.LintUnusedLet,
                     message: $"Template '{name}' is declared but never instantiated",
                     span: node.Span
                 );
@@ -85,7 +85,7 @@ public static partial class PuckLinter {
                 // Check if hardcoded color literal could be hoisted to a constant
                 if (!inLet) {
                     diagnostics.ReportInformation(
-                        code: "PUCK_LINT_003",
+                        code: PuckDiagnosticCodes.LintShadowedDeclaration,
                         message: $"Inline color literal '{color.Hex}' — consider declaring as a named 'let' constant",
                         span: color.Span
                     );
@@ -94,7 +94,7 @@ public static partial class PuckLinter {
 
             case LiteralExpressionNode { Value: string strVal } lit when !inLet && strVal.StartsWith('#') && (strVal.Length == 7 || strVal.Length == 9):
                 diagnostics.ReportInformation(
-                    code: "PUCK_LINT_003",
+                    code: PuckDiagnosticCodes.LintShadowedDeclaration,
                     message: $"Inline color literal '{strVal}' — consider declaring as a named 'let' constant",
                     span: lit.Span
                 );
@@ -107,7 +107,7 @@ public static partial class PuckLinter {
                         if (stmt is PropertyNode prop && string.Equals(prop.Name, "targetHertz", StringComparison.OrdinalIgnoreCase)) {
                             if (prop.Value is LiteralExpressionNode { Value: long hz } && hz <= 0) {
                                 diagnostics.ReportWarning(
-                                    code: "PUCK_LINT_004",
+                                    code: PuckDiagnosticCodes.LintEmptyBlock,
                                     message: $"Host targetHertz must be greater than 0, got {hz}",
                                     span: prop.Span
                                 );

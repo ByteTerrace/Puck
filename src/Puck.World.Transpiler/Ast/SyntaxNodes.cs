@@ -28,7 +28,11 @@ public sealed record DocumentNode(
     int Length = 0,
     int Line = 1,
     int Column = 1
-) : SyntaxNode(Offset, Length, Line, Column);
+) : SyntaxNode(Offset, Length, Line, Column) {
+    /// <summary>Gets the span of the <c>basis:</c> header itself, so a composition failure points at the line that
+    /// named the basis rather than at the document. Defaults to the whole document when none was authored.</summary>
+    public SourceSpan BasisSpan { get; init; }
+}
 
 /// <summary>Base class for all statement nodes.</summary>
 /// <param name="Offset">The character offset within the source text.</param>

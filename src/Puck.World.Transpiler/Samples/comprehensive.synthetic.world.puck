@@ -110,3 +110,68 @@ state {
         }
     ]
 }
+
+// Creation document: `shape <Type> "<name>" { }` rows, with the canonicalizer's own defaults elided.
+creation {
+    schema: "puck.creation.v1"
+
+    shape Box "felt" {
+        material: 0
+        position: [0, -1, 0]
+        scale: [24, 0.5, 24]
+    }
+
+    shape Cylinder "post" {
+        material: 1
+        position: [0, 0, 0]
+        smooth: 0.25
+    }
+}
+
+// Placements: `placement "<id>" { }` rows, with `prototype:` and the bare `solid` flag.
+placements {
+    policy: { collision: "Ignore" }
+
+    placement "table" {
+        prototype: tableTop
+        position: [0, 0, 0]
+        yawDegrees: 45deg
+        solid
+    }
+
+    placement "stool" {
+        prototype: seat
+        parent: table
+        position: [2, 0, 0]
+        scale: 2
+    }
+}
+
+// Rules: an infix `when` gate, effect statements, and a decision with one scored option.
+rule "advance-round" {
+    when tableState[activeRound] < 8 and not tableState[locked] == 1
+    mode: Edge
+    bind seat : Int = $each
+    tableState[activeRound] += 1
+    schedule tableState[settle] in 250ms
+    transaction {
+        tableState[busy] = 1
+        tableState[status] = "dealing"
+    } onFailure {
+        tableState[busy] = 0
+    }
+}
+
+rule "choose-seat" {
+    forEach: "seat"
+    decision {
+        periodSeconds: 1s
+        commitmentSeconds: 3s
+        seed: 11
+        option "hold" {
+            when tableState[activeRound] >= 1
+            score: tableState[activeRound] * 2
+            tableState[choice] = 1
+        }
+    }
+}

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -9,14 +10,31 @@ namespace Puck.World.Transpiler.Decompiler;
 // `Id`), `prototypeId` maps back to a bare `prototype:` property, `yawDegrees`/`scale` elide at their defaults, and
 // `{"margin":0}` maps back to the bare `solid` flag.
 public static partial class WorldDecompiler {
+    // Whether every row in a `placements` section is one the `placement "id" { }` grammar can carry. A row with no
+    // `id` is a basis-merge directive, not a placement; the whole section then prints through the generic value path.
+    private static bool CanSugarPlacements(JsonObject placements) {
+        if (placements["rows"] is not JsonArray rows) {
+            return false;
+        }
+        foreach (var item in rows) {
+            if (item is not JsonObject row || row["id"] is not JsonValue idVal || !idVal.TryGetValue<string>(out var id) || (id.Length == 0)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static void DecompilePlacementsBlock(StringBuilder sb, JsonObject placements, int indentLevel) {
         var indent = new string(' ', indentLevel * 4);
         var inner = new string(' ', (indentLevel + 1) * 4);
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}placements {{");
         var wroteAny = false;
 
-        if (placements["policy"] is { } policy) {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}policy: {FormatValue(policy, indentLevel + 1)}");
+        foreach (var (key, value) in placements) {
+            if (string.Equals(key, "rows", StringComparison.Ordinal) || value is null) {
+                continue;
+            }
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{key}: {FormatValue(value, indentLevel + 1)}");
             wroteAny = true;
         }
 
@@ -44,29 +62,30 @@ public static partial class WorldDecompiler {
 
         var elide = new HashSet<string>(StringComparer.Ordinal) { "id" };
 
+        // A row with no prototypeId of its own is a basis-merge directive or a partial row a basis completes; the
+        // emitter fills no default there, so eliding one here would silently drop an authored value.
         if (row["prototypeId"] is { } prototypeId) {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}prototype: {FormatValue(prototypeId, indentLevel + 1)}");
             elide.Add("prototypeId");
-        }
-        if (row["yawDegrees"] is JsonValue yawVal && IsNumberEqualTo(yawVal, 0.0)) {
-            elide.Add("yawDegrees");
-        }
-        if (row["scale"] is JsonValue scaleVal && IsNumberEqualTo(scaleVal, 1.0)) {
-            elide.Add("scale");
+            foreach (var key in WorldDocumentRowDefaults.PlacementKeys) {
+                if (WorldDocumentRowDefaults.IsDefaultValue(key, row[key], index: 0, shape: false)) {
+                    elide.Add(key);
+                }
+            }
         }
 
         var bareSolid = false;
         if (row["solid"] is JsonObject solidObj) {
             elide.Add("solid");
-            bareSolid = (solidObj.Count == 1) && solidObj["margin"] is JsonValue marginVal && IsNumberEqualTo(marginVal, 0.0);
+            bareSolid = WorldDocumentRowDefaults.IsBareSolid(solidObj);
         }
 
         foreach (var (k, v) in row) {
             if (elide.Contains(k) || v is null) {
                 continue;
             }
-            if (string.Equals(k, "yawDegrees", StringComparison.Ordinal) && v is JsonValue yawPrint) {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: {FormatValue(yawPrint, indentLevel + 1)}deg");
+            if (v is JsonValue numeric && UnitSuffixFor(k, numeric) is { } unit) {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: {FormatValue(numeric, indentLevel + 1)}{unit}");
                 continue;
             }
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: {FormatValue(v, indentLevel + 1)}");

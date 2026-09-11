@@ -50,7 +50,11 @@ public static partial class WorldDocumentEmitter {
             }
         }
 
-        obj["effects"] = effects;
+        // An authored `effects:`/`bindings:` property is the whole array; the statement-built one only fills in when
+        // no property named it, so neither spelling silently erases the other.
+        if (effects.Count > 0 || !obj.ContainsKey("effects")) {
+            obj["effects"] = effects;
+        }
         if (bindings is not null) {
             obj["bindings"] = bindings;
         }
@@ -108,6 +112,9 @@ public static partial class WorldDocumentEmitter {
                 case InterruptStatementNode interrupt:
                     obj["interrupt"] = LowerPredicate(interrupt.Predicate);
                     break;
+                case PropertyNode { Name: "interrupt" } p:
+                    obj["interrupt"] = LowerExpression(p.Value, scope, p.Name);
+                    break;
                 case OnNoChoiceBlockNode onNoChoice: {
                     var arr = new JsonArray();
                     foreach (var effect in onNoChoice.Effects) {
@@ -156,8 +163,8 @@ public static partial class WorldDocumentEmitter {
                 case ScoreStatementNode score:
                     obj["score"] = score.Text;
                     break;
-                case PropertyNode { Name: "neighbors" } p:
-                    obj["neighbors"] = LowerExpression(p.Value, scope, p.Name);
+                case PropertyNode p:
+                    obj[p.Name] = LowerExpression(p.Value, scope, p.Name);
                     break;
                 case EffectStatementNode or ExpressionStatementNode:
                     effects.AppendNode(LowerEffectStatement(stmt, scope));
@@ -195,7 +202,10 @@ public static partial class WorldDocumentEmitter {
     }
 
     private static JsonObject LowerComparison(ComparisonPredicateNode cmp) {
-        var comparison = ComparatorToComparisonName(cmp.Comparator);
+        if (!PuckDslVocabulary.TryParseComparator(cmp.Comparator, out var parsedComparison)) {
+            throw new InvalidOperationException($"'{cmp.Comparator}' is not a DSL comparison operator");
+        }
+        var comparison = PuckDslVocabulary.NameOf(parsedComparison);
 
         // An explicit `: Kind`/`as Kind` suffix always forces compareValue, even for two simple single-token
         // operands — CompareState carries no Kind field at all, so an authored kind annotation on it is meaningless;
@@ -224,7 +234,7 @@ public static partial class WorldDocumentEmitter {
             && rightTokens.Count == 1 && rightTokens[0] is ValueToken.State rightState2) {
             // Operands swapped so the live State read is always the CompareState subject — the decompiler never
             // emits this constant-first spelling, only the compiler tolerates it.
-            return NewCompareState(rightState2.Name, rightState2.Key, FlipComparison(comparison), value: leftConstant.Value);
+            return NewCompareState(rightState2.Name, rightState2.Key, PuckDslVocabulary.NameOf(PuckDslVocabulary.Flip(parsedComparison)), value: leftConstant.Value);
         }
 
         return new JsonObject {
@@ -252,25 +262,6 @@ public static partial class WorldDocumentEmitter {
         }
         return obj;
     }
-
-    private static string ComparatorToComparisonName(string comparator) => comparator switch {
-        "==" => "Equal",
-        "!=" => "NotEqual",
-        "<" => "Less",
-        "<=" => "LessOrEqual",
-        ">" => "Greater",
-        ">=" => "GreaterOrEqual",
-        _ => throw new InvalidOperationException($"unknown comparator '{comparator}'"),
-    };
-
-    // Swaps comparison direction (not equality) — `a < b` read as `b > a` is still "greater", not "less".
-    private static string FlipComparison(string comparison) => comparison switch {
-        "Less" => "Greater",
-        "LessOrEqual" => "GreaterOrEqual",
-        "Greater" => "Less",
-        "GreaterOrEqual" => "LessOrEqual",
-        _ => comparison,
-    };
 
     // ---- Effect statement lowering (§2) ---------------------------------------------------------------------
 

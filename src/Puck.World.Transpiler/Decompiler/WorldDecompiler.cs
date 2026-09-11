@@ -94,12 +94,19 @@ public static partial class WorldDecompiler {
         };
 
         foreach (var (key, value) in root) {
-            if (knownRootKeys.Contains(key) || value is null) {
+            if (knownRootKeys.Contains(key)) {
                 continue;
             }
 
             if (sb.Length > 0) {
                 sb.AppendLine();
+            }
+
+            // An explicit JSON null is a value a basis-merge document authored deliberately; dropping it would
+            // change what the composed document says about that section.
+            if (value is null) {
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{key}: null");
+                continue;
             }
 
             if (string.Equals(key, "views", StringComparison.OrdinalIgnoreCase) && value is JsonObject viewsObj) {
@@ -110,9 +117,9 @@ public static partial class WorldDecompiler {
                 DecompileShapesBlock(sb, shapesArr, indentLevel: 0);
             } else if (string.Equals(key, "materials", StringComparison.OrdinalIgnoreCase) && value is JsonArray materialsArr) {
                 DecompileMaterialsBlock(sb, materialsArr);
-            } else if (string.Equals(key, "rules", StringComparison.OrdinalIgnoreCase) && value is JsonArray rulesArr) {
+            } else if (string.Equals(key, "rules", StringComparison.OrdinalIgnoreCase) && value is JsonArray rulesArr && CanSugarRules(rulesArr)) {
                 DecompileRulesBlock(sb, rulesArr, indentLevel: 0);
-            } else if (string.Equals(key, "placements", StringComparison.OrdinalIgnoreCase) && value is JsonObject placementsObj) {
+            } else if (string.Equals(key, "placements", StringComparison.OrdinalIgnoreCase) && value is JsonObject placementsObj && CanSugarPlacements(placementsObj)) {
                 DecompilePlacementsBlock(sb, placementsObj, indentLevel: 0);
             } else if (value is JsonObject blockObj) {
                 DecompileNamedBlock(sb, key, null, blockObj, indentLevel: 0);

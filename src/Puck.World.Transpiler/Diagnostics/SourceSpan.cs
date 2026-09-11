@@ -6,8 +6,9 @@ namespace Puck.World.Transpiler.Diagnostics;
 /// <param name="Line">1-based line number.</param>
 /// <param name="Column">1-based column number.</param>
 public readonly record struct SourceSpan(int Offset, int Length, int Line, int Column) {
-    /// <summary>An empty span representing no specific location or whole-document context.</summary>
-    public static readonly SourceSpan None = new(0, 0, 1, 1);
+    /// <summary>An empty span standing for a whole-document finding with no location of its own. Its
+    /// <see cref="Line"/> is 0, which renderers read as "file-level": no line/column, and no quoted source line.</summary>
+    public static readonly SourceSpan None = new(0, 0, 0, 0);
 
     /// <summary>Combines two spans into a single bounding span.</summary>
     public static SourceSpan Combine(SourceSpan start, SourceSpan end) {

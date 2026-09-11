@@ -45,7 +45,9 @@ public static class ModuleResolver {
             Length: rootDoc.Length,
             Line: rootDoc.Line,
             Column: rootDoc.Column
-        );
+        ) {
+            BasisSpan = rootDoc.BasisSpan,
+        };
     }
 
     private static bool TraverseImports(
@@ -60,7 +62,7 @@ public static class ModuleResolver {
 
         if (activeChain.Contains(fullPath, StringComparer.OrdinalIgnoreCase)) {
             var cycle = string.Join(" -> ", activeChain.Concat([fullPath]).Select(Path.GetFileName));
-            diagnostics.ReportError("PUCK015", $"Circular import dependency detected: {cycle}", SourceSpan.None);
+            diagnostics.ReportError(PuckDiagnosticCodes.UnresolvedLet, $"Circular import dependency detected: {cycle}", SourceSpan.None);
             return false;
         }
 
@@ -78,7 +80,7 @@ public static class ModuleResolver {
 
                 if (!File.Exists(resolvedTarget)) {
                     diagnostics.ReportError(
-                        "PUCK016",
+                        PuckDiagnosticCodes.ImportTargetMissing,
                         $"Imported document '{importNode.Path}' could not be found at '{resolvedTarget}'.",
                         importNode.Span
                     );
@@ -95,7 +97,7 @@ public static class ModuleResolver {
                             success = false;
                         }
                     } catch (Exception ex) {
-                        diagnostics.ReportError("PUCK017", $"Failed to parse imported document '{importNode.Path}': {ex.Message}", importNode.Span);
+                        diagnostics.ReportError(PuckDiagnosticCodes.ImportGraph, $"Failed to parse imported document '{importNode.Path}': {ex.Message}", importNode.Span);
                         success = false;
                     }
                 }

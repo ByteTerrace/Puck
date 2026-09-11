@@ -1,6 +1,7 @@
 using Parlot.Fluent;
 using Puck.World.Transpiler.Ast;
 using Puck.World.Transpiler.Diagnostics;
+using Puck.World.Transpiler.Lowering;
 
 namespace Puck.World.Transpiler.Parsing;
 
@@ -10,12 +11,15 @@ namespace Puck.World.Transpiler.Parsing;
 // property there (§2.2) — the two productions never share a parse context, so no backtracking is needed to
 // disambiguate them.
 public static partial class PuckParser {
+    // `in` closes a `schedule <row> in <delay>` row reference; nothing else terminates one but the statement itself.
+    private static readonly HashSet<string> ScheduleStopKeywords = new(StringComparer.Ordinal) { "in" };
+
     private static RuleBlockNode ParseRuleBlock(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
         var cursor = context.Scanner.Cursor;
         SkipWhiteSpace(context);
         if (!TryReadString(context, out var name)) {
             var (nLine, nCol) = GetLineAndColumn(context.Scanner.Buffer, cursor.Offset);
-            diagnostics?.ReportError("PUCK011", "Expected a quoted name after 'rule'", new SourceSpan(cursor.Offset, 1, nLine, nCol));
+            diagnostics?.ReportError(PuckDiagnosticCodes.RuleNameMissing, "Expected a quoted name after 'rule'", new SourceSpan(cursor.Offset, 1, nLine, nCol));
             name = string.Empty;
         }
 
@@ -33,7 +37,7 @@ public static partial class PuckParser {
             if (stmt is WhenStatementNode) {
                 if (sawWhen) {
                     var span = new SourceSpan(stmt.Offset, stmt.Length, stmt.Line, stmt.Column);
-                    diagnostics?.ReportError("PUCK012", $"rule '{name}' has more than one 'when' clause", span);
+                    diagnostics?.ReportError(PuckDiagnosticCodes.DuplicateWhen, $"rule '{name}' has more than one 'when' clause", span);
                 } else {
                     sawWhen = true;
                 }
@@ -51,11 +55,33 @@ public static partial class PuckParser {
         }
 
         if (!sawEffect) {
-            diagnostics?.ReportError("PUCK026", $"rule '{name}' carries no effect statements", new SourceSpan(startOffset, cursor.Offset - startOffset, line, col));
+            diagnostics?.ReportError(PuckDiagnosticCodes.RuleWithoutEffects, $"rule '{name}' carries no effect statements", new SourceSpan(startOffset, cursor.Offset - startOffset, line, col));
         }
 
         var len = cursor.Offset - startOffset;
         return new RuleBlockNode(name, statements, startOffset, len, line, col);
+    }
+
+    // A rule's own wire fields. `mode = Edge` reads exactly like a cell assignment to the effect dispatcher, so
+    // these names are routed to the property path first; a state row genuinely called one of them is backquoted.
+    private static readonly HashSet<string> RuleBodyPropertyNames = new(StringComparer.Ordinal) {
+        "name", "gate", "mode", "forEach", "zones", "bindings", "effects", "decision",
+    };
+
+    // Whether the next token is one of `names` used as a property (followed by ':', '=', '{' or '[').
+    private static bool AtPropertyNamed(ParseContext context, IReadOnlySet<string> names) {
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+        try {
+            if (!TryReadIdentifier(context, out var name) || !names.Contains(name)) {
+                return false;
+            }
+            SkipWhiteSpace(context);
+            // ':'/'=' only: a '{' after one of these names opens the construct's own block, not a property value.
+            return cursor.Current is ':' or '=';
+        } finally {
+            cursor.ResetPosition(saved);
+        }
     }
 
     private static StatementNode ParseRuleBodyStatement(ParseContext context, DiagnosticBag? diagnostics) {
@@ -63,6 +89,13 @@ public static partial class PuckParser {
         var cursor = context.Scanner.Cursor;
         var startOffset = cursor.Offset;
         var (line, col) = GetLineAndColumn(context.Scanner.Buffer, startOffset);
+
+        if (AtPropertyNamed(context, RuleBodyPropertyNames)) {
+            var ruleProperty = TryParseGenericProperty(context, diagnostics);
+            if (ruleProperty is not null) {
+                return ruleProperty;
+            }
+        }
 
         if (TryMatchKeyword(context, "when")) {
             return ParseWhenStatement(context, startOffset, line, col, diagnostics);
@@ -98,22 +131,18 @@ public static partial class PuckParser {
         string? kind = null;
         if (TryConsume(context, ':') || TryMatchKeyword(context, "as")) {
             SkipWhiteSpace(context);
-            if (TryMatchKeyword(context, "Int")) {
-                kind = "Int";
-            } else if (TryMatchKeyword(context, "Fixed")) {
-                kind = "Fixed";
-            }
+            kind = TryMatchKindKeyword(context);
         }
         if (kind is null) {
             var (kLine, kCol) = GetLineAndColumn(context.Scanner.Buffer, cursor.Offset);
-            diagnostics?.ReportError("PUCK006", $"'bind {name}' is missing its required ': Int' or ': Fixed' kind annotation", new SourceSpan(cursor.Offset, 1, kLine, kCol));
+            diagnostics?.ReportError(PuckDiagnosticCodes.BindKindMissing, $"'bind {name}' is missing its required ': Int' or ': Fixed' kind annotation", new SourceSpan(cursor.Offset, 1, kLine, kCol));
             kind = "Int";
         }
 
         SkipWhiteSpace(context);
         if (!TryConsume(context, '=')) {
             var (eLine, eCol) = GetLineAndColumn(context.Scanner.Buffer, cursor.Offset);
-            diagnostics?.ReportError("PUCK007", $"'bind {name}' is missing its '=' initializer", new SourceSpan(cursor.Offset, 1, eLine, eCol));
+            diagnostics?.ReportError(PuckDiagnosticCodes.BindInitializerMissing, $"'bind {name}' is missing its '=' initializer", new SourceSpan(cursor.Offset, 1, eLine, eCol));
             var missingLen = cursor.Offset - startOffset;
             return new BindStatementNode(name, kind, string.Empty, startOffset, missingLen, line, col);
         }
@@ -123,7 +152,7 @@ public static partial class PuckParser {
         var text = ScanOperandSpan(context, stopKeywords: null, stopAtComparator: false, out _);
         var span = new SourceSpan(opStart, cursor.Offset - opStart, oLine, oCol);
         if (text.Length == 0) {
-            diagnostics?.ReportError("PUCK007", $"'bind {name}' initializer is empty", span);
+            diagnostics?.ReportError(PuckDiagnosticCodes.BindInitializerMissing, $"'bind {name}' initializer is empty", span);
         } else {
             ValidateOperandText(text, span, diagnostics);
         }
@@ -157,7 +186,7 @@ public static partial class PuckParser {
         }
 
         if (!sawPeriodSeconds) {
-            diagnostics?.ReportError("PUCK029", "'decision' is missing its required 'periodSeconds'", new SourceSpan(startOffset, cursor.Offset - startOffset, line, col));
+            diagnostics?.ReportError(PuckDiagnosticCodes.DecisionPeriodMissing, "'decision' is missing its required 'periodSeconds'", new SourceSpan(startOffset, cursor.Offset - startOffset, line, col));
         }
 
         var len = cursor.Offset - startOffset;
@@ -174,6 +203,14 @@ public static partial class PuckParser {
             return ParseOptionBlock(context, startOffset, line, col, diagnostics);
         }
         if (TryMatchKeyword(context, "interrupt")) {
+            SkipWhiteSpace(context);
+            // `interrupt: <call-form>` is the spelling a predicate the gate grammar cannot carry decompiles to.
+            if (cursor.Current is ':' or '=') {
+                cursor.Advance();
+                var value = ParseExpression(context);
+                var propertyLen = cursor.Offset - startOffset;
+                return new PropertyNode("interrupt", value, startOffset, propertyLen, line, col);
+            }
             var predicate = ParseGate(context, diagnostics);
             var len = cursor.Offset - startOffset;
             return new InterruptStatementNode(predicate, startOffset, len, line, col);
@@ -204,7 +241,7 @@ public static partial class PuckParser {
         SkipWhiteSpace(context);
         if (!TryReadString(context, out var name)) {
             var (nLine, nCol) = GetLineAndColumn(context.Scanner.Buffer, cursor.Offset);
-            diagnostics?.ReportError("PUCK013", "Expected a quoted name after 'option'", new SourceSpan(cursor.Offset, 1, nLine, nCol));
+            diagnostics?.ReportError(PuckDiagnosticCodes.DecisionStructure, "Expected a quoted name after 'option'", new SourceSpan(cursor.Offset, 1, nLine, nCol));
             name = string.Empty;
         }
 
@@ -231,18 +268,31 @@ public static partial class PuckParser {
         }
 
         if (!sawScore) {
-            diagnostics?.ReportError("PUCK013", $"option '{name}' is missing its required 'score'", new SourceSpan(startOffset, cursor.Offset - startOffset, line, col));
+            diagnostics?.ReportError(PuckDiagnosticCodes.DecisionStructure, $"option '{name}' is missing its required 'score'", new SourceSpan(startOffset, cursor.Offset - startOffset, line, col));
         }
 
         var len = cursor.Offset - startOffset;
         return new OptionBlockNode(name, statements, startOffset, len, line, col);
     }
 
+    // An option's own wire fields, for the same reason a rule body routes its own (see RuleBodyPropertyNames).
+    // `gate:` is the spelling a predicate the `when` grammar cannot carry decompiles to.
+    private static readonly HashSet<string> OptionBodyPropertyNames = new(StringComparer.Ordinal) {
+        "name", "gate", "neighbors", "effects",
+    };
+
     private static StatementNode ParseOptionBodyStatement(ParseContext context, DiagnosticBag? diagnostics) {
         SkipWhiteSpace(context);
         var cursor = context.Scanner.Cursor;
         var startOffset = cursor.Offset;
         var (line, col) = GetLineAndColumn(context.Scanner.Buffer, startOffset);
+
+        if (AtPropertyNamed(context, OptionBodyPropertyNames)) {
+            var optionProperty = TryParseGenericProperty(context, diagnostics);
+            if (optionProperty is not null) {
+                return optionProperty;
+            }
+        }
 
         if (TryMatchKeyword(context, "when")) {
             return ParseWhenStatement(context, startOffset, line, col, diagnostics);
@@ -299,7 +349,7 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context, "countdown")) {
-            if (!TryReadRowRef(context, diagnostics, out var target) || target is null) {
+            if (!TryReadRowRefOperand(context, diagnostics, stopKeywords: null, out var target) || target is null) {
                 throw CreateException(context, "Expected a state row reference after 'countdown'");
             }
             var len = cursor.Offset - startOffset;
@@ -307,7 +357,7 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context, "remove")) {
-            if (!TryReadRowRef(context, diagnostics, out var target) || target is null) {
+            if (!TryReadRowRefOperand(context, diagnostics, stopKeywords: null, out var target) || target is null) {
                 throw CreateException(context, "Expected a state row reference after 'remove'");
             }
             var len = cursor.Offset - startOffset;
@@ -315,7 +365,7 @@ public static partial class PuckParser {
         }
 
         if (TryMatchKeyword(context, "schedule")) {
-            if (!TryReadRowRef(context, diagnostics, out var target) || target is null) {
+            if (!TryReadRowRefOperand(context, diagnostics, ScheduleStopKeywords, out var target) || target is null) {
                 throw CreateException(context, "Expected a state row reference after 'schedule'");
             }
             SkipWhiteSpace(context);
@@ -324,10 +374,15 @@ public static partial class PuckParser {
             }
             SkipWhiteSpace(context);
             var literal = ParseNumberWithOptionalUnit(context);
-            if (literal.Unit != "s") {
-                diagnostics?.ReportError("PUCK010", "'schedule ... in' requires a number carrying the 's' suffix", new SourceSpan(literal.Offset, literal.Length, literal.Line, literal.Column));
-            }
             var delay = LiteralToDecimal(literal.Value);
+            if (literal.Unit is null) {
+                diagnostics?.ReportError(PuckDiagnosticCodes.ScheduleDelayUnit, "'schedule ... in' requires a number carrying a time unit", new SourceSpan(literal.Offset, literal.Length, literal.Line, literal.Column));
+            } else if (WorldDocumentEmitterUnits.TryConvert("delaySeconds", (double)delay, literal.Unit, out var seconds)) {
+                delay = (decimal)seconds;
+            } else {
+                var accepted = string.Join("/", WorldDocumentEmitterUnits.AcceptedUnitsFor(WorldDocumentEmitterUnits.FieldDimensionKind.Seconds));
+                diagnostics?.ReportError(PuckDiagnosticCodes.ScheduleDelayUnit, $"'schedule ... in' accepts {accepted}, not '{literal.Unit}'", new SourceSpan(literal.Offset, literal.Length, literal.Line, literal.Column));
+            }
             var len = cursor.Offset - startOffset;
             return new ScheduleStatementNode(target, delay, startOffset, len, line, col);
         }
@@ -415,7 +470,7 @@ public static partial class PuckParser {
         var cursor = context.Scanner.Cursor;
 
         if (insideTransaction) {
-            diagnostics?.ReportError("PUCK019", "nested 'transaction' is not supported", new SourceSpan(startOffset, "transaction".Length, line, col));
+            diagnostics?.ReportError(PuckDiagnosticCodes.NestedTransaction, "nested 'transaction' is not supported", new SourceSpan(startOffset, "transaction".Length, line, col));
         }
 
         SkipWhiteSpace(context);
@@ -442,7 +497,7 @@ public static partial class PuckParser {
             SkipWhiteSpace(context);
             if (TryMatchKeyword(context, "onFailure")) {
                 var (dLine, dCol) = GetLineAndColumn(context.Scanner.Buffer, cursor.Offset);
-                diagnostics?.ReportError("PUCK014", "a 'transaction' may carry at most one 'onFailure' block", new SourceSpan(cursor.Offset, 9, dLine, dCol));
+                diagnostics?.ReportError(PuckDiagnosticCodes.OnFailureStructure, "a 'transaction' may carry at most one 'onFailure' block", new SourceSpan(cursor.Offset, 9, dLine, dCol));
                 SkipWhiteSpace(context);
                 if (TryConsume(context, '{')) {
                     ParseEffectStatementList(context, diagnostics, insideTransaction: true);
@@ -470,7 +525,7 @@ public static partial class PuckParser {
             }
             var span = new SourceSpan(start, cursor.Offset - start, line, col);
             if (!allowText) {
-                diagnostics?.ReportError("PUCK009", $"a string literal is not valid here — '{ownerForDiagnostic}' carries no Text field", span);
+                diagnostics?.ReportError(PuckDiagnosticCodes.EffectRhsShape, $"a string literal is not valid here — '{ownerForDiagnostic}' carries no Text field", span);
             }
             return new RhsTextNode(text, start, span.Length, line, col);
         }
@@ -481,7 +536,7 @@ public static partial class PuckParser {
             if (AtEndOfLogicalStatement(context.Scanner.Buffer, cursor.Offset)) {
                 if (literal.Unit == "s") {
                     if (!allowSeconds) {
-                        diagnostics?.ReportError("PUCK009", $"a seconds literal is not valid here — '{ownerForDiagnostic}' carries no ValueSeconds field", new SourceSpan(literal.Offset, literal.Length, literal.Line, literal.Column));
+                        diagnostics?.ReportError(PuckDiagnosticCodes.EffectRhsShape, $"a seconds literal is not valid here — '{ownerForDiagnostic}' carries no ValueSeconds field", new SourceSpan(literal.Offset, literal.Length, literal.Line, literal.Column));
                     }
                     return new RhsSecondsNode(LiteralToDecimal(literal.Value), literal.Offset, literal.Length, literal.Line, literal.Column);
                 }

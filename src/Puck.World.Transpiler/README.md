@@ -33,7 +33,11 @@ identifier                                    // a bare flag statement, only whe
 
 Expressions: `+ - * /` (C precedence via additive/multiplicative), `.` member access, `(...)` calls,
 `[a, b]` arrays, `{ k: v }` objects, `a..b` ranges, `#rrggbb[aa]` colors, and number literals with an optional unit
-suffix (`s ms hz rad deg m mm cm % pct`). A call `name(k: v, ...)` lowers to `{"$type":"name","k":v,...}` — the
+suffix (`s ms hz rad deg m mm cm % pct`), every one of which is checked against the field-dimension table in
+`Lowering/WorldDocumentEmitterUnits` — a unit on a field the table does not cover is PUCK024 and a unit the field's
+own dimension does not admit is PUCK025, so no suffix ever converts a value silently. A call argument classifies by
+its qualified `call.argument` key, an ordinary property by its bare name: `orbit(yaw: 45deg)` is radians-native and
+converts, a `yaw:` property on any other block is not in the table at all and is refused. A call `name(k: v, ...)` lowers to `{"$type":"name","k":v,...}` — the
 universal escape hatch for any `$type` object; positional args are special-cased only for `orbit`/`fov`.
 
 ### `when` gates
@@ -117,7 +121,13 @@ decision {
 ### Shapes and placements
 
 `shape Type "name" { ... }` and `placements { policy: { ... } placement "id" { ... } }` are ordinary named/targeted
-blocks — no dedicated grammar beyond the bare flag statement above (`solid` inside a `placement` row).
+blocks — no dedicated grammar beyond the bare flag statement above (`solid` inside a `placement` row). The values
+each elides, and the values the emitter fills back in, are one table: `Lowering/WorldDocumentRowDefaults`.
+
+`shape` is authorable but the decompiler does not yet produce it for a shipped world: a creation document's
+`shapes` array always sits inside an array or object VALUE (`prototypes: [{ document: { shapes: [...] } }]`), and
+block sugar is only read in a statement list, so those rows still print as brace objects with their defaults spelled
+out. Reaching it needs a `prototype`/`document` collecting block, which does not exist yet.
 
 ## Decompiling
 
@@ -140,18 +150,29 @@ target does not round-trip through `ExpressionSpelling.Print`/`TryParse` unchang
 is the confirmed case — printing strips the `$expr:` prefix, but reparsing then reads `X[Y]` as a `$cell:`
 indirection instead), or whenever its `expression` field is a single token `ExpressionSpelling` would classify as a
 bare `value`/`fromState` and the compiler's own RHS classifier would therefore never leave under `expression`.
-`option`/`interrupt` have no such fallback (their only grammar is a bare `Gate`), so they print through regardless.
+An option's gate and a decision's `interrupt` take the same test and the same way out, spelled `gate: <call-form>`
+and `interrupt: <call-form>`, both of which the option and decision bodies accept as ordinary properties.
+
+A `compareState` carrying both `value` and `comparandState` (`ActionPredicate.CompareState` admits exactly one)
+also stays call-form rather than having one of the two silently dropped, and so does a `comparison` or `kind`
+spelled in any casing but its own enum member name — the engine's converter accepts those, but the sugar can only
+reprint the canonical spelling, which would change the document.
 
 ## Diagnostics
 
 New codes: PUCK002 (operand failed `ExpressionSpelling.TryParse`), PUCK003 (a row reference wasn't exactly one
 state read), PUCK004 (chained comparison), PUCK005 (bad `: Kind`/`as Kind` word), PUCK006 (`bind` missing its kind),
 PUCK007 (`bind` missing its initializer), PUCK009 (an `rhs` shape the target effect's fields can't carry — a string
-on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing the `s` suffix), PUCK011 (`rule`
+on `addState`/`push`, seconds on `push`), PUCK010 (`schedule ... in` missing a time unit, or carrying one the seconds dimension does not admit), PUCK011 (`rule`
 missing its name), PUCK012 (a second `when` in one rule/option), PUCK013 (`option`/`decision` structure: a missing
 name or a missing `score`), PUCK014 (`onFailure` used more than once on one `transaction`), PUCK019 (nested
 `transaction`), PUCK026 (a rule with no effect statements), PUCK028 (a placement authoring both the bare `solid`
-flag and an explicit `solid: { }`), PUCK029 (`decision` missing `periodSeconds`).
+flag and an explicit `solid: { }`), PUCK029 (`decision` missing `periodSeconds`), PUCK035 (basis/import composition refused).
+
+`PUCK008`/`PUCK013`/`PUCK014` also cover a rule-body-only keyword found where an ordinary statement belongs
+(`option "x" { }` outside a `decision`, `push x = 1` outside a rule), named at the keyword's own span.
+
+Every code is declared once in `Diagnostics/PuckDiagnosticCodes`; report sites name a constant, never a literal.
 
 Unit-dimension validation (PUCK024/PUCK025), the shape-type check (PUCK027), and the reference-resolution lint
 family (PUCK_LINT_005 onward) live in the lowering/lint stages, not the parser.

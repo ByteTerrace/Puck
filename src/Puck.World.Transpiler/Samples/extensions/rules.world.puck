@@ -1,0 +1,11 @@
+schema: "puck.world.def.v1"
+documentId: "comprehensive-synthetic-rules-v1"
+
+// An imported fragment: its statements bundle into the importer under `puck compile --bundle`, and its mere
+// existence is what the default (unbundled) import check verifies.
+rule "reset-table" {
+    when tableState[activeRound] > 8
+    mode: Edge
+    tableState[activeRound] = 1
+    tableState[busy] = 0
+}
