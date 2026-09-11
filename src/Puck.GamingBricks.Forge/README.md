@@ -100,10 +100,10 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `clock` | Optional naming of state slots a `clock` step fills from the cartridge's real-time clock. `seconds`, `minutes` and `hours` work on both targets. The rest do not, because the two machines carry different devices: `days` is a count of days since the cartridge started and is cgb only, while `day`, `month` and `year` are a calendar date and are agb only. |
 | `affine` | Optional `{map,angle,scale,centreX,centreY,visible}` background that rotates and scales. Angle is a turn in 256 steps, scale is sixteenths (16 = life size). AGB only. |
 | `tallSprites` | Draws sprites 8×16; a sprite's tile index then names a pair and its low bit is ignored. |
-| `variables` | Up to 64 `{name,initial}` unsigned bytes. |
+| `variables` | Up to 128 `{name,initial}` unsigned bytes. |
 | `arrays` | Up to 32 named `{name,initial}` byte runs, 7168 bytes in total. `initial` fixes the length at 1–256; a byte index cannot address more. |
-| `screens` | Up to 16 named `{name,width,tiles}` rectangles, at most 120 tiles, painted by a blit step. |
-| `sounds` | Up to 8 named sounds, each exactly one of `music` (a looping audio document), `effect` (a one-shot on the pulse-1, noise or wave voice, with `frames` per row, and a 32-entry `waveform` for the wave voice), or `sample` (signed 8-bit recorded audio; AGB only). |
+| `screens` | Up to 16 named `{name,width,tiles,palettes}` rectangles, at most 120 tiles, painted by a blit step. `palettes` is optional and gives one background palette index per tile. |
+| `sounds` | Up to 8 named sounds, each exactly one of `music` (1–4 `{voice,part,waveform}` voice parts, one to a channel, each part a looping audio document), `effect` (a one-shot on the pulse-1, noise or wave voice, with `frames` per row, and a 32-entry `waveform` for the wave voice), or `sample` (signed 8-bit recorded audio; AGB only). A voice any track's part occupies is refused to every effect, so an effect can never cut a line of the music off. |
 | `save` | Optional `{version,variables,arrays}` battery-backed state, at most 72 bytes. |
 | `rules` | Up to 64 `{name,when,body}` rules; at most 8 conditions per rule and 64 steps anywhere in one body, nested at most 8 deep. |
 | `sprites` | Up to 40 `{name,tile,x,y,visible,palette}` 8×8 sprites. Every value field accepts constants or variables; `palette` is optional and selects an object palette. |
@@ -133,7 +133,7 @@ A rule body is a tree of steps, not a flat list. Each step is one of:
 {"kind":"if","when":[...],"then":[...],"else":[...]}
 {"kind":"repeat","count":18,"index":"row","body":[...]}
 {"kind":"break"}
-{"kind":"map","row":{"variable":"y"},"column":{"variable":"x"},"tile":{"constant":3}}
+{"kind":"map","row":{"variable":"y"},"column":{"variable":"x"},"tile":{"constant":3},"palette":{"variable":"colour"}}
 {"kind":"blit","screen":"panel","row":0,"column":0}
 {"kind":"play","sound":"theme"}
 {"kind":"stop"}
@@ -145,9 +145,11 @@ A rule body is a tree of steps, not a flat list. Each step is one of:
 {"kind":"load"}
 ```
 
-A `map` step writes one background cell at run time. Writes are queued and land
-together in the next frame's vertical blank, so a cell changed this frame appears
-the frame after. The queue holds 24 entries, and validation bounds a frame's map
+A `map` step writes one background cell at run time, tile and colour together:
+its optional `palette` picks the background palette the cell is drawn through, so
+what stands in a cell decides its colour rather than where the cell is. Writes
+are queued and land together in the next frame's vertical blank, so a cell
+changed this frame appears the frame after. The queue holds 24 entries, and validation bounds a frame's map
 writes to that rather than letting the queue drop one: loops multiply, and branch
 arms count once because only one runs. A blit repaints a whole named screen with
 the display off; its row and column are literals. Because no vertical blank
@@ -172,10 +174,18 @@ there is no tracker primitive, and none is needed. A rate of zero sounds
 nothing rather than holding one sample forever. Rates are refused on music and
 effect sounds, which take their pitch from their own rows.
 
-`play` starts a named sound. Music replaces whatever the melodic voice was
-playing; an effect runs on one of the two voices reserved for one-shots, so it
-never interrupts the music under it and ends on its own terminator; a sample
-takes one of four mixer voices. `stop` silences the music voice only.
+`play` starts a named sound. A track starts every one of its parts together,
+each replacing whatever its voice was playing and each looping on its own
+length, so a four-row bass sits under a thirty-two-row melody without being
+padded out. An effect runs on a voice no track claims and ends on its own
+terminator; a sample takes one of four mixer voices. `stop` silences every voice
+the cartridge's music occupies.
+
+Nothing in the hardware reserves a voice for music or for one-shots: what
+separates them is that a track's voice carries a loop start and a one-shot's
+does not. The four voices are `pulse1`, `pulse2`, `wave` and `noise`; a part on
+`wave` carries the 32-entry `waveform` it plays through, and no other voice
+may.
 
 A `sample` needs the AGB target: that machine streams recorded audio through a
 timer-clocked transfer into a mixer the cartridge runs every frame, and the CGB

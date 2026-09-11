@@ -23,6 +23,8 @@ public sealed record AudioRowDocument(string Note, int? Duty, int? Envelope) {
 public sealed record AudioEffectDocument(string? Voice, IReadOnlyList<AudioRowDocument> Rows) {
     /// <summary>The pulse-1 voice name.</summary>
     public const string VoicePulse1 = "pulse1";
+    /// <summary>The pulse-2 voice name. An effect never names it; a cartridge's music part may.</summary>
+    public const string VoicePulse2 = "pulse2";
     /// <summary>The noise voice name.</summary>
     public const string VoiceNoise = "noise";
     /// <summary>The wave voice name; its cartridge sound also carries the waveform it plays through.</summary>

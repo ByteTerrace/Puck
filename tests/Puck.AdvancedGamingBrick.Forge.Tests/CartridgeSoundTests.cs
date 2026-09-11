@@ -14,7 +14,7 @@ public sealed class CartridgeSoundTests {
     public void PlayStartsTheMusicVoiceAndStopSilencesIt(string target) {
         var document = CartridgeDocuments.Create(target: target, title: "SOUND") with {
             Variables = [new CartridgeVariable(Name: "phase", Initial: 0)],
-            Sounds = [new CartridgeSound(Name: "theme", Music: Track())],
+            Sounds = [new CartridgeSound(Name: "theme", Music: [Lead(part: Track())])],
             Rules = [
                 At(phase: 2, body: [new CartridgeStatement(Kind: "play", Sound: "theme")]),
                 At(phase: 10, body: [new CartridgeStatement(Kind: "stop")]),
@@ -38,6 +38,37 @@ public sealed class CartridgeSoundTests {
     }
 
     [Theory]
+    [InlineData("cgb")]
+    [InlineData("agb")]
+    public void EveryVoiceOfATrackPlaysAtOnceAndStopsTogether(string target) {
+        var document = CartridgeDocuments.Create(target: target, title: "TRIO") with {
+            Variables = [new CartridgeVariable(Name: "phase", Initial: 0)],
+            Sounds = [new CartridgeSound(Name: "theme", Music: [
+                new CartridgeMusicVoice(Voice: AudioEffectDocument.VoicePulse2, Part: Track()),
+                new CartridgeMusicVoice(Voice: AudioEffectDocument.VoicePulse1, Part: Track()),
+                new CartridgeMusicVoice(Voice: AudioEffectDocument.VoiceWave, Part: Track(), Waveform: Waveform()),
+            ])],
+            Rules = [
+                At(phase: 2, body: [new CartridgeStatement(Kind: "play", Sound: "theme")]),
+                At(phase: 30, body: [new CartridgeStatement(Kind: "stop")]),
+                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "lt", Right: new CartridgeValue(Constant: 200))],
+                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: "add", Value: new CartridgeValue(Constant: 1))]),
+            ],
+        };
+        ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();
+        var result = compiler.Compile(document: document);
+        using var machine = new SoundProbe(result: result);
+
+        machine.Run(frames: 8);
+
+        // The status register's low nibble reports the channels that are sounding; the track claims three of them.
+        Assert.Equal(expected: 0x07u, actual: machine.Status() & 0x07u);
+
+        machine.Run(frames: 34);
+        Assert.Equal(expected: 0u, actual: machine.Status() & 0x07u);
+    }
+
+    [Theory]
     [InlineData("cgb", "pulse1")]
     [InlineData("cgb", "noise")]
     [InlineData("cgb", "wave")]
@@ -48,7 +79,7 @@ public sealed class CartridgeSoundTests {
         var document = CartridgeDocuments.Create(target: target, title: "SFX") with {
             Variables = [new CartridgeVariable(Name: "phase", Initial: 0)],
             Sounds = [
-                new CartridgeSound(Name: "theme", Music: Track()),
+                new CartridgeSound(Name: "theme", Music: [Lead(part: Track())]),
                 new CartridgeSound(Name: "blip", Effect: new AudioEffectDocument(Voice: voice, Rows: [
                     new AudioRowDocument(Note: "C5", Duty: null, Envelope: null),
                     new AudioRowDocument(Note: "G5", Duty: null, Envelope: null),
@@ -83,8 +114,8 @@ public sealed class CartridgeSoundTests {
             Variables = [new CartridgeVariable(Name: "x", Initial: 0)],
         };
         Refuses(document: document with { Sounds = [new CartridgeSound(Name: "s")] }, fragment: "exactly one of music, effect or sample");
-        Refuses(document: document with { Sounds = [new CartridgeSound(Name: "s", Music: Track(), Effect: new AudioEffectDocument(Voice: "noise", Rows: []))] }, fragment: "exactly one of music, effect or sample");
-        Refuses(document: document with { Sounds = [new CartridgeSound(Name: "s", Music: Track(), Frames: 4)] }, fragment: "takes its pacing");
+        Refuses(document: document with { Sounds = [new CartridgeSound(Name: "s", Music: [Lead(part: Track())], Effect: new AudioEffectDocument(Voice: "noise", Rows: []))] }, fragment: "exactly one of music, effect or sample");
+        Refuses(document: document with { Sounds = [new CartridgeSound(Name: "s", Music: [Lead(part: Track())], Frames: 4)] }, fragment: "takes its pacing");
         Refuses(document: document with { Sounds = [new CartridgeSound(Name: "s", Effect: new AudioEffectDocument(Voice: "sine", Rows: [new AudioRowDocument(Note: "C5", Duty: null, Envelope: null)]), Frames: 4)] }, fragment: "Expected pulse1, noise or wave");
         // The wave voice is the only one that carries a waveform, and it must.
         Refuses(document: document with { Sounds = [new CartridgeSound(Name: "s", Effect: new AudioEffectDocument(Voice: "wave", Rows: [new AudioRowDocument(Note: "C5", Duty: null, Envelope: null)]), Frames: 4)] }, fragment: "carries a waveform");
@@ -101,6 +132,9 @@ public sealed class CartridgeSoundTests {
 
     }
 
+    private static CartridgeMusicVoice Lead(AudioDocument part) =>
+        new(Voice: AudioEffectDocument.VoicePulse2, Part: part);
+
     private static AudioDocument Track() => new(
         Schema: AudioDocument.CurrentSchema,
         Name: "theme",
@@ -116,6 +150,39 @@ public sealed class CartridgeSoundTests {
     // One cycle rising then falling, so the voice has something audible to play through.
     private static int[] Waveform() => [.. Enumerable.Range(start: 0, count: 32).Select(selector: static step => step < 16 ? step : 31 - step)];
 
+    [Fact]
+    public void AnEffectIsRefusedOnAVoiceTheMusicOccupies() {
+        var document = CartridgeDocuments.Create(target: "cgb", title: "CLASH") with {
+            Sounds = [
+                new CartridgeSound(Name: "theme", Music: [
+                    new CartridgeMusicVoice(Voice: AudioEffectDocument.VoicePulse2, Part: Track()),
+                    new CartridgeMusicVoice(Voice: AudioEffectDocument.VoicePulse1, Part: Track()),
+                ]),
+                new CartridgeSound(Name: "blip", Effect: new AudioEffectDocument(Voice: "pulse1", Rows: [
+                    new AudioRowDocument(Note: "C5", Duty: null, Envelope: null),
+                ]), Frames: 4),
+            ],
+        };
+
+        Assert.Contains(
+            collection: CartridgeDocuments.Validate(document: document),
+            filter: error => error.Message.Contains(value: "carries a part of this cartridge's music", comparisonType: StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ATrackIsRefusedTwoPartsOnOneVoice() {
+        var document = CartridgeDocuments.Create(target: "cgb", title: "DOUBLE") with {
+            Sounds = [new CartridgeSound(Name: "theme", Music: [
+                new CartridgeMusicVoice(Voice: AudioEffectDocument.VoicePulse2, Part: Track()),
+                new CartridgeMusicVoice(Voice: AudioEffectDocument.VoicePulse2, Part: Track()),
+            ])],
+        };
+
+        Assert.Contains(
+            collection: CartridgeDocuments.Validate(document: document),
+            filter: error => error.Message.Contains(value: "each voice at most one part", comparisonType: StringComparison.Ordinal));
+    }
+
     private static CartridgeRule Rule(CartridgeStatement[] body) => new(Name: "rule", When: [], Body: body);
 
     private static CartridgeRule At(int phase, CartridgeStatement[] body) => new(
@@ -128,7 +195,7 @@ public sealed class CartridgeSoundTests {
         // Bit one of the master status register is set while the music channel is sounding, on either machine.
         private const uint AdvancedStatusAddress = 0x04000084u;
         private const ushort HumbleStatusAddress = 0xFF26;
-        private const uint AdvancedStateAddress = 0x020000E8u;
+        private const uint AdvancedStateAddress = 0x0200013Cu;
         private readonly AgbVerifyMachineDriver? m_agb;
         private readonly VerifyMachineDriver? m_hgb;
         public SoundProbe(CartridgeCompilation result) {
@@ -141,7 +208,7 @@ public sealed class CartridgeSoundTests {
         }
         public uint Playing() => m_agb is { } agb
             ? agb.ReadWord(address: AdvancedStateAddress)
-            : m_hgb!.Read(address: FrameworkMemoryMap.SoundMusicPointerHigh);
+            : m_hgb!.Read(address: (ushort)(FrameworkMemoryMap.SoundPulse2State + FrameworkMemoryMap.SoundVoicePointerOffset + 1));
         public uint Status() => m_agb is { } agb
             ? agb.ReadHalf(address: AdvancedStatusAddress)
             : m_hgb!.Read(address: HumbleStatusAddress);

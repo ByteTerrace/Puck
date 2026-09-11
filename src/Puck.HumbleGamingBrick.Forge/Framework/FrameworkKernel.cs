@@ -229,6 +229,7 @@ public static class FrameworkKernel {
     // background write queue drained while VRAM is open, the frame counter advanced, registers restored, reti.
     private static void EmitVBlankHandler(Sm83Emitter emitter, Action<Sm83Emitter>? rasterRearm = null) {
         var noQueue = emitter.NewLabel();
+        var attributeLoop = emitter.NewLabel();
         var drainLoop = emitter.NewLabel();
         var noCounterHigh = emitter.NewLabel();
 
@@ -239,6 +240,8 @@ public static class FrameworkKernel {
 
         emitter.Call(address: FrameworkMemoryMap.DmaTrampoline);
 
+        // Two passes over the same run, because a cell's tile and its attribute live at one address in two different
+        // video-memory banks: tiles with the bank register at zero, then attributes with it at one.
         emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
         emitter.Arithmetic(op: AluOp.Or, source: Reg8.A);
         emitter.JumpRelative(condition: Condition.Zero, label: noQueue);
@@ -251,9 +254,26 @@ public static class FrameworkKernel {
         emitter.Load(destination: Reg8.E, source: Reg8.A);
         emitter.LoadAFromHlIncrement();
         emitter.StoreAToDe();
+        emitter.Increment(pair: Reg16.Hl);
         emitter.Decrement(register: Reg8.B);
         emitter.JumpRelative(condition: Condition.NotZero, label: drainLoop);
+        emitter.LoadAImmediate(value: 0x01);
+        emitter.StoreAToHighPage(port: Hw.PortVramBank);
+        emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
+        emitter.Load(destination: Reg8.B, source: Reg8.A);
+        emitter.LoadImmediate(pair: Reg16.Hl, value: FrameworkMemoryMap.VramQueue);
+        emitter.MarkLabel(label: attributeLoop);
+        emitter.LoadAFromHlIncrement();
+        emitter.Load(destination: Reg8.D, source: Reg8.A);
+        emitter.LoadAFromHlIncrement();
+        emitter.Load(destination: Reg8.E, source: Reg8.A);
+        emitter.Increment(pair: Reg16.Hl);
+        emitter.LoadAFromHlIncrement();
+        emitter.StoreAToDe();
+        emitter.Decrement(register: Reg8.B);
+        emitter.JumpRelative(condition: Condition.NotZero, label: attributeLoop);
         emitter.XorA();
+        emitter.StoreAToHighPage(port: Hw.PortVramBank);
         emitter.StoreAToAddress(address: FrameworkMemoryMap.VramQueueCount);
         emitter.MarkLabel(label: noQueue);
 

@@ -54,8 +54,9 @@ internal static class BootRomProgram {
     /// <summary>Emits the program bytes for a layout at a solved calibration.</summary>
     /// <param name="layout">The revision's layout.</param>
     /// <param name="calibration">The straight-line machine-cycle counts to subtract.</param>
+    /// <param name="bitmap">The boot bitmap the program hands off to.</param>
     /// <returns>The assembled program, to be placed at the layout's code base.</returns>
-    public static byte[] Emit(BootRomLayout layout, BootRomCalibration calibration) {
+    public static byte[] Emit(BootRomLayout layout, BootRomCalibration calibration, BootRomMark bitmap = BootRomMark.Era) {
         var emitter = new Sm83Emitter();
         var logo = emitter.NewLabel();
         var mark = emitter.NewLabel();
@@ -136,6 +137,7 @@ internal static class BootRomProgram {
             emitter: emitter,
             labels: colorLabels,
             layout: layout,
+            bitmap: bitmap,
             logo: logo,
             mark: mark,
             registerTable: registerTable
@@ -843,7 +845,7 @@ internal static class BootRomProgram {
         (layout.SupportsColor
         ? ((byte)0x11)
         : MonochromeHandoff(model: layout.Model).A);
-    private static void EmitTables(Sm83Emitter emitter, BootRomLayout layout, int logo, int mark, int registerTable, BootRomColorLabels labels) {
+    private static void EmitTables(Sm83Emitter emitter, BootRomLayout layout, int logo, int mark, BootRomMark bitmap, int registerTable, BootRomColorLabels labels) {
         emitter.MarkLabel(label: mark);
         emitter.EmitData(value: MarkBitmap);
 
@@ -852,7 +854,9 @@ internal static class BootRomProgram {
 
         if (layout.VerifiesHeader) {
             emitter.MarkLabel(label: logo);
-            emitter.EmitData(value: CartridgeHeader.Logo);
+            emitter.EmitData(value: (bitmap == BootRomMark.House)
+                ? CartridgeHeader.HouseLogo
+                : CartridgeHeader.Logo);
         }
 
         if (!layout.SupportsColor) {

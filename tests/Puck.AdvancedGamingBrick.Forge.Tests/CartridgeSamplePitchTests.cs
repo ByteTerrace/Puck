@@ -42,7 +42,7 @@ public sealed class CartridgeSamplePitchTests {
     [Fact]
     public void ValidationRefusesARateOnASoundThatIsNotARecording() {
         var document = CartridgeDocuments.Create(target: "agb", title: "RATEBAD") with {
-            Sounds = [new CartridgeSound(Name: "theme", Music: CartridgeCostMeasurement.Track())],
+            Sounds = [new CartridgeSound(Name: "theme", Music: [CartridgeCostMeasurement.Lead(part: CartridgeCostMeasurement.Track())])],
             Rules = [new CartridgeRule(Name: "go", When: [], Body: [
                 new CartridgeStatement(Kind: "play", Sound: "theme", Rate: new CartridgeValue(Constant: 64)),
             ])],

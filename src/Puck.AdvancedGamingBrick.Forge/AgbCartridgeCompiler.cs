@@ -5,9 +5,9 @@ namespace Puck.AdvancedGamingBrick.Forge;
 
 /// <summary>Compiles cartridge documents into BIOS-independent Thumb code and mode-0 graphics.</summary>
 /// <remarks>
-/// EWRAM layout above <c>AgbForgeMemoryMap.GameRam</c>: 0x02000040..0x0200007F variables, 0x02000080 discard sink,
-/// 0x02000084 map-write queue count, 0x02000088 the queue's 24 entries of (row, column, tile, unused), 0x020000E8 the
-/// sound sequencer's state, 0x02000104 the save mirror, 0x02000160 the digital sound engine, 0x020003F0 the clock's reply, 0x02000400 the surface's fill word, 0x02000500 the per-scanline
+/// EWRAM layout above <c>AgbForgeMemoryMap.GameRam</c>: 0x02000040..0x020000BF variables, 0x020000C0 discard sink,
+/// 0x020000C4 map-write queue count, 0x020000C8 the queue's 24 entries of (row, column, tile, palette), 0x02000130 the
+/// four sound voices' state, 0x02000200 the save mirror, 0x02000160 the digital sound engine, 0x020003F0 the clock's reply, 0x02000400 the surface's fill word, 0x02000500 the per-scanline
 /// scroll table, and arrays from 0x02000900. The queue drains right
 /// after the frame sync, so a map write is on screen the following frame exactly as the Color machine's
 /// vertical-blank drain makes it.
@@ -15,14 +15,14 @@ namespace Puck.AdvancedGamingBrick.Forge;
 public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     private const uint ArrayBaseAddress = 0x02000900u;
     private const uint DirectSoundStateAddress = 0x02000160u;
-    private const uint QueueBaseAddress = 0x02000088u;
-    private const uint QueueCountAddress = 0x02000084u;
+    private const uint QueueBaseAddress = 0x020000C8u;
+    private const uint QueueCountAddress = 0x020000C4u;
     private const uint BitmapFillAddress = 0x02000400u;
     private const uint ClockReplyAddress = 0x020003F0u;
     private const uint RasterTableAddress = 0x02000500u;
-    private const uint SaveMirrorAddress = 0x02000104u;
-    private const uint SoundStateAddress = 0x020000E8u;
-    private const uint VoidAddress = 0x02000080u;
+    private const uint SaveMirrorAddress = 0x02000200u;
+    private const uint SoundStateAddress = 0x02000130u;
+    private const uint VoidAddress = 0x020000C0u;
 
     /// <inheritdoc />
     public string EngineId => "advanced-gaming-brick";
@@ -52,20 +52,36 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         var arithmetic = new ThumbCartridgeArithmetic(emitter: emitter);
         var kernel = new AgbForgeKernel(emitter: emitter);
         var data = new List<byte>();
+        // A sound is a list of voice parts: a track has one per voice it occupies, an effect or a recording exactly one.
         var sounds = document.Sounds.ToDictionary(
             keySelector: static sound => sound.Name,
             elementSelector: sound => sound.Sample is { } pcm
-                ? (Address: Add(bytes: pcm.Select(selector: static value => (byte)value).ToArray()), IsMusic: false, Voice: 0, SampleLength: pcm.Length, Pattern: 0u)
+                ? (IsMusic: false, SampleLength: pcm.Length, Parts: new[] { (
+                    Address: Add(bytes: pcm.Select(selector: static value => (byte)value).ToArray()),
+                    Voice: CartridgeVoice.Pulse1,
+                    Pattern: 0u) })
                 : sound.Music is { } music
-                    ? (Address: Add(bytes: AudioDocumentCompiler.CompileMusicLoop(document: AudioCanonicalizer.Normalize(document: music))), IsMusic: true, Voice: 0, SampleLength: 0, Pattern: 0u)
-                    : (Address: Add(bytes: AudioDocumentCompiler.CompileEffect(effect: sound.Effect!, frames: sound.Frames!.Value)),
-                        IsMusic: false,
-                        Voice: sound.Effect!.Voice switch { AudioEffectDocument.VoiceNoise => 1, AudioEffectDocument.VoiceWave => 2, _ => 0 },
-                        SampleLength: 0,
-                        Pattern: sound.Waveform is { } levels
-                            ? Add(bytes: Enumerable.Range(start: 0, count: 16).Select(selector: index => (byte)((levels[index * 2] << 4) | levels[(index * 2) + 1])).ToArray())
-                            : 0u),
+                    ? (IsMusic: true, SampleLength: 0, Parts: music.Select(selector: part => (
+                        Address: Add(bytes: AudioDocumentCompiler.CompileMusicVoice(document: AudioCanonicalizer.Normalize(document: part.Part), voice: part.Voice)),
+                        Voice: CartridgeVoices.Of(name: part.Voice),
+                        Pattern: Waveform(levels: part.Waveform))).ToArray())
+                    : (IsMusic: false, SampleLength: 0, Parts: new[] { (
+                        Address: Add(bytes: AudioDocumentCompiler.CompileEffect(effect: sound.Effect!, frames: sound.Frames!.Value)),
+                        Voice: CartridgeVoices.Of(name: sound.Effect!.Voice),
+                        Pattern: Waveform(levels: sound.Waveform)) }),
             comparer: StringComparer.Ordinal);
+
+        // Every voice any track occupies, which is what a stop step silences.
+        var musicVoices = document.Sounds
+            .SelectMany(selector: static sound => sound.Music ?? [])
+            .Select(selector: static part => CartridgeVoices.Of(name: part.Voice))
+            .Distinct()
+            .Order()
+            .ToArray();
+
+        uint Waveform(int[]? levels) => levels is null
+            ? 0u
+            : Add(bytes: Enumerable.Range(start: 0, count: 16).Select(selector: index => (byte)((levels[index * 2] << 4) | levels[(index * 2) + 1])).ToArray());
         var audio = document.Sounds.Length == 0 ? null : new AgbSoundDriver(emitter: emitter, stateAddress: SoundStateAddress);
         var digital = document.Sounds.Any(predicate: static sound => sound.Sample is not null) ? new AgbDirectSound(emitter: emitter, stateAddress: DirectSoundStateAddress) : null;
         AgbSaveModule? saver = null;
@@ -410,6 +426,10 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.LoadConstant(destination: LowRegister.R2, value: 0x0600F800u);
             emitter.AddRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R2);
             emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 2, destination: LowRegister.R1);
+            // A map entry carries its cell's palette in its top four bits.
+            emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 3, destination: LowRegister.R2);
+            emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R2, source: LowRegister.R2, amount: 12);
+            emitter.Alu(op: ThumbAlu.Or, destination: LowRegister.R1, source: LowRegister.R2);
             emitter.StoreHalf(baseRegister: LowRegister.R0, byteOffset: 0, source: LowRegister.R1);
             emitter.AddImmediate(register: LowRegister.R4, value: 4);
             emitter.SubtractImmediate(register: LowRegister.R3, value: 1);
@@ -426,6 +446,12 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             Load(value: statement.Row!, register: LowRegister.R5);
             Load(value: statement.Column!, register: LowRegister.R6);
             Load(value: statement.Tile!, register: LowRegister.R7);
+            if (statement.Palette is { } shade) {
+                Load(value: shade, register: LowRegister.R3);
+            } else {
+                emitter.MoveImmediate(destination: LowRegister.R3, value: 0);
+            }
+
             emitter.LoadConstant(destination: LowRegister.R2, value: QueueCountAddress);
             emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: LowRegister.R1);
             emitter.LoadConstant(destination: LowRegister.R4, value: QueueBaseAddress);
@@ -437,6 +463,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 0, source: LowRegister.R5);
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 1, source: LowRegister.R6);
             emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 2, source: LowRegister.R7);
+            emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 3, source: LowRegister.R3);
             emitter.AddImmediate(register: LowRegister.R1, value: 1);
             emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R1);
         }
@@ -563,18 +590,29 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                         }
                     case "play": {
                             var sound = sounds[statement.Sound!];
-                            if (sound.SampleLength > 0) { digital!.EmitStart(sampleAddress: sound.Address, sampleLength: sound.SampleLength, rate: statement.Rate is null ? null : register => Load(value: statement.Rate, register: register)); } else if (sound.IsMusic) { audio!.EmitStart(streamAddress: sound.Address); } else {
-                                // The wave voice plays through a pattern, which must be in place before the voice starts.
-                                if (sound.Pattern != 0u) { audio!.EmitWavePatternLoad(patternAddress: sound.Pattern); }
+                            if (sound.SampleLength > 0) {
+                                digital!.EmitStart(sampleAddress: sound.Parts[0].Address, sampleLength: sound.SampleLength, rate: statement.Rate is null ? null : register => Load(value: statement.Rate, register: register));
+                            } else {
+                                foreach (var part in sound.Parts) {
+                                    // The wave voice plays through a pattern, which must be in place before the voice starts.
+                                    if (part.Pattern != 0u) { audio!.EmitWavePatternLoad(patternAddress: part.Pattern); }
 
-                                audio!.EmitEffectStart(streamAddress: sound.Address, voice: sound.Voice);
+                                    if (sound.IsMusic) {
+                                        audio!.EmitStart(streamAddress: part.Address, voice: part.Voice);
+                                    } else {
+                                        audio!.EmitEffectStart(streamAddress: part.Address, voice: part.Voice);
+                                    }
+                                }
                             }
 
                             Flush();
                             break;
                         }
                     case "stop":
-                        audio!.EmitStop();
+                        foreach (var voice in musicVoices) {
+                            audio!.EmitStop(voice: voice);
+                        }
+
                         Flush();
                         break;
                     case "save": {

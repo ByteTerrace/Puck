@@ -31,56 +31,63 @@ public static class FrameworkMemoryMap {
     public const ushort PendingState = 0xC00A;
     /// <summary>The number of queued background-map writes (drained by the VBlank handler).</summary>
     public const ushort VramQueueCount = 0xC00B;
-    /// <summary>The queue entries: <see cref="VramQueueCapacity"/> × (address-high, address-low, tile).</summary>
+    /// <summary>
+    /// The queue entries: <see cref="VramQueueCapacity"/> × (address-high, address-low, tile, attribute). The
+    /// attribute rides in the entry rather than in a queue of its own because the drain walks the run twice — once
+    /// per video-memory bank — and one pointer per pass is what the processor has registers for.
+    /// </summary>
     public const ushort VramQueue = 0xC00C;
     /// <summary>The queue capacity; a push beyond it is dropped.</summary>
     public const int VramQueueCapacity = 24;
+    /// <summary>The bytes one queue entry occupies.</summary>
+    public const int VramQueueEntrySize = 4;
     /// <summary>Non-zero while an input script (attract mode) overrides the held byte.</summary>
-    public const ushort ScriptOverride = 0xC054;
+    public const ushort ScriptOverride = 0xC06C;
     /// <summary>The low byte of the script read pointer.</summary>
-    public const ushort ScriptPointer = 0xC055;
+    public const ushort ScriptPointer = 0xC06D;
     /// <summary>The high byte of the script read pointer.</summary>
-    public const ushort ScriptPointerHigh = 0xC056;
+    public const ushort ScriptPointerHigh = 0xC06E;
     /// <summary>Frames left before the script advances to its next (buttons, frames) pair.</summary>
-    public const ushort ScriptFramesLeft = 0xC057;
+    public const ushort ScriptFramesLeft = 0xC06F;
     /// <summary>Set to 1 when the script reaches its <c>0xFF</c> terminator.</summary>
-    public const ushort ScriptEnded = 0xC058;
+    public const ushort ScriptEnded = 0xC070;
     /// <summary>The buttons byte of the script's current pair.</summary>
-    public const ushort ScriptButtons = 0xC059;
+    public const ushort ScriptButtons = 0xC071;
     /// <summary>The battery-save payload's work-RAM mirror (up to <see cref="SaveMirrorCapacity"/> bytes).</summary>
-    public const ushort SaveMirror = 0xC060;
+    public const ushort SaveMirror = 0xC074;
     /// <summary>The mirror capacity in bytes.</summary>
     public const int SaveMirrorCapacity = 72;
-    /// <summary>The music sequencer's read-pointer low byte (high byte zero = no music playing).</summary>
-    public const ushort SoundMusicPointer = 0xC0A8;
-    /// <summary>The music sequencer's read-pointer high byte.</summary>
-    public const ushort SoundMusicPointerHigh = 0xC0A9;
-    /// <summary>The music pattern's start-address low byte (the loop restart target).</summary>
-    public const ushort SoundMusicStart = 0xC0AA;
-    /// <summary>The music pattern's start-address high byte.</summary>
-    public const ushort SoundMusicStartHigh = 0xC0AB;
-    /// <summary>Frames left before the music sequencer advances to its next event.</summary>
-    public const ushort SoundMusicWait = 0xC0AC;
-    /// <summary>The pulse SFX voice's read-pointer low byte (high byte zero = idle).</summary>
-    public const ushort SoundPulsePointer = 0xC0AD;
-    /// <summary>The pulse SFX voice's read-pointer high byte.</summary>
-    public const ushort SoundPulsePointerHigh = 0xC0AE;
-    /// <summary>Frames left before the pulse SFX voice advances to its next step.</summary>
-    public const ushort SoundPulseWait = 0xC0AF;
-    /// <summary>The noise SFX voice's read-pointer low byte (high byte zero = idle).</summary>
-    public const ushort SoundNoisePointer = 0xC0B0;
-    /// <summary>The noise SFX voice's read-pointer high byte.</summary>
-    public const ushort SoundNoisePointerHigh = 0xC0B1;
-    /// <summary>Frames left before the noise SFX voice advances to its next step.</summary>
-    public const ushort SoundNoiseWait = 0xC0B2;
-    /// <summary>The wave voice's read-pointer low byte (high byte zero = idle).</summary>
-    public const ushort SoundWavePointer = 0xC0B4;
-    /// <summary>The wave voice's read-pointer high byte.</summary>
-    public const ushort SoundWavePointerHigh = 0xC0B5;
-    /// <summary>Frames left before the wave voice advances to its next step.</summary>
-    public const ushort SoundWaveWait = 0xC0B6;
-    /// <summary>Framework scratch (0xC0B8..0xC0EF), free for module-internal temporaries.</summary>
-    public const ushort Scratch = 0xC0B8;
+    /// <summary>
+    /// The four sound voices' sequencer state: <see cref="SoundVoiceCount"/> blocks of
+    /// <see cref="SoundVoiceStateSize"/> bytes in the order pulse one, pulse two, wave, noise — read pointer low and
+    /// high, loop-start low and high, then the frames left before the voice advances.
+    /// </summary>
+    /// <remarks>
+    /// Every voice carries a loop start, and that is the only thing separating music from a one-shot: a voice whose
+    /// loop-start high byte is zero stops and mutes at its stream's terminator, and one carrying a start rewinds to
+    /// it. Nothing about a voice reserves it for either, so a document decides which voices its music occupies.
+    /// </remarks>
+    public const ushort SoundVoiceState = 0xC0BC;
+    /// <summary>The number of sequencer voices.</summary>
+    public const int SoundVoiceCount = 4;
+    /// <summary>One voice's state size: pointer, loop start, wait.</summary>
+    public const int SoundVoiceStateSize = 5;
+    /// <summary>Pulse one's sequencer state.</summary>
+    public const ushort SoundPulse1State = SoundVoiceState;
+    /// <summary>Pulse two's sequencer state.</summary>
+    public const ushort SoundPulse2State = SoundVoiceState + SoundVoiceStateSize;
+    /// <summary>The wave voice's sequencer state.</summary>
+    public const ushort SoundWaveState = SoundVoiceState + (2 * SoundVoiceStateSize);
+    /// <summary>The noise voice's sequencer state.</summary>
+    public const ushort SoundNoiseState = SoundVoiceState + (3 * SoundVoiceStateSize);
+    /// <summary>A voice block's read-pointer low byte (its high byte is the next one; zero means idle).</summary>
+    public const int SoundVoicePointerOffset = 0;
+    /// <summary>A voice block's loop-start low byte (its high byte is the next one; zero means one-shot).</summary>
+    public const int SoundVoiceStartOffset = 2;
+    /// <summary>A voice block's wait counter.</summary>
+    public const int SoundVoiceWaitOffset = 4;
+    /// <summary>Framework scratch (0xC0D0..0xC0EF), free for module-internal temporaries.</summary>
+    public const ushort Scratch = 0xC0D0;
     /// <summary>The 16-byte "victory share" source slot (0xC0F0..0xC0FF): the host seeds this cabinet's authored 128-bit
     /// meta victory share here at boot (a per-cabinet <see cref="Sm83Emitter"/>-invisible poke, like the mode-swap boot
     /// shim), and <see cref="VictoryModule"/> copies it verbatim into the top-16 SRAM win region on the game's win edge.

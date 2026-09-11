@@ -12,7 +12,7 @@ namespace Puck.GamingBricks.Forge;
 /// </remarks>
 public static class CartridgeLimits {
     /// <summary>The maximum number of named byte state slots.</summary>
-    public const int VariableCount = 64;
+    public const int VariableCount = 128;
     /// <summary>The maximum number of named arrays.</summary>
     public const int ArrayCount = 32;
     /// <summary>The maximum number of elements in one array; a byte index cannot address more.</summary>
@@ -81,4 +81,6 @@ public static class CartridgeLimits {
     public const int SpriteCount = 40;
     /// <summary>The maximum number of 8 by 8 tiles.</summary>
     public const int TileCount = 256;
+    /// <summary>The machine's sound voices, and so the most parts one track can carry.</summary>
+    public const int SoundVoiceCount = 4;
 }

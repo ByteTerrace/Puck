@@ -7,14 +7,14 @@ namespace Puck.HumbleGamingBrick.Forge;
 /// <summary>Compiles cartridge documents into native CGB machine code and graphics.</summary>
 /// <remarks>
 /// Work-RAM layout above <c>FrameworkMemoryMap.GameRam</c>:
-/// 0xC200..0xC23F variables, 0xC240 prior held input, 0xC241 operand spill, 0xC242 discard sink, 0xC243..0xDFFF arrays, spanning the fixed page and the switchable bank pinned at boot.
+/// 0xC200..0xC27F variables, 0xC280 prior held input, 0xC281 operand spill, 0xC282 discard sink, 0xC283..0xDFFF arrays, spanning the fixed page and the switchable bank pinned at boot.
 /// </remarks>
 public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
-    private const ushort ArrayBaseAddress = 0xC243;
+    private const ushort ArrayBaseAddress = 0xC283;
     private const ushort ArrayLimitAddress = 0xE000;
-    private const ushort HeldInputAddress = 0xC240;
-    private const ushort ScratchAddress = 0xC241;
-    private const ushort VoidAddress = 0xC242;
+    private const ushort HeldInputAddress = 0xC280;
+    private const ushort ScratchAddress = 0xC281;
+    private const ushort VoidAddress = 0xC282;
     /// <summary>The mid-picture walk's cursor; the row triples follow it.</summary>
     private const ushort RasterCursorAddress = FrameworkMemoryMap.Scratch;
     /// <summary>The first row triple: scanline, horizontal scroll, vertical scroll.</summary>
@@ -25,6 +25,14 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
 
     /// <inheritdoc />
     public string Target => "cgb";
+
+    // The document names voices; the driver numbers them.
+    private static SoundVoice Voice(string name) => name switch {
+        AudioEffectDocument.VoiceNoise => SoundVoice.Noise,
+        AudioEffectDocument.VoiceWave => SoundVoice.Wave,
+        AudioEffectDocument.VoicePulse2 => SoundVoice.Pulse2,
+        _ => SoundVoice.Pulse1,
+    };
 
     /// <inheritdoc />
     public CartridgeCompilation Compile(CartridgeDocument document) {
@@ -84,22 +92,40 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
         var trampoline = data.Add(name: "dma", bytes: FrameworkKernel.BuildDmaTrampolineBlob());
         var screens = document.Screens.ToDictionary(
             keySelector: static screen => screen.Name,
-            elementSelector: screen => (Table: data.Add(name: $"screen-{screen.Name}", bytes: screen.Tiles.Select(selector: static tile => (byte)tile).ToArray()), screen.Width, Height: screen.Tiles.Length / screen.Width),
+            elementSelector: screen => (
+                Table: data.Add(name: $"screen-{screen.Name}", bytes: screen.Tiles.Select(selector: static tile => (byte)tile).ToArray()),
+                Shades: screen.Palettes is { } palettes ? data.Add(name: $"screen-{screen.Name}-palettes", bytes: palettes.Select(selector: static shade => (byte)(shade & 0x07)).ToArray()) : (RomTable?)null,
+                screen.Width,
+                Height: screen.Tiles.Length / screen.Width),
             comparer: StringComparer.Ordinal);
         // Arrays pack contiguously from ArrayBaseAddress, so one ROM table seeds every one of them.
         var arrayInitial = document.Arrays.SelectMany(selector: static array => array.Initial.Select(selector: static value => (byte)value)).ToArray();
         var arrayData = data.Add(name: "arrays", bytes: arrayInitial.Length == 0 ? [0] : arrayInitial);
+        // A sound is a list of voice parts: a track has one per voice it occupies, an effect exactly one.
         var sounds = document.Sounds.ToDictionary(
             keySelector: static sound => sound.Name,
             elementSelector: sound => sound.Music is { } music
-                ? (Table: data.Add(name: $"music-{sound.Name}", bytes: AudioDocumentCompiler.CompileMusicLoop(document: AudioCanonicalizer.Normalize(document: music))), IsMusic: true, Voice: SoundVoice.Pulse, Pattern: (RomTable?)null)
-                : (Table: data.Add(name: $"effect-{sound.Name}", bytes: AudioDocumentCompiler.CompileEffect(effect: sound.Effect!, frames: sound.Frames!.Value)),
-                    IsMusic: false,
-                    Voice: sound.Effect!.Voice switch { AudioEffectDocument.VoiceNoise => SoundVoice.Noise, AudioEffectDocument.VoiceWave => SoundVoice.Wave, _ => SoundVoice.Pulse },
-                    Pattern: sound.Waveform is { } levels
-                        ? data.Add(name: $"wave-{sound.Name}", bytes: Enumerable.Range(start: 0, count: 16).Select(selector: index => (byte)((levels[index * 2] << 4) | levels[(index * 2) + 1])).ToArray())
-                        : null),
+                ? (IsMusic: true, Parts: music.Select(selector: part => (
+                    Table: data.Add(name: $"music-{sound.Name}-{part.Voice}", bytes: AudioDocumentCompiler.CompileMusicVoice(document: AudioCanonicalizer.Normalize(document: part.Part), voice: part.Voice)),
+                    Voice: Voice(name: part.Voice),
+                    Pattern: Waveform(levels: part.Waveform, name: $"wave-{sound.Name}-{part.Voice}"))).ToArray())
+                : (IsMusic: false, Parts: new[] { (
+                    Table: data.Add(name: $"effect-{sound.Name}", bytes: AudioDocumentCompiler.CompileEffect(effect: sound.Effect!, frames: sound.Frames!.Value)),
+                    Voice: Voice(name: sound.Effect!.Voice ?? AudioEffectDocument.VoicePulse1),
+                    Pattern: Waveform(levels: sound.Waveform, name: $"wave-{sound.Name}")) }),
             comparer: StringComparer.Ordinal);
+
+        // Every voice any track occupies, which is what a stop step silences.
+        var musicVoices = document.Sounds
+            .SelectMany(selector: static sound => sound.Music ?? [])
+            .Select(selector: static part => Voice(name: part.Voice))
+            .Distinct()
+            .Order()
+            .ToArray();
+
+        RomTable? Waveform(int[]? levels, string name) => levels is null
+            ? null
+            : data.Add(name: name, bytes: Enumerable.Range(start: 0, count: 16).Select(selector: index => (byte)((levels[index * 2] << 4) | levels[(index * 2) + 1])).ToArray());
         var audio = document.Sounds.Length == 0 ? null : new ApuSoundDriver();
         var save = document.Save is null ? null : new SaveModule(emitter: emitter, defaults: data.Add(name: "save-defaults", bytes: [.. defaults]), version: (byte)document.Save.Version);
         var boot = emitter.NewLabel();
@@ -147,6 +173,8 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             rom = FrameworkCartridge.Build(
             title: document.Title, routine: routine, data: data.ToArray(), banks: banked.Banks,
             clock: document.Clock is not null,
+            // A forged cartridge is this house's, and says so on the screen the machine shows before it hands over.
+            logo: CartridgeHeader.HouseLogo.ToArray(),
             statHandlerAddress: document.Raster.Length == 0 ? (ushort)0 : emitter.LabelAddress(label: rasterHandler, baseAddress: Hw.EntryAddress));
         } catch (Exception overrun) when (overrun is ArgumentException or ArgumentOutOfRangeException) {
             throw new CartridgeCapacityException(message: $"The document does not fit the Color machine's cartridge: {overrun.Message}", innerException: overrun);
@@ -316,21 +344,26 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                         }
                     case "play": {
                             var sound = sounds[statement.Sound!];
-                            if (sound.IsMusic) {
-                                ApuSoundDriver.EmitMusicStart(emitter: emitter, stream: sound.Table);
-                            } else {
+                            foreach (var part in sound.Parts) {
                                 // The wave voice plays through a pattern, which must be in place before the voice starts.
-                                if (sound.Pattern is { } pattern) {
+                                if (part.Pattern is { } pattern) {
                                     ApuSoundDriver.EmitWavePatternLoad(emitter: emitter, pattern: pattern);
                                 }
 
-                                ApuSoundDriver.EmitEffectStart(emitter: emitter, stream: sound.Table, voice: sound.Voice);
+                                if (sound.IsMusic) {
+                                    ApuSoundDriver.EmitMusicStart(emitter: emitter, stream: part.Table, voice: part.Voice);
+                                } else {
+                                    ApuSoundDriver.EmitEffectStart(emitter: emitter, stream: part.Table, voice: part.Voice);
+                                }
                             }
 
                             break;
                         }
                     case "stop":
-                        ApuSoundDriver.EmitMusicStop(emitter: emitter);
+                        foreach (var voice in musicVoices) {
+                            ApuSoundDriver.EmitVoiceStop(emitter: emitter, voice: voice);
+                        }
+
                         break;
                     case "fade": {
                             // Pick the baked bank for this step, then republish both palette banks from it.
@@ -454,6 +487,14 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                             emitter.ArithmeticImmediate(op: AluOp.Add, value: Hw.VramBackgroundMap >> 8);
                             emitter.Load(destination: Reg8.D, source: Reg8.A);
                             emitter.Push(pair: StackPair.De);
+                            if (statement.Palette is { } shade) {
+                                Load(value: shade);
+                                emitter.ArithmeticImmediate(op: AluOp.And, value: 0x07);
+                            } else {
+                                emitter.XorA();
+                            }
+
+                            emitter.Load(destination: Reg8.C, source: Reg8.A);
                             Load(value: statement.Tile!);
                             emitter.Pop(pair: StackPair.De);
                             background.EmitQueuePush();
@@ -464,6 +505,15 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                             background.EmitLcdOff();
                             background.EmitQueueClear();
                             background.EmitPaintRect(sourceAddress: screen.Table.Address, row: statement.Row!.Constant!.Value, column: statement.Column!.Constant!.Value, width: screen.Width, height: screen.Height);
+                            if (screen.Shades is { } shades) {
+                                // The colour of a cell lives at the same address in the other video-memory bank.
+                                emitter.LoadAImmediate(value: 0x01);
+                                emitter.StoreAToHighPage(port: Hw.PortVramBank);
+                                background.EmitPaintRect(sourceAddress: shades.Address, row: statement.Row!.Constant!.Value, column: statement.Column!.Constant!.Value, width: screen.Width, height: screen.Height);
+                                emitter.XorA();
+                                emitter.StoreAToHighPage(port: Hw.PortVramBank);
+                            }
+
                             background.EmitLcdOn(lcdc: BaseControl(document: document));
                             break;
                         }

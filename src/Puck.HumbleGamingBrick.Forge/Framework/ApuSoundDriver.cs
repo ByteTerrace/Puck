@@ -4,12 +4,12 @@ namespace Puck.HumbleGamingBrick.Forge.Framework;
 /// The real APU sound driver: a compact SM83 register pump over the <see cref="SoundTables"/> catalog.
 /// </summary>
 /// <remarks>
-/// Three independent sequencer voices tick once per frame from the main loop — a pulse-1 SFX voice, a noise SFX
-/// voice, and a pulse-2 music voice — each holding a read pointer + wait counter in the framework's sound work-RAM
-/// block (<see cref="FrameworkMemoryMap.SoundMusicPointer"/>…). A step is a duration byte followed by the voice's
-/// raw APU register bytes; the tick writes them straight to the ports and waits the duration out, an effect
-/// stream's zero terminator silences its channel (envelope zero, DAC off), and the music pattern's terminator
-/// rewinds to the pattern start — the short loop. <see cref="ISoundDriver.EmitEffect"/> resolves an effect id to
+/// Four sequencer voices tick once per frame from the main loop — pulse 1, pulse 2, wave and noise — each holding a
+/// read pointer, a loop start and a wait counter in the framework's sound work-RAM block
+/// (<see cref="FrameworkMemoryMap.SoundVoiceState"/>). A step is a duration byte followed by the voice's raw APU
+/// register bytes; the tick writes them straight to the ports and waits the duration out. What a stream's zero
+/// terminator does is the loop start's to decide: a voice carrying one rewinds to it and plays on, and a voice
+/// without one stops and silences its channel. Nothing here reserves a voice for music or for effects. <see cref="ISoundDriver.EmitEffect"/> resolves an effect id to
 /// its ROM stream at build time and emits a three-store trigger (pointer + zeroed wait), so triggering is
 /// race-free with the tick that runs later in the same frame. The streams themselves are manifest tables: the game
 /// declares them with <see cref="SoundTables.DefineIn"/> beside its other data, links, then hands the linked
@@ -66,10 +66,7 @@ public sealed class ApuSoundDriver : ISoundDriver {
         ArgumentNullException.ThrowIfNull(emitter);
 
         if (effectId == SoundTables.MusicStop) {
-            // Stop the loop and silence pulse 2 (envelope zero = DAC off): idempotent, safe with no music playing.
-            emitter.XorA();
-            emitter.StoreAToAddress(address: FrameworkMemoryMap.SoundMusicPointerHigh);
-            emitter.StoreAToHighPage(port: Hw.PortPulse2Envelope);
+            EmitVoiceStop(emitter: emitter, voice: SoundVoice.Pulse2);
 
             return;
         }
@@ -77,13 +74,7 @@ public sealed class ApuSoundDriver : ISoundDriver {
         if (effectId == SoundTables.MusicLoop) {
             var pattern = (m_musicLoop ?? throw new InvalidOperationException(message: "The sound driver was never bound to a linked manifest (call Bind after GameManifest.Link)."));
 
-            EmitVoiceStart(
-                emitter: emitter,
-                pointerAddress: FrameworkMemoryMap.SoundMusicPointer,
-                startAddress: FrameworkMemoryMap.SoundMusicStart,
-                streamAddress: pattern.Address,
-                waitAddress: FrameworkMemoryMap.SoundMusicWait
-            );
+            EmitMusicStart(emitter: emitter, stream: pattern, voice: SoundVoice.Pulse2);
 
             return;
         }
@@ -92,29 +83,22 @@ public sealed class ApuSoundDriver : ISoundDriver {
             throw new ArgumentException(message: $"Effect id {effectId} is not in the sound catalog (was the driver bound?).", paramName: nameof(effectId));
         }
 
-        var isPulse = (effect.Voice == SoundVoice.Pulse);
-
-        EmitVoiceStart(
-            emitter: emitter,
-            pointerAddress: (isPulse ? FrameworkMemoryMap.SoundPulsePointer : FrameworkMemoryMap.SoundNoisePointer),
-            startAddress: null,
-            streamAddress: effect.Table.Address,
-            waitAddress: (isPulse ? FrameworkMemoryMap.SoundPulseWait : FrameworkMemoryMap.SoundNoiseWait)
-        );
+        EmitEffectStart(emitter: emitter, stream: effect.Table, voice: effect.Voice);
     }
     /// <summary>Emits a start of the named music stream, replacing whatever the music voice was playing.</summary>
     /// <param name="emitter">The routine emitter.</param>
     /// <param name="stream">The compiled music-loop table; the voice rewinds to its start on the terminator.</param>
+    /// <param name="voice">The voice the part occupies.</param>
     /// <remarks>Independent of <see cref="Bind"/>: a document compiler supplies its own tables.</remarks>
-    public static void EmitMusicStart(Sm83Emitter emitter, RomTable stream) {
+    public static void EmitMusicStart(Sm83Emitter emitter, RomTable stream, SoundVoice voice) {
         ArgumentNullException.ThrowIfNull(emitter);
 
         EmitVoiceStart(
             emitter: emitter,
-            pointerAddress: FrameworkMemoryMap.SoundMusicPointer,
-            startAddress: FrameworkMemoryMap.SoundMusicStart,
+            pointerAddress: VoicePointer(voice: voice),
+            startAddress: VoiceStart(voice: voice),
             streamAddress: stream.Address,
-            waitAddress: FrameworkMemoryMap.SoundMusicWait
+            waitAddress: VoiceWait(voice: voice)
         );
     }
 
@@ -128,6 +112,7 @@ public sealed class ApuSoundDriver : ISoundDriver {
 
         EmitVoiceStart(
             emitter: emitter,
+            clearAddress: VoiceStart(voice: voice),
             pointerAddress: VoicePointer(voice: voice),
             startAddress: null,
             streamAddress: stream.Address,
@@ -151,25 +136,39 @@ public sealed class ApuSoundDriver : ISoundDriver {
         }
     }
 
-    private static ushort VoicePointer(SoundVoice voice) => voice switch {
-        SoundVoice.Noise => FrameworkMemoryMap.SoundNoisePointer,
-        SoundVoice.Wave => FrameworkMemoryMap.SoundWavePointer,
-        _ => FrameworkMemoryMap.SoundPulsePointer,
+    /// <summary>Returns the base of a voice's sequencer state block.</summary>
+    /// <param name="voice">The hardware voice.</param>
+    /// <returns>The block's first address.</returns>
+    public static ushort VoiceState(SoundVoice voice) => voice switch {
+        SoundVoice.Noise => FrameworkMemoryMap.SoundNoiseState,
+        SoundVoice.Wave => FrameworkMemoryMap.SoundWaveState,
+        SoundVoice.Pulse2 => FrameworkMemoryMap.SoundPulse2State,
+        _ => FrameworkMemoryMap.SoundPulse1State,
     };
-    private static ushort VoiceWait(SoundVoice voice) => voice switch {
-        SoundVoice.Noise => FrameworkMemoryMap.SoundNoiseWait,
-        SoundVoice.Wave => FrameworkMemoryMap.SoundWaveWait,
-        _ => FrameworkMemoryMap.SoundPulseWait,
+    /// <summary>Returns the high-page port a voice's channel is silenced through.</summary>
+    /// <param name="voice">The hardware voice.</param>
+    /// <returns>The port.</returns>
+    public static byte VoiceMutePort(SoundVoice voice) => voice switch {
+        SoundVoice.Noise => Hw.PortNoiseEnvelope,
+        SoundVoice.Wave => Hw.PortWaveDacEnable,
+        SoundVoice.Pulse2 => Hw.PortPulse2Envelope,
+        _ => Hw.PortPulse1Envelope,
     };
 
-    /// <summary>Emits a stop of the music voice and silences its channel. Safe with nothing playing.</summary>
+    private static ushort VoicePointer(SoundVoice voice) => ((ushort)(VoiceState(voice: voice) + FrameworkMemoryMap.SoundVoicePointerOffset));
+    private static ushort VoiceStart(SoundVoice voice) => ((ushort)(VoiceState(voice: voice) + FrameworkMemoryMap.SoundVoiceStartOffset));
+    private static ushort VoiceWait(SoundVoice voice) => ((ushort)(VoiceState(voice: voice) + FrameworkMemoryMap.SoundVoiceWaitOffset));
+
+    /// <summary>Emits a stop of one voice and silences its channel. Safe with nothing playing.</summary>
     /// <param name="emitter">The routine emitter.</param>
-    public static void EmitMusicStop(Sm83Emitter emitter) {
+    /// <param name="voice">The voice to silence.</param>
+    public static void EmitVoiceStop(Sm83Emitter emitter, SoundVoice voice) {
         ArgumentNullException.ThrowIfNull(emitter);
 
         emitter.XorA();
-        emitter.StoreAToAddress(address: FrameworkMemoryMap.SoundMusicPointerHigh);
-        emitter.StoreAToHighPage(port: Hw.PortPulse2Envelope);
+        emitter.StoreAToAddress(address: ((ushort)(VoicePointer(voice: voice) + 1)));
+        emitter.StoreAToAddress(address: ((ushort)(VoiceStart(voice: voice) + 1)));
+        emitter.StoreAToHighPage(port: VoiceMutePort(voice: voice));
     }
 
     /// <inheritdoc/>
@@ -178,50 +177,18 @@ public sealed class ApuSoundDriver : ISoundDriver {
 
         emitter.MarkLabel(label: (m_tickLabel ??= emitter.NewLabel()));
 
-        // The pulse-1 SFX voice (five registers from NR10), the noise SFX voice (four from NR41), then the music
-        // voice (four from NR21, looping on its terminator).
-        EmitVoiceTick(
-            emitter: emitter,
-            loopStartAddress: null,
-            muteEnvelopePort: Hw.PortPulse1Envelope,
-            pointerAddress: FrameworkMemoryMap.SoundPulsePointer,
-            portBase: Hw.PortPulse1Sweep,
-            registerCount: 5,
-            waitAddress: FrameworkMemoryMap.SoundPulseWait
-        );
-        EmitVoiceTick(
-            emitter: emitter,
-            loopStartAddress: null,
-            muteEnvelopePort: Hw.PortNoiseEnvelope,
-            pointerAddress: FrameworkMemoryMap.SoundNoisePointer,
-            portBase: Hw.PortNoiseLength,
-            registerCount: 4,
-            waitAddress: FrameworkMemoryMap.SoundNoiseWait
-        );
-        EmitVoiceTick(
-            emitter: emitter,
-            loopStartAddress: null,
-            muteEnvelopePort: Hw.PortWaveDacEnable,
-            pointerAddress: FrameworkMemoryMap.SoundWavePointer,
-            portBase: Hw.PortWaveDacEnable,
-            registerCount: 5,
-            waitAddress: FrameworkMemoryMap.SoundWaveWait
-        );
-        EmitVoiceTick(
-            emitter: emitter,
-            loopStartAddress: FrameworkMemoryMap.SoundMusicStart,
-            muteEnvelopePort: Hw.PortPulse2Envelope,
-            pointerAddress: FrameworkMemoryMap.SoundMusicPointer,
-            portBase: Hw.PortPulse2DutyLength,
-            registerCount: 4,
-            waitAddress: FrameworkMemoryMap.SoundMusicWait
-        );
+        // One section per voice, in hardware order. Nothing here reserves a voice for music or for one-shots: a
+        // stream's terminator rewinds or stops depending on whether the voice carries a loop start.
+        EmitVoiceTick(emitter: emitter, portBase: Hw.PortPulse1Sweep, registerCount: 5, voice: SoundVoice.Pulse1);
+        EmitVoiceTick(emitter: emitter, portBase: Hw.PortNoiseLength, registerCount: 4, voice: SoundVoice.Noise);
+        EmitVoiceTick(emitter: emitter, portBase: Hw.PortWaveDacEnable, registerCount: 5, voice: SoundVoice.Wave);
+        EmitVoiceTick(emitter: emitter, portBase: Hw.PortPulse2DutyLength, registerCount: 4, voice: SoundVoice.Pulse2);
         emitter.Return();
     }
 
     // The build-time-resolved trigger: point the voice at the stream and zero its wait, so the tick later this same
     // frame plays the first step immediately. Retriggering a playing voice restarts it — the intended feel.
-    private static void EmitVoiceStart(Sm83Emitter emitter, ushort pointerAddress, ushort? startAddress, ushort streamAddress, ushort waitAddress) {
+    private static void EmitVoiceStart(Sm83Emitter emitter, ushort pointerAddress, ushort? startAddress, ushort streamAddress, ushort waitAddress, ushort? clearAddress = null) {
         emitter.LoadAImmediate(value: ((byte)(streamAddress & 0xFF)));
         emitter.StoreAToAddress(address: pointerAddress);
 
@@ -238,16 +205,27 @@ public sealed class ApuSoundDriver : ISoundDriver {
 
         emitter.XorA();
         emitter.StoreAToAddress(address: waitAddress);
+
+        if (clearAddress is { } clear) {
+            // No loop start: the terminator stops this voice instead of rewinding it.
+            emitter.StoreAToAddress(address: clear);
+            emitter.StoreAToAddress(address: ((ushort)(clear + 1)));
+        }
     }
     // One voice's per-frame sequencer section. Idle (pointer high byte zero) falls straight through; a positive wait
     // burns one frame; otherwise the next step's duration byte decides — zero is the terminator (an SFX voice stops
     // and mutes its channel; the music voice rewinds to the pattern start and plays on), anything else writes the
     // step's register bytes to the ports and waits the duration out. Clobbers A/B/C/HL — main-loop-safe.
-    private static void EmitVoiceTick(Sm83Emitter emitter, ushort? loopStartAddress, byte muteEnvelopePort, ushort pointerAddress, byte portBase, int registerCount, ushort waitAddress) {
+    private static void EmitVoiceTick(Sm83Emitter emitter, byte portBase, int registerCount, SoundVoice voice) {
         var copy = emitter.NewLabel();
         var play = emitter.NewLabel();
         var sectionDone = emitter.NewLabel();
         var step = emitter.NewLabel();
+        var stop = emitter.NewLabel();
+        var muteEnvelopePort = VoiceMutePort(voice: voice);
+        var pointerAddress = VoicePointer(voice: voice);
+        var loopStartAddress = VoiceStart(voice: voice);
+        var waitAddress = VoiceWait(voice: voice);
         var pointerHighAddress = ((ushort)(pointerAddress + 1));
 
         // Idle?
@@ -273,19 +251,20 @@ public sealed class ApuSoundDriver : ISoundDriver {
         emitter.Arithmetic(op: AluOp.Or, source: Reg8.A);
         emitter.JumpRelative(condition: Condition.NotZero, label: play);
 
-        if (loopStartAddress is { } loopStart) {
-            // The music terminator: rewind to the pattern start and play its first event this same frame.
-            emitter.LoadAFromAddress(address: loopStart);
-            emitter.StoreAToAddress(address: pointerAddress);
-            emitter.LoadAFromAddress(address: ((ushort)(loopStart + 1)));
-            emitter.StoreAToAddress(address: pointerHighAddress);
-            emitter.JumpAbsolute(label: step);
-        } else {
-            // The effect terminator: stop the voice (A is zero here) and turn the channel's DAC off.
-            emitter.StoreAToAddress(address: pointerHighAddress);
-            emitter.StoreAToHighPage(port: muteEnvelopePort);
-            emitter.JumpAbsolute(label: sectionDone);
-        }
+        // The terminator. A voice carrying a loop start rewinds to it and plays its first event this same frame;
+        // one without stops and turns its channel's converter off.
+        emitter.LoadAFromAddress(address: ((ushort)(loopStartAddress + 1)));
+        emitter.Arithmetic(op: AluOp.Or, source: Reg8.A);
+        emitter.JumpRelative(condition: Condition.Zero, label: stop);
+        emitter.StoreAToAddress(address: pointerHighAddress);
+        emitter.LoadAFromAddress(address: loopStartAddress);
+        emitter.StoreAToAddress(address: pointerAddress);
+        emitter.JumpAbsolute(label: step);
+        emitter.MarkLabel(label: stop);
+        emitter.XorA();
+        emitter.StoreAToAddress(address: pointerHighAddress);
+        emitter.StoreAToHighPage(port: muteEnvelopePort);
+        emitter.JumpAbsolute(label: sectionDone);
 
         // Play the step: wait := duration - 1 (this frame counts), then pump the register bytes to the ports.
         emitter.MarkLabel(label: play);

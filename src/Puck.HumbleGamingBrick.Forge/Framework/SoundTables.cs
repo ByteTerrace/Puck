@@ -2,16 +2,18 @@ using Puck.GamingBricks.Forge;
 
 namespace Puck.HumbleGamingBrick.Forge.Framework;
 
-/// <summary>The hardware voice a catalog effect plays on: <see cref="Pulse"/> = pulse channel 1 (NR10–NR14, five
+/// <summary>The hardware voice a catalog effect plays on: <see cref="Pulse1"/> = pulse channel 1 (NR10–NR14, five
 /// register bytes per step), <see cref="Noise"/> = the noise channel (NR41–NR44, four register bytes per step).
 /// Music always plays on pulse channel 2, so effects never fight the loop for a channel.</summary>
 public enum SoundVoice {
-    /// <summary>Pulse channel 1 (melodic effects, sweeps, jingles).</summary>
-    Pulse = 0,
-    /// <summary>The noise channel (ticks, thuds, riffles).</summary>
+    /// <summary>Pulse channel 1 (NR10-NR14, five register bytes per step).</summary>
+    Pulse1 = 0,
+    /// <summary>The noise channel (NR41-NR44, four register bytes per step).</summary>
     Noise = 1,
     /// <summary>The wave channel (NR30-NR34, five register bytes per step) plus its own pattern.</summary>
     Wave = 2,
+    /// <summary>Pulse channel 2 (NR21-NR24, four register bytes per step).</summary>
+    Pulse2 = 3,
 }
 /// <summary>One catalog sound effect: its trigger id, diagnostic block name, hardware voice, and step stream.</summary>
 /// <param name="Id">The effect id a game passes to <see cref="ISoundDriver.EmitEffect"/>.</param>
@@ -106,7 +108,7 @@ public static class SoundTables {
             NoiseStep(envelope: 0x51, frames: 2, polynomial: 0x40),
             NoiseStep(envelope: 0x31, frames: 3, polynomial: 0x51)
         )),
-        new SoundEffect(Id: EffectFlip, Name: "flip", Voice: SoundVoice.Pulse, Stream: BuildStream(
+        new SoundEffect(Id: EffectFlip, Name: "flip", Voice: SoundVoice.Pulse1, Stream: BuildStream(
             PulseStep(duty: DutyHalf, envelope: 0x91, frames: 2, millihertz: NoteE5, sweep: 0x00),
             PulseStep(duty: DutyHalf, envelope: 0x71, frames: 4, millihertz: NoteG5, sweep: 0x00)
         )),
@@ -118,23 +120,23 @@ public static class SoundTables {
             NoiseStep(envelope: 0x31, frames: 2, polynomial: 0x5A),
             NoiseStep(envelope: 0x21, frames: 4, polynomial: 0x62)
         )),
-        new SoundEffect(Id: EffectWin, Name: "win", Voice: SoundVoice.Pulse, Stream: BuildStream(
+        new SoundEffect(Id: EffectWin, Name: "win", Voice: SoundVoice.Pulse1, Stream: BuildStream(
             PulseStep(duty: DutyHalf, envelope: 0xA1, frames: 5, millihertz: NoteC5, sweep: 0x00),
             PulseStep(duty: DutyHalf, envelope: 0xA1, frames: 5, millihertz: NoteE5, sweep: 0x00),
             PulseStep(duty: DutyHalf, envelope: 0xA1, frames: 5, millihertz: NoteG5, sweep: 0x00),
             PulseStep(duty: DutyHalf, envelope: 0xA3, frames: 14, millihertz: NoteC6, sweep: 0x00)
         )),
-        new SoundEffect(Id: EffectCursor, Name: "cursor", Voice: SoundVoice.Pulse, Stream: BuildStream(
+        new SoundEffect(Id: EffectCursor, Name: "cursor", Voice: SoundVoice.Pulse1, Stream: BuildStream(
             PulseStep(duty: DutyQuarter, envelope: 0x71, frames: 2, millihertz: NoteA5, sweep: 0x00)
         )),
         new SoundEffect(Id: EffectThud, Name: "thud", Voice: SoundVoice.Noise, Stream: BuildStream(
             NoiseStep(envelope: 0x71, frames: 3, polynomial: 0x74),
             NoiseStep(envelope: 0x31, frames: 3, polynomial: 0x76)
         )),
-        new SoundEffect(Id: EffectSweep, Name: "sweep", Voice: SoundVoice.Pulse, Stream: BuildStream(
+        new SoundEffect(Id: EffectSweep, Name: "sweep", Voice: SoundVoice.Pulse1, Stream: BuildStream(
             PulseStep(duty: DutyHalf, envelope: 0xA2, frames: 14, millihertz: NoteC5, sweep: 0x13)
         )),
-        new SoundEffect(Id: EffectOver, Name: "over", Voice: SoundVoice.Pulse, Stream: BuildStream(
+        new SoundEffect(Id: EffectOver, Name: "over", Voice: SoundVoice.Pulse1, Stream: BuildStream(
             PulseStep(duty: DutyThreeQuarters, envelope: 0x91, frames: 6, millihertz: NoteG4, sweep: 0x00),
             PulseStep(duty: DutyThreeQuarters, envelope: 0x91, frames: 6, millihertz: NoteE4, sweep: 0x00),
             PulseStep(duty: DutyThreeQuarters, envelope: 0x93, frames: 16, millihertz: NoteC4, sweep: 0x00)

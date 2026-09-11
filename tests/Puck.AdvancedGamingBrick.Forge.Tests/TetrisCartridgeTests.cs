@@ -41,6 +41,22 @@ public sealed class TetrisCartridgeTests {
     }
 
     [Fact]
+    public void AGameSoundsOnThreeVoicesAndTheTitleOnThreeOfItsOwn() {
+        var result = new HgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-sound");
+
+        // The status register's low nibble reports the channels that are sounding.
+        SettleTitle(machine: machine);
+        Assert.Equal(expected: 0x07, actual: machine.Read(address: SoundStatus) & 0x07);
+
+        StartGame(machine: machine);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 30);
+        Assert.Equal(expected: 0x07, actual: machine.Read(address: SoundStatus) & 0x07);
+    }
+
+    private const ushort SoundStatus = 0xFF26;
+
+    [Fact]
     public void APieceSpawnsAndFallsUnderGravity() {
         var result = new HgbCartridgeCompiler().Compile(document: Document());
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris");
@@ -105,9 +121,13 @@ public sealed class TetrisCartridgeTests {
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-screens");
         var phase = (ushort)result.Variables["ph"];
 
-        // Boot lands on the title, not in a game.
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
-        Assert.Equal(expected: 8, actual: machine.Read(address: phase));
+        // Boot lands somewhere in the title sequence, not in a game.
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 20);
+        Assert.Contains(expected: machine.Read(address: phase), collection: TitlePhases);
+
+        // The sequence finishes on the phase that waits for a press.
+        SettleTitle(machine: machine);
+        Assert.Equal(expected: 18, actual: machine.Read(address: phase));
 
         // Start leaves it, and the well is wiped on the way to the menu.
         machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
@@ -194,7 +214,7 @@ public sealed class TetrisCartridgeTests {
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-ending");
 
         // Into the second mode: down on the menu picks it.
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
+        SettleTitle(machine: machine);
         machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
         machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
         machine.RunFrames(buttons: JoypadButtons.Down, frames: 4);
@@ -209,7 +229,7 @@ public sealed class TetrisCartridgeTests {
 
         // The rocket climbs off the top, and the title comes back behind it.
         machine.RunFrames(buttons: JoypadButtons.None, frames: 60 * 6);
-        Assert.Equal(expected: 8, actual: machine.Read(address: (ushort)result.Variables["ph"]));
+        Assert.Equal(expected: 18, actual: machine.Read(address: (ushort)result.Variables["ph"]));
     }
 
     [Fact]
@@ -219,7 +239,7 @@ public sealed class TetrisCartridgeTests {
         var result = new HgbCartridgeCompiler().Compile(document: Document());
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-paint");
 
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 50);
+        SettleTitle(machine: machine);
         var title = WellInk(machine: machine);
         Assert.True(condition: title > 40, userMessage: $"title drew {title} lit pixels");
 
@@ -245,12 +265,22 @@ public sealed class TetrisCartridgeTests {
     // Boot lands on the title, so a test that wants a game presses through the title and the mode menu. The waits
     // cover a screen painting itself and the well being wiped between them, both of which run a band a frame.
     private static void StartGame(VerifyMachineDriver machine) {
-        for (var screen = 0; screen < 2; ++screen) {
-            machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
-            machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
-            machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
-        }
+        SettleTitle(machine: machine);
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
     }
+
+    // The title arrives in three passes with a beat between them and only takes a press once it has finished
+    // arriving, so a test that wants past it waits the whole sequence out rather than a screen's worth of painting.
+    private const int TitleFrames = 120;
+
+    // The three passes and the wait they settle on.
+    private static readonly byte[] TitlePhases = [8, 16, 17, 18];
+
+    private static void SettleTitle(VerifyMachineDriver machine) =>
+        machine.RunFrames(buttons: JoypadButtons.None, frames: TitleFrames);
 
     private static CartridgeDocument Document() {
         var json = File.ReadAllText(path: Path.Combine(

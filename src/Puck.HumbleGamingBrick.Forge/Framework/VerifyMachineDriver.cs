@@ -13,10 +13,18 @@ public sealed class VerifyMachineDriver : IDisposable {
     private readonly ISystemBus m_bus;
     private readonly IFramebuffer m_framebuffer;
 
-    public VerifyMachineDriver(byte[] rom, string label) {
+    /// <summary>Creates a driver over a machine running the cartridge.</summary>
+    /// <param name="rom">The cartridge image.</param>
+    /// <param name="label">The diagnostic label failures are reported under.</param>
+    /// <param name="bootRom">A boot image to execute from reset, or null to start from the seeded post-boot state.</param>
+    /// <remarks>
+    /// With a boot image the machine spends its first frames inside the boot program, so a caller that wants the
+    /// cartridge running must step past the handoff.
+    /// </remarks>
+    public VerifyMachineDriver(byte[] rom, string label, byte[]? bootRom = null) {
         m_label = label;
         m_machine = MachineFactory.Create(
-            configuration: new MachineConfiguration(model: ConsoleModel.CgbE, cartridgeRom: rom),
+            configuration: new MachineConfiguration(bootRom: bootRom, model: ConsoleModel.CgbE, cartridgeRom: rom),
             compose: static services => services.AddHumbleGamingBrickComponents()
         );
         m_bus = m_machine.GetRequiredService<ISystemBus>();

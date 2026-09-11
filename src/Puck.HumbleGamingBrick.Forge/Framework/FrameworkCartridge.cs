@@ -34,8 +34,10 @@ public static class FrameworkCartridge {
     /// <param name="statHandlerAddress">The display status handler's address, or zero to leave that vector inert.</param>
     /// <param name="banks">Payloads for banks two and up, each at most <see cref="BankSize"/> bytes. Each is paged
     /// into 0x4000..0x7FFF by writing its number to 0x2000, so a bank's contents are only readable while selected.</param>
+    /// <param name="logo">The 48-byte boot bitmap the header carries, or null for the era one. A boot program only
+    /// hands off to a cartridge whose bitmap it recognizes, so this decides which consoles will run the image.</param>
     /// <returns>The ROM image, sized to hold every bank.</returns>
-    public static byte[] Build(string title, byte[] routine, byte[] data, IReadOnlyList<byte[]>? banks = null, bool clock = false, ushort statHandlerAddress = 0) {
+    public static byte[] Build(string title, byte[] routine, byte[] data, IReadOnlyList<byte[]>? banks = null, bool clock = false, ushort statHandlerAddress = 0, byte[]? logo = null) {
         ArgumentException.ThrowIfNullOrEmpty(title);
         ArgumentNullException.ThrowIfNull(routine);
         ArgumentNullException.ThrowIfNull(data);
@@ -72,7 +74,7 @@ public static class FrameworkCartridge {
         var rom = new byte[bankCount * BankSize];
 
         WriteInterruptVectors(rom: rom, statHandlerAddress: statHandlerAddress);
-        WriteHeader(rom: rom, title: title, bankCount: bankCount, clock: clock);
+        WriteHeader(logo: logo, rom: rom, title: title, bankCount: bankCount, clock: clock);
 
         routine.CopyTo(array: rom, index: Hw.EntryAddress);
         data.CopyTo(array: rom, index: RomDataBuilder.BaseAddress);
@@ -105,14 +107,14 @@ public static class FrameworkCartridge {
         rom[0x0058] = OpcodeReturnFromInterrupt;
         rom[0x0060] = OpcodeReturnFromInterrupt;
     }
-    private static void WriteHeader(byte[] rom, string title, int bankCount, bool clock) {
+    private static void WriteHeader(byte[] rom, string title, int bankCount, bool clock, byte[]? logo) {
         // Entry point (0x0100): nop; jp EntryAddress.
         rom[EntryPoint] = 0x00;
         rom[(EntryPoint + 1)] = OpcodeJumpAbsolute;
         rom[(EntryPoint + 2)] = ((byte)(Hw.EntryAddress & 0xFF));
         rom[(EntryPoint + 3)] = ((byte)((Hw.EntryAddress >> 8) & 0xFF));
 
-        CartridgeHeader.Logo.CopyTo(destination: rom.AsSpan(start: CartridgeHeader.LogoOffset));
+        (logo ?? CartridgeHeader.Logo.ToArray()).CopyTo(destination: rom.AsSpan(start: CartridgeHeader.LogoOffset));
 
         var titleBytes = Encoding.ASCII.GetBytes(s: title.ToUpperInvariant());
 

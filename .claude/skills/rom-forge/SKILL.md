@@ -43,15 +43,18 @@ Colour is per-palette, not global: `palettes.background` / `palettes.object` hol
 up to 8 palettes on cgb and 16 on agb, `mapPalettes` picks one per background
 cell, and a sprite picks an object palette. cgb carries the cell attributes in
 video bank one (low three bits) and agb packs them into the screen entry's top
-four bits; a runtime `map` write changes a cell's TILE and leaves its authored
-palette alone.
+four bits; a runtime `map` write carries its own optional `palette`, and the cgb
+queue drains twice — once a bank — to land the tile and the attribute.
 
-A sound is EITHER music or a one-shot effect. Effects use the two voices the
-framework reserves for them (pulse one and noise), so an effect never interrupts
-music. The effect stream is `duration` + FIVE register bytes for pulse one
-(NR10-NR14) and FOUR for noise (NR41-NR44) — `AppendNoiseRow` once emitted three
-and every noise effect was a byte out of step, so keep the encoder and both
-drivers' register counts in sync.
+A sound is EITHER a music track or a one-shot effect. A track is 1-4 voice
+parts, one to a channel; validation refuses an effect on any voice a track
+occupies. The four sequencers are identical and a loop start is the only thing
+that separates a track from a one-shot: a voice carrying one rewinds at the
+terminator, a voice without one stops and mutes. Stream step widths are
+`duration` + FIVE register bytes for pulse one (NR10-NR14) and for wave
+(NR30-NR34), FOUR for pulse two (NR21-NR24) and noise (NR41-NR44) — keep the
+encoder and both drivers' register counts in sync. A music part's hold SUSTAINS
+where a one-shot's mutes, which is why the two cannot share a row appender.
 
 `AudioDocumentCompiler` and `ApuNotePeriod` live in the SHARED forge package, not
 the humble one: the advanced machine's legacy sound channel takes the same four
@@ -64,18 +67,20 @@ native execution tests, not by a hidden special case.
 
 ## Backend contracts
 
-- CGB variables: `0xC200..0xC23F`; `0xC240` retains the prior held byte before
+- CGB variables: `0xC200..0xC27F`; `0xC280` retains the prior held byte before
   `InputModule.EmitTick`, whose own previous field is advanced inside its call;
-  `0xC241` is the operand spill, `0xC242` the out-of-range discard sink, and
-  arrays pack upward from `0xC243` to `0xCFFF`. AGB mirrors this with the sink at
-  `0x02000080` and arrays from `0x02000081`.
+  `0xC281` is the operand spill, `0xC282` the out-of-range discard sink, and
+  arrays pack upward from `0xC283` to `0xDFFF`. AGB mirrors this with the sink at
+  `0x020000C0` and arrays from `0x02000900`.
   The compiler uses `FrameworkKernel` and input primitives directly, with no
   save, victory or C# game-state callbacks in generated player cartridges.
 - CGB shadow OAM: `0xC100`; the VBlank handler invokes the HRAM DMA trampoline
   and advances the frame counter. Fixed code/data windows are 0x0150..0x3FFF
   and 0x4000..0x7FFF. The header is Color-required MBC1+RAM+battery.
-- AGB variables: `0x02000040..0x0200007F`; kernel state is the preceding 64
-  bytes. Mode-0 background map uses screenblock 31; tiles and object graphics
+- AGB variables: `0x02000040..0x020000BF`; kernel state is the preceding 64
+  bytes. Above them: `0x020000C4` queue count, `0x020000C8` the queue's 24
+  entries of (row, column, tile, palette), `0x02000130` the four voices' state,
+  `0x02000200` the save mirror. Mode-0 background map uses screenblock 31; tiles and object graphics
   use their native VRAM regions. Code starts at `0x080000C8`, data at
   `0x0800C000`, image size 64 KiB.
 - Thumb literal pools are DATA. `EmitLiteralPool` does not branch around them;
@@ -190,6 +195,13 @@ start-up chime, the compatibility-mode selector and compatibility-palette load f
 a cartridge without the color flag, the revision's register handoff, and the unmap
 at 0x00FE so the program counter falls into 0x0100.
 
+- **The mark decides which cartridges an image runs.** `BootRomBuilder.Build(model, mark)` emits the same program
+  with one of two 48-byte bitmaps: the era one, or `CartridgeHeader.HouseLogo` — the ByteTerrace wordmark every
+  cartridge `HgbCartridgeCompiler` forges carries. It is a SUBSTITUTION, not an addition: the Color image spends
+  nearly all of its 0x700 bytes, with no room for a second table, so a house image refuses era cartridges and an era
+  image refuses forged ones. The solve always runs on the era image, because it works by booting against probe
+  cartridges that carry the era bitmap. The emitted program draws its own one-tile mark and never expands the
+  cartridge's bitmap into video memory, so the header logo is verified but not displayed.
 - **The handoff counter is the contract.** `BootDivPrediction`'s tables are the
   budget; the Color image carries those same tables and computes its target from
   the cartridge header, plus the revision's own offset from those shared tables

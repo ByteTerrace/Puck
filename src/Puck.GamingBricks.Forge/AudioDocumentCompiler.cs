@@ -27,7 +27,20 @@ public static class AudioDocumentCompiler {
     /// </summary>
     /// <param name="document">The normalized document (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
     /// <returns>The music-loop stream bytes, the music driver's exact grammar.</returns>
-    public static byte[] CompileMusicLoop(AudioDocument document) {
+    public static byte[] CompileMusicLoop(AudioDocument document) =>
+        CompileMusicVoice(document: document, voice: AudioEffectDocument.VoicePulse2);
+
+    /// <summary>Compiles one voice's part of a track: the document's <see cref="AudioDocument.Order"/> laid out in
+    /// the register format <paramref name="voice"/> takes, ending with the terminator the driver rewinds on.</summary>
+    /// <param name="document">The normalized document (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
+    /// <param name="voice">The channel the part plays on.</param>
+    /// <returns>The stream bytes, in the sequencer's grammar for that voice.</returns>
+    /// <remarks>
+    /// A part differs from a one-shot on the same voice in one way that reaches these bytes: a hold SUSTAINS, keeping
+    /// the previous step's registers without retriggering, where a one-shot's hold mutes. A held note is what music
+    /// is made of and what an effect has no use for, so the two cannot share a row appender.
+    /// </remarks>
+    public static byte[] CompileMusicVoice(AudioDocument document, string voice) {
         ArgumentNullException.ThrowIfNull(document);
 
         var stream = new List<byte>();
@@ -39,7 +52,20 @@ public static class AudioDocumentCompiler {
 
         foreach (var patternIndex in order) {
             foreach (var row in patterns[patternIndex]) {
-                AppendMusicRow(frames: frames, lastDuty: ref lastDuty, lastEnvelope: ref lastEnvelope, row: row, stream: stream);
+                switch (voice) {
+                    case AudioEffectDocument.VoicePulse1:
+                        AppendPulseOneMusicRow(frames: frames, lastDuty: ref lastDuty, lastEnvelope: ref lastEnvelope, row: row, stream: stream);
+                        break;
+                    case AudioEffectDocument.VoiceWave:
+                        AppendWaveMusicRow(frames: frames, row: row, stream: stream);
+                        break;
+                    case AudioEffectDocument.VoiceNoise:
+                        AppendNoiseRow(frames: frames, row: row, stream: stream);
+                        break;
+                    default:
+                        AppendMusicRow(frames: frames, lastDuty: ref lastDuty, lastEnvelope: ref lastEnvelope, row: row, stream: stream);
+                        break;
+                }
             }
         }
 
@@ -166,6 +192,52 @@ public static class AudioDocumentCompiler {
         stream.Add(item: ((byte)(((row.Envelope ?? 1) & 0x03) << 5)));
         stream.Add(item: ((byte)(period & 0xFF)));
         stream.Add(item: ((byte)(0x80 | (period >> 8))));
+    }
+
+    // One pulse-1 music row. The register run starts at the sweep, which stays flat because the schema carries no
+    // sweep field, and a hold repeats the last step's voicing with no trigger so the note carries rather than cuts.
+    private static void AppendPulseOneMusicRow(byte frames, ref byte lastDuty, ref byte lastEnvelope, AudioRowDocument row, List<byte> stream) {
+        if (string.Equals(a: row.Note, b: AudioRowDocument.Off, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            stream.AddRange(collection: [frames, (byte)0x00, lastDuty, (byte)0x00, (byte)0x00, (byte)0x00]);
+
+            return;
+        }
+
+        if (string.Equals(a: row.Note, b: AudioRowDocument.Hold, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            stream.AddRange(collection: [frames, (byte)0x00, lastDuty, lastEnvelope, (byte)0x00, (byte)0x00]);
+
+            return;
+        }
+
+        var duty = DutyBits[Math.Clamp(value: (row.Duty ?? 2), max: 3, min: 0)];
+        var envelope = ((byte)(row.Envelope ?? DefaultPulseEnvelope));
+        var period = ApuNotePeriod.Period(millihertz: ApuNotePeriod.MillihertzFor(noteName: row.Note));
+
+        lastDuty = duty;
+        lastEnvelope = envelope;
+
+        stream.AddRange(collection: [frames, (byte)0x00, duty, envelope, (byte)(period & 0xFF), (byte)(0x80 | (period >> 8))]);
+    }
+    // One wave music row: the converter stays switched on through a hold so the note rings out, where a one-shot's
+    // hold would switch it off.
+    private static void AppendWaveMusicRow(byte frames, AudioRowDocument row, List<byte> stream) {
+        var volume = ((byte)(((row.Envelope ?? 1) & 0x03) << 5));
+
+        if (string.Equals(a: row.Note, b: AudioRowDocument.Off, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            stream.AddRange(collection: [frames, (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00, (byte)0x00]);
+
+            return;
+        }
+
+        if (string.Equals(a: row.Note, b: AudioRowDocument.Hold, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            stream.AddRange(collection: [frames, (byte)0x80, (byte)0x00, volume, (byte)0x00, (byte)0x00]);
+
+            return;
+        }
+
+        var period = ApuNotePeriod.Period(millihertz: ApuNotePeriod.MillihertzFor(noteName: row.Note));
+
+        stream.AddRange(collection: [frames, (byte)0x80, (byte)0x00, volume, (byte)(period & 0xFF), (byte)(0x80 | (period >> 8))]);
     }
 
     private static void AppendNoiseRow(byte frames, AudioRowDocument row, List<byte> stream) {

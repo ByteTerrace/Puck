@@ -35,12 +35,20 @@ public static class BootRomBuilder {
 
     /// <summary>Builds the boot ROM image for a revision.</summary>
     /// <param name="model">The revision whose boot program to emit.</param>
+    /// <param name="mark">The boot bitmap the image scrolls in and hands off to; the era one by default.</param>
     /// <returns>A 256-byte monochrome image, or a 2304-byte Color image.</returns>
-    public static byte[] Build(ConsoleModel model) {
+    /// <remarks>
+    /// The mark changes 48 bytes of table and nothing else, so the solved straight-line constants are the same for
+    /// both and a house image keeps the revision's handoff exactly.
+    /// </remarks>
+    public static byte[] Build(ConsoleModel model, BootRomMark mark = BootRomMark.Era) {
         var layout = BootRomLayout.For(model: model);
+        // The solve runs on the era image whatever mark is asked for: it works by BOOTING the image against probe
+        // cartridges, and those carry the era bitmap, so a house image would wedge before it ever handed off.
         var image = Emit(
+            calibration: BootRomCalibration.Zero,
             layout: layout,
-            calibration: BootRomCalibration.Zero
+            mark: BootRomMark.Era
         );
 
         return Emit(
@@ -48,16 +56,18 @@ public static class BootRomBuilder {
                 image: image,
                 layout: layout
             ),
-            layout: layout
+            layout: layout,
+            mark: mark
         );
     }
 
     // Emits the whole image for a layout at a fixed calibration.
-    private static byte[] Emit(BootRomLayout layout, BootRomCalibration calibration) {
+    private static byte[] Emit(BootRomLayout layout, BootRomCalibration calibration, BootRomMark mark) {
         var image = new byte[layout.SupportsColor
             ? ColorLength
             : MonochromeLength];
         var code = BootRomProgram.Emit(
+            bitmap: mark,
             calibration: calibration,
             layout: layout
         );
@@ -150,7 +160,8 @@ public static class BootRomBuilder {
 
             image = Emit(
                 calibration: calibration,
-                layout: layout
+                layout: layout,
+                mark: BootRomMark.Era
             );
         }
 

@@ -8,6 +8,10 @@ namespace Puck.HumbleGamingBrick.Forge.Framework;
 /// </summary>
 public sealed class BgModule {
     private readonly Sm83Emitter m_emitter;
+    // The push needs the tile alive across the address arithmetic, and every register it could hold it in is either
+    // an argument or part of that arithmetic.
+    private const ushort TileHold = FrameworkMemoryMap.Scratch + 2;
+
     private readonly int m_queuePushLabel;
 
     /// <summary>Creates the module over the shared emitter.</summary>
@@ -19,19 +23,28 @@ public sealed class BgModule {
         m_queuePushLabel = emitter.NewLabel();
     }
 
-    /// <summary>The queue-push subroutine's label (D = address-high, E = address-low, A = tile; clobbers A, B, C, H, L).
-    /// Exposed so sibling modules (the text printer) can call it.</summary>
+    /// <summary>The queue-push subroutine's label (D = address-high, E = address-low, A = tile, C = attribute;
+    /// clobbers A, B, H, L). Exposed so sibling modules (the text printer) can call it.</summary>
     public int QueuePushLabel => m_queuePushLabel;
 
-    /// <summary>Emits a call to the queue-push subroutine (caller pre-loads D/E = cell address, A = tile).</summary>
+    /// <summary>Emits a call to the queue-push subroutine (caller pre-loads D/E = cell address, A = tile,
+    /// C = attribute).</summary>
     public void EmitQueuePush() => m_emitter.Call(label: m_queuePushLabel);
+    /// <summary>Emits a queue push whose cell takes the default attribute — palette zero, video-memory bank zero.</summary>
+    public void EmitQueuePushPlain() {
+        m_emitter.Push(pair: StackPair.Af);
+        m_emitter.XorA();
+        m_emitter.Load(destination: Reg8.C, source: Reg8.A);
+        m_emitter.Pop(pair: StackPair.Af);
+        m_emitter.Call(label: m_queuePushLabel);
+    }
     /// <summary>Emits a queue push for a cell KNOWN at build time: loads DE with the cell address and calls the push
     /// subroutine. The caller pre-loads A with the tile id (the DE load does not clobber A).</summary>
     /// <param name="row">The map row.</param>
     /// <param name="column">The map column.</param>
     public void EmitQueueCell(int row, int column) {
         m_emitter.LoadImmediate(pair: Reg16.De, value: Hw.MapCell(column: column, row: row));
-        m_emitter.Call(label: m_queuePushLabel);
+        EmitQueuePushPlain();
     }
     /// <summary>Emits a queue reset (count = 0). Call inside an LCD-off repaint so stale queued cells from the previous
     /// screen never drain on top of the fresh paint (with the LCD off no VBlank fires, so the clear is race-free).</summary>
@@ -126,21 +139,24 @@ public sealed class BgModule {
     public void EmitLibrary() {
         var full = m_emitter.NewLabel();
 
-        // queuePush: D = address-high, E = address-low, A = tile. Clobbers A, B, C, H, L.
+        // queuePush: D = address-high, E = address-low, A = tile, C = attribute. Clobbers A, B, H, L.
         m_emitter.MarkLabel(label: m_queuePushLabel);
-        m_emitter.Load(destination: Reg8.C, source: Reg8.A);                                   // C = tile.
+        m_emitter.StoreAToAddress(address: TileHold);                                          // The tile waits out the address arithmetic.
         m_emitter.LoadAFromAddress(address: FrameworkMemoryMap.VramQueueCount);
         m_emitter.ArithmeticImmediate(op: AluOp.Compare, value: FrameworkMemoryMap.VramQueueCapacity);
         m_emitter.JumpRelative(condition: Condition.NoCarry, label: full);                     // count >= capacity → drop.
         m_emitter.Load(destination: Reg8.B, source: Reg8.A);                                   // B = count.
         m_emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);                                   // ×2
-        m_emitter.Arithmetic(op: AluOp.Add, source: Reg8.B);                                   // ×3
+        m_emitter.Arithmetic(op: AluOp.Add, source: Reg8.A);                                   // ×4
         m_emitter.ArithmeticImmediate(op: AluOp.Add, value: ((byte)(FrameworkMemoryMap.VramQueue & 0xFF)));
         m_emitter.Load(destination: Reg8.L, source: Reg8.A);                                   // Entries never cross the page.
         m_emitter.LoadImmediate(destination: Reg8.H, value: ((byte)(FrameworkMemoryMap.VramQueue >> 8)));
         m_emitter.Load(destination: Reg8.Memory, source: Reg8.D);
         m_emitter.Increment(pair: Reg16.Hl);
         m_emitter.Load(destination: Reg8.Memory, source: Reg8.E);
+        m_emitter.Increment(pair: Reg16.Hl);
+        m_emitter.LoadAFromAddress(address: TileHold);
+        m_emitter.Load(destination: Reg8.Memory, source: Reg8.A);
         m_emitter.Increment(pair: Reg16.Hl);
         m_emitter.Load(destination: Reg8.Memory, source: Reg8.C);
         m_emitter.Load(destination: Reg8.A, source: Reg8.B);

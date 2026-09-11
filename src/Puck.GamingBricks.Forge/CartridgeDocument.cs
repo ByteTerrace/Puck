@@ -225,12 +225,39 @@ public sealed record CartridgeClock(
     string? Year = null);
 
 /// <summary>
-/// A named sound a play step starts: exactly one of a looping music track or a one-shot effect. Music holds the
-/// melodic voice; an effect holds one of the two voices reserved for short sounds, so an effect never interrupts the
-/// music playing under it.
+/// One voice's part of a music track: the patterns it plays and the order it plays them in, on one of the machine's
+/// four sound channels.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A track is as many parts as it has voices, so a melody over a bass over a counter-line is three parts rather than
+/// one document pretending to be three. Every part of a track starts and stops together, and each loops on its own
+/// length, which is what lets a four-row bass sit under a thirty-two-row melody without either being padded out.
+/// </para>
+/// <para>
+/// Nothing reserves a voice for music or for effects. What a track's parts occupy, its cartridge's effects may not:
+/// validation refuses an effect on a voice any track claims, so an effect can never cut a line of the music off.
+/// </para>
+/// </remarks>
+/// <param name="Voice">The channel this part plays on: pulse1, pulse2, wave or noise.</param>
+/// <param name="Part">The part's patterns, order and tempo.</param>
+/// <param name="Waveform">
+/// For the wave voice: thirty-two four-bit samples describing one cycle of its waveform. Required for that voice and
+/// refused for any other.
+/// </param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CartridgeMusicVoice(
+    string Voice,
+    Puck.Assets.Documents.AudioDocument Part,
+    int[]? Waveform = null);
+
+/// <summary>
+/// A named sound a play step starts: exactly one of a looping music track or a one-shot effect. A track occupies as
+/// many voices as it has parts; an effect holds one voice no track claims, so an effect never interrupts the music
+/// playing under it.
 /// </summary>
 /// <param name="Name">The case-sensitive sound name.</param>
-/// <param name="Music">The looping track's patterns, order and tempo, or null for an effect.</param>
+/// <param name="Music">The track's voice parts, or null for an effect.</param>
 /// <param name="Effect">The one-shot's voice and rows, or null for music.</param>
 /// <param name="Frames">For an effect: how many frames each row holds, 1 through 255.</param>
 /// <param name="Sample">
@@ -244,7 +271,7 @@ public sealed record CartridgeClock(
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeSound(
     string Name,
-    Puck.Assets.Documents.AudioDocument? Music = null,
+    CartridgeMusicVoice[]? Music = null,
     Puck.Assets.Documents.AudioEffectDocument? Effect = null,
     int? Frames = null,
     int[]? Sample = null,
@@ -272,8 +299,9 @@ public sealed record CartridgeSave(int Version, string[] Variables, string[] Arr
 /// <param name="Name">The case-sensitive screen name.</param>
 /// <param name="Width">The width in tiles, 1 through 32.</param>
 /// <param name="Tiles">The tile indices in row-major order.</param>
+/// <param name="Palettes">The background palette index of each tile, or null to paint the rectangle on palette zero.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeScreen(string Name, int Width, int[] Tiles);
+public sealed record CartridgeScreen(string Name, int Width, int[] Tiles, int[]? Palettes = null);
 
 /// <summary>
 /// A readable byte: exactly one of a literal, a named state slot, or an element of a named array. An array read also
@@ -320,6 +348,7 @@ public sealed record CartridgeCondition(string Kind, string? Key = null, string?
 /// <param name="Row">For map and blit: the destination map row.</param>
 /// <param name="Column">For map and blit: the destination map column.</param>
 /// <param name="Tile">For map: the tile index to write.</param>
+/// <param name="Palette">For map: the background palette the cell is drawn through, or null for palette zero.</param>
 /// <param name="Screen">For blit: the declared screen to paint.</param>
 /// <param name="Sound">For play: the declared music track to start.</param>
 /// <param name="Rate">For play of a recorded sound: the playback rate in sixty-fourths of the recording's own, so 64
@@ -344,6 +373,7 @@ public sealed record CartridgeStatement(
     CartridgeValue? Row = null,
     CartridgeValue? Column = null,
     CartridgeValue? Tile = null,
+    CartridgeValue? Palette = null,
     string? Screen = null,
     string? Sound = null,
     CartridgeValue? Rate = null,

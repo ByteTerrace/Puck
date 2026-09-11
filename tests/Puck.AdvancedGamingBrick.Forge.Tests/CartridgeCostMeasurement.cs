@@ -162,7 +162,7 @@ public sealed class CartridgeCostMeasurement {
                 .. save > 0 ? new[] { new CartridgeArray(Name: "kept", Initial: new int[save]) } : [],
             ],
             Save = save > 0 ? new CartridgeSave(Version: 1, Variables: [], Arrays: ["kept"]) : null,
-            Sounds = music ? [new CartridgeSound(Name: "theme", Music: Track())] : [],
+            Sounds = music ? [new CartridgeSound(Name: "theme", Music: [Lead(part: Track())])] : [],
             Sprites = [.. Enumerable.Range(start: 0, count: sprites).Select(selector: index => new CartridgeSprite(
                 Name: $"s{index}", Tile: new CartridgeValue(Constant: 0), X: new CartridgeValue(Variable: "sink"),
                 Y: new CartridgeValue(Constant: 40), Visible: new CartridgeValue(Constant: 1)))],
@@ -182,6 +182,9 @@ public sealed class CartridgeCostMeasurement {
             ])],
         };
     }
+
+    internal static CartridgeMusicVoice Lead(Puck.Assets.Documents.AudioDocument part) =>
+        new(Voice: Puck.Assets.Documents.AudioEffectDocument.VoicePulse2, Part: part);
 
     internal static Puck.Assets.Documents.AudioDocument Track() => new(
         Schema: Puck.Assets.Documents.AudioDocument.CurrentSchema, Name: "t", Tempo: 8,

@@ -65,6 +65,10 @@ __pycache__/
 *.gba
 *.gbc
 
+# Built images and the document each was compiled from, plus a licensed reference a comparison is run against.
+# Nothing here is repo content: the authored document lives under src/Puck.World/Assets/cartridges.
+roms/
+
 # Runtime authoring saves (the player's own documents/store — never repo content; checked-in examples live under docs/examples/)
 /creations/
 /store/

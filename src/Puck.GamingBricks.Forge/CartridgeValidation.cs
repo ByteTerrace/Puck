@@ -382,8 +382,56 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         Value(value: window.Visible, path: "window.visible");
     }
 
+    // One voice part of a music track: a voice named once, its own document, and a waveform exactly when the voice
+    // it plays on is the one that needs one.
+    private void MusicVoice(CartridgeMusicVoice? part, string path, HashSet<string> voices) {
+        if (part is null) {
+            Error(path: path, message: "A voice part cannot be null.");
+
+            return;
+        }
+
+        if (part.Voice is not (Puck.Assets.Documents.AudioEffectDocument.VoicePulse1
+            or Puck.Assets.Documents.AudioEffectDocument.VoiceNoise
+            or Puck.Assets.Documents.AudioEffectDocument.VoiceWave
+            or Puck.Assets.Documents.AudioEffectDocument.VoicePulse2)) {
+            Error(path: path + ".voice", message: "Expected pulse1, pulse2, wave or noise.");
+        } else if (!voices.Add(item: part.Voice)) {
+            Error(path: path + ".voice", message: "A track gives each voice at most one part.");
+        }
+
+        var wave = part.Voice == Puck.Assets.Documents.AudioEffectDocument.VoiceWave;
+        if (wave != (part.Waveform is not null)) {
+            Error(path: path + ".waveform", message: "A part on the wave voice carries a waveform, and no other voice may.");
+        } else if (part.Waveform is { } pattern && (pattern.Length != 32 || pattern.Any(predicate: static level => level is < 0 or > 15))) {
+            Error(path: path + ".waveform", message: "Expected 32 four-bit levels in 0..15.");
+        }
+
+        if (part.Part is null) {
+            Error(path: path + ".part", message: "A voice part carries a document.");
+
+            return;
+        }
+
+        foreach (var failure in Puck.Assets.Documents.AudioCanonicalizer.Validate(document: part.Part)) {
+            Error(path: $"{path}.part.{failure.Path}", message: failure.Message);
+        }
+    }
+
     private void Sounds() {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        // The voices the cartridge's music occupies. An effect may not land on one of them, so they are gathered
+        // before any effect is judged rather than as the sounds are walked.
+        var occupied = new HashSet<string>(comparer: StringComparer.Ordinal);
+        foreach (var sound in document.Sounds) {
+            foreach (var part in (sound?.Music ?? [])) {
+                if (part?.Voice is { } voice) {
+                    occupied.Add(item: voice);
+                }
+            }
+        }
+
         for (var index = 0; index < document.Sounds.Length; ++index) {
             var sound = document.Sounds[index];
             var path = $"sounds[{index}]";
@@ -423,14 +471,28 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 continue;
             }
 
-            if (sound.Music is not null && sound.Frames is not null) {
-                Error(path: path + ".frames", message: "A music track takes its pacing from the document's tempo.");
+            if (sound.Music is { } parts) {
+                if (sound.Frames is not null) {
+                    Error(path: path + ".frames", message: "A music track takes its pacing from each part's own tempo.");
+                }
+
+                if (parts.Length is < 1 or > CartridgeLimits.SoundVoiceCount) {
+                    Error(path: path + ".music", message: $"A track carries 1 to {CartridgeLimits.SoundVoiceCount} voice parts.");
+                    continue;
+                }
+
+                var voices = new HashSet<string>(comparer: StringComparer.Ordinal);
+                for (var part = 0; part < parts.Length; ++part) {
+                    MusicVoice(part: parts[part], path: $"{path}.music[{part}]", voices: voices);
+                }
             }
 
             if (sound.Effect is { } effect) {
                 var wave = effect.Voice == Puck.Assets.Documents.AudioEffectDocument.VoiceWave;
                 if (effect.Voice is not (Puck.Assets.Documents.AudioEffectDocument.VoicePulse1 or Puck.Assets.Documents.AudioEffectDocument.VoiceNoise or Puck.Assets.Documents.AudioEffectDocument.VoiceWave)) {
                     Error(path: path + ".effect.voice", message: "Expected pulse1, noise or wave.");
+                } else if (occupied.Contains(item: effect.Voice!)) {
+                    Error(path: path + ".effect.voice", message: $"The {effect.Voice} voice carries a part of this cartridge's music; an effect there would cut it off.");
                 } else if (wave != (sound.Waveform is not null)) {
                     Error(path: path + ".waveform", message: "A wave effect carries a waveform, and no other voice may.");
                 } else if (sound.Waveform is { } pattern && (pattern.Length != 32 || pattern.Any(predicate: static level => level is < 0 or > 15))) {
@@ -515,6 +577,14 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
 
             if (screen.Tiles.Any(predicate: tile => tile < 0 || tile >= document.Tiles.Length)) {
                 Error(path: path + ".tiles", message: "Tile index is outside the authored tile bank.");
+            }
+
+            if (screen.Palettes is { } shades) {
+                if (shades.Length != screen.Tiles.Length) {
+                    Error(path: path + ".palettes", message: "Expected one palette index per tile.");
+                } else if (shades.Any(predicate: shade => shade < 0 || shade >= (document.Palettes?.Background?.Length ?? 0))) {
+                    Error(path: path + ".palettes", message: "A tile names a background palette that is not declared.");
+                }
             }
 
             m_screens[key: screen.Name] = (screen.Width, screen.Tiles.Length / screen.Width);
@@ -641,10 +711,17 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
 
                 break;
             case "map":
-                Reject(value: value, path: path, allowed: "row column tile");
+                Reject(value: value, path: path, allowed: "row column tile palette");
                 Value(value: value.Row, path: path + ".row");
                 Value(value: value.Column, path: path + ".column");
                 Value(value: value.Tile, path: path + ".tile");
+                if (value.Palette is { } cellPalette) {
+                    Value(value: cellPalette, path: path + ".palette");
+                    if (cellPalette.Constant >= (document.Palettes?.Background?.Length ?? 0)) {
+                        Error(path: path + ".palette", message: "The write names a background palette that is not declared.");
+                    }
+                }
+
                 break;
             case "blit":
                 Reject(value: value, path: path, allowed: "screen row column");

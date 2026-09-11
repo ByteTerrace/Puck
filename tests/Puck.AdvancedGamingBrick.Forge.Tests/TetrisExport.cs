@@ -4,8 +4,12 @@ using Puck.HumbleGamingBrick.Forge;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
-/// <summary>Writes the authored cartridge as a bootable image.</summary>
-/// <remarks>Set <c>PUCK_TETRIS_EXPORT</c> to the destination path; without it this does nothing.</remarks>
+/// <summary>Writes the authored cartridge as a bootable image, and the document it was compiled from beside it.</summary>
+/// <remarks>
+/// Set <c>PUCK_TETRIS_EXPORT</c> to the image's destination path; without it this does nothing. The document lands
+/// next to it under the same name with a <c>.cartridge.json</c> suffix, in its canonical form, so the pair a reader
+/// compares is the exact source and the exact bytes it produced rather than two things that drifted apart.
+/// </remarks>
 public sealed class TetrisExport {
     [Fact]
     public void WriteImage() {
@@ -25,6 +29,12 @@ public sealed class TetrisExport {
         })!;
 
         var result = new HgbCartridgeCompiler().Compile(document: document);
+        var canonical = CartridgeDocuments.Canonicalize(document: document);
+
+        Assert.Equal(expected: canonical.Hash, actual: result.SourceHash);
         File.WriteAllBytes(path: destination, bytes: result.Rom);
+        File.WriteAllBytes(
+            bytes: canonical.Bytes,
+            path: Path.ChangeExtension(path: destination, extension: null) + ".cartridge.json");
     }
 }
