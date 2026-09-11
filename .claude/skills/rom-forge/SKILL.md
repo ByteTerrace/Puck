@@ -80,6 +80,36 @@ native execution tests, not by a hidden special case.
   `0x0800C000`, image size 64 KiB.
 - Thumb literal pools are DATA. `EmitLiteralPool` does not branch around them;
   emit a branch yourself wherever the instruction stream can fall through.
+- The AGB per-pixel surface is mode 4 drawn by BG2, so DISPCNT needs BG2's
+  enable bit (0x400) or the surface never appears. Its memory ignores byte
+  writes: plot by reading and rebuilding the containing halfword. A full-screen
+  clear must be a DMA fill from a held source word (38400 bytes is far past what
+  a per-frame loop can cover), and the tile and map copies must be skipped,
+  because the surface occupies the same memory.
+- A cartridge carrying a clock or another general-purpose device overlays its
+  registers on ROM at 0x0C4-0x0C9, and an instruction fetched from there reads
+  pin state rather than code. `EntryStubOffset` and `CodeOffset` are placed
+  clear of that window for this reason; moving either back under it stops every
+  clock-bearing image from booting at all, with no diagnostic.
+- The AGB clock is bit-banged over those pins: bit 0 clock, bit 1 data, bit 2
+  select; the direction register (0x0C6) says which the cartridge drives, and
+  the control register's (0x0C8) low bit must be set or every read returns zero.
+  Command bytes go out least significant bit first, taken on rising edges, and
+  the reply comes back on falling edges in decimal-coded nibbles. Emit the bit
+  work as a runtime loop — fifty-six unrolled exchanges put their constants out
+  of reach of a program-counter-relative load.
+- AGB sampled voices carry a 16.16 position and step, so one recording covers a
+  range of pitches; a voice record is 16 bytes (base, position, length, step)
+  and a zero step is what marks it free. A document sequences sampled
+  instruments from its own state — an array of rates plus a frame counter — so
+  do not add a tracker primitive.
+- One writer owns AGB's display control: the frame accumulates it in r4 from a
+  base word (mode, objects, BG0) plus one bit per surface that is drawn, then
+  stores it once. Never write 0x04000000 from a feature block: a second writer
+  silently drops every other surface's bit.
+- AGB background surfaces: BG0 is the document's map (screenblock 31), BG1 the
+  window panel (30), BG2 the turning background (28) or the first declared
+  layer (29), BG3 the second layer (27).
 - The AGB window unit gates the blend unit as well as the layers: WININ/WINOUT
   bit 5 must be set in every region a `blend` should act in, or the blend
   silently does nothing exactly where the panel is. Blend targets are BLDCNT

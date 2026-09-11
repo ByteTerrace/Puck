@@ -93,9 +93,11 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `tiles` | 1–256 named 8×8 tiles. Each `pixels` array has eight strings of eight hexadecimal palette indices. Sprite color zero is transparent. |
 | `map` | Exactly 1024 tile indices, row-major over a 32×32 background. |
 | `mapPalettes` | Optional 1024 background palette indices, one per cell. Absent means every cell is on palette zero. |
+| `bitmap` | Optional `{clear}` per-pixel drawing surface, 240 by 160, one byte per pixel indexing the background palette bank read as one flat run of 256 colours. It replaces the tile background entirely, so it cannot share a document with a panel, a turning background or extra layers; sprites still draw over it. `clear` is the colour it is filled with each frame, or absent to leave it as drawn. AGB only. |
+| `layers` | Up to 2 `{map,mapPalettes,scrollX,scrollY,priority,visible}` scrolling backgrounds behind the document's own, each with its own 32×32 map and scroll. `priority` is 0 (nearest) through 3. A turning background occupies the nearer of the two hardware surfaces, so declaring one leaves room for a single layer. AGB only. |
 | `window` | Optional `{map,mapPalettes,x,y,visible}` panel drawn over the background from its corner down and right, out of its own 32×32 map. |
 | `raster` | Up to 8 `{line,scrollX,scrollY}` rows in ascending scanline order, each setting the scroll for the band from its line to the picture's foot. `line` is 1–143; line zero is the document's own scroll. |
-| `clock` | Optional `{seconds,minutes,hours,days}` naming state slots a `clock` step fills from the cartridge's battery-backed real-time clock. CGB only. |
+| `clock` | Optional naming of state slots a `clock` step fills from the cartridge's real-time clock. `seconds`, `minutes` and `hours` work on both targets. The rest do not, because the two machines carry different devices: `days` is a count of days since the cartridge started and is cgb only, while `day`, `month` and `year` are a calendar date and are agb only. |
 | `affine` | Optional `{map,angle,scale,centreX,centreY,visible}` background that rotates and scales. Angle is a turn in 256 steps, scale is sixteenths (16 = life size). AGB only. |
 | `tallSprites` | Draws sprites 8×16; a sprite's tile index then names a pair and its low bit is ignored. |
 | `variables` | Up to 64 `{name,initial}` unsigned bytes. |
@@ -137,6 +139,8 @@ A rule body is a tree of steps, not a flat list. Each step is one of:
 {"kind":"stop"}
 {"kind":"fade","amount":{"variable":"dim"},"toward":"black"}
 {"kind":"blend","surface":"panel","weight":{"variable":"alpha"}}
+{"kind":"play","sound":"pluck","rate":{"array":"notes","index":{"variable":"row"}}}
+{"kind":"plot","row":{"variable":"y"},"column":{"variable":"x"},"colour":{"constant":3}}
 {"kind":"save"}
 {"kind":"load"}
 ```
@@ -160,6 +164,14 @@ table through a horizontal-blank transfer instead. Rows republish in the
 vertical blank on the advanced machine, so a change there shows on the following
 frame exactly as a map write does.
 
+A `play` of a recorded sound takes an optional `rate`: the playback rate in
+sixty-fourths of the recording's own, so 64 plays it as recorded, 128 an octave
+up and 32 an octave down. One recording therefore serves a whole instrument's
+range, and a rate read from an array makes an ordinary rule into a sequencer —
+there is no tracker primitive, and none is needed. A rate of zero sounds
+nothing rather than holding one sample forever. Rates are refused on music and
+effect sounds, which take their pitch from their own rows.
+
 `play` starts a named sound. Music replaces whatever the melodic voice was
 playing; an effect runs on one of the two voices reserved for one-shots, so it
 never interrupts the music under it and ends on its own terminator; a sample
@@ -180,8 +192,16 @@ save block carries the same magic, version and checksum on both, though the stor
 bytes live in each machine's own save window and a saved game does not travel
 between them.
 
+A `plot` sets one pixel of the declared `bitmap` to a palette entry. Coordinates
+run from the top left, and a plot outside the surface is dropped rather than
+wrapping onto another row. The surface's memory takes no single-byte write, so
+each plot reads and rebuilds the halfword holding its pixel; two plots on the
+same halfword therefore do not disturb each other.
+
 A `blend` makes one surface translucent over whatever is drawn beneath it.
-`surface` names `background`, `panel`, `affine`, `sprites` or `backdrop` — the
+`surface` names `background`, `panel`, `middle`, `far`, `sprites` or `backdrop`
+— `middle` and `far` being the two surfaces behind the document's own background,
+which a turning background and the declared layers fill nearest first, and the
 last two being every sprite and the colour behind everything — and `weight` is
 the translucent surface's share in sixteenths, so 16 is opaque and 0 leaves only
 what is below. Weights past 16 are held at 16 rather than wrapping. It is an

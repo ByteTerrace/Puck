@@ -41,9 +41,10 @@ public sealed class CartridgeBlendTests {
     [Fact]
     public void ValidationNamesTheSurfaceAndRefusesTheColourMachine() {
         var document = CartridgeDocuments.Create(target: "agb", title: "BLENDBAD");
-        Refuses(document: document with { Rules = [Rule(surface: "nowhere", weight: 8)] }, fragment: "background, panel, affine, sprites or backdrop");
+        Refuses(document: document with { Rules = [Rule(surface: "nowhere", weight: 8)] }, fragment: "background, panel, middle, far, sprites or backdrop");
         Refuses(document: document with { Rules = [Rule(surface: "panel", weight: 8)] }, fragment: "needs a declared window");
-        Refuses(document: document with { Rules = [Rule(surface: "affine", weight: 8)] }, fragment: "needs a declared affine background");
+        Refuses(document: document with { Rules = [Rule(surface: "middle", weight: 8)] }, fragment: "needs a turning background or a declared layer");
+        Refuses(document: document with { Rules = [Rule(surface: "far", weight: 8)] }, fragment: "needs a layer behind the middle one");
         Refuses(document: document with { Rules = [Rule(surface: "backdrop", weight: 40)] }, fragment: "weight runs 0 through 16");
         Refuses(
             document: CartridgeDocuments.Create(target: "cgb", title: "BLENDBAD") with { Rules = [Rule(surface: "backdrop", weight: 8)] },

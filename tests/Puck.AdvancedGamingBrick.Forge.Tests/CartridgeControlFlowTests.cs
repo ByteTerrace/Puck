@@ -135,7 +135,7 @@ public sealed class CartridgeControlFlowTests {
         Refuses(document: document with { Rules = [Rule(body: [Repeat(count: 0, index: "i", body: [Set(target: "x", operation: "add", value: new CartridgeValue(Constant: 1))])])] }, fragment: "iteration count");
         Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "repeat", Count: 4, Index: "missing", Body: [Set(target: "x", operation: "add", value: new CartridgeValue(Constant: 1))])])] }, fragment: "Unknown state variable");
         Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "x"), Operation: "set", Value: new CartridgeValue(Constant: 1), Count: 3)])] }, fragment: "cannot carry 'count'");
-        Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "loop")])] }, fragment: "Expected set, if, repeat, break, map, blit, save, load, play, stop, clock, fade or blend");
+        Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "loop")])] }, fragment: "Expected set, if, repeat, break, map, blit, plot, save, load, play, stop, clock, fade or blend");
         // A sweep the hardware could not finish inside one frame must not validate.
         Refuses(document: document with {
             Arrays = [new CartridgeArray(Name: "cells", Initial: new int[255])],

@@ -21,9 +21,14 @@ public static class AgbForgeCartridge {
     /// <summary>The logo field's exact length in bytes.</summary>
     public const int LogoLength = 156;
     /// <summary>The ROM offset of the ARM entry stub the header branch targets.</summary>
-    public const int EntryStubOffset = 0x0C0;
+    /// <remarks>
+    /// Clear of 0x0C4-0x0C9, where a cartridge carrying a clock or another general-purpose device overlays its
+    /// registers: an instruction fetched from there reads pin state rather than code, so a stub straddling the window
+    /// never reaches the routine it hands off to.
+    /// </remarks>
+    public const int EntryStubOffset = 0x0D0;
     /// <summary>The ROM offset the Thumb routine is placed at (right after the two entry-stub ARM words).</summary>
-    public const int CodeOffset = 0x0C8;
+    public const int CodeOffset = 0x0D8;
     /// <summary>The ROM offset the data blob is placed at.</summary>
     public const int DataOffset = 0xC000;
     /// <summary>The bus address of the cartridge base.</summary>

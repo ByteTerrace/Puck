@@ -8,6 +8,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
     private readonly Dictionary<string, int> m_arrays = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, (int Width, int Height)> m_screens = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_variables = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> m_recordings = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_sounds = new(comparer: StringComparer.Ordinal);
     private bool m_clocks;
     private bool m_saves;
@@ -39,6 +40,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             !Count(items: document.Screens, path: "screens", min: 0, max: CartridgeLimits.ScreenCount) ||
             !Count(items: document.Sounds, path: "sounds", min: 0, max: CartridgeLimits.SoundCount) ||
             !Count(items: document.Raster, path: "raster", min: 0, max: CartridgeLimits.RasterRowCount) ||
+            !Count(items: document.Layers, path: "layers", min: 0, max: CartridgeLimits.LayerCount) ||
             !Count(items: document.Rules, path: "rules", min: 0, max: CartridgeLimits.RuleCount) ||
             !Count(items: document.Sprites, path: "sprites", min: 0, max: CartridgeLimits.SpriteCount)) {
             return m_errors;
@@ -78,6 +80,8 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
 
         Arrays();
         Raster();
+        Bitmap();
+        Layers();
         Affine();
         Clock();
         Window();
@@ -207,6 +211,70 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
     }
 
+    private void Bitmap() {
+        if (document.Bitmap is not { } bitmap) {
+            return;
+        }
+
+        if (document.Target != "agb") {
+            Error(path: "bitmap", message: "A per-pixel surface needs the advanced machine; the cgb target draws only from tiles.");
+            return;
+        }
+
+        // The surface takes the whole picture, so a tile background declared beside it would never be seen.
+        if (document.Window is not null || document.Affine is not null || document.Layers.Length != 0) {
+            Error(path: "bitmap", message: "A per-pixel surface replaces the tile background, so it cannot share a document with a panel, a turning background or extra layers.");
+        }
+
+        if (bitmap.Clear is not null) {
+            Value(value: bitmap.Clear, path: "bitmap.clear");
+        }
+    }
+
+    private void Layers() {
+        if (document.Layers.Length == 0) {
+            return;
+        }
+
+        if (document.Target != "agb") {
+            Error(path: "layers", message: "Extra scrolling backgrounds need the advanced machine; the cgb target has one background and a panel.");
+            return;
+        }
+
+        // The nearer of the two hardware surfaces is where a turning background lives, so the two cannot both claim it.
+        var room = document.Affine is null ? CartridgeLimits.LayerCount : CartridgeLimits.LayerCount - 1;
+        if (document.Layers.Length > room) {
+            Error(path: "layers", message: $"A turning background occupies one of the two surfaces, leaving room for {room}.");
+        }
+
+        for (var index = 0; index < document.Layers.Length; ++index) {
+            var layer = document.Layers[index];
+            var path = $"layers[{index}]";
+            if (layer is null) { Error(path: path, message: "A layer cannot be null."); continue; }
+            if (!Count(items: layer.Map, path: path + ".map", min: 1024, max: 1024)) { continue; }
+            if (layer.Map.Any(predicate: tile => tile < 0 || tile >= document.Tiles.Length)) {
+                Error(path: path + ".map", message: "Tile index is outside the authored tile bank.");
+            }
+
+            if (layer.MapPalettes is { } cells) {
+                var background = document.Palettes?.Background?.Length ?? 0;
+                if (cells.Length != 1024) {
+                    Error(path: path + ".mapPalettes", message: "Expected 1024 entries, one per cell.");
+                } else if (cells.Any(predicate: entry => entry < 0 || entry >= background)) {
+                    Error(path: path + ".mapPalettes", message: "A cell names a background palette that is not declared.");
+                }
+            }
+
+            if (layer.Priority is < 0 or > 3) {
+                Error(path: path + ".priority", message: "Expected a priority in 0..3, nearest to furthest.");
+            }
+
+            Value(value: layer.ScrollX, path: path + ".scrollX");
+            Value(value: layer.ScrollY, path: path + ".scrollY");
+            Value(value: layer.Visible, path: path + ".visible");
+        }
+    }
+
     private void Affine() {
         if (document.Affine is not { } affine) {
             return;
@@ -240,13 +308,24 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
 
         m_clocks = true;
-        if (document.Target != "cgb") {
-            Error(path: "clock", message: "A real-time clock is a cgb capability today; the agb target's clock is not wired.");
-            return;
+
+        // The two machines carry different clocks: one counts days since the cartridge was started, the other keeps a
+        // calendar date. Naming a field the target's device does not have would silently report a made-up value.
+        if (document.Target == "agb" && clock.Days is not null) {
+            Error(path: "clock.days", message: "The agb clock keeps a calendar date rather than a day count; name day, month and year instead.");
+        }
+
+        foreach (var (value, field) in new[] { (clock.Day, "day"), (clock.Month, "month"), (clock.Year, "year") }) {
+            if (value is not null && document.Target != "agb") {
+                Error(path: "clock." + field, message: $"A calendar {field} needs the advanced machine; the cgb clock counts days rather than dates.");
+            }
         }
 
         var named = 0;
-        foreach (var (name, field) in new[] { (clock.Seconds, "seconds"), (clock.Minutes, "minutes"), (clock.Hours, "hours"), (clock.Days, "days") }) {
+        foreach (var (name, field) in new[] {
+            (clock.Seconds, "seconds"), (clock.Minutes, "minutes"), (clock.Hours, "hours"), (clock.Days, "days"),
+            (clock.Day, "day"), (clock.Month, "month"), (clock.Year, "year"),
+        }) {
             if (name is null) {
                 continue;
             }
@@ -326,6 +405,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 }
 
                 m_sounds.Add(item: sound.Name);
+                m_recordings.Add(item: sound.Name);
                 continue;
             }
 
@@ -575,9 +655,16 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
 
                 break;
             case "play":
-                Reject(value: value, path: path, allowed: "sound");
+                Reject(value: value, path: path, allowed: "sound rate");
                 if (value.Sound is not { } track || !m_sounds.Contains(item: track)) {
                     Error(path: path + ".sound", message: $"Unknown sound '{value.Sound}'.");
+                } else if (value.Rate is not null && !m_recordings.Contains(item: track)) {
+                    // Only a recording is resampled; the melodic voices take their pitch from the track's own rows.
+                    Error(path: path + ".rate", message: $"Sound '{track}' is not a recording, so it has no playback rate.");
+                }
+
+                if (value.Rate is not null) {
+                    Value(value: value.Rate, path: path + ".rate");
                 }
 
                 break;
@@ -588,6 +675,16 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 }
 
                 break;
+            case "plot":
+                Reject(value: value, path: path, allowed: "row column colour");
+                if (document.Bitmap is null) {
+                    Error(path: path, message: "A plot step requires a declared bitmap.");
+                }
+
+                Value(value: value.Row, path: path + ".row");
+                Value(value: value.Column, path: path + ".column");
+                Value(value: value.Colour, path: path + ".colour");
+                break;
             case "blend":
                 Reject(value: value, path: path, allowed: "surface weight");
                 if (document.Target != "agb") {
@@ -596,12 +693,14 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                     Error(path: path, message: "Blending two surfaces is an agb capability; the cgb target has no blend unit.");
                 }
 
-                if (value.Surface is null || Array.IndexOf(array: CartridgeLimits.BlendSurfaces, value: value.Surface) is < 0 or 3) {
-                    Error(path: path + ".surface", message: "Expected background, panel, affine, sprites or backdrop.");
+                if (value.Surface is null || Array.IndexOf(array: CartridgeLimits.BlendSurfaces, value: value.Surface) < 0) {
+                    Error(path: path + ".surface", message: "Expected background, panel, middle, far, sprites or backdrop.");
                 } else if (value.Surface == "panel" && document.Window is null) {
                     Error(path: path + ".surface", message: "Blending the panel needs a declared window.");
-                } else if (value.Surface == "affine" && document.Affine is null) {
-                    Error(path: path + ".surface", message: "Blending the affine surface needs a declared affine background.");
+                } else if (value.Surface == "middle" && document.Affine is null && document.Layers.Length < 1) {
+                    Error(path: path + ".surface", message: "Blending the middle surface needs a turning background or a declared layer.");
+                } else if (value.Surface == "far" && document.Layers.Length < (document.Affine is null ? 2 : 1)) {
+                    Error(path: path + ".surface", message: "Blending the far surface needs a layer behind the middle one.");
                 }
 
                 Value(value: value.Weight, path: path + ".weight");
@@ -644,7 +743,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 }
 
                 break;
-            default: Error(path: path + ".kind", message: "Expected set, if, repeat, break, map, blit, save, load, play, stop, clock, fade or blend."); break;
+            default: Error(path: path + ".kind", message: "Expected set, if, repeat, break, map, blit, plot, save, load, play, stop, clock, fade or blend."); break;
         }
     }
 
@@ -655,8 +754,8 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             ("when", value.When is not null), ("then", value.Then is not null), ("else", value.Else is not null),
             ("count", value.Count is not null), ("index", value.Index is not null), ("body", value.Body is not null),
             ("row", value.Row is not null), ("column", value.Column is not null), ("tile", value.Tile is not null),
-            ("screen", value.Screen is not null), ("sound", value.Sound is not null),
-            ("amount", value.Amount is not null), ("toward", value.Toward is not null),
+            ("screen", value.Screen is not null), ("sound", value.Sound is not null), ("rate", value.Rate is not null),
+            ("amount", value.Amount is not null), ("toward", value.Toward is not null), ("colour", value.Colour is not null),
             ("surface", value.Surface is not null), ("weight", value.Weight is not null),
         }) {
             if (present && !allowed.Contains(value: name, comparisonType: StringComparison.Ordinal)) {

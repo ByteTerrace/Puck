@@ -16,6 +16,11 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// the pair, so the mixer must always fill the half the transfer is not in; the frame counter's low bit picks it.
 /// </para>
 /// <para>
+/// Pitch: a voice steps through its recording by a 16.16 increment, so one recording serves a whole instrument's
+/// range. The authored rate is in <see cref="NaturalRate"/>ths of the recording's own, so 64 plays it as recorded, 128
+/// an octave up and 32 an octave down. Nearest-neighbour resampling is what the hardware's own mixers did.
+/// </para>
+/// <para>
 /// The sample rate and buffer size are tied: one frame is 280896 machine cycles and the timer reloads every
 /// <see cref="CyclesPerSample"/>, so a half must cover a whole frame's worth or the queue starves.
 /// </para>
@@ -25,8 +30,12 @@ public sealed class AgbDirectSound {
     public const int CyclesPerSample = 1024;
     /// <summary>Samples in one half of the mix buffer, covering a whole frame at <see cref="CyclesPerSample"/>.</summary>
     public const int SamplesPerFrame = 288;
+    /// <summary>The authored playback rate that plays a recording at the rate it was recorded.</summary>
+    public const int NaturalRate = 64;
+    /// <summary>Bytes a voice's state occupies: recording base, 16.16 position, length in samples, 16.16 step.</summary>
+    public const int VoiceByteCount = 16;
     /// <summary>Bytes of work memory the engine needs: the mix buffer plus per-voice state.</summary>
-    public const int StateByteCount = (SamplesPerFrame * 2) + (CartridgeLimits.SampleVoiceCount * 8) + 4;
+    public const int StateByteCount = (SamplesPerFrame * 2) + (CartridgeLimits.SampleVoiceCount * VoiceByteCount) + 4;
 
     private const uint ControlMixAddress = 0x04000082u;
     /// <summary>The first transfer's control halfword. 0x040000C4 is its word count, which the queue mode ignores.</summary>
@@ -79,18 +88,36 @@ public sealed class AgbDirectSound {
     /// <summary>Emits a start of a recorded one-shot in the first idle voice, dropping it when every voice is busy.</summary>
     /// <param name="sampleAddress">The sample's address in the cartridge image.</param>
     /// <param name="sampleLength">The sample's length in bytes.</param>
-    public void EmitStart(uint sampleAddress, int sampleLength) {
+    /// <param name="rate">
+    /// Emits a load of the playback rate in <see cref="NaturalRate"/>ths into the given register, or null to play the
+    /// recording at the rate it was recorded.
+    /// </param>
+    public void EmitStart(uint sampleAddress, int sampleLength, Action<LowRegister>? rate = null) {
         var done = m_emitter.NewLabel();
+
+        // r6 carries the step through every voice test below, so the rate is evaluated once rather than per candidate.
+        if (rate is null) {
+            m_emitter.LoadConstant(destination: LowRegister.R6, value: 1u << 16);
+        } else {
+            rate(LowRegister.R6);
+            m_emitter.ShiftImmediate(op: ThumbShift.LogicalLeft, destination: LowRegister.R6, source: LowRegister.R6, amount: 10);
+        }
+
         for (var voice = 0; voice < CartridgeLimits.SampleVoiceCount; ++voice) {
             var busy = m_emitter.NewLabel();
-            m_emitter.LoadConstant(destination: LowRegister.R2, value: VoiceAddress + (uint)(voice * 8));
-            m_emitter.LoadWord(destination: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 4);
+            m_emitter.LoadConstant(destination: LowRegister.R2, value: VoiceAddress + (uint)(voice * VoiceByteCount));
+            // A silent voice is one whose step is zero; a sounding one always carries a non-zero step.
+            m_emitter.LoadWord(destination: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 12);
             m_emitter.CompareImmediate(register: LowRegister.R0, value: 0);
             m_emitter.Branch(condition: ThumbCondition.NotEqual, label: busy);
             m_emitter.LoadConstant(destination: LowRegister.R0, value: sampleAddress);
             m_emitter.StoreWord(source: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 0);
-            m_emitter.LoadConstant(destination: LowRegister.R0, value: (uint)sampleLength);
+            m_emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
             m_emitter.StoreWord(source: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 4);
+            m_emitter.LoadConstant(destination: LowRegister.R0, value: (uint)sampleLength);
+            m_emitter.StoreWord(source: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 8);
+            // A rate of zero never advances, so it leaves the voice free rather than sounding one sample forever.
+            m_emitter.StoreWord(source: LowRegister.R6, baseRegister: LowRegister.R2, byteOffset: 12);
             m_emitter.Branch(label: done);
             m_emitter.MarkLabel(label: busy);
         }
@@ -131,30 +158,39 @@ public sealed class AgbDirectSound {
         m_emitter.MarkLabel(label: fill);
     }
 
-    // One voice: walk its remaining samples into the half, clamping each sum, and retire it when it runs out.
+    // One voice: resample its recording into the half at the voice's own step, clamping each sum, and retire it once
+    // the position walks past the recording's end.
     private void EmitVoiceMix(int voice) {
         var done = m_emitter.NewLabel();
         var loop = m_emitter.NewLabel();
         var high = m_emitter.NewLabel();
         var low = m_emitter.NewLabel();
+        var retire = m_emitter.NewLabel();
         var stored = m_emitter.NewLabel();
 
-        m_emitter.LoadConstant(destination: LowRegister.R5, value: VoiceAddress + (uint)(voice * 8));
-        m_emitter.LoadWord(destination: LowRegister.R6, baseRegister: LowRegister.R5, byteOffset: 4);
-        m_emitter.CompareImmediate(register: LowRegister.R6, value: 0);
+        m_emitter.LoadConstant(destination: LowRegister.R5, value: VoiceAddress + (uint)(voice * VoiceByteCount));
+        m_emitter.LoadWord(destination: LowRegister.R0, baseRegister: LowRegister.R5, byteOffset: 12);
+        m_emitter.CompareImmediate(register: LowRegister.R0, value: 0);
         m_emitter.Branch(condition: ThumbCondition.Equal, label: done);
         m_emitter.LoadWord(destination: LowRegister.R7, baseRegister: LowRegister.R5, byteOffset: 0);
+        m_emitter.LoadWord(destination: LowRegister.R6, baseRegister: LowRegister.R5, byteOffset: 4);
         m_emitter.MoveRegister(destination: LowRegister.R3, source: LowRegister.R4);
         m_emitter.LoadConstant(destination: LowRegister.R2, value: SamplesPerFrame);
 
         m_emitter.MarkLabel(label: loop);
-        m_emitter.CompareImmediate(register: LowRegister.R6, value: 0);
-        m_emitter.Branch(condition: ThumbCondition.Equal, label: done);
-        EmitLoadSigned(destination: LowRegister.R0, baseRegister: LowRegister.R7);
+        // The position's whole part against the recording's length.
+        m_emitter.ShiftImmediate(op: ThumbShift.LogicalRight, destination: LowRegister.R1, source: LowRegister.R6, amount: 16);
+        m_emitter.LoadWord(destination: LowRegister.R0, baseRegister: LowRegister.R5, byteOffset: 8);
+        m_emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R1, source: LowRegister.R0);
+        m_emitter.Branch(condition: ThumbCondition.UnsignedHigher, label: retire);
+        m_emitter.Branch(condition: ThumbCondition.Equal, label: retire);
+
+        m_emitter.AddRegister(destination: LowRegister.R1, source: LowRegister.R1, operand: LowRegister.R7);
+        EmitLoadSigned(destination: LowRegister.R0, baseRegister: LowRegister.R1);
         EmitLoadSigned(destination: LowRegister.R1, baseRegister: LowRegister.R3);
         m_emitter.AddRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1);
 
-        // Clamp: a sum past a signed byte would otherwise wrap and inverted the waveform.
+        // Clamp: a sum past a signed byte would otherwise wrap and invert the waveform.
         m_emitter.LoadConstant(destination: LowRegister.R1, value: 127);
         m_emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
         m_emitter.Branch(condition: ThumbCondition.SignedGreaterOrEqual, label: high);
@@ -171,13 +207,18 @@ public sealed class AgbDirectSound {
 
         m_emitter.StoreByte(source: LowRegister.R0, baseRegister: LowRegister.R3, byteOffset: 0);
         m_emitter.AddImmediate(register: LowRegister.R3, value: 1);
-        m_emitter.AddImmediate(register: LowRegister.R7, value: 1);
-        m_emitter.SubtractImmediate(register: LowRegister.R6, value: 1);
+        m_emitter.LoadWord(destination: LowRegister.R1, baseRegister: LowRegister.R5, byteOffset: 12);
+        m_emitter.AddRegister(destination: LowRegister.R6, source: LowRegister.R6, operand: LowRegister.R1);
         m_emitter.SubtractImmediate(register: LowRegister.R2, value: 1);
         m_emitter.Branch(condition: ThumbCondition.NotEqual, label: loop);
+        m_emitter.Branch(label: done);
+
+        // Past the end: zeroing the step is what marks the voice free for the next sound.
+        m_emitter.MarkLabel(label: retire);
+        m_emitter.MoveImmediate(destination: LowRegister.R0, value: 0);
+        m_emitter.StoreWord(source: LowRegister.R0, baseRegister: LowRegister.R5, byteOffset: 12);
 
         m_emitter.MarkLabel(label: done);
-        m_emitter.StoreWord(source: LowRegister.R7, baseRegister: LowRegister.R5, byteOffset: 0);
         m_emitter.StoreWord(source: LowRegister.R6, baseRegister: LowRegister.R5, byteOffset: 4);
     }
 

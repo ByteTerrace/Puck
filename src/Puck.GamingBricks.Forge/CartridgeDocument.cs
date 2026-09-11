@@ -31,8 +31,12 @@ public sealed record CartridgeDocument {
     public required CartridgeScreen[] Screens { get; init; }
     /// <summary>Gets the battery-backed state, or null when the cartridge keeps nothing across power cycles.</summary>
     public CartridgeSave? Save { get; init; }
+    /// <summary>Gets the scrolling backgrounds drawn behind the document's own, nearest first.</summary>
+    public required CartridgeLayer[] Layers { get; init; }
     /// <summary>Gets the scroll changes applied part way down the picture, in ascending scanline order.</summary>
     public required CartridgeRasterRow[] Raster { get; init; }
+    /// <summary>Gets the per-pixel drawing surface, or null when the cartridge draws only from tiles.</summary>
+    public CartridgeBitmap? Bitmap { get; init; }
     /// <summary>Gets the rotating and scaling background, or null when the cartridge has none.</summary>
     public CartridgeAffine? Affine { get; init; }
     /// <summary>Gets the real-time clock's landing places, or null when the cartridge carries no clock.</summary>
@@ -102,6 +106,55 @@ public sealed record CartridgeVariable(string Name, int Initial);
 public sealed record CartridgeArray(string Name, int[] Initial);
 
 /// <summary>
+/// A per-pixel drawing surface covering the whole screen, which is what a cartridge draws on when its picture is not
+/// made of tiles at all.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The surface is one byte per pixel, indexing the background palette bank read as one flat run of 256 colours — the
+/// first declared palette's entries are 0 through 15, the second's 16 through 31 — so a plot carries an ordinary byte
+/// of state as its colour. It replaces the tile background entirely: a document declaring one draws no
+/// map, panel, layer or turning background, and sprites still draw over it.
+/// </para>
+/// <para>
+/// Coordinates: <see cref="Width"/> by <see cref="Height"/> pixels with the origin at the top left. A plot outside
+/// that is dropped rather than wrapping onto another row.
+/// </para>
+/// </remarks>
+/// <param name="Clear">The palette entry the surface is filled with each frame, or null to leave it as drawn.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CartridgeBitmap(CartridgeValue? Clear = null) {
+    /// <summary>The surface's height in pixels.</summary>
+    public const int Height = 160;
+    /// <summary>The surface's width in pixels.</summary>
+    public const int Width = 240;
+}
+
+/// <summary>
+/// A scrolling background beside the document's own, which is what lets a sky drift at a different rate from the
+/// ground in front of it.
+/// </summary>
+/// <remarks>
+/// Depth: <paramref name="Priority"/> runs 0 (nearest the viewer) through 3. Surfaces sharing a priority resolve by
+/// hardware order, and these layers sit behind the document's own background and its panel, so a layer tying with one
+/// of those draws beneath it.
+/// </remarks>
+/// <param name="Map">Exactly 1024 tile indices over a 32 by 32 grid, as the document's own map is.</param>
+/// <param name="MapPalettes">One palette index per cell, or null to put every cell on palette zero.</param>
+/// <param name="ScrollX">Pixels the layer is scrolled left.</param>
+/// <param name="ScrollY">Pixels the layer is scrolled up.</param>
+/// <param name="Priority">Draw order, 0 nearest through 3 furthest.</param>
+/// <param name="Visible">Zero hides the layer; any other value draws it.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CartridgeLayer(
+    int[] Map,
+    int[]? MapPalettes,
+    CartridgeValue ScrollX,
+    CartridgeValue ScrollY,
+    int Priority,
+    CartridgeValue Visible);
+
+/// <summary>
 /// A scroll change applied from one scanline down, which is how a picture gets a fixed panel over a scrolling world
 /// or layers that drift at different speeds.
 /// </summary>
@@ -156,9 +209,20 @@ public sealed record CartridgeAffine(
 /// <param name="Seconds">The state slot receiving 0..59, or null.</param>
 /// <param name="Minutes">The state slot receiving 0..59, or null.</param>
 /// <param name="Hours">The state slot receiving 0..23, or null.</param>
-/// <param name="Days">The state slot receiving the day counter's low byte, or null.</param>
+/// <param name="Days">The state slot receiving the day counter's low byte, or null. cgb only, the advanced machine's
+/// clock keeping a calendar date rather than a count of days.</param>
+/// <param name="Day">The state slot receiving the day of the month, 1..31, or null. agb only.</param>
+/// <param name="Month">The state slot receiving the month, 1..12, or null. agb only.</param>
+/// <param name="Year">The state slot receiving the year within its century, 0..99, or null. agb only.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeClock(string? Seconds, string? Minutes, string? Hours, string? Days);
+public sealed record CartridgeClock(
+    string? Seconds,
+    string? Minutes,
+    string? Hours,
+    string? Days,
+    string? Day = null,
+    string? Month = null,
+    string? Year = null);
 
 /// <summary>
 /// A named sound a play step starts: exactly one of a looping music track or a one-shot effect. Music holds the
@@ -258,8 +322,11 @@ public sealed record CartridgeCondition(string Kind, string? Key = null, string?
 /// <param name="Tile">For map: the tile index to write.</param>
 /// <param name="Screen">For blit: the declared screen to paint.</param>
 /// <param name="Sound">For play: the declared music track to start.</param>
+/// <param name="Rate">For play of a recorded sound: the playback rate in sixty-fourths of the recording's own, so 64
+/// plays it as recorded and 128 an octave up. Absent plays it as recorded.</param>
 /// <param name="Amount">For fade: how far toward the target, 0 through 16.</param>
 /// <param name="Toward">For fade: black or white.</param>
+/// <param name="Colour">For plot: the palette entry the pixel is set to.</param>
 /// <param name="Surface">For blend: the surface made translucent — background, panel, affine, sprites or backdrop.</param>
 /// <param name="Weight">For blend: how much of the translucent surface shows, 0 through 16; everything below it supplies the rest.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -279,10 +346,12 @@ public sealed record CartridgeStatement(
     CartridgeValue? Tile = null,
     string? Screen = null,
     string? Sound = null,
+    CartridgeValue? Rate = null,
     CartridgeValue? Amount = null,
     string? Toward = null,
     string? Surface = null,
-    CartridgeValue? Weight = null);
+    CartridgeValue? Weight = null,
+    CartridgeValue? Colour = null);
 
 /// <summary>An ordered, conditional group of state changes.</summary>
 /// <param name="Name">The diagnostic name.</param>

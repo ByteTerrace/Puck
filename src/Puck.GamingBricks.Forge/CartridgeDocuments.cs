@@ -37,6 +37,7 @@ public static class CartridgeDocuments {
             Arrays = [],
             Screens = [],
             Sounds = [],
+            Layers = [],
             Raster = [],
             Rules = [],
             Sprites = [],

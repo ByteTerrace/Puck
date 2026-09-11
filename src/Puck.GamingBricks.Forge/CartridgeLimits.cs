@@ -63,8 +63,15 @@ public static class CartridgeLimits {
     /// <summary>The fade amount that reaches the target colour completely.</summary>
     public const int FadeSteps = 16;
     /// <summary>The surfaces a blend step can make translucent, in the order the hardware numbers them.</summary>
-    /// <remarks>KEEP IN SYNC with the target bits each backend writes; the index here is the bit position.</remarks>
-    public static readonly string[] BlendSurfaces = ["background", "panel", "affine", "reserved", "sprites", "backdrop"];
+    /// <remarks>
+    /// KEEP IN SYNC with the target bits each backend writes; the index here is the bit position. "middle" and "far"
+    /// are the two surfaces behind the document's own background — a turning background occupies "middle", and the
+    /// declared layers fill them nearest first.
+    /// </remarks>
+    public static readonly string[] BlendSurfaces = ["background", "panel", "middle", "far", "sprites", "backdrop"];
+    /// <summary>The maximum number of scrolling backgrounds beside the document's own.</summary>
+    /// <remarks>A turning background occupies the nearer of the two, so declaring one leaves room for a single layer.</remarks>
+    public const int LayerCount = 2;
     /// <summary>The blend weight that leaves the translucent surface fully opaque.</summary>
     public const int BlendWeights = 16;
     /// <summary>The maximum number of mid-picture scroll changes.</summary>

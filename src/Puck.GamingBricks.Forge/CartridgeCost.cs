@@ -65,7 +65,11 @@ public static class CartridgeCost {
             }
         }
 
-        var total = CostBound.Known(cycles: ((document.Sprites?.Length ?? 0) * SpriteUnits) + ((document.Sounds?.Length ?? 0) == 0 ? 0L : SoundUnits));
+        // A layer costs its visibility test and, when drawn, two scroll writes — the shape of an ordinary step.
+        var total = CostBound.Known(cycles:
+            ((document.Sprites?.Length ?? 0) * SpriteUnits)
+            + ((document.Layers?.Length ?? 0) * StepSetUnits * 3)
+            + ((document.Sounds?.Length ?? 0) == 0 ? 0L : SoundUnits));
         foreach (var rule in document.Rules ?? []) {
             total = CostBound.Add(left: total, right: Conditions(conditions: rule?.When));
             total = CostBound.Add(left: total, right: Statements(statements: rule?.Body, cells: cells, payload: payload));
@@ -114,6 +118,10 @@ public static class CartridgeCost {
                 // whole of it to each rather than apportioning it keeps every part an upper bound.
                 "clock" => CostBound.Known(cycles: SaveFixedUnits),
                 // A fade republishes every palette, which is the same shape of work as a save's payload walk.
+                // A plot bounds two coordinates, multiplies, and rebuilds one halfword of video memory.
+                "plot" => CostBound.Add(
+                    left: CostBound.Known(cycles: StepMultiplyUnits + (StepArithmeticUnits * 3)),
+                    right: CostBound.Add(left: Operand(value: statement.Row), right: CostBound.Add(left: Operand(value: statement.Column), right: Operand(value: statement.Colour)))),
                 // A blend is two register writes and a clamp, so it costs what an arithmetic step does.
                 "blend" => CostBound.Add(left: CostBound.Known(cycles: StepArithmeticUnits), right: Operand(value: statement.Weight)),
                 "fade" => CostBound.Add(left: CostBound.Known(cycles: SaveFixedUnits), right: Operand(value: statement.Amount)),
