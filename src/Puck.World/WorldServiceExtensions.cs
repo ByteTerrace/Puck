@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Hosting;
 using Puck.Storage;
-using Puck.World.Azure;
 using Puck.World.Server;
 
 namespace Puck.World;
@@ -11,8 +10,24 @@ internal sealed record WorldServiceExtensionOptions(WorldExtensionConfiguration?
 /// <summary>The every-boot-shape service-extension composition. Only an operator-selected configuration enables it.</summary>
 internal sealed class WorldServiceExtensions(WorldServiceExtensionOptions options, WorldServer server,
     WorldInstanceHost instances, WorldReplayTape tape, IObjectBlobStore store) : IHostedService {
-    internal static WorldExtensionRegistry<WorldExtensionProviderType> Types { get; } = new(
-        [AzureConfiguredProvider.Registration], type => type.Type);
+    private static readonly Dictionary<string, WorldExtensionProviderType> s_types = new(StringComparer.Ordinal);
+    private static readonly Lock s_gate = new();
+
+    internal static void Register(WorldExtensionProviderType providerType) {
+        ArgumentNullException.ThrowIfNull(argument: providerType);
+        lock (s_gate) {
+            s_types[providerType.Type] = providerType;
+        }
+    }
+
+    internal static WorldExtensionRegistry<WorldExtensionProviderType> Types {
+        get {
+            lock (s_gate) {
+                return new WorldExtensionRegistry<WorldExtensionProviderType>(extensions: s_types.Values.ToArray(), keyOf: static type => type.Type);
+            }
+        }
+    }
+
     internal WorldConfiguredExtensions? Runtime { get; private set; }
 
     internal void Initialize() {

@@ -264,7 +264,17 @@ internal static class WorldBootComposition {
         var appExtensions = Path.Combine(AppContext.BaseDirectory, "extensions");
 
         if (Directory.Exists(path: appExtensions)) {
-            _ = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: appExtensions);
+            var machineRegistry = new WorldMachineExtensionRegistry();
+            var serverRegistry = new DesktopWorldExtensionRegistry();
+
+            WorldExtensionLoader.LoadFromDirectory(
+                directoryPath: appExtensions,
+                serverRegistry: serverRegistry,
+                onExtensionLoaded: ext => {
+                    if (ext is Puck.GamingBricks.Forge.IGamingBrickExtension brickExtension) {
+                        brickExtension.Initialize(registry: machineRegistry);
+                    }
+                });
         }
 
         // The reserved derived-face slot range (None-sourced placeholders, so a creation FACE appearing at a later
@@ -1400,5 +1410,13 @@ internal static class WorldBootComposition {
         }
 
         return runtime;
+    }
+
+    private sealed class DesktopWorldExtensionRegistry : IWorldExtensionRegistry {
+        public void RegisterStorage(WorldSiloStorageProvider provider) { }
+        public void RegisterRetirement(WorldSiloRetirementProvider provider) { }
+        public void RegisterAuthentication(WorldAuthenticationProvider provider) => WorldConnectionAuthentication.Register(provider);
+        public void RegisterOperation(WorldExtensionProviderType provider) => WorldServiceExtensions.Register(provider);
+        public void RegisterHealthCheck(string path, Func<bool, (string ContentType, string Body)> handler) { }
     }
 }

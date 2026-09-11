@@ -2,8 +2,11 @@
     <PropertyGroup>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
+        <!-- WorldExtensionLoader uses AssemblyLoadContext and reflection for dynamic extension discovery at runtime. -->
+        <IsAotCompatible>false</IsAotCompatible>
     </PropertyGroup>
     <ItemGroup>
+        <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Attestation\Puck.Attestation.csproj" />
         <ProjectReference Include="..\Puck.Audio\Puck.Audio.csproj" />
         <ProjectReference Include="..\Puck.Hosting\Puck.Hosting.csproj" />

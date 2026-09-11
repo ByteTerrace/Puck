@@ -36,15 +36,6 @@ public interface ICartridgeCompiler {
 }
 
 /// <summary>
-/// Marks an assembly as providing one or more gaming brick extensions for fast discovery.
-/// </summary>
-[AttributeUsage(validOn: AttributeTargets.Assembly, AllowMultiple = true)]
-public sealed class PuckExtensionAttribute(Type extensionType) : Attribute {
-    /// <summary>Gets the extension entry-point type.</summary>
-    public Type ExtensionType { get; } = extensionType;
-}
-
-/// <summary>
 /// Entry point for a gaming brick extension package, supporting both static DI composition
 /// and dynamic runtime loading without compile-time host coupling.
 /// </summary>

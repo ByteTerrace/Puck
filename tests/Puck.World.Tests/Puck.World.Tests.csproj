@@ -35,6 +35,7 @@
         <ProjectReference Include="..\..\src\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
         <ProjectReference Include="..\..\src\Puck.AdvancedGamingBrick.Forge\Puck.AdvancedGamingBrick.Forge.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Addons\Puck.World.Addons.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.Azure\Puck.World.Azure.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Client\Puck.World.Client.csproj" />
         <!-- The generic world.row.step field walker (public, no InternalsVisibleTo needed) — see
              WorldRowFieldStepperLawTests. -->

@@ -379,6 +379,7 @@
       "puck.world.server": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Audio": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",

@@ -134,22 +134,36 @@ public static class WorldSiloApplication {
     }
 
     private static void LoadDynamicExtensions(string? explicitDir) {
-        if (!string.IsNullOrWhiteSpace(value: explicitDir) && Directory.Exists(path: explicitDir)) {
-            _ = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: explicitDir, log: static msg => Console.WriteLine(value: msg));
+        var serverRegistry = new WorldSiloExtensions.Registry();
+        var machineRegistry = new WorldMachineExtensionRegistry();
 
+        void Scan(string dir) {
+            WorldExtensionLoader.LoadFromDirectory(
+                directoryPath: dir,
+                serverRegistry: serverRegistry,
+                onExtensionLoaded: ext => {
+                    if (ext is Puck.GamingBricks.Forge.IGamingBrickExtension brickExtension) {
+                        brickExtension.Initialize(registry: machineRegistry);
+                    }
+                },
+                log: static msg => Console.WriteLine(value: msg));
+        }
+
+        if (!string.IsNullOrWhiteSpace(value: explicitDir) && Directory.Exists(path: explicitDir)) {
+            Scan(dir: explicitDir);
             return;
         }
 
         var localDir = Path.Combine(Directory.GetCurrentDirectory(), "extensions");
 
         if (Directory.Exists(path: localDir)) {
-            _ = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: localDir, log: static msg => Console.WriteLine(value: msg));
+            Scan(dir: localDir);
         }
 
         var appDir = Path.Combine(AppContext.BaseDirectory, "extensions");
 
         if (Directory.Exists(path: appDir) && !string.Equals(a: localDir, b: appDir, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            _ = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: appDir, log: static msg => Console.WriteLine(value: msg));
+            Scan(dir: appDir);
         }
     }
 }

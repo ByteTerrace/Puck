@@ -61,14 +61,6 @@
           "Microsoft.Extensions.Primitives": "10.0.3"
         }
       },
-      "Microsoft.Extensions.DependencyInjection": {
-        "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "lXyK2O5GoYvfxW8eCFcD16JFbcoSTM1sJkAM0UHS1jZyl9NYMW64Tqm6OQFT0IDBjZi+xHt95/Zg+nxZhGFhZg==",
-        "dependencies": {
-          "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12"
-        }
-      },
       "Microsoft.Extensions.DependencyInjection.Abstractions": {
         "type": "Transitive",
         "resolved": "10.0.12",
@@ -191,22 +183,6 @@
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project"
       },
-      "ByteTerrace.Puck.AdvancedGamingBrick": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
-        }
-      },
-      "ByteTerrace.Puck.AdvancedGamingBrick.Forge": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.AdvancedGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )"
-        }
-      },
       "ByteTerrace.Puck.Assets": {
         "type": "Project",
         "dependencies": {
@@ -236,20 +212,6 @@
           "System.CommandLine": "[2.*, )"
         }
       },
-      "ByteTerrace.Puck.GamingBricks": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
-        }
-      },
-      "ByteTerrace.Puck.GamingBricks.Forge": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
-        }
-      },
       "ByteTerrace.Puck.Hosting": {
         "type": "Project",
         "dependencies": {
@@ -257,23 +219,6 @@
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Networking": "[0.1.0-alpha, )"
-        }
-      },
-      "ByteTerrace.Puck.HumbleGamingBrick": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
-        }
-      },
-      "ByteTerrace.Puck.HumbleGamingBrick.Forge": {
-        "type": "Project",
-        "dependencies": {
-          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Maths": {
@@ -378,6 +323,7 @@
       "puck.world.server": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Audio": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",

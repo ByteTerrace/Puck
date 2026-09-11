@@ -1718,6 +1718,7 @@
           "Microsoft.CodeAnalysis.Workspaces.MSBuild": "[5.*, )",
           "Puck.Launcher": "[1.0.0, )",
           "Puck.Mcp": "[1.0.0, )",
+          "Puck.World.Azure": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Machines": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )",
@@ -2020,6 +2021,7 @@
       "puck.world.server": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Audio": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
@@ -2035,19 +2037,14 @@
       "puck.world.silo": {
         "type": "Project",
         "dependencies": {
-          "ByteTerrace.Puck.AdvancedGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.AdvancedGamingBrick.Forge": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )",
-          "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
           "Microsoft.Extensions.Hosting": "[10.*, )",
           "Microsoft.Orleans.Server": "[10.*, )",
           "Puck.Actors": "[1.0.0, )",
           "Puck.Launcher": "[1.0.0, )",
           "Puck.Storage": "[1.0.0, )",
           "Puck.World.Addons": "[1.0.0, )",
-          "Puck.World.Azure": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Console": "[1.0.0, )",
           "Puck.World.Machines": "[1.0.0, )",

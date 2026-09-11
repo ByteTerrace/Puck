@@ -21,6 +21,11 @@ one System.CommandLine tree (`PuckRootCommand.cs`) every verb hangs off:
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
 | [`puck creation`](#puck-creation--code-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck registry`](#puck-registry--world-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
+| [`puck compile`](#the-puck-dsl-verbs) | compiles a `.puck` authoring document to canonical `puck.world.def.v1` JSON; `--validate` composes basis and imports first, `--bundle` inlines the import graph, `--watch` recompiles on change. |
+| [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source — a one-time import, not a synced mirror. |
+| [`puck fmt`](#the-puck-dsl-verbs) | formats `.puck` sources (distinct from `puck format`, which rewrites this repository's C#). |
+| [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
+| [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting. |
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck shaders`](#puck-shaders--shader-studies) | `shaders study`: compiles one Shadertoy-dialect study source to both backend compute kernels through `glslang`, `spirv-cross`, and `dxc`. |
@@ -734,6 +739,35 @@ descriptions, and this verb says so on stderr rather than failing. Exit
 codes: **0** wrote or matched, **1** `--check` found drift (reported per file
 — missing, orphan, or the path plus the first differing line), **2** usage
 error or missing repository root.
+
+---
+
+## The `.puck` DSL verbs
+
+Five verbs over `Puck.World.Transpiler`, the `.puck` authoring layer above the
+world documents. JSON stays the wire form and the checked-in source of every
+shipped world; `.puck` is how one is written and read by hand.
+
+```
+puck compile <source.puck> [-o <out.json>] [--validate] [--bundle] [--strict] [--watch]
+puck decompile <source.json> [-o <out.puck>]
+puck fmt <path> [--check]
+puck lint <path> [--strict]
+puck lsp
+```
+
+`--validate` composes the document's `basis` and `imports` graph **before**
+validating, rooted at the source file's own directory — the same order
+`PuckWorldLoader` uses at boot. Validating the uncomposed root would report every
+field the basis supplies as missing, so a document naming a basis only validates
+correctly this way. `puck lint` composes on the same terms.
+
+`decompile` writes beside its source when `-o` is omitted. A basis or import path
+inside the document resolves relative to the `.puck` file, so a round trip must
+write the `.puck` next to the JSON it came from.
+
+Exit codes: **0** success, **1** diagnostics at or above the failing severity
+(`--strict` promotes warnings), **2** usage error or unreadable input.
 
 ---
 

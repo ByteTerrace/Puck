@@ -1,24 +1,34 @@
 using Puck.Abstractions.Machines;
 using Puck.GamingBricks.Forge;
 using Puck.World.Machines;
+using Puck.World.Server;
 using Xunit;
 
 namespace Puck.World.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: <see cref="WorldMachineExtensionLoader"/> and <see cref="PuckExtensionLoadContext"/>
-/// discover and dynamically load machine extensions without compile-time host coupling, delegating shared
-/// contracts to the default load context and isolating private extension dependencies.
+/// CONTRACT UNDER TEST: <see cref="WorldExtensionLoader"/> and <see cref="PuckExtensionLoadContext"/>
+/// discover and dynamically load extensions (gaming brick emulators, cloud storage, retirement observers,
+/// authenticators, operation providers) without compile-time host coupling, delegating shared contracts
+/// to the default load context and isolating private extension dependencies.
 /// </summary>
 public sealed class DynamicExtensionLoaderLawTests {
-    private static string FindHgbForgeAssembly() {
+    private sealed class TestServerExtensionRegistry : IWorldExtensionRegistry {
+        public List<WorldSiloStorageProvider> StorageProviders { get; } = [];
+        public List<WorldSiloRetirementProvider> RetirementProviders { get; } = [];
+        public List<WorldAuthenticationProvider> AuthenticationProviders { get; } = [];
+        public List<WorldExtensionProviderType> OperationProviders { get; } = [];
+        public Dictionary<string, Func<bool, (string ContentType, string Body)>> HealthChecks { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public void RegisterStorage(WorldSiloStorageProvider provider) => StorageProviders.Add(provider);
+        public void RegisterRetirement(WorldSiloRetirementProvider provider) => RetirementProviders.Add(provider);
+        public void RegisterAuthentication(WorldAuthenticationProvider provider) => AuthenticationProviders.Add(provider);
+        public void RegisterOperation(WorldExtensionProviderType provider) => OperationProviders.Add(provider);
+        public void RegisterHealthCheck(string path, Func<bool, (string ContentType, string Body)> handler) => HealthChecks[path] = handler;
+    }
+
+    private static string FindRepositoryRoot() {
         var baseDir = AppContext.BaseDirectory;
-        var directPath = Path.Combine(baseDir, "Puck.HumbleGamingBrick.Forge.dll");
-
-        if (File.Exists(directPath)) {
-            return directPath;
-        }
-
         var directory = new DirectoryInfo(baseDir);
 
         while ((directory is not null) && !File.Exists(Path.Combine(directory.FullName, "Puck.slnx"))) {
@@ -26,19 +36,32 @@ public sealed class DynamicExtensionLoaderLawTests {
         }
 
         Assert.NotNull(directory);
+        return directory!.FullName;
+    }
 
-        var releaseBuild = Path.Combine(directory!.FullName, "src", "Puck.HumbleGamingBrick.Forge", "bin", "Release", "net10.0", "Puck.HumbleGamingBrick.Forge.dll");
+    private static string FindAssembly(string projectName, string assemblyFileName) {
+        var baseDir = AppContext.BaseDirectory;
+        var directPath = Path.Combine(baseDir, assemblyFileName);
+
+        if (File.Exists(directPath)) {
+            return directPath;
+        }
+
+        var repoRoot = FindRepositoryRoot();
+        var releaseBuild = Path.Combine(repoRoot, "src", projectName, "bin", "Release", "net10.0", assemblyFileName);
 
         if (File.Exists(releaseBuild)) {
             return releaseBuild;
         }
 
-        var debugBuild = Path.Combine(directory.FullName, "src", "Puck.HumbleGamingBrick.Forge", "bin", "Debug", "net10.0", "Puck.HumbleGamingBrick.Forge.dll");
-
-        Assert.True(File.Exists(debugBuild), $"Could not find Puck.HumbleGamingBrick.Forge.dll at '{releaseBuild}' or '{debugBuild}'.");
+        var debugBuild = Path.Combine(repoRoot, "src", projectName, "bin", "Debug", "net10.0", assemblyFileName);
+        Assert.True(File.Exists(debugBuild), $"Could not find {assemblyFileName} at '{releaseBuild}' or '{debugBuild}'.");
 
         return debugBuild;
     }
+
+    private static string FindHgbForgeAssembly() => FindAssembly("Puck.HumbleGamingBrick.Forge", "Puck.HumbleGamingBrick.Forge.dll");
+    private static string FindAzureAssembly() => FindAssembly("Puck.World.Azure", "Puck.World.Azure.dll");
 
     [Fact]
     public void LoadFromAssembly_LoadsAndRegistersExtension() {
@@ -50,6 +73,25 @@ public sealed class DynamicExtensionLoaderLawTests {
         Assert.True(WorldScreenMachineEngines.IsRegistered("gaming-brick"));
         Assert.True(WorldScreenMachineEngines.CompilesCartridges("gaming-brick"));
         Assert.True(WorldScreenMachineEngines.CartridgeCompilers.ContainsKey("gaming-brick"));
+    }
+
+    [Fact]
+    public void LoadFromAssembly_LoadsAndRegistersAzureExtension() {
+        var assemblyPath = FindAzureAssembly();
+        var registry = new TestServerExtensionRegistry();
+        var loaded = WorldExtensionLoader.LoadFromAssembly(assemblyPath: assemblyPath, serverRegistry: registry);
+
+        Assert.NotEmpty(loaded);
+        Assert.Contains(loaded, extension => string.Equals((extension as IWorldExtension)?.Name, "Azure", StringComparison.Ordinal));
+        Assert.Contains(registry.StorageProviders, p => p.Type == "azure.blob");
+        Assert.Contains(registry.RetirementProviders, p => p.Type == "azure.scheduled-events");
+        Assert.Contains(registry.AuthenticationProviders, p => p.Type == "azure.api-users");
+        Assert.Contains(registry.OperationProviders, p => p.Type == "azure.resource");
+        Assert.True(registry.HealthChecks.ContainsKey("/livez/azure"));
+
+        var (contentType, body) = registry.HealthChecks["/livez/azure"](true);
+        Assert.Equal("application/json", contentType);
+        Assert.Contains("Healthy", body);
     }
 
     [Fact]
@@ -79,6 +121,62 @@ public sealed class DynamicExtensionLoaderLawTests {
                 tempRoot.Delete(recursive: true);
             } catch (Exception) {
                 // On Windows, loaded assembly files remain memory-mapped and locked until ALC unload or process exit.
+            }
+        }
+    }
+
+    [Fact]
+    public void LoadFromDirectory_DiscoversBothAzureAndGamingBrickExtensions() {
+        var hgbAssemblyPath = FindHgbForgeAssembly();
+        var azureAssemblyPath = FindAzureAssembly();
+        var tempRoot = Directory.CreateTempSubdirectory(prefix: "puck-ext-unified-");
+
+        try {
+            // Setup HGB directory
+            var hgbDir = Path.Combine(tempRoot.FullName, "hgb");
+            Directory.CreateDirectory(hgbDir);
+            File.Copy(hgbAssemblyPath, Path.Combine(hgbDir, "Puck.HumbleGamingBrick.Forge.dll"), overwrite: true);
+
+            var hgbDeps = Path.ChangeExtension(hgbAssemblyPath, ".deps.json");
+            if (File.Exists(hgbDeps)) {
+                File.Copy(hgbDeps, Path.Combine(hgbDir, "Puck.HumbleGamingBrick.Forge.deps.json"), overwrite: true);
+            }
+
+            // Setup Azure directory
+            var azureDir = Path.Combine(tempRoot.FullName, "azure");
+            Directory.CreateDirectory(azureDir);
+            File.Copy(azureAssemblyPath, Path.Combine(azureDir, "Puck.World.Azure.dll"), overwrite: true);
+
+            var azureDeps = Path.ChangeExtension(azureAssemblyPath, ".deps.json");
+            if (File.Exists(azureDeps)) {
+                File.Copy(azureDeps, Path.Combine(azureDir, "Puck.World.Azure.deps.json"), overwrite: true);
+            }
+
+            var serverRegistry = new TestServerExtensionRegistry();
+            var machineExtensions = new List<IGamingBrickExtension>();
+            var machineRegistry = new WorldMachineExtensionRegistry();
+
+            var loaded = WorldExtensionLoader.LoadFromDirectory(
+                directoryPath: tempRoot.FullName,
+                serverRegistry: serverRegistry,
+                onExtensionLoaded: ext => {
+                    if (ext is IGamingBrickExtension brickExt) {
+                        brickExt.Initialize(registry: machineRegistry);
+                        machineExtensions.Add(brickExt);
+                    }
+                });
+
+            // Proves both Azure and HGB were loaded from the same unified extensions directory
+            Assert.NotEmpty(loaded);
+            Assert.NotEmpty(machineExtensions);
+            Assert.Contains(machineExtensions, ext => ext.Name == "HumbleGamingBrick");
+            Assert.Contains(serverRegistry.StorageProviders, p => p.Type == "azure.blob");
+            Assert.Contains(serverRegistry.RetirementProviders, p => p.Type == "azure.scheduled-events");
+        } finally {
+            try {
+                tempRoot.Delete(recursive: true);
+            } catch (Exception) {
+                // Ignore locked memory-mapped files on Windows
             }
         }
     }
@@ -118,6 +216,11 @@ public sealed class DynamicExtensionLoaderLawTests {
             var loadedForgeAssembly = context.LoadFromAssemblyName(assemblyName: hostForgeAssembly.GetName());
 
             Assert.Same(expected: hostForgeAssembly, actual: loadedForgeAssembly);
+
+            var hostServerAssembly = typeof(WorldServer).Assembly;
+            var loadedServerAssembly = context.LoadFromAssemblyName(assemblyName: hostServerAssembly.GetName());
+
+            Assert.Same(expected: hostServerAssembly, actual: loadedServerAssembly);
         } finally {
             context.Unload();
         }
