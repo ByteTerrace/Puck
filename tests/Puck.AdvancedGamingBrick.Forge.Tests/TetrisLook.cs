@@ -21,6 +21,15 @@ public sealed class TetrisLook {
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "look");
 
         var art = new System.Text.StringBuilder();
+        // PUCK_TETRIS_LOOK_PLAY presses through the title and the mode menu first, so the look is of a game rather than a screen.
+        if (Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK_PLAY") is "1") {
+            for (var screen = 0; screen < 2; ++screen) {
+                machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
+                machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+                machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
+            }
+        }
+
         machine.RunFrames(buttons: JoypadButtons.None, frames: int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK_FRAMES"), out var wanted) ? wanted : 200);
         var backdrop = machine.ReadPixel(x: 158, y: 142);
         for (var y = 0; y < 144; ++y) {

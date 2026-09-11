@@ -231,6 +231,19 @@
       ]
     },
     {
+      "name": "glyph-d",
+      "pixels": [
+        "11110000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "11110000",
+        "00000000"
+      ]
+    },
+    {
       "name": "glyph-e",
       "pixels": [
         "11111000",
@@ -240,6 +253,19 @@
         "10000000",
         "10000000",
         "11111000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-f",
+      "pixels": [
+        "11111000",
+        "10000000",
+        "10000000",
+        "11110000",
+        "10000000",
+        "10000000",
+        "10000000",
         "00000000"
       ]
     },
@@ -374,6 +400,32 @@
       ]
     },
     {
+      "name": "glyph-k",
+      "pixels": [
+        "10001000",
+        "10010000",
+        "10100000",
+        "11000000",
+        "10100000",
+        "10010000",
+        "10001000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-q",
+      "pixels": [
+        "01110000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "10101000",
+        "10010000",
+        "01101000",
+        "00000000"
+      ]
+    },
+    {
       "name": "glyph-t",
       "pixels": [
         "11111000",
@@ -396,6 +448,32 @@
         "10001000",
         "01010000",
         "00100000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-u",
+      "pixels": [
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-w",
+      "pixels": [
+        "10001000",
+        "10001000",
+        "10001000",
+        "10101000",
+        "10101000",
+        "11011000",
+        "10001000",
         "00000000"
       ]
     },
@@ -428,7 +506,6 @@
   ],
   "map": [
     0,
-    2,
     0,
     0,
     0,
@@ -439,7 +516,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -460,7 +536,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -471,12 +546,6 @@
     0,
     0,
     0,
-    2,
-    26,
-    15,
-    23,
-    25,
-    16,
     0,
     0,
     0,
@@ -492,7 +561,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -503,7 +571,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -524,7 +591,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -535,7 +601,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -556,7 +621,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -567,7 +631,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -588,7 +651,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -599,12 +661,6 @@
     0,
     0,
     0,
-    2,
-    20,
-    16,
-    28,
-    16,
-    20,
     0,
     0,
     0,
@@ -620,7 +676,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -631,7 +686,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -652,7 +706,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -663,7 +716,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -684,7 +736,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -695,7 +746,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -716,7 +766,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -727,12 +776,6 @@
     0,
     0,
     0,
-    2,
-    20,
-    18,
-    22,
-    16,
-    26,
     0,
     0,
     0,
@@ -748,7 +791,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -759,7 +801,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -780,7 +821,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -791,7 +831,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -812,7 +851,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -823,7 +861,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -844,7 +881,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -855,11 +891,6 @@
     0,
     0,
     0,
-    2,
-    22,
-    16,
-    29,
-    27,
     0,
     0,
     0,
@@ -876,7 +907,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -887,7 +917,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -908,7 +937,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -919,7 +947,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -940,7 +967,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -951,7 +977,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -972,7 +997,6 @@
     0,
     0,
     0,
-    2,
     0,
     0,
     0,
@@ -983,7 +1007,61 @@
     0,
     0,
     0,
-    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
     0,
     0,
     0,
@@ -1650,6 +1728,18 @@
       "initial": 0
     },
     {
+      "name": "dressed",
+      "initial": 0
+    },
+    {
+      "name": "wrow",
+      "initial": 0
+    },
+    {
+      "name": "wcol",
+      "initial": 0
+    },
+    {
       "name": "beat",
       "initial": 0
     },
@@ -1930,84 +2020,522 @@
     {
       "name": "titletext",
       "initial": [
-        42,
+        1,
+        4,
+        14,
+        1,
+        5,
+        36,
+        1,
+        6,
+        31,
+        1,
+        7,
+        17,
+        1,
+        8,
+        31,
+        1,
+        9,
+        17,
+        1,
+        10,
         27,
-        43,
-        16,
-        44,
+        1,
+        11,
         27,
-        45,
-        25,
-        46,
-        18,
-        47,
-        26,
-        102,
-        24,
-        103,
-        25,
-        104,
-        16,
-        105,
-        26,
-        106,
-        26,
-        112,
-        26,
-        113,
-        27,
-        114,
+        1,
+        12,
         13,
-        115,
+        1,
+        13,
+        15,
+        1,
+        14,
+        17,
+        3,
+        6,
+        26,
+        3,
+        7,
+        27,
+        3,
+        8,
+        17,
+        3,
+        9,
+        28,
+        3,
+        10,
+        17,
+        3,
+        11,
+        24,
+        3,
+        12,
+        31,
+        3,
+        13,
+        28,
+        6,
+        8,
+        26,
+        6,
+        9,
+        33,
+        6,
+        10,
+        15,
+        6,
+        11,
+        29,
+        8,
+        7,
+        31,
+        8,
+        8,
+        17,
+        8,
+        9,
+        31,
+        8,
+        10,
+        27,
+        8,
+        11,
+        20,
+        8,
+        12,
+        28,
+        11,
+        4,
+        13,
+        11,
+        6,
+        15,
+        11,
+        7,
+        13,
+        11,
+        8,
+        27,
+        11,
+        9,
+        31,
+        11,
+        10,
+        27,
+        11,
+        11,
+        20,
+        11,
+        12,
+        16,
+        11,
+        13,
+        21,
+        11,
+        14,
+        17,
+        12,
+        4,
+        23,
+        12,
+        5,
+        13,
+        12,
+        6,
+        16,
+        12,
+        7,
+        17,
+        12,
+        9,
         25,
-        116,
-        27
+        12,
+        10,
+        18,
+        12,
+        12,
+        16,
+        12,
+        13,
+        13,
+        12,
+        14,
+        31,
+        12,
+        15,
+        13,
+        15,
+        4,
+        26,
+        15,
+        5,
+        27,
+        15,
+        6,
+        17,
+        15,
+        7,
+        28,
+        15,
+        8,
+        28,
+        15,
+        10,
+        28,
+        15,
+        11,
+        31,
+        15,
+        12,
+        13,
+        15,
+        13,
+        27,
+        15,
+        14,
+        31,
+        17,
+        8,
+        14,
+        17,
+        9,
+        17,
+        17,
+        10,
+        28,
+        17,
+        11,
+        31
       ]
     },
     {
       "name": "menutext",
       "initial": [
-        62,
-        27,
-        63,
-        30,
-        64,
-        24,
-        65,
-        16,
-        67,
+        2,
+        4,
+        28,
+        2,
+        5,
+        17,
+        2,
+        6,
+        22,
+        2,
+        7,
+        17,
+        2,
+        8,
+        15,
+        2,
+        9,
+        31,
+        2,
+        11,
+        23,
+        2,
+        12,
+        25,
+        2,
         13,
-        92,
-        27,
-        93,
-        30,
-        94,
-        24,
-        95,
         16,
-        97,
-        14
+        2,
+        14,
+        17,
+        6,
+        7,
+        31,
+        6,
+        8,
+        36,
+        6,
+        9,
+        26,
+        6,
+        10,
+        17,
+        6,
+        12,
+        13,
+        9,
+        7,
+        31,
+        9,
+        8,
+        36,
+        9,
+        9,
+        26,
+        9,
+        10,
+        17,
+        9,
+        12,
+        14,
+        15,
+        3,
+        28,
+        15,
+        4,
+        31,
+        15,
+        5,
+        13,
+        15,
+        6,
+        27,
+        15,
+        7,
+        31,
+        15,
+        9,
+        31,
+        15,
+        10,
+        25,
+        15,
+        12,
+        26,
+        15,
+        13,
+        22,
+        15,
+        14,
+        13,
+        15,
+        15,
+        36
       ]
     },
     {
       "name": "overtext",
       "initial": [
-        73,
-        19,
-        74,
-        13,
-        75,
+        7,
+        5,
         21,
-        76,
-        16,
-        83,
+        7,
+        6,
+        13,
+        7,
+        7,
         23,
-        84,
+        7,
+        8,
+        17,
+        7,
+        10,
+        25,
+        7,
+        11,
+        32,
+        7,
+        12,
+        17,
+        7,
+        13,
+        27,
+        11,
+        4,
+        26,
+        11,
+        5,
+        27,
+        11,
+        6,
+        17,
+        11,
+        7,
         28,
-        85,
+        11,
+        8,
+        28,
+        11,
+        10,
+        28,
+        11,
+        11,
+        31,
+        11,
+        12,
+        13,
+        11,
+        13,
+        27,
+        11,
+        14,
+        31
+      ]
+    },
+    {
+      "name": "paneltext",
+      "initial": [
+        1,
+        13,
+        28,
+        1,
+        14,
+        15,
+        1,
+        15,
+        25,
+        1,
         16,
-        86,
-        25
+        27,
+        1,
+        17,
+        17,
+        5,
+        13,
+        22,
+        5,
+        14,
+        17,
+        5,
+        15,
+        32,
+        5,
+        16,
+        17,
+        5,
+        17,
+        22,
+        9,
+        13,
+        22,
+        9,
+        14,
+        20,
+        9,
+        15,
+        24,
+        9,
+        16,
+        17,
+        9,
+        17,
+        28,
+        13,
+        13,
+        24,
+        13,
+        14,
+        17,
+        13,
+        15,
+        35,
+        13,
+        16,
+        31,
+        0,
+        1,
+        2,
+        1,
+        1,
+        2,
+        2,
+        1,
+        2,
+        3,
+        1,
+        2,
+        4,
+        1,
+        2,
+        5,
+        1,
+        2,
+        6,
+        1,
+        2,
+        7,
+        1,
+        2,
+        8,
+        1,
+        2,
+        9,
+        1,
+        2,
+        10,
+        1,
+        2,
+        11,
+        1,
+        2,
+        12,
+        1,
+        2,
+        13,
+        1,
+        2,
+        14,
+        1,
+        2,
+        15,
+        1,
+        2,
+        16,
+        1,
+        2,
+        17,
+        1,
+        2,
+        0,
+        12,
+        2,
+        1,
+        12,
+        2,
+        2,
+        12,
+        2,
+        3,
+        12,
+        2,
+        4,
+        12,
+        2,
+        5,
+        12,
+        2,
+        6,
+        12,
+        2,
+        7,
+        12,
+        2,
+        8,
+        12,
+        2,
+        9,
+        12,
+        2,
+        10,
+        12,
+        2,
+        11,
+        12,
+        2,
+        12,
+        12,
+        2,
+        13,
+        12,
+        2,
+        14,
+        12,
+        2,
+        15,
+        12,
+        2,
+        16,
+        12,
+        2,
+        17,
+        12,
+        2
       ]
     },
     {
@@ -5754,6 +6282,16 @@
               }
             },
             {
+              "kind": "set",
+              "target": {
+                "variable": "tcur"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
               "kind": "stop"
             }
           ]
@@ -6132,72 +6670,15 @@
             {
               "kind": "compare",
               "left": {
-                "variable": "pcur"
+                "variable": "ph"
               },
               "comparison": "lt",
               "right": {
-                "constant": 5
+                "constant": 8
               }
             }
           ],
           "then": [
-            {
-              "kind": "set",
-              "target": {
-                "variable": "dv"
-              },
-              "operation": "set",
-              "value": {
-                "array": "score",
-                "index": {
-                  "variable": "pcur"
-                }
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "variable": "c2"
-              },
-              "operation": "set",
-              "value": {
-                "variable": "pcur"
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "variable": "c2"
-              },
-              "operation": "add",
-              "value": {
-                "constant": 13
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "variable": "dv"
-              },
-              "operation": "add",
-              "value": {
-                "constant": 3
-              }
-            },
-            {
-              "kind": "map",
-              "row": {
-                "constant": 2
-              },
-              "column": {
-                "variable": "c2"
-              },
-              "tile": {
-                "variable": "dv"
-              }
-            }
-          ],
-          "else": [
             {
               "kind": "if",
               "when": [
@@ -6206,7 +6687,7 @@
                   "left": {
                     "variable": "pcur"
                   },
-                  "comparison": "eq",
+                  "comparison": "lt",
                   "right": {
                     "constant": 5
                   }
@@ -6214,15 +6695,58 @@
               ],
               "then": [
                 {
+                  "kind": "set",
+                  "target": {
+                    "variable": "dv"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "array": "score",
+                    "index": {
+                      "variable": "pcur"
+                    }
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "c2"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "variable": "pcur"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "c2"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "constant": 13
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "dv"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "constant": 3
+                  }
+                },
+                {
                   "kind": "map",
                   "row": {
                     "constant": 2
                   },
                   "column": {
-                    "constant": 18
+                    "variable": "c2"
                   },
                   "tile": {
-                    "constant": 3
+                    "variable": "dv"
                   }
                 }
               ],
@@ -6237,51 +6761,21 @@
                       },
                       "comparison": "eq",
                       "right": {
-                        "constant": 6
+                        "constant": 5
                       }
                     }
                   ],
                   "then": [
                     {
-                      "kind": "set",
-                      "target": {
-                        "variable": "dv"
-                      },
-                      "operation": "set",
-                      "value": {
-                        "variable": "level"
-                      }
-                    },
-                    {
-                      "kind": "set",
-                      "target": {
-                        "variable": "dv"
-                      },
-                      "operation": "div",
-                      "value": {
-                        "constant": 10
-                      }
-                    },
-                    {
-                      "kind": "set",
-                      "target": {
-                        "variable": "dv"
-                      },
-                      "operation": "add",
-                      "value": {
-                        "constant": 3
-                      }
-                    },
-                    {
                       "kind": "map",
                       "row": {
-                        "constant": 6
+                        "constant": 2
                       },
                       "column": {
-                        "constant": 13
+                        "constant": 18
                       },
                       "tile": {
-                        "variable": "dv"
+                        "constant": 3
                       }
                     }
                   ],
@@ -6296,7 +6790,7 @@
                           },
                           "comparison": "eq",
                           "right": {
-                            "constant": 7
+                            "constant": 6
                           }
                         }
                       ],
@@ -6316,7 +6810,7 @@
                           "target": {
                             "variable": "dv"
                           },
-                          "operation": "mod",
+                          "operation": "div",
                           "value": {
                             "constant": 10
                           }
@@ -6337,7 +6831,7 @@
                             "constant": 6
                           },
                           "column": {
-                            "constant": 14
+                            "constant": 13
                           },
                           "tile": {
                             "variable": "dv"
@@ -6355,7 +6849,7 @@
                               },
                               "comparison": "eq",
                               "right": {
-                                "constant": 8
+                                "constant": 7
                               }
                             }
                           ],
@@ -6367,7 +6861,7 @@
                               },
                               "operation": "set",
                               "value": {
-                                "variable": "lines"
+                                "variable": "level"
                               }
                             },
                             {
@@ -6375,9 +6869,9 @@
                               "target": {
                                 "variable": "dv"
                               },
-                              "operation": "div",
+                              "operation": "mod",
                               "value": {
-                                "constant": 100
+                                "constant": 10
                               }
                             },
                             {
@@ -6393,10 +6887,10 @@
                             {
                               "kind": "map",
                               "row": {
-                                "constant": 10
+                                "constant": 6
                               },
                               "column": {
-                                "constant": 13
+                                "constant": 14
                               },
                               "tile": {
                                 "variable": "dv"
@@ -6414,7 +6908,7 @@
                                   },
                                   "comparison": "eq",
                                   "right": {
-                                    "constant": 9
+                                    "constant": 8
                                   }
                                 }
                               ],
@@ -6436,17 +6930,7 @@
                                   },
                                   "operation": "div",
                                   "value": {
-                                    "constant": 10
-                                  }
-                                },
-                                {
-                                  "kind": "set",
-                                  "target": {
-                                    "variable": "dv"
-                                  },
-                                  "operation": "mod",
-                                  "value": {
-                                    "constant": 10
+                                    "constant": 100
                                   }
                                 },
                                 {
@@ -6465,7 +6949,7 @@
                                     "constant": 10
                                   },
                                   "column": {
-                                    "constant": 14
+                                    "constant": 13
                                   },
                                   "tile": {
                                     "variable": "dv"
@@ -6483,7 +6967,7 @@
                                       },
                                       "comparison": "eq",
                                       "right": {
-                                        "constant": 10
+                                        "constant": 9
                                       }
                                     }
                                   ],
@@ -6496,6 +6980,16 @@
                                       "operation": "set",
                                       "value": {
                                         "variable": "lines"
+                                      }
+                                    },
+                                    {
+                                      "kind": "set",
+                                      "target": {
+                                        "variable": "dv"
+                                      },
+                                      "operation": "div",
+                                      "value": {
+                                        "constant": 10
                                       }
                                     },
                                     {
@@ -6524,11 +7018,72 @@
                                         "constant": 10
                                       },
                                       "column": {
-                                        "constant": 15
+                                        "constant": 14
                                       },
                                       "tile": {
                                         "variable": "dv"
                                       }
+                                    }
+                                  ],
+                                  "else": [
+                                    {
+                                      "kind": "if",
+                                      "when": [
+                                        {
+                                          "kind": "compare",
+                                          "left": {
+                                            "variable": "pcur"
+                                          },
+                                          "comparison": "eq",
+                                          "right": {
+                                            "constant": 10
+                                          }
+                                        }
+                                      ],
+                                      "then": [
+                                        {
+                                          "kind": "set",
+                                          "target": {
+                                            "variable": "dv"
+                                          },
+                                          "operation": "set",
+                                          "value": {
+                                            "variable": "lines"
+                                          }
+                                        },
+                                        {
+                                          "kind": "set",
+                                          "target": {
+                                            "variable": "dv"
+                                          },
+                                          "operation": "mod",
+                                          "value": {
+                                            "constant": 10
+                                          }
+                                        },
+                                        {
+                                          "kind": "set",
+                                          "target": {
+                                            "variable": "dv"
+                                          },
+                                          "operation": "add",
+                                          "value": {
+                                            "constant": 3
+                                          }
+                                        },
+                                        {
+                                          "kind": "map",
+                                          "row": {
+                                            "constant": 10
+                                          },
+                                          "column": {
+                                            "constant": 15
+                                          },
+                                          "tile": {
+                                            "variable": "dv"
+                                          }
+                                        }
+                                      ]
                                     }
                                   ]
                                 }
@@ -6621,7 +7176,7 @@
                       },
                       "comparison": "ge",
                       "right": {
-                        "constant": 32
+                        "constant": 189
                       }
                     }
                   ],
@@ -6634,7 +7189,7 @@
                 {
                   "kind": "set",
                   "target": {
-                    "variable": "pos"
+                    "variable": "cr"
                   },
                   "operation": "set",
                   "value": {
@@ -6647,31 +7202,11 @@
                 {
                   "kind": "set",
                   "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "set",
-                  "value": {
-                    "variable": "pos"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "div",
-                  "value": {
-                    "constant": 10
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
+                    "variable": "tcur"
                   },
                   "operation": "add",
                   "value": {
-                    "constant": 0
+                    "constant": 1
                   }
                 },
                 {
@@ -6681,27 +7216,10 @@
                   },
                   "operation": "set",
                   "value": {
-                    "variable": "pos"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "mod",
-                  "value": {
-                    "constant": 10
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "constant": 2
+                    "array": "titletext",
+                    "index": {
+                      "variable": "tcur"
+                    }
                   }
                 },
                 {
@@ -6761,7 +7279,7 @@
                   },
                   "comparison": "ge",
                   "right": {
-                    "constant": 32
+                    "constant": 189
                   }
                 }
               ],
@@ -6814,6 +7332,16 @@
                   "kind": "set",
                   "target": {
                     "variable": "painted"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 0
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "tcur"
                   },
                   "operation": "set",
                   "value": {
@@ -6891,7 +7419,7 @@
                       },
                       "comparison": "ge",
                       "right": {
-                        "constant": 20
+                        "constant": 93
                       }
                     }
                   ],
@@ -6904,7 +7432,7 @@
                 {
                   "kind": "set",
                   "target": {
-                    "variable": "pos"
+                    "variable": "cr"
                   },
                   "operation": "set",
                   "value": {
@@ -6917,31 +7445,11 @@
                 {
                   "kind": "set",
                   "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "set",
-                  "value": {
-                    "variable": "pos"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "div",
-                  "value": {
-                    "constant": 10
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
+                    "variable": "tcur"
                   },
                   "operation": "add",
                   "value": {
-                    "constant": 0
+                    "constant": 1
                   }
                 },
                 {
@@ -6951,27 +7459,10 @@
                   },
                   "operation": "set",
                   "value": {
-                    "variable": "pos"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "mod",
-                  "value": {
-                    "constant": 10
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "constant": 2
+                    "array": "menutext",
+                    "index": {
+                      "variable": "tcur"
+                    }
                   }
                 },
                 {
@@ -7031,7 +7522,7 @@
                   },
                   "comparison": "ge",
                   "right": {
-                    "constant": 20
+                    "constant": 93
                   }
                 }
               ],
@@ -7128,6 +7619,16 @@
                   "kind": "set",
                   "target": {
                     "variable": "painted"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 0
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "tcur"
                   },
                   "operation": "set",
                   "value": {
@@ -7269,11 +7770,11 @@
                 {
                   "kind": "compare",
                   "left": {
-                    "variable": "rcur"
+                    "variable": "wrow"
                   },
                   "comparison": "ge",
                   "right": {
-                    "constant": 180
+                    "constant": 18
                   }
                 }
               ],
@@ -7284,85 +7785,12 @@
               ]
             },
             {
-              "kind": "set",
-              "target": {
-                "variable": "cr"
-              },
-              "operation": "set",
-              "value": {
-                "variable": "rcur"
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "variable": "cr"
-              },
-              "operation": "div",
-              "value": {
-                "constant": 10
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "variable": "cr"
-              },
-              "operation": "add",
-              "value": {
-                "constant": 0
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "variable": "cc"
-              },
-              "operation": "set",
-              "value": {
-                "variable": "rcur"
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "variable": "cc"
-              },
-              "operation": "mod",
-              "value": {
-                "constant": 10
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "variable": "cc"
-              },
-              "operation": "add",
-              "value": {
-                "constant": 2
-              }
-            },
-            {
-              "kind": "set",
-              "target": {
-                "array": "field",
-                "index": {
-                  "variable": "rcur"
-                }
-              },
-              "operation": "set",
-              "value": {
-                "constant": 0
-              }
-            },
-            {
               "kind": "map",
               "row": {
-                "variable": "cr"
+                "variable": "wrow"
               },
               "column": {
-                "variable": "cc"
+                "variable": "wcol"
               },
               "tile": {
                 "constant": 0
@@ -7371,12 +7799,49 @@
             {
               "kind": "set",
               "target": {
-                "variable": "rcur"
+                "variable": "wcol"
               },
               "operation": "add",
               "value": {
                 "constant": 1
               }
+            },
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "wcol"
+                  },
+                  "comparison": "ge",
+                  "right": {
+                    "constant": 20
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "wcol"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 0
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "wrow"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "constant": 1
+                  }
+                }
+              ]
             }
           ]
         },
@@ -7386,11 +7851,11 @@
             {
               "kind": "compare",
               "left": {
-                "variable": "rcur"
+                "variable": "wrow"
               },
               "comparison": "ge",
               "right": {
-                "constant": 180
+                "constant": 18
               }
             }
           ],
@@ -7398,7 +7863,17 @@
             {
               "kind": "set",
               "target": {
-                "variable": "rcur"
+                "variable": "wrow"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "wcol"
               },
               "operation": "set",
               "value": {
@@ -7434,6 +7909,73 @@
         }
       ],
       "body": [
+        {
+          "kind": "repeat",
+          "count": 18,
+          "index": "cr",
+          "body": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "base"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "cr"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "base"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 10
+              }
+            },
+            {
+              "kind": "repeat",
+              "count": 10,
+              "index": "cc",
+              "body": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "fi"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "variable": "base"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "fi"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "variable": "cc"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "array": "field",
+                    "index": {
+                      "variable": "fi"
+                    }
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 0
+                  }
+                }
+              ]
+            }
+          ]
+        },
         {
           "kind": "set",
           "target": {
@@ -7673,6 +8215,53 @@
           ]
         },
         {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "gtype"
+              },
+              "comparison": "eq",
+              "right": {
+                "constant": 0
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "play",
+              "sound": "theme-a"
+            }
+          ],
+          "else": [
+            {
+              "kind": "play",
+              "sound": "theme-b"
+            }
+          ]
+        },
+        {
+          "kind": "set",
+          "target": {
+            "variable": "tcur"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        },
+        {
+          "kind": "set",
+          "target": {
+            "variable": "dressed"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        },
+        {
           "kind": "set",
           "target": {
             "variable": "rcur"
@@ -7689,8 +8278,187 @@
           },
           "operation": "set",
           "value": {
-            "constant": 5
+            "constant": 15
           }
+        }
+      ]
+    },
+    {
+      "name": "dress",
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 15
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "repeat",
+          "count": 9,
+          "index": "k",
+          "body": [
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "tcur"
+                  },
+                  "comparison": "ge",
+                  "right": {
+                    "constant": 165
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "break"
+                }
+              ]
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "set",
+              "value": {
+                "array": "paneltext",
+                "index": {
+                  "variable": "tcur"
+                }
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "tcur"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "set",
+              "value": {
+                "array": "paneltext",
+                "index": {
+                  "variable": "tcur"
+                }
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "tcur"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "dv"
+              },
+              "operation": "set",
+              "value": {
+                "array": "paneltext",
+                "index": {
+                  "variable": "tcur"
+                }
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "tcur"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "map",
+              "row": {
+                "variable": "cr"
+              },
+              "column": {
+                "variable": "cc"
+              },
+              "tile": {
+                "variable": "dv"
+              }
+            }
+          ]
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "tcur"
+              },
+              "comparison": "ge",
+              "right": {
+                "constant": 165
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "dressed"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 1
+              }
+            }
+          ]
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "dressed"
+              },
+              "comparison": "ne",
+              "right": {
+                "constant": 0
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "nph"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 5
+              }
+            }
+          ]
         }
       ]
     },
@@ -7898,7 +8666,7 @@
                       },
                       "comparison": "ge",
                       "right": {
-                        "constant": 16
+                        "constant": 54
                       }
                     }
                   ],
@@ -7911,7 +8679,7 @@
                 {
                   "kind": "set",
                   "target": {
-                    "variable": "pos"
+                    "variable": "cr"
                   },
                   "operation": "set",
                   "value": {
@@ -7924,31 +8692,11 @@
                 {
                   "kind": "set",
                   "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "set",
-                  "value": {
-                    "variable": "pos"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
-                  },
-                  "operation": "div",
-                  "value": {
-                    "constant": 10
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cr"
+                    "variable": "tcur"
                   },
                   "operation": "add",
                   "value": {
-                    "constant": 0
+                    "constant": 1
                   }
                 },
                 {
@@ -7958,27 +8706,10 @@
                   },
                   "operation": "set",
                   "value": {
-                    "variable": "pos"
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "mod",
-                  "value": {
-                    "constant": 10
-                  }
-                },
-                {
-                  "kind": "set",
-                  "target": {
-                    "variable": "cc"
-                  },
-                  "operation": "add",
-                  "value": {
-                    "constant": 2
+                    "array": "overtext",
+                    "index": {
+                      "variable": "tcur"
+                    }
                   }
                 },
                 {
@@ -8038,7 +8769,7 @@
                   },
                   "comparison": "ge",
                   "right": {
-                    "constant": 16
+                    "constant": 54
                   }
                 }
               ],
@@ -8081,6 +8812,16 @@
                   "kind": "set",
                   "target": {
                     "variable": "painted"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 0
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "tcur"
                   },
                   "operation": "set",
                   "value": {
@@ -8228,6 +8969,16 @@
               "kind": "set",
               "target": {
                 "variable": "painted"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "tcur"
               },
               "operation": "set",
               "value": {
@@ -8510,13 +9261,13 @@
               },
               "operation": "add",
               "value": {
-                "constant": 4
+                "constant": 11
               }
             },
             {
               "kind": "map",
               "row": {
-                "constant": 15
+                "constant": 17
               },
               "column": {
                 "variable": "cc"
@@ -8530,10 +9281,10 @@
             {
               "kind": "map",
               "row": {
-                "constant": 15
+                "constant": 17
               },
               "column": {
-                "constant": 9
+                "constant": 16
               },
               "tile": {
                 "constant": 3

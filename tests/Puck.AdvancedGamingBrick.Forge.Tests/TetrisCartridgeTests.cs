@@ -106,19 +106,19 @@ public sealed class TetrisCartridgeTests {
         var phase = (ushort)result.Variables["ph"];
 
         // Boot lands on the title, not in a game.
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 20);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
         Assert.Equal(expected: 8, actual: machine.Read(address: phase));
 
         // Start leaves it, and the well is wiped on the way to the menu.
         machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
         Assert.Equal(expected: 10, actual: machine.Read(address: phase));
 
         // The chooser moves between the two modes and the second one is remembered.
         machine.RunFrames(buttons: JoypadButtons.Down, frames: 4);
         machine.RunFrames(buttons: JoypadButtons.None, frames: 4);
         machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 60);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 140);
         Assert.Equal(expected: 1, actual: machine.Read(address: (ushort)result.Variables["gtype"]));
         Assert.Equal(expected: 0, actual: machine.Read(address: phase));
 
@@ -194,12 +194,12 @@ public sealed class TetrisCartridgeTests {
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-ending");
 
         // Into the second mode: down on the menu picks it.
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 20);
-        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
         machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
         machine.RunFrames(buttons: JoypadButtons.Down, frames: 4);
         machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 60);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 140);
         Assert.Equal(expected: 1, actual: machine.Read(address: (ushort)result.Variables["gtype"]));
 
         // Reaching the target is what wins it, so the count is set to the target under the running game.
@@ -212,13 +212,43 @@ public sealed class TetrisCartridgeTests {
         Assert.Equal(expected: 8, actual: machine.Read(address: (ushort)result.Variables["ph"]));
     }
 
+    [Fact]
+    public void EachScreenActuallyPutsItsWordsOnTheWell() {
+        // The painter walks a cursor; a screen that inherits a spent cursor paints nothing and looks empty, which is
+        // indistinguishable from a screen that has no words. Counting ink is what tells them apart.
+        var result = new HgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-paint");
+
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 50);
+        var title = WellInk(machine: machine);
+        Assert.True(condition: title > 40, userMessage: $"title drew {title} lit pixels");
+
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 130);
+        var menu = WellInk(machine: machine);
+        Assert.True(condition: menu > 40, userMessage: $"menu drew {menu} lit pixels");
+    }
+
+    // Lit pixels inside the well, which is where every screen puts its words.
+    private static int WellInk(VerifyMachineDriver machine) {
+        var backdrop = machine.ReadPixel(x: 158, y: 142);
+        var lit = 0;
+        for (var y = 0; y < 144; ++y) {
+            for (var x = 16; x < 96; ++x) {
+                if (machine.ReadPixel(x: x, y: y) != backdrop) { ++lit; }
+            }
+        }
+
+        return lit;
+    }
+
     // Boot lands on the title, so a test that wants a game presses through the title and the mode menu. The waits
     // cover a screen painting itself and the well being wiped between them, both of which run a band a frame.
     private static void StartGame(VerifyMachineDriver machine) {
         for (var screen = 0; screen < 2; ++screen) {
-            machine.RunFrames(buttons: JoypadButtons.None, frames: 20);
-            machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
             machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
+            machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+            machine.RunFrames(buttons: JoypadButtons.None, frames: 110);
         }
     }
 
