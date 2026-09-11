@@ -29,11 +29,13 @@ public sealed class TetrisCartridgeTests {
         var result = new HgbCartridgeCompiler().Compile(document: Document());
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-cadence");
 
+        StartGame(machine: machine);
+        var started = machine.Read(address: (ushort)result.Variables["ticks"]);
         const int Frames = 240;
         machine.RunFrames(buttons: JoypadButtons.None, frames: Frames);
 
         // The counter is a byte, so it wraps; the comparison is against the run's own wrapped expectation.
-        var expected = (byte)Frames;
+        var expected = (byte)(started + Frames);
         var ticks = machine.Read(address: (ushort)result.Variables["ticks"]);
         Assert.InRange(actual: ticks, low: (byte)(expected - 4), high: expected);
     }
@@ -43,7 +45,7 @@ public sealed class TetrisCartridgeTests {
         var result = new HgbCartridgeCompiler().Compile(document: Document());
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris");
 
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 4);
+        StartGame(machine: machine);
         Assert.Equal(expected: 0, actual: machine.Read(address: (ushort)result.Variables["ph"]));
         var first = machine.Read(address: (ushort)result.Variables["py"]);
 
@@ -56,6 +58,8 @@ public sealed class TetrisCartridgeTests {
     public void APieceComesToRestOnTheFloorAndAnotherFollowsIt() {
         var result = new HgbCartridgeCompiler().Compile(document: Document());
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-rest");
+
+        StartGame(machine: machine);
 
         // Long enough for the first piece to reach the floor, settle, and the next to take the field.
         machine.RunFrames(buttons: JoypadButtons.None, frames: 60 * 20);
@@ -73,18 +77,15 @@ public sealed class TetrisCartridgeTests {
     [Fact]
     public void ACompletedRowClearsAndCountsTowardTheLineTotal() {
         // The first piece out of the generator is the bar, spawning across columns three to six. Seeding every other
-        // column of the floor means it completes that row on landing and nothing else can.
-        var document = Document();
-        var field = document.Arrays.First(predicate: static array => array.Name == "field");
-        var seeded = (int[])field.Initial.Clone();
+        // column of the floor once the game is running means it completes that row on landing and nothing else can.
+        // The seed goes in after the start sequence because starting a game wipes the well, as it should.
+        var result = new HgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-clear");
+        StartGame(machine: machine);
         foreach (var column in new[] { 0, 1, 2, 7, 8, 9 }) {
-            seeded[(17 * 10) + column] = 1;
+            machine.Write(address: (ushort)(result.Arrays["field"] + (17 * 10) + (uint)column), value: 1);
         }
 
-        var result = new HgbCartridgeCompiler().Compile(document: document with {
-            Arrays = [.. document.Arrays.Select(selector: array => array.Name == "field" ? array with { Initial = seeded } : array)],
-        });
-        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-clear");
         machine.RunFrames(buttons: JoypadButtons.None, frames: 60 * 25);
 
         Assert.Equal(expected: 1, actual: machine.Read(address: (ushort)result.Variables["lines"]));
@@ -96,6 +97,67 @@ public sealed class TetrisCartridgeTests {
         }
 
         Assert.True(condition: floor < 10, userMessage: $"{floor} cells still on the floor");
+    }
+
+    [Fact]
+    public void TheCartridgeOpensOnItsTitleAndWalksThroughTheModeMenuIntoAGame() {
+        var result = new HgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-screens");
+        var phase = (ushort)result.Variables["ph"];
+
+        // Boot lands on the title, not in a game.
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 20);
+        Assert.Equal(expected: 8, actual: machine.Read(address: phase));
+
+        // Start leaves it, and the well is wiped on the way to the menu.
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
+        Assert.Equal(expected: 10, actual: machine.Read(address: phase));
+
+        // The chooser moves between the two modes and the second one is remembered.
+        machine.RunFrames(buttons: JoypadButtons.Down, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 60);
+        Assert.Equal(expected: 1, actual: machine.Read(address: (ushort)result.Variables["gtype"]));
+        Assert.Equal(expected: 0, actual: machine.Read(address: phase));
+
+        // That mode starts under rubble, which is the whole of its problem.
+        var settled = 0;
+        for (var index = 0; index < 180; ++index) {
+            if (machine.Read(address: (ushort)(result.Arrays["field"] + (uint)index)) != 0) { ++settled; }
+        }
+
+        Assert.InRange(actual: settled, low: 9 * 5, high: 9 * 5 + 4);
+    }
+
+    [Fact]
+    public void AStackThatReachesTheCeilingEndsTheGame() {
+        var result = new HgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-over");
+        StartGame(machine: machine);
+
+        // Fill the ceiling but leave a column short, so no row is complete: a full well would clear instead of
+        // topping out, which is the opposite of what this asks.
+        for (var row = 0; row < 6; ++row) {
+            for (var column = 0; column < 9; ++column) {
+                machine.Write(address: (ushort)(result.Arrays["field"] + (uint)((row * 10) + column)), value: 1);
+            }
+        }
+
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 60 * 6);
+        Assert.Equal(expected: 1, actual: machine.Read(address: (ushort)result.Variables["over"]));
+        Assert.Equal(expected: 9, actual: machine.Read(address: (ushort)result.Variables["ph"]));
+    }
+
+    // Boot lands on the title, so a test that wants a game presses through the title and the mode menu. The waits
+    // cover a screen painting itself and the well being wiped between them, both of which run a band a frame.
+    private static void StartGame(VerifyMachineDriver machine) {
+        for (var screen = 0; screen < 2; ++screen) {
+            machine.RunFrames(buttons: JoypadButtons.None, frames: 20);
+            machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+            machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
+        }
     }
 
     private static CartridgeDocument Document() {

@@ -26,6 +26,11 @@ public sealed class VerifyMachineDriver : IDisposable {
     }
 
     public byte Read(ushort address) => m_bus.ReadByte(address: address);
+    /// <summary>Writes one work-memory byte, for setting up a position a cartridge would take many inputs to reach.</summary>
+    /// <param name="address">The bus address.</param>
+    /// <param name="value">The byte to write.</param>
+    /// <remarks>The cartridge cannot tell this from its own store, so what runs afterward is the cartridge's own code.</remarks>
+    public void Write(ushort address, byte value) => m_bus.WriteByte(address: address, value: value);
     /// <summary>Reads a completed framebuffer pixel without advancing the machine.</summary>
     /// <param name="x">The pixel column, 0..159.</param>
     /// <param name="y">The pixel row, 0..143.</param>

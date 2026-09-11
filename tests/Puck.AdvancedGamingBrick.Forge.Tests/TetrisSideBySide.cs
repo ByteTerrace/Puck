@@ -24,14 +24,17 @@ namespace Puck.AdvancedGamingBrick.Forge.Tests;
 public sealed class TetrisSideBySide {
     private const int Height = 144;
     private const int Width = 160;
+    private const string DefaultReference = "roms/tetris-world-rev1.gb";
 
     [Fact]
     public void RenderBothForComparison() {
-        if (Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_REFERENCE") is not { Length: > 0 } reference) {
+        // A relative path is read against the checkout, not the test binary's directory; roms/ is ignored by git, so a
+        // licensed cartridge can sit in the tree without ever being committed.
+        var named = Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_REFERENCE") ?? DefaultReference;
+        var reference = Path.IsPathRooted(path: named) ? named : Path.Combine(path1: Checkout(), path2: named);
+        if (!File.Exists(path: reference)) {
             return;
         }
-
-        Assert.True(condition: File.Exists(path: reference), userMessage: $"No cartridge at {reference}.");
 
         var authored = new HgbCartridgeCompiler().Compile(document: Authored());
         using var ours = new VerifyMachineDriver(rom: authored.Rom, label: "authored");
@@ -51,15 +54,21 @@ public sealed class TetrisSideBySide {
         File.WriteAllText(path: destination, contents: page.ToString());
     }
 
-    private static (string Caption, int Frames, JoypadButtons Buttons)[] Script() => [
-        ("boot", 120, JoypadButtons.None),
-        ("start pressed", 8, JoypadButtons.Start),
-        ("settling", 60, JoypadButtons.None),
-        ("start pressed", 8, JoypadButtons.Start),
-        ("playing", 180, JoypadButtons.None),
-        ("holding left", 40, JoypadButtons.Left),
-        ("playing on", 240, JoypadButtons.None),
-    ];
+    // The reference walks a logo and three menus before it deals a piece, so the run-in presses start several times
+    // with room to settle between. The authored cartridge ignores the presses it has no screen for.
+    private static (string Caption, int Frames, JoypadButtons Buttons)[] Script() {
+        var script = new List<(string, int, JoypadButtons)> { ("boot", 300, JoypadButtons.None) };
+        for (var press = 0; press < 8; ++press) {
+            script.Add(item: ($"start {press}", 6, JoypadButtons.Start));
+            script.Add(item: ($"settling {press}", 40, JoypadButtons.None));
+        }
+
+        script.Add(item: ("playing", 240, JoypadButtons.None));
+        script.Add(item: ("holding left", 40, JoypadButtons.Left));
+        script.Add(item: ("playing on", 300, JoypadButtons.None));
+
+        return [.. script];
+    }
 
     // Two screens in one column pair, sampled a tile at a time: a full-pixel diff of two different games says nothing,
     // while the shapes at tile resolution are what a reader compares.
@@ -83,14 +92,18 @@ public sealed class TetrisSideBySide {
         return line.ToString();
     }
 
-    private static CartridgeDocument Authored() {
+    private static string Checkout() {
         var directory = new DirectoryInfo(path: AppContext.BaseDirectory);
         while ((directory is not null) && !File.Exists(path: Path.Combine(path1: directory.FullName, path2: "Puck.slnx"))) {
             directory = directory.Parent;
         }
 
+        return directory!.FullName;
+    }
+
+    private static CartridgeDocument Authored() {
         var json = File.ReadAllText(path: Path.Combine(
-            path1: directory!.FullName, path2: "src/Puck.World/Assets/cartridges", path3: "tetris.cgb.cartridge.json"));
+            path1: Checkout(), path2: "src/Puck.World/Assets/cartridges", path3: "tetris.cgb.cartridge.json"));
 
         return JsonSerializer.Deserialize<CartridgeDocument>(json: json, options: new JsonSerializerOptions {
             PropertyNameCaseInsensitive = true,

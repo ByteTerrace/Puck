@@ -106,17 +106,26 @@ public static class CartridgeCost {
         return total;
     }
 
-    // A rule guarded by one equality against a constant — the shape a phase machine's rules take.
-    private static (string? Name, int Value) Guard(CartridgeRule? rule) =>
+    /// <summary>Returns the guard a rule is keyed to: one equality against a constant, or none.</summary>
+    /// <param name="rule">The rule to read.</param>
+    /// <returns>The guard variable's name and the value it must hold, or a null name.</returns>
+    /// <remarks>The shape a phase machine's rules take.</remarks>
+    public static (string? Name, int Value) Guard(CartridgeRule? rule) =>
         rule?.When is [{ Kind: "compare", Comparison: "eq", Left.Variable: { } name, Right.Constant: { } value }]
             ? (name, value)
             : (null, 0);
 
-    // The guard variables whose values genuinely partition a frame. A guard only partitions if nothing can change it
-    // while the rules keyed to it are still being evaluated, so a write to it anywhere from the first such rule
-    // through the last disqualifies it — including a write by a rule that is not itself guarded on it. A write after
-    // the last one is what a phase machine's own advance step is, and it is harmless.
-    private static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards) {
+    /// <summary>Returns the guard variables whose values genuinely partition a frame.</summary>
+    /// <param name="rules">The document's rules, in evaluation order.</param>
+    /// <param name="guards">Each rule's guard, from <see cref="Guard"/>.</param>
+    /// <returns>The names that partition.</returns>
+    /// <remarks>
+    /// A guard only partitions if nothing can change it while the rules keyed to it are still being evaluated, so a
+    /// write to it anywhere from the first such rule through the last disqualifies it — including a write by a rule
+    /// that is not itself guarded on it. A write after the last one is what a phase machine's own advance step is,
+    /// and it is harmless.
+    /// </remarks>
+    public static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards) {
         var candidates = new HashSet<string>(comparer: StringComparer.Ordinal);
         foreach (var guard in guards) {
             if (guard.Name is { } name) {

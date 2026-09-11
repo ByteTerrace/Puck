@@ -90,9 +90,33 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         Save();
         Rules();
         if (m_errors.Count == 0) {
+            // Rules that cannot share a frame do not share the queue either, so a set of phase arms needs room for the
+            // heaviest of them rather than for all. This is the same partition the cost estimate reads.
+            var guards = new (string? Name, int Value)[document.Rules.Length];
+            for (var index = 0; index < document.Rules.Length; ++index) {
+                guards[index] = CartridgeCost.Guard(rule: document.Rules[index]);
+            }
+
+            var exclusive = CartridgeCost.ExclusiveGuards(rules: document.Rules, guards: guards);
             var writes = 0;
-            foreach (var rule in document.Rules) {
-                writes += MapWrites(statements: rule.Body);
+            var arms = new Dictionary<string, Dictionary<int, int>>(comparer: StringComparer.Ordinal);
+            for (var index = 0; index < document.Rules.Length; ++index) {
+                var count = MapWrites(statements: document.Rules[index].Body);
+                if (guards[index].Name is not { } name || !exclusive.Contains(item: name)) {
+                    writes += count;
+                    continue;
+                }
+
+                if (!arms.TryGetValue(key: name, value: out var byValue)) {
+                    byValue = [];
+                    arms[key: name] = byValue;
+                }
+
+                byValue[key: guards[index].Value] = byValue.GetValueOrDefault(key: guards[index].Value) + count;
+            }
+
+            foreach (var byValue in arms.Values) {
+                writes += byValue.Values.Max();
             }
 
             if (writes > CartridgeLimits.MapWriteCount) {

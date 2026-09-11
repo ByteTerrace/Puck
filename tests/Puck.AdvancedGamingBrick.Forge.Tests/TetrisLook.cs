@@ -21,7 +21,7 @@ public sealed class TetrisLook {
         using var machine = new VerifyMachineDriver(rom: result.Rom, label: "look");
 
         var art = new System.Text.StringBuilder();
-        machine.RunFrames(buttons: JoypadButtons.None, frames: 200);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: int.TryParse(Environment.GetEnvironmentVariable(variable: "PUCK_TETRIS_LOOK_FRAMES"), out var wanted) ? wanted : 200);
         var backdrop = machine.ReadPixel(x: 158, y: 142);
         for (var y = 0; y < 144; ++y) {
             var line = new System.Text.StringBuilder();
