@@ -15,7 +15,8 @@ public static class PuckFormatter {
         }
 
         var lines = SplitLines(source);
-        var preprocessed = PreprocessEgyptianBraces(lines);
+        var splitLines = SplitCompoundDelimiters(lines);
+        var preprocessed = PreprocessEgyptianBraces(splitLines);
         var formattedLines = new List<string>();
 
         var indentLevel = 0;
@@ -97,6 +98,62 @@ public static class PuckFormatter {
         return lines;
     }
 
+    private static List<string> SplitCompoundDelimiters(List<string> lines) {
+        var result = new List<string>();
+
+        foreach (var line in lines) {
+            var inString = false;
+            var escape = false;
+            var splitIdx = -1;
+
+            for (var i = 0; i < line.Length; i++) {
+                var c = line[i];
+
+                if (inString) {
+                    if (escape) {
+                        escape = false;
+                    } else if (c == '\\') {
+                        escape = true;
+                    } else if (c == '"') {
+                        inString = false;
+                    }
+                    continue;
+                }
+
+                if (c == '"') {
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '/' && i + 1 < line.Length && line[i + 1] == '/') {
+                    break;
+                }
+
+                if ((c == '[' || c == '}') && i + 1 < line.Length) {
+                    var j = i + 1;
+                    while (j < line.Length && char.IsWhiteSpace(line[j])) {
+                        j++;
+                    }
+                    if (j < line.Length && line[j] == '{') {
+                        splitIdx = i + 1;
+                        break;
+                    }
+                }
+            }
+
+            if (splitIdx > 0) {
+                var first = line[..splitIdx].TrimEnd();
+                var second = line[splitIdx..].TrimStart();
+                var subLines = SplitCompoundDelimiters([first, second]);
+                result.AddRange(subLines);
+            } else {
+                result.Add(line);
+            }
+        }
+
+        return result;
+    }
+
     private static List<string> PreprocessEgyptianBraces(List<string> lines) {
         var result = new List<string>();
 
@@ -113,7 +170,7 @@ public static class PuckFormatter {
                 }
                 if (prevIdx >= 0) {
                     var prevTrimmed = result[prevIdx].TrimEnd();
-                    if (!prevTrimmed.EndsWith(trimmed[0])) {
+                    if (CanAttachEgyptianBrace(prevTrimmed, trimmed)) {
                         result[prevIdx] = prevTrimmed + " " + trimmed;
                         // Clear any blank lines between them
                         for (var k = result.Count - 1; k > prevIdx; k--) {
@@ -128,6 +185,40 @@ public static class PuckFormatter {
         }
 
         return result;
+    }
+
+    private static bool CanAttachEgyptianBrace(string prevTrimmed, string brace) {
+        if (string.IsNullOrWhiteSpace(prevTrimmed)) {
+            return false;
+        }
+
+        // Never attach to any delimiter or statement separator
+        if (prevTrimmed.EndsWith('{') || prevTrimmed.EndsWith('}') ||
+            prevTrimmed.EndsWith('[') || prevTrimmed.EndsWith(']') ||
+            prevTrimmed.EndsWith(',') || prevTrimmed.EndsWith(';')) {
+            return false;
+        }
+
+        // Never attach if previous line ends with a comment
+        if (prevTrimmed.Contains("//", StringComparison.Ordinal) || prevTrimmed.EndsWith("*/", StringComparison.Ordinal)) {
+            return false;
+        }
+
+        // For '[', only attach to property declarations ending with ':'
+        if (brace == "[") {
+            return prevTrimmed.EndsWith(':');
+        }
+
+        // For '{', attach to property ending with ':' or block header (identifier, string literal, or parameter ')')
+        if (brace == "{") {
+            return prevTrimmed.EndsWith(':') ||
+                   prevTrimmed.EndsWith(')') ||
+                   prevTrimmed.EndsWith('"') ||
+                   char.IsLetterOrDigit(prevTrimmed[^1]) ||
+                   prevTrimmed[^1] == '_';
+        }
+
+        return false;
     }
 
     private static int CountLeadingClosingDelimiters(string trimmedLine) {

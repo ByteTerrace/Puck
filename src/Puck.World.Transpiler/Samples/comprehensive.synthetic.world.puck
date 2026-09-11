@@ -55,7 +55,8 @@ host {
 views {
     layout "arena" {
         seatCount: 2
-        slots: [ {
+        slots: [
+            {
                 camera: null
                 height: 1
                 study: "moth-study"
@@ -91,14 +92,17 @@ addon "rules-engine" {
 
 // State catalog with world cells
 state {
-    world: [ {
+    world: [
+        {
             name: "tableState"
             kind: "Int"
             capacity: 1
-            cells: [ {
+            cells: [
+                {
                     key: "feltColor"
                     value: feltColor
-                } {
+                }
+                {
                     key: "activeRound"
                     value: 1
                 }
