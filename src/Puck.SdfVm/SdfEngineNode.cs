@@ -72,8 +72,16 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of
     /// the <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
     public int LiveProgramWords { get; private set; }
+    /// <summary>Copies the currently uploaded packed program for inspection, or returns an empty array before
+    /// the engine is initialized. The caller owns the copy; editing it cannot change the renderer.</summary>
+    /// <returns>The live program's 32-bit words, excluding reserved capacity and per-frame transform/grid buffers.</returns>
+    /// <remarks>Call on the render pump thread, as with the live console diagnostics. This performs a CPU copy,
+    /// not a GPU readback. The packed format follows <see cref="SdfProgram"/> and is not a durable asset format.</remarks>
+    public uint[] CopyLiveProgramWords() => m_engine?.CopyLiveProgramWords() ?? [];
     /// <summary>Gets the last uploaded program's instance count, or 0 before the first upload.</summary>
     public int LiveProgramInstances { get; private set; }
+    /// <summary>Gets the bounded volume count in the most recently submitted frame, before per-ray rejection.</summary>
+    public int LiveVolumes { get; private set; }
     /// <summary>Gets the last uploaded program's Lipschitz step scale (1 = no clamp), or 0 before the first
     /// upload.</summary>
     public float LiveProgramStepScale { get; private set; }
@@ -761,6 +769,8 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
                 onFrameSlotAvailable: RetireAndAdoptScreenSourceFrames
             );
         }
+
+        LiveVolumes = frame.Volumes.Count;
 
         if (cpuTimingEnabled) {
             ++m_cpuTimingFrame;

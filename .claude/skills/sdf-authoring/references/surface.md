@@ -47,6 +47,13 @@ something to reflect — see the environment section below.
 A stage is `{ threshold, surface }` with thresholds strictly ascending in (0, 1];
 a surface is `{ color, roughness, metal }`, all three required.
 
+A threshold is compared against **coverage**, not against the lane, and coverage
+is `saturate(amount × max(edge × edgeMask, lines × lineMask))` — so it can never
+exceed `max(edge, lines)`. A stage above that ceiling never reveals: the document
+validates, `creation stats` exits 0, and the frame is pixel-identical. With
+`lines: 0.45` and no edge, a stage at 0.55 is dead. Keep thresholds inside the
+reachable band, not merely inside [0, 1].
+
 Two cross-rules the validator enforces together:
 
 - `edge > 0` or `lines > 0` **requires** a non-empty `under` — there must be

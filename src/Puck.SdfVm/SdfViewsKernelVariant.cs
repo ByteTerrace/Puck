@@ -3,21 +3,21 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 /// <summary>
-/// The compiled variants of the Stage 1 views kernel — the one enumerable pair, deliberately not a combinatorial
-/// space. <see cref="Full"/> (sdf-world-views.comp) is the default and the bit-exact reference: the complete ISA,
+/// The three compiled variants of the views shading kernel. <see cref="Full"/> (sdf-world-views.comp) is the default
+/// reference: the complete ISA,
 /// every op and shape case compiled in. <see cref="CoreOps"/> (sdf-world-views-core.comp) compiles the exotic cases
-/// out (the <c>SDF_CORE_OPS</c> strip in sdf-vm.hlsli), shrinking the interpreter's live register state so more warps
-/// reside — the full interpreter is register-pressure-limited (~38% CS-warp occupancy, ~72% of the register file).
+/// out (the <c>SDF_CORE_OPS</c> strip in sdf-vm.hlsli), reducing shader size and live register state. Occupancy and
+/// performance depend on the scene, shader build, and device; a previous fixture's counters are not a universal limit.
 /// <see cref="SdfWorldEngine.UploadProgram"/> selects per program via
 /// <see cref="SdfViewsKernelVariants.Select"/>: a pure function of the instruction stream, so a program that touches
-/// any stripped op/shape always runs <see cref="Full"/>, and under <see cref="CoreOps"/> every compiled-out case is
+/// a heavy op/shape runs <see cref="Full"/>, the middle tier runs <see cref="Folds"/>, and under <see cref="CoreOps"/> every compiled-out case is
 /// unreachable — the rendered field is semantically identical (a separate compiled binary can still carry the usual
 /// DXC codegen-re-roll ±1 LSB noise class the calibrated threshold families encode, never a structural change). Only
-/// the views kernel has a core variant — stripping the beam regressed its cone march (a register-allocation/
-/// scheduling shift), so it stays on the full interpreter.
+/// the views kernel has stripped variants. Primary traversal keeps the full interpreter; an earlier beam-stripping
+/// experiment regressed its cone march, so the beam also keeps the full interpreter.
 /// </summary>
 public enum SdfViewsKernelVariant {
-    /// <summary>The complete ISA (sdf-world-views.comp) — the default and the bit-exact reference.</summary>
+    /// <summary>The complete ISA shading kernel (sdf-world-views.comp), used as the variant reference.</summary>
     Full = 0,
     /// <summary>The exotic-ops-stripped interpreter (sdf-world-views-core.comp) — selected only for a program whose
     /// instruction stream provably touches no stripped op or shape.</summary>

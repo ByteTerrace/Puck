@@ -82,8 +82,7 @@ public sealed class SweepLawTests {
 
         return (taper + (bulge * MathF.Pow(x: s, y: 0.65f)));
     }
-    // The RENDER-PATH field: closest-t on the centerline, evaluate the orbit offset and radius there, minus the
-    // strand count, minus the conservative margin — mirrors sdfSweep (sdf-vm.hlsli) exactly.
+    // The render field selects closest-t on the centerline, then the nearest strand there, minus its margin.
     private static float FieldDistance(Vector3 p, Vector3 a, Vector3 b, Vector3 c, float radiusStart, float radiusEnd, float bulge, int strands, float twist, float strandOffset) {
         var t = ClosestT(p: p, a: a, b: b, c: c);
         var basePoint = BezierPoint(a: a, b: b, c: c, t: t);
@@ -93,7 +92,7 @@ public sealed class SweepLawTests {
         var referenceAxis = ((MathF.Abs(tangentDirection.Y) < 0.999f) ? Vector3.UnitY : Vector3.UnitX);
         var u = Vector3.Normalize(Vector3.Cross(tangentDirection, referenceAxis));
         var v = Vector3.Cross(tangentDirection, u);
-        var best = float.PositiveInfinity;
+        var best = 1e9f; // sdfSweep's finite strand seed is part of the field, including at extreme distances.
 
         for (var strand = 0; (strand < strands); strand++) {
             var phase = ((t * twist * MathF.Tau) + ((strand * MathF.Tau) / strands));
@@ -189,6 +188,88 @@ public sealed class SweepLawTests {
         var closedFormT = ClosestT(p: probe, a: a, b: b, c: c);
 
         Assert.True(condition: (MathF.Abs(closedFormT - bruteBestT) < 0.001f));
+    }
+    [Theory]
+    [InlineData(0f, 0f, 0f, 1, false, 0f)]
+    [InlineData(0.2f, 0.2f, 4f, 3, false, 0f)]
+    [InlineData(-0.2f, 0.1f, -3f, 4, false, 0f)]
+    [InlineData(0f, 0.2f, 2f, 2, true, 0f)]
+    [InlineData(0.2f, 0.2f, 4f, 3, false, 1000000f)]
+    [InlineData(0f, 0.2f, 2f, 2, true, 1000000f)]
+    public void PackedSweepSphereCannotBeatTheActualCandidate(float bulge, float orbit, float twist, int strands, bool degenerate, float offset) {
+        var a = new Vector3(3f + offset, -1f, 2f);
+        var b = degenerate ? a : a + new Vector3(0f, 0.5f, 0.4f);
+        var c = degenerate ? a : a + Vector3.UnitY;
+        var words = BuildSweep(a, b, c, 0.1f, 0.4f, bulge, strands, twist, orbit).Words;
+        var bound = SweepBound(words);
+        var center = new Vector3(bound.X, bound.Y, bound.Z);
+        var random = new Random(352);
+
+        Assert.True(bound.W > 0f);
+        for (var trial = 0; trial < 400; trial++) {
+            var direction = trial == 0 ? Vector3.UnitY : Vector3.Normalize(new Vector3(
+                (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f));
+            var p = center + direction * ((trial % 4) switch { 0 => 100f, 1 => 8f, 2 => 2f, _ => 0.1f });
+            var candidate = FieldDistance(p, a, b, c, 0.1f, 0.4f, bulge, strands, twist, orbit);
+            var lowerBound = Vector3.Distance(p, center) - bound.W;
+
+            Assert.True(lowerBound <= candidate + 1e-5f, $"Sweep sphere {lowerBound} exceeded candidate {candidate} at {p}");
+        }
+    }
+    [Theory]
+    [InlineData(false, SdfBlendOp.Union, false, true)]
+    [InlineData(true, SdfBlendOp.Union, false, true)]
+    [InlineData(false, SdfBlendOp.Subtraction, false, false)]
+    [InlineData(false, SdfBlendOp.Union, true, false)]
+    public void SweepBoundsRespectPoseBlendAndNonRigidFallback(bool dynamic, SdfBlendOp blend, bool scaled, bool bounded) {
+        var original = BuildSweep(Vector3.Zero, Vector3.UnitY, 2f * Vector3.UnitY, 0.1f, 0.1f, 0f, 1, 0f, 0f);
+        var instructions = new List<SdfInstruction> { original.Instructions[0] };
+        if (dynamic) {
+            instructions.Add(original.Instructions[0] with { Op = SdfOp.TransformDynamic, Data0 = new Vector4(7f, 0f, 0f, 0f) });
+        }
+        if (scaled) {
+            instructions.Add(original.Instructions[0] with { Op = SdfOp.Scale, Data0 = new Vector4(2f, 3f, 4f, 0f) });
+        }
+        var shapeIndex = instructions.Count;
+        instructions.Add(original.Instructions[1] with { Blend = (uint)blend, Detail = true, Secondary = false });
+        var words = new SdfProgram(
+            instructions: instructions,
+            materials: [new SdfMaterial(Albedo: Vector3.One)],
+            sweepCurves: [new SdfSweepCurve(InstructionIndex: shapeIndex, A: Vector3.Zero, B: Vector3.UnitY, C: 2f * Vector3.UnitY,
+                RadiusStart: 0.1f, RadiusEnd: 0.1f, Bulge: 0f)]
+        ).Words;
+        var shapeBound = checked((int)(words[3] + 20u * words[1] + 2u * (uint)shapeIndex) * 4);
+
+        Assert.Equal(bounded ? (dynamic ? 2u : 1u) : 0u, words[shapeBound + 4]);
+        if (!bounded) {
+            return;
+        }
+        Assert.Equal(dynamic ? 7u : 0u, words[shapeBound + 5]);
+        var segmentHeader = checked((int)(words[3] + 20u * words[1] + 2u * words[0]) * 4);
+        var plan = checked((int)words[segmentHeader + 2] * 4);
+        var leaf = checked((int)words[plan] * 4);
+        Assert.True(BitConverter.UInt32BitsToSingle(words[leaf + 11]) > 1.1f);
+        Assert.Equal(1f, BitConverter.UInt32BitsToSingle(words[leaf + 9]));
+        Assert.Equal((uint)shapeIndex, words[leaf + 3] & 0x7FFFFFFFu);
+        Assert.Equal((uint)SdfShapeType.Sweep | 0xC0000000u, words[(shapeIndex + 1) * 4 + 1]);
+    }
+    [Theory]
+    [InlineData(16f, true)]
+    [InlineData(17f, false)]
+    [InlineData(64f, false)]
+    public void SweepCapOnlyAdmitsMarginsWithRoundingSlack(float bulge, bool bounded) {
+        var words = BuildSweep(Vector3.Zero, Vector3.Zero, Vector3.Zero, 4f, 4f, bulge, 1, 0f, 0f).Words;
+        var boundIndex = checked((int)(words[3] + 20u * words[1] + 2u) * 4);
+
+        Assert.Equal(bounded ? 1u : 0u, words[boundIndex + 4]);
+        var candidate = FieldDistance(new Vector3(2e9f, 0f, 0f), Vector3.Zero, Vector3.Zero, Vector3.Zero, 4f, 4f, bulge, 1, 0f, 0f);
+        Assert.Equal(1e9f - bulge, candidate);
+    }
+    private static Vector4 SweepBound(ReadOnlySpan<uint> words) {
+        var index = checked((int)(words[3] + 20u * words[1] + 2u) * 4);
+        Assert.Equal(1u, words[index + 4]);
+        return new Vector4(BitConverter.UInt32BitsToSingle(words[index]), BitConverter.UInt32BitsToSingle(words[index + 1]),
+            BitConverter.UInt32BitsToSingle(words[index + 2]), BitConverter.UInt32BitsToSingle(words[index + 3]));
     }
     [Theory]
     [InlineData(0f, 0.1f, 0.5f, 0f, 0.1f)]

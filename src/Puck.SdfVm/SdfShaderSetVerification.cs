@@ -46,6 +46,7 @@ public static class SdfShaderSetVerification {
         using var hash = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
 
         hash.AppendData(data: kernels.Beam.Span);
+        hash.AppendData(data: kernels.Primary.Span);
         hash.AppendData(data: kernels.Views.Span);
         hash.AppendData(data: kernels.ViewsCore.Span);
         hash.AppendData(data: kernels.ViewsFolds.Span);

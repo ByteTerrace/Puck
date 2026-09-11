@@ -399,7 +399,7 @@ public static class CreationStampEmitter {
             }
 
             var afterShape = SdfSolidGeometry.AppendScaledPrimitive(
-                chain: chain,
+                chain: ApplyErode(chain),
                 type: shape.Type, taper: shape.Taper ?? 0.5f, profile: shape.Profile,
                     lift: (shape.Lift ?? SdfLift.Extrude), rounding: (shape.Rounding ?? 0f), chamfer: (shape.Chamfer ?? 0f), exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
                     curve: shape.Curve?.Parameters(),

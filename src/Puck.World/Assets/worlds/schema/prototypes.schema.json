@@ -1796,6 +1796,24 @@
                   ],
                   "default": null
                 },
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "coverage": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "softness": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null
+                },
                 "isKnownKind": {
                   "type": "boolean"
                 }

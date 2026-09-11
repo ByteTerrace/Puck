@@ -69,6 +69,29 @@ public sealed class WorldStampPoolCompactionLawTests {
         Assert.DoesNotContain(program.Instructions, instruction => instruction.Op == SdfOp.ShapeBlend);
     }
 
+    [Theory]
+    [InlineData(false, 2)]
+    [InlineData(true, 1)]
+    public void AnInhabitedAnimatedPlacementRendersOnlyThroughItsBody(bool inhabited, int expectedInstances) {
+        var initial = Creation(Shape(0));
+        var creation = new WorldPrototype(initial.Id, initial.Document with {
+            Frames = [new FrameDocument("pose", [new FrameTransformDocument(
+                Id: 0, Position: Vector3.Zero, Rotation: Quaternion.Identity, Scale: new Vector3(.1f))])],
+        });
+        var row = new WorldPlacement(Id: "station", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f,
+            Inhabit: inhabited ? new WorldPlacementInhabit(Kit: "display", Look: null, Source: Puck.World.Protocol.IntentSource.Idle) : null);
+        var pool = new WorldStampPool();
+        var bodies = new[] { new WorldStampPool.BodyStamp(0, creation, 1f, WorldLookMotion.Default) };
+        pool.Reconcile([row], [creation], [], bodies);
+        Assert.Equal(expectedInstances, Emit(pool).Instances.Count);
+
+        // Changing the row's ownership also retires an already-registered placement copy.
+        pool.Reconcile([row with { Inhabit = new WorldPlacementInhabit("display", null, Puck.World.Protocol.IntentSource.Idle) }], [creation], [], bodies);
+        Assert.Single(Emit(pool).Instances);
+        pool.Reconcile([row with { Inhabit = new WorldPlacementInhabit("display", null, Puck.World.Protocol.IntentSource.Idle) }], [creation], [], []);
+        Assert.Empty(Emit(pool).Instances);
+    }
+
     [Fact]
     public void RemovingAnEarlierBodyKeepsTheSurvivorsTransformAddress() {
         var pool = new WorldStampPool();

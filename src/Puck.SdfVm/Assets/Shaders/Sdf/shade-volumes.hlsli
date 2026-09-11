@@ -1,4 +1,4 @@
-// Bounded flow volumes. Ten float4 rows, paired with SdfWorldEngine.PackVolumes.
+// Bounded flow/cloud volumes. Eleven float4 rows, paired with SdfWorldEngine.PackVolumes.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
 struct SdfVolumeData {
@@ -17,10 +17,13 @@ struct SdfVolumeData {
     float pulseFrequency;
     int intensityLane;
     uint rampCount;
+    uint kind;
+    float coverage;
+    float softness;
     float4 ramp[4];
 };
 SdfVolumeData sdfLoadVolume(uint index) {
-    uint b = index * 10u;
+    uint b = index * 11u;
     SdfVolumeData v;
     float4 r0 = sdfVolumes[b];
     v.position = r0.xyz; v.dynamicSlot = (int)r0.w;
@@ -32,7 +35,8 @@ SdfVolumeData sdfLoadVolume(uint index) {
     float4 r4 = sdfVolumes[b + 4u];
     v.intensity = r4.x; v.extinction = r4.y; v.pulseAmplitude = r4.z; v.pulseFrequency = r4.w;
     float4 r5 = sdfVolumes[b + 5u];
-    v.intensityLane = (int)r5.x; v.rampCount = (uint)r5.y;
+    v.intensityLane = (int)r5.x; v.rampCount = (uint)r5.y; v.kind = (uint)r5.z;
+    v.coverage = sdfVolumes[b + 10u].x; v.softness = sdfVolumes[b + 10u].y;
     [unroll] for (uint i = 0u; i < 4u; i++) v.ramp[i] = sdfVolumes[b + 6u + i];
     return v;
 }
@@ -99,6 +103,19 @@ float3 sdfVolumeRamp(SdfVolumeData v, float density) {
     }
     return color;
 }
+// A true 3D medium, clipped smoothly inside its own bound. Width is the noise-cell size in world units;
+// coverage moves a density threshold, not a screen-space alpha. The ramp and height tint provide art-directed
+// illumination; this does not trace cloud shadows or multiple scattering.
+float sdfCloudDensity(SdfVolumeData v, float3 p, float clock) {
+    float3 unit = p / v.halfExtent;
+    float envelope = smoothstep(0.0, 0.3, 1.0 - dot(unit, unit));
+    float3 q = (p + float3(clock * v.speed, 0.0, clock * v.speed * 0.21)) / v.width;
+    float noise = 0.5 + 0.5 * (
+        0.57 * sdfLatticeNoise3(q, v.seed) +
+        0.28 * sdfLatticeNoise3(q * 2.03 + 7.1, v.seed + 19u) +
+        0.15 * sdfLatticeNoise3(q * 4.07 - 3.7, v.seed + 53u));
+    return envelope * smoothstep(1.0 - v.coverage - v.softness, 1.0 - v.coverage + v.softness, noise);
+}
 void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirection, float tBegin, float tEnd,
     float clock, float dither, out float3 radianceOut, out float transmissionOut) {
     int steps = (int)v.steps;
@@ -109,15 +126,24 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
     [loop] for (int i = 0; i < steps; i++) {
         float sampleT = tBegin + ((float)i + 0.5 + dither * 0.49) * stepLength;
         float3 p = localOrigin + localDirection * sampleT;
-        float axial = (v.halfExtent.y - p.y) / v.axis;
-        if (axial < 0.0 || axial >= 1.0) continue;
-        float taper = 1.0 - axial;
-        float radius = length(p.xz) / max(v.width * taper, 1.0e-6);
-        float3 flow = float3(p.x, p.y + clock * v.speed, p.z) / v.width;
-        float noise = 0.5 + 0.5 * sdfLatticeNoise3(flow, v.seed);
-        float density = saturate(exp(-radius * radius) * taper * noise * pulse);
+        float density;
+        if (v.kind == 1u) {
+            density = saturate(sdfCloudDensity(v, p, clock) * pulse);
+        } else {
+            float axial = (v.halfExtent.y - p.y) / v.axis;
+            if (axial < 0.0 || axial >= 1.0) continue;
+            float taper = 1.0 - axial;
+            float radius = length(p.xz) / max(v.width * taper, 1.0e-6);
+            float3 flow = float3(p.x, p.y + clock * v.speed, p.z) / v.width;
+            float noise = 0.5 + 0.5 * sdfLatticeNoise3(flow, v.seed);
+            density = saturate(exp(-radius * radius) * taper * noise * pulse);
+        }
         float3 emission = sdfVolumeRamp(v, density) * (density * v.intensity);
         float extinction = density * v.extinction;
+        if (v.kind == 1u) {
+            float heightLight = lerp(0.52, 1.0, saturate(0.5 + 0.5 * p.y / v.halfExtent.y));
+            emission *= v.extinction * heightLight;
+        }
         float segment = exp(-extinction * stepLength);
         // The zero-absorption limit is stepLength, so pure emissive media remain visible.
         float integral = extinction > 1.0e-5 ? (1.0 - segment) / extinction : stepLength;
@@ -129,68 +155,44 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
 }
 
 // Composites every bounded volume whose slab intersects the ray — clipped to `surfaceDistance`
-// so a volume never paints through solid geometry — into `color`, in camera order (the associative
-// front-to-back rule, generalized past two disjoint volumes by an insertion sort on entry distance: farthest
-// composited first as the new background, nearest last so it draws on top).
+// so a volume never paints through solid geometry. Select the next farthest intersecting volume, integrate it,
+// and composite immediately. This preserves the previous entry-distance ordering (including index ties) without
+// per-pixel arrays or an unrolled copy of the integrator for every capacity slot. Overlapping media still composite
+// as whole volumes; this is not a combined-density integral through their overlap.
 float3 shadeVolumes(float3 color, float3 rayOrigin, float3 rayDirection, float surfaceDistance, uint2 pixel, float time) {
-    float3 radiance[8];
-    float transmission[8];
-    float tNear[8];
-    int order[8];
-    int count = 0;
     float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
-
-    [unroll]
-    for (uint index = 0u; (index < SdfVolumeCount); index++) {
-        SdfVolumeData v = sdfLoadVolume(index);
-
-        if (all(v.halfExtent <= 0.0)) {
-            continue; // an unauthored/trailing slot packs a zero box — inert by construction, no ray can cross it
+    float previousNear = 3.402823e+38;
+    uint previousIndex = SdfVolumeCount;
+    [loop] for (uint rank = 0u; rank < SdfVolumeCount; rank++) {
+        uint selected = SdfVolumeCount;
+        float selectedNear = -3.402823e+38;
+        [loop] for (uint index = 0u; index < SdfVolumeCount; index++) {
+            SdfVolumeData v = sdfLoadVolume(index);
+            // PackVolumes writes a contiguous prefix and zeroes every trailing bound.
+            if (all(v.halfExtent <= 0.0)) break;
+            float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
+            float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
+            float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
+            if (min(interval.y, surfaceDistance) <= max(interval.x, 0.0)) continue;
+            bool beforeCursor = interval.x < previousNear || (interval.x == previousNear && index < previousIndex);
+            bool nearerChoice = interval.x > selectedNear || (interval.x == selectedNear && index > selected);
+            if (beforeCursor && (selected == SdfVolumeCount || nearerChoice)) {
+                selected = index;
+                selectedNear = interval.x;
+            }
         }
-
+        if (selected == SdfVolumeCount) break;
+        SdfVolumeData v = sdfLoadVolume(selected);
         float3 localOrigin = sdfVolumeLocalPoint(v, rayOrigin);
         float3 localDirection = sdfVolumeLocalDirection(v, rayDirection);
         float2 interval = sdfVolumeSlabInterval(localOrigin, localDirection, v.halfExtent);
-        float tBegin = max(interval.x, 0.0);
-        float tEnd = min(interval.y, surfaceDistance);
-
-        if (tEnd <= tBegin) {
-            continue;
-        }
-
-        SdfVolumeData scaled = v;
-
-        scaled.intensity *= sdfVolumeIntensityScale(v);
-
-        float clock = time;
-        float3 vRadiance; float vTransmission;
-
-        sdfIntegrateVolume(scaled, localOrigin, localDirection, tBegin, tEnd, clock, dither, vRadiance, vTransmission);
-
-        radiance[count] = vRadiance; transmission[count] = vTransmission; tNear[count] = interval.x; order[count] = count;
-        count++;
-    }
-
-    // Insertion sort `order` by tNear ascending; count <= 8, so this is cheap and needs no sort library.
-    [loop]
-    for (int i = 1; (i < count); i++) {
-        int key = order[i];
-        float keyNear = tNear[key];
-        int j = (i - 1);
-
-        while ((j >= 0) && (tNear[order[j]] > keyNear)) {
-            order[(j + 1)] = order[j];
-            j--;
-        }
-
-        order[(j + 1)] = key;
-    }
-
-    [loop]
-    for (int k = (count - 1); (k >= 0); k--) {
-        int slot = order[k];
-
-        color = (radiance[slot] + (transmission[slot] * color));
+        v.intensity *= sdfVolumeIntensityScale(v);
+        float3 radiance; float transmission;
+        sdfIntegrateVolume(v, localOrigin, localDirection, max(interval.x, 0.0), min(interval.y, surfaceDistance),
+            time, dither, radiance, transmission);
+        color = radiance + transmission * color;
+        previousNear = selectedNear;
+        previousIndex = selected;
     }
 
     return color;

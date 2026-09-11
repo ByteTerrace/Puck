@@ -32,6 +32,12 @@ instances or mask bits. Dynamic-transform addresses stay fixed when another
 registration disappears; a later edit rebuilds the compact program inside the
 same reserved capacity.
 
+An inhabited placement registers its appearance only through the body census.
+Even when its creation is animated or attached, the placement must not also
+register a second copy in the animated placement pool. Removing `inhabit`
+restores ordinary placement ownership. The compaction laws cover that ownership
+transition as well as registration removal.
+
 Blend groups whose members inherit the same rigid animation transform use a
 bound centered on their first member. Union members, authored frames, smoothing,
 and outward field operations determine its radius; remote cutters do not enlarge

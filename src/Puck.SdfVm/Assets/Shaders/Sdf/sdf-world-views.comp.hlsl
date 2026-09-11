@@ -1,36 +1,31 @@
-// Stage 1 of the two-stage SDF world compositor: renders EACH viewport's SDF camera into its own per-view source
-// texture (rect-sized, view-local), accelerated by the sdf-beam.comp tile cull. Stage 2 (sdf-world-composite.comp)
-// then places each source — an SDF view OR a child node's output, treated uniformly — into its screen region. The
-// dispatch is (maxRectWidth, maxRectHeight, viewportCount) over an 8x8 workgroup. KEEP shading IN SYNC with
-// renderView in sdf-world.hlsli.
-// Stage 1 marches map(), so it opts into the per-frame dynamic-entity transform buffer (sdf-vm.hlsli), is the ONLY
-// kernel that opts into the screen-source sampling seam (sdf-world.hlsli) — the beam prepass and Stage 2 never bind
-// the screen table/sources, so they keep their existing descriptor sets byte-for-byte — and is the ONLY kernel that
-// opts into the READ side of the per-tile instance mask (SDF_INSTANCE_MASKS: sdf-vm.hlsli's sdfInstanceMasks at
-// binding 7, register t37 — the first SRV slot free of the program/viewport/dynamicTransforms/cullBounds/
-// screenSurfaces/screenSources run above (32 screen sources at t5..t36); the beam prepass binds the same buffer as its
-// own RW u1 to WRITE it).
+// Shared dispatch for primary traversal and hit shading. sdf-world-primary.comp includes this with SDF_PRIMARY_PASS;
+// the ordinary views variants read its hit records and shade each source texture. SDF_MONOLITHIC_VIEWS compiles
+// the original combined walk for shader A/B comparisons. Composite places each source or child into its region.
+// Both dispatches use an 8x8 workgroup and the same indirect tile bbox, camera, masks, and active-pixel tests.
+// The shared layout carries dynamic transforms, screen sources, and the read-only instance mask (binding 7 / t37,
+// after screen sources t5..t36). Instance-cull produces that mask; the beam reads it at its own t3 binding.
+// Primary hit records are appended at binding 49 / u6. Unused shading resources compile out of primary traversal.
 #define SDF_DYNAMIC_TRANSFORMS
+#if !defined(SDF_PRIMARY_PASS) && !defined(SDF_MONOLITHIC_VIEWS)
+#define SDF_PRIMARY_READ
+#endif
 #define SDF_FRAME_INSTANCE_GRID
 #define SDF_FRAME_INSTANCE_GRID_REGISTER t42
 #define SDF_INSTANCE_MASKS
 #define SDF_SCREEN_SOURCES
-// The ONLY kernel that binds the glyph atlas (sdf-vm.hlsli's sdfGlyphAtlas at binding 44 / register t39, sampler s32) —
-// so SDF_SHAPE_GLYPH marches the true lettering here while every other kernel sees the conservative cell box.
+// Primary and views bind the glyph atlas (binding 44 / t39, sampler s32), so primary marches true lettering.
+// The beam and other non-atlas kernels retain the conservative cell box.
 #define SDF_GLYPH_ATLAS
-// The brick pool (sdf-vm.hlsli's sdfBrickPool at binding 46): Stage 1 samples baked SampledRegion carves O(1) so the
-// primary/shadow/AO marches stop paying O(carve-count). register(t41): appended LAST in the engine's views binding list
-// (after sdfDecalCells t40), and the core-ops variant (sdf-world-views-core.comp) inherits this define through its
-// verbatim include, so BOTH Stage 1 variants bind the pool and evaluate bricks.
+// The brick pool (binding 46 / t41, after sdfDecalCells t40): primary and shading sample baked SampledRegion carves
+// O(1), so primary/shadow/AO marches stop paying O(carve-count). All views variants inherit this binding.
 #define SDF_SAMPLED_REGIONS
 #define SDF_BRICK_POOL_REGISTER t41
-// The bounded-volume buffer (sdf-world.hlsli's sdfVolumes, declared unconditionally under SDF_SCREEN_SOURCES) binds
-// at 48 / t43, APPENDED LAST in the engine's viewsBindings after the frame instance grid t42 — shade-volumes.hlsli's
-// one call site at the end of renderView. Stage 1 is the only kernel that shades, so it is the only one that binds
-// it. The core-ops variant inherits SDF_SCREEN_SOURCES through its verbatim include, so both Stage 1 pipelines bind it.
+// The bounded-volume buffer binds at 48 / t43 after the frame instance grid t42. It is in the shared descriptor
+// layout, but only shading uses shade-volumes.hlsli's call at the end of renderView; primary compiles it out.
 // The per-tile shadow gather (sdf-world.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
 // workgroup, built cooperatively at the uniform seam inside renderView. Every lane — rendered pixel or not — must
 // reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.
+// Primary exits renderView before this gather; only the shading dispatch executes its barriers.
 #define SDF_GROUP_SHADOW_GATHER
 #include "sdf-world.hlsli"
 
@@ -75,9 +70,8 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 
     // The symmetry-LOD origin: this viewport's camera (the per-sample wallpaper LOD rule measures from it).
     sdfLodOrigin = view.position.xyz;
-    // The per-invocation program-layout cache (sdf-vm.hlsli) — renderView's primary march (<=160 steps), shadow
-    // march (<=2 x 32 steps), AO taps, and normal dual all call mapMasked/mapGradMasked per step, so the decode must
-    // happen exactly once here, before renderView runs.
+    // The per-invocation program-layout cache (sdf-vm.hlsli): primary/shadow marches, AO taps and normal queries
+    // repeatedly call the field evaluators. Decode once for this invocation before renderView runs.
     sdfProgramLayout = sdfLoadProgramLayout();
 
     // The RENDER extent: the output rect reduced by the view's render scale (worldRenderDims — the identical integer
@@ -124,9 +118,11 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
+#ifndef SDF_PRIMARY_PASS
     // Dither before the 8-bit store to break gradient banding (sky, distance fog) into blue-ish high-frequency noise:
     // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.
     color += ((sdfR2Dither(pixel) - 0.5) * DitherQuantum);
 
     sources[id.z][pixel] = float4(color, 1.0);
+#endif
 }

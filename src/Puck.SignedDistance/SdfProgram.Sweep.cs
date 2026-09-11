@@ -1,6 +1,48 @@
+using System.Numerics;
+
 namespace Puck.SignedDistance;
 
 public sealed partial class SdfProgram {
+    // A Bezier point is in its control polygon's convex hull. Enclose that hull, then add the largest positive
+    // profile radius, strand orbit and the margin SUBTRACTED by sdfSweep. Geometric containment alone is too small
+    // to lower-bound that field. This argument does not depend on the approximate closest-t solver's choice.
+    private static bool TryGetSweepBound(SdfInstruction instruction, int instructionIndex, SdfSweepCurve[] sweepCurves, out Vector3 center, out float radius) {
+        center = Vector3.Zero;
+        radius = 0f;
+
+        if (!TryFindSweepCurve(sweepCurves: sweepCurves, instructionIndex: instructionIndex, curve: out var curve)) {
+            return false;
+        }
+
+        var margin = SdfProgramBuilder.SweepConservativeMargin(
+            bulge: curve.Bulge,
+            strandOffset: instruction.Data0.W,
+            twist: instruction.Data0.Z,
+            radiusStart: curve.RadiusStart,
+            radiusEnd: curve.RadiusEnd
+        );
+
+        // sdfSweep seeds its strand minimum with SDF_FAR_DISTANCE = 1e9 (float ULP 64). At margin <= 16,
+        // subtracting the margin from that cap still rounds to 1e9, with slack for shader arithmetic. Larger margins
+        // retain full evaluation. The scalar AND dual bound tests also require runningMin <= SDF_FAR_DISTANCE:
+        // this sphere bounds the uncapped candidate, while the capped candidate cannot win under that condition.
+        if (!(margin <= 16f)) {
+            return false;
+        }
+
+        var low = Vector3.Min(curve.A, Vector3.Min(curve.B, curve.C));
+        var high = Vector3.Max(curve.A, Vector3.Max(curve.B, curve.C));
+
+        center = ((low * 0.5f) + (high * 0.5f));
+        var hullRadius = MathF.Max(Vector3.Distance(center, curve.A), MathF.Max(Vector3.Distance(center, curve.B), Vector3.Distance(center, curve.C)));
+        // A tight hull can sit far from the local origin. Cover interpolation/center rounding in those coordinates,
+        // in addition to PackBounds' radius-relative padding; padding only the small hull misses that error scale.
+        var coordinateSlack = (0.000001f * MathF.Max(curve.A.Length(), MathF.Max(curve.B.Length(), curve.C.Length())));
+
+        radius = (hullRadius + MathF.Max(curve.RadiusStart, curve.RadiusEnd) + MathF.Max(curve.Bulge, 0f) + instruction.Data0.W + margin + coordinateSlack);
+
+        return float.IsFinite(radius);
+    }
     // A Sweep's chain reach is the control polygon's own max distance from the local origin plus the largest radius
     // the sweep's profile can reach plus the strand orbit radius — the same sum SdfSolidGeometry.SweepReach and
     // SdfProgramBuilder.Sweep's admitted-envelope bound use.

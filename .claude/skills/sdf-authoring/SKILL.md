@@ -67,7 +67,9 @@ dotnet run --project src/Puck.Cli -- creation stats --world <path> --prototype <
 
 It validates the whole world and checks the stamp budget, then emits text-free
 prototypes at unit placement scale to inspect static and pooled rest-pose clamps.
-Exit 1 can mean validation refusal **or emission failure**; read the diagnostic.
+It also constructs the whole world's deterministic contact field, including solid
+placements and screens, even with a prototype filter. Exit 1 can mean validation,
+render emission, or contact compilation failure; read the diagnostic.
 Text requires a resolved font atlas and reports clamp inspection unavailable.
 A successful check does not prove live motion, contact parity, or appearance.
 
@@ -88,7 +90,7 @@ from what you want the surface to *do*:
 | A local dent or swelling | `bumps` | up to 4 gaussian pushes |
 | Softened edges | `rounding` (curved) or `chamfer` (45° bevel) | never both on one shape |
 | A hollow shell | `onion` | |
-| Repetition — ribs, teeth, plates, spokes | a `domain` fold | repeat, polar, symmetry, wallpaper; one fold, not N shapes |
+| Repetition — ribs, teeth, plates, spokes | a `domain` fold | repeat, polar, symmetry, wallpaper; one fold, not N shapes. Refuses a `panel` on the same shape |
 | Cellular or faceted relief — scales, chitin, hammered metal | `cells` | needs its own scope; see the scope rules |
 | Erosion driven by live state | `erode` | see "Binding to state" |
 
@@ -133,7 +135,9 @@ not. See [composition](references/composition.md) for shared-clamp diagnostics.
 In pooled emission, `group` collects interacting shapes into one instance and
 forwards their authored blends; ungrouped shapes use Union defaults. A group
 opens a shared scope when needed, and grouped shapes cannot carry panel, trims,
-or cells.
+or cells. Static emission ignores `group` entirely — it walks the list in order —
+so a group cannot be used to keep a subtraction off its siblings on a static
+placement.
 
 ## The budget
 
@@ -174,6 +178,11 @@ Shapes and materials read a lane by index:
 - `palette[].weathering` scales its chips and scratches by a lane, with a
   static floor for props
 - a volume's intensity can ride a lane — the jet that answers throttle
+
+Live erosion uses the body path's lanes. Static placements supply zero-valued
+lanes, so their erosion resolves at zero; the prefix is emitted both inside a
+shared scope and when the shape owns its scope. See
+[composition](references/composition.md#the-three-scope-rules).
 
 Author the meaning in the document's own cell names and the lane expression; the
 engine only ever sees a number. A reversed `from`/`to` range runs the fold

@@ -18,7 +18,7 @@ namespace Puck.SignedDistance;
 //                         (twist/bend) or an eccentric ellipsoid and hole — == 1.0 for an isometric program, so its
 //                         scenes stay byte-identical. Both tables' offsets derive from word[0]'s existing lanes, so
 //                         the header is unchanged. See PackBounds.
-//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory (world render path only): one (instanceCount, 0, 0, 0)
+//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, 0, 0)
 //                         header uvec4, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius (float
 //                         bits), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd) — segmentFirst/segmentEnd index
 //                         the SEGMENT directory above (not raw instructions): every segment in that range is
@@ -37,8 +37,8 @@ namespace Puck.SignedDistance;
 //                         uniform grid the tile-cull beam prepass walks so its cost tracks instances NEAR a tile's cone,
 //                         not the total instance count. A self-contained uint block (header + CSR cellStart[] + cell
 //                         entries + always-tested list), padded to a uvec4 boundary — see SdfInstanceGrid for the full
-//                         layout. mapCore never reads it (it stops at the world-segment list), so every rendered pixel is
-//                         unchanged by its presence; only sdf-beam.comp consumes it.
+//                         layout. The instance-mask pass and secondary-query gathers consume this grid; mapCore
+//                         consumes their candidate masks and the ordered world/instance segment directories.
 //   [.. after the grid ..) = the RIGID-LEAF execution plan: one directory uvec4 per segment, followed by three uvec4s
 //                         per compiled leaf (pose, quaternion, tight sphere). Rigid Reset/Translate/Rotate/TransformDynamic/Shape chains are collapsed
 //                         host-side into a direct transform + shape record; mapCore executes these without its generic
@@ -289,6 +289,7 @@ public sealed partial class SdfProgram {
         // The bounds analysis runs FIRST: the segment directory's length is part of the packed layout below.
         var (shapeBounds, segments) = AnalyzeBounds(instructionOwners: instructionOwners);
         var rigidPlan = CompileRigidPlan(segments: segments);
+        var partPrograms = CompilePartPrograms();
 
         var instructionCount = m_instructions.Length;
         var materialCount = materialTable.Length;
@@ -359,7 +360,13 @@ public sealed partial class SdfProgram {
             sweepCurveOffsets[curveIndex] = (sweepOffsetVectors + (curveIndex * SweepCurveVectorsPerEntry));
         }
 
-        var totalVectors = (sweepOffsetVectors + (SweepCurveVectorsPerEntry * m_sweepCurves.Length));
+        var partProgramOffset = (sweepOffsetVectors + (SweepCurveVectorsPerEntry * m_sweepCurves.Length));
+        var totalVectors = (partProgramOffset + partPrograms.VectorCount);
+        // A probe cannot rely on shared or ineligible parts staying that way in every later emission. Each leaf
+        // needs at least ResetPoint + ShapeBlend, so its shared record plus placement binding consume at most
+        // instructionCount vectors in total, even if no two placements share geometry.
+        PartCompilationWordCapacity = checked((partProgramOffset + (m_instances.Length == 0
+            ? 0 : 1 + m_instances.Length + instructionCount)) * WordsPerVector);
 
         InstructionCount = instructionCount;
         m_words = new uint[(totalVectors * WordsPerVector)];
@@ -474,6 +481,7 @@ public sealed partial class SdfProgram {
         );
         PackConvexPolygonProfiles(profileOffsets: convexPolygonProfileOffsets);
         PackSweepCurves(curveOffsets: sweepCurveOffsets);
+        PackPartPrograms(partProgramOffset, instanceOffsetVectors, partPrograms);
     }
 
     /// <summary>Gets the per-(viewport, tile) instance-mask width in uints for this program: ceil(instance count / 32),
@@ -764,6 +772,7 @@ public sealed partial class SdfProgram {
                             TryGetLocalBound(
                             center: out var localCenter,
                             convexPolygonProfiles: m_convexPolygonProfiles,
+                            sweepCurves: m_sweepCurves,
                             instruction: instruction,
                             instructionIndex: index,
                             radius: out var localRadius
@@ -1759,10 +1768,8 @@ public sealed partial class SdfProgram {
         var segmentHeaderBase = (segmentOffsetVectors * WordsPerVector);
 
         m_words[segmentHeaderBase] = ((uint)segments.Count);
-        // The segment-directory header's .y lane is otherwise written zero and read by nothing (the shader reads only
-        // .x, the segment count) — a free lane. It carries the per-program Lipschitz step scale as float bits; mapCore
-        // reads it back and multiplies its FINAL returned distance by it (KEEP IN SYNC with the stepScale read in
-        // Assets/Shaders/Sdf/sdf-vm.hlsli's mapCore). See AnalyzeLipschitz.
+        // The header's .y carries the final field's Lipschitz correction; .z locates the rigid plan directory.
+        // KEEP IN SYNC with sdfLoadProgramLayout in sdf-vm.hlsli.
         m_words[(segmentHeaderBase + 1)] = BitConverter.SingleToUInt32Bits(value: stepScale);
         // Absolute uint4 offset of the plan directory. The table is appended after the instance grid so the grid's
         // long-settled offset chain stays byte-for-byte unchanged.
@@ -1865,7 +1872,7 @@ public sealed partial class SdfProgram {
     // Packs one fixed directory entry per segment followed by three vectors per compiled leaf:
     //   dir  = (absolute first-leaf vector, leaf count, dynamic slot + 1 [0 = static], 0)
     //   leaf = (local position.xyz, shapeInstruction | identityRotationBit), local quaternion, tight sphere
-    // The original instruction range remains in the segment metadata for mapGradCore and fallback evaluation.
+    // Original instruction ranges remain available to both generic evaluators.
     private void PackRigidPlan(int rigidPlanOffsetVectors, in RigidPlan plan) {
         var leafTableOffsetVectors = (rigidPlanOffsetVectors + plan.Segments.Length);
 
@@ -1937,8 +1944,8 @@ public sealed partial class SdfProgram {
     // unbounded plane as 0 (planes are never warped in practice, and any bounded shape sharing the chain dominates the
     // max). Over-estimating rho only slows the march, never makes it unsafe.
     private static float ShapeReachRadius(SdfInstruction instruction, int instructionIndex, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
-        // Sweep carries no TryGetLocalBound cull bound (its own field is already only "exact enough", not a sound
-        // cull lower bound) — see SweepShapeReachRadius (SdfProgram.Sweep.cs).
+        // Keep Sweep's geometric chain reach separate from its field cull sphere, which also includes the
+        // subtractive conservative margin — see SdfProgram.Sweep.cs.
         if (((SdfShapeType)instruction.Shape) == SdfShapeType.Sweep) {
             return SweepShapeReachRadius(
                 instruction: instruction,
@@ -1950,6 +1957,7 @@ public sealed partial class SdfProgram {
         if (TryGetLocalBound(
             center: out var center,
             convexPolygonProfiles: convexPolygonProfiles,
+            sweepCurves: sweepCurves,
             instruction: instruction,
             instructionIndex: instructionIndex,
             radius: out var radius
@@ -2055,17 +2063,13 @@ public sealed partial class SdfProgram {
                         chainDynamicSlot = ((int)instruction.Data0.X);
                         break;
                     }
+                case SdfOp.Scale when instruction.Data0 == Vector4.One:
+                    // Placement emission can retain an identity scale between rigid poses. It changes neither the
+                    // query point nor distance scale, so it does not require a generic segment.
+                    break;
                 case SdfOp.ShapeBlend: {
-                        // The rigid-leaf walk evaluates every leaf unconditionally (sdf-vm.hlsli has no mode check on
-                        // that path) — a Detail or non-secondary shape needs the generic per-instruction switch, where
-                        // the mode gate lives, so it never marches under sdfDetailShadingActive/sdfSecondaryMarchActive
-                        // as its flag requires. Fall back to the slow path for the whole segment.
-                        if (instruction.Detail || !instruction.Secondary) {
-                            dynamicSlot = -1;
-
-                            return false;
-                        }
-
+                        // Leaves retain their original shape header: both GPU rigid walks apply its Detail and
+                        // Secondary mode gates before evaluating the primitive, just as the generic walks do.
                         if (int.MinValue == commonDynamicSlot) {
                             commonDynamicSlot = chainDynamicSlot;
                         } else if (commonDynamicSlot != chainDynamicSlot) {
@@ -2082,6 +2086,7 @@ public sealed partial class SdfProgram {
                             TryGetLocalBound(
                             center: out var localBoundCenter,
                             convexPolygonProfiles: m_convexPolygonProfiles,
+                            sweepCurves: m_sweepCurves,
                             instruction: instruction,
                             instructionIndex: index,
                             radius: out var localBoundRadius
@@ -2126,10 +2131,12 @@ public sealed partial class SdfProgram {
     // The shape's LOCAL bounding sphere. Plane is unbounded; ellipsoid's SDF is a first-order approximation that can
     // UNDERESTIMATE at range, so a geometric containment sphere is not a sound lower bound on its candidate — both
     // evaluate fully, forever correct.
-    private static bool TryGetLocalBound(SdfInstruction instruction, int instructionIndex, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, out Vector3 center, out float radius) {
+    private static bool TryGetLocalBound(SdfInstruction instruction, int instructionIndex, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, out Vector3 center, out float radius) {
         var data0 = instruction.Data0;
 
         switch ((SdfShapeType)instruction.Shape) {
+            case SdfShapeType.Sweep:
+                return TryGetSweepBound(instruction: instruction, instructionIndex: instructionIndex, sweepCurves: sweepCurves, center: out center, radius: out radius);
             case SdfShapeType.Box:
             case SdfShapeType.ScreenSlab: {
                     // The rounded box is contained in the sharp half-extents box; the rounding is added anyway as slack

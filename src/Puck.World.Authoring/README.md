@@ -408,6 +408,8 @@ L=2 for F2MinusF1. Invalid fields are refused by name.
 Flare, shear, bumps, and erode take a per-shape clamp when a field scope is
 available. Inside a creation or group scope, the same warp stays on its own
 shape chain, while the enclosing scope's clamp applies to all its siblings.
+Static erosion is emitted in either scope form and reads zero-valued lanes;
+live state-driven erosion requires a body's dynamic lanes.
 Panels, trims, and cells require field isolation for their operation and are
 refused when that scope is unavailable. This is a semantic restriction;
 warps sharing a conservative bound remain valid.
@@ -545,8 +547,10 @@ the same. Verified by `ShapeDetailLawTests`.
 
 `CreationDocument.Volumes` declares bounded participating media beside
 the shapes. Each `flow` uses an oriented `halfExtent` box, with its mouth
-at +Y and advection toward -Y. The renderer integrates it after opaque
-shading and clips it against that depth; it creates no collider.
+at +Y and advection toward -Y. A `cloud` fills a smooth ellipsoidal envelope
+inside that box with advected three-dimensional noise. The renderer integrates
+both on sky rays and after opaque shading, clipped against opaque depth;
+neither creates a collider. `enabled: false` omits a volume from emission.
 
 A volume declares `position`, `rotation`, `halfExtent`, and a `ramp`
 of one to four ascending `{ density, color }` stops. The ramp maps local
@@ -556,10 +560,20 @@ density to emission before integration. `axis`, `width`, `speed`,
 Optional `intensityLane` selects anonymous render lane 0..3; omission
 uses unit gain. Zero extinction uses the transparent integration limit.
 
+For clouds, `width` is the noise-cell size, `coverage` (default 0.55) is in
+[0, 1], and `softness` (default 0.18) is in (0, 1]. `axis` is flow-only;
+`coverage` and `softness` are cloud-only. Clouds use the ramp and a height tint
+for illumination, without cloud shadows or multiple scattering. They are
+bounded media, independent of the sky's two-dimensional cloud layer.
+
 Optional `parent` names a shape frame; omission uses the creation root.
 The frame and all creation-unit lengths follow placement scaling.
 `CreationCanonicalizer.ValidateVolumes` refuses invalid values and more
-than `SdfProgramBuilder.MaxVolumes` entries.
+than `SdfProgramBuilder.MaxVolumes` entries. The frame budget is 64 volumes
+shared by all placements and bodies, not 64 per character. World emission
+keeps the first 64 enabled entries; `world.budget` reports the submitted count.
+Stay within that budget when composing a scene. Overlapping volumes composite
+in entry-distance order; their densities are not integrated as a combined medium.
 
 ## Sculpting: authoring creations in code (`Sculpting/`)
 

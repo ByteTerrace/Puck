@@ -65,6 +65,62 @@ public sealed class VolumeLawTests {
         Assert.Empty(collection: CreationCanonicalizer.Validate(document: Document(Flow(parent: null))));
 
     [Fact]
+    public void ACloudPreservesItsDensityControlsAndScalesItsNoiseCells() {
+        var cloud = Flow(kind: VolumeDocument.CloudKind, parent: null) with {
+            Width = 2f, Coverage = 0.7f, Softness = 0.12f, IntensityLane = null,
+        };
+        Assert.Empty(CreationCanonicalizer.Validate(Document(cloud)));
+        var volume = cloud.ToVolume(-1, Vector3.Zero, Quaternion.Identity, 3f);
+        volume.Validate(0);
+        Assert.Equal(SdfVolumeKind.Cloud, volume.Kind);
+        Assert.Equal(6f, volume.Width);
+        Assert.Equal(0.7f, volume.Coverage);
+        Assert.Equal(0.12f, volume.Softness);
+        Assert.Equal(NozzleOffset * 3f, volume.Position);
+    }
+
+    [Theory]
+    [InlineData(-0.1f, 0.2f)]
+    [InlineData(1.1f, 0.2f)]
+    [InlineData(0.5f, 0f)]
+    [InlineData(0.5f, 1.1f)]
+    public void InvalidCloudDensityControlsAreRefused(float coverage, float softness) =>
+        AssertRefusesNaming(Document(Flow(kind: VolumeDocument.CloudKind) with {
+            Coverage = coverage, Softness = softness,
+        }), "volumes[0]");
+
+    [Fact]
+    public void DensityFamilyControlsCannotSilentlyDisappear() {
+        AssertRefusesNaming(Document(Flow() with { Coverage = 0.5f }), ".coverage");
+        AssertRefusesNaming(Document(Flow(kind: VolumeDocument.CloudKind) with { Axis = 1f }), ".axis");
+    }
+
+    [Fact]
+    public void SixteenJetsSurviveAnimatedEmissionAndDisabledVolumesUseNoSlot() {
+        var creation = CreationDomainParentLawTests.Prototype(document: Document([
+            Flow() with { Enabled = false },
+            .. Enumerable.Range(0, 16).Select(index => Flow() with { Seed = (uint)index }),
+        ]));
+        var definition = CreationDomainParentLawTests.Definition(creation: creation, scale: 1f);
+        var client = CreationDomainParentLawTests.Client(definition: definition);
+        var pool = CreationDomainParentLawTests.Pool(creation: creation, scale: 1f);
+        var transforms = new DynamicTransform[WorldStampPool.DynamicSlotCount];
+        CreationDomainParentLawTests.Advance(client: client, pool: pool, transforms: transforms, tick: 1UL);
+        Assert.Equal(16, pool.Volumes.Count);
+        Assert.Equal(Enumerable.Range(0, 16).Select(index => (uint)index), pool.Volumes.Select(volume => volume.Seed));
+    }
+
+    [Fact]
+    public void ADisabledStaticCloudEmitsNoVolume() {
+        var creation = CreationDomainParentLawTests.Prototype(Document(Flow(kind: VolumeDocument.CloudKind) with { Enabled = false }));
+        var placement = new WorldPlacement(Id: "cloud", PrototypeId: creation.Id, Position: Vector3.Zero, YawDegrees: 0f, Scale: 1f);
+        var definition = Fixtures.BuildDocument() with { CreationsRaw = [creation], PlacementRowsRaw = [placement] };
+        var volumes = new List<SdfVolume>();
+        WorldPlacementStamper.EmitStatic(new SdfProgramBuilder(), definition, [creation], [placement], volumes: volumes);
+        Assert.Empty(volumes);
+    }
+
+    [Fact]
     public void AnUnknownKindIsRefusedByName() =>
         AssertRefusesNaming(document: Document(Flow(kind: "smoke")), needle: "volumes[0].kind");
 

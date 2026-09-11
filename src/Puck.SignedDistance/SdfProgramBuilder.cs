@@ -93,9 +93,9 @@ public sealed partial class SdfProgramBuilder {
     public const int ScreenMaterialId = 65535;
     /// <summary>The most bounded emissive volumes (<see cref="SdfVolume"/>) one rendered frame may carry — matches
     /// <c>Puck.SdfVm.SdfWorldEngine.MaxVolumes</c>, which reads this rather than hand-syncing a second literal. Sized
-    /// for bounded media per frame; the per-pixel cost is a slab test for every volume whose ray
-    /// misses, so this stays small.</summary>
-    public const int MaxVolumes = 8;
+    /// for multi-character jets and cloud banks. Rays test the live prefix; intersecting volumes require
+    /// repeated selection scans and density integration. Capacity is not a frame-rate guarantee.</summary>
+    public const int MaxVolumes = 64;
 
     private readonly List<SdfInstanceRange> m_instances;
     private readonly List<SdfInstruction> m_instructions;

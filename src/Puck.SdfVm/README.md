@@ -36,16 +36,19 @@ never a Vulkan or DirectX type by name.
   scene be assembled from independent emitters — fixed geometry, an authoring
   pool, a debug takeover — as one list instead of one hand-written
   `BuildProgram` method.
-- *Analytic normals by default:* a single forward-mode gradient dual
-  (`mapGradCore`) replaces the classic four-tap finite-difference probe,
-  cutting the hottest kernel's per-pixel cost while improving cross-backend
-  parity.
+- *Gradient propagation for normals:* one forward-mode walk (`mapGradCore`)
+  carries shape gradients through transforms and composition. Common primitives,
+  including superellipsoids, use analytical leaf normals; the remaining shapes
+  use local finite differences. The full-field finite-difference option remains
+  available for comparisons. Authored curvature shading selects five full-field
+  samples for the normal and curvature instead of this gradient path.
 - *Shading-only detail shapes:* a shape instruction flagged
   `SdfInstruction.Detail` is invisible to every march (beam, fine, shadow, AO)
   and appears only in the hit-only normal/material re-evaluation `renderView`
   runs at an already-found surface point — a seam or rivet too thin for the
   footprint-relative march to resolve at distance stays a crisp mark instead
-  of dotting out.
+  of dotting out. Compiled rigid leaves retain the same detail and secondary
+  mode gates as the generic scalar and gradient interpreters.
 - *Non-secondary shapes and gradient-scaled shadow/AO:* `SdfInstruction.Secondary`
   is Detail's opposite exclusion set — false drops a shape from ONLY the
   soft-shadow and ambient-occlusion marches, while it still marches for the
@@ -56,36 +59,77 @@ never a Vulkan or DirectX type by name.
 
 ## 🎬 The render pipeline
 
-Six kernels run per frame: `sdf-sky.comp` (a direct, un-culled pass that
+Eight kernels run per frame: `sdf-frame-upload.comp` (frame data copied to
+device-local buffers) → `sdf-sky.comp` (a direct, un-culled pass that
 fills every source pixel with the authored sky, before any tile is culled)
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
-(cone march over the tile-masked field) → `sdf-cull-args.comp` → the views
-kernel (per-camera march) → the composite pass (split-screen assembly).
+(cone march over the tile-masked field) → `sdf-cull-args.comp` →
+`sdf-world-primary.comp` (camera traversal) → the views kernel (hit shading
+and diagnostics) → the composite pass (split-screen assembly).
 `SdfWorldEngine.PassLabels` names them for per-pass GPU timing. The views
-kernel ships in two compiled variants
-(`SdfViewsKernelVariant.Full`/`.CoreOps`) — the core-ops variant strips the
-exotic op/shape cases to shrink register pressure and raise warp occupancy
-when a program uses none of them.
+kernel ships in three compiled variants
+(`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
+CoreOps also strips the remaining exotic cases. The program selects the smallest
+variant that supports its operations, reducing shader size and register pressure.
+
+Primary traversal writes a 48-byte hit record per active pixel. It preserves
+depth, hit acceptance, terminal field radius and threshold, material and seam
+data, dynamic frame/lanes, and primary iteration/evaluation counts. The views
+pass reads those records after a compute barrier; normals, detail, lighting,
+and volumes keep their existing evaluation paths. Both dispatches use the same
+indirect bounds and live view dimensions. Child views are skipped by both.
+The buffer reserves `width × height × viewportCapacity × 48` bytes so changing
+view rectangles cannot overrun an allocation sized for an earlier layout.
+It is shared across frame slots under the engine's existing cross-frame barrier.
+The `primary` and `views` timing labels report traversal and shading separately;
+compare the full frame, including the extra buffer traffic and dispatch.
+
+The beam searches for an initial depth, an empty gap, and a clear tail. Three
+consecutive occupied samples with non-increasing clearance abandon both the gap
+and tail searches. This bounds wasted work inside ground and walls; it does not
+prove that later space is empty. The initial depth remains valid, and the gap and
+far-bound sentinels leave subsequent traversal to the primary rays.
+
+Scalar queries can execute a complete compiled part instead of revisiting its
+scope and individual VM segments. `SdfProgram` shares its leaf program by geometry
+identity and supplies separate pose/material bindings per placement. The direct
+walk retains internal cuts, blend order, shape participation flags, material
+seams and the scope's distance correction. Unsupported parts and analytic dual
+queries use the existing interpreter. This is a shorter execution program;
+it does not introduce approximate distances or a new spatial-culling rule.
+The shader implementation is in `Assets/Shaders/Sdf/sdf-parts.hlsli`.
 
 Exact secondary lighting has its own instance masks. Each 8×8 workgroup's
-shadow gather covers the full 16384-instance ceiling; reserved slots cannot
+shadow gather covers the full 65536-instance ceiling; reserved slots cannot
 silently select camera-tile shadows. Exact ambient occlusion includes every
 live instance, with parked slots removed once per group. Camera visibility
 does not prove that an object is irrelevant to an AO probe outside that ray.
-The two shared masks cost 4 KiB per workgroup. Explicit fast AO and camera-tile
+The two shared masks cost 16 KiB per workgroup. Explicit fast AO and camera-tile
 shadows remain approximation options; exact AO costs more in dense scenes.
 
 `SdfWorldEngine`'s construction options (`SdfWorldEngineOptions`) freeze the
 program word capacity, instance capacity, and dynamic-transform capacity for
 the lifetime of the engine; `UploadProgram` is the single owner of every
 per-program derived buffer and mask width, called once at construction and
-again whenever a host swaps the live program. `SdfEngineNode` is the
+again whenever a host swaps the live program. Composition probes reserve
+`SdfProgram.PartCompilationWordCapacity` so different part-sharing or admission
+outcomes within the probe's ceilings cannot overrun the program allocation.
+`SdfEngineNode` is the
 `Puck.Hosting.IRenderNode` adapter a generic render tree composes — it owns
 device-loss recovery and forwards `NotifyDeviceLost` to the wrapped engine. It
 also records the last uploaded program's word/instance count and Lipschitz
 step scale (`LiveProgramWords`/`LiveProgramInstances`/`LiveProgramStepScale`,
 against the frozen `ProgramWordCapacity`) — the live half of `Puck.World`'s
 `world.budget` cost sheet.
+`LiveVolumes` reports the submitted bounded-media count against the shared
+64-volume ceiling. Flow and cloud media use eleven `float4` rows per entry:
+family in row 5.z, density ramp in rows 6–9, cloud coverage/softness in row 10.xy.
+Keep `SdfVolume.VectorsPerEntry`, `PackVolumes`, and `shade-volumes.hlsli` aligned.
+The shader scans the live prefix, selects each intersecting volume from far to
+near, and composites it immediately. This avoids capacity-sized per-pixel arrays
+and duplicated unrolled integrators; intersecting volumes still require repeated
+selection scans. The [authoring contract](../Puck.World.Authoring/README.md#bounded-volumes-volumes)
+describes density controls and lighting limits.
 `SdfWorldRenderSpec.Decorate` is where a host wraps that node: post-render
 passes are `Puck.Shaders.FullscreenPassNode`s built from `puck.shader.v1`
 manifests shipped in this project's `Assets/Shaders/Sdf/` tree

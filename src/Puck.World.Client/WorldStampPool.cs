@@ -973,7 +973,7 @@ public sealed partial class WorldStampPool {
     // timeline) or an attached row (a live body root). The exact complement of WorldPlacementStamper.IsStaticStamp for a
     // non-inhabited row — an inhabited row roots through the body-stamp census instead.
     private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
-        (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null));
+        (row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null));
     private static int[] ProbePalette(SdfProgramBuilder builder) {
         var ids = new int[CreationDocument.PaletteSize];
 
@@ -1625,6 +1625,9 @@ public sealed partial class WorldStampPool {
         var shapes = (document.Shapes ?? []);
 
         foreach (var volume in volumes) {
+            if (!volume.Enabled) {
+                continue;
+            }
             if (m_volumes.Count >= SdfProgramBuilder.MaxVolumes) {
                 return;
             }

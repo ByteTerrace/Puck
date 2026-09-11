@@ -317,7 +317,7 @@ public sealed partial class SdfWorldEngine {
             frame: frame
         );
     }
-    // Ten float4 rows, paired with shade-volumes.hlsli. Unused slots carry zero bounds.
+    // Eleven float4 rows, paired with shade-volumes.hlsli. Unused trailing slots carry zero bounds.
     private void PackVolumes(SdfFrame frame) {
         Array.Clear(array: m_volumeScratch);
 
@@ -341,6 +341,8 @@ public sealed partial class SdfWorldEngine {
             floats[b + 16] = volume.Intensity; floats[b + 17] = volume.Extinction;
             floats[b + 18] = volume.PulseAmplitude; floats[b + 19] = volume.PulseFrequency;
             floats[b + 20] = volume.IntensityLane ?? -1; floats[b + 21] = volume.Ramp.Count;
+            floats[b + 22] = (float)volume.Kind;
+            floats[b + 40] = volume.Coverage; floats[b + 41] = volume.Softness;
             for (var stop = 0; stop < volume.Ramp.Count; stop++) {
                 var row = b + 24 + stop * 4;
                 var value = volume.Ramp[stop];

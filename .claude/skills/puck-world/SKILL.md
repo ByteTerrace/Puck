@@ -5,6 +5,21 @@ description: Guides work on Puck.World across its document and Protocol model, a
 
 # Puck.World: the game of many games
 
+For multi-body render validation, inhabited placements belong only to the body
+stamp census, even when their creation is animated or attached. A simultaneous
+animated-placement registration doubles the character. Verify body count and
+`world.budget` together. Bounded flow/cloud media share 64 frame slots; disabled
+volumes emit nothing, and the budget readback includes their submitted count.
+The [Moth courtyard](../../../src/Puck.World/Assets/worlds/moth-courtyard.md)
+provides eight held poses and independent sky/cloud switches for repeatable GPU
+captures. Density controls live in the World.Authoring README.
+
+`world.sdf.dump <path>` copies the initialized renderer's live packed program
+to little-endian uint32 words, replacing the destination. It excludes capacity
+headroom, dynamic transforms and the frame grid; use the current `SdfProgram`
+layout to inspect it. It is a CPU-side diagnostic copy, not a GPU readback or
+loadable asset, and leaves simulation and rendering unchanged.
+
 Creation shapes support `type: "Prism"`: an XY profile extruded along Z.
 `scale` gives bottom half-width, half-height and extrusion half-depth; optional
 `taper` gives top/bottom width in [0, 1] (default 0.5). Zero makes a triangle,

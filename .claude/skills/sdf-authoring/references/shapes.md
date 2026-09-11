@@ -110,17 +110,27 @@ body-collider row, because a revolve's radial offset is not a per-axis box.
 ### Warps
 
 Applied in this order on the local point: twist, bend, flare, shear, bumps,
-erode, then the primitive.
+erode, then the primitive — but **only the pooled/body path emits twist and
+bend**. The static stamper's chain runs flare, shear, bumps and never emits
+either, so on a static placement both fields are inert: no refusal, and
+`creation stats` still prints a nonzero `twist:`/`bend:` count. Get a static
+curve from a `Sweep`, a profiled `Prism`, or `shear` instead.
 
 | Field | Shape | Range |
 |---|---|---|
-| `twist` | scalar, radians per unit local Y | clamped ±3 |
-| `bend` | scalar, radians per unit local Y | clamped ±1.5 |
+| `twist` | scalar, radians per unit local Y; **body path only** | clamped ±3 |
+| `bend` | scalar, radians per unit local Y; **body path only** | clamped ±1.5 |
 | `flare` | `{ amount, bulge, span, top, axis, startScale }` | amount [−0.9, 4], bulge ±1, span > 0, axis 0..2 default 1 (Y), startScale (0, 5] |
 | `shear` | `{ linear, quadratic, cubic, target, driver }` | coefficients ±4; target and driver must be **distinct** axes in 0..2 |
 | `bumps` | up to 4 × `{ center, radii, push }` | push magnitude ≤ 2; radii floored at 0.001 |
 | `erode` | `{ lane, from, to, noise }` | lane 0..3; from and to must differ; noise defaults to 1 cell per unit |
 | `cells` | `{ frequency, amplitude, seed, mode, randomness }` | frequency (0, 8]; amplitude [0, 4]; mode `F1` or `F2MinusF1`; randomness ≤ 0.46 (F1) or ≤ 0.2 (F2MinusF1); the derived march factor must stay ≤ 8 |
+
+An erosion's range is consumed against the shape's **bound radius**
+(`SdfSolidGeometry.Reach`), not its thinnest dimension, so a flat plate is
+already fully gone a fraction of the way into its authored `from`/`to` window —
+roughly a quarter of it for a thin plate. Back-solve the window from a measured
+capture rather than assuming `to` is where the shape disappears.
 
 Creation contact emission omits `flare`, `shear`, `bumps`, and `erode`.
 This is an authoring-path omission, not a statement that their low-level VM
@@ -195,7 +205,35 @@ folds may not carry either.
   for the omitted facets. Author a separate admitted contact shape if needed.
 
 A low-level SDF operation's CPU support does not guarantee that a creation's
-contact compiler emits it.
+contact compiler emits it. Conversely, a supported primitive or profile name
+does not prove the whole transform chain is admitted: `SdfFieldEvaluator`
+refuses a residual **nonuniform `Scale`** op, because a nonuniform scale carries
+no distance.
+
+Whether one appears is decided by the primitive, not by the solid row. Arms that
+bake the authored dimensions into the shape emit no `Scale`; everything else
+rides a generic `Scale(scale)`, nonuniform exactly when the authored scale is.
+A uniform scale is always admitted, so this only bites an anisotropic shape.
+
+| Bakes its dimensions | Rides a generic `Scale` |
+|---|---|
+| Sphere, Ellipsoid, Superellipsoid, Box, Plane | Torus, RoundCone |
+| Prism with a Trapezoid, RoundedRectangle, or ChamferedRectangle profile | Prism with a Convex profile (Polygon and Ellipse are already refused) |
+| Capsule, Cylinder, Cone when `scale.x == scale.z` | those three when `scale.x != scale.z` |
+
+None of the right column is refused by name — each validates, renders, and fails
+only when the contact field is constructed. For an anisotropic solid, prefer a
+left-column spelling: a `RoundedRectangle` or `ChamferedRectangle` prism takes
+its half-extents natively where a `Convex` one cannot. Keeping a convex outline
+means scaling the prism uniformly with the outline's XY ratio baked into its
+vertices, restoring the extrusion depth with an admitted cut when the uniform
+scale changed it.
+
+`creation stats` constructs the world's deterministic contact field through the
+same builder used at boot. A residual nonuniform Scale in a solid placement
+therefore exits 1 with a contact-inspection diagnostic. This check covers the
+whole world even with `--prototype`; it does not demand contact support from
+unplaced prototypes or non-solid placements.
 
 ## Reading a refusal
 

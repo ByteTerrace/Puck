@@ -21,10 +21,14 @@ shade it; this library never names a device, a window, or a shader.
 - *Deterministic to the bit:* the CPU evaluator is `FixedQ4816`/`FixedVector3`
   throughout, with no float, wall-clock, or RNG in its walk; identical ordered
   inputs return identical results on every machine.
-- *Sound instance culling:* bounded primitives contribute exact or conservative
-  bounds for `SdfProgram`'s packing pass. Shapes for which no finite sound bound
-  exists, including planes and the approximate ellipsoid path, deliberately stay
-  always-tested instead of claiming a false finite envelope.
+- *Sound instance culling:* geometric spheres narrow camera-tile candidates.
+  Per-query rejection needs a lower bound on the returned field as well;
+  approximate ellipsoids and unsupported expressions retain full evaluation
+  where a geometric sphere cannot prove that their distance loses.
+- *Mixed-scale spatial indexing:* `SdfInstanceGrid` separates unusually large
+  bounds from the fine grid before choosing its extent and query padding. A large
+  floor therefore cannot make every query scan a character-sized population.
+  The separate list still tests those bounds normally; it does not discard them.
 - *One fold, two readings:* an isometric domain operator is a point transform
   to a marcher and a set of rigid copies to anything that places geometry
   instead. `SdfDomainExpansion` derives the copies in fixed point, so an
@@ -71,6 +75,30 @@ reports every non-unit scale baked into `PopField`, with its instruction
 range, owning instance, and number of shapes sharing the bound. A global
 scale of one does not mean scopes are unclamped. These are conservative
 field bounds, not measured march counts or GPU time.
+
+`SdfProgram` also compiles eligible whole field scopes into shared part programs:
+short lists of primitive queries with separate pose and material bindings for
+each placement. Equal geometry shares the list even when those bindings differ.
+The first implementation accepts hard-union scopes whose leaves each reset the
+point, optionally select a dynamic pose, optionally apply one Scale, AxialProfile
+or Shear, then evaluate a shape. Internal blend order, participation flags and
+the scope's distance correction remain intact. Unsupported chains and Sweep
+retain the original instruction stream. Polygon identity includes its vertices,
+not its packed table address. The CPU evaluator continues to use the typed stream.
+
+Capacity probes use `PartCompilationWordCapacity`, which reserves room for part
+metadata at the probe's instruction and instance ceilings. `Words.Length` only
+describes the current representation: later geometry can share less, or qualify
+for compilation when the probe did not. The part table follows the existing
+payload tables; the instance-directory header's second lane points to it.
+
+Rigid hard-union Sweeps use the existing shape, segment and rigid-leaf sphere
+tests. Their spheres enclose the control-point hull, profile and strand orbit,
+plus the margin subtracted by the field. This bounds the evaluated candidate
+even when its closest-point approximation is imperfect. Margins above 16 retain
+full evaluation because Sweep caps its strand minimum at 1e9 before subtracting
+the margin. Both GPU walks bypass sphere rejection when the accumulator exceeds
+that cap. This changes culling metadata, not the curve, materials or step scale.
 
 Round seams use the existing smooth-radius lane: `GrooveUnion` carves the
 complement of sqrt(a²+b²)-r from the union, and `PipeUnion` adds that tube;

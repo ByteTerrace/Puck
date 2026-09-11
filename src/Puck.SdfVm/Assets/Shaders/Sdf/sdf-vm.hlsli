@@ -688,7 +688,7 @@ static float sdfMaterialBlendWeight = 0.0;
 static int sdfMaterialBlendOther = 0;
 
 // mapCore/mapGradCore's march-vs-shade mode: false (every march sample — the beam cone, the fine march, shadow, AO,
-// and the rigid-leaf fast path, which SdfProgram's rigid-plan compiler refuses for a Detail-carrying segment) skips a
+// including their rigid-leaf fast paths) skips a
 // SDF_SHAPE_DETAIL_FLAG shape entirely, so it never appears in the marched hit, the collider, or the step bound.
 // sdf-world.hlsli's renderView flips it true for exactly the lifetime of its hit-only material/normal re-evaluation
 // at the already-found surface point, so a detail shape's local perturbation and material win only there. False
@@ -701,6 +701,12 @@ static bool sdfDetailShadingActive = false;
 // it — the study's secondaryScene posture: a shape marked secondary=false still shades and collides, it just casts
 // no shadow and contributes no AO. False everywhere else, so an unauthored program renders byte-identical.
 static bool sdfSecondaryMarchActive = false;
+
+// Shared by scalar/gradient, rigid/generic walks. Flags control participation in the field, not the primitive id.
+bool sdfShapeEnabled(uint packedShapeType) {
+    return (((packedShapeType & SDF_SHAPE_DETAIL_FLAG) == 0u) || sdfDetailShadingActive)
+        && (((packedShapeType & SDF_SHAPE_NO_SECONDARY_FLAG) == 0u) || !sdfSecondaryMarchActive);
+}
 
 // GLSL-style FLOOR modulo. HLSL's fmod truncates toward zero, so it disagrees with GLSL's mod for negative
 // operands — and the wallpaper parity keys take mod of (possibly negative) cell indices, where a trunc-mod would
@@ -2005,6 +2011,20 @@ float3 sdfShapeGradientFd(uint shapeType, float3 p, float4 data0, float4 data1) 
         (k.yxy * evaluateShape(shapeType, (p + (k.yxy * e)), data0, data1)) +
         (k.xxx * evaluateShape(shapeType, (p + (k.xxx * e)), data0, data1)));
 }
+#ifndef SDF_STRIP_HEAVY
+// The normalized gradient of min(r) * (sum(abs(p/r)^e)^(1/e) - 1). Its common positive factor cancels
+// on normalization, leaving sign(p_i) * abs(p_i/r_i)^(e-1) / r_i. Factor by max(abs(p/r)) before pow,
+// as in sdfSuperellipsoid, to avoid overflowing for distant samples. The center has no unique normal.
+// Return a unit direction like the previous shape-local FD path; transform/CSG gradient transport is unchanged.
+float3 sdfSuperellipsoidGradient(float3 p, float3 inverseRadii, float exponent) {
+    float3 q = (abs(p) * inverseRadii);
+    float m = max(q.x, max(q.y, q.z));
+    if (m <= 0.0) {
+        return float3(0.0, 0.0, 0.0);
+    }
+    return sdfSafeNormalize(sign(p) * pow(q / m, (exponent - 1.0)) * inverseRadii);
+}
+#endif
 // The gradient companion to evaluateShape (same dispatch): analytic for the cheap majority, shape-local FD for the rest.
 float3 evaluateShapeGradient(uint shapeType, float3 p, float4 data0, float4 data1) {
     switch (shapeType) {
@@ -2018,6 +2038,9 @@ float3 evaluateShapeGradient(uint shapeType, float3 p, float4 data0, float4 data
 #endif
         case SDF_SHAPE_CAPSULE:     return sdfCapsuleGradient(p, data0.xyz, data1.y);
         case SDF_SHAPE_CYLINDER:    return sdfCylinderGradient(p, data0.x, data0.y);
+#ifndef SDF_STRIP_HEAVY
+        case SDF_SHAPE_SUPERELLIPSOID: return sdfSuperellipsoidGradient(p, data1.yzw, data0.w);
+#endif
         // The exotic tail — the 2D-lift family, Glyph, and SDF_SHAPE_SAMPLED_REGION — falls to the shape-local 4-tap FD
         // (the analytic-dual doctrine already pays FD for Star/Ellipse here). For a brick that is 4 extra pool samples,
         // hit-only; an analytic trilinear gradient is a recorded follow-up. FD holds in both variants because the
@@ -2190,12 +2213,13 @@ struct SdfFieldSave {
 
 // Advances the visible-instance cursor to the next SET BIT of the caller's per-tile mask (ascending instance index,
 // so ascending segment index — instances' segment ranges are disjoint and ascend with declaration order) and loads
-// that instance's [segmentFirst, segmentEnd) directory range; both outputs are SDF_SEGMENT_NONE when no visible
-// instance remains. `maskWordIndex`/`maskWordBits` carry the enumeration across calls: the current word index and
+// that instance's identity and [segmentFirst, segmentEnd) directory range. The identity selects a complete shared
+// part program where supported; all three outputs are SDF_SEGMENT_NONE when no visible instance remains.
+// `maskWordIndex`/`maskWordBits` carry the enumeration across calls: the current word index and
 // its remaining (unconsumed) bits — the caller initializes them to (0xFFFFFFFFu, 0u), so the word-fetch loop below
 // wraps onto word 0 on the first call. An empty range (an instance declared around zero instructions) is skipped,
 // never surfaced.
-void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uint instanceCount, inout uint maskWordIndex, inout uint maskWordBits, out uint segmentFirst, out uint segmentEnd) {
+void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uint instanceCount, inout uint maskWordIndex, inout uint maskWordBits, out uint segmentFirst, out uint segmentEnd, out uint instanceIndex) {
     uint wordCount = sdfInstanceMaskWordCount(instanceCount);
     bool hasSummary = sdfInstanceMaskHasSummary(instanceMaskBase);
 
@@ -2238,10 +2262,11 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
         if (maskWordBits == 0u) {
             segmentFirst = SDF_SEGMENT_NONE;
             segmentEnd = SDF_SEGMENT_NONE;
+            instanceIndex = SDF_SEGMENT_NONE;
             return;
         }
 
-        uint instanceIndex = ((maskWordIndex << 5u) + firstbitlow(maskWordBits));
+        instanceIndex = ((maskWordIndex << 5u) + firstbitlow(maskWordBits));
 
         maskWordBits &= (maskWordBits - 1u);
 
@@ -2271,7 +2296,7 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
 #endif
         // Strip the shadow-transparent flag (i1.w's high bit — SDF_INSTANCE_SHADOW_TRANSPARENT_BIT) before using the
         // lane as segmentEnd: it is a shadow-gather-only classification, unrelated to the render range. The mask is the
-        // identity for every existing program (the bit is clear), so the render stays byte-identical.
+        // identity when the flag is clear; a set flag never changes the segment range it names.
         uint metaSegmentEnd = (instanceMeta.w & SDF_INSTANCE_SEGMENT_END_MASK);
 
         if (instanceMeta.z < metaSegmentEnd) {
@@ -2284,8 +2309,8 @@ void sdfNextVisibleInstanceRange(uint instanceMaskBase, uint instanceOffset, uin
 
 // The program's LAYOUT — every offset/count mapCore/mapGradCore need to walk the instruction stream. There is one
 // program per dispatch, so this is dispatch-uniform; mapCore/mapGradCore used to re-derive it from sdfWords[0] on
-// EVERY call, and the marchers call them once per march STEP (the primary march up to 160 times, the shadow march up
-// to 48, per lit pixel) — DXC's no-GVN-over-StructuredBuffer-loads gap (see sdfInstanceDirectoryOffsetFrom above)
+// EVERY call, and marchers call them once per step (up to 128 primary steps plus exhaustion re-evaluation) —
+// DXC's no-GVN-over-StructuredBuffer-loads gap (see sdfInstanceDirectoryOffsetFrom above)
 // turned that into a real per-step reload. sdfLoadProgramLayout is now the ONE decode point; mapCore/mapGradCore read
 // the cached static instead.
 struct SdfProgramLayout {
@@ -2294,6 +2319,7 @@ struct SdfProgramLayout {
     uint segmentOffset;      // segment directory offset
     uint segmentCount;       // segment directory's segment count
     uint rigidPlanOffset;    // rigid-leaf execution plan offset (segmentHeader.z)
+    uint partProgramOffset;  // whole-scope shared programs (instanceHeader.y); zero when none qualify
     float stepScale;         // per-program Lipschitz step clamp (1/L; already >0-guarded)
     uint instanceOffset;     // instance directory offset
     uint instanceCount;      // packed (unclamped) instance count
@@ -2325,6 +2351,7 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.segmentOffset = segmentOffset;
     layout.segmentCount = segmentCount;
     layout.rigidPlanOffset = segmentHeader.z;
+    layout.partProgramOffset = sdfWords[instanceOffset].y;
     layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
@@ -2350,6 +2377,8 @@ SdfProgramLayout sdfLoadProgramLayout() {
 #define SDF_VM_LOAD_DATA0 float4 data0 = asfloat(sdfWords[dataOffset + (2u * index)])
 #define SDF_VM_LOAD_DATA1 float4 data1 = asfloat(sdfWords[dataOffset + (2u * index) + 1u])
 #endif
+
+#include "sdf-parts.hlsli"
 
 SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) {
     // Every call publishes a fresh fold-safe step bound (stale bounds from a previous sample would be unsound); the
@@ -2400,11 +2429,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     uint maskWordBits = 0u;
     uint instanceSegment = SDF_SEGMENT_NONE;
     uint instanceSegmentEnd = SDF_SEGMENT_NONE;
+    uint pendingInstance = SDF_SEGMENT_NONE;
 
     if (hasInstances) {
         worldCount = sdfWords[worldSegmentOffset].x;
         worldNext = ((0u < worldCount) ? sdfWords[worldSegmentOffset + 1u].x : SDF_SEGMENT_NONE);
-        sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd);
+        sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
     }
 
     float3 localPosition = worldPosition;
@@ -2481,10 +2511,25 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
             worldCursor++;
             worldNext = ((worldCursor < worldCount) ? sdfWords[worldSegmentOffset + 1u + worldCursor].x : SDF_SEGMENT_NONE);
         } else if (instanceSegment < instanceSegmentEnd) {
+#ifndef SDF_VM_DISABLE_PART_PROGRAMS
+            if (sdfProgramLayout.partProgramOffset != 0u) {
+                uint4 part = sdfWords[sdfProgramLayout.partProgramOffset + 1u + pendingInstance];
+                bool partReady = ((part.z & 0x7FFFFFFFu) != 0u);
+#ifndef SDF_DYNAMIC_TRANSFORMS
+                partReady = partReady && ((part.z & 0x80000000u) == 0u);
+#endif
+                if (partReady) {
+                    sdfComposePartProgram(result, worldPosition, part, dataOffset, trackMaterial);
+                    sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
+                        maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
+                    continue;
+                }
+            }
+#endif
             segment = instanceSegment++;
 
             if (instanceSegment == instanceSegmentEnd) {
-                sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd);
+                sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
             }
         } else {
             break;
@@ -2508,8 +2553,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
 
             // A dynamic sphere without the dynamic-transform buffer (non-world paths) stays unready: evaluate fully.
             // Squared-distance form of length(p - c) - radius >= runningMin (the max keeps a negative running
-            // minimum, deep inside geometry, from flipping the comparison's sign).
-            if (boundReady) {
+            // minimum from flipping the sign). The far guard preserves capped Sweep candidates; see TryGetSweepBound.
+            if (boundReady && (result.distance <= SDF_FAR_DISTANCE)) {
                 float3 toCenter = (worldPosition - boundCenter);
                 float clearance = max((result.distance + segmentBound.w), 0.0);
 
@@ -2563,7 +2608,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     // distant bones before pose/shape payload loads. Negative radius marks a non-Union/unbounded leaf.
                     float4 leafBound = asfloat(sdfWords[leafOffset + 2u]);
 
-                    if (leafBound.w >= 0.0) {
+                    if ((leafBound.w >= 0.0) && (result.distance <= SDF_FAR_DISTANCE)) {
                         float3 toLeafCenter = (rigidBasePosition - leafBound.xyz);
                         float leafClearance = max((result.distance + leafBound.w), 0.0);
 
@@ -2572,16 +2617,21 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
                     }
 
+                    uint4 shapeHeader = sdfWords[1u + shapeIndex];
+
+                    if (!sdfShapeEnabled(shapeHeader.y)) {
+                        continue;
+                    }
+
                     float3 rigidPosition = (rigidBasePosition - asfloat(packedPose.xyz));
 
                     if ((packedShape & SDF_RIGID_LEAF_IDENTITY_ROTATION) == 0u) {
                         rigidPosition = rotatePointByInverseQuaternion(rigidPosition, asfloat(sdfWords[leafOffset + 1u]));
                     }
 
-                    uint4 shapeHeader = sdfWords[1u + shapeIndex];
                     float4 shapeData0 = asfloat(sdfWords[dataOffset + (2u * shapeIndex)]);
                     float4 shapeData1 = asfloat(sdfWords[dataOffset + (2u * shapeIndex) + 1u]);
-                    float candidate = evaluateShape(shapeHeader.y, rigidPosition, shapeData0, shapeData1);
+                    float candidate = evaluateShape((shapeHeader.y & SDF_SHAPE_TYPE_MASK), rigidPosition, shapeData0, shapeData1);
                     int material = (trackMaterial ? (int)shapeHeader.w : 0);
 
                     sdfComposeCandidate(result, candidate, shapeHeader.z, material, rigidLanes, rigidSlot, shapeData1.x, trackMaterial);
@@ -3110,16 +3160,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         break;
                     }
 
-                    // A SHADING-ONLY shape (SDF_SHAPE_DETAIL_FLAG) contributes nothing to a march — skip it before
-                    // touching its bound or payload unless the hit-only shade re-evaluation asked for it.
-                    if (((instructionHeader.y & SDF_SHAPE_DETAIL_FLAG) != 0u) && !sdfDetailShadingActive) {
-                        break;
-                    }
-
-                    // A SECONDARY-EXCLUDED shape (SDF_SHAPE_NO_SECONDARY_FLAG) marches for the camera/beam/fine march
-                    // and the hit-only shade re-evaluations like any ordinary shape; it drops out ONLY here, under the
-                    // soft-shadow/AO field walks (sdfSecondaryMarchActive).
-                    if (((instructionHeader.y & SDF_SHAPE_NO_SECONDARY_FLAG) != 0u) && sdfSecondaryMarchActive) {
+                    if (!sdfShapeEnabled(instructionHeader.y)) {
                         break;
                     }
 
@@ -3143,7 +3184,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         }
 #endif
 
-                        if (shapeBoundReady) {
+                        if (shapeBoundReady && (result.distance <= SDF_FAR_DISTANCE)) {
                             float3 toShapeCenter = (worldPosition - shapeBoundCenter);
                             float shapeClearance = max((result.distance + shapeBound.w), 0.0);
 
@@ -3329,9 +3370,8 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // (true of both the 4-tap tetrahedron and the 6-tap central difference), so shading is unchanged. stepScale == 1.0
     // leaves the result bit-identical.
     //
-    // CAVEAT for consumers: the returned distance is scaled. Take a STEP with it freely, but a consumer that COMPARES it
-    // against a world-space quantity (a penumbra ratio, a footprint threshold) must divide the clamp back out — see
-    // sdfStepScale() and softShadowVisibility in sdf-world.hlsli.
+    // Consumers receive the clamped field. Primary acceptance uses that field with its footprint threshold; shadow
+    // penumbra estimation separately removes the global clamp — see softShadowVisibility in sdf-world.hlsli.
     result.distance *= stepScale;
     // Publish the fold-safe step bound in the SAME clamped units as the returned distance: stepScale = 1/L covers the
     // whole chain's worst-case expansion, so the clamped gap remains a conservative world-travel bound even when a
@@ -3437,11 +3477,12 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
     uint maskWordBits = 0u;
     uint instanceSegment = SDF_SEGMENT_NONE;
     uint instanceSegmentEnd = SDF_SEGMENT_NONE;
+    uint pendingInstance = SDF_SEGMENT_NONE;
 
     if (hasInstances) {
         worldCount = sdfWords[worldSegmentOffset].x;
         worldNext = ((0u < worldCount) ? sdfWords[worldSegmentOffset + 1u].x : SDF_SEGMENT_NONE);
-        sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd);
+        sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
     }
 
     float3 localPosition = worldPosition;
@@ -3490,7 +3531,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             segment = instanceSegment++;
 
             if (instanceSegment == instanceSegmentEnd) {
-                sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd);
+                sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex, maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
             }
         } else {
             break;
@@ -3512,7 +3553,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
             }
 #endif
 
-            if (boundReady) {
+            if (boundReady && (result.distance <= SDF_FAR_DISTANCE)) {
                 float3 toCenter = (worldPosition - boundCenter);
                 float clearance = max((result.distance + segmentBound.w), 0.0);
 
@@ -3569,13 +3610,19 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                     // marks a non-Union/unbounded leaf that is always evaluated.
                     float4 leafBound = asfloat(sdfWords[leafOffset + 2u]);
 
-                    if (leafBound.w >= 0.0) {
+                    if ((leafBound.w >= 0.0) && (result.distance <= SDF_FAR_DISTANCE)) {
                         float3 toLeafCenter = (rigidBasePosition - leafBound.xyz);
                         float leafClearance = max((result.distance + leafBound.w), 0.0);
 
                         if (dot(toLeafCenter, toLeafCenter) >= (leafClearance * leafClearance)) {
                             continue;
                         }
+                    }
+
+                    uint4 shapeHeader = sdfWords[1u + shapeIndex];
+
+                    if (!sdfShapeEnabled(shapeHeader.y)) {
+                        continue;
                     }
 
                     float3 rigidPosition = (rigidBasePosition - asfloat(packedPose.xyz));
@@ -3586,13 +3633,13 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         rigidPosition = rotatePointByInverseQuaternion(rigidPosition, leafQuat);
                     }
 
-                    uint4 shapeHeader = sdfWords[1u + shapeIndex];
                     float4 shapeData0 = asfloat(sdfWords[dataOffset + (2u * shapeIndex)]);
                     float4 shapeData1 = asfloat(sdfWords[dataOffset + (2u * shapeIndex) + 1u]);
-                    float candidate = evaluateShape(shapeHeader.y, rigidPosition, shapeData0, shapeData1);
+                    uint shapeType = (shapeHeader.y & SDF_SHAPE_TYPE_MASK);
+                    float candidate = evaluateShape(shapeType, rigidPosition, shapeData0, shapeData1);
                     // The shape-LOCAL gradient, forward-rotated to world by the leaf rotation then (for a dynamic leaf)
                     // the entity orientation — R_dyn * R_leaf * localGrad = R(dynamicOrientation ∘ leafQuat) * localGrad.
-                    float3 leafGrad = evaluateShapeGradient(shapeHeader.y, rigidPosition, shapeData0, shapeData1);
+                    float3 leafGrad = evaluateShapeGradient(shapeType, rigidPosition, shapeData0, shapeData1);
 
                     if (!leafIdentity) {
                         leafGrad = rotatePointByQuaternion(leafGrad, leafQuat);
@@ -4057,11 +4104,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         break;
                     }
 
-                    if (((instructionHeader.y & SDF_SHAPE_DETAIL_FLAG) != 0u) && !sdfDetailShadingActive) {
-                        break;
-                    }
-
-                    if (((instructionHeader.y & SDF_SHAPE_NO_SECONDARY_FLAG) != 0u) && sdfSecondaryMarchActive) {
+                    if (!sdfShapeEnabled(instructionHeader.y)) {
                         break;
                     }
 
@@ -4080,7 +4123,7 @@ SdfHit mapGradCore(float3 worldPosition, uint instanceMaskBase, out float3 gradi
                         }
 #endif
 
-                        if (shapeBoundReady) {
+                        if (shapeBoundReady && (result.distance <= SDF_FAR_DISTANCE)) {
                             float3 toShapeCenter = (worldPosition - shapeBoundCenter);
                             float shapeClearance = max((result.distance + shapeBound.w), 0.0);
 

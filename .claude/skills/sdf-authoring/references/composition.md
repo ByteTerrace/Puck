@@ -78,9 +78,15 @@ origins unchanged, so for an unrotated placement an author-space position
 `[x,y,z]` needs origin `[-x,y,-z]` to coincide with its engine-space centre.
 Do not blindly copy a nonzero author X/Z position into `origin`.
 
-A shape carrying folds may not also carry a swing or a slide, may not be the
-reference of a trim, and may not be a chain bone: a fold rides its parent's
-frame, never a solve or a swing of its own.
+A shape carrying folds may not also carry a swing or a slide, may not carry a
+`panel`, may not be the reference of a trim, and may not be a chain bone: a fold
+rides its parent's frame, never a solve or a swing of its own, and its fold
+already owns the point, so a panel has no scope left to nest into.
+
+That panel exclusion decides most budget questions, because folding repetition
+and dropping panel copies are the two cheapest levers and they do not compose:
+a panelled shape cannot be folded, so fold the unpanelled copies and leave the
+panelled ones hand-placed.
 
 ## Panels and trims
 
@@ -118,6 +124,13 @@ symptom alone does not establish the cause.
 Because that consumes the depth, a grouped shape may not carry `panel`, `trims`,
 or `cells`.
 
+Only the pooled/body path reads `group` at all. Static emission walks the shape
+list in declaration order and never looks at it, so on a static placement a group
+isolates nothing and every `Subtraction` composes against the whole creation
+accumulator — order each cut to be spatially local instead. `creation stats`
+shows the difference directly: its `static:` line reports one scope over all
+shapes where `pooled:` reports one per group.
+
 **3. Static emission takes a creation scope** when it has a `noise` facet, an
 engraved text run, **or any shape blend outside `Union` and `SmoothUnion`**.
 The document admission rule uses that same predicate for all placements:
@@ -140,12 +153,12 @@ summary and worst clamp. Global scale 1 does not mean every scope is unit.
 These are field bounds, not measured GPU timings; capture the running game to
 judge appearance.
 
-Static erosion has an emission exception: when the caller already owns a
-scope, `CreationStampEmitter.EmitShapeChain` takes the branch that omits
-`ApplyErode`. The authored facet can therefore validate yet disappear from
-the static program rather than merely share its clamp. The pooled chain emits
-the erosion prefix. Keep state-driven erosion on its supported body path and
-inspect both reports when comparing static and pooled behavior.
+Erosion emits on both branches — the shape's own scope and the enclosing one —
+so a shape inside a group or creation scope shares that pop's clamp rather than
+losing the facet. What a static placement lacks is a lane to drive it: static,
+animated, and attached registrations supply zero-valued lanes, so a static
+erosion resolves at zero every frame. State-driven erosion belongs on an
+inhabited placement for that reason, not because static emission drops it.
 
 ## The budget
 

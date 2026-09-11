@@ -1,7 +1,6 @@
-// Shared data contract + shading for the SDF world compositor compute kernels: sdf-beam.comp (the tile-cull
-// prepass) and sdf-world-views.comp (Stage 1, per-view rendering; sdf-world-composite.comp does Stage 2). Both run
-// the generic VM (sdf-vm.hlsli) over the scene program and a table of viewports/cameras supplied as DATA. KEEP IN
-// SYNC with SdfWorldEngine's packing.
+// Shared contract and rendering functions for the world kernels. Beam evaluates tile clearance; primary records
+// camera hits; views reconstructs hit shading and diagnostics; composite assembles the source images. The scene
+// program and cameras remain data. KEEP IN SYNC with SdfWorldEngine's packing and pass order.
 #ifndef SDF_WORLD_HLSLI
 #define SDF_WORLD_HLSLI
 #include "sdf-tile.hlsli"
@@ -55,6 +54,28 @@ struct CompositeParams {
     uint sampleIndex;
 };
 [[vk::push_constant]] ConstantBuffer<CompositeParams> params;
+
+#if defined(SDF_PRIMARY_PASS) || defined(SDF_PRIMARY_READ)
+// Three float4 rows per full-extent pixel per viewport. KEEP IN SYNC with SdfWorldEngine.PrimaryHitByteLength,
+// PrimaryHitBindingIndex and its views binding order (tiles u0, five source images u1..u5, hit records u6).
+// Row 0: depth, terminal field radius, acceptance threshold, material bits. Row 1: anonymous hit lanes.
+// Row 2: frame-slot bits, seam weight, other-material bits, packed step/eval/hit bits. No quantized depth/attributes.
+// Scalar uint storage matches the engine's four-byte UAV descriptor stride on both backends.
+[[vk::binding(49, 0)]] RWStructuredBuffer<uint> sdfPrimaryHits : register(u6);
+uint sdfPrimaryHitOffset(uint2 pixel, uint viewIndex) {
+    return (12u * (((viewIndex * params.imageExtent.y) + pixel.y) * params.imageExtent.x + pixel.x));
+}
+float4 sdfLoadPrimaryRow(uint index) {
+    return asfloat(uint4(sdfPrimaryHits[index], sdfPrimaryHits[index + 1u], sdfPrimaryHits[index + 2u], sdfPrimaryHits[index + 3u]));
+}
+void sdfStorePrimaryRow(uint index, float4 value) {
+    uint4 bits = asuint(value);
+    sdfPrimaryHits[index] = bits.x;
+    sdfPrimaryHits[index + 1u] = bits.y;
+    sdfPrimaryHits[index + 2u] = bits.z;
+    sdfPrimaryHits[index + 3u] = bits.w;
+}
+#endif
 
 // Whether viewport v is a hosted child surface (its source[] slot holds another node's output): the beam prepass
 // and Stage 1 skip such slots so the SDF render never overwrites the child's pixels.
@@ -355,12 +376,12 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
 #endif
 
 // Bounded emissive volumes (Puck.SignedDistance.SdfVolume — a participating medium, never a distance-field shape):
-// one uint4-free, 10-float4-per-volume table, APPENDED LAST in the views set — binding 48, Direct3D 12 register t43
+// one uint4-free, 11-float4-per-volume table, APPENDED LAST in the views set — binding 48, Direct3D 12 register t43
 // (after the frame instance grid t42). Stage 1 is the only kernel that shades, so it is the only one that binds it.
 // Decoded and integrated by shade-volumes.hlsli in renderView and the sky prepass. KEEP IN SYNC with
 // SdfWorldEngine.PackVolumes / SdfProgramBuilder.MaxVolumes.
 [[vk::binding(48, 0)]] StructuredBuffer<float4> sdfVolumes : register(t43);
-static const uint SdfVolumeCount = 8u;
+static const uint SdfVolumeCount = 64u;
 #include "shade-volumes.hlsli"
 
 bool screenSourceBound(uint screenIndex) {
@@ -685,19 +706,16 @@ static const float ConeEpsilon = 0.002;
 // TileGapMinStep floors the through-band advance so a near-zero cone clearance can't stall the search.
 static const int TileGapSteps = 16;
 static const float TileGapMinStep = 0.15;
-// Early-abandon for the through-band phase: a ground/wall tile whose cone never re-clears would otherwise burn all
-// TileGapSteps descending monotonically deeper into the half-space. After this many CONSECUTIVE in-band steps whose
-// clearance stays below the open-threshold AND is non-increasing (the cone is only going deeper), give up proving a
-// gap — a real gap re-clears within a few magnitude-stepped steps, so it resets the streak first. Missing a gap is
-// SAFE: the teleport just does not arm, and the fine march is pixel-identical whether or not it teleports (the jump
-// lands at secondEntry <= the true re-entry). Four stalled steps keep gap-less tile cost bounded.
+// Abandon the gap search after this many consecutive in-band, non-increasing-clearance samples. Ground/wall cones
+// often descend further into an occupied half-space; continuing both gap and tail searches there adds field walks
+// without finding a useful bound. A later clear span may be missed, so this is a cost heuristic, not an emptiness
+// proof. Keep the entry already established and leave gap/far bounds at the far plane; the fine ray does the work.
 static const int TileGapStallLimit = 3;
 // F1 FAR BOUND: after the gap search resolves, a bounded TAIL phase cone-marches from the
 // resolved t to prove the far bound — the depth past which the tile's cone cannot produce any footprint-accepted hit
 // through the far distance. TileFarSteps caps that extra beam cost (the tail is a latency-rich single-thread march,
-// per the beam kernel's design). Sixteen steps is enough to walk a live tile's near band + one gap + a second band
-// into a clear-to-far span; if the span is not proven within the budget the tile publishes farBound = the far distance
-// (no early exit — a total function).
+// per the beam kernel's design). A descending-band stall skips this phase altogether. Otherwise ten samples may
+// establish a clear-to-far span; if none is proven, the tile publishes farBound = the far distance (no early exit).
 static const int TileFarSteps = 10;
 // Bán & Valasek 2023 auto-relaxed sphere tracing (EG short paper). The fine march tracks the field's along-ray slope
 // with an EMA `m` and over-relaxes adaptively — `omega = max(1, 2/(1 - m))`, so a planar (m -> 1) approach takes a big
@@ -1364,9 +1382,8 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
                 if (stall >= TileGapStallLimit) {
                     b.firstExit = farDistance;
                     b.secondEntry = farDistance;
-                    // F1: a descending, gap-less tile (ground/wall). The tail proves the far bound if the cone ever
-                    // clears to the far plane past here (a ground tile never does => farBound stays the far distance).
-                    b.farBound = coneMarchFarBound(view, cone, instanceMaskBase, footprint, t);
+                    // Stop the whole search after the descending-band stall. No gap or tail has been proven, so
+                    // keep the initialized far bound at farDistance; never infer empty space from the stall itself.
 
                     return b;
                 }
@@ -2166,6 +2183,25 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     // MASK (reads the tile mask buffer directly) and OVERSHOOT (runs its OWN two marches in its case) skip the primary
     // march too — for MASK it is unused work, for OVERSHOOT running it AS WELL would be a third march. Every non-debug
     // and every OTHER debug mode still marches exactly as before (the added compares are false for them).
+#ifdef SDF_PRIMARY_READ
+    if (active) {
+        uint hitOffset = sdfPrimaryHitOffset(pixel, viewIndex);
+        float4 geometry = sdfLoadPrimaryRow(hitOffset);
+        float4 attributes = sdfLoadPrimaryRow(hitOffset + 8u);
+        uint flags = asuint(attributes.w);
+        traveled = geometry.x;
+        terminalRadius = geometry.y;
+        terminalHitThreshold = geometry.z;
+        material = asint(geometry.w);
+        hitLanes = sdfLoadPrimaryRow(hitOffset + 4u);
+        hitFrameSlot = asint(attributes.x);
+        materialBlendWeight = attributes.y;
+        materialBlendOther = asint(attributes.z);
+        marchStep = (int)(flags & 255u);
+        sdfEvalCount = (float)((flags >> 8u) & 255u);
+        hitSurface = ((flags & 65536u) != 0u);
+    }
+#else
     if ((marchStart >= 0.0) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
         // Sphere-trace to the surface with a footprint-ADAPTIVE hit threshold. The field mapMasked returns is already
         // Lipschitz-clamped (SdfProgram stepScale; <= 1-Lipschitz along the ray), so over-relaxing stays
@@ -2357,6 +2393,19 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         }
     }
 
+#endif // SDF_PRIMARY_READ
+
+#ifdef SDF_PRIMARY_PASS
+    if (active) {
+        uint hitOffset = sdfPrimaryHitOffset(pixel, viewIndex);
+        // MaxSteps = 128; at most 129 primary evaluations including the exhaustion re-evaluation fit in eight bits.
+        uint flags = (uint)marchStep | ((uint)sdfEvalCount << 8u) | (hitSurface ? 65536u : 0u);
+        sdfStorePrimaryRow(hitOffset, float4(traveled, terminalRadius, terminalHitThreshold, asfloat(material)));
+        sdfStorePrimaryRow(hitOffset + 4u, hitLanes);
+        sdfStorePrimaryRow(hitOffset + 8u, float4(asfloat(hitFrameSlot), materialBlendWeight, asfloat(materialBlendOther), asfloat(flags)));
+    }
+    return 0.0;
+#else
     // THE GROUP SHADOW GATHER — at the one seam every lane of the workgroup reaches (the march loops above carry no
     // barrier; the epilogue below is per-lane divergent): reduce the group's hit points and build ONE shadow candidate
     // mask for all of them (sdfShadowGatherGroup, uniform control flow). The decisions feeding it are uniform: the
@@ -2488,6 +2537,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 // ONE shared scaled reach for BOTH the gather cull cone and the march ceiling (the sdf.shadow-distance
                 // lever) — they MUST use the same length or the gathered occluder set is unsound for the shadow ray.
                 float shadowReach = (ShadowMaxDistance * worldShadowDistanceScale());
+                sdfSecondaryMarchActive = true;
 #ifdef SDF_SCREEN_SOURCES
                 // The shadow GRID CULL (default ON). The group phase above built this workgroup's shadow candidate mask
                 // (sdfShadowMaskWords, groupshared) and decided the fallback for every lane: 2 = mask BUILT — march it
@@ -2510,6 +2560,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 #else
                 keyVisibility = softShadowVisibility(surfacePoint, normal, keyDirection, instanceMaskBase, shadingStepScale, shadowReach);
 #endif
+                sdfSecondaryMarchActive = false;
                 sunDiffuse *= keyVisibility;
             }
 
@@ -2583,11 +2634,13 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                     ambientMaskBase = SDF_INSTANCE_MASK_ALL; // exact no-grid fallback; an active shared mask overrides it
                 }
 #endif
+                sdfSecondaryMarchActive = true;
                 float ambientOcclusion = (worldAoDisabled()
                     ? 1.0
                     : (worldUseFastAmbientOcclusion()
                         ? calcFastAO(surfacePoint, normal, ambientMaskBase, shadingStepScale)
                         : calcAO(surfacePoint, normal, ambientMaskBase, shadingStepScale)));
+                sdfSecondaryMarchActive = false;
 #ifdef SDF_SCREEN_SOURCES
                 sdfAmbientMaskActive = false;
 #endif
@@ -2988,6 +3041,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     }
 
     return viewColor;
+#endif // SDF_PRIMARY_PASS
 }
 
 #endif

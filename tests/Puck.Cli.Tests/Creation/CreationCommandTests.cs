@@ -109,8 +109,50 @@ public sealed class CreationCommandTests {
             Assert.Equal(expected: 0, actual: exitCode);
             Assert.Contains(expectedSubstring: $"[moth] shapes: {moth.Document.Shapes!.Count}, stamp budget: {moth.Document.StampShapeCount()}/{WorldPlacementPolicy.MaxShapesPerStamp}", actualString: output, comparisonType: StringComparison.Ordinal);
             Assert.Contains(expectedSubstring: "primitive:", actualString: output, comparisonType: StringComparison.Ordinal);
+            Assert.Contains("contact: accepted", output, StringComparison.Ordinal);
         } finally {
             File.Delete(path: path);
+        }
+    }
+    /// <summary>Schema and render admission cannot stand in for contact compilation. A Convex prism leaves a
+    /// residual Scale; nonuniform values must fail only when it is actually placed as a solid.</summary>
+    [Theory]
+    [InlineData(true, true, 1)]
+    [InlineData(true, false, 0)]
+    [InlineData(false, true, 0)]
+    public void StatsConstructsContactForSolidPlacements(bool solid, bool nonuniform, int expectedExitCode) {
+        var path = TempWorldCopy();
+        try {
+            var definition = WorldDefinitionSerialization.Deserialize(File.ReadAllBytes(path));
+            var shape = new ShapeDocument(
+                Id: 0, Name: "convex", Type: SdfSolidPrimitive.Prism,
+                Position: Vector3.Zero, Rotation: Quaternion.Identity,
+                Scale: nonuniform ? new Vector3(.4f, .2f, .1f) : new Vector3(.2f),
+                Material: 0, Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0,
+                Profile: new(SdfPrismProfileKind.Convex, Vertices: [
+                    new(-1f, -1f), new(-1f, 1f), new(1f, 1f), new(1f, -1f),
+                ]));
+            var canonical = CreationCanonicalizer.Canonicalize(new CreationDocument(
+                Schema: CreationDocument.CurrentSchema, Name: "contact-proof", Palette: null,
+                Shapes: [shape], Frames: null));
+            WorldDefinitionSerialization.Save(definition with {
+                CreationsRaw = [.. definition.Creations, new WorldPrototype("contact-proof", canonical.Document, canonical.Hash)],
+                PlacementRowsRaw = [.. definition.Placements, new WorldPlacement(
+                    Id: "contact-proof", PrototypeId: "contact-proof", Position: new Vector3(3f, 1f, 0f),
+                    YawDegrees: 0f, Scale: 1f, Solid: solid ? new WorldSolid(Margin: 0f) : null)],
+            }, path);
+            var before = File.ReadAllBytes(path);
+            // Deliberately filter to Moth: contact coverage is world-wide, not limited to the report's prototype.
+            var (exitCode, output) = Invoke("creation", "stats", "--world", path, "--prototype", "moth");
+
+            Assert.Equal(expectedExitCode, exitCode);
+            Assert.Contains(expectedExitCode == 0 ? "contact: accepted" : "contact inspection failed", output, StringComparison.Ordinal);
+            if (expectedExitCode != 0) {
+                Assert.Contains("Scale", output, StringComparison.Ordinal);
+            }
+            Assert.Equal(before, File.ReadAllBytes(path));
+        } finally {
+            File.Delete(path);
         }
     }
     [Fact]

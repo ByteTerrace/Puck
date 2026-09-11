@@ -7,10 +7,39 @@ namespace Puck.World;
 /// <summary>
 /// The <c>puck.sdf.v1</c> geometry-document console surface: <c>world.sdf.load</c> reads a document FILE, decodes and
 /// dry-validates it, and — only on success — composes it into the live scene through <see cref="WorldSdfDocumentEmitter"/>.
+/// <c>world.sdf.dump</c> exports the live packed GPU program for inspection.
 /// Client-local presentation state (like <c>world.screenshot</c>), never a simulation mutation, so it stays Immediate.
 /// </summary>
-internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents) : ICommandModule {
+internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents, WorldRenderProbe renderProbe) : ICommandModule {
     private readonly WorldSdfDocumentEmitter m_documents = documents;
+    private readonly WorldRenderProbe m_renderProbe = renderProbe;
+
+    private CommandResult DumpHandler(CommandContext context, WireArgs args) {
+        if (args.Count != 1) {
+            return CommandResult.Error(output: "[world.sdf.dump: expected <path>]");
+        }
+
+        var words = m_renderProbe.Node?.CopyLiveProgramWords();
+
+        if (words is not { Length: > 0 }) {
+            return CommandResult.Error(output: "[world.sdf.dump: no live render program]");
+        }
+
+        var path = args[0].ToString();
+
+        try {
+            using var stream = File.Create(path: path);
+            using var writer = new BinaryWriter(output: stream);
+
+            foreach (var word in words) {
+                writer.Write(value: word);
+            }
+
+            return new CommandResult(Output: $"[world.sdf.dump: '{path}' — {words.Length} little-endian uint32 word(s); transforms and frame grid are separate]");
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) {
+            return CommandResult.Error(output: $"[world.sdf.dump: {exception.Message.ReplaceLineEndings(replacementText: " ")}]");
+        }
+    }
 
     private CommandResult LoadHandler(CommandContext context, WireArgs args) {
         if (args.Count != 1) {
@@ -44,6 +73,12 @@ internal sealed class WorldSdfCommandModule(WorldSdfDocumentEmitter documents) :
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            bindability: CommandBindability.Unbindable,
+            name: "world.sdf.dump",
+            description: "Writes the live packed GPU program as little-endian uint32 words: world.sdf.dump <path>. Replaces the destination file. Excludes reserved capacity, dynamic transforms and the per-frame instance grid. Diagnostic output follows the current SdfProgram layout, not a loadable or durable asset format. Requires an initialized renderer; does not mutate the world.",
+            handler: DumpHandler
+        );
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.sdf.load",

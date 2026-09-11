@@ -11,7 +11,7 @@ using Puck.World.Server;
 namespace Puck.World;
 
 /// <summary>
-/// The GENERAL document-row verb TRIO — <c>world.row.set</c>/<c>world.row.remove</c>/<c>world.row.step</c> — the ONE
+/// The document-row verbs — <c>world.row</c>, <c>world.row.set</c>, <c>world.row.remove</c> and <c>world.row.step</c> — the one
 /// door every document section is authored through: a dotted DOCUMENT MEMBER PATH (the document's own
 /// camelCase JSON names, e.g. <c>kits</c>, <c>hud.panels</c>, <c>views.seatRig</c>) selects which
 /// <see cref="WorldMutation"/> a row's inline JSON composes into, closing over the same section table

@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Puck.World;
 using Puck.World.Authoring;
 using Puck.World.Authoring.Sculpting;
+using Puck.World.Server;
 
 namespace Puck.Cli.Creation;
 
@@ -13,8 +14,8 @@ namespace Puck.Cli.Creation;
 /// verbs: <c>sculpts</c> lists the registry, <c>sculpt &lt;name&gt; --world &lt;path&gt;</c> applies a sculpt's
 /// <see cref="SculptPatch"/> to a world file on disk (refusing and leaving it untouched on a validation failure),
 /// and <c>stats --world &lt;path&gt; [--prototype &lt;id&gt;]</c> reports a creation's shape budget and feature
-/// usage and field-scope clamps. Exit codes: 0 succeeded, 1 the patched document was refused (sculpt) or the file
-/// failed to load or its geometry inspection failed (stats),
+/// usage and field-scope clamps, then constructs the world's deterministic contact field. Exit codes: 0 succeeded,
+/// 1 the patched document was refused (sculpt), or loading, render emission or contact compilation failed (stats),
 /// 2 a usage error (unknown sculpt/prototype name, missing file).
 /// </summary>
 internal static partial class CreationCommand {
@@ -58,7 +59,7 @@ internal static partial class CreationCommand {
     private static Command StatsCommand() {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document to inspect.", Required = true };
         var prototypeOption = new Option<string?>(name: "--prototype") { Description = "Limit to one prototype id (default: every prototype carrying a creation document)." };
-        var command = new Command(description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps for static and pooled rest geometry.", name: "stats") { worldOption, prototypeOption };
+        var command = new Command(description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps for static and pooled rest geometry. Constructs the whole world's deterministic contact field, including solid placements, even when a prototype filter is supplied.", name: "stats") { worldOption, prototypeOption };
 
         command.SetAction(action: parseResult => RunStats(
             prototypeId: parseResult.GetValue(option: prototypeOption),
@@ -176,6 +177,17 @@ internal static partial class CreationCommand {
             }
         }
 
+        try {
+            if (!WorldSolidField.TryBuild(definition, out _, out var contactReason)) {
+                Console.Error.WriteLine($"creation stats: contact inspection failed — {contactReason}");
+                return 1;
+            }
+        } catch (Exception exception) when (exception is InvalidOperationException or ArgumentException) {
+            Console.Error.WriteLine($"creation stats: contact inspection failed — {exception.Message.ReplaceLineEndings(" ")}");
+            return 1;
+        }
+
+        Console.Out.WriteLine("  contact: accepted — the world's deterministic field compiled, including solid placements and screens; render-only facets remain omitted.");
         return 0;
     }
     private static void ReportPrototype(string id, CreationDocument document) {

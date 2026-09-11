@@ -33,6 +33,35 @@ public sealed class SdfDetailShapeLawTests {
         screenSurfaces: null
     );
 
+    /// <summary>Superellipsoids preserve Detail both at the ellipsoid delegation and at higher exponents. The
+    /// common packed flag does not depend on a shape-specific lane.</summary>
+    [Theory]
+    [InlineData(2f, SdfShapeType.Ellipsoid)]
+    [InlineData(4f, SdfShapeType.Superellipsoid)]
+    [InlineData(8f, SdfShapeType.Superellipsoid)]
+    public void SuperellipsoidPreservesDetailAtEveryExponent(float exponent, SdfShapeType expectedShape) {
+        var builder = new SdfProgramBuilder();
+        var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.Superellipsoid(
+            radii: new Vector3(1f, 2f, 3f),
+            exponent: exponent,
+            material: material,
+            detail: true
+        );
+
+        var program = builder.Build();
+
+        Assert.Equal(expected: 0x80000000u | (uint)expectedShape, actual: program.Words[5]);
+        var evaluator = new SdfFieldEvaluator(program: program);
+
+        Assert.False(condition: evaluator.TryDistance(
+            distance: out _,
+            material: out _,
+            position: FixedPosition.FromLocal(local: FixedVector3.Zero)
+        ));
+    }
+
     /// <summary>The flag packs into the Shape lane's high bit, and the shape id stays readable underneath it — the
     /// two halves of one word.</summary>
     [Fact]

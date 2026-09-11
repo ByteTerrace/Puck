@@ -55,11 +55,11 @@ public sealed record SdfFrame(
     /// never references). Updating this list is how entities move — the program (binding 1) is uploaded once and left
     /// untouched.</summary>
     public IReadOnlyList<DynamicTransform> DynamicTransforms { get; init; } = [];
-    /// <summary>The frame's bounded flow volumes, at most
-    /// <see cref="SdfWorldEngine.MaxVolumes"/> — extras beyond the cap are dropped, nearest-first is a host concern.
+    /// <summary>The frame's bounded flow and cloud volumes, at most
+    /// <see cref="SdfWorldEngine.MaxVolumes"/>; submission refuses a list beyond that capacity.
     /// Packed into its own structured buffer (never <c>sdfScreenLights</c>) and shaded by <c>shade-volumes.hlsli</c>'s
     /// one call site at the end of <c>renderView</c>, after the surface color is final. Empty (the default) uploads an
-    /// all-zero table the shader never iterates past — byte-identical to a build without volumes.</summary>
+    /// all-zero table whose first bound ends the shader's scan.</summary>
     public IReadOnlyList<SdfVolume> Volumes { get; init; } = [];
     /// <summary>A per-frame scale on the world path's ambient term (default 1 = unchanged). Below 1 dims the room so
     /// the diegetic screen glow dominates — the overworld sets it low for mood; other scenes leave the default.</summary>

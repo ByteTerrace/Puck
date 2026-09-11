@@ -77,7 +77,7 @@ public sealed class CreationStampEmitterUnitsLawTests {
     }
     // The whole-creation, one-shared-scope static form (WorldPlacementStamper.EmitPlacement's "scoped" branch — a
     // creation whose blend composes internally).
-    private static SdfProgram EmitScoped(IReadOnlyList<ShapeDocument> shapes, float stampScale) {
+    private static SdfProgram EmitScoped(IReadOnlyList<ShapeDocument> shapes, float stampScale, bool callerScope = true) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
@@ -85,7 +85,9 @@ public sealed class CreationStampEmitterUnitsLawTests {
             boundCenter: Vector3.Zero,
             boundRadius: 8f
         );
-        _ = builder.PushField(compose: SdfBlendOp.Union);
+        if (callerScope) {
+            _ = builder.PushField(compose: SdfBlendOp.Union);
+        }
         CreationStampEmitter.Emit(
             builder: builder,
             document: new CreationDocument(
@@ -95,7 +97,7 @@ public sealed class CreationStampEmitterUnitsLawTests {
                 Shapes: shapes,
                 Frames: null
             ),
-            inScope: true,
+            inScope: callerScope,
             materialFor: _ => material,
             transform: new CreationStampTransform(
                 Origin: Vector3.Zero,
@@ -104,13 +106,47 @@ public sealed class CreationStampEmitterUnitsLawTests {
                 ReflectionNormal: null
             )
         );
-        _ = builder.PopField();
+        if (callerScope) {
+            _ = builder.PopField();
+        }
         _ = builder.EndInstance();
 
         return builder.Build(buildInstanceGrid: false);
     }
     private static SdfInstruction ShapeBlendOf(SdfProgram program, uint blend = ((uint)SdfBlendOp.Union)) =>
         program.Instructions.Single(predicate: instruction => ((instruction.Op == SdfOp.ShapeBlend) && (instruction.Blend == blend)));
+
+    /// <summary>Both per-shape and shared scopes retain erosion without eroding a sibling or opening a
+    /// forbidden nested scope. The containing scope owns the noise clamp.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ScopeOwnershipPreservesErosionOnItsAuthoredShape(bool callerScope) {
+        var eroding = Shape(SdfSolidPrimitive.Sphere, Vector3.One) with {
+            Erode = new ShapeErodeDocument(2, 1f, 0f, 2f),
+        };
+        var sibling = Shape(SdfSolidPrimitive.Box, Vector3.One, id: 1);
+        var program = EmitScoped([eroding, sibling], 2f, callerScope);
+        var erosionIndex = Enumerable.Range(0, program.Instructions.Count)
+            .Single(index => program.Instructions[index].Op == SdfOp.LaneErode);
+        var erosion = program.Instructions[erosionIndex];
+
+        Assert.Equal(new Vector4(2f, 1f, 0f, 2f), erosion.Data0);
+        Assert.Equal(2f, erosion.Data1.X);
+        var targetIndex = Enumerable.Range(erosionIndex + 1, program.Instructions.Count - erosionIndex - 1)
+            .First(index => program.Instructions[index].Op == SdfOp.ShapeBlend);
+        // Primitive lowering may insert Scale; a Reset would silently discard the pending erosion.
+        Assert.DoesNotContain(program.Instructions.Skip(erosionIndex + 1).Take(targetIndex - erosionIndex - 1),
+            instruction => instruction.Op == SdfOp.ResetPoint);
+        Assert.Equal((uint)SdfShapeType.Sphere, program.Instructions[targetIndex].Shape);
+        Assert.Equal(2, program.Instructions.Count(instruction => instruction.Op == SdfOp.ShapeBlend));
+        Assert.Single(program.Instructions, instruction => instruction.Op == SdfOp.PushField);
+        Assert.Single(program.Instructions, instruction => instruction.Op == SdfOp.PopField);
+        Assert.Equal(1f, program.StepScale);
+        var clamp = Assert.Single(program.FieldScopeClamps);
+        Assert.Equal(callerScope ? 2 : 1, clamp.ShapeCount);
+        Assert.True(clamp.StepScale < 1f);
+    }
 
     [Theory]
     [InlineData(SdfSolidPrimitive.Cylinder, 0.02f, 0f)]

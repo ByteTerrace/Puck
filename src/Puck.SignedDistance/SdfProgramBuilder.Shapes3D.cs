@@ -204,8 +204,8 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="material">The material index assigned to the shape.</param>
     /// <param name="blend">The operation used to combine the shape with the accumulated field.</param>
     /// <param name="smooth">The blend smoothing radius.</param>
-    /// <param name="detail">Forwarded to <see cref="Ellipsoid"/> at the e = 2 delegation; ignored otherwise (this
-    /// shape carries no detail-culling lane of its own yet).</param>
+    /// <param name="detail">Whether the shape participates only in hit material and normal evaluation, without
+    /// changing the marched surface or contact field. Preserved at every admitted exponent.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="radii"/> is not finite, <paramref name="exponent"/>
     /// is not finite or lies outside the admitted interval, <paramref name="material"/> is negative,
     /// <paramref name="blend"/> is not a defined <see cref="SdfBlendOp"/>, or <paramref name="smooth"/> is not
@@ -250,6 +250,7 @@ public sealed partial class SdfProgramBuilder {
             derived1: inverse.X,
             derived2: inverse.Y,
             derived3: inverse.Z,
+            detail: detail,
             dimensions: new Vector4(
                 value: clamped,
                 w: exponent

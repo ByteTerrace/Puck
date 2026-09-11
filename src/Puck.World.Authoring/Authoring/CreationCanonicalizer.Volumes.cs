@@ -37,7 +37,7 @@ public static partial class CreationCanonicalizer {
 
             if (!volume.IsKnownKind) {
                 errors.Add(item: new(
-                    Message: $"kind '{volume.Kind}' is not a volume kind; expected '{VolumeDocument.FlowKind}'.",
+                    Message: $"kind '{volume.Kind}' is not a volume kind; expected '{VolumeDocument.FlowKind}' or '{VolumeDocument.CloudKind}'.",
                     Path: $"{path}.kind"
                 ));
             }
@@ -92,6 +92,17 @@ public static partial class CreationCanonicalizer {
 
             ValidatePositive(value: volume.Axis, name: "axis", errors: errors, path: path);
             ValidatePositive(value: volume.Width, name: "width", errors: errors, path: path);
+            ValidateUnitRange(volume.Coverage, "coverage", errors, path + ".coverage");
+            ValidateUnitRange(volume.Softness, "softness", errors, path + ".softness");
+            if (volume.Softness is 0f) {
+                errors.Add(new(Path: path + ".softness", Message: "softness must be positive."));
+            }
+            if (volume.Kind != VolumeDocument.CloudKind && (volume.Coverage is not null || volume.Softness is not null)) {
+                errors.Add(new(Path: path + (volume.Coverage is not null ? ".coverage" : ".softness"), Message: "coverage and softness are cloud-only controls."));
+            }
+            if (volume.Kind == VolumeDocument.CloudKind && volume.Axis is not null) {
+                errors.Add(new(Path: path + ".axis", Message: "axis is a flow-only control; a cloud uses halfExtent."));
+            }
             if (volume.Speed is { } speed && !float.IsFinite(speed)) {
                 errors.Add(new(Path: path + ".speed", Message: "speed must be finite."));
             }
@@ -109,7 +120,7 @@ public static partial class CreationCanonicalizer {
             }
 
             if (volume.Ramp is not { Count: >= 1 and <= 4 }) {
-                errors.Add(new(Path: path + ".ramp", Message: "A flow ramp requires one to four density stops."));
+                errors.Add(new(Path: path + ".ramp", Message: "A volume ramp requires one to four density stops."));
             } else {
                 var previous = -1f;
                 foreach (var stop in volume.Ramp) {

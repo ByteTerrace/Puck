@@ -114,10 +114,11 @@
     {
       "assertions": [
         "Identifies that Polygon and Ellipse prism profiles have no deterministic field-contact evaluator and so are refused on a placement carrying a solid row",
-        "Preserves the requested octagonal obstacle using an eight-vertex convex extrusion with an appropriate pose and retains the solid placement",
-        "Does not suggest that the renderer is at fault"
+        "Preserves the requested octagonal obstacle using admitted convex geometry and retains the solid placement",
+        "Does not suggest that the renderer is at fault",
+        "creation stats --world <edited fixture> --prototype subject exits 0 and reports contact: accepted, proving the emitted solid-placement program constructs SdfFieldEvaluator; a nonuniform Convex Scale must fail this check"
       ],
-      "expected_output": "Use an eight-vertex clockwise Convex prism, posed with its extrusion axis along the bollard's height, retaining the solid row. Polygon lacks the needed deterministic field evaluator.",
+      "expected_output": "Use an eight-vertex clockwise Convex profile, preserving the requested outline and solid row. Ensure the complete contact program has no residual nonuniform Scale: bake the XY ratio into vertices under uniform scale and use an admitted depth intersection if necessary. Run creation stats and require exit 0 with contact: accepted to verify.",
       "files": [
         "fixtures/contact-mismatch.world.json"
       ],

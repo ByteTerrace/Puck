@@ -31,6 +31,10 @@ For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/
 It pairs a rebuilt SDF avatar with the Moth Study, with inspection cameras,
 walking and flight poses, and live document reload.
 
+The [Moth courtyard](Assets/worlds/moth-courtyard.md) imports that model into an
+eight-body scene: one isolated inspection subject and seven held pose stations,
+with named cameras and independent sky and volumetric-cloud toggles.
+
 For service extensions, use the [configuration guide](../Puck.World.Server/ExtensionConfiguration.md)
 and the [Azure example](Assets/hosting/azure.extensions.example.json). The operator
 selects the file with `--extensions-config-file`; `world.extensions.catalog`
@@ -1215,6 +1219,14 @@ domains contribute their aggregate per-tick budget once, not once per follower.
 `body.targets <body>` includes the selected route's status and waypoint. Both
 `world.navigation` and `world.budget` are server-safe under `--headless`;
 the latter names the absent renderer while retaining all authoritative costs.
+
+`world.sdf.dump <path>` exports the live packed GPU program as little-endian
+32-bit words, replacing the destination file. Use it to inspect the instructions,
+materials and acceleration tables actually uploaded, rather than the reserved
+capacity. It requires an initialized renderer and does not change the world.
+Dynamic transforms and the per-frame grid are separate buffers and are excluded.
+The dump follows the current `SdfProgram` layout; it is a diagnostic snapshot,
+not a loadable or durable asset format.
 
 `render.farDistance` is the depth every camera march ends at (default 40 when
 unauthored; 1..8192), re-read on every definition revision like the lighting

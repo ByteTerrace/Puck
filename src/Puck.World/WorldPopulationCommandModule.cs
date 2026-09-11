@@ -199,6 +199,7 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
             : "renderer not built yet"
         );
         if (renderProbe?.Node is { } rendered) {
+            render += $", volumes {rendered.LiveVolumes}/{Puck.SdfVm.SdfWorldEngine.MaxVolumes}";
             var clamps = rendered.LiveProgramFieldScopeClamps;
             render += $", scoped clamps {clamps.Count} ({clamps.Count(static clamp => clamp.ShapeCount > 1)} shared)";
             if (clamps.Count > 0) {

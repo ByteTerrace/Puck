@@ -446,6 +446,9 @@ public static class WorldPlacementStamper {
         var shapes = (creation.Shapes ?? []);
 
         foreach (var volume in authored) {
+            if (!volume.Enabled) {
+                continue;
+            }
             if (volumes.Count >= SdfProgramBuilder.MaxVolumes) {
                 return;
             }
