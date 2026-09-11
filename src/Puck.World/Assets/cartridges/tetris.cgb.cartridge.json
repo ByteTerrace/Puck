@@ -2810,6 +2810,26 @@
         {
           "kind": "set",
           "target": {
+            "variable": "nfull"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        },
+        {
+          "kind": "set",
+          "target": {
+            "variable": "rcur"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        },
+        {
+          "kind": "set",
+          "target": {
             "variable": "nph"
           },
           "operation": "set",
@@ -2835,20 +2855,40 @@
       ],
       "body": [
         {
-          "kind": "set",
-          "target": {
-            "variable": "nfull"
-          },
-          "operation": "set",
-          "value": {
-            "constant": 0
-          }
-        },
-        {
           "kind": "repeat",
-          "count": 18,
-          "index": "cr",
+          "count": 5,
+          "index": "k",
           "body": [
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "rcur"
+                  },
+                  "comparison": "ge",
+                  "right": {
+                    "constant": 18
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "break"
+                }
+              ]
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "rcur"
+              }
+            },
             {
               "kind": "set",
               "target": {
@@ -2961,6 +3001,16 @@
               "value": {
                 "variable": "full"
               }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rcur"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
+              }
             }
           ]
         },
@@ -2970,11 +3020,11 @@
             {
               "kind": "compare",
               "left": {
-                "variable": "nfull"
+                "variable": "rcur"
               },
-              "comparison": "ne",
+              "comparison": "ge",
               "right": {
-                "constant": 0
+                "constant": 18
               }
             }
           ],
@@ -2982,24 +3032,61 @@
             {
               "kind": "set",
               "target": {
-                "variable": "nph"
+                "variable": "rcur"
               },
               "operation": "set",
               "value": {
-                "constant": 3
+                "constant": 0
               }
-            }
-          ],
-          "else": [
+            },
             {
               "kind": "set",
               "target": {
-                "variable": "nph"
+                "variable": "w"
               },
               "operation": "set",
               "value": {
-                "constant": 6
+                "constant": 17
               }
+            },
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "nfull"
+                  },
+                  "comparison": "ne",
+                  "right": {
+                    "constant": 0
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "nph"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 3
+                  }
+                }
+              ],
+              "else": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "nph"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 6
+                  }
+                }
+              ]
             }
           ]
         }
@@ -3021,20 +3108,30 @@
       ],
       "body": [
         {
-          "kind": "set",
-          "target": {
-            "variable": "w"
-          },
-          "operation": "set",
-          "value": {
-            "constant": 17
-          }
-        },
-        {
           "kind": "repeat",
-          "count": 18,
+          "count": 5,
           "index": "k",
           "body": [
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "rcur"
+                  },
+                  "comparison": "ge",
+                  "right": {
+                    "constant": 18
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "break"
+                }
+              ]
+            },
             {
               "kind": "set",
               "target": {
@@ -3052,7 +3149,17 @@
               },
               "operation": "subtract",
               "value": {
-                "variable": "k"
+                "variable": "rcur"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rcur"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
               }
             },
             {
@@ -3191,24 +3298,51 @@
           ]
         },
         {
-          "kind": "set",
-          "target": {
-            "variable": "lines"
-          },
-          "operation": "add",
-          "value": {
-            "variable": "nfull"
-          }
-        },
-        {
-          "kind": "set",
-          "target": {
-            "variable": "nph"
-          },
-          "operation": "set",
-          "value": {
-            "constant": 4
-          }
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "rcur"
+              },
+              "comparison": "ge",
+              "right": {
+                "constant": 18
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rcur"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "lines"
+              },
+              "operation": "add",
+              "value": {
+                "variable": "nfull"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "nph"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 4
+              }
+            }
+          ]
         }
       ]
     },
@@ -3229,8 +3363,8 @@
       "body": [
         {
           "kind": "repeat",
-          "count": 18,
-          "index": "cr",
+          "count": 5,
+          "index": "k",
           "body": [
             {
               "kind": "if",
@@ -3238,7 +3372,7 @@
                 {
                   "kind": "compare",
                   "left": {
-                    "variable": "cr"
+                    "variable": "rcur"
                   },
                   "comparison": "gt",
                   "right": {
@@ -3259,7 +3393,7 @@
               },
               "operation": "set",
               "value": {
-                "variable": "cr"
+                "variable": "rcur"
               }
             },
             {
@@ -3311,28 +3445,55 @@
                   }
                 }
               ]
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rcur"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
+              }
             }
           ]
         },
         {
-          "kind": "set",
-          "target": {
-            "variable": "rcur"
-          },
-          "operation": "set",
-          "value": {
-            "constant": 0
-          }
-        },
-        {
-          "kind": "set",
-          "target": {
-            "variable": "nph"
-          },
-          "operation": "set",
-          "value": {
-            "constant": 5
-          }
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "rcur"
+              },
+              "comparison": "gt",
+              "right": {
+                "variable": "w"
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rcur"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "nph"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 5
+              }
+            }
+          ]
         }
       ]
     },
