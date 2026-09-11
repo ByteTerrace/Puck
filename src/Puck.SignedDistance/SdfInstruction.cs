@@ -10,8 +10,7 @@ namespace Puck.SignedDistance;
 /// <param name="Data0">The first operation-specific data vector.</param>
 /// <param name="Data1">The second operation-specific data vector.</param>
 /// <param name="Detail">Whether a <see cref="SdfOp.ShapeBlend"/> instruction is SHADING-ONLY: skipped by every
-/// march/step-bound consumer (the beam cone march, the fine march, shadow/AO, and the rigid-leaf fast path — see
-/// <see cref="SdfProgram"/>'s rigid-plan compiler, which refuses to collapse a segment carrying one) and included
+/// march/step-bound consumer (the beam cone march, the fine march, shadow/AO, and the rigid-leaf fast path) and included
 /// only in the hit-only shade re-evaluation the world renderer runs at an already-found hit (KEEP IN SYNC with
 /// <c>SDF_SHAPE_DETAIL_FLAG</c>/<c>sdfDetailShadingActive</c> in Assets/Shaders/Sdf/sdf-vm.hlsli). Packs into the
 /// otherwise-unused high bit of the instruction's Shape lane (see <see cref="SdfProgram"/>'s packing), so it is

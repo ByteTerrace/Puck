@@ -222,14 +222,13 @@ an unset frame uploads zero and every default is preserved.
 | `sdf.screen-lights` off | The per-screen area-light loop is skipped; CRTs stop spilling glow | Directly measures the lit CRTs' cost, which scales with how many cabinets are booted |
 | `sdf.normals` analytic/finite-diff | Picks the dual normal or the four-tap probe at runtime | The A/B lever behind the normal argument above |
 
-One more shading style lives behind a *compile-time* switch rather than a
-runtime one: **curvature / NPR shading** — cavity darkening in creases, rim
-light on ridges, ink-line outlines where the field's curvature spikes. It's
-stylized, not physically based, and off by default. It's compile-time because
-enabling it re-introduces the finite-difference taps a discrete Laplacian needs
-(the analytic dual gives the normal but not the second derivative), and a
-dead-branch guard lets the compiler strip the whole thing — extra tap included —
-from the shipped build on both backends, byte-for-byte.
+**Curvature shading** adds cavity darkening in creases, rim light on ridges,
+and ink lines where curvature spikes. The authored `render.lighting.curvature`
+gains enable it at runtime; all three at zero disable it. It uses four nearby
+field samples and a center distance to estimate a discrete Laplacian, since
+the analytic normal alone provides no second derivative. Programs without
+shading-only detail reuse the primary hit's center distance. See the
+[renderer README](../../src/Puck.SdfVm/README.md) for hit-data reuse.
 
 ---
 

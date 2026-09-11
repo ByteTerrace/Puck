@@ -40,15 +40,18 @@ never a Vulkan or DirectX type by name.
   carries shape gradients through transforms and composition. Common primitives,
   including superellipsoids, use analytical leaf normals; the remaining shapes
   use local finite differences. The full-field finite-difference option remains
-  available for comparisons. Authored curvature shading selects five full-field
-  samples for the normal and curvature instead of this gradient path.
+  available for comparisons. Authored curvature shading uses four neighboring
+  samples and the primary hit's distance. Programs with shading-only details
+  need a fifth sample because their shading field differs from the march field.
 - *Shading-only detail shapes:* a shape instruction flagged
   `SdfInstruction.Detail` is invisible to every march (beam, fine, shadow, AO)
   and appears only in the hit-only normal/material re-evaluation `renderView`
   runs at an already-found surface point — a seam or rivet too thin for the
   footprint-relative march to resolve at distance stays a crisp mark instead
   of dotting out. Compiled rigid leaves retain the same detail and secondary
-  mode gates as the generic scalar and gradient interpreters.
+  mode gates as the generic scalar and gradient interpreters. When packing proves
+  that the program contains no Detail shapes, shading reuses the primary hit's
+  material, pose lanes and seam values instead of reevaluating the field.
 - *Non-secondary shapes and gradient-scaled shadow/AO:* `SdfInstruction.Secondary`
   is Detail's opposite exclusion set — false drops a shape from ONLY the
   soft-shadow and ambient-occlusion marches, while it still marches for the
@@ -83,6 +86,10 @@ view rectangles cannot overrun an allocation sized for an earlier layout.
 It is shared across frame slots under the engine's existing cross-frame barrier.
 The `primary` and `views` timing labels report traversal and shading separately;
 compare the full frame, including the extra buffer traffic and dispatch.
+The iteration count describes the selected march; the evaluation count sums
+queries across all primary marches and attribute resolution, saturating at
+8,388,607. Queries can evaluate different amounts of geometry, so this count
+alone does not measure field work.
 
 The beam searches for an initial depth, an empty gap, and a clear tail. Three
 consecutive occupied samples with non-increasing clearance abandon both the gap
@@ -98,6 +105,17 @@ seams and the scope's distance correction. Unsupported parts and analytic dual
 queries use the existing interpreter. This is a shorter execution program;
 it does not introduce approximate distances or a new spatial-culling rule.
 The shader implementation is in `Assets/Shaders/Sdf/sdf-parts.hlsli`.
+
+When the program's root combines shapes and scopes only by hard union and has
+no field-wide modifiers, primary rays trace compiled parts independently of
+the remaining scene. Each part retains its complete ordered field, including
+cuts and smooth blends. The nearest accepted sample wins, then one full-field
+query resolves its attributes in original composition order. Local marches
+return only geometry, avoiding attribute state carried through their loops. This reduces
+repeated part evaluation but can select different sample positions within the
+existing pixel-footprint acceptance band; images need not be bit-identical to
+the full-scene march. Other root compositions keep the reference traversal.
+Both paths share the marcher in `Assets/Shaders/Sdf/sdf-primary.hlsli`.
 
 Exact secondary lighting has its own instance masks. Each 8×8 workgroup's
 shadow gather covers the full 65536-instance ceiling; reserved slots cannot

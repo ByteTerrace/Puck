@@ -18,14 +18,15 @@ namespace Puck.SignedDistance;
 //                         (twist/bend) or an eccentric ellipsoid and hole — == 1.0 for an isometric program, so its
 //                         scenes stay byte-identical. Both tables' offsets derive from word[0]'s existing lanes, so
 //                         the header is unchanged. See PackBounds.
-//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, 0, 0)
+//   [.. + 1 + 2*segmentCount ..) = the INSTANCE directory: one (instanceCount, partProgramOffset, shadingFlags, 0)
 //                         header uvec4, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius (float
 //                         bits), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd) — segmentFirst/segmentEnd index
 //                         the SEGMENT directory above (not raw instructions): every segment in that range is
 //                         guaranteed (by construction — AnalyzeBounds splits/merges never cross an instance
 //                         boundary) to be owned by exactly that instance, so mapCore (sdf-vm.hlsli) evaluates the
 //                         whole range when the instance's per-tile mask bit is set and never touches it otherwise,
-//                         and the BEAM prepass reads only i0/i1 for its per-tile cull. See PackInstances.
+//                         and the BEAM prepass reads only i0/i1 for its per-tile cull. shadingFlags bit 0 proves
+//                         the entire stream has no Detail shape; zero requires shade re-evaluation. See PackInstances.
 //   [.. + 1 + 2*instanceCount ..) = the WORLD-SEGMENT list (world render path only): one (worldSegmentCount, 0, 0,
 //                         0) header uvec4, then one uvec4 per WORLD segment (only .x used — kept uvec4-granular for
 //                         simplicity), value = the segment-directory index of a segment owned by NO instance,
@@ -82,6 +83,8 @@ public sealed partial class SdfProgram {
     // High shape-type-lane bit on a ShapeBlend instruction: SdfInstruction.Detail. Shape-type ids are far below 2^31,
     // so the bit is free. KEEP IN SYNC with SDF_SHAPE_DETAIL_FLAG in sdf-vm.hlsli.
     private const uint ShapeDetailFlag = 0x80000000u;
+    // Instance-header .z admission bit; KEEP IN SYNC with sdfLoadProgramLayout's noDetailShapes.
+    private const uint NoDetailShapesFlag = 1u;
     // The next-highest shape-type-lane bit: SdfInstruction.Secondary == false. KEEP IN SYNC with
     // SDF_SHAPE_NO_SECONDARY_FLAG in sdf-vm.hlsli.
     private const uint ShapeNoSecondaryFlag = 0x40000000u;
@@ -1788,12 +1791,12 @@ public sealed partial class SdfProgram {
             );
         }
     }
-    // Packs the instance directory: a count header, then 2 uvec4 per instance — i0 = bound center/offset.xyz + radius
-    // (the packed radius ClassifyInstances derived), i1 = (mode, dynamicSlot, segmentFirst, segmentEnd). The segment
-    // range is resolved here by scanning the FINAL, POST-MERGE segment list for the contiguous run whose InstanceIndex
-    // equals this instance's index — sound because splits/merges never let a segment straddle an instance boundary.
+    // Packs the header and two vectors per instance: bound sphere, then mode/slot/segment range.
+    // Detail admission covers the entire stream, including uninstanced and parked shapes.
     private void PackInstances(SdfInstanceGridInput[] binning, int instanceOffsetVectors, List<BoundRecord> segments) {
         m_words[(instanceOffsetVectors * WordsPerVector)] = ((uint)m_instances.Length);
+        m_words[(instanceOffsetVectors * WordsPerVector) + 2] = m_instructions.Any(static instruction => instruction.Detail)
+            ? 0u : NoDetailShapesFlag;
 
         // Resolve every instance's contiguous [segmentFirst, segmentEnd) directory range in ONE pass over the segment
         // list in O(instances + segments). Splits/merges never let a
