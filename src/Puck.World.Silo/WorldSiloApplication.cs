@@ -10,15 +10,13 @@ using Puck.World.Server;
 
 namespace Puck.World.Silo;
 
-/// <summary>Composes and runs the silo, allowing an outer distribution to install optional host extensions.</summary>
+/// <summary>Composes and runs the silo, allowing dynamic host extensions to register capabilities.</summary>
 public static class WorldSiloApplication {
-    /// <summary>Runs the ordinary silo with optional service registrations supplied by its trusted composition owner.</summary>
+    /// <summary>Runs the ordinary silo with dynamic extensions loaded from --extensions-dir.</summary>
     /// <param name="args">The silo's ordinary command-line arguments.</param>
-    /// <param name="configureBuilder">Optional host extensions, registered before building the host.</param>
     /// <param name="cancellationToken">Stops the host through its normal lifecycle.</param>
     /// <returns>The process exit code.</returns>
-    public static async Task<int> RunAsync(string[] args, Action<IHostApplicationBuilder>? configureBuilder = null,
-        CancellationToken cancellationToken = default) {
+    public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken = default) {
         var siloOption = new Option<string?>(name: "--silo") {
             DefaultValueFactory = static _ => null,
             Description = "The silo document (puck.silo.def.v1) to load. Required.",
@@ -27,8 +25,13 @@ public static class WorldSiloApplication {
             DefaultValueFactory = static _ => null,
             Description = "Optional path to the extensions directory. Defaults to ./extensions and <app>/extensions.",
         };
+        var mcpOption = new Option<string?>(name: "--mcp") {
+            DefaultValueFactory = static _ => Environment.GetEnvironmentVariable(variable: "PUCK_MCP_CONFIG"),
+            Description = "Optional path to MCP deployment configuration (remote.json). Enables dynamic MCP control hosting.",
+        };
         var launchCommand = new RootCommand(description: "Puck World Silo") {
             extensionsDirOption,
+            mcpOption,
             siloOption,
         };
         var parseResult = launchCommand.Parse(args);
@@ -37,7 +40,7 @@ public static class WorldSiloApplication {
         
             return 1;
         }
-        LoadDynamicExtensions(explicitDir: parseResult.GetValue(option: extensionsDirOption));
+        var loadedExtensions = LoadDynamicExtensions(explicitDir: parseResult.GetValue(option: extensionsDirOption));
         if (!WorldSiloDefinitionSerialization.TryLoadFile(
             clusteringKinds: WorldSiloExtensions.ClusteringKinds,
             definition: out var definition,
@@ -118,7 +121,33 @@ public static class WorldSiloApplication {
         // handles verb output directly; this writer catches engine narration written straight to Console.Out/Error).
         Console.SetOut(newOut: new SiloNarrationWriter(inner: Console.Out));
         Console.SetError(newError: new SiloNarrationWriter(inner: Console.Error));
-        configureBuilder?.Invoke(builder);
+        if (parseResult.GetValue(option: mcpOption) is { Length: > 0 } mcpConfigPath) {
+            if (loadedExtensions.ControlExtensions.Count == 0) {
+                Console.Error.WriteLine(value: "[silo] Warning: --mcp was specified, but no IControlExtension (e.g. Puck.Mcp) was found in the extensions directory.");
+            } else {
+                foreach (var controlExt in loadedExtensions.ControlExtensions) {
+                    var controlRegistry = new SiloControlExtensionRegistry();
+                    controlExt.Register(registry: controlRegistry);
+                    if (controlRegistry.HostedControlFactory is { } factory) {
+                        builder.Services.AddHostedService(implementationFactory: sp => {
+                            var controlHost = sp.GetRequiredService<IControlSessionHost>();
+                            var service = factory(sp, controlHost, mcpConfigPath);
+                            return new SiloHostedServiceAdapter(service: service);
+                        });
+                    }
+                }
+            }
+        }
+        foreach (var agentExt in loadedExtensions.AgentExtensions) {
+            var agentRegistry = new SiloWorldAgentExtensionRegistry();
+            agentExt.Register(registry: agentRegistry);
+            if (agentRegistry.AgentRunnerFactory is { } factory) {
+                builder.Services.AddHostedService(implementationFactory: sp => {
+                    var service = factory(sp);
+                    return new SiloHostedServiceAdapter(service: service);
+                });
+            }
+        }
         var host = builder.Build();
         // The silo's own boot-free WorldInstanceHost carries every row this silo ever admits, so one attach here reaches
         // its cross-row/host-level narration for the run's whole lifetime — each admitted row's own WorldServer.Output
@@ -133,9 +162,34 @@ public static class WorldSiloApplication {
         return Environment.ExitCode;
     }
 
-    private static void LoadDynamicExtensions(string? explicitDir) {
+    private sealed class LoadedExtensions {
+        public List<IControlExtension> ControlExtensions { get; } = [];
+        public List<Puck.World.Protocol.IWorldAgentExtension> AgentExtensions { get; } = [];
+    }
+
+    private sealed class SiloHostedServiceAdapter(Puck.Abstractions.IPuckHostedService service) : IHostedService {
+        public Task StartAsync(CancellationToken cancellationToken) => service.StartAsync(cancellationToken: cancellationToken);
+        public Task StopAsync(CancellationToken cancellationToken) => service.StopAsync(cancellationToken: cancellationToken);
+    }
+
+    private sealed class SiloControlExtensionRegistry : IControlExtensionRegistry {
+        public Func<IServiceProvider, IControlSessionHost, string, Puck.Abstractions.IPuckHostedService>? HostedControlFactory { get; private set; }
+        public void RegisterHostedControl(Func<IServiceProvider, IControlSessionHost, string, Puck.Abstractions.IPuckHostedService> factory) {
+            HostedControlFactory = factory;
+        }
+    }
+
+    private sealed class SiloWorldAgentExtensionRegistry : Puck.World.Protocol.IWorldAgentExtensionRegistry {
+        public Func<IServiceProvider, Puck.Abstractions.IPuckHostedService>? AgentRunnerFactory { get; private set; }
+        public void RegisterAgentRunner(Func<IServiceProvider, Puck.Abstractions.IPuckHostedService> factory) {
+            AgentRunnerFactory = factory;
+        }
+    }
+
+    private static LoadedExtensions LoadDynamicExtensions(string? explicitDir) {
         var serverRegistry = new WorldSiloExtensions.Registry();
         var machineRegistry = new WorldMachineExtensionRegistry();
+        var loaded = new LoadedExtensions();
 
         void Scan(string dir) {
             WorldExtensionLoader.LoadFromDirectory(
@@ -145,13 +199,19 @@ public static class WorldSiloApplication {
                     if (ext is Puck.GamingBricks.Forge.IGamingBrickExtension brickExtension) {
                         brickExtension.Initialize(registry: machineRegistry);
                     }
+                    if (ext is IControlExtension controlExtension) {
+                        loaded.ControlExtensions.Add(item: controlExtension);
+                    }
+                    if (ext is Puck.World.Protocol.IWorldAgentExtension agentExtension) {
+                        loaded.AgentExtensions.Add(item: agentExtension);
+                    }
                 },
                 log: static msg => Console.WriteLine(value: msg));
         }
 
         if (!string.IsNullOrWhiteSpace(value: explicitDir) && Directory.Exists(path: explicitDir)) {
             Scan(dir: explicitDir);
-            return;
+            return loaded;
         }
 
         var localDir = Path.Combine(Directory.GetCurrentDirectory(), "extensions");
@@ -165,5 +225,7 @@ public static class WorldSiloApplication {
         if (Directory.Exists(path: appDir) && !string.Equals(a: localDir, b: appDir, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             Scan(dir: appDir);
         }
+
+        return loaded;
     }
 }

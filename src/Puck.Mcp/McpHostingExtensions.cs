@@ -25,8 +25,8 @@ public static class McpHostingExtensions {
         return builder;
     }
 
-    private sealed class McpHostedService(string configurationPath, RemoteMcpOptions options,
-        RemoteMcpHost host) : BackgroundService, IHostedLifecycleService {
+    internal sealed class McpHostedService(string configurationPath, RemoteMcpOptions options,
+        RemoteMcpHost host) : BackgroundService, IHostedLifecycleService, Puck.Abstractions.IPuckHostedService {
         private WebApplication? m_app;
         protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
             await using var app = RemoteMcpServer.Build(options, builder => {
@@ -48,8 +48,15 @@ public static class McpHostingExtensions {
         public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public override void Dispose() { base.Dispose(); (host as IDisposable)?.Dispose(); }
+        public async ValueTask DisposeAsync() {
+            Dispose();
+            if (m_app is not null) {
+                await m_app.DisposeAsync().ConfigureAwait(false);
+                m_app = null;
+            }
+        }
     }
-    private sealed class HostedControlHost(IControlSessionHost host, string target) : RemoteMcpHost {
+    internal sealed class HostedControlHost(IControlSessionHost host, string target) : RemoteMcpHost {
         public override ValueTask<ControlCapabilities> DescribeControlAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => host.DescribeAsync(target, new(caller.Issuer, caller.Subject), cancellationToken);
         public override bool IsReady => host.IsReady(target);
         public override ValueTask<IControlSession> AttachAsync(RemoteMcpCaller caller, CancellationToken cancellationToken) => host.AttachAsync(target, new(caller.Issuer, caller.Subject), cancellationToken);

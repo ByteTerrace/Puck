@@ -62,6 +62,64 @@ public sealed class DynamicExtensionLoaderLawTests {
 
     private static string FindHgbForgeAssembly() => FindAssembly("Puck.HumbleGamingBrick.Forge", "Puck.HumbleGamingBrick.Forge.dll");
     private static string FindAzureAssembly() => FindAssembly("Puck.World.Azure", "Puck.World.Azure.dll");
+    private static string FindMcpAssembly() => FindAssembly("Puck.Mcp", "Puck.Mcp.dll");
+    private static string FindAgentHarnessAssembly() => FindAssembly("Puck.World.AgentHarness", "Puck.World.AgentHarness.dll");
+
+    private sealed class TestControlExtensionRegistry : Puck.Hosting.IControlExtensionRegistry {
+        public Func<IServiceProvider, Puck.Hosting.IControlSessionHost, string, Puck.Abstractions.IPuckHostedService>? Factory { get; private set; }
+        public void RegisterHostedControl(Func<IServiceProvider, Puck.Hosting.IControlSessionHost, string, Puck.Abstractions.IPuckHostedService> factory) {
+            Factory = factory;
+        }
+    }
+
+    private sealed class TestWorldAgentExtensionRegistry : Puck.World.Protocol.IWorldAgentExtensionRegistry {
+        public Func<IServiceProvider, Puck.Abstractions.IPuckHostedService>? Factory { get; private set; }
+        public void RegisterAgentRunner(Func<IServiceProvider, Puck.Abstractions.IPuckHostedService> factory) {
+            Factory = factory;
+        }
+    }
+
+    [Fact]
+    public void LoadFromAssembly_LoadsAndRegistersMcpControlExtension() {
+        var assemblyPath = FindMcpAssembly();
+        Puck.Hosting.IControlExtension? controlExtension = null;
+        var loaded = WorldExtensionLoader.LoadFromAssembly(
+            assemblyPath: assemblyPath,
+            onExtensionLoaded: ext => {
+                if (ext is Puck.Hosting.IControlExtension ce) {
+                    controlExtension = ce;
+                }
+            });
+
+        Assert.NotEmpty(loaded);
+        Assert.NotNull(controlExtension);
+        Assert.Equal("Puck.Mcp", controlExtension!.Name);
+
+        var registry = new TestControlExtensionRegistry();
+        controlExtension.Register(registry);
+        Assert.NotNull(registry.Factory);
+    }
+
+    [Fact]
+    public void LoadFromAssembly_LoadsAndRegistersAgentHarnessExtension() {
+        var assemblyPath = FindAgentHarnessAssembly();
+        Puck.World.Protocol.IWorldAgentExtension? agentExtension = null;
+        var loaded = WorldExtensionLoader.LoadFromAssembly(
+            assemblyPath: assemblyPath,
+            onExtensionLoaded: ext => {
+                if (ext is Puck.World.Protocol.IWorldAgentExtension ae) {
+                    agentExtension = ae;
+                }
+            });
+
+        Assert.NotEmpty(loaded);
+        Assert.NotNull(agentExtension);
+        Assert.Equal("Puck.World.AgentHarness", agentExtension!.Name);
+
+        var registry = new TestWorldAgentExtensionRegistry();
+        agentExtension.Register(registry);
+        Assert.NotNull(registry.Factory);
+    }
 
     [Fact]
     public void LoadFromAssembly_LoadsAndRegistersExtension() {
@@ -177,6 +235,67 @@ public sealed class DynamicExtensionLoaderLawTests {
                 tempRoot.Delete(recursive: true);
             } catch (Exception) {
                 // Ignore locked memory-mapped files on Windows
+            }
+        }
+    }
+
+    [Fact]
+    public void LoadFromDirectory_DiscoversAllFourExtensionFamilies() {
+        var hgbAssembly = FindHgbForgeAssembly();
+        var azureAssembly = FindAzureAssembly();
+        var mcpAssembly = FindMcpAssembly();
+        var agentAssembly = FindAgentHarnessAssembly();
+
+        var tempRoot = Directory.CreateTempSubdirectory(prefix: "puck-ext-all-");
+
+        try {
+            var hgbDir = Path.Combine(tempRoot.FullName, "hgb");
+            var azureDir = Path.Combine(tempRoot.FullName, "azure");
+            var mcpDir = Path.Combine(tempRoot.FullName, "mcp");
+            var agentDir = Path.Combine(tempRoot.FullName, "agent");
+
+            Directory.CreateDirectory(hgbDir);
+            Directory.CreateDirectory(azureDir);
+            Directory.CreateDirectory(mcpDir);
+            Directory.CreateDirectory(agentDir);
+
+            File.Copy(hgbAssembly, Path.Combine(hgbDir, "Puck.HumbleGamingBrick.Forge.dll"), overwrite: true);
+            File.Copy(azureAssembly, Path.Combine(azureDir, "Puck.World.Azure.dll"), overwrite: true);
+            File.Copy(mcpAssembly, Path.Combine(mcpDir, "Puck.Mcp.dll"), overwrite: true);
+            File.Copy(agentAssembly, Path.Combine(agentDir, "Puck.World.AgentHarness.dll"), overwrite: true);
+
+            var serverRegistry = new TestServerExtensionRegistry();
+            var discoveredControlExtensions = new List<Puck.Hosting.IControlExtension>();
+            var discoveredAgentExtensions = new List<Puck.World.Protocol.IWorldAgentExtension>();
+            var discoveredBrickExtensions = new List<IGamingBrickExtension>();
+
+            var loaded = WorldExtensionLoader.LoadFromDirectory(
+                directoryPath: tempRoot.FullName,
+                serverRegistry: serverRegistry,
+                onExtensionLoaded: ext => {
+                    if (ext is IGamingBrickExtension be) {
+                        discoveredBrickExtensions.Add(be);
+                    }
+                    if (ext is Puck.Hosting.IControlExtension ce) {
+                        discoveredControlExtensions.Add(ce);
+                    }
+                    if (ext is Puck.World.Protocol.IWorldAgentExtension ae) {
+                        discoveredAgentExtensions.Add(ae);
+                    }
+                });
+
+            Assert.Equal(4, loaded.Count);
+            Assert.Single(discoveredBrickExtensions);
+            Assert.Single(discoveredControlExtensions);
+            Assert.Single(discoveredAgentExtensions);
+            Assert.Contains(serverRegistry.StorageProviders, p => p.Type == "azure.blob");
+            Assert.Equal("HumbleGamingBrick", discoveredBrickExtensions[0].Name);
+            Assert.Equal("Puck.Mcp", discoveredControlExtensions[0].Name);
+            Assert.Equal("Puck.World.AgentHarness", discoveredAgentExtensions[0].Name);
+        } finally {
+            try {
+                tempRoot.Delete(recursive: true);
+            } catch (Exception) {
             }
         }
     }

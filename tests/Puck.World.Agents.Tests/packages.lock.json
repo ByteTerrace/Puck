@@ -397,6 +397,7 @@
       "puck.world.agentharness": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "Microsoft.Agents.AI.Harness": "[1.20.0, 1.20.0]",
           "Puck.World.AgentBridge": "[1.0.0, )"
         }

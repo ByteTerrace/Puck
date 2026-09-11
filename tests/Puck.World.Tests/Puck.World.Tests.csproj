@@ -46,6 +46,9 @@
         <!-- Retirement must close the real silo routing session, including work awaiting a row's clock. -->
         <ProjectReference Include="..\..\src\Puck.World.Silo\Puck.World.Silo.csproj" />
         <ProjectReference Include="..\..\src\Puck.Launcher\Puck.Launcher.csproj" />
+        <ProjectReference Include="..\..\src\Puck.Hosting\Puck.Hosting.csproj" />
+        <ProjectReference Include="..\..\src\Puck.Mcp\Puck.Mcp.csproj" />
+        <ProjectReference Include="..\..\src\Puck.World.AgentHarness\Puck.World.AgentHarness.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

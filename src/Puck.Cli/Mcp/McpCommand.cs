@@ -1,8 +1,5 @@
 using System.CommandLine;
 
-using Microsoft.Extensions.DependencyInjection;
-
-using Puck.Hosting;
 using Puck.Mcp;
 
 namespace Puck.Cli.Mcp;
@@ -75,20 +72,10 @@ internal static class McpCommand {
 
         try {
             if (siloPath is not null) {
-                var options = await RemoteMcpServer
-                    .ReadOptionsAsync(cancellationToken: stop.Token, configurationPath: configurationPath!)
-                    .ConfigureAwait(continueOnCapturedContext: false);
-
                 return await Puck.World.Silo.WorldSiloApplication
                     .RunAsync(
-                        args: ["--silo", siloPath],
-                        cancellationToken: stop.Token,
-                        configureBuilder: builder => builder.AddPuckMcp(
-                            configurationPath: configurationPath!,
-                            hostFactory: ((options.Services is null)
-                                ? null
-                                : serviceProvider => new AzureMcpHost(host: serviceProvider.GetRequiredService<IControlSessionHost>(), options: options)),
-                            options: options))
+                        args: ["--silo", siloPath, "--mcp", configurationPath!],
+                        cancellationToken: stop.Token)
                     .ConfigureAwait(continueOnCapturedContext: false);
             }
 

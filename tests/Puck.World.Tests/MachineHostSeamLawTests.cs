@@ -96,6 +96,46 @@ public sealed class MachineHostSeamLawTests {
         Assert.False(condition: referenced.Contains("Puck.World.Azure"), userMessage: "Puck.World must not reference concrete Puck.World.Azure — cloud extensions must be dynamic plugins.");
     }
     [Fact]
+    public void SiloAssemblyReferencesNoOptionalExtensions() {
+        var referenced = typeof(Puck.World.Silo.WorldSiloApplication).Assembly.GetReferencedAssemblies().Select(selector: name => name.Name).ToHashSet(comparer: StringComparer.Ordinal);
+
+        Assert.False(condition: referenced.Contains("Puck.Mcp"), userMessage: "Puck.World.Silo must not reference Puck.Mcp — control extensions must be dynamic plugins.");
+        Assert.False(condition: referenced.Contains("Puck.World.AgentBridge"), userMessage: "Puck.World.Silo must not reference Puck.World.AgentBridge.");
+        Assert.False(condition: referenced.Contains("Puck.World.AgentHarness"), userMessage: "Puck.World.Silo must not reference Puck.World.AgentHarness — agent extensions must be dynamic plugins.");
+    }
+    [Fact]
+    public void DesktopWorldAssemblyReferencesNoOptionalExtensions() {
+        var baseDir = AppContext.BaseDirectory;
+        var directPath = Path.Combine(baseDir, "Puck.World.dll");
+        string assemblyPath;
+
+        if (File.Exists(directPath)) {
+            assemblyPath = directPath;
+        } else {
+            var directory = new DirectoryInfo(baseDir);
+
+            while ((directory is not null) && !File.Exists(Path.Combine(directory.FullName, "Puck.slnx"))) {
+                directory = directory.Parent;
+            }
+
+            Assert.NotNull(directory);
+
+            var releasePath = Path.Combine(directory!.FullName, "src", "Puck.World", "bin", "Release", "net10.0", "Puck.World.dll");
+            assemblyPath = File.Exists(releasePath)
+                ? releasePath
+                : Path.Combine(directory.FullName, "src", "Puck.World", "bin", "Debug", "net10.0", "Puck.World.dll");
+        }
+
+        Assert.True(File.Exists(assemblyPath), $"Could not find Puck.World.dll at '{assemblyPath}'.");
+
+        var worldAssembly = Assembly.LoadFrom(assemblyPath);
+        var referenced = worldAssembly.GetReferencedAssemblies().Select(selector: name => name.Name).ToHashSet(comparer: StringComparer.Ordinal);
+
+        Assert.False(condition: referenced.Contains("Puck.Mcp"), userMessage: "Puck.World must not reference Puck.Mcp — control extensions must be dynamic plugins.");
+        Assert.False(condition: referenced.Contains("Puck.World.AgentBridge"), userMessage: "Puck.World must not reference Puck.World.AgentBridge.");
+        Assert.False(condition: referenced.Contains("Puck.World.AgentHarness"), userMessage: "Puck.World must not reference Puck.World.AgentHarness — agent extensions must be dynamic plugins.");
+    }
+    [Fact]
     public void MachinesPropertyIsTypedThroughTheSeamInterfaceNotTheConcreteHost() {
         var property = typeof(WorldServer).GetProperty(name: nameof(WorldServer.Machines), bindingAttr: (BindingFlags.Public | BindingFlags.Instance));
 
