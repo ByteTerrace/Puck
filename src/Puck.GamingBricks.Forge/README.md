@@ -192,6 +192,14 @@ save block carries the same magic, version and checksum on both, though the stor
 bytes live in each machine's own save window and a saved game does not travel
 between them.
 
+Compilation refuses a document only for what makes the image wrong — a shape the
+machine has no room for — never for what makes it slow. A cartridge that misses
+frames still runs, and the machine absorbs that already, so the per-frame work is
+reported rather than refused: `CartridgeDocuments.Estimate` returns the estimate
+and the target's reservation, and an author over it gets a slower cartridge, not
+a wall. An image that outgrows its machine's windows raises
+`CartridgeCapacityException` naming what overran.
+
 A `plot` sets one pixel of the declared `bitmap` to a palette entry. Coordinates
 run from the top left, and a plot outside the surface is dropped rather than
 wrapping onto another row. The surface's memory takes no single-byte write, so

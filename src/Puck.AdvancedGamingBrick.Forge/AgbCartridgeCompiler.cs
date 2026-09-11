@@ -88,6 +88,9 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         }
 
         kernel.EmitBootPrologue();
+        // Before anything else: the routine runs from the cartridge, so the prefetch and wait states govern how fast
+        // every instruction after this one is fetched.
+        StoreHalf(address: AgbForgeCartridge.WaitControlAddress, value: AgbForgeCartridge.WaitControlValue);
         StoreHalf(address: 0x04000000, value: 0x80); // Forced blank while copying video memory.
         var backgroundPalettes = CartridgeGraphics.PaletteBank(bank: document.Palettes.Background);
         var objectPalettes = CartridgeGraphics.PaletteBank(bank: document.Palettes.Object);
@@ -189,7 +192,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         audio?.EmitBoot();
         digital?.EmitBoot();
         clock?.EmitBoot();
-        saver?.EmitBoot();
+
         Flush();
         var screens = document.Screens.ToDictionary(
             keySelector: static screen => screen.Name,
@@ -376,7 +379,13 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         emitter.Call(label: loop);
         kernel.EmitLibrary();
         arithmetic.EmitLibrary();
-        var rom = AgbForgeCartridge.Build(title: document.Title, gameCode: document.GameCode, routine: emitter.ToArray(baseAddress: AgbForgeCartridge.CodeAddress), data: data.ToArray());
+        byte[] rom;
+        try {
+            rom = AgbForgeCartridge.Build(title: document.Title, gameCode: document.GameCode, routine: emitter.ToArray(baseAddress: AgbForgeCartridge.CodeAddress), data: data.ToArray());
+        } catch (Exception overrun) when (overrun is ArgumentException or ArgumentOutOfRangeException) {
+            throw new CartridgeCapacityException(message: $"The document does not fit the advanced machine's cartridge: {overrun.Message}", innerException: overrun);
+        }
+
         return new CartridgeCompilation(Rom: rom, SourceHash: source.Hash, Target: Target, Variables: variables, Arrays: arrays);
 
         // Publishes every queued cell into the screenblock, then empties the queue.

@@ -98,6 +98,25 @@ native execution tests, not by a hidden special case.
   the reply comes back on falling edges in decimal-coded nibbles. Emit the bit
   work as a runtime loop — fifty-six unrolled exchanges put their constants out
   of reach of a program-counter-relative load.
+- Cost is advice, not a gate. Validation refuses what makes an image wrong — a
+  shape the hardware has no room for — never what merely makes it slow: a
+  cartridge that misses frames still runs, and the emulator already absorbs that
+  worst case. `CartridgeDocuments.Estimate` reports the per-frame work and the
+  target's reservation; nothing refuses on it. Do not reintroduce a cost
+  refusal.
+- The one hard refusal is capacity. Every way an image can outgrow its machine —
+  the Color image's bank windows, the advanced image's code and data windows,
+  and the Thumb literal pool's reach — raises `CartridgeCapacityException` with a
+  message naming what overran.
+- Cost weights are per machine, on `CartridgeCostProfile`, not shared. A shared
+  table has to take the worse of the two machines' ratios for every shape, which
+  fits neither; each machine's weights and reservation are solved from its own
+  capacity table. Units are not comparable between the two.
+- Both machines run their processors at full speed: the Color one switches to
+  double speed at boot (arm KEY1 bit 0 with interrupts off, then `stop`), and the
+  advanced one sets WAITCNT to 0x4017 (prefetch on, first wait state 3/1, save
+  window left at 8 cycles) before anything else, since the routine runs from the
+  cartridge.
 - AGB sampled voices carry a 16.16 position and step, so one recording covers a
   range of pitches; a voice record is 16 bytes (base, position, length, step)
   and a zero step is what marks it free. A document sequences sampled

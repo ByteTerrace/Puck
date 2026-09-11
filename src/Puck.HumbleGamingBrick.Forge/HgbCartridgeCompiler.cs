@@ -139,10 +139,16 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
         save?.EmitLibrary();
         audio?.EmitLibrary(emitter: emitter);
         var routine = emitter.ToArray(baseAddress: Hw.EntryAddress);
-        var rom = FrameworkCartridge.Build(
+        byte[] rom;
+        try {
+            rom = FrameworkCartridge.Build(
             title: document.Title, routine: routine, data: data.ToArray(), banks: banked.Banks,
             clock: document.Clock is not null,
             statHandlerAddress: document.Raster.Length == 0 ? (ushort)0 : emitter.LabelAddress(label: rasterHandler, baseAddress: Hw.EntryAddress));
+        } catch (Exception overrun) when (overrun is ArgumentException or ArgumentOutOfRangeException) {
+            throw new CartridgeCapacityException(message: $"The document does not fit the Color machine's cartridge: {overrun.Message}", innerException: overrun);
+        }
+
         return new CartridgeCompilation(Rom: rom, SourceHash: source.Hash, Target: Target, Variables: variables, Arrays: arrays);
 
         // Keeps a payload in the fixed window while it fits, so a small cartridge stays a two-bank image.

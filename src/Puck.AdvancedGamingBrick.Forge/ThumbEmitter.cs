@@ -274,7 +274,7 @@ public sealed class ThumbEmitter {
             var delta = (literalOffset - anchor);
 
             if ((delta < 0) || (delta > 1020)) {
-                throw new InvalidOperationException(message: $"A literal load at offset 0x{patchOffset:X} cannot reach its pool slot at 0x{literalOffset:X} (delta {delta}); call EmitLiteralPool closer to the load.");
+                throw new Puck.GamingBricks.Forge.CartridgeCapacityException(message: $"A literal load at offset 0x{patchOffset:X} cannot reach its pool slot at 0x{literalOffset:X} (delta {delta}); call EmitLiteralPool closer to the load.");
             }
 
             m_code[patchOffset] = ((byte)(delta / 4));

@@ -25,7 +25,6 @@ public sealed class AgbSaveModule {
     /// <summary>Magic pair, version and checksum precede the payload.</summary>
     private const int HeaderByteCount = 4;
     private const uint SaveWindowAddress = 0x0E000000u;
-    private const uint WaitControlAddress = 0x04000204u;
 
     private readonly uint m_defaultsAddress;
     private readonly ThumbEmitter m_emitter;
@@ -47,15 +46,6 @@ public sealed class AgbSaveModule {
         m_mirrorAddress = mirrorAddress;
         m_payloadByteCount = payloadByteCount;
         m_version = version;
-    }
-
-    /// <summary>Emits the slowest wait-state configuration for the save window.</summary>
-    public void EmitBoot() {
-        m_emitter.LoadConstant(destination: LowRegister.R2, value: WaitControlAddress);
-        m_emitter.LoadHalf(destination: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 0);
-        m_emitter.MoveImmediate(destination: LowRegister.R1, value: 3);
-        m_emitter.Alu(op: ThumbAlu.Or, destination: LowRegister.R0, source: LowRegister.R1);
-        m_emitter.StoreHalf(source: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 0);
     }
 
     /// <summary>Emits a write of the mirror to the save window, with a fresh header and checksum.</summary>

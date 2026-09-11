@@ -31,6 +31,19 @@ public static class AgbForgeCartridge {
     public const int CodeOffset = 0x0D8;
     /// <summary>The ROM offset the data blob is placed at.</summary>
     public const int DataOffset = 0xC000;
+    /// <summary>The wait-state register's address.</summary>
+    public const uint WaitControlAddress = 0x04000204u;
+    /// <summary>
+    /// The wait-state register's value: cartridge prefetch on, the first wait state 3/1, and the save window held at
+    /// its slowest 8 cycles.
+    /// </summary>
+    /// <remarks>
+    /// The machine boots this register at its slowest setting, which leaves the processor stalled on most instruction
+    /// fetches because the routine executes from the cartridge. Bit 14 runs the prefetch queue ahead of the processor,
+    /// and bits 2-4 shorten the first access to three cycles and a sequential one to one. The save window keeps eight
+    /// cycles (bits 0-1 set): it is the one region that does not tolerate a shorter access.
+    /// </remarks>
+    public const uint WaitControlValue = 0x4017u;
     /// <summary>The bus address of the cartridge base.</summary>
     public const uint RomAddress = 0x08000000u;
     /// <summary>The bus address the Thumb routine executes from — pass it to

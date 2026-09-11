@@ -98,25 +98,33 @@ public sealed class CartridgeControlFlowTests {
     }
 
     /// <summary>
-    /// Calibrates <see cref="CartridgeCost.FrameBudget"/> against hardware: a document the validator accepts at
-    /// the ceiling must still complete one rule pass per hardware frame. A budget too generous shows up here as a
-    /// counter that falls behind the frames actually run.
+    /// Calibrates <see cref="CartridgeCostProfile.FrameUnits"/> against hardware: a document the estimate puts at the
+    /// reservation must still complete one rule pass per hardware frame, or the advice is wrong in the direction that
+    /// matters. The estimate gates nothing, so this is what keeps it honest.
     /// </summary>
     [Theory]
     [InlineData("cgb")]
     [InlineData("agb")]
     public void ADocumentAtTheBudgetKeepsUpWithTheFrameRate(string target) {
         const int Frames = 40;
+        var accepted = LargestSweepInsideTheReservation(target: target);
+
+        // The bisection must have stopped on the reservation, not on the schema's own cap for one count.
+        Assert.NotEqual(expected: CartridgeLimits.RepeatCount, actual: accepted);
+
         var document = Blank(target: target, title: "BUDGET") with {
             Variables = [
                 new CartridgeVariable(Name: "slot", Initial: 0),
+                new CartridgeVariable(Name: "band", Initial: 0),
                 new CartridgeVariable(Name: "ticks", Initial: 0),
                 new CartridgeVariable(Name: "sink", Initial: 0),
             ],
             Arrays = [new CartridgeArray(Name: "cells", Initial: new int[180])],
             Rules = [new CartridgeRule(Name: "work", When: [], Body: [
-                Repeat(count: LargestAcceptedSweep(target: target), index: "slot", body: [
-                    Set(target: "sink", operation: "add", value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "slot"))),
+                Repeat(count: accepted, index: "band", body: [
+                    Repeat(count: SweepInner, index: "slot", body: [
+                        Set(target: "sink", operation: "add", value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "slot"))),
+                    ]),
                 ]),
                 Set(target: "ticks", operation: "add", value: new CartridgeValue(Constant: 1)),
             ])],
@@ -136,32 +144,35 @@ public sealed class CartridgeControlFlowTests {
         Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "repeat", Count: 4, Index: "missing", Body: [Set(target: "x", operation: "add", value: new CartridgeValue(Constant: 1))])])] }, fragment: "Unknown state variable");
         Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "x"), Operation: "set", Value: new CartridgeValue(Constant: 1), Count: 3)])] }, fragment: "cannot carry 'count'");
         Refuses(document: document with { Rules = [Rule(body: [new CartridgeStatement(Kind: "loop")])] }, fragment: "Expected set, if, repeat, break, map, blit, plot, save, load, play, stop, clock, fade or blend");
-        // A sweep the hardware could not finish inside one frame must not validate.
-        Refuses(document: document with {
-            Arrays = [new CartridgeArray(Name: "cells", Initial: new int[255])],
-            Rules = [Rule(body: [Repeat(count: 255, index: "i", body: [Set(target: "x", operation: "add", value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "i")))])])],
-        }, fragment: "per-frame reservation");
     }
 
-    // The widest sweep of one indexed add the validator still accepts, found by bisection rather than a pinned number
-    // that would drift the moment a cost constant moves.
-    private static int LargestAcceptedSweep(string target) {
+    // The widest sweep the estimate still puts inside the reservation, found by bisection rather than a pinned number that would drift
+    // the moment a cost constant moves. The sweep nests: one count is bounded at 255 by the schema, which is well
+    // inside either reservation, so a single loop would measure that bound instead of the reservation.
+    // Inner iterations per band. Small enough that the outer count lands well inside the schema's cap on either
+    // machine, so the bisection is bounded by the reservation.
+    private const int SweepInner = 20;
+
+    private static int LargestSweepInsideTheReservation(string target) {
         var low = 1;
         var high = CartridgeLimits.RepeatCount;
         while (low < high) {
             var probe = (low + high + 1) / 2;
-            if (CartridgeDocuments.Validate(document: Sweep(target: target, count: probe)).Count == 0) { low = probe; } else { high = probe - 1; }
+            var (frame, reservation) = CartridgeDocuments.Estimate(document: Sweep(target: target, count: probe));
+            if (frame.IsKnown && frame.Cycles <= reservation) { low = probe; } else { high = probe - 1; }
         }
 
         return low;
     }
 
     private static CartridgeDocument Sweep(string target, int count) => Blank(target: target, title: "SWEEP") with {
-        Variables = [new CartridgeVariable(Name: "slot", Initial: 0), new CartridgeVariable(Name: "sink", Initial: 0)],
+        Variables = [new CartridgeVariable(Name: "slot", Initial: 0), new CartridgeVariable(Name: "band", Initial: 0), new CartridgeVariable(Name: "sink", Initial: 0)],
         Arrays = [new CartridgeArray(Name: "cells", Initial: new int[180])],
         Rules = [new CartridgeRule(Name: "work", When: [], Body: [
-            Repeat(count: count, index: "slot", body: [
-                Set(target: "sink", operation: "add", value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "slot"))),
+            Repeat(count: count, index: "band", body: [
+                Repeat(count: SweepInner, index: "slot", body: [
+                    Set(target: "sink", operation: "add", value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "slot"))),
+                ]),
             ]),
         ])],
     };

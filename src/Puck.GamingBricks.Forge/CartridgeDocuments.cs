@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
 
+using Puck.Maths;
+
 namespace Puck.GamingBricks.Forge;
 
 /// <summary>The cartridge document's parse, validate and canonicalize boundary, shared by editors and both compilers.</summary>
@@ -72,9 +74,25 @@ public static class CartridgeDocuments {
     /// <summary>Collects source-path diagnostics without compiling or running a cartridge.</summary>
     /// <param name="document">The authored source.</param>
     /// <returns>Every detected violation; an empty list means valid.</returns>
+    /// <remarks>
+    /// Validation refuses what makes an image wrong — a shape the hardware has no room for — never what merely makes
+    /// it slow. A cartridge that misses frames still runs, and the machine absorbs that case already, so the per-frame
+    /// cost is reported on the compilation rather than refused here.
+    /// </remarks>
     public static IReadOnlyList<DocumentValidationError> Validate(CartridgeDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
         var check = new CartridgeValidation(document: document);
         return check.Run();
+    }
+
+    /// <summary>Estimates a document's per-frame work and the reservation its target grants.</summary>
+    /// <param name="document">The authored source.</param>
+    /// <returns>The estimate, and the target's reservation for comparison.</returns>
+    /// <remarks>Advice for an author, not a gate: a document over its reservation compiles and runs, more slowly.</remarks>
+    public static (CostBound Frame, long Reservation) Estimate(CartridgeDocument document) {
+        ArgumentNullException.ThrowIfNull(argument: document);
+
+        var profile = document.Target is "agb" or "cgb" ? CartridgeCostProfile.For(target: document.Target) : CartridgeCostProfile.Humble;
+        return (CartridgeCost.Frame(document: document, profile: profile), profile.FrameUnits);
     }
 }

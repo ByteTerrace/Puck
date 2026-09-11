@@ -100,16 +100,6 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             }
         }
 
-        // Only cost a document whose shape already checked out; a malformed step has no meaningful weight.
-        if (m_errors.Count == 0) {
-            var frame = CartridgeCost.Frame(document: document);
-            if (frame.IsUnmodeled) {
-                Error(path: "rules", message: $"{frame.Reason} A document cannot be admitted against an unmeasured primitive.");
-            } else if (!CartridgeCost.Admits(bound: frame)) {
-                Error(path: "rules", message: $"Rules and sprites need {frame.Cycles} work units against a per-frame reservation of {CartridgeCost.FrameBudget}; reduce iterations, conditions, steps, indexed accesses or sprites.");
-            }
-        }
-
         names.Clear();
         for (var index = 0; index < document.Sprites.Length; ++index) {
             var sprite = document.Sprites[index];

@@ -1,4 +1,5 @@
 using Puck.GamingBricks.Forge;
+using Puck.HumbleGamingBrick.Forge;
 using Puck.Maths;
 
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
@@ -33,8 +34,7 @@ public sealed class CartridgeCostTests {
     public void AnUnmeasuredPrimitiveIsUnmodeledAndNeverAdmitted() {
         var unknown = Frame(body: [new CartridgeStatement(Kind: "scroll")]);
         Assert.True(condition: unknown.IsUnmodeled);
-        Assert.False(condition: CartridgeCost.Admits(bound: unknown));
-
+        
         // Nesting cannot launder an unmodeled step into a number.
         var buried = Frame(body: [new CartridgeStatement(Kind: "repeat", Count: 4, Index: "i", Body: [
             new CartridgeStatement(Kind: "if", When: [], Then: [new CartridgeStatement(Kind: "scroll")]),
@@ -48,12 +48,45 @@ public sealed class CartridgeCostTests {
         Assert.True(condition: unknownCondition.IsUnmodeled);
     }
 
+    [Theory]
+    [InlineData("cgb")]
+    [InlineData("agb")]
+    public void EachMachineCarriesItsOwnWeightsAndReservation(string target) {
+        var profile = CartridgeCostProfile.For(target: target);
+        Assert.True(condition: profile.FrameUnits > 0L);
+
+        // The unit's anchor is a set step, and it is the same on both so a document reads the same way on either.
+        Assert.Equal(expected: CartridgeCostProfile.Humble.StepSet, actual: profile.StepSet);
+    }
+
     [Fact]
-    public void AdmissionTracksTheReservation() {
-        Assert.True(condition: CartridgeCost.Admits(bound: CostBound.Known(cycles: CartridgeCost.FrameBudget)));
-        Assert.False(condition: CartridgeCost.Admits(bound: CostBound.Known(cycles: CartridgeCost.FrameBudget + 1)));
-        Assert.False(condition: CartridgeCost.Admits(bound: CostBound.Overflow));
-        Assert.False(condition: CartridgeCost.Admits(bound: CostBound.Unmodeled(reason: "untested")));
+    public void TheMachinesWeightsDifferWhereTheirHardwareDoes() {
+        // A shared table would have to take the worse of the two for every shape, which fits neither machine. Divide
+        // is the clearest case: one machine has no divider at all and the other's is far cheaper per step.
+        Assert.NotEqual(expected: CartridgeCostProfile.Humble.StepDivide, actual: CartridgeCostProfile.Advanced.StepDivide);
+        Assert.True(condition: CartridgeCostProfile.Advanced.FrameUnits > CartridgeCostProfile.Humble.FrameUnits);
+    }
+
+    [Fact]
+    public void AnEstimatePastTheReservationIsReportedRatherThanRefused() {
+        // A slow cartridge still runs, and the machine absorbs that case already, so cost is advice and not a gate.
+        var heavy = CartridgeDocuments.Create(target: "cgb", title: "HEAVY") with {
+            Variables = [new CartridgeVariable(Name: "i", Initial: 0), new CartridgeVariable(Name: "j", Initial: 0), new CartridgeVariable(Name: "x", Initial: 0)],
+            Rules = [new CartridgeRule(Name: "work", When: [], Body: [
+                new CartridgeStatement(Kind: "repeat", Count: 255, Index: "j", Body: [
+                    new CartridgeStatement(Kind: "repeat", Count: 255, Index: "i", Body: [
+                        new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "x"), Operation: "add", Value: new CartridgeValue(Constant: 1)),
+                    ]),
+                ]),
+            ])],
+        };
+
+        Assert.Empty(collection: CartridgeDocuments.Validate(document: heavy));
+
+        var (frame, reservation) = CartridgeDocuments.Estimate(document: heavy);
+        Assert.True(condition: frame.IsKnown);
+        Assert.True(condition: frame.Cycles > reservation);
+        Assert.NotEmpty(collection: new HgbCartridgeCompiler().Compile(document: heavy).Rom);
     }
 
     [Fact]
@@ -65,8 +98,8 @@ public sealed class CartridgeCostTests {
         Assert.True(condition: indexed.Cycles < nested.Cycles);
 
         var document = Document(body: [Set(operation: "set", value: new CartridgeValue(Constant: 1))]);
-        var bare = CartridgeCost.Frame(document: document);
-        var withSprites = CartridgeCost.Frame(document: document with {
+        var bare = CartridgeCost.Frame(document: document, profile: CartridgeCostProfile.Humble);
+        var withSprites = CartridgeCost.Frame(profile: CartridgeCostProfile.Humble, document: document with {
             Sprites = [.. Enumerable.Range(start: 0, count: 8).Select(selector: index => new CartridgeSprite(
                 Name: $"s{index}", Tile: new CartridgeValue(Constant: 0), X: new CartridgeValue(Constant: 0),
                 Y: new CartridgeValue(Constant: 0), Visible: new CartridgeValue(Constant: 1)))],
@@ -74,7 +107,7 @@ public sealed class CartridgeCostTests {
         Assert.True(condition: withSprites.Cycles > bare.Cycles);
     }
 
-    private static CostBound Frame(CartridgeStatement[] body) => CartridgeCost.Frame(document: Document(body: body));
+    private static CostBound Frame(CartridgeStatement[] body) => CartridgeCost.Frame(document: Document(body: body), profile: CartridgeCostProfile.Humble);
 
     private static CartridgeDocument Document(CartridgeStatement[] body) => CartridgeDocuments.Create(target: "cgb", title: "COST") with {
         Variables = [new CartridgeVariable(Name: "i", Initial: 0), new CartridgeVariable(Name: "x", Initial: 0)],

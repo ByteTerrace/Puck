@@ -19,6 +19,8 @@ public static class Hw {
     /// different amounts of execution hold different DIV values, so a link protocol seeds a symmetry-breaking backoff
     /// from it. Writing any value resets the whole counter to zero.</summary>
     public const byte PortDivider = 0x04;
+    /// <summary>KEY1: bit 0 arms a processor speed switch, bit 7 reads the speed currently running.</summary>
+    public const byte PortSpeedSwitch = 0x4D;
     /// <summary>IF — the interrupt request flags.</summary>
     public const byte PortInterruptFlag = 0x0F;
     /// <summary>NR10 — pulse 1's frequency sweep.</summary>
