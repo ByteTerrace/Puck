@@ -3,6 +3,7 @@
     "displayName": "Puck Authoring Language",
     "description": "Rich language support, syntax highlighting, and snippets for the Puck World Authoring DSL (.puck).",
     "version": "1.0.0",
+    "icon": "icon.png",
     "publisher": "ByteTerrace",
     "repository": {
         "type": "git",

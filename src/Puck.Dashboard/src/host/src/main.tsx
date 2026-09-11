@@ -103,7 +103,7 @@ const publicClientApplication = new PublicClientApplication({
   },
   telemetry: {
     application: {
-      appName: "FdeHack Portal",
+      appName: "Puck Dashboard",
       appVersion: "0.0.1",
     },
   },

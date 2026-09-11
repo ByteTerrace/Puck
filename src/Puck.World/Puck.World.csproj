@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
+        <ApplicationIcon>puck.ico</ApplicationIcon>
         <IsAotCompatible>false</IsAotCompatible>
         <OutputType>Exe</OutputType>
         <PuckKind>Production</PuckKind>

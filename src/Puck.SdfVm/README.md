@@ -254,9 +254,9 @@ source or its sidecar. The recipe is `build/Shaders.targets` (`Puck.Shaders`).
 ## 🧪 Verification
 
 `puck parity` (`dotnet src/Puck.Cli/publish/Puck.Cli.dll parity`) is the one
-live automated check over this engine: it boots the real windowed
-`Puck.World` on both backends and compares the same fenced composed frame
-under the relaxed cross-backend envelope. The Post battery that once
+live automated GPU check over this engine: it boots the authored parity world
+offscreen on both backends and checks scheduled captures for content, exact
+state hashes, and per-tile pixel differences. The Post battery that once
 exercised every kernel and ISA path is quarantined with `Puck.Post` and is
 not run — say so plainly rather than implying coverage that does not exist.
 The [`sdf-world` skill](../../.claude/skills/sdf-world/SKILL.md) carries the
