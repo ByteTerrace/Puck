@@ -91,6 +91,18 @@ metadata at the probe's instruction and instance ceilings. `Words.Length` only
 describes the current representation: later geometry can share less, or qualify
 for compilation when the probe did not. The part table follows the existing
 payload tables; the instance-directory header's second lane points to it.
+The part header's first lane stores the compiled-instance count in bits 0–30.
+Bit 31 admits independent primary tracing: all root shape and scope composes
+must be hard unions, and root operations must be supported point transforms or
+resets. A root field modifier or other composition clears that flag while
+retaining eligible compiled parts for ordinary scalar queries. Admission is
+recomputed whenever the program is packed; it is not tied to a particular scene.
+
+The instance header's third lane carries shading admission flags. Bit 0 proves
+that the entire instruction stream contains no `Detail` shapes, including parked
+and uninstanced geometry. The renderer can then reuse the primary hit's distance
+and material attributes during shading. Without that proof it reevaluates the
+shading field, which includes detail geometry omitted by the primary march.
 
 Rigid hard-union Sweeps use the existing shape, segment and rigid-leaf sphere
 tests. Their spheres enclose the control-point hull, profile and strand orbit,

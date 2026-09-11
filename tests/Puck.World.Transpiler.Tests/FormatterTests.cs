@@ -83,4 +83,23 @@ authority:""my-auth"",presentation:headless
         Assert.Contains("authority: \"my-auth\"", formatted);
         Assert.Contains("presentation: headless", formatted);
     }
+
+    [Fact]
+    public void TestFormatterArrayOfObjectsDoesNotCollapseBraces() {
+        var unformatted = @"
+cells: [
+{
+key: ""feltColor""
+value: feltColor
+}
+{
+key: ""activeRound""
+value: 1
+}
+]";
+        var formatted = PuckFormatter.Format(unformatted);
+        Assert.DoesNotContain("[ {", formatted);
+        Assert.DoesNotContain("} {", formatted);
+        Assert.Contains("cells: [\n    {\n        key: \"feltColor\"", formatted);
+    }
 }

@@ -51,6 +51,9 @@ public sealed class PartProgramLawTests {
         var shape = (int)(words[leaf] + 1u) * 4;
         Assert.Equal((uint)SdfShapeType.Sphere | (detail ? 0x80000000u : 0u)
             | (secondary ? 0u : 0x40000000u), words[shape + 1]);
+        var segment = (int)(words[3] + 20u * words[1] + 2u * words[0]) * 4;
+        var instances = segment + 4 + 8 * (int)words[segment];
+        Assert.Equal(detail ? 0u : 1u, words[instances + 2]);
     }
 
     [Theory]

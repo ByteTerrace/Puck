@@ -33,6 +33,39 @@ public sealed class SdfDetailShapeLawTests {
         screenSurfaces: null
     );
 
+    /// <summary>Hit reuse is admitted only when the entire program is free of shading-only geometry.
+    /// Instance culling, parking and secondary-ray participation cannot hide a Detail declaration.</summary>
+    [Theory]
+    [InlineData(false, false, false, false)]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, true, true, false)]
+    [InlineData(false, true, false, true)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, true, true, false)]
+    [InlineData(true, true, false, true)]
+    public void PrimaryHitReuseAdmissionIncludesAllShapes(bool detail, bool instanced, bool parked, bool secondary) {
+        var program = new SdfProgram(
+            instructions: [Shape(detail: false), new SdfInstruction(SdfOp.ResetPoint, 0, 0, 0, Vector4.Zero, Vector4.Zero),
+                Shape(detail: detail) with { Secondary = secondary }],
+            materials: OneMaterial,
+            instances: instanced
+                ? [new SdfInstanceRange(First: 1, End: 3, IsDynamic: false, Center: Vector3.Zero,
+                    Radius: 1f, Slot: 0, Active: !parked)] : null);
+        Assert.Equal(expected: detail ? 0u : 1u, actual: ShadingFlags(program));
+    }
+
+    /// <summary>An empty program still carries a complete directory header and needs no detail resolve.</summary>
+    [Fact]
+    public void EmptyProgramAdmitsPrimaryHitReuse() => Assert.Equal(expected: 1u, actual: ShadingFlags(Build([])));
+
+    private static uint ShadingFlags(SdfProgram program) {
+        var words = program.Words;
+        var segment = (int)(words[3] + 20u * words[1] + 2u * words[0]) * 4;
+        var instances = segment + 4 + 8 * (int)words[segment];
+        return words[instances + 2];
+    }
+
     /// <summary>Superellipsoids preserve Detail both at the ellipsoid delegation and at higher exponents. The
     /// common packed flag does not depend on a shape-specific lane.</summary>
     [Theory]

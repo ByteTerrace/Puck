@@ -844,27 +844,24 @@ float3 calculateNormal(float3 p, uint instanceMaskBase, out float gradientMagnit
 
     return normalize(sum);
 }
-// A curvature-carrying variant of the tetrahedron normal probe: it reuses the SAME four taps to ALSO recover the
-// field's discrete Laplacian. Because the tetrahedron offsets are isotropic (Σ dᵢdᵢᵀ = 4·I, Σ dᵢ = 0), the four tap
-// distances minus four times the center distance is 2·e²·∇²d to first order — which for a metric SDF (|∇d| ≈ 1)
-// approximates the mean curvature of the level set: concave creases read negative, convex ridges/silhouettes positive.
-// One extra CENTER tap on top of the normal's four. The whole curvature chain — the center tap, the sum, the /(2 e²) —
-// feeds ONLY `curvature`, which the stylization knobs below multiply by 0 in the default build, so DXC dead-code-
-// eliminates it on both backends and the default lit path stays byte-identical to calculateNormal (the four taps and
-// the normalize survive unchanged). The Laplacian is de-scaled by stepScale so the signal is world-unit curvature.
-// gradientMagnitude (out): same recovery as calculateNormal's (see its remarks) — reuses the stepScale this function
-// already reads for the curvature de-scale.
-float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, out float curvature, out float gradientMagnitude) {
+// The tetrahedron's four distances minus four times the center recover 2*e^2 times the field Laplacian.
+// De-scale it to world units: concave creases read negative, convex ridges positive. The primary hit supplies
+// the center unless Detail shapes can change the shading field; those programs query the current field again.
+float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, float primaryCenter, out float curvature, out float gradientMagnitude) {
     const float2 k = float2(1.0, -1.0);
     const float e = NormalProbeEpsilon;
 
-    sdfEvalCount += 5.0; // four tetrahedron taps plus the extra center tap below
+    sdfEvalCount += 4.0;
 
     float d0 = mapDistanceMasked(p + (k.xyy * e), instanceMaskBase);
     float d1 = mapDistanceMasked(p + (k.yyx * e), instanceMaskBase);
     float d2 = mapDistanceMasked(p + (k.yxy * e), instanceMaskBase);
     float d3 = mapDistanceMasked(p + (k.xxx * e), instanceMaskBase);
-    float center = mapDistanceMasked(p, instanceMaskBase);
+    float center = primaryCenter;
+    if (!sdfProgramLayout.noDetailShapes) {
+        center = mapDistanceMasked(p, instanceMaskBase);
+        sdfEvalCount += 1.0;
+    }
     float stepScale = sdfStepScale();
     float3 sum = ((k.xyy * d0) + (k.yyx * d1) + (k.yxy * d2) + (k.xxx * d3));
 
@@ -2129,6 +2126,8 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
     return traveled;
 }
 
+#include "sdf-primary.hlsli"
+
 // `lane` is the caller's index within its 8x8 workgroup and `active` whether this lane owns a rendered pixel: an
 // inactive lane (past the render extent) still runs the march-free prologue and the group shadow gather's barriers
 // (UNIFORM control flow — see sdfShadowGatherGroup) and then returns black, which the caller never stores.
@@ -2147,15 +2146,6 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
     // The winning instance's four anonymous lane values and frame.
     float4 hitLanes = float4(0.0, 0.0, 0.0, 0.0);
     int hitFrameSlot = -1;
-    // The running closest approach, in the units of the hit-accept rule: the smallest (fieldDistance - hitThreshold)
-    // any sample of this ray measured, and the depth it was measured at. Negative means that sample satisfied the one
-    // accept rule (fieldDistance < hitThreshold) — the rule the in-loop hit arm applies, the F1 far bound is proven
-    // against, and the exhaustion arm after the loop re-applies. A sample can satisfy it yet not be accepted in-loop
-    // only when the disjoint-sphere test flagged the step that reached it as an overshoot (the sample is skipped and
-    // the march retreats); if the budget ends before the retreat re-finds the surface, that sample is the hit.
-    // Seeded far positive = no candidate.
-    float candidateMargin = SDF_FAR_DISTANCE;
-    float candidateT = 0.0;
     // Material blend at smooth seams (sdf-vm.hlsli's sdfMaterialBlendWeight): captured from the ACCEPT-sample march call
     // alongside `material`, because the normal/AO/shadow map calls after the loop clobber the per-thread channel. Weight 0
     // (no smooth seam within a blend radius of the hit) => the shade below is the exact table lookup, unchanged.
@@ -2198,199 +2188,23 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
         materialBlendWeight = attributes.y;
         materialBlendOther = asint(attributes.z);
         marchStep = (int)(flags & 255u);
-        sdfEvalCount = (float)((flags >> 8u) & 255u);
-        hitSurface = ((flags & 65536u) != 0u);
+        sdfEvalCount = (float)((flags >> 8u) & 0x7FFFFFu);
+        hitSurface = ((flags & 0x80000000u) != 0u);
     }
 #else
     if ((marchStart >= 0.0) && (viewMode != DebugViewModeSlice) && (viewMode != DebugViewModeMask) && (viewMode != DebugViewModeOvershoot)) {
-        // Sphere-trace to the surface with a footprint-ADAPTIVE hit threshold. The field mapMasked returns is already
-        // Lipschitz-clamped (SdfProgram stepScale; <= 1-Lipschitz along the ray), so over-relaxing stays
-        // safe. DEFAULT: Bán & Valasek 2023 AUTO-RELAXED tracing — a per-ray slope EMA `slopeM` drives an adaptive
-        // over-relaxation omega = max(1, 2/(1 - m)) (planar approach steps big, concave degenerates to a plain step),
-        // with a disjoint-sphere step-back on overshoot. This subsumes the fixed clear-space multiplier the teleport
-        // increment carried. STRICT (SDF_STRICT_MARCH): the plain omega=1.2 Keinert marcher — the conservative
-        // cross-backend parity reference; the auto-relaxed step's division never rides the strict gate. The four-bound
-        // teleport runs in BOTH paths.
-        //
-        // Footprint-hit biases (both conservative toward the camera — fatten a silhouette, never drop geometry):
-        // (1) pixelFootprint * traveled is the pixel's full world DIAMETER (2x Keinert's radius); (2) `radius` is
-        // Lipschitz-clamped, so the test fires at true distance threshold/stepScale.
-#ifdef SDF_STRICT_MARCH
-        float omega = SphereTraceOmega;
-#else
-        float slopeM = -1.0; // slope EMA, init -1 => the first step is plain (omega = 1)
-#endif
-        float previousRadius = 0.0;
-        float stepLength = 0.0;
-
-        [loop]
-        for (marchStep = 0; (marchStep < MaxSteps); marchStep++) {
-            SdfHit hit = mapMasked(rayOrigin + (rayDirection * traveled), instanceMaskBase);
-
-            sdfEvalCount += 1.0; // one primary-march sample
-
-            // FOLD-SAFE split: STEP (sizing, unbounding spheres, the slope EMA) on min(value, sdfMapStepBound) —
-            // the sound marchable field near a fold boundary — but TERMINATE on the raw value (exact in the owning
-            // cell; the bound never invents a phantom boundary hit). Fold-free programs: the min is the identity.
-            float fieldDistance = hit.distance;
-            float radius = min(fieldDistance, sdfMapStepBound);
-            float hitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
-            // The closest-approach candidate (see its declaration): every evaluated sample competes, INCLUDING one an
-            // overshoot retreat is about to skip — that skipped sample is exactly the one the exhaustion arm exists
-            // for. Recorded at this sample's own depth, before any retreat moves `traveled`.
-            float margin = (fieldDistance - hitThreshold);
-
-            if (margin < candidateMargin) {
-                candidateMargin = margin;
-                candidateT = traveled;
-            }
-
-            bool overshoot;
-
-#ifdef SDF_STRICT_MARCH
-            // Keinert over-relaxation: omega=1.2 with a disjoint-sphere step-back, latching to plain tracing (omega=1)
-            // for the rest of the ray once it overshoots. Never terminate on an overshoot-retreat step.
-            overshoot = ((omega > 1.0) && ((radius + previousRadius) < stepLength));
-
-            if (overshoot) {
-                stepLength -= (omega * stepLength);
-                omega = 1.0;
-            }
-            else {
-                stepLength = (radius * omega);
-            }
-
-            previousRadius = radius;
-#else
-            // Auto-relaxed step (Bán 2023). `stepLength` is the step that reached this sample. A disjoint-sphere
-            // overshoot (`stepLength > |R| + r` — the over-relaxed step tunneled past / off the previous unbounding
-            // sphere) is rejected: retreat to the previous sample and plain-step, resetting the slope. The divided
-            // step and the fallback compare are `precise` so DXC's SPIR-V/DXIL FMA contraction can't flip the branch
-            // near tangency; SlopeCap keeps (1 - m) away from 0 there.
-            precise float sphereReach = (abs(radius) + previousRadius);
-            overshoot = ((stepLength > 0.0) && (stepLength > sphereReach));
-
-            if (overshoot) {
-                traveled -= stepLength; // undo the unsafe step — back to the previous accepted sample
-                radius = previousRadius;
-                slopeM = -1.0;          // next step is plain (omega = 1)
-            }
-#endif
-
-            // SHARED hit-accept: both march paths have now decided this sample's overshoot/step outcome and land
-            // here — an overshoot-retreat sample is never tested (there is nothing new to accept this iteration),
-            // and the coverage-AA epilogue's terminal-state capture (terminalRadius/terminalHitThreshold) lives in
-            // ONE place instead of duplicated per path.
-            if (!overshoot && (fieldDistance < hitThreshold)) {
-                hitSurface = true;
-                material = hit.material;
-                hitLanes = hit.lanes;
-                hitFrameSlot = hit.frameSlot;
-                // This mapMasked() call evaluated at exactly surfacePoint (traveled is frozen at the break), so its
-                // per-thread material blend channel describes THIS hit's winning smooth seam — capture it now, before the
-                // epilogue's normal/AO/shadow marches overwrite the static.
-                materialBlendWeight = sdfMaterialBlendWeight;
-                materialBlendOther = sdfMaterialBlendOther;
-                terminalRadius = fieldDistance;
-                terminalHitThreshold = hitThreshold;
-                break;
-            }
-
-            // The depth this step leaves from (after any retreat above) — the plain-step fallback below re-steps from it.
-            float stepFrom = traveled;
-
-#ifdef SDF_STRICT_MARCH
-            traveled += stepLength;
-#else
-            // Update the slope EMA from the step that reached this sample (skip the very first sample; an
-            // overshoot-retreat step already reset slopeM above). Only reached when the shared accept check did
-            // not break.
-            if (!overshoot && (stepLength > 0.0)) {
-                precise float slope = ((radius - previousRadius) / stepLength);
-                slopeM = lerp(slopeM, slope, SlopeBeta);
-            }
-
-            precise float denominator = (1.0 - min(slopeM, SlopeCap));
-            precise float omega = max(1.0, (2.0 / denominator));
-            precise float advance = (radius * omega);
-            previousRadius = radius;
-            stepLength = advance;
-            traveled += stepLength;
-#endif
-            // A far exit may only be taken on a VALIDATED step. An over-relaxed step (omega > 1: stepLength > radius)
-            // is not proven clear by the 1-Lipschitz bound — only the next sample's disjoint-sphere test can reject a
-            // step that tunneled past a surface, and the two exits below fire before that sample exists. So a relaxed
-            // step that would cross the far plane / far bound is retaken as the plain step (radius, omega = 1 — the
-            // proven-clear advance; the slope resets as after a retreat), and the ray exits only if the plain step
-            // crosses too. A ray whose relaxed step never crosses an exit is untouched, so silhouettes against a far
-            // background — where omega reaches 2 / (1 - SlopeCap) = 10 while the ray accelerates away from the near
-            // object — resolve the background instead of vaulting it into sky.
-            if (((traveled >= farBound) || (traveled > farDistance)) && (stepLength > radius)) {
-                stepLength = radius;
-                traveled = (stepFrom + radius);
-#ifndef SDF_STRICT_MARCH
-                slopeM = -1.0; // the next step is plain — the same reset an overshoot retreat takes
-#endif
-            }
-
-            // Four-bound teleport (Larsson "The Gunk"): once the ray marches past the tile's first occupied band without
-            // converging, it is inside the beam-proven-empty gap — jump straight to the second band's start. secondEntry
-            // >= firstExit, so this fires at most once (past secondEntry it is a no-op); a tile with no proven gap packs
-            // firstExit = the far distance, making the branch dead. The teleport lands at secondEntry <= the ray's true
-            // re-entry, so `traveled` — and the footprint threshold — is never inflated beyond a normal march (it cannot
-            // worsen the ground-notch). Reset the relaxation state so a stale step/slope does not carry across the jump.
-            if ((traveled >= firstExit) && (traveled < secondEntry)) {
-                traveled = secondEntry;
-                previousRadius = 0.0;
-                stepLength = 0.0;
-#ifndef SDF_STRICT_MARCH
-                slopeM = -1.0;
-#else
-                // Strict keeps omega latched at 1 after an overshoot and across teleports.
-                // Only previousRadius/stepLength reset, so the disjoint-sphere
-                // step-back restarts cleanly at the landing sample without resurrecting over-relaxation the overshoot
-                // already retired.
-#endif
-            }
-
-            // F1 FAR-FIELD EXIT: past the tile's beam-proven far bound no ray in the tile can produce a hit the fine
-            // march would ACCEPT (coneMarchFarBound proved it against the footprint-inflated threshold), so the ray
-            // renders skyColor whether it exits here or marches on — OUTPUT-IDENTICAL, only fewer steps. farBound =
-            // the far distance (no bound proven, or the A/B lever pushed it out of reach) makes this a no-op past the
-            // far plane the far-distance break already handles. Both exits are reached only on a validated step (the
-            // plain-step fallback above) or a cone-proven teleport landing.
-            if (traveled >= farBound) {
-                break;
-            }
-
-            if (traveled > farDistance) {
-                break;
-            }
-        }
-
-        // THE EXHAUSTION ARM — the ONE accept rule, re-applied to the closest approach. A ray that ended its budget
-        // (the step cap, or a far exit) without the in-loop arm accepting a sample, but whose closest approach DID
-        // satisfy fieldDistance < max(SurfaceEpsilon, footprint * t) (candidateMargin < 0 — only an overshoot-skipped
-        // sample can be in that state, see the candidate's declaration), is a hit at that sample: re-evaluate the
-        // field there (one extra eval on this rare path, so the loop carries no per-sample material/blend capture) and
-        // shade with its material and normal exactly as the in-loop arm would have. A ray whose closest approach never
-        // satisfied the rule stays a miss — there is no second, looser threshold here. Adjacent pixels along an edge
-        // therefore resolve by the same rule whichever arm ends them.
-        if (!hitSurface && (candidateMargin < 0.0)) {
-            traveled = candidateT;
-
-            SdfHit candidate = mapMasked(rayOrigin + (rayDirection * traveled), instanceMaskBase);
-
-            sdfEvalCount += 1.0;
-            hitSurface = true;
-            material = candidate.material;
-            hitLanes = candidate.lanes;
-            hitFrameSlot = candidate.frameSlot;
-            materialBlendWeight = sdfMaterialBlendWeight;
-            materialBlendOther = sdfMaterialBlendOther;
-            terminalRadius = candidate.distance;
-            terminalHitThreshold = max(SurfaceEpsilon, (pixelFootprint * traveled));
-        }
+        SdfPrimaryHit primary = sdfTracePrimary(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,
+            farBound, farDistance, instanceMaskBase, pixelFootprint);
+        traveled = primary.traveled;
+        terminalRadius = primary.radius;
+        terminalHitThreshold = primary.threshold;
+        material = primary.material;
+        hitLanes = primary.lanes;
+        hitFrameSlot = primary.frameSlot;
+        materialBlendWeight = primary.blendWeight;
+        materialBlendOther = primary.blendOther;
+        marchStep = (int)primary.steps;
+        hitSurface = primary.found;
     }
 
 #endif // SDF_PRIMARY_READ
@@ -2398,8 +2212,9 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
 #ifdef SDF_PRIMARY_PASS
     if (active) {
         uint hitOffset = sdfPrimaryHitOffset(pixel, viewIndex);
-        // MaxSteps = 128; at most 129 primary evaluations including the exhaustion re-evaluation fit in eight bits.
-        uint flags = (uint)marchStep | ((uint)sdfEvalCount << 8u) | (hitSurface ? 65536u : 0u);
+        // Selected march steps occupy bits 0..7; total queries across all marches saturate in bits 8..30.
+        // Bit 31 marks a hit. Local traces can execute more than 255 queries; none may overwrite the hit bit.
+        uint flags = min((uint)marchStep, 255u) | (min((uint)sdfEvalCount, 0x7FFFFFu) << 8u) | (hitSurface ? 0x80000000u : 0u);
         sdfStorePrimaryRow(hitOffset, float4(traveled, terminalRadius, terminalHitThreshold, asfloat(material)));
         sdfStorePrimaryRow(hitOffset + 4u, hitLanes);
         sdfStorePrimaryRow(hitOffset + 8u, float4(asfloat(hitFrameSlot), materialBlendWeight, asfloat(materialBlendOther), asfloat(flags)));
@@ -2496,7 +2311,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // A/B lever). The 4-tap path stays compiled; the toggle picks at runtime. Every path also reports the
             // hit's local gradient magnitude (see GradientMagnitudeFloor) for the shadow/AO de-scale below.
             if (curvatureShading) {
-                normal = calculateNormalCurvature(surfacePoint, instanceMaskBase, curvature, gradientMagnitude);
+                normal = calculateNormalCurvature(surfacePoint, instanceMaskBase, terminalRadius, curvature, gradientMagnitude);
             } else if (worldUseTapNormals()) {
                 normal = calculateNormal(surfacePoint, instanceMaskBase, gradientMagnitude);
             } else {
@@ -2573,18 +2388,19 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             } else {
                 // DETAIL RE-RESOLVE, moved ahead of AO/lighting (Puck.SignedDistance.SdfMaterial's wrap/soften/eye
                 // lanes need the resolved material before either): one extra hit-only field evaluation, WITH Detail
-                // shapes included, so a rivet or seam's own material wins its footprint at the exact hit point —
-                // never marched, never per step. A program with no Detail shape is untouched (the extra eval
-                // returns the same winner the march already captured, at zero visible cost since it replaces
-                // identical values).
-                sdfDetailShadingActive = true;
-                SdfHit detailHit = mapMasked(surfacePoint, instanceMaskBase);
-                sdfDetailShadingActive = false;
-                material = detailHit.material;
-                hitLanes = detailHit.lanes;
-                hitFrameSlot = detailHit.frameSlot;
-                materialBlendWeight = sdfMaterialBlendWeight;
-                materialBlendOther = sdfMaterialBlendOther;
+                // shapes included, so a rivet or seam's own material wins its footprint. When the host proves
+                // there are no Detail shapes, reuse the primary hit's complete attributes and seam instead.
+                if (!sdfProgramLayout.noDetailShapes) {
+                    sdfDetailShadingActive = true;
+                    SdfHit detailHit = mapMasked(surfacePoint, instanceMaskBase);
+                    sdfEvalCount += 1.0;
+                    sdfDetailShadingActive = false;
+                    material = detailHit.material;
+                    hitLanes = detailHit.lanes;
+                    hitFrameSlot = detailHit.frameSlot;
+                    materialBlendWeight = sdfMaterialBlendWeight;
+                    materialBlendOther = sdfMaterialBlendOther;
+                }
 
                 // MATERIAL BLEND AT SEAMS. The smooth blend eases the DISTANCE across
                 // the seam, but `material` is the single integer winner — a hard colour cut at the geometric midpoint.
@@ -2615,7 +2431,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
                 applyInset(layerPoint, layerNormal, layerRay, shadeMaterial);
                 if (shadeMaterial.weathering.x > 0.0 && !curvatureShading) {
                     float unusedMagnitude;
-                    calculateNormalCurvature(surfacePoint, instanceMaskBase, curvature, unusedMagnitude);
+                    calculateNormalCurvature(surfacePoint, instanceMaskBase, terminalRadius, curvature, unusedMagnitude);
                 }
                 applyWeathering(layerPoint, layerNormal, normal.y, curvature, pixelFootprint * traveled, hitLanes, shadeMaterial);
 

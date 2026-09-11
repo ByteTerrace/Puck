@@ -2320,6 +2320,7 @@ struct SdfProgramLayout {
     uint segmentCount;       // segment directory's segment count
     uint rigidPlanOffset;    // rigid-leaf execution plan offset (segmentHeader.z)
     uint partProgramOffset;  // whole-scope shared programs (instanceHeader.y); zero when none qualify
+    bool noDetailShapes;    // instanceHeader.z bit 0: primary hit distance and attributes are valid for shading
     float stepScale;         // per-program Lipschitz step clamp (1/L; already >0-guarded)
     uint instanceOffset;     // instance directory offset
     uint instanceCount;      // packed (unclamped) instance count
@@ -2327,11 +2328,8 @@ struct SdfProgramLayout {
     bool hasInstances;       // instanceCount != 0
 };
 
-// Per-thread cache of the current invocation's layout — the sdfMapStepBound/sdfShadowMaskActive/sdfLodOrigin static
-// pattern. EVERY kernel that transitively calls mapCore/mapGradCore (map/mapMasked/mapDistance/mapDistanceMasked/
-// mapGradMasked) MUST assign this exactly once at entry, before the first such call — a missing init reads whatever
-// the previous invocation (or nothing) left behind. Zero-initialized so an accidentally-skipped init fails loud
-// (segment/instance counts of 0) rather than reading unrelated registers.
+// Every kernel calling a field evaluator must initialize this per-thread cache once at entry.
+// A skipped initialization leaves zero counts and no optimization admission.
 static SdfProgramLayout sdfProgramLayout = (SdfProgramLayout)0;
 
 // The ONE per-invocation layout decode. Same loads, same order as mapCore's former inline sequence.
@@ -2352,6 +2350,7 @@ SdfProgramLayout sdfLoadProgramLayout() {
     layout.segmentCount = segmentCount;
     layout.rigidPlanOffset = segmentHeader.z;
     layout.partProgramOffset = sdfWords[instanceOffset].y;
+    layout.noDetailShapes = (sdfWords[instanceOffset].z & 1u) != 0u; // SdfProgram.NoDetailShapesFlag
     layout.stepScale = ((stepScale > 0.0) ? stepScale : 1.0);
     layout.instanceOffset = instanceOffset;
     layout.instanceCount = instanceCount;
@@ -2380,6 +2379,8 @@ SdfProgramLayout sdfLoadProgramLayout() {
 
 #include "sdf-parts.hlsli"
 
+// Only the primary whole-part traversal sets this. Other query paths keep the complete field.
+static bool sdfPrimaryOmitParts = false;
 SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) {
     // Every call publishes a fresh fold-safe step bound (stale bounds from a previous sample would be unsound); the
     // fold cases below tighten walkStepBound and the single return publishes it in clamped units.
@@ -2482,16 +2483,10 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     float savedFieldBlendWeight = 0.0;
     int savedFieldBlendOther = 0;
 
-    // The OUTER loop walks chain segments (the stream split at ResetPoints), the inner loop interprets a segment's
-    // instructions exactly as before — the zero-instance linear walk visits every segment in directory order, and
-    // the instanced merge visits the world segments plus the visible instances' ranges in the SAME ascending order,
-    // so with no skips the execution is the reference interpreter verbatim. The EXACT Union early-out: when a
-    // segment's combined bounding sphere cannot beat the running union minimum, the whole chain is skipped —
-    // transforms included (the state they would have produced is provably dead: every later segment begins with a
-    // ResetPoint). The skipped candidates' true distances are >= the sphere's lower bound >= the running minimum, so
-    // the min, the material winner, and every pixel are bit-identical to full evaluation (even a backend-divergent
-    // skip DECISION cannot diverge a pixel). A DYNAMIC sphere's center is offset + the entity slot's per-frame
-    // position — NO quaternion rotate (orientation is folded into the host-baked radius).
+    // Walk ResetPoint segments in directory order, merging world and visible-instance ranges in ascending order.
+    // A Union chain can be skipped when its sphere's lower bound cannot beat the running minimum; the next ResetPoint
+    // makes its discarded transform state dead. This preserves the field and material winner even if backends choose
+    // different skips. A dynamic sphere's center is offset + entity position; rotation is folded into its baked radius.
     [loop]
     for (;;) {
         // Select the next segment. Zero-instance: the plain linear counter (independent of any loaded value, so the
@@ -2519,7 +2514,9 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 partReady = partReady && ((part.z & 0x80000000u) == 0u);
 #endif
                 if (partReady) {
-                    sdfComposePartProgram(result, worldPosition, part, dataOffset, trackMaterial);
+                    if (!sdfPrimaryOmitParts) {
+                        sdfComposePartProgram(result, worldPosition, part, dataOffset, trackMaterial);
+                    }
                     sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,
                         maskWordBits, instanceSegment, instanceSegmentEnd, pendingInstance);
                     continue;

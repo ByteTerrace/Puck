@@ -155,12 +155,9 @@ public sealed partial class SdfProgram {
         var depth = 0;
         foreach (var instruction in m_instructions) {
             if (instruction.Op == SdfOp.PushField) {
-                // A compiled part inside another field is not necessarily a union operand of the root.
-                if (++depth != 1) {
-                    return false;
-                }
+                depth++;
             } else if (instruction.Op == SdfOp.PopField) {
-                if (depth != 1 || instruction.Blend != (uint)SdfBlendOp.Union) {
+                if (depth <= 0 || (depth == 1 && instruction.Blend != (uint)SdfBlendOp.Union)) {
                     return false;
                 }
                 depth--;
@@ -176,6 +173,8 @@ public sealed partial class SdfProgram {
                 }
             }
         }
+        // Scope validation already forbids nesting and crossing instance ownership, so each compiled scope
+        // is a complete root operand. Internal cuts and field modifiers remain inside their owning scope.
         return depth == 0;
     }
 
