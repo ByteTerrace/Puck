@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Ast;
 using Puck.World.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Formatting;
+using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
 
@@ -245,6 +246,41 @@ public sealed class PuckLanguageServer {
         AddCompletion(items, "cm", "cm", "Unit: Centimeters", 11);
         AddCompletion(items, "mm", "mm", "Unit: Millimeters", 11);
 
+        // 6. Gate/effect/rule sugar keywords
+        AddCompletion(items, "when", "when ${1:condition}", "Keyword: Rule/option gate", 14);
+        AddCompletion(items, "and", "and", "Keyword: Gate conjunction", 14);
+        AddCompletion(items, "or", "or", "Keyword: Gate disjunction", 14);
+        AddCompletion(items, "not", "not ${1:condition}", "Keyword: Gate negation", 14);
+        AddCompletion(items, "as", "as ${1|Int,Fixed|}", "Keyword: Comparison kind annotation", 14);
+        AddCompletion(items, "rule", "rule \"${1:name}\" {\n    when $0\n}", "Keyword: Reactive rule block", 14);
+        AddCompletion(items, "bind", "bind ${1:name}: ${2|Int,Fixed|} = ${3:expression}", "Keyword: Rule-scoped binding", 14);
+        AddCompletion(items, "push", "push ${1:row} = ${2:value}", "Keyword: pushState effect", 14);
+        AddCompletion(items, "countdown", "countdown ${1:row}", "Keyword: countdownState effect", 14);
+        AddCompletion(items, "remove", "remove ${1:row}", "Keyword: removeStateCell effect", 14);
+        AddCompletion(items, "schedule", "schedule ${1:row} in ${2:1s}", "Keyword: scheduleState effect", 14);
+        AddCompletion(items, "transform", "transform ${1:row} = ${2:boardCombine}(${3:args})", "Keyword: transformState effect", 14);
+        AddCompletion(items, "transaction", "transaction {\n    $0\n} onFailure {\n}", "Keyword: Atomic effect batch", 14);
+        AddCompletion(items, "onFailure", "onFailure {\n    $0\n}", "Keyword: transaction failure branch", 14);
+        AddCompletion(items, "decision", "decision {\n    periodSeconds: ${1:1s}\n    option \"${2:name}\" {\n        score: $0\n    }\n}", "Keyword: Reconsidered decision", 14);
+        AddCompletion(items, "option", "option \"${1:name}\" {\n    score: $0\n}", "Keyword: Decision candidate", 14);
+        AddCompletion(items, "interrupt", "interrupt ${1:condition}", "Keyword: Decision early-reconsider gate", 14);
+        AddCompletion(items, "onNoChoice", "onNoChoice {\n    $0\n}", "Keyword: Decision fallback effects", 14);
+        AddCompletion(items, "shape", "shape ${1:Box} \"${2:name}\" {\n    $0\n}", "Keyword: Creation-document shape row", 14);
+        AddCompletion(items, "placements", "placements {\n    $0\n}", "Section: Placement rows", 14);
+        AddCompletion(items, "placement", "placement \"${1:id}\" {\n    prototype: $0\n}", "Keyword: One placement row", 14);
+
+        // 7. Effect/predicate/kind discriminators (the `name(k: v, ...)` call-form escape hatch)
+        AddCompletion(items, "compareState", "compareState(state: \"${1:row}\", comparison: ${2|Equal,NotEqual,Less,LessOrEqual,Greater,GreaterOrEqual|}, value: ${3:0})", "Predicate: compareState", 3);
+        AddCompletion(items, "compareValue", "compareValue(left: \"${1:expr}\", comparison: ${2|Equal,NotEqual,Less,LessOrEqual,Greater,GreaterOrEqual|}, right: \"${3:expr}\")", "Predicate: compareValue", 3);
+        AddCompletion(items, "setState", "setState(state: \"${1:row}\", value: ${2:0})", "Effect: setState", 3);
+        AddCompletion(items, "addState", "addState(state: \"${1:row}\", value: ${2:0})", "Effect: addState", 3);
+        AddCompletion(items, "pushState", "pushState(state: \"${1:row}\", value: ${2:0})", "Effect: pushState", 3);
+        AddCompletion(items, "countdownState", "countdownState(state: \"${1:row}\")", "Effect: countdownState", 3);
+        AddCompletion(items, "removeStateCell", "removeStateCell(state: \"${1:row}\")", "Effect: removeStateCell", 3);
+        AddCompletion(items, "scheduleState", "scheduleState(state: \"${1:row}\", delaySeconds: ${2:1})", "Effect: scheduleState", 3);
+        AddCompletion(items, "Int", "Int", "CellKind: exact integer domain", 13);
+        AddCompletion(items, "Fixed", "Fixed", "CellKind: fixed-point domain", 13);
+
         await SendResponseAsync(id, new JsonObject {
             ["isIncomplete"] = false,
             ["items"] = items
@@ -277,7 +313,7 @@ public sealed class PuckLanguageServer {
             return;
         }
 
-        var docCard = GetDocumentationForWord(word);
+        var docCard = GetDocumentationForWord(word) ?? GetStateRowHoverCard(text, word);
         if (docCard is null) {
             await SendResponseAsync(id, null).ConfigureAwait(false);
             return;
@@ -343,6 +379,44 @@ public sealed class PuckLanguageServer {
         _ => null
     };
 
+    // Best-effort: lowers the open document and looks `word` up as a declared `state` row's name, reporting its
+    // kind. Swallows parse/lowering failures — a document mid-edit need not lower cleanly for hover to still work
+    // on the parts that do.
+    private static string? GetStateRowHoverCard(string text, string word) {
+        try {
+            var parseResult = PuckParser.ParseDocumentWithDiagnostics(text);
+            if (parseResult.Value is not { } document) {
+                return null;
+            }
+            if (WorldDocumentEmitter.LowerWithDiagnostics(document).Value?["state"] is not JsonObject stateSection) {
+                return null;
+            }
+            foreach (var (_, section) in stateSection) {
+                if (section is not JsonArray rows) {
+                    continue;
+                }
+                foreach (var row in rows) {
+                    if (row is not JsonObject rowObj || rowObj["name"]?.ToString() != word) {
+                        continue;
+                    }
+                    var kind = rowObj["kind"]?.ToString() ?? "?";
+                    var facets = new List<string>();
+                    if (rowObj["capacity"] is JsonValue capacity) {
+                        facets.Add($"capacity {capacity}");
+                    }
+                    if (rowObj["domain"] is JsonValue domain) {
+                        facets.Add($"domain {domain}");
+                    }
+                    var suffix = (facets.Count > 0) ? $" ({string.Join(", ", facets)})" : "";
+                    return $"**`{word}`** — state row\n\nKind: `{kind}`{suffix}";
+                }
+            }
+        } catch {
+            return null;
+        }
+        return null;
+    }
+
     private async Task HandleDocumentSymbolAsync(JsonNode? id, JsonObject? @params) {
         var uri = @params?["textDocument"]?["uri"]?.ToString() ?? "";
         if (!m_documents.TryGetValue(uri, out var text)) {
@@ -379,10 +453,35 @@ public sealed class PuckLanguageServer {
                 AddNode(symbols, CreateSymbol($"let {letNode.Name}", 13, letNode.Line - 1, letNode.Column - 1, letNode.Length));
             } else if (stmt is TemplateNode tmpl) {
                 AddNode(symbols, CreateSymbol($"template {tmpl.Name}", 11, tmpl.Line - 1, tmpl.Column - 1, tmpl.Length));
+            } else if (stmt is RuleBlockNode ruleBlock) {
+                AddNode(symbols, CreateRuleSymbol(ruleBlock));
             }
         }
 
         await SendResponseAsync(id, symbols).ConfigureAwait(false);
+    }
+
+    private static JsonObject CreateRuleSymbol(RuleBlockNode rule) {
+        var ruleSymbol = CreateSymbol($"rule \"{rule.Name}\"", 5, rule.Line - 1, rule.Column - 1, rule.Length);
+        var children = new JsonArray();
+        foreach (var stmt in rule.Statements) {
+            switch (stmt) {
+                case WhenStatementNode when1:
+                    AddNode(children, CreateSymbol("when", 6, when1.Line - 1, when1.Column - 1, when1.Length));
+                    break;
+                case BindStatementNode bindStmt:
+                    AddNode(children, CreateSymbol($"bind {bindStmt.Name}", 13, bindStmt.Line - 1, bindStmt.Column - 1, bindStmt.Length));
+                    break;
+                case DecisionBlockNode decisionStmt:
+                    AddNode(children, CreateSymbol("decision", 5, decisionStmt.Line - 1, decisionStmt.Column - 1, decisionStmt.Length));
+                    break;
+                case PropertyNode propStmt:
+                    AddNode(children, CreateSymbol(propStmt.Name, 7, propStmt.Line - 1, propStmt.Column - 1, propStmt.Length));
+                    break;
+            }
+        }
+        ruleSymbol["children"] = children;
+        return ruleSymbol;
     }
 
     private static JsonObject CreateSymbol(string name, int kind, int line, int character, int length) {

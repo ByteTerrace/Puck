@@ -155,3 +155,35 @@ flag and an explicit `solid: { }`), PUCK029 (`decision` missing `periodSeconds`)
 
 Unit-dimension validation (PUCK024/PUCK025), the shape-type check (PUCK027), and the reference-resolution lint
 family (PUCK_LINT_005 onward) live in the lowering/lint stages, not the parser.
+
+## Reference-resolution lint
+
+`Validation/PuckLinter.LintReferences` walks the LOWERED JSON (not the AST): a document declaring `basis` is
+skipped outright (one `PUCK_LINT_005` note, not a real finding) since a basis-composed document's own rows may be
+inherited, invisible to a single-file pass. Otherwise it checks, all Information severity except the last:
+
+- `PUCK_LINT_005` — a `state`/`comparandState`/`fromState` name, or a `State` token inside a `left`/`right`/
+  `expression`/`score` operand, that resolves to no declared `state.*[].name` row.
+- `PUCK_LINT_006` — a `prototypeId` that resolves to no `prototypes[].id`.
+- `PUCK_LINT_007` — a placement row's `parent` that resolves to no `placements.rows[].id`.
+- `PUCK_LINT_008` — a `camera`/`spawnPoint` reference that resolves to no `cameras[].name`/`spawnPoints[].id`.
+- `PUCK_LINT_009` — a `$`-prefixed operand name one edit apart from a `RuleFacts` channel prefix (`$tabl:` for
+  `$table:`) — deliberately narrow: a real extension prefix (`$board`, `$physics`, ...) sits far from every
+  `RuleFacts` name and is never flagged.
+- `PUCK034` (Warning) — a `shape`'s `parent` that resolves to no sibling `name` in the SAME `shapes` array.
+
+`$`-prefixed and dotted (import-alias) names are never checked against a declared-row set. A leaf world document
+composed only by import (a game module a parent's `imports` pulls in, or that imports siblings of its own, e.g.
+`games/{klondike,spider,freecell}.world.json` under `games/solitaire.world.json`) can reference a row/prototype a
+sibling or parent declares — invisible to this pass, which resolves only within the one document it was given. That
+shows up as a true, if unhelpful, `PUCK_LINT_005`/`PUCK_LINT_006` note on such a document linted standalone; it is
+not a false positive in the basis sense, just the limit of single-file lexical resolution.
+
+## Editor tooling
+
+`Lsp/PuckLanguageServer.cs` offers completion for the gate/effect/rule keywords and the `Puck.State`
+predicate/effect/`CellKind` discriminators, hover on a declared `state` row name (its `kind`, and `capacity`/`domain`
+when present, via a best-effort lower of the open document), and `documentSymbol` entries for `rule` blocks (with
+`when`/`bind`/`decision` children). `Formatting/PuckFormatter.cs` treats a `$name:segment` reserved channel —
+including a folded `$zones[...]` selector — as one opaque token, so its colon-spacing rule never splices
+`$physics:quiescent` into `$physics: quiescent`.

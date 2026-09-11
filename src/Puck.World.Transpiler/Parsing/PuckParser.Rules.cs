@@ -38,7 +38,7 @@ public static partial class PuckParser {
                     sawWhen = true;
                 }
             }
-            if (stmt is EffectStatementNode or ExpressionStatementNode) {
+            if (stmt is EffectStatementNode or ExpressionStatementNode or DecisionBlockNode) {
                 sawEffect = true;
             }
             statements.Add(stmt);

@@ -4,7 +4,7 @@ using Puck.World.Transpiler.Diagnostics;
 namespace Puck.World.Transpiler.Validation;
 
 /// <summary>Static analysis linter for Puck authoring source files.</summary>
-public static class PuckLinter {
+public static partial class PuckLinter {
     /// <summary>Lints an authored <see cref="DocumentNode"/>, reporting code quality warnings and suggestions.</summary>
     /// <param name="document">The parsed AST document.</param>
     /// <param name="diagnostics">The diagnostic bag to record linter findings into.</param>

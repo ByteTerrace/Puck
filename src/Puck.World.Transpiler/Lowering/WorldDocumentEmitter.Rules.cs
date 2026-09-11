@@ -70,10 +70,15 @@ public static partial class WorldDocumentEmitter {
         var options = new JsonArray();
         decimal? periodSeconds = null;
         var mode = "HighestScore";
+        var sawMode = false;
         var scoreKind = "Fixed";
+        var sawScoreKind = false;
         decimal commitmentSeconds = 0;
+        var sawCommitmentSeconds = false;
         decimal incumbentBonus = 0;
+        var sawIncumbentBonus = false;
         var seed = 0L;
+        var sawSeed = false;
 
         foreach (var stmt in decision.Statements) {
             switch (stmt) {
@@ -82,18 +87,23 @@ public static partial class WorldDocumentEmitter {
                     break;
                 case PropertyNode { Name: "mode" } p:
                     mode = LowerExpression(p.Value, scope, p.Name)?.ToString() ?? mode;
+                    sawMode = true;
                     break;
                 case PropertyNode { Name: "scoreKind" } p:
                     scoreKind = LowerExpression(p.Value, scope, p.Name)?.ToString() ?? scoreKind;
+                    sawScoreKind = true;
                     break;
                 case PropertyNode { Name: "commitmentSeconds" } p:
                     commitmentSeconds = ToDecimalNode(LowerExpression(p.Value, scope, p.Name));
+                    sawCommitmentSeconds = true;
                     break;
                 case PropertyNode { Name: "incumbentBonus" } p:
                     incumbentBonus = ToDecimalNode(LowerExpression(p.Value, scope, p.Name));
+                    sawIncumbentBonus = true;
                     break;
                 case PropertyNode { Name: "seed" } p:
                     seed = (long)ToDecimalNode(LowerExpression(p.Value, scope, p.Name));
+                    sawSeed = true;
                     break;
                 case InterruptStatementNode interrupt:
                     obj["interrupt"] = LowerPredicate(interrupt.Predicate);
@@ -115,19 +125,19 @@ public static partial class WorldDocumentEmitter {
         if (periodSeconds is { } periodValue) {
             obj["periodSeconds"] = periodValue;
         }
-        if (!string.Equals(mode, "HighestScore", StringComparison.Ordinal)) {
+        if (sawMode || !string.Equals(mode, "HighestScore", StringComparison.Ordinal)) {
             obj["mode"] = mode;
         }
-        if (!string.Equals(scoreKind, "Fixed", StringComparison.Ordinal)) {
+        if (sawScoreKind || !string.Equals(scoreKind, "Fixed", StringComparison.Ordinal)) {
             obj["scoreKind"] = scoreKind;
         }
-        if (commitmentSeconds != 0) {
+        if (sawCommitmentSeconds || commitmentSeconds != 0) {
             obj["commitmentSeconds"] = commitmentSeconds;
         }
-        if (incumbentBonus != 0) {
+        if (sawIncumbentBonus || incumbentBonus != 0) {
             obj["incumbentBonus"] = incumbentBonus;
         }
-        if (seed != 0) {
+        if (sawSeed || seed != 0) {
             obj["seed"] = seed;
         }
         obj["options"] = options;
