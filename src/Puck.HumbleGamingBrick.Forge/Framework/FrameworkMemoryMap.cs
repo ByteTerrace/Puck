@@ -73,8 +73,14 @@ public static class FrameworkMemoryMap {
     public const ushort SoundNoisePointerHigh = 0xC0B1;
     /// <summary>Frames left before the noise SFX voice advances to its next step.</summary>
     public const ushort SoundNoiseWait = 0xC0B2;
-    /// <summary>Framework scratch (0xC0B4..0xC0EF), free for module-internal temporaries.</summary>
-    public const ushort Scratch = 0xC0B4;
+    /// <summary>The wave voice's read-pointer low byte (high byte zero = idle).</summary>
+    public const ushort SoundWavePointer = 0xC0B4;
+    /// <summary>The wave voice's read-pointer high byte.</summary>
+    public const ushort SoundWavePointerHigh = 0xC0B5;
+    /// <summary>Frames left before the wave voice advances to its next step.</summary>
+    public const ushort SoundWaveWait = 0xC0B6;
+    /// <summary>Framework scratch (0xC0B8..0xC0EF), free for module-internal temporaries.</summary>
+    public const ushort Scratch = 0xC0B8;
     /// <summary>The 16-byte "victory share" source slot (0xC0F0..0xC0FF): the host seeds this cabinet's authored 128-bit
     /// meta victory share here at boot (a per-cabinet <see cref="Sm83Emitter"/>-invisible poke, like the mode-swap boot
     /// shim), and <see cref="VictoryModule"/> copies it verbatim into the top-16 SRAM win region on the game's win edge.

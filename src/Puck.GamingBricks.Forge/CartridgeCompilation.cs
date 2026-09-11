@@ -5,7 +5,8 @@ namespace Puck.GamingBricks.Forge;
 /// <param name="SourceHash">The canonical source document's SHA-256.</param>
 /// <param name="Target">The target platform.</param>
 /// <param name="Variables">Bus addresses of the named one-byte state slots.</param>
-public sealed record CartridgeCompilation(byte[] Rom, string SourceHash, string Target, IReadOnlyDictionary<string, uint> Variables);
+/// <param name="Arrays">Bus addresses of the first element of each named array.</param>
+public sealed record CartridgeCompilation(byte[] Rom, string SourceHash, string Target, IReadOnlyDictionary<string, uint> Variables, IReadOnlyDictionary<string, uint> Arrays);
 
 /// <summary>Compiles validated authored data to standalone native cartridge instructions and assets.</summary>
 public interface ICartridgeCompiler {

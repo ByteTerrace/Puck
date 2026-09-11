@@ -177,8 +177,8 @@ public sealed class MachineCartridgeLawTests {
         using var files = new TempWorldDirectory();
         var good = JsonNode.Parse(json: File.ReadAllText(path: CartridgePath(file: "pip.cgb.cartridge.json")))!.AsObject();
 
-        // Three palette entries where the CGB target needs four — the forge's own validator names it.
-        good["palette"] = new JsonArray(0, 1, 2);
+        // Three colors in a background palette where the CGB target needs four — the forge's own validator names it.
+        good["palettes"]!["background"] = new JsonArray(new JsonArray(0, 1, 2));
 
         var badPath = files.WriteText(name: "bad.cartridge.json", text: good.ToJsonString());
         var forgeMessage = Assert.Throws<DocumentValidationException>(testCode: () => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: badPath))).Message.ReplaceLineEndings(replacementText: " ");

@@ -24,11 +24,24 @@ public static class CartridgeDocuments {
         palette[0] = 0x7FFF;
         palette[1] = 0x56B5;
         palette[2] = 0x294A;
+        var palettes = new CartridgePalettes(Background: [palette], Object: [palette]);
         return Canonicalize(document: new CartridgeDocument {
-            Schema = CartridgeDocument.SchemaId, Target = target, Title = title, GameCode = "PUCK",
-            Palette = palette, Tiles = [new CartridgeTile(Name: "blank", Pixels: Enumerable.Repeat(element: "00000000", count: 8).ToArray())],
-            Map = new int[1024], Variables = [], Rules = [], Sprites = [],
-            ScrollX = new CartridgeValue(Constant: 0), ScrollY = new CartridgeValue(Constant: 0),
+            Schema = CartridgeDocument.SchemaId,
+            Target = target,
+            Title = title,
+            GameCode = "PUCK",
+            Palettes = palettes,
+            Tiles = [new CartridgeTile(Name: "blank", Pixels: Enumerable.Repeat(element: "00000000", count: 8).ToArray())],
+            Map = new int[1024],
+            Variables = [],
+            Arrays = [],
+            Screens = [],
+            Sounds = [],
+            Raster = [],
+            Rules = [],
+            Sprites = [],
+            ScrollX = new CartridgeValue(Constant: 0),
+            ScrollY = new CartridgeValue(Constant: 0),
         }).Document;
     }
 

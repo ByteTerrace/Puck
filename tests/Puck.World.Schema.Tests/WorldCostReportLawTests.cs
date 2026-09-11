@@ -1,6 +1,8 @@
 using System.Numerics;
 using Xunit;
 
+using Puck.Maths;
+
 namespace Puck.World.Schema.Tests;
 
 /// <summary>Portable policy arithmetic and honest reporting while calibration is incomplete.</summary>

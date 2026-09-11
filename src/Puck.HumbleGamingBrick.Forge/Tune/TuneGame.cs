@@ -1,6 +1,8 @@
 using Puck.Assets.Documents;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.GamingBricks.Forge;
+
 namespace Puck.HumbleGamingBrick.Forge.Tune;
 
 /// <summary>

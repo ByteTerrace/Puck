@@ -41,6 +41,10 @@ public static class Hw {
     public const byte PortPulse2PeriodHigh = 0x19;
     /// <summary>NR30 — the wave channel's DAC enable.</summary>
     public const byte PortWaveDacEnable = 0x1A;
+    /// <summary>The wave voice's first register; five consecutive ports run from here through its control byte.</summary>
+    public const byte PortWaveLength = 0x1B;
+    /// <summary>The first of the sixteen bytes holding the wave voice's thirty-two four-bit samples.</summary>
+    public const byte PortWavePattern = 0x30;
     /// <summary>NR41 — the noise channel's length.</summary>
     public const byte PortNoiseLength = 0x20;
     /// <summary>NR42 — the noise channel's volume envelope.</summary>
@@ -62,7 +66,13 @@ public static class Hw {
     /// <summary>SCX — the background horizontal scroll.</summary>
     public const byte PortScrollX = 0x43;
     /// <summary>LY — the current scanline.</summary>
+    /// <summary>The display status register; bit 6 raises an interrupt when the scanline matches the compare value.</summary>
+    public const byte PortLcdStatus = 0x41;
     public const byte PortScanline = 0x44;
+    /// <summary>The scanline the status register compares against.</summary>
+    public const byte PortLineCompare = 0x45;
+    /// <summary>Selects which switchable work-RAM bank appears at 0xD000; banks run 1 through 7 and 0 aliases 1.</summary>
+    public const byte PortWorkRamBank = 0x70;
     /// <summary>DMA — writing a source page here arms the OAM DMA transfer.</summary>
     public const byte PortOamDma = 0x46;
     /// <summary>VBK — the Color VRAM bank select.</summary>
@@ -77,6 +87,8 @@ public static class Hw {
     public const byte PortObjPaletteData = 0x6B;
     /// <summary>IE — the interrupt enable mask (0xFFFF, reachable as high-page port 0xFF).</summary>
     public const byte PortInterruptEnable = 0xFF;
+    /// <summary>The display status interrupt's enable bit.</summary>
+    public const byte InterruptStatBit = 0x02;
     /// <summary>The auto-increment bit for the Color palette index ports.</summary>
     public const byte PaletteAutoIncrement = 0x80;
     /// <summary>The VBlank bit of IF/IE.</summary>
@@ -97,6 +109,12 @@ public static class Hw {
     public const ushort VramTiles = 0x8000;
     /// <summary>The first 32×32 background tilemap.</summary>
     public const ushort VramBackgroundMap = 0x9800;
+    /// <summary>The second tile map, which the window layer draws from.</summary>
+    public const ushort VramWindowMap = 0x9C00;
+    /// <summary>The window's top scanline.</summary>
+    public const byte PortWindowY = 0x4A;
+    /// <summary>The window's left edge plus seven; 7 places it at column zero.</summary>
+    public const byte PortWindowX = 0x4B;
     /// <summary>Object attribute memory (the hardware sprite table).</summary>
     public const ushort ObjectAttributeMemory = 0xFE00;
     // LCDC bits: LCD on (0x80) | BG tile data @ 0x8000 (0x10) | 8×16 objects (0x04) | OBJ on (0x02) | BG on (0x01).

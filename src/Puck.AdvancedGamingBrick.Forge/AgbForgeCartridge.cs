@@ -13,8 +13,11 @@ namespace Puck.AdvancedGamingBrick.Forge;
 /// caller targeting hardware must supply those bytes.</para>
 /// </summary>
 public static class AgbForgeCartridge {
-    /// <summary>The ROM image size (64 KiB).</summary>
-    public const int RomSize = 0x10000;
+    /// <summary>The smallest ROM image emitted, in bytes. A larger data blob grows the image instead of overflowing.</summary>
+    /// <remarks>This machine addresses its whole cartridge linearly, so growth is a bigger image, never a bank.</remarks>
+    public const int MinimumRomSize = 0x10000;
+    /// <summary>The largest ROM image the cartridge bus addresses (32 MiB).</summary>
+    public const int MaximumRomSize = 0x2000000;
     /// <summary>The logo field's exact length in bytes.</summary>
     public const int LogoLength = 156;
     /// <summary>The ROM offset of the ARM entry stub the header branch targets.</summary>
@@ -34,7 +37,27 @@ public static class AgbForgeCartridge {
     /// <summary>The code window's capacity in bytes.</summary>
     public const int MaxRoutineBytes = (DataOffset - CodeOffset);
     /// <summary>The data window's capacity in bytes.</summary>
-    public const int MaxDataBytes = (RomSize - DataOffset);
+    public const int MaxDataBytes = (MaximumRomSize - DataOffset);
+
+    /// <summary>Returns the image size a data blob of the given length needs, rounded up to a power of two.</summary>
+    /// <param name="dataByteCount">The blob's length.</param>
+    /// <returns>The image size in bytes.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The blob does not fit the cartridge bus.</exception>
+    public static int RomSizeFor(int dataByteCount) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: dataByteCount);
+
+        var needed = DataOffset + dataByteCount;
+        if (needed > MaximumRomSize) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(dataByteCount), message: $"A {needed} byte image exceeds the {MaximumRomSize} byte cartridge bus.");
+        }
+
+        var size = MinimumRomSize;
+        while (size < needed) {
+            size <<= 1;
+        }
+
+        return size;
+    }
 
     /// <summary>Assembles a complete direct-boot-valid cartridge.</summary>
     /// <param name="title">The header title (≤ 12 ASCII characters, upper-cased into the 12-byte field).</param>
@@ -69,7 +92,7 @@ public static class AgbForgeCartridge {
             throw new ArgumentException(message: $"A supplied logo must be exactly {LogoLength} bytes.", paramName: nameof(logo));
         }
 
-        var rom = new byte[RomSize];
+        var rom = new byte[RomSizeFor(dataByteCount: data.Length)];
 
         WriteWord(rom: rom, offset: 0x000, value: ArmWords.Branch(fromAddress: RomAddress, toAddress: (RomAddress + EntryStubOffset)));
 

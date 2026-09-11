@@ -1,9 +1,9 @@
-namespace Puck.HumbleGamingBrick.Forge.Framework;
+namespace Puck.GamingBricks.Forge;
 
 /// <summary>
 /// The shared integer note-period math every APU stream compiler needs: an 11-bit pulse/wave period register value
-/// for a note frequency, resolved at BUILD time so the in-ROM driver stays a dumb register pump. <see cref="SoundTables"/>
-/// delegates to this, the shared integer math, so <c>AudioDocumentCompiler</c> shares the exact same integer math —
+/// for a note frequency, resolved at BUILD time so the in-ROM driver stays a dumb register pump. Both target compilers share it, so a document
+/// resolves to the same periods on either machine —
 /// pure millihertz arithmetic, so the same document compiles to byte-identical streams on every run, on every
 /// machine, forever (no floats anywhere in the compile path).
 /// </summary>

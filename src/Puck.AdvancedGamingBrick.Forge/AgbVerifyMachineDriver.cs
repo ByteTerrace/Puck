@@ -46,8 +46,11 @@ public sealed class AgbVerifyMachineDriver : IDisposable {
     /// <summary>Reads a little-endian halfword through the clock-free debug path.</summary>
     /// <param name="address">The 32-bit bus address.</param>
     /// <returns>The halfword at <paramref name="address"/>.</returns>
-    public ushort ReadHalf(uint address) =>
-        ((ushort)(ReadByte(address: address) | (ReadByte(address: (address + 1u)) << 8)));
+    /// <remarks>
+    /// Goes through the bus's own halfword peek rather than pairing byte reads: an input/output register is a halfword
+    /// register, and a byte read of its odd address matches no case and yields zero.
+    /// </remarks>
+    public ushort ReadHalf(uint address) => m_bus.DebugRead16(address: address);
     /// <summary>Reads a little-endian word through the clock-free debug path.</summary>
     /// <param name="address">The 32-bit bus address.</param>
     /// <returns>The word at <paramref name="address"/>.</returns>

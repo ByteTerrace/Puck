@@ -1,3 +1,5 @@
+using Puck.GamingBricks.Forge;
+
 namespace Puck.HumbleGamingBrick.Forge.Framework;
 
 /// <summary>The hardware voice a catalog effect plays on: <see cref="Pulse"/> = pulse channel 1 (NR10–NR14, five
@@ -8,6 +10,8 @@ public enum SoundVoice {
     Pulse = 0,
     /// <summary>The noise channel (ticks, thuds, riffles).</summary>
     Noise = 1,
+    /// <summary>The wave channel (NR30-NR34, five register bytes per step) plus its own pattern.</summary>
+    Wave = 2,
 }
 /// <summary>One catalog sound effect: its trigger id, diagnostic block name, hardware voice, and step stream.</summary>
 /// <param name="Id">The effect id a game passes to <see cref="ISoundDriver.EmitEffect"/>.</param>

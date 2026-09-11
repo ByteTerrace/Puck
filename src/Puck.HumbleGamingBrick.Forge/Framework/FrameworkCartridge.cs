@@ -20,15 +20,22 @@ public static class FrameworkCartridge {
     private const int MaxRoutineBytes = (RomDataBuilder.BaseAddress - Hw.EntryAddress);
     private const byte OpcodeJumpAbsolute = 0xC3;
     private const byte OpcodeReturnFromInterrupt = 0xD9;
-    private const int RomSize = 0x8000;
+    /// <summary>One switchable window's size; banks two and up are paged into 0x4000..0x7FFF.</summary>
+    public const int BankSize = 0x4000;
+    /// <summary>The most banks the header's size field can describe.</summary>
+    public const int MaxBankCount = 512;
 
     /// <summary>Assembles a complete framework cartridge.</summary>
     /// <param name="title">The header title (≤ 15 characters, upper-cased).</param>
     /// <param name="routine">The machine code (emit it with base address <see cref="Hw.EntryAddress"/>; the first
     /// instruction must be a 3-byte <c>jp boot</c> so the VBlank handler sits at <see cref="Hw.VBlankHandlerAddress"/>).</param>
     /// <param name="data">The baked data blob (a <see cref="RomDataBuilder"/> result), placed at 0x4000.</param>
-    /// <returns>The 32 KiB ROM image.</returns>
-    public static byte[] Build(string title, byte[] routine, byte[] data) {
+    /// <param name="clock">Whether the header advertises a battery-backed real-time clock.</param>
+    /// <param name="statHandlerAddress">The display status handler's address, or zero to leave that vector inert.</param>
+    /// <param name="banks">Payloads for banks two and up, each at most <see cref="BankSize"/> bytes. Each is paged
+    /// into 0x4000..0x7FFF by writing its number to 0x2000, so a bank's contents are only readable while selected.</param>
+    /// <returns>The ROM image, sized to hold every bank.</returns>
+    public static byte[] Build(string title, byte[] routine, byte[] data, IReadOnlyList<byte[]>? banks = null, bool clock = false, ushort statHandlerAddress = 0) {
         ArgumentException.ThrowIfNullOrEmpty(title);
         ArgumentNullException.ThrowIfNull(routine);
         ArgumentNullException.ThrowIfNull(data);
@@ -45,32 +52,60 @@ public static class FrameworkCartridge {
             throw new ArgumentException(message: "The routine must open with the 3-byte 'jp boot' prologue so the VBlank handler lands at 0x0153.", paramName: nameof(routine));
         }
 
-        var rom = new byte[RomSize];
+        var extra = banks ?? [];
+        for (var index = 0; index < extra.Count; ++index) {
+            if (extra[index] is null || extra[index].Length > BankSize) {
+                throw new ArgumentException(message: $"Bank {index + 2} is {extra[index]?.Length ?? 0} bytes, over the {BankSize}-byte window.", paramName: nameof(banks));
+            }
+        }
 
-        WriteInterruptVectors(rom: rom);
-        WriteHeader(rom: rom, title: title);
+        // Two fixed banks plus the switchable ones, rounded up to the power of two the header's size field describes.
+        var bankCount = 2;
+        while (bankCount < extra.Count + 2) {
+            bankCount <<= 1;
+        }
+
+        if (bankCount > MaxBankCount) {
+            throw new ArgumentException(message: $"{extra.Count} extra banks exceed the {MaxBankCount}-bank ceiling.", paramName: nameof(banks));
+        }
+
+        var rom = new byte[bankCount * BankSize];
+
+        WriteInterruptVectors(rom: rom, statHandlerAddress: statHandlerAddress);
+        WriteHeader(rom: rom, title: title, bankCount: bankCount, clock: clock);
 
         routine.CopyTo(array: rom, index: Hw.EntryAddress);
         data.CopyTo(array: rom, index: RomDataBuilder.BaseAddress);
+        for (var index = 0; index < extra.Count; ++index) {
+            extra[index].CopyTo(array: rom, index: (index + 2) * BankSize);
+        }
 
         Finalize(rom: rom);
 
         return rom;
     }
 
-    private static void WriteInterruptVectors(byte[] rom) {
+    private static void WriteInterruptVectors(byte[] rom, ushort statHandlerAddress) {
         // 0x0040 (VBlank): jp Hw.VBlankHandlerAddress. The handler address is fixed by the prologue convention.
         rom[0x0040] = OpcodeJumpAbsolute;
         rom[0x0041] = ((byte)(Hw.VBlankHandlerAddress & 0xFF));
         rom[0x0042] = ((byte)((Hw.VBlankHandlerAddress >> 8) & 0xFF));
 
-        // STAT / timer / serial / joypad vectors: bare reti (never enabled, but a stray request stays harmless).
-        rom[0x0048] = OpcodeReturnFromInterrupt;
+        // STAT: jumps to the raster handler when one exists, otherwise a bare reti like the rest.
+        if (statHandlerAddress != 0) {
+            rom[0x0048] = OpcodeJumpAbsolute;
+            rom[0x0049] = ((byte)(statHandlerAddress & 0xFF));
+            rom[0x004A] = ((byte)((statHandlerAddress >> 8) & 0xFF));
+        } else {
+            rom[0x0048] = OpcodeReturnFromInterrupt;
+        }
+
+        // Timer / serial / joypad vectors: bare reti (never enabled, but a stray request stays harmless).
         rom[0x0050] = OpcodeReturnFromInterrupt;
         rom[0x0058] = OpcodeReturnFromInterrupt;
         rom[0x0060] = OpcodeReturnFromInterrupt;
     }
-    private static void WriteHeader(byte[] rom, string title) {
+    private static void WriteHeader(byte[] rom, string title, int bankCount, bool clock) {
         // Entry point (0x0100): nop; jp EntryAddress.
         rom[EntryPoint] = 0x00;
         rom[(EntryPoint + 1)] = OpcodeJumpAbsolute;
@@ -86,8 +121,16 @@ public static class FrameworkCartridge {
         }
 
         rom[0x0143] = 0xC0; // CGB flag: Color REQUIRED.
-        rom[0x0147] = 0x03; // Cartridge type: MBC1 + RAM + BATTERY.
-        rom[0x0148] = 0x00; // ROM size: 32 KiB (2 banks, both visible at reset).
+        // Cartridge type. MBC5 pages without MBC1's bank-number aliasing, but only MBC3 carries a real-time clock,
+        // so a cartridge wanting one takes MBC3's smaller reach in exchange.
+        rom[0x0147] = (byte)(clock ? 0x10 : 0x1B);
+        // ROM size: the code is log2 of the bank count minus one, so two banks is 0 and 512 banks is 8.
+        var sizeCode = 0;
+        while ((2 << sizeCode) < bankCount) {
+            ++sizeCode;
+        }
+
+        rom[0x0148] = (byte)sizeCode;
         rom[0x0149] = 0x02; // RAM size: 8 KiB at 0xA000.
         rom[0x014A] = 0x01; // Destination: non-Japanese.
         rom[0x014B] = 0x33; // Old licensee 0x33 = "see new licensee code".

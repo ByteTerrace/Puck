@@ -1,4 +1,4 @@
-namespace Puck.State;
+namespace Puck.Maths;
 
 /// <summary>The state of a cost calculation: a known non-negative cycle count, an unmodeled operation reason, or integer overflow.</summary>
 public enum CostBoundKind : byte {

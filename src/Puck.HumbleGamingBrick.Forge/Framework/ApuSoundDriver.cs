@@ -102,6 +102,76 @@ public sealed class ApuSoundDriver : ISoundDriver {
             waitAddress: (isPulse ? FrameworkMemoryMap.SoundPulseWait : FrameworkMemoryMap.SoundNoiseWait)
         );
     }
+    /// <summary>Emits a start of the named music stream, replacing whatever the music voice was playing.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    /// <param name="stream">The compiled music-loop table; the voice rewinds to its start on the terminator.</param>
+    /// <remarks>Independent of <see cref="Bind"/>: a document compiler supplies its own tables.</remarks>
+    public static void EmitMusicStart(Sm83Emitter emitter, RomTable stream) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        EmitVoiceStart(
+            emitter: emitter,
+            pointerAddress: FrameworkMemoryMap.SoundMusicPointer,
+            startAddress: FrameworkMemoryMap.SoundMusicStart,
+            streamAddress: stream.Address,
+            waitAddress: FrameworkMemoryMap.SoundMusicWait
+        );
+    }
+
+    /// <summary>Emits a start of a one-shot on the voice reserved for it, leaving the music voice untouched.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    /// <param name="stream">The compiled effect table; the voice stops on its terminator.</param>
+    /// <param name="voice">The one-shot voice the effect plays on.</param>
+    /// <remarks>Independent of <see cref="Bind"/>: a document compiler supplies its own tables.</remarks>
+    public static void EmitEffectStart(Sm83Emitter emitter, RomTable stream, SoundVoice voice) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        EmitVoiceStart(
+            emitter: emitter,
+            pointerAddress: VoicePointer(voice: voice),
+            startAddress: null,
+            streamAddress: stream.Address,
+            waitAddress: VoiceWait(voice: voice)
+        );
+    }
+
+    /// <summary>Emits a copy of a waveform into the wave voice's pattern registers.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    /// <param name="pattern">The sixteen bytes holding thirty-two four-bit samples.</param>
+    /// <remarks>The DAC must be off while the pattern is written, so this switches it off and leaves it off.</remarks>
+    public static void EmitWavePatternLoad(Sm83Emitter emitter, RomTable pattern) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        emitter.XorA();
+        emitter.StoreAToHighPage(port: Hw.PortWaveDacEnable);
+        emitter.LoadImmediate(pair: Reg16.Hl, value: pattern.Address);
+        for (var index = 0; index < 16; ++index) {
+            emitter.LoadAFromHlIncrement();
+            emitter.StoreAToHighPage(port: ((byte)(Hw.PortWavePattern + index)));
+        }
+    }
+
+    private static ushort VoicePointer(SoundVoice voice) => voice switch {
+        SoundVoice.Noise => FrameworkMemoryMap.SoundNoisePointer,
+        SoundVoice.Wave => FrameworkMemoryMap.SoundWavePointer,
+        _ => FrameworkMemoryMap.SoundPulsePointer,
+    };
+    private static ushort VoiceWait(SoundVoice voice) => voice switch {
+        SoundVoice.Noise => FrameworkMemoryMap.SoundNoiseWait,
+        SoundVoice.Wave => FrameworkMemoryMap.SoundWaveWait,
+        _ => FrameworkMemoryMap.SoundPulseWait,
+    };
+
+    /// <summary>Emits a stop of the music voice and silences its channel. Safe with nothing playing.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    public static void EmitMusicStop(Sm83Emitter emitter) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        emitter.XorA();
+        emitter.StoreAToAddress(address: FrameworkMemoryMap.SoundMusicPointerHigh);
+        emitter.StoreAToHighPage(port: Hw.PortPulse2Envelope);
+    }
+
     /// <inheritdoc/>
     public void EmitLibrary(Sm83Emitter emitter) {
         ArgumentNullException.ThrowIfNull(emitter);
@@ -127,6 +197,15 @@ public sealed class ApuSoundDriver : ISoundDriver {
             portBase: Hw.PortNoiseLength,
             registerCount: 4,
             waitAddress: FrameworkMemoryMap.SoundNoiseWait
+        );
+        EmitVoiceTick(
+            emitter: emitter,
+            loopStartAddress: null,
+            muteEnvelopePort: Hw.PortWaveDacEnable,
+            pointerAddress: FrameworkMemoryMap.SoundWavePointer,
+            portBase: Hw.PortWaveDacEnable,
+            registerCount: 5,
+            waitAddress: FrameworkMemoryMap.SoundWaveWait
         );
         EmitVoiceTick(
             emitter: emitter,

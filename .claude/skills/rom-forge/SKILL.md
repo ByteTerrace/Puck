@@ -32,15 +32,43 @@ there are no environment-variable settings. `forge.play` exports then submits
 Never bypass the server's screen authority or replay/content hashing.
 
 The current schema has explicit limits and omissions: cgb/agb targets,
-byte state, static maps, 8x8 sprites, ordered straight-line rules. It does not
-claim DMG, cartridge sound/save authoring, dynamic tile maps, or large banked
-games. Add those by extending data, validation, both relevant backends and
+byte state, addressable byte arrays, 8x8 sprites, runtime background writes,
+cartridge audio, battery-backed state, and rule bodies that are step TREES
+(`set`/`if`/`repeat`/`break`/`map`/`blit`/`play`/`stop`/`save`/`load`), not flat
+action lists. It does not claim DMG or ROM banking. EVERY primitive runs on both
+targets; nothing is target-gated, and adding a gate would be a design decision
+rather than a shortcut.
+
+Colour is per-palette, not global: `palettes.background` / `palettes.object` hold
+up to 8 palettes on cgb and 16 on agb, `mapPalettes` picks one per background
+cell, and a sprite picks an object palette. cgb carries the cell attributes in
+video bank one (low three bits) and agb packs them into the screen entry's top
+four bits; a runtime `map` write changes a cell's TILE and leaves its authored
+palette alone.
+
+A sound is EITHER music or a one-shot effect. Effects use the two voices the
+framework reserves for them (pulse one and noise), so an effect never interrupts
+music. The effect stream is `duration` + FIVE register bytes for pulse one
+(NR10-NR14) and FOUR for noise (NR41-NR44) — `AppendNoiseRow` once emitted three
+and every noise effect was a byte out of step, so keep the encoder and both
+drivers' register counts in sync.
+
+`AudioDocumentCompiler` and `ApuNotePeriod` live in the SHARED forge package, not
+the humble one: the advanced machine's legacy sound channel takes the same four
+registers, so one compiled track drives both. `AgbSoundDriver` remaps them to the
+halfword pair at 0x04000068 / 0x0400006C — KEEP IN SYNC with the humble driver's
+port order. `AgbSaveModule` writes the byte-wide window at 0x0E000000 and the
+image must carry its identifier text, which is how a host recognizes the backup
+kind; without it the window reads open bus and nothing persists. Add those by extending data, validation, both relevant backends and
 native execution tests, not by a hidden special case.
 
 ## Backend contracts
 
 - CGB variables: `0xC200..0xC23F`; `0xC240` retains the prior held byte before
-  `InputModule.EmitTick`, whose own previous field is advanced inside its call.
+  `InputModule.EmitTick`, whose own previous field is advanced inside its call;
+  `0xC241` is the operand spill, `0xC242` the out-of-range discard sink, and
+  arrays pack upward from `0xC243` to `0xCFFF`. AGB mirrors this with the sink at
+  `0x02000080` and arrays from `0x02000081`.
   The compiler uses `FrameworkKernel` and input primitives directly, with no
   save, victory or C# game-state callbacks in generated player cartridges.
 - CGB shadow OAM: `0xC100`; the VBlank handler invokes the HRAM DMA trampoline
@@ -52,11 +80,33 @@ native execution tests, not by a hidden special case.
   `0x0800C000`, image size 64 KiB.
 - Thumb literal pools are DATA. `EmitLiteralPool` does not branch around them;
   emit a branch yourself wherever the instruction stream can fall through.
+- The AGB window unit gates the blend unit as well as the layers: WININ/WINOUT
+  bit 5 must be set in every region a `blend` should act in, or the blend
+  silently does nothing exactly where the panel is. Blend targets are BLDCNT
+  (0x04000050) first-target bits 0-5 (BG0,BG1,BG2,BG3,OBJ,BD), mode 01 in bits
+  6-7, second target in bits 8-13; weights are BLDALPHA (0x04000052), EVA in
+  bits 0-4 and EVB in bits 8-12. `blend` and `fade` share BLDCNT.
+- Per-scanline scroll takes a different road on each machine: the Color machine
+  arms a scanline-match interrupt whose handler waits for mode 0 before writing
+  SCX/SCY, so the match is aimed one line ABOVE the band; the advanced machine
+  arms DMA0 from an EWRAM table (0x02000400, 160 pairs of halfwords) into
+  0x04000010 with control 0xA260. A burst runs in line n's horizontal blank and
+  governs line n+1, so a band starting at line L is written from entry L-1.
+  Rows republish in the vertical blank, never mid-picture — a burst must not
+  read the table while it is being written.
 - AGB document output uses direct boot without BIOS calls/IRQs. World play
   supplies `stub` explicitly. The lower-level builder accepts an optional
   caller-supplied logo for retail BIOS boot; document output does not claim it.
-- Rules execute in source order; later actions read earlier writes. Arithmetic
+- Rules execute in source order; later steps read earlier writes. Arithmetic
   wraps modulo 256, comparisons are unsigned, and key edges are frame-local.
+  A `repeat` count is a literal, never a variable, because the cost walk
+  multiplies the body by it; `break` skips the increment, so the index is left at
+  the iteration that broke while a completed loop leaves it at `count`.
+  `mul`, `div`, `mod`, `shl` and `shr` come from emitted helpers, not silicon,
+  and are total: a runtime zero divisor or a shift of eight or more yields zero.
+  Array indices are bytes; an index past the declared length reads zero and
+  discards the write. Both backends must agree on every one of these results,
+  which is what `CartridgeMemoryTests` pins on the real emulators.
   The source validator bounds work as well as array sizes; compiler capacity
   failures must be errors rather than truncated ROMs.
 
@@ -129,6 +179,48 @@ at 0x00FE so the program counter falls into 0x0100.
   its status register reads 0x84.
 - `MachineIdentity` fingerprints the boot image, so a booted machine's snapshots
   never interchange with a seeded machine's.
+
+## Per-frame cost is measured, never estimated
+
+`CartridgeCost` prices a document in abstract work units and `CartridgeValidation`
+refuses one that exceeds the per-frame reservation. The units name no processor,
+clock or instruction count; one unit is an eleventh of a `set` step writing a
+literal to a variable. Weights come from `CartridgeCostMeasurement`, which boots
+documents on both real machines and bisects the largest per-frame iteration count
+each sustains at full frame rate; cost per iteration is inversely proportional to
+that capacity. Never hand-count an emitter's instruction sequence into a weight,
+and never adjust a weight to make a document fit.
+
+Each weight is the WORSE of the two targets' ratios, and the reservation is the
+Color machine's, which is the smaller. That is what lets a document carry one
+portable unit count and still be safe on either backend, so flipping `/target`
+cannot change whether it holds frame cadence. The two targets genuinely disagree
+on relative cost — a multiply is expensive on SM83 and nearly free in Thumb — so
+a per-target weight table would not be portable.
+
+A blit SUSPENDS frame production rather than costing work: with the display off no
+vertical blank arrives, so the frame counter does not advance. Measured, a
+rectangle degrades cadence steeply past 120 tiles and stalls the document entirely
+near 168, which is what `CartridgeLimits.BlitCellCount` pins. Never raise it
+without re-measuring.
+
+`map` writes queue and drain in the next frame's vertical blank on BOTH targets —
+AGB stages and drains at its frame sync deliberately, so a cell changed this frame
+appears the frame after on either machine. Validation bounds a frame's map writes
+to the queue's 24 entries so a write can never be silently dropped; the push
+subroutine's drop path must stay unreachable. `blit` is implemented and validated
+on both targets but is deliberately UNMODELED: a small one measures near a fixed
+cost while a full-screen one exceeds a whole frame on the Color machine and barely
+registers on AGB, so it is both uncharacterized and a cadence-divergence hazard.
+Do not give it a weight without a model that spans both observations.
+
+A primitive with no measured weight prices as `CostBound.Unmodeled` and its
+document is refused; nothing is admitted against an invented number. Adding a
+primitive means measuring it. To re-measure, raise the reservation so the harness
+can probe past it, run the harness with `PUCK_FORGE_MEASURE=1`, fold the reported
+capacities in, and restore the reservation. `CostBound` and `CostModelProfile`
+live in `Puck.Maths` and are shared with `Puck.State`'s rule cost; each subsystem
+owns its own coefficients.
 
 ## Verification
 

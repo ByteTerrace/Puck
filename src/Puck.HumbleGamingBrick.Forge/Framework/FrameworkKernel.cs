@@ -9,7 +9,27 @@ namespace Puck.HumbleGamingBrick.Forge.Framework;
 /// <param name="InitialMap">The 1024-byte background map shown at boot (typically the title screen).</param>
 /// <param name="Lcdc">The LCDC value the boot turns the screen on with.</param>
 /// <param name="InitialState">The state machine's boot state (requested before the first frame).</param>
-public readonly record struct FrameworkBootSpec(RomTable BgPalettes, RomTable ObjPalettes, RomTable Tiles, int TileByteCount, RomTable InitialMap, byte Lcdc, byte InitialState);
+/// <param name="BgAttributes">One attribute byte per background cell, or null to place every cell on palette zero.</param>
+/// <param name="SelectTileBank">Pages in the bank holding the tiles, or null when they sit in the fixed window.</param>
+/// <param name="SelectMapBank">Pages in the bank holding the map.</param>
+/// <param name="SelectAttributeBank">Pages in the bank holding the cell attributes.</param>
+/// <param name="RasterRows">How many mid-picture scroll changes the cartridge carries; zero leaves the status interrupt off.</param>
+/// <param name="RestoreFixedBank">Pages bank one back in once the video copies are done. Everything the running
+/// game reads from the switchable window lives in bank one, so leaving another bank selected strands all of it.</param>
+public readonly record struct FrameworkBootSpec(
+    RomTable BgPalettes,
+    RomTable ObjPalettes,
+    RomTable Tiles,
+    int TileByteCount,
+    RomTable InitialMap,
+    byte Lcdc,
+    byte InitialState,
+    RomTable? BgAttributes = null,
+    Action<Sm83Emitter>? SelectTileBank = null,
+    Action<Sm83Emitter>? SelectMapBank = null,
+    Action<Sm83Emitter>? SelectAttributeBank = null,
+    Action<Sm83Emitter>? RestoreFixedBank = null,
+    int RasterRows = 0);
 /// <summary>
 /// The interrupt-driven kernel: the fixed 3-byte <c>jp boot</c> prologue that pins the VBlank handler at
 /// <see cref="Hw.VBlankHandlerAddress"/>; the handler itself (save registers → <c>call 0xFF80</c> for the HRAM OAM-DMA
@@ -32,7 +52,8 @@ public static class FrameworkKernel {
     /// to. Must be the FIRST emission into the routine.</summary>
     /// <param name="emitter">The routine emitter.</param>
     /// <param name="bootLabel">The boot label the prologue jumps to (marked later by the boot emission).</param>
-    public static void EmitPrologue(Sm83Emitter emitter, int bootLabel) {
+    /// <param name="rasterRearm">Rearms the mid-picture scroll walk each frame, or null when there is none.</param>
+    public static void EmitPrologue(Sm83Emitter emitter, int bootLabel, Action<Sm83Emitter>? rasterRearm = null) {
         ArgumentNullException.ThrowIfNull(emitter);
 
         if (emitter.Length != 0) {
@@ -45,7 +66,7 @@ public static class FrameworkKernel {
             throw new InvalidOperationException(message: $"The prologue jump is {emitter.Length} bytes; the handler must land at 0x0153.");
         }
 
-        EmitVBlankHandler(emitter: emitter);
+        EmitVBlankHandler(emitter: emitter, rasterRearm: rasterRearm);
     }
     /// <summary>Emits the boot sequence's hardware half: interrupts off, stack, framework + game work RAM cleared,
     /// the DMA trampoline installed in HRAM, and the LCD-off video bring-up (palettes, tiles, initial map, cleared
@@ -76,6 +97,10 @@ public static class FrameworkKernel {
         emitter.StoreAToHighPage(port: Hw.PortScrollX);
         emitter.StoreAToHighPage(port: Hw.PortVramBank);
 
+        // Pin the switchable work-RAM bank so state above 0xD000 is addressable without any further selection.
+        emitter.LoadAImmediate(value: 0x01);
+        emitter.StoreAToHighPage(port: Hw.PortWorkRamBank);
+
         emitter.LoadAImmediate(value: Hw.PaletteAutoIncrement);
         emitter.StoreAToHighPage(port: Hw.PortBgPaletteIndex);
         EmitPaletteCopy(emitter: emitter, sourceAddress: spec.BgPalettes.Address, dataPort: Hw.PortBgPaletteData, byteCount: spec.BgPalettes.Length);
@@ -83,15 +108,24 @@ public static class FrameworkKernel {
         emitter.StoreAToHighPage(port: Hw.PortObjPaletteIndex);
         EmitPaletteCopy(emitter: emitter, sourceAddress: spec.ObjPalettes.Address, dataPort: Hw.PortObjPaletteData, byteCount: spec.ObjPalettes.Length);
 
+        spec.SelectTileBank?.Invoke(obj: emitter);
         EmitBlockCopy(emitter: emitter, sourceAddress: spec.Tiles.Address, destinationAddress: Hw.VramTiles, byteCount: ((ushort)spec.TileByteCount));
+        spec.SelectMapBank?.Invoke(obj: emitter);
         EmitBlockCopy(emitter: emitter, sourceAddress: spec.InitialMap.Address, destinationAddress: Hw.VramBackgroundMap, byteCount: 0x0400);
 
-        // Bank 1: every cell's attributes → palette 0.
+        // Bank 1 holds one attribute byte per cell; without an authored table every cell sits on palette zero.
         emitter.LoadAImmediate(value: 0x01);
         emitter.StoreAToHighPage(port: Hw.PortVramBank);
-        EmitBlockFill(byteCount: 0x0400, destinationAddress: Hw.VramBackgroundMap, emitter: emitter, value: 0x00);
+        if (spec.BgAttributes is { } attributes) {
+            spec.SelectAttributeBank?.Invoke(obj: emitter);
+            EmitBlockCopy(emitter: emitter, sourceAddress: attributes.Address, destinationAddress: Hw.VramBackgroundMap, byteCount: 0x0400);
+        } else {
+            EmitBlockFill(byteCount: 0x0400, destinationAddress: Hw.VramBackgroundMap, emitter: emitter, value: 0x00);
+        }
         emitter.XorA();
         emitter.StoreAToHighPage(port: Hw.PortVramBank);
+
+        spec.RestoreFixedBank?.Invoke(obj: emitter);
     }
     /// <summary>Emits the boot sequence's tail: request the initial state, turn the LCD on, clear the post-boot stale
     /// IF (the seeded handoff leaves VBlank requested), enable ONLY the VBlank interrupt, and <c>ei</c>.</summary>
@@ -110,8 +144,14 @@ public static class FrameworkKernel {
 
         emitter.XorA();
         emitter.StoreAToHighPage(port: Hw.PortInterruptFlag);
-        emitter.LoadAImmediate(value: Hw.InterruptVBlankBit);
+        emitter.LoadAImmediate(value: (byte)(Hw.InterruptVBlankBit | (spec.RasterRows > 0 ? Hw.InterruptStatBit : 0)));
         emitter.StoreAToHighPage(port: Hw.PortInterruptEnable);
+        if (spec.RasterRows > 0) {
+            // Bit 6 raises the interrupt on a scanline match; the compare value is set per row.
+            emitter.LoadAImmediate(value: 0x40);
+            emitter.StoreAToHighPage(port: Hw.PortLcdStatus);
+        }
+
         emitter.EnableInterrupts();
     }
     /// <summary>Emits the main loop's frame wait: <c>halt</c> until the VBlank handler advances the frame counter past
@@ -180,7 +220,7 @@ public static class FrameworkKernel {
 
     // The VBlank handler (fixed at 0x0153): registers saved, shadow OAM DMA-copied via the HRAM trampoline, the
     // background write queue drained while VRAM is open, the frame counter advanced, registers restored, reti.
-    private static void EmitVBlankHandler(Sm83Emitter emitter) {
+    private static void EmitVBlankHandler(Sm83Emitter emitter, Action<Sm83Emitter>? rasterRearm = null) {
         var noQueue = emitter.NewLabel();
         var drainLoop = emitter.NewLabel();
         var noCounterHigh = emitter.NewLabel();
@@ -210,6 +250,8 @@ public static class FrameworkKernel {
         emitter.StoreAToAddress(address: FrameworkMemoryMap.VramQueueCount);
         emitter.MarkLabel(label: noQueue);
 
+        rasterRearm?.Invoke(obj: emitter);
+
         emitter.LoadAFromAddress(address: FrameworkMemoryMap.FrameCounter);
         emitter.Increment(register: Reg8.A);
         emitter.StoreAToAddress(address: FrameworkMemoryMap.FrameCounter);
@@ -225,6 +267,27 @@ public static class FrameworkKernel {
         emitter.Pop(pair: StackPair.Af);
         emitter.ReturnFromInterrupt();
     }
+    /// <summary>Emits a palette republish from wherever HL already points, leaving HL past the bytes written.</summary>
+    /// <param name="emitter">The routine emitter.</param>
+    /// <param name="indexPort">The port selecting which palette byte the data port writes.</param>
+    /// <param name="dataPort">The port the bytes go to.</param>
+    /// <param name="byteCount">How many bytes to write; a bank is at most 64.</param>
+    /// <remarks>The index port is set to auto-increment first, so the data port walks the bank on its own.</remarks>
+    public static void EmitPaletteRepublish(Sm83Emitter emitter, byte indexPort, byte dataPort, int byteCount) {
+        ArgumentNullException.ThrowIfNull(emitter);
+
+        var loop = emitter.NewLabel();
+
+        emitter.LoadAImmediate(value: Hw.PaletteAutoIncrement);
+        emitter.StoreAToHighPage(port: indexPort);
+        emitter.LoadImmediate(destination: Reg8.B, value: ((byte)byteCount));
+        emitter.MarkLabel(label: loop);
+        emitter.LoadAFromHlIncrement();
+        emitter.StoreAToHighPage(port: dataPort);
+        emitter.Decrement(register: Reg8.B);
+        emitter.JumpRelative(condition: Condition.NotZero, label: loop);
+    }
+
     private static void EmitPaletteCopy(Sm83Emitter emitter, ushort sourceAddress, byte dataPort, int byteCount) {
         var loop = emitter.NewLabel();
 

@@ -25,6 +25,8 @@ public sealed record AudioEffectDocument(string? Voice, IReadOnlyList<AudioRowDo
     public const string VoicePulse1 = "pulse1";
     /// <summary>The noise voice name.</summary>
     public const string VoiceNoise = "noise";
+    /// <summary>The wave voice name; its cartridge sound also carries the waveform it plays through.</summary>
+    public const string VoiceWave = "wave";
 }
 /// <summary>
 /// The <c>puck.audio.v1</c> document — authored music as DATA: a short song describing the exact ROM sound-table

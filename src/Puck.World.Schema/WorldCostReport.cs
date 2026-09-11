@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.World;
 
 /// <summary>Portable cost analysis status. Existing heuristic totals are exposed separately until calibrated

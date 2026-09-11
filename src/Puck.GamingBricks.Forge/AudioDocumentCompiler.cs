@@ -1,16 +1,14 @@
 using Puck.Assets.Documents;
-using Puck.HumbleGamingBrick.Forge.Framework;
 
-namespace Puck.HumbleGamingBrick.Forge;
+namespace Puck.GamingBricks.Forge;
 
 /// <summary>
 /// Compiles a normalized <see cref="AudioDocument"/> to the exact ROM sound-table stream formats
-/// <see cref="ApuSoundDriver"/> already plays: the pulse-2 music loop (NR21 duty/length, NR22 envelope, NR23/NR24
+/// each target's music driver already plays: the pulse-2 music loop (NR21 duty/length, NR22 envelope, NR23/NR24
 /// period + trigger per step) and pulse-1/noise effect streams (NR10-NR14 / NR41-NR44). Every step resolves through
 /// <see cref="ApuNotePeriod"/>'s integer millihertz math, so the same document compiles to byte-identical streams on
 /// every run — no wall-clock, no RNG, no floats anywhere in the compile path. The output streams are ordinary bytes a
-/// <see cref="Framework.GameManifest"/> declares with <c>DefineTable</c>, exactly like <see cref="SoundTables"/>'s own
-/// hand-authored catalog.
+/// target compiler places in its cartridge image.
 /// </summary>
 public static class AudioDocumentCompiler {
     // Duty bits (NR11/NR21 bits 7-6) — the same four-value hardware encoding SoundTables uses.
@@ -28,7 +26,7 @@ public static class AudioDocumentCompiler {
     /// was; "OFF" silences the voice), and the stream ends with the terminator byte the driver rewinds its loop on.
     /// </summary>
     /// <param name="document">The normalized document (see <see cref="AudioCanonicalizer.Normalize"/>).</param>
-    /// <returns>The music-loop stream bytes, <see cref="SoundTables.MusicLoopTableName"/>'s exact grammar.</returns>
+    /// <returns>The music-loop stream bytes, the music driver's exact grammar.</returns>
     public static byte[] CompileMusicLoop(AudioDocument document) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -59,11 +57,14 @@ public static class AudioDocumentCompiler {
 
         var stream = new List<byte>();
         var isNoise = string.Equals(a: effect.Voice, b: AudioEffectDocument.VoiceNoise, comparisonType: StringComparison.OrdinalIgnoreCase);
+        var isWave = string.Equals(a: effect.Voice, b: AudioEffectDocument.VoiceWave, comparisonType: StringComparison.OrdinalIgnoreCase);
         var stepFrames = ((byte)Math.Clamp(max: 255, min: 1, value: frames));
 
         foreach (var row in effect.Rows) {
             if (isNoise) {
                 AppendNoiseRow(frames: stepFrames, row: row, stream: stream);
+            } else if (isWave) {
+                AppendWaveRow(frames: stepFrames, row: row, stream: stream);
             } else {
                 AppendPulseRow(frames: stepFrames, row: row, stream: stream);
             }
@@ -142,10 +143,36 @@ public static class AudioDocumentCompiler {
     // One noise effect row (NR41 length, NR42 envelope, NR43 polynomial, NR44 control+trigger). The document has no
     // dedicated polynomial field, so the row's envelope byte (when present) doubles as the polynomial selector — a
     // deliberately narrow surface until a later schema bump adds one; a hold/off row mutes the channel.
+    // One wave row: the five registers from the DAC switch through the control byte, which carries the trigger.
+    private static void AppendWaveRow(byte frames, AudioRowDocument row, List<byte> stream) {
+        if (string.Equals(a: row.Note, b: AudioRowDocument.Off, comparisonType: StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(a: row.Note, b: AudioRowDocument.Hold, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            stream.Add(item: frames);
+            stream.Add(item: 0x00);
+            stream.Add(item: 0x00);
+            stream.Add(item: 0x00);
+            stream.Add(item: 0x00);
+            stream.Add(item: 0x00);
+
+            return;
+        }
+
+        var period = ApuNotePeriod.Period(millihertz: ApuNotePeriod.MillihertzFor(noteName: row.Note));
+
+        stream.Add(item: frames);
+        stream.Add(item: 0x80);
+        stream.Add(item: 0x00);
+        // Volume field: the top two bits pick full, half or quarter output.
+        stream.Add(item: ((byte)(((row.Envelope ?? 1) & 0x03) << 5)));
+        stream.Add(item: ((byte)(period & 0xFF)));
+        stream.Add(item: ((byte)(0x80 | (period >> 8))));
+    }
+
     private static void AppendNoiseRow(byte frames, AudioRowDocument row, List<byte> stream) {
         if (string.Equals(a: row.Note, b: AudioRowDocument.Off, comparisonType: StringComparison.OrdinalIgnoreCase) ||
             string.Equals(a: row.Note, b: AudioRowDocument.Hold, comparisonType: StringComparison.OrdinalIgnoreCase)) {
             stream.Add(item: frames);
+            stream.Add(item: 0x00);
             stream.Add(item: 0x00);
             stream.Add(item: 0x00);
             stream.Add(item: 0x00);
@@ -156,7 +183,9 @@ public static class AudioDocumentCompiler {
         var envelope = ((byte)(row.Envelope ?? DefaultNoiseEnvelope));
         var polynomial = ((byte)DefaultNoisePolynomial);
 
+        // NR41 through NR44: the length counter goes unused because the control byte never enables it.
         stream.Add(item: frames);
+        stream.Add(item: 0x00);
         stream.Add(item: envelope);
         stream.Add(item: polynomial);
         stream.Add(item: 0x80);

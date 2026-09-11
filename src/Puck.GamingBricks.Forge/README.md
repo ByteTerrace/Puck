@@ -18,7 +18,7 @@ forge.new cgb PLAYER
 forge.set /variables/- {"name":"x","initial":32}
 forge.set /tiles/- {"name":"block","pixels":["11111111","11111111","11111111","11111111","11111111","11111111","11111111","11111111"]}
 forge.set /sprites/- {"name":"player","tile":{"constant":1},"x":{"variable":"x"},"y":{"constant":40},"visible":{"constant":1}}
-forge.set /rules/- {"name":"move","when":[{"kind":"key","key":"right","mode":"held"}],"actions":[{"variable":"x","operation":"add","value":{"constant":1}}]}
+forge.set /rules/- {"name":"move","when":[{"kind":"key","key":"right","mode":"held"}],"body":[{"kind":"set","target":{"variable":"x"},"operation":"add","value":{"constant":1}}]}
 forge.show /rules
 forge.check
 forge.build
@@ -89,21 +89,117 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `target` | `cgb` or `agb`. CGB uses the Color hardware, not DMG compatibility. |
 | `title` | 1–12 printable ASCII characters, canonicalized to uppercase. |
 | `gameCode` | Four ASCII characters; used by the AGB header. |
-| `palette` | 4 CGB or 16 AGB RGB555 integers, 0–32767. Shared by background and sprites. |
+| `palettes` | `{background,object}`, each 1–8 palettes on CGB or 1–16 on AGB. A palette is 4 RGB555 integers on CGB, 16 on AGB. Object color zero is transparent. |
 | `tiles` | 1–256 named 8×8 tiles. Each `pixels` array has eight strings of eight hexadecimal palette indices. Sprite color zero is transparent. |
 | `map` | Exactly 1024 tile indices, row-major over a 32×32 background. |
+| `mapPalettes` | Optional 1024 background palette indices, one per cell. Absent means every cell is on palette zero. |
+| `window` | Optional `{map,mapPalettes,x,y,visible}` panel drawn over the background from its corner down and right, out of its own 32×32 map. |
+| `raster` | Up to 8 `{line,scrollX,scrollY}` rows in ascending scanline order, each setting the scroll for the band from its line to the picture's foot. `line` is 1–143; line zero is the document's own scroll. |
+| `clock` | Optional `{seconds,minutes,hours,days}` naming state slots a `clock` step fills from the cartridge's battery-backed real-time clock. CGB only. |
+| `affine` | Optional `{map,angle,scale,centreX,centreY,visible}` background that rotates and scales. Angle is a turn in 256 steps, scale is sixteenths (16 = life size). AGB only. |
+| `tallSprites` | Draws sprites 8×16; a sprite's tile index then names a pair and its low bit is ignored. |
 | `variables` | Up to 64 `{name,initial}` unsigned bytes. |
-| `rules` | Up to 64 `{name,when,actions}` rules; at most 8 conditions and 16 actions per rule. |
-| `sprites` | Up to 40 `{name,tile,x,y,visible}` 8×8 sprites. All four value fields accept constants or variables. |
+| `arrays` | Up to 32 named `{name,initial}` byte runs, 7168 bytes in total. `initial` fixes the length at 1–256; a byte index cannot address more. |
+| `screens` | Up to 16 named `{name,width,tiles}` rectangles, at most 120 tiles, painted by a blit step. |
+| `sounds` | Up to 8 named sounds, each exactly one of `music` (a looping audio document), `effect` (a one-shot on the pulse-1, noise or wave voice, with `frames` per row, and a 32-entry `waveform` for the wave voice), or `sample` (signed 8-bit recorded audio; AGB only). |
+| `save` | Optional `{version,variables,arrays}` battery-backed state, at most 72 bytes. |
+| `rules` | Up to 64 `{name,when,body}` rules; at most 8 conditions per rule and 64 steps anywhere in one body, nested at most 8 deep. |
+| `sprites` | Up to 40 `{name,tile,x,y,visible,palette}` 8×8 sprites. Every value field accepts constants or variables; `palette` is optional and selects an object palette. |
 | `scrollX`, `scrollY` | Constant/variable background offsets in pixels. |
 
 Names are unique within each collection, case-sensitive, 1–64 ASCII letters,
-digits, underscores or hyphens. A value is exactly `{"constant":42}` or
-`{"variable":"score"}`. Constants and initial values are in 0–255.
+digits, underscores or hyphens, and an array may not reuse a variable's name.
+Constants and initial values are in 0–255.
+
+A value reads exactly one of a literal, a state slot, or an array element:
+
+```json
+{"constant":42}
+{"variable":"score"}
+{"array":"field","index":{"variable":"cursor"}}
+```
+
+An index is itself a value, so `field[pointers[cursor]]` nests. An index at or
+beyond the array's length reads zero and discards a write, which keeps every
+access total rather than trapping. A write destination is the same shape without
+the literal: `{"variable":"score"}` or `{"array":"field","index":{...}}`.
+
+A rule body is a tree of steps, not a flat list. Each step is one of:
+
+```json
+{"kind":"set","target":{"variable":"score"},"operation":"add","value":{"constant":1}}
+{"kind":"if","when":[...],"then":[...],"else":[...]}
+{"kind":"repeat","count":18,"index":"row","body":[...]}
+{"kind":"break"}
+{"kind":"map","row":{"variable":"y"},"column":{"variable":"x"},"tile":{"constant":3}}
+{"kind":"blit","screen":"panel","row":0,"column":0}
+{"kind":"play","sound":"theme"}
+{"kind":"stop"}
+{"kind":"fade","amount":{"variable":"dim"},"toward":"black"}
+{"kind":"blend","surface":"panel","weight":{"variable":"alpha"}}
+{"kind":"save"}
+{"kind":"load"}
+```
+
+A `map` step writes one background cell at run time. Writes are queued and land
+together in the next frame's vertical blank, so a cell changed this frame appears
+the frame after. The queue holds 24 entries, and validation bounds a frame's map
+writes to that rather than letting the queue drop one: loops multiply, and branch
+arms count once because only one runs. A blit repaints a whole named screen with
+the display off; its row and column are literals. Because no vertical blank
+arrives while the display is off, a blit suspends frame production rather than
+merely costing work, which is why a screen is capped at 120 tiles — measured, the
+frame counter stalls entirely near 168.
+
+A `raster` row changes the scroll part way down the picture, which is what puts a
+fixed status panel over a scrolling world or drives layers at different speeds.
+The Color machine takes a scanline-match interrupt and writes the registers in
+the horizontal blank before the band's first line; the advanced machine has no
+interrupt handler when it direct-boots, so it feeds the same registers from a
+table through a horizontal-blank transfer instead. Rows republish in the
+vertical blank on the advanced machine, so a change there shows on the following
+frame exactly as a map write does.
+
+`play` starts a named sound. Music replaces whatever the melodic voice was
+playing; an effect runs on one of the two voices reserved for one-shots, so it
+never interrupts the music under it and ends on its own terminator; a sample
+takes one of four mixer voices. `stop` silences the music voice only.
+
+A `sample` needs the AGB target: that machine streams recorded audio through a
+timer-clocked transfer into a mixer the cartridge runs every frame, and the CGB
+target has no digital sound hardware to stream into. Every other sound kind runs
+on both. `save` writes the declared state to the cartridge's
+battery-backed window behind a magic, version and checksum header, and `load`
+restores it — a block that fails any of those checks leaves the state at its
+authored initial values, so a fresh cartridge and a corrupted one behave alike.
+
+Both run on either target. One compiled track drives both machines: the advanced
+machine's legacy programmable-sound channel exposes the same four registers the
+humble machine's does, so a document's audio does not change with its target. The
+save block carries the same magic, version and checksum on both, though the stored
+bytes live in each machine's own save window and a saved game does not travel
+between them.
+
+A `blend` makes one surface translucent over whatever is drawn beneath it.
+`surface` names `background`, `panel`, `affine`, `sprites` or `backdrop` — the
+last two being every sprite and the colour behind everything — and `weight` is
+the translucent surface's share in sixteenths, so 16 is opaque and 0 leaves only
+what is below. Weights past 16 are held at 16 rather than wrapping. It is an
+`agb` step: the Color machine has no blend unit, and its `fade` works by rebaking
+palettes, which cannot mix two surfaces because a palette entry knows nothing
+about what is drawn beneath it. A `blend` and a `fade` share one hardware
+register, so the later step in a frame is the one that takes effect.
+
+A `repeat` writes `index` with the iteration number and runs `body` `count`
+times. The count is a literal in 1..255, never a variable, so the work a frame
+can do stays bounded by inspection. A `break` leaves the innermost `repeat` and
+is refused outside one; because it skips the increment, the index is left at the
+iteration that broke, while a loop that finishes leaves it at `count`. A step
+carrying a field belonging to another kind is refused rather than ignored.
 
 Each frame samples input, evaluates rules in array order, then updates
 presentation. All conditions in `when` must match; an empty array always
-matches. Actions execute immediately in order, so later actions and rules see
+matches. Steps execute immediately in order, so later steps and rules see
 earlier writes. There are no hidden states or game-type switches.
 
 Conditions have either of these shapes:
@@ -115,21 +211,43 @@ Conditions have either of these shapes:
 
 Keys are `a`, `b`, `start`, `select`, `up`, `down`, `left`, `right`. Modes are
 `held`, `pressed`, `released`. Comparisons are unsigned `eq`, `ne`, `lt`, `le`,
-`gt`, `ge`. An action is `{"variable":"score","operation":"add","value":{"constant":1}}`.
-Operations are `set`, `add`, `subtract`, `and`, `or`, `xor`; arithmetic wraps
-modulo 256 on both targets. A sprite with zero visibility, an invalid runtime
+`gt`, `ge`. An action is
+`{"target":{"variable":"score"},"operation":"add","value":{"constant":1}}`.
+Operations are `set`, `add`, `subtract`, `and`, `or`, `xor`, `mul`, `div`,
+`mod`, `shl` and `shr`; arithmetic is unsigned and wraps modulo 256 on both
+targets. A runtime zero divisor yields zero and a runtime shift of eight or more
+yields zero, so no operand can trap; the literal forms of both are refused at
+validation instead. A sprite with zero visibility, an invalid runtime
 tile index, or a top-left position outside the native viewport is hidden.
 The viewports are 160×144 and 240×160 pixels respectively.
 
-The compiler enforces code/data capacity, and validation conservatively bounds
-per-frame work across both targets. CGB exports are 32 KiB; AGB exports are
-64 KiB. Source hashes identify canonical source; they are distinct from the
-engine's hash of exported ROM bytes. `CartridgeCompilation.Variables` maps
-source names to native memory addresses for debugging and memory watches.
+The compiler enforces code/data capacity, and validation bounds per-frame work
+with `CartridgeCost`. That model counts abstract work units — one unit is an
+eleventh of a `set` step writing a literal to a variable — and compares the
+total against a per-frame reservation. The weights are measured, not estimated:
+`CartridgeCostMeasurement` boots documents on both real machines and reports the
+largest per-frame iteration count each sustains at full frame rate, and cost per
+iteration is inversely proportional to that. Each weight is the worse of the two
+targets, so a document that fits also fits either target alone and flipping
+`/target` cannot change whether it holds frame cadence.
 
-This version supports static tile maps, byte-state rules and sprites. Cartridge
-sound, persistent variable saves, dynamic map writes, banked large games and
-visual editing are not yet part of this document schema. Existing Tune audio
+A primitive with no measured weight prices as `Unmodeled` and the document is
+refused, rather than admitted against an invented number. Adding a primitive
+therefore means measuring it. To re-measure, raise the reservation so the
+harness can probe past it, run
+`PUCK_FORGE_MEASURE=1 dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests`,
+fold the reported capacities into the weights, and restore the reservation. CGB exports are 32 KiB; AGB exports are
+64 KiB. Source hashes identify canonical source; they are distinct from the
+engine's hash of exported ROM bytes. `CartridgeCompilation.Variables` and `.Arrays` map source names to native
+memory addresses for debugging and memory watches.
+
+This version supports background maps written at run time, byte-state rules,
+addressable byte arrays, sprites, cartridge audio and battery-backed state on both
+targets. ROM banking, persistent variable saves, dynamic map
+banked large games and visual editing are not yet part of this document schema. A blit compiles and runs on both targets but carries no
+measured per-frame weight, so a document using one is refused until that cost is
+characterized; build screens from the initial `map` and runtime `map` writes
+instead. Existing Tune audio
 documents retain their separate compiler. These boundaries are explicit so
 an editor cannot silently discard unsupported authored data.
 

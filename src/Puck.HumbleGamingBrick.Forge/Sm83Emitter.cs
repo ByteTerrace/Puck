@@ -44,6 +44,14 @@ public sealed class Sm83Emitter {
     public int NewLabel() => m_nextLabel++;
     /// <summary>Binds <paramref name="label"/> to the current position in the stream.</summary>
     public void MarkLabel(int label) => m_labelOffsets[label] = m_code.Count;
+    /// <summary>Returns the bus address a bound label landed at, for a vector that must name it.</summary>
+    /// <param name="label">The label, already bound.</param>
+    /// <param name="baseAddress">The address the routine is emitted at.</param>
+    /// <exception cref="InvalidOperationException">The label was never bound.</exception>
+    public ushort LabelAddress(int label, ushort baseAddress) =>
+        m_labelOffsets.TryGetValue(key: label, value: out var offset)
+            ? ((ushort)(baseAddress + offset))
+            : throw new InvalidOperationException(message: $"Label {label} was never bound, so it has no address.");
     // --- The 8-bit register/ALU grid (0x40..0xBF): generated from the operand slot 0..7. --------------------------------
     /// <summary>ld dst, src — copy one 8-bit register (or <c>(hl)</c>) to another. The <c>(hl)→(hl)</c> slot is
     /// <c>halt</c>, not a load — call <see cref="Halt"/> for it.</summary>

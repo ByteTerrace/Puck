@@ -3,12 +3,24 @@
   "target": "cgb",
   "title": "PIP",
   "gameCode": "PIPC",
-  "palette": [
-    4195,
-    28069,
-    5467,
-    10983
-  ],
+  "palettes": {
+    "background": [
+      [
+        4195,
+        28069,
+        5467,
+        10983
+      ]
+    ],
+    "object": [
+      [
+        4195,
+        28069,
+        5467,
+        10983
+      ]
+    ]
+  },
   "tiles": [
     {
       "name": "floor",
@@ -1129,6 +1141,10 @@
       "initial": 0
     }
   ],
+  "arrays": [],
+  "screens": [],
+  "sounds": [],
+  "raster": [],
   "rules": [
     {
       "name": "walk-west",
@@ -1139,12 +1155,15 @@
           "mode": "held"
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "x",
+          "kind": "set",
           "operation": "subtract",
           "value": {
             "constant": 1
+          },
+          "target": {
+            "variable": "x"
           }
         }
       ]
@@ -1158,12 +1177,15 @@
           "mode": "held"
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "x",
+          "kind": "set",
           "operation": "add",
           "value": {
             "constant": 1
+          },
+          "target": {
+            "variable": "x"
           }
         }
       ]
@@ -1177,12 +1199,15 @@
           "mode": "held"
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "y",
+          "kind": "set",
           "operation": "subtract",
           "value": {
             "constant": 1
+          },
+          "target": {
+            "variable": "y"
           }
         }
       ]
@@ -1196,12 +1221,15 @@
           "mode": "held"
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "y",
+          "kind": "set",
           "operation": "add",
           "value": {
             "constant": 1
+          },
+          "target": {
+            "variable": "y"
           }
         }
       ]
@@ -1220,12 +1248,15 @@
           }
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "x",
+          "kind": "set",
           "operation": "set",
           "value": {
             "constant": 8
+          },
+          "target": {
+            "variable": "x"
           }
         }
       ]
@@ -1244,12 +1275,15 @@
           }
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "x",
+          "kind": "set",
           "operation": "set",
           "value": {
             "constant": 144
+          },
+          "target": {
+            "variable": "x"
           }
         }
       ]
@@ -1268,12 +1302,15 @@
           }
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "y",
+          "kind": "set",
           "operation": "set",
           "value": {
             "constant": 8
+          },
+          "target": {
+            "variable": "y"
           }
         }
       ]
@@ -1292,12 +1329,15 @@
           }
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "y",
+          "kind": "set",
           "operation": "set",
           "value": {
             "constant": 128
+          },
+          "target": {
+            "variable": "y"
           }
         }
       ]
@@ -1321,12 +1361,15 @@
           "mode": "pressed"
         }
       ],
-      "actions": [
+      "body": [
         {
-          "variable": "steps",
+          "kind": "set",
           "operation": "add",
           "value": {
             "constant": 1
+          },
+          "target": {
+            "variable": "steps"
           }
         }
       ]

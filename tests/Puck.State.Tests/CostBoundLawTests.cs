@@ -1,6 +1,8 @@
 using System.Numerics;
 using Xunit;
 
+using Puck.Maths;
+
 namespace Puck.State.Tests;
 
 public sealed class CostBoundLawTests {
