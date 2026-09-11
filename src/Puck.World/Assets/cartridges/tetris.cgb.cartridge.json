@@ -1455,11 +1455,11 @@
   "variables": [
     {
       "name": "ph",
-      "initial": 8
+      "initial": 14
     },
     {
       "name": "nph",
-      "initial": 8
+      "initial": 14
     },
     {
       "name": "pt",
@@ -1639,6 +1639,14 @@
     },
     {
       "name": "painted",
+      "initial": 0
+    },
+    {
+      "name": "beat",
+      "initial": 0
+    },
+    {
+      "name": "cmpd",
       "initial": 0
     },
     {
@@ -1878,6 +1886,16 @@
         0,
         0,
         0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "best",
+      "initial": [
         0,
         0,
         0,
@@ -2172,6 +2190,13 @@
     }
   ],
   "screens": [],
+  "save": {
+    "version": 1,
+    "variables": [],
+    "arrays": [
+      "best"
+    ]
+  },
   "sounds": [],
   "layers": [],
   "raster": [],
@@ -6075,6 +6100,36 @@
       ]
     },
     {
+      "name": "recall",
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 14
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "load"
+        },
+        {
+          "kind": "set",
+          "target": {
+            "variable": "nph"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 8
+          }
+        }
+      ]
+    },
+    {
       "name": "title",
       "when": [
         {
@@ -6288,6 +6343,16 @@
                 }
               ],
               "then": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "beat"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 0
+                  }
+                },
                 {
                   "kind": "set",
                   "target": {
@@ -7182,6 +7247,165 @@
               "right": {
                 "constant": 0
               }
+            },
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "beat"
+              },
+              "comparison": "eq",
+              "right": {
+                "constant": 0
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "beat"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cmpd"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "repeat",
+              "count": 5,
+              "index": "k",
+              "body": [
+                {
+                  "kind": "if",
+                  "when": [
+                    {
+                      "kind": "compare",
+                      "left": {
+                        "array": "score",
+                        "index": {
+                          "variable": "k"
+                        }
+                      },
+                      "comparison": "gt",
+                      "right": {
+                        "array": "best",
+                        "index": {
+                          "variable": "k"
+                        }
+                      }
+                    }
+                  ],
+                  "then": [
+                    {
+                      "kind": "set",
+                      "target": {
+                        "variable": "cmpd"
+                      },
+                      "operation": "set",
+                      "value": {
+                        "constant": 1
+                      }
+                    },
+                    {
+                      "kind": "break"
+                    }
+                  ]
+                },
+                {
+                  "kind": "if",
+                  "when": [
+                    {
+                      "kind": "compare",
+                      "left": {
+                        "array": "score",
+                        "index": {
+                          "variable": "k"
+                        }
+                      },
+                      "comparison": "lt",
+                      "right": {
+                        "array": "best",
+                        "index": {
+                          "variable": "k"
+                        }
+                      }
+                    }
+                  ],
+                  "then": [
+                    {
+                      "kind": "break"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "cmpd"
+                  },
+                  "comparison": "ne",
+                  "right": {
+                    "constant": 0
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "repeat",
+                  "count": 5,
+                  "index": "k",
+                  "body": [
+                    {
+                      "kind": "set",
+                      "target": {
+                        "array": "best",
+                        "index": {
+                          "variable": "k"
+                        }
+                      },
+                      "operation": "set",
+                      "value": {
+                        "array": "score",
+                        "index": {
+                          "variable": "k"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "save"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "painted"
+              },
+              "comparison": "eq",
+              "right": {
+                "constant": 0
+              }
             }
           ],
           "then": [
@@ -7410,6 +7634,146 @@
                   }
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "best",
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 8
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "variable": "pcur"
+          },
+          "operation": "add",
+          "value": {
+            "constant": 1
+          }
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "pcur"
+              },
+              "comparison": "ge",
+              "right": {
+                "constant": 6
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "pcur"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            }
+          ]
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "pcur"
+              },
+              "comparison": "lt",
+              "right": {
+                "constant": 5
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "dv"
+              },
+              "operation": "set",
+              "value": {
+                "array": "best",
+                "index": {
+                  "variable": "pcur"
+                }
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "dv"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 3
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "pcur"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 4
+              }
+            },
+            {
+              "kind": "map",
+              "row": {
+                "constant": 15
+              },
+              "column": {
+                "variable": "cc"
+              },
+              "tile": {
+                "variable": "dv"
+              }
+            }
+          ],
+          "else": [
+            {
+              "kind": "map",
+              "row": {
+                "constant": 15
+              },
+              "column": {
+                "constant": 9
+              },
+              "tile": {
+                "constant": 3
+              }
             }
           ]
         }

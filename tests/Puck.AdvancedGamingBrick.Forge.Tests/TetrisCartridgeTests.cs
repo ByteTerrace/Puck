@@ -150,6 +150,44 @@ public sealed class TetrisCartridgeTests {
         Assert.Equal(expected: 9, actual: machine.Read(address: (ushort)result.Variables["ph"]));
     }
 
+    [Fact]
+    public void AFinishedRunIsMeasuredAgainstTheBestAndKeptWhenItWins() {
+        var result = new HgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-best");
+        StartGame(machine: machine);
+
+        // A row short of one column, so the first piece completes it and the run is worth something.
+        foreach (var column in new[] { 0, 1, 2, 7, 8, 9 }) {
+            machine.Write(address: (ushort)(result.Arrays["field"] + (17 * 10) + (uint)column), value: 1);
+        }
+
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 60 * 25);
+        Assert.Equal(expected: 1, actual: machine.Read(address: (ushort)result.Variables["lines"]));
+
+        var scored = Digits(machine: machine, address: result.Arrays["score"]);
+        Assert.NotEqual(expected: "0000", actual: scored);
+
+        // Top out: the run ends, and a run better than the stored best replaces it.
+        for (var row = 0; row < 6; ++row) {
+            for (var column = 0; column < 9; ++column) {
+                machine.Write(address: (ushort)(result.Arrays["field"] + (uint)((row * 10) + column)), value: 1);
+            }
+        }
+
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 60 * 8);
+        Assert.Equal(expected: 9, actual: machine.Read(address: (ushort)result.Variables["ph"]));
+        Assert.Equal(expected: scored, actual: Digits(machine: machine, address: result.Arrays["best"]));
+    }
+
+    private static string Digits(VerifyMachineDriver machine, uint address) {
+        var digits = new System.Text.StringBuilder();
+        for (var index = 0u; index < 5u; ++index) {
+            digits.Append(value: machine.Read(address: (ushort)(address + index)));
+        }
+
+        return digits.ToString();
+    }
+
     // Boot lands on the title, so a test that wants a game presses through the title and the mode menu. The waits
     // cover a screen painting itself and the well being wiped between them, both of which run a band a frame.
     private static void StartGame(VerifyMachineDriver machine) {
