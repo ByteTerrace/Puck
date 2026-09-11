@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <Description>Native AGB cartridge compilation from editable puck.cartridge.v1 data, with Thumb/ARM emitters, direct-boot image building and emulator verification tools.</Description>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
         <IsAotCompatible>false</IsAotCompatible>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.AdvancedGamingBrick.Forge</PackageId>

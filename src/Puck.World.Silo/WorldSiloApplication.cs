@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Launcher;
+using Puck.World.Machines;
 using Puck.World.Server;
 
 namespace Puck.World.Silo;
@@ -22,7 +23,12 @@ public static class WorldSiloApplication {
             DefaultValueFactory = static _ => null,
             Description = "The silo document (puck.silo.def.v1) to load. Required.",
         };
+        var extensionsDirOption = new Option<string?>(name: "--extensions-dir") {
+            DefaultValueFactory = static _ => null,
+            Description = "Optional path to the extensions directory. Defaults to ./extensions and <app>/extensions.",
+        };
         var launchCommand = new RootCommand(description: "Puck World Silo") {
+            extensionsDirOption,
             siloOption,
         };
         var parseResult = launchCommand.Parse(args);
@@ -31,6 +37,7 @@ public static class WorldSiloApplication {
         
             return 1;
         }
+        LoadDynamicExtensions(explicitDir: parseResult.GetValue(option: extensionsDirOption));
         if (!WorldSiloDefinitionSerialization.TryLoadFile(
             clusteringKinds: WorldSiloExtensions.ClusteringKinds,
             definition: out var definition,
@@ -124,6 +131,25 @@ public static class WorldSiloApplication {
             // shutdown race, not a fault; every terminal command already ran on the tick thread before this unwound.
         }
         return Environment.ExitCode;
-        
+    }
+
+    private static void LoadDynamicExtensions(string? explicitDir) {
+        if (!string.IsNullOrWhiteSpace(value: explicitDir) && Directory.Exists(path: explicitDir)) {
+            _ = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: explicitDir, log: static msg => Console.WriteLine(value: msg));
+
+            return;
+        }
+
+        var localDir = Path.Combine(Directory.GetCurrentDirectory(), "extensions");
+
+        if (Directory.Exists(path: localDir)) {
+            _ = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: localDir, log: static msg => Console.WriteLine(value: msg));
+        }
+
+        var appDir = Path.Combine(AppContext.BaseDirectory, "extensions");
+
+        if (Directory.Exists(path: appDir) && !string.Equals(a: localDir, b: appDir, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+            _ = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: appDir, log: static msg => Console.WriteLine(value: msg));
+        }
     }
 }

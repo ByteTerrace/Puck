@@ -11,12 +11,6 @@
           "Microsoft.Extensions.DependencyInjection.Abstractions": "10.0.12"
         }
       },
-      "Microsoft.NET.ILLink.Tasks": {
-        "type": "Direct",
-        "requested": "[10.0.12, )",
-        "resolved": "10.0.12",
-        "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
-      },
       "Azure.Core": {
         "type": "Transitive",
         "resolved": "1.55.0",
@@ -219,6 +213,7 @@
       "ByteTerrace.Puck.GamingBricks.Forge": {
         "type": "Project",
         "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
         }
       },

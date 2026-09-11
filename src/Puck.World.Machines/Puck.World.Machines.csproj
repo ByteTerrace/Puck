@@ -2,6 +2,8 @@
     <PropertyGroup>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
+        <!-- WorldMachineExtensionLoader uses AssemblyLoadContext and reflection for dynamic extension discovery at runtime. -->
+        <IsAotCompatible>false</IsAotCompatible>
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />

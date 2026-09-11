@@ -51,6 +51,15 @@ public sealed class MachineHostSeamLawTests {
         Assert.False(condition: referenced.Contains("Puck.AdvancedGamingBrick.Forge"), userMessage: "Puck.World.Machines must not reference concrete Puck.AdvancedGamingBrick.Forge.");
     }
     [Fact]
+    public void SiloAssemblyReferencesNoConcreteEmulatorProjects() {
+        var referenced = typeof(Puck.World.Silo.WorldSiloApplication).Assembly.GetReferencedAssemblies().Select(selector: name => name.Name).ToHashSet(comparer: StringComparer.Ordinal);
+
+        Assert.False(condition: referenced.Contains("Puck.HumbleGamingBrick"), userMessage: "Puck.World.Silo must not reference concrete Puck.HumbleGamingBrick.");
+        Assert.False(condition: referenced.Contains("Puck.AdvancedGamingBrick"), userMessage: "Puck.World.Silo must not reference concrete Puck.AdvancedGamingBrick.");
+        Assert.False(condition: referenced.Contains("Puck.HumbleGamingBrick.Forge"), userMessage: "Puck.World.Silo must not reference concrete Puck.HumbleGamingBrick.Forge.");
+        Assert.False(condition: referenced.Contains("Puck.AdvancedGamingBrick.Forge"), userMessage: "Puck.World.Silo must not reference concrete Puck.AdvancedGamingBrick.Forge.");
+    }
+    [Fact]
     public void MachinesPropertyIsTypedThroughTheSeamInterfaceNotTheConcreteHost() {
         var property = typeof(WorldServer).GetProperty(name: nameof(WorldServer.Machines), bindingAttr: (BindingFlags.Public | BindingFlags.Instance));
 

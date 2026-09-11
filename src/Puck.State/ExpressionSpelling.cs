@@ -141,29 +141,52 @@ public static class ExpressionSpelling {
     /// <summary>Whether a name prints bare, without backquotes.</summary>
     /// <param name="name">The name.</param>
     /// <returns><see langword="true"/> when the name lexes as one bare identifier.</returns>
-    public static bool IsBareName(string name) {
-        if (name.Length == 0 || !IsNameStart(name[0])) {
-            return false;
+    public static bool IsBareName(string name) =>
+        (ScanBareName(text: name, start: 0) == name.Length) && (name.Length > 0) && !Calls.ContainsKey(key: name);
+
+    /// <summary>Scans one bare name out of <paramref name="text"/> starting at <paramref name="start"/>, on exactly
+    /// the terms this lexer's own names obey: a letter/<c>_</c>/<c>$</c> start, letter/digit/<c>_</c>/<c>$</c>/<c>.</c>
+    /// continuations, and — once the name opens with <c>$</c> — <c>:segment</c> continuations, signed <c>:-N</c>
+    /// offsets, and a <see cref="RuleFacts.LiveZonePrefix"/> group folded whole into the name. This is the one
+    /// implementation of that walk: <see cref="IsBareName"/> asks it whether a whole string is one name, and callers
+    /// outside this assembly (the <c>.puck</c> parser and formatter) scan with it rather than carrying a copy.</summary>
+    /// <param name="text">The text to scan.</param>
+    /// <param name="start">The offset to scan from.</param>
+    /// <returns>The name's length in characters, or 0 when <paramref name="start"/> does not open a name.</returns>
+    public static int ScanBareName(string text, int start) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+
+        if ((start < 0) || (start >= text.Length) || !IsNameStart(character: text[start])) {
+            return 0;
         }
-        var reserved = (name[0] == '$');
-        for (var index = 1; index < name.Length; index++) {
-            var character = name[index];
-            if (IsNamePart(character)) {
+        var reserved = (text[start] == '$');
+        var index = start + 1;
+
+        while (index < text.Length) {
+            var character = text[index];
+            if (IsNamePart(character: character)) {
+                index++;
                 continue;
             }
-            if (reserved && character == ':' && index + 1 < name.Length && (IsNamePart(name[index + 1]) || IsSignedSegment(name, index + 1))) {
+            if (reserved && (character == ':') && ((index + 1) < text.Length) && (IsNamePart(character: text[index + 1]) || IsSignedSegment(text: text, index: index + 1))) {
+                index++;
                 continue;
             }
-            if (reserved && character == '-' && index > 0 && name[index - 1] == ':' && index + 1 < name.Length && char.IsAsciiDigit(name[index + 1])) {
+            if (reserved && (character == '-') && (text[index - 1] == ':') && ((index + 1) < text.Length) && char.IsAsciiDigit(c: text[index + 1])) {
+                index++;
                 continue;
             }
-            if (reserved && LiveZoneIndexEnd(text: name, start: 0, bracket: index) is var close && close > 0) {
-                index = close;
-                continue;
+            if (reserved && (character == '[')) {
+                var close = LiveZoneIndexEnd(text: text, start: start, bracket: index);
+                if (close > 0) {
+                    index = close + 1;
+                    continue;
+                }
             }
-            return false;
+            break;
         }
-        return !Calls.ContainsKey(key: name);
+
+        return index - start;
     }
 
     // A "$zones[" segment inside a reserved name carries its whole bracketed index — colons, nested brackets and all —

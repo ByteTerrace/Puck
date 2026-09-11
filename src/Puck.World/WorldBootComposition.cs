@@ -23,6 +23,7 @@ using Puck.Shaders.Study;
 using Puck.World.Addons;
 using Puck.World.Audio;
 using Puck.World.Client;
+using Puck.World.Machines;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
@@ -258,6 +259,13 @@ internal static class WorldBootComposition {
         // Register the shipped first-class gaming brick screen machine extensions and cartridge compilers.
         services.AddHumbleGamingBrick();
         services.AddAdvancedGamingBrick();
+
+        // Discover optional dynamic extensions.
+        var appExtensions = Path.Combine(AppContext.BaseDirectory, "extensions");
+
+        if (Directory.Exists(path: appExtensions)) {
+            _ = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: appExtensions);
+        }
 
         // The reserved derived-face slot range (None-sourced placeholders, so a creation FACE appearing at a later
         // delivery re-points a slot that already exists — the render provider key set is frozen at boot) —

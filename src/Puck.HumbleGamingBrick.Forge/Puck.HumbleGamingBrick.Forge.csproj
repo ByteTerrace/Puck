@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <Description>Native CGB cartridge compilation from editable puck.cartridge.v1 data, with SM83 emitters, hardware framework primitives, Tune audio-document compilation and boot-ROM tools.</Description>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
         <IsAotCompatible>false</IsAotCompatible>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.HumbleGamingBrick.Forge</PackageId>

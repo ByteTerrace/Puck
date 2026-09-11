@@ -21,10 +21,6 @@
         <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Console\Puck.World.Console.csproj" />
         <ProjectReference Include="..\Puck.Actors\Puck.Actors.csproj" />
-        <ProjectReference Include="..\Puck.AdvancedGamingBrick\Puck.AdvancedGamingBrick.csproj" />
-        <ProjectReference Include="..\Puck.AdvancedGamingBrick.Forge\Puck.AdvancedGamingBrick.Forge.csproj" />
-        <ProjectReference Include="..\Puck.HumbleGamingBrick\Puck.HumbleGamingBrick.csproj" />
-        <ProjectReference Include="..\Puck.HumbleGamingBrick.Forge\Puck.HumbleGamingBrick.Forge.csproj" />
         <ProjectReference Include="..\Puck.World.Machines\Puck.World.Machines.csproj" />
         <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
