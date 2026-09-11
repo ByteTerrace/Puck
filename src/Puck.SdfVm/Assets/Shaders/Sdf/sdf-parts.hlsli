@@ -1,6 +1,17 @@
 #ifndef PUCK_SDF_PARTS_HLSLI
 #define PUCK_SDF_PARTS_HLSLI
 
+// Root composition admission is rebuilt by SdfProgram.PartPrograms.cs. Header .x stores the compiled count
+// in bits 0..30 and independent-tracing admission in bit 31. Beam and primary share this decision.
+bool sdfCanTracePartsIndependently() {
+#ifndef SDF_VM_DISABLE_PART_PROGRAMS
+    uint table = sdfProgramLayout.partProgramOffset;
+    return table != 0u && (sdfWords[table].x & 0x80000000u) != 0u;
+#else
+    return false;
+#endif
+}
+
 // Compiled whole-scope programs: entry = (shared leaf run, placement binding run, count|dynamic flag, scope scale).
 // Each leaf = (canonical shape instruction, optional domain instruction + 1, 0, 0); each placement binding =
 // (pose slot + 1, material, 0, 0). Geometry payloads and flags come from the canonical instructions, not the

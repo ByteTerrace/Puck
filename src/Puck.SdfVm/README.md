@@ -91,11 +91,14 @@ queries across all primary marches and attribute resolution, saturating at
 8,388,607. Queries can evaluate different amounts of geometry, so this count
 alone does not measure field work.
 
-The beam searches for an initial depth, an empty gap, and a clear tail. Three
-consecutive occupied samples with non-increasing clearance abandon both the gap
-and tail searches. This bounds wasted work inside ground and walls; it does not
-prove that later space is empty. The initial depth remains valid, and the gap and
-far-bound sentinels leave subsequent traversal to the primary rays.
+The beam chooses its work from the program's traversal admission. Programs that
+trace compiled parts independently use at most eight conservative entry samples;
+they leave gap and far-bound searches to the primary rays. Other programs retain
+the longer entry, gap, and clear-tail searches. In that path, three consecutive
+occupied samples with non-increasing clearance abandon both the gap and tail
+searches. Neither early exit proves that later space is empty: the initial depth
+remains valid, and far-distance sentinels disable unproven skips. Compare beam
+and primary work together; a cheaper prepass can require more per-pixel samples.
 
 Scalar queries can execute a complete compiled part instead of revisiting its
 scope and individual VM segments. `SdfProgram` shares its leaf program by geometry

@@ -1,6 +1,7 @@
 // Tile-cull prepass: one invocation per (tile, viewport). It cone-marches the distance field over the tile and
 // writes a conservative march-start depth — or TileEmpty when no ray in the tile can hit — that Stage 1
 // (sdf-world-views.comp) uses to fast-forward, or skip, the per-pixel march.
+// Programs admitted to independent part tracing use only a short entry search; others also search gap/tail bounds.
 //
 // MASK-FIRST: this kernel runs AFTER the instance-cull pass (sdf-instance-cull.comp) and cone-marches the
 // TILE-MASKED field (mapMasked at this tile's mask base) — each march sample walks only the instances whose bounds

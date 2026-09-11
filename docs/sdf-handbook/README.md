@@ -16,7 +16,7 @@ out of order.
 |---|---|
 | [1. The idea](01-the-idea.md) | What a distance field is, why fields compose into whole worlds, sphere tracing, and why Puck interprets scenes as data instead of compiling shaders. |
 | [2. The program model](02-the-program-model.md) | The scene as a flat instruction stream: the one running accumulator, why intersection is dangerous where union is free, field scopes, materials, instances, the Lipschitz step clamp, and the ISA admission rule. |
-| [3. The frame](03-the-frame.md) | The five compute passes (mask → beam → cull-args → views → composite), why mask-first flattened the instance-scaling wall, render-scale tiers, and the two-deep frame ring. |
+| [3. The frame](03-the-frame.md) | The render pipeline, separate primary tracing and shading, mask-first culling, render-scale tiers, and the two-deep frame ring. |
 | [4. Lighting and shading](04-lighting-and-shading.md) | The shading epilogue: the single-walk analytic normal, penumbra soft shadows, the per-pixel shadow gather, three-tap AO, CRT screens as picture-and-light, and the runtime shading switches. |
 | [5. Authoring](05-authoring.md) | Building real scenes with `SdfProgramBuilder`: a worked plaza, emitter composition, material scopes, the capacity-probe doctrine, and the pitfalls stated as rules. |
 | [6. Motion and views](06-motion-and-views.md) | Anchors as named presentation-only poses, the six camera rigs, `ViewStack` as the hypervisor primitive, view transitions, and the two diegetic-screen seams. |

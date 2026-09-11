@@ -282,10 +282,7 @@ SdfPrimaryHit sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float march
     float pixelFootprint) {
     bool independent = false;
 #if defined(SDF_PRIMARY_PASS) && !defined(SDF_VM_DISABLE_PART_PROGRAMS)
-    // Root composition admission is rebuilt with the program, not inferred from instruction counts or offsets.
-    // Header .x: compiled count in bits 0..30, admission in bit 31. KEEP IN SYNC with SdfProgram.PartPrograms.cs.
-    uint table = sdfProgramLayout.partProgramOffset;
-    independent = table != 0u && (sdfWords[table].x & 0x80000000u) != 0u;
+    independent = sdfCanTracePartsIndependently();
 #endif
     if (!independent) {
         return sdfTracePrimaryField(rayOrigin, rayDirection, marchStart, firstExit, secondEntry,

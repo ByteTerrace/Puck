@@ -663,6 +663,12 @@ plus the existing instanced==flat stages.
   `CanTracePartsIndependently` allows only root Union shapes/PopField and
   Reset/Translate/Rotate/Scale/TransformDynamic. Root field modifiers or other
   composes keep the full-scene march; eligible parts still accelerate scalar queries.
+  `sdfCanTracePartsIndependently` decodes the admission for both beam and primary.
+  Admitted programs use `IndependentConeMarchSteps` entry samples without gap/tail
+  searches; other programs retain the full beam path. An exhausted entry search
+  publishes its conservative depth and far-distance sentinels, never TileEmpty.
+  Compare combined beam/primary work and inspect silhouettes and changed poses;
+  an earlier start can increase primary queries without changing visible geometry.
   `sdf-primary.hlsli` shares the marcher between the remaining scene and each
   visible complete part, then resolves attributes with the full field at the
   nearest accepted sample. Independent selection uses `SdfPrimarySurface`, not

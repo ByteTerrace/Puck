@@ -11,6 +11,12 @@ native render scale, default switches. Treat them as shape and order of
 magnitude, not gospel constants: a different GPU shifts them, and the point is
 always the *ratios* between passes and the *slopes* under load.
 
+These historical measurements predate the separate `primary` pass. Current
+timings split camera traversal from `views` shading, and programs admitted to
+independent part tracing use a shorter beam search. Compare beam, primary, and
+views together, including field-operation counts: fewer prepass queries can
+require more primary samples. See [the current pipeline](03-the-frame.md).
+
 ## Where the milliseconds go: the per-pass anatomy
 
 A world frame runs as a short pipeline of GPU passes, each separately timed

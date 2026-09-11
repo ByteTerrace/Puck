@@ -698,6 +698,7 @@ static const int MaxSteps = 128;
 static const float SurfaceEpsilon = 0.001;
 static const float SphereTraceOmega = 1.2; // Keinert over-relaxation factor (1 = plain sphere tracing; [1, 2))
 static const int ConeMarchSteps = 56;
+static const int IndependentConeMarchSteps = 8;
 static const float ConeNear = 0.02;
 static const float ConeEpsilon = 0.002;
 // Four-bound teleport (Larsson "The Gunk"): after the beam cone finds the tile's ENTRY (the classic marchStart), it
@@ -1292,20 +1293,14 @@ float coneMarchFarBound(ViewportData view, TileCone cone, uint instanceMaskBase,
 // one, so a teleport is never unsafe. Reaching the far distance while clear yields secondEntry = the far distance (an
 // empty tail — the ray teleports to the far plane and ends), the one far-bound benefit taken here.
 //
-// The march evaluates the TILE-MASKED field (mapMasked at `instanceMaskBase` — the mask the instance-cull pass wrote
-// for THIS tile, dispatched immediately before the beam): each sample walks only the instances overlapping the tile's
-// cone, so the march's per-step cost is O(instances near this tile), not O(all instances) — the measured O(n) beam
-// wall was exactly this per-sample enumeration (~1.6B segment-bound checks at 4096
-// instances), never the per-tile binning. BIT-EXACT by the same contract Stage 1's masked march rides: a masked-out
-// instance's bound excludes every point of the tile's cone (the sphere-vs-cone test is a necessary condition for the
-// bound to touch it), and the bound-sizing contract (SdfProgram.PackInstances — union influence margins, smooth
-// halos, scoped-field reach, the unmaskable sentinel) guarantees such an instance's compose returns the accumulator
-// bit-exactly at any point outside its influence — so every mapMasked sample here equals the unmasked map() to the
-// bit, and marchStart/the gap planes are unchanged. World segments have no mask bits and always evaluate (mapCore's
-// world/instance merge). A consumer with no mask passes SDF_INSTANCE_MASK_ALL and gets the unmasked march verbatim.
+// The tile's instance mask excludes only bounds with no influence on its cone; world segments always evaluate.
+// Independently traced parts use a short entry search: the full-scene gap/tail searches cost more than the
+// cheaper local marches save. Exhaustion leaves a proven-clear start, never an empty tile or invented far bound.
+// Other root compositions retain the full entry/gap/tail search below.
 TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMaskBase, float footprint) {
     float3 origin = view.position.xyz;
     float farDistance = worldFarDistance(view);
+    bool entryOnly = sdfCanTracePartsIndependently();
 
     TileBounds b;
     b.entry = TileEmpty;
@@ -1313,15 +1308,14 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
     b.secondEntry = farDistance;
     b.farBound = farDistance;    // F1: no proven far bound yet => the consumer's far-exit is a no-op (total function)
 
-    // Phase 1 — ENTRY (the classic conservative cone/beam march). map() is a true distance field, so the cone of
-    // half-spread `chord` clears ALL of its rays while map(center) - chord*t > 0, and a 1-Lipschitz-safe step is
-    // clearance / (1 + chord). Returns the earliest t at which the cone could hit (the shared per-tile marchStart), or
-    // TileEmpty when the cone clears the field out to the far distance.
+    // ENTRY: the Lipschitz-clamped field clears the cone by map(center) - chord*t.
+    // Advancing by clearance/(1+chord) stays conservative, including when the entry budget ends early.
     float t = ConeNear;
     bool foundEntry = false;
+    int entrySteps = entryOnly ? IndependentConeMarchSteps : ConeMarchSteps;
 
     [loop]
-    for (int i = 0; (i < ConeMarchSteps); i++) {
+    for (int i = 0; (i < entrySteps); i++) {
         // FOLD-SAFE: the clearance proof rides min(value, sdfMapStepBound). A folded field's raw value can
         // overestimate near a fold boundary, and a cone proof built on it classifies tiles straight through shell
         // geometry (the Droste tile-shatter). min with the published boundary gap
@@ -1342,6 +1336,10 @@ TileBounds coneMarchTileBounds(ViewportData view, TileCone cone, uint instanceMa
         }
     }
 
+    if (entryOnly) {
+        if (!foundEntry) b.entry = t;
+        return b; // Gap and far-bound sentinels leave all remaining work to primary rays.
+    }
     if (!foundEntry) {
         b.entry = t; // step budget exhausted at the entry band — matches coneMarchTile's fallthrough `return t`
         // F1 leak #2: a budget-exhausted grazing tile is marked LIVE (all its pixels fine-march from t). Prove the far
@@ -2305,7 +2303,7 @@ float3 renderView(ViewportData view, float2 localUv, float marchStart, float fir
             // silently drops a detail shape's dent.
             sdfDetailShadingActive = true;
 
-            // The curvature variant reuses the normal's four taps plus one center tap (compile-time, off by default).
+            // Authored curvature uses four taps and a center distance, reused from primary when admitted.
             // Otherwise the runtime toggle selects between the ANALYTIC forward-mode dual normal (the default — one dual
             // eval, exact through the op chain) and the 4-tap finite-difference probe (worldUseTapNormals, for the
             // A/B lever). The 4-tap path stays compiled; the toggle picks at runtime. Every path also reports the

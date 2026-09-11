@@ -1,27 +1,24 @@
 # The frame
 
 After this chapter you'll understand how one world frame turns a program into
-pixels: the five compute passes it runs, what each one buys and what it costs on
+pixels: the compute passes it runs, what each one buys and what it costs on
 the reference GPU, why computing a per-tile instance mask *before* the march is
 the move that flattened the engine's worst scaling wall, how render-scale tiers
 buy frame budget, and how the engine keeps two frames in flight without a
 whole-device stall.
 
-## Five passes, one indirect pipeline
+## One indirect pipeline
 
-A world frame is five compute passes recorded into one command buffer and
-submitted together. They run strictly in order, each feeding the next:
+A world frame records its passes into one command buffer. Upload and sky filling
+precede culling; camera traversal and hit shading have separate dispatches:
 
 ```
-   mask ──▶ beam ──▶ cull-args ──▶ views ──▶ composite
-    │        │          │           │          │
- per-tile  coarse    pack the    per-pixel   blit views
- instance  cone-     indirect    march +     into the
- bitmask   march     dispatch    shade       framebuffer
+   upload → sky → mask → beam → cull-args → primary → views → composite
 ```
 
-The pass labels are exactly `["mask", "beam", "cull-args", "views", "composite"]`
-— the same names the GPU-timing instrument reports. Here is what each one is for.
+These are the engine's GPU timing labels. Here is what the culling and rendering
+passes do; [the engine README](../../src/Puck.SdfVm/README.md)
+describes the hit records shared by primary and views.
 
 **mask** (`sdf-instance-cull.comp`) computes, for every 16×16 screen tile, the
 set of instances that could possibly matter to that tile — a bitmask, one bit per
@@ -34,23 +31,23 @@ per-tile instance bitmask.
 **beam** (`sdf-beam.comp`) runs a coarse cone-march per tile over the
 *mask-restricted* field. One representative cone per 16×16 tile marches until it
 hits something or proves a stretch of space empty, recording where the fine march
-should start and one proven-empty gap it can teleport across. Because it marches
+should start and, when worthwhile, an empty gap it can teleport across. Programs
+admitted to independent part tracing use a short entry search; their cheaper
+per-part marches finish the work. Other programs also search gap and tail bounds.
+Budget exhaustion leaves the unproven bounds disabled. Because the beam marches
 `mapMasked` — the field with masked-out instances excluded — it never pays for
 instances the mask already ruled out. Its cost is dominated by the VM evaluations
 performed along the representative cone.
 
 **cull-args** (`sdf-cull-args`) reads the beam's per-tile results and packs the
-indirect-dispatch arguments for the fine march: which tiles have work, how many
-threads to launch. It is a prefix-sum compaction (count → scan → scatter), never
-an atomic-append, so the tile ordering is deterministic and bit-identical across
-backends. This is the seam that lets the expensive `views` pass launch threads
-*only* where there is surface to shade.
+indirect-dispatch arguments for primary and views. A parallel min/max reduction
+finds the bounding rectangle of surviving tiles. Empty margins outside that
+rectangle launch no threads; holes inside it remain in the dispatch.
 
-**views** (`sdf-world-views.comp`) is the fine, per-pixel march and shade — the
-real cost of the frame. Each pixel starts where its tile's beam told it to,
-marches the masked field to a hit, computes the lit normal, and runs the full
-shading epilogue: material, sun, screen lights, soft shadows, ambient occlusion.
-Almost all per-frame GPU time lives here for any realistic scene.
+**primary** (`sdf-world-primary.comp`) traces camera rays from their tile's entry
+depth and records accepted hits. **views** (`sdf-world-views.comp`) reads those
+records and computes normals, materials, lighting, shadows, ambient occlusion,
+and volumes. Compare both passes when measuring per-pixel field cost.
 
 **composite** blits the finished per-view surfaces into the framebuffer, applying
 the per-view render-scale upsample where a view rendered below native. It is
