@@ -11,7 +11,7 @@ public sealed class PartProgramLawTests {
         var words = Build(instructions, [Range(0, 8), Range(8, 16)]).Words;
         var table = PartTable(words);
         Assert.NotEqual(0, table);
-        Assert.Equal(2u, words[table]);
+        Assert.Equal(0x80000002u, words[table]);
         Assert.Equal(1u, words[table + 1]);
         Assert.Equal(2u, words[table + 2]);
         Assert.Equal(4u, words[table + 3]);
@@ -138,6 +138,43 @@ public sealed class PartProgramLawTests {
         Assert.Equal(0, PartTable(a.Words));
         Assert.NotEqual(0, PartTable(b.Words));
         Assert.True(a.PartCompilationWordCapacity >= b.Words.Length);
+    }
+
+    [Theory]
+    [InlineData(SdfBlendOp.Union, true)]
+    [InlineData(SdfBlendOp.SmoothUnion, false)]
+    [InlineData(SdfBlendOp.Subtraction, false)]
+    [InlineData(SdfBlendOp.Intersection, false)]
+    public void RootCompositionControlsIndependentTracingWithoutDiscardingCompiledParts(SdfBlendOp blend, bool independent) {
+        var instructions = Scope(2, 1, 1, 2, 0, 1);
+        instructions.Add(Op(SdfOp.ResetPoint));
+        instructions.Add(Shape(1, 0) with { Blend = (uint)blend, Data1 = new Vector4(0.2f, 0, 0, 0) });
+        var words = Build(instructions, [Range(0, 8)]).Words;
+        var header = words[PartTable(words)];
+        Assert.Equal(1u, header & 0x7FFFFFFFu);
+        Assert.Equal(independent, (header & 0x80000000u) != 0);
+    }
+
+    [Theory]
+    [InlineData(SdfOp.Onion)]
+    [InlineData(SdfOp.Dilate)]
+    public void RootFieldModifierDisablesIndependentTracingWithoutDiscardingCompiledParts(SdfOp modifier) {
+        var instructions = Scope(2, 1, 1, 2, 0, 1);
+        instructions.Add(Op(SdfOp.ResetPoint));
+        instructions.Add(Op(modifier, new Vector4(0.2f, 0, 0, 0)));
+        instructions.Add(Shape(1, 0));
+        var words = Build(instructions, [Range(0, 8)]).Words;
+        Assert.Equal(1u, words[PartTable(words)]);
+    }
+
+    [Fact]
+    public void NonUnionGenericScopeDisablesIndependentTracingOfOtherParts() {
+        var instructions = Scope(2, 1, 1, 2, 0, 1);
+        var other = Scope(2, 1, 3, 4, 2, 3);
+        other[^1] = other[^1] with { Blend = (uint)SdfBlendOp.Subtraction };
+        instructions.AddRange(other);
+        var words = Build(instructions, [Range(0, 8), Range(8, 16)]).Words;
+        Assert.Equal(1u, words[PartTable(words)]);
     }
 
     private static List<SdfInstruction> Scope(float outer, float inner, int slotA, int slotB, uint materialA, uint materialB) => [

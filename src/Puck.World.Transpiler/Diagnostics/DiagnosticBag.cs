@@ -38,6 +38,10 @@ public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {
     public void ReportInfo(string code, string message, SourceSpan span) =>
         Report(Diagnostic.Info(code, message, span));
 
+    /// <summary>Reports an informational diagnostic.</summary>
+    public void ReportInformation(string code, string message, SourceSpan span) =>
+        Report(Diagnostic.Info(code, message, span));
+
     /// <summary>Adds a range of diagnostics to the bag.</summary>
     public void AddRange(IEnumerable<Diagnostic> diagnostics) {
         ArgumentNullException.ThrowIfNull(diagnostics);
