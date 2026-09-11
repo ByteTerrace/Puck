@@ -1,11 +1,16 @@
+using System.Text;
 using System.Text.Json.Nodes;
+using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Validation;
 
 /// <summary>Validates lowered world definitions against engine semantic rules and maps errors to source spans.</summary>
 public static class WorldSemanticValidator {
-    /// <summary>Validates a lowered world definition JsonObject using Puck.World.Schema's engine validator.</summary>
+    /// <summary>Validates a lowered world definition JsonObject using Puck.World.Schema's engine validator. The
+    /// document is validated exactly as given — a document naming a <c>basis</c> or <c>imports</c> must already be
+    /// composed (see <see cref="ValidateComposedWorld"/>), or fields the basis chain would have filled in read as
+    /// missing.</summary>
     /// <param name="loweredJson">The lowered JsonObject.</param>
     /// <param name="sourceMap">The SourceMap linking JSON pointer paths to source AST spans.</param>
     /// <param name="diagnostics">The DiagnosticBag to report semantic errors into.</param>
@@ -34,6 +39,32 @@ public static class WorldSemanticValidator {
         }
 
         return errors.Count == 0;
+    }
+
+    /// <summary>Composes <paramref name="loweredJson"/>'s <c>basis</c>/<c>imports</c> graph, rooted beside
+    /// <paramref name="sourcePath"/>, through <see cref="PuckDocumentComposer"/> — the same composition the game
+    /// boot path runs — and validates the composed document. A document naming neither composes to itself.</summary>
+    /// <param name="loweredJson">The lowered JsonObject, not yet composed with its basis or imports.</param>
+    /// <param name="sourceMap">The SourceMap linking JSON pointer paths to source AST spans. Spans for fields a
+    /// basis or import supplied do not resolve (they trace no span in this source) and report at
+    /// <see cref="SourceSpan.None"/>.</param>
+    /// <param name="diagnostics">The DiagnosticBag to report composition and semantic errors into.</param>
+    /// <param name="sourcePath">The <c>.puck</c> source file's own resolved path — basis and import references
+    /// resolve relative to its directory.</param>
+    /// <returns>True if the composed world passed semantic validation without errors.</returns>
+    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath) {
+        ArgumentNullException.ThrowIfNull(loweredJson);
+        ArgumentNullException.ThrowIfNull(diagnostics);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+
+        var rootBytes = Encoding.UTF8.GetBytes(loweredJson.ToJsonString());
+
+        if (!PuckDocumentComposer.TryComposeWorldDocument(sourcePath, rootBytes, out var composed, out _, out var composeReason)) {
+            diagnostics.ReportError("PUCK033", $"Basis/import composition refused: {composeReason}", SourceSpan.None);
+            return false;
+        }
+
+        return ValidateWorld(composed ?? loweredJson, sourceMap, diagnostics);
     }
 
     private static SourceSpan ExtractSpanFromError(string error, SourceMap? sourceMap) {

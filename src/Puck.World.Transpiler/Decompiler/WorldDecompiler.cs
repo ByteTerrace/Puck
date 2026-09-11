@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 namespace Puck.World.Transpiler.Decompiler;
 
 /// <summary>Decompiles canonical Puck JSON definitions back into declarative Puck authoring DSL (.puck).</summary>
-public static class WorldDecompiler {
+public static partial class WorldDecompiler {
     /// <summary>Decompiles a JSON text string into formatted Puck source code.</summary>
     /// <param name="jsonText">The raw or canonical JSON text.</param>
     /// <returns>Clean, idiomatic Puck DSL source code.</returns>
@@ -27,6 +27,15 @@ public static class WorldDecompiler {
         ArgumentNullException.ThrowIfNull(root);
 
         var sb = new StringBuilder();
+
+        // 0. Header: every decompiled file is a one-time import — 'let'/'template' cannot be recovered, and
+        // re-running the decompiler will not preserve hand-authored constants or templates added after this file
+        // was generated.
+        sb.AppendLine("// Decompiled from a canonical Puck world document — a one-time import.");
+        sb.AppendLine("// 'let'/'template' cannot be recovered; re-running the decompiler will not");
+        sb.AppendLine("// preserve hand-authored constants or templates added after this file was");
+        sb.AppendLine("// generated. Treat this file as a starting point, not a synced mirror.");
+        sb.AppendLine();
 
         // 1. Headers: schema, basis, documentId
         if (root.TryGetPropertyValue("schema", out var schemaNode) && schemaNode is not null) {
@@ -97,10 +106,14 @@ public static class WorldDecompiler {
                 DecompileViewsBlock(sb, viewsObj);
             } else if (string.Equals(key, "addons", StringComparison.OrdinalIgnoreCase) && value is JsonArray addonsArr) {
                 DecompileAddonsBlock(sb, addonsArr);
-            } else if (string.Equals(key, "solids", StringComparison.OrdinalIgnoreCase) && value is JsonArray solidsArr) {
-                DecompileSolidsBlock(sb, solidsArr);
+            } else if (string.Equals(key, "shapes", StringComparison.OrdinalIgnoreCase) && value is JsonArray shapesArr) {
+                DecompileShapesBlock(sb, shapesArr, indentLevel: 0);
             } else if (string.Equals(key, "materials", StringComparison.OrdinalIgnoreCase) && value is JsonArray materialsArr) {
                 DecompileMaterialsBlock(sb, materialsArr);
+            } else if (string.Equals(key, "rules", StringComparison.OrdinalIgnoreCase) && value is JsonArray rulesArr) {
+                DecompileRulesBlock(sb, rulesArr, indentLevel: 0);
+            } else if (string.Equals(key, "placements", StringComparison.OrdinalIgnoreCase) && value is JsonObject placementsObj) {
+                DecompilePlacementsBlock(sb, placementsObj, indentLevel: 0);
             } else if (value is JsonObject blockObj) {
                 DecompileNamedBlock(sb, key, null, blockObj, indentLevel: 0);
             } else {
@@ -212,16 +225,8 @@ public static class WorldDecompiler {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}operations: [");
             var opIndent = new string(' ', (indentLevel + 2) * 4);
             foreach (var opItem in opsArr) {
-                if (opItem is JsonObject opObj && opObj.TryGetPropertyValue("$type", out var typeNode)) {
-                    var type = typeNode?.ToString() ?? "";
-                    var args = new List<string>();
-                    foreach (var (argK, argV) in opObj) {
-                        if (string.Equals(argK, "$type", StringComparison.OrdinalIgnoreCase) || argV is null) {
-                            continue;
-                        }
-                        args.Add($"{argK}: {FormatValue(argV, 0)}");
-                    }
-                    sb.AppendLine(CultureInfo.InvariantCulture, $"{opIndent}{type}({string.Join(", ", args)})");
+                if (opItem is JsonObject opObj && opObj.ContainsKey("$type")) {
+                    sb.AppendLine(CultureInfo.InvariantCulture, $"{opIndent}{FormatCallForm(opObj, indentLevel + 2)}");
                 } else {
                     sb.AppendLine(CultureInfo.InvariantCulture, $"{opIndent}{FormatValue(opItem, indentLevel + 2)}");
                 }
@@ -245,18 +250,6 @@ public static class WorldDecompiler {
             if (item is JsonObject addonObj) {
                 var name = addonObj.TryGetPropertyValue("name", out var n) ? n?.ToString() : null;
                 DecompileNamedBlock(sb, "addon", name, addonObj, indentLevel: 0, excludedKeys: ["name"]);
-                sb.AppendLine();
-            }
-        }
-    }
-
-    private static void DecompileSolidsBlock(StringBuilder sb, JsonArray solids) {
-        foreach (var item in solids) {
-            if (item is JsonObject solidObj) {
-                var name = solidObj.TryGetPropertyValue("name", out var n) ? n?.ToString() : null;
-                var kind = solidObj.TryGetPropertyValue("kind", out var k) ? k?.ToString() : null;
-                var id = kind is not null ? $"solid {kind}" : "solid";
-                DecompileNamedBlock(sb, id, name, solidObj, indentLevel: 0, excludedKeys: ["name", "kind"]);
                 sb.AppendLine();
             }
         }
@@ -353,6 +346,13 @@ public static class WorldDecompiler {
                 return "{}";
             }
 
+            // The call-form escape hatch (§7): any object carrying a `$type` discriminator prints as
+            // `type(k: v, ...)` — the ActionPredicate/ActionEffect/StateTransform family and every extension arm
+            // the DSL's dedicated sugar does not otherwise cover, wherever it appears in the document.
+            if (obj["$type"] is JsonValue typeVal && typeVal.TryGetValue<string>(out _)) {
+                return FormatCallForm(obj, indentLevel);
+            }
+
             var indent = new string(' ', indentLevel * 4);
             var itemIndent = new string(' ', (indentLevel + 1) * 4);
             var sb = new StringBuilder();
@@ -365,6 +365,22 @@ public static class WorldDecompiler {
         }
 
         return node.ToString();
+    }
+
+    // The universal call-form printer: `type(k: v, ...)`, always with NAMED arguments (never positional — the
+    // emitter's positional heuristics only exist for `orbit`/`fov`, so a named spelling is the only one guaranteed
+    // to round-trip any `$type` object). Recurses through `FormatValue` for nested arguments, so a `$type` object
+    // nested inside another call's argument prints as a nested call too.
+    private static string FormatCallForm(JsonObject obj, int indentLevel) {
+        var type = obj["$type"]?.ToString() ?? "";
+        var args = new List<string>();
+        foreach (var (k, v) in obj) {
+            if (string.Equals(k, "$type", StringComparison.Ordinal) || v is null) {
+                continue;
+            }
+            args.Add($"{k}: {FormatValue(v, indentLevel)}");
+        }
+        return $"{type}({string.Join(", ", args)})";
     }
 
     private static string EscapeString(string s) {

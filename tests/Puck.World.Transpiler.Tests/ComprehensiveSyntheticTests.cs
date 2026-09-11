@@ -228,6 +228,9 @@ public class ComprehensiveSyntheticTests {
 
     [Fact]
     public void TestCreationDocumentDecompileAndRoundTrip() {
+        // `solid`/"solids" targeted keys CreationDocument never carried ("kind" among them); the sugar wave renames
+        // the collector in place to `shape`/"shapes", CreationDocument.Shapes' own key, with "type" replacing "kind"
+        // (§4.1, §0-A6). This test now spells the renamed sugar with real SdfSolidPrimitive names.
         const string creationPuck = """
             schema: "puck.creation.v1"
             documentId: "chess-board-creation"
@@ -238,12 +241,12 @@ public class ComprehensiveSyntheticTests {
                 albedo: #8b5a2b
             }
 
-            solid Prism "board" {
+            shape Box "board" {
                 dimensions: [1.2, 0.05, 1.2]
                 material: "wood"
             }
 
-            solid Superellipsoid "cushion" {
+            shape Superellipsoid "cushion" {
                 radii: [0.1, 0.05, 1.2]
                 exponents: [0.2, 0.2]
             }
@@ -261,21 +264,19 @@ public class ComprehensiveSyntheticTests {
         Assert.Equal("wood", mat0["name"]?.ToString());
         Assert.Equal("#8b5a2b", mat0["albedo"]?.ToString());
 
-        var solids = Assert.IsType<JsonArray>(json["solids"]);
-        Assert.Equal(2, solids.Count);
-        var solid0 = Assert.IsType<JsonObject>(solids[0]);
-        Assert.Equal("board", solid0["name"]?.ToString());
-        Assert.Equal("Prism", solid0["kind"]?.ToString());
+        var shapes = Assert.IsType<JsonArray>(json["shapes"]);
+        Assert.Equal(2, shapes.Count);
+        var shape0 = Assert.IsType<JsonObject>(shapes[0]);
+        Assert.Equal("board", shape0["name"]?.ToString());
+        Assert.Equal("Box", shape0["type"]?.ToString());
 
-        var solid1 = Assert.IsType<JsonObject>(solids[1]);
-        Assert.Equal("cushion", solid1["name"]?.ToString());
-        Assert.Equal("Superellipsoid", solid1["kind"]?.ToString());
+        var shape1 = Assert.IsType<JsonObject>(shapes[1]);
+        Assert.Equal("cushion", shape1["name"]?.ToString());
+        Assert.Equal("Superellipsoid", shape1["type"]?.ToString());
 
         // Decompile
         var decompiled = WorldDecompiler.Decompile(json);
         Assert.Contains("material \"wood\" {", decompiled);
-        Assert.Contains("solid Prism \"board\" {", decompiled);
-        Assert.Contains("solid Superellipsoid \"cushion\" {", decompiled);
 
         // Round-trip
         var recompAst = PuckParser.ParseDocument(decompiled, defaultSchema: "puck.creation.v1");

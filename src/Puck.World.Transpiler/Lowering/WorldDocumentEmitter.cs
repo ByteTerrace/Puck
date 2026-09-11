@@ -10,7 +10,7 @@ using Puck.World.Transpiler.Extensions;
 namespace Puck.World.Transpiler.Lowering;
 
 /// <summary>Lowers a Puck authoring AST into a canonical JSON document according to puck.world.def.v1.</summary>
-public static class WorldDocumentEmitter {
+public static partial class WorldDocumentEmitter {
     /// <summary>Lowers the AST <see cref="DocumentNode"/> into a mutable <see cref="JsonObject"/> with diagnostic reporting.</summary>
     /// <param name="document">The document AST to lower.</param>
     /// <param name="basePath">The optional base directory for resolving relative assets such as WASM addons.</param>
@@ -170,7 +170,12 @@ public static class WorldDocumentEmitter {
             case PropertyNode propNode: {
                 var childPointer = $"{scope.CurrentPointer}/{propNode.Name}";
                 scope.SourceMap?.Register(childPointer, propNode.Span);
-                target[propNode.Name] = LowerExpression(propNode.Value, scope);
+                target[propNode.Name] = LowerExpression(propNode.Value, scope, propNode.Name);
+                break;
+            }
+
+            case RuleBlockNode ruleNode: {
+                LowerRuleBlock(ruleNode, target, scope);
                 break;
             }
 
@@ -267,28 +272,15 @@ public static class WorldDocumentEmitter {
             return;
         }
 
-        // Solid collection block (puck.creation.v1)
-        if (string.Equals(id, "solid", StringComparison.OrdinalIgnoreCase)) {
-            if (parent["solids"] is not JsonArray solidsArr) {
-                solidsArr = [];
-                parent["solids"] = solidsArr;
-            }
-            var solidIdx = solidsArr.Count;
-            var solidPointer = $"{scope.CurrentPointer}/solids/{solidIdx}";
-            scope.SourceMap?.Register(solidPointer, block.Span);
+        // Shape collection block (puck.creation.v1) — CreationDocument.Shapes.
+        if (string.Equals(id, "shape", StringComparison.OrdinalIgnoreCase)) {
+            LowerShapeBlock(block, parent, scope);
+            return;
+        }
 
-            var oldPointer = scope.CurrentPointer;
-            scope.CurrentPointer = solidPointer;
-            var solidObj = LowerBlockToObject(block, scope);
-            scope.CurrentPointer = oldPointer;
-
-            if (block.Name is not null) {
-                solidObj["name"] = block.Name;
-            }
-            if (block.Target is not null) {
-                solidObj["kind"] = block.Target;
-            }
-            solidsArr.AppendNode(solidObj);
+        // Placements section — WorldPlacementsSection { policy, rows }, with `placement "id" { }` sub-blocks.
+        if (string.Equals(id, "placements", StringComparison.OrdinalIgnoreCase)) {
+            LowerPlacementsBlock(block, parent, scope);
             return;
         }
 
@@ -352,17 +344,22 @@ public static class WorldDocumentEmitter {
         return obj;
     }
 
-    private static JsonNode? LowerExpression(ExpressionNode expr, EvaluationScope scope) {
+    /// <summary><paramref name="fieldKey"/> is the enclosing JSON key this expression fills — a property name, or a
+    /// call argument's resolved name — threaded down so a unit-suffixed literal reachable from it (directly, or
+    /// through an array/object/range/binary/`let` indirection) can validate against <see cref="WorldDocumentEmitterUnits"/>'s
+    /// field-dimension table (§5 of the sugar wave). <see langword="null"/> means no such key applies (a bare
+    /// top-level expression, an unnamed call argument that fell to the <c>argN</c> fallback).</summary>
+    private static JsonNode? LowerExpression(ExpressionNode expr, EvaluationScope scope, string? fieldKey = null) {
         switch (expr) {
             case LiteralExpressionNode lit:
-                return LowerLiteral(lit);
+                return LowerLiteral(lit, fieldKey, scope);
 
             case ColorExpressionNode color:
                 return JsonValue.Create(color.Hex);
 
             case IdentifierExpressionNode ident:
                 if (scope.Constants.TryGetValue(ident.Name, out var constExpr)) {
-                    return LowerExpression(constExpr, scope);
+                    return LowerExpression(constExpr, scope, fieldKey);
                 }
                 if (string.Equals(ident.Name, "null", StringComparison.Ordinal)) {
                     return null;
@@ -381,7 +378,7 @@ public static class WorldDocumentEmitter {
             case ArrayExpressionNode arr: {
                 var jsonArr = new JsonArray();
                 foreach (var elem in arr.Elements) {
-                    jsonArr.AppendNode(LowerExpression(elem, scope));
+                    jsonArr.AppendNode(LowerExpression(elem, scope, fieldKey));
                 }
                 return jsonArr;
             }
@@ -389,7 +386,7 @@ public static class WorldDocumentEmitter {
             case ObjectExpressionNode obj: {
                 var jsonObj = new JsonObject();
                 foreach (var prop in obj.Properties) {
-                    jsonObj[prop.Name] = LowerExpression(prop.Value, scope);
+                    jsonObj[prop.Name] = LowerExpression(prop.Value, scope, prop.Name);
                 }
                 return jsonObj;
             }
@@ -419,20 +416,20 @@ public static class WorldDocumentEmitter {
                         }
                     }
 
-                    jsonObj[key] = LowerExpression(arg.Value, scope);
+                    jsonObj[key] = LowerExpression(arg.Value, scope, key);
                     positionalIndex++;
                 }
                 return jsonObj;
             }
 
             case BinaryExpressionNode bin: {
-                return EvaluateBinary(bin, scope);
+                return EvaluateBinary(bin, scope, fieldKey);
             }
 
             case RangeExpressionNode range: {
                 var rangeArr = new JsonArray();
-                rangeArr.AppendNode(LowerExpression(range.Start, scope));
-                rangeArr.AppendNode(LowerExpression(range.End, scope));
+                rangeArr.AppendNode(LowerExpression(range.Start, scope, fieldKey));
+                rangeArr.AppendNode(LowerExpression(range.End, scope, fieldKey));
                 return rangeArr;
             }
 
@@ -441,7 +438,7 @@ public static class WorldDocumentEmitter {
         }
     }
 
-    private static JsonNode? LowerLiteral(LiteralExpressionNode lit) {
+    private static JsonNode? LowerLiteral(LiteralExpressionNode lit, string? fieldKey, EvaluationScope scope) {
         if (lit.Value is null) {
             return null;
         }
@@ -467,22 +464,7 @@ public static class WorldDocumentEmitter {
         }
 
         if (lit.Unit is not null) {
-            var unit = lit.Unit.ToLowerInvariant();
-            if (unit == "deg") {
-                // Convert degrees to radians: deg * (PI / 180)
-                var rad = Math.Round(numVal * Math.PI / 180.0, 6);
-                return JsonValue.Create(rad);
-            }
-            if (unit is "s" or "hz" or "rad" or "m") {
-                // Return as normalized double/int
-                if (Math.Abs(numVal % 1) < double.Epsilon) {
-                    return JsonValue.Create((long)numVal);
-                }
-                return JsonValue.Create(numVal);
-            }
-            if (unit == "%") {
-                return JsonValue.Create(numVal / 100.0);
-            }
+            return LowerUnitLiteral(numVal, lit.Unit, fieldKey, lit.Span, scope);
         }
 
         if (lit.Value is long longVal) {
@@ -492,9 +474,36 @@ public static class WorldDocumentEmitter {
         return JsonValue.Create(numVal);
     }
 
-    private static JsonNode? EvaluateBinary(BinaryExpressionNode bin, EvaluationScope scope) {
-        var leftNode = LowerExpression(bin.Left, scope);
-        var rightNode = LowerExpression(bin.Right, scope);
+    // A percentage suffix converts to a 0..1 fraction on any field — the DSL's one dimension-table exception,
+    // since no field name in the corpus is dedicated to a 0..1 quantity. Every other unit is checked against
+    // WorldDocumentEmitterUnits' field-dimension table (§5): a field absent from it is PUCK024, a unit the field
+    // does not accept is PUCK025.
+    private static JsonNode LowerUnitLiteral(double numVal, string unit, string? fieldKey, SourceSpan span, EvaluationScope scope) {
+        var lowerUnit = unit.ToLowerInvariant();
+        if (lowerUnit is "%" or "pct") {
+            return JsonValue.Create(numVal / 100.0);
+        }
+
+        if (fieldKey is not null && WorldDocumentEmitterUnits.TryConvert(fieldKey, numVal, unit, out var converted)) {
+            if (Math.Abs(converted % 1) < double.Epsilon) {
+                return JsonValue.Create((long)converted);
+            }
+            return JsonValue.Create(converted);
+        }
+
+        var kind = (fieldKey is null) ? WorldDocumentEmitterUnits.FieldDimensionKind.Unknown : WorldDocumentEmitterUnits.Classify(fieldKey);
+        if (kind == WorldDocumentEmitterUnits.FieldDimensionKind.Unknown) {
+            scope.Diagnostics.ReportError("PUCK024", $"'{fieldKey ?? "this field"}' admits no unit — remove the '{unit}' suffix", span);
+        } else {
+            var accepted = string.Join("/", WorldDocumentEmitterUnits.AcceptedUnitsFor(kind));
+            scope.Diagnostics.ReportError("PUCK025", $"'{fieldKey}' accepts {accepted}, not '{unit}'", span);
+        }
+        return JsonValue.Create(numVal);
+    }
+
+    private static JsonNode? EvaluateBinary(BinaryExpressionNode bin, EvaluationScope scope, string? fieldKey) {
+        var leftNode = LowerExpression(bin.Left, scope, fieldKey);
+        var rightNode = LowerExpression(bin.Right, scope, fieldKey);
 
         if (leftNode is JsonValue leftVal && rightNode is JsonValue rightVal) {
             if (leftVal.TryGetValue<double>(out var lNum) && rightVal.TryGetValue<double>(out var rNum)) {

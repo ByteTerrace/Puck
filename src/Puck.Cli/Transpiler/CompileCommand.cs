@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
+using Puck.World;
 using Puck.World.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Modules;
@@ -143,10 +144,12 @@ internal static class CompileCommand {
         var json = Encoding.UTF8.GetString(bytes: jsonBytes);
 
         if (validate && !diagnostics.HasErrors) {
-            WorldSemanticValidator.ValidateWorld(
+            EnsureVocabularyHooksInstalled();
+            WorldSemanticValidator.ValidateComposedWorld(
                 diagnostics: diagnostics,
                 loweredJson: jsonObject,
-                sourceMap: sourceMap
+                sourceMap: sourceMap,
+                sourcePath: sourcePath
             );
         }
 
@@ -242,6 +245,27 @@ internal static class CompileCommand {
         cancelEvent.WaitOne();
         Console.WriteLine(value: "[puck watch] Stopped.");
         return 0;
+    }
+
+    // WorldDefinitionValidator reads several catalogs (screen-machine engines, post-render extensions, probe kinds)
+    // through Puck.World.Schema's injection hooks rather than referencing their owning projects directly; some
+    // process root must wire them before the first validation runs (see Puck.World.Client.WorldSchemaVocabularyHooks
+    // and Puck.Cli.Automation.WorldPrepareCommand, which wires the same hooks for `puck world prepare`). Installing
+    // is idempotent (it only reassigns delegates), so a guard here is an optimization, not a correctness need.
+    private static bool s_vocabularyHooksInstalled;
+
+    private static void EnsureVocabularyHooksInstalled() {
+        if (s_vocabularyHooksInstalled) {
+            return;
+        }
+
+        Puck.World.Client.WorldSchemaVocabularyHooks.Install(
+            postRenderExtensionCheck: WorldPostRenderExtensions.IsShipped,
+            probeKindCheck: WorldProbeKinds.IsShipped,
+            screenMachineCartridgeCheck: WorldScreenMachineEngines.CompilesCartridges,
+            screenMachineEngineCheck: WorldScreenMachineEngines.IsRegistered
+        );
+        s_vocabularyHooksInstalled = true;
     }
 
     private static void PrintDiagnostics(DiagnosticBag diagnostics, string filePath, string sourceText) {

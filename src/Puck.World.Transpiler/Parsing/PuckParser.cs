@@ -6,7 +6,7 @@ using Puck.World.Transpiler.Diagnostics;
 namespace Puck.World.Transpiler.Parsing;
 
 /// <summary>High-performance recursive-descent parser for the Puck authoring language.</summary>
-public static class PuckParser {
+public static partial class PuckParser {
     private static readonly PuckWhiteSpaceParser WhiteSpace = new();
 
     /// <summary>Parses the entire Puck source text into a <see cref="DocumentNode"/>, collecting all diagnostics with resilient recovery.</summary>
@@ -275,6 +275,10 @@ public static class PuckParser {
             return new TemplateNode(Name: templateName, Parameters: parameters, Body: body, Offset: startOffset, Length: len, Line: line, Column: col);
         }
 
+        if (TryMatchKeyword(context, "rule")) {
+            return ParseRuleBlock(context, startOffset, line, col, diagnostics);
+        }
+
         // Addon capability request: request Mutate "section:state"
         if (TryMatchKeyword(context, "request")) {
             SkipWhiteSpace(context);
@@ -330,6 +334,11 @@ public static class PuckParser {
             throw CreateException(context, $"Unexpected token '{cursor.Current}' while parsing statement");
         }
 
+        // Raw position right after `firstId`, before the whitespace skip below can erase the newline a bare
+        // keyword statement (§4.2's `solid` flag) depends on — see the fallback at the bottom of this method.
+        var afterFirstIdPosition = cursor.Position;
+        var afterFirstIdOffset = cursor.Offset;
+
         SkipWhiteSpace(context);
 
         // Check if invocation: name(...)
@@ -377,6 +386,15 @@ public static class PuckParser {
             }
         }
 
+        // Bare keyword statement: nothing else was found on `firstId`'s own line, and no block/property/call shape
+        // matched — e.g. the `solid` flag inside a `placement { }` row (§4.2). A last resort, tried only once every
+        // other statement shape above has failed, so it can never shadow a multi-line block header.
+        if (context.Scanner.Buffer[startOffset] != '"' && AtEndOfLogicalStatement(context.Scanner.Buffer, afterFirstIdOffset)) {
+            cursor.ResetPosition(afterFirstIdPosition);
+            var flagLen = afterFirstIdOffset - startOffset;
+            return new FlagStatementNode(Name: firstId, Offset: startOffset, Length: flagLen, Line: line, Column: col);
+        }
+
         throw CreateException(context, $"Unexpected token sequence after '{firstId}'");
     }
 
@@ -398,6 +416,16 @@ public static class PuckParser {
 
         if (!TryConsume(context, '}')) {
             throw CreateException(context, $"Expected '}}' closing block for '{identifier}'");
+        }
+
+        // A placement row (§4.2) authoring both the bare `solid` flag and an explicit `solid: { }` override leaves
+        // the emitter no single answer for the field — diagnosed here, where both spellings are already visible.
+        if (string.Equals(identifier, "placement", StringComparison.Ordinal)) {
+            var sawBareSolid = statements.Exists(static s => s is FlagStatementNode { Name: "solid" });
+            var sawSolidProperty = statements.Exists(static s => s is PropertyNode { Name: "solid" });
+            if (sawBareSolid && sawSolidProperty) {
+                diagnostics?.ReportError("PUCK028", $"placement '{name}' authors both the bare 'solid' flag and an explicit 'solid: {{ }}' override", new SourceSpan(startOffset, context.Scanner.Cursor.Offset - startOffset, line, col));
+            }
         }
 
         var len = context.Scanner.Cursor.Offset - startOffset;
@@ -615,8 +643,10 @@ public static class PuckParser {
             return ParseNumberWithOptionalUnit(context);
         }
 
-        // Identifier, boolean, or null
-        if (TryReadIdentifier(context, out var ident)) {
+        // Identifier, boolean, or null — extended (TryReadExtendedName) so a reserved-channel argument like
+        // `$board:cellOf:board:placement:$each` or a `$zones[...]`-folded selector (§9-A8) reads as one token here,
+        // the same way ExpressionSpelling's own lexer folds it.
+        if (TryReadExtendedName(context, out var ident)) {
             var len = cursor.Offset - startOffset;
 
             if (string.Equals(ident, "true", StringComparison.Ordinal)) {

@@ -1,4 +1,5 @@
 using System.Text;
+using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
 using Puck.World.Transpiler.Parsing;
@@ -65,30 +66,23 @@ internal static class PuckWorldLoader {
         }
 
         var jsonObject = loweringResult.Value;
-        var rawJson = jsonObject.ToJsonString();
-        var rawBytes = Encoding.UTF8.GetBytes(s: rawJson);
-
-        var docSource = new FilePuckDocumentSource();
+        var rawBytes = Encoding.UTF8.GetBytes(s: jsonObject.ToJsonString());
         var finalBytes = rawBytes;
 
-        if (rawJson.Contains($"\"{WorldDocumentBasis.BasisMemberName}\"", StringComparison.Ordinal) ||
-            rawJson.Contains($"\"{WorldDocumentBasis.ImportsMemberName}\"", StringComparison.Ordinal)) {
-            if (!WorldDefinitionFileSource.TryComposeChainWithImports(
-                source: docSource,
-                rootResolvedName: path,
-                rootBytes: rawBytes,
-                composed: out var composed,
-                chainBytes: out _,
-                reason: out var composeReason
-            )) {
-                source = null!;
-                failure = $"[world] definition refused: {path} composition refused: {composeReason}";
-                return false;
-            }
+        if (!PuckDocumentComposer.TryComposeWorldDocument(
+            rootResolvedPath: path,
+            rootBytes: rawBytes,
+            composed: out var composed,
+            chainBytes: out _,
+            reason: out var composeReason
+        )) {
+            source = null!;
+            failure = $"[world] definition refused: {path} composition refused: {composeReason}";
+            return false;
+        }
 
-            if (composed is not null) {
-                finalBytes = Encoding.UTF8.GetBytes(s: composed.ToJsonString());
-            }
+        if (composed is not null) {
+            finalBytes = Encoding.UTF8.GetBytes(s: composed.ToJsonString());
         }
 
         var directory = (Path.GetDirectoryName(path: path) is { Length: > 0 } dir ? dir : AppContext.BaseDirectory);
@@ -114,43 +108,5 @@ internal static class PuckWorldLoader {
         );
         failure = string.Empty;
         return true;
-    }
-
-    private sealed class FilePuckDocumentSource : IWorldDocumentSource {
-        public bool TryRead(string name, string referrerName, out string resolvedName, out byte[]? content, out string reason) {
-            content = null;
-            try {
-                var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: referrerName)) ?? ".");
-                resolvedName = Path.GetFullPath(path: Path.Combine(path1: directory, path2: name));
-            } catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) {
-                resolvedName = name;
-                reason = $"cannot resolve path '{name}' from {referrerName}: {ex.Message}";
-                return false;
-            }
-
-            if (!File.Exists(path: resolvedName)) {
-                reason = $"document {resolvedName} (named by {referrerName}) does not exist.";
-                return false;
-            }
-
-            try {
-                if (resolvedName.EndsWith(".puck", StringComparison.OrdinalIgnoreCase)) {
-                    var puckText = File.ReadAllText(path: resolvedName);
-                    var doc = PuckParser.ParseDocument(source: puckText);
-                    var lowered = WorldDocumentEmitter.Lower(
-                        basePath: Path.GetDirectoryName(path: resolvedName),
-                        document: doc
-                    );
-                    content = Encoding.UTF8.GetBytes(s: lowered.ToJsonString());
-                } else {
-                    content = File.ReadAllBytes(path: resolvedName);
-                }
-                reason = string.Empty;
-                return true;
-            } catch (Exception ex) {
-                reason = $"cannot read document {resolvedName}: {ex.Message}";
-                return false;
-            }
-        }
     }
 }
