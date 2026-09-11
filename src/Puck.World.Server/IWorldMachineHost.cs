@@ -112,12 +112,31 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="links">The declared cable groups, derived from the live definition's machine sources
     /// (<c>WorldDefinition.MachineCableGroups()</c>).</param>
     void ReconcileLinks(IReadOnlyList<WorldMachineCableGroup> links);
+    /// <summary>Prepares the machine-runtime delta between <paramref name="current"/> and <paramref name="candidate"/>.</summary>
+    /// <param name="current">The current live definition, or <see langword="null"/> at boot.</param>
+    /// <param name="candidate">The candidate definition to prepare against.</param>
+    /// <param name="plan">The prepared plan on success; must be disposed if not committed.</param>
+    /// <param name="reason">A refusal reason on failure.</param>
+    /// <returns><see langword="true"/> when preparation succeeded.</returns>
+    bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason);
+    /// <summary>Commits a previously prepared plan.</summary>
+    /// <param name="plan">The prepared plan.</param>
+    void Commit(IWorldMachinePreparedPlan plan);
+    /// <summary>Finishes and publishes a committed plan.</summary>
+    /// <param name="plan">The committed plan.</param>
+    void Finish(IWorldMachinePreparedPlan plan);
     /// <summary>Reconciles the host's machine slots to a mutated screen list — the live-application half of an
     /// <c>UpsertScreen</c>/<c>RemoveScreen</c> world mutation, called from <see cref="WorldServer"/>'s own Install
     /// path when the definition changes.</summary>
     /// <param name="screens">The mutated screen list (the live definition's screens).</param>
     /// <returns>The screen indices removed this call — feed each to <see cref="WorldEngagement.DissolveScreen"/>.</returns>
     IReadOnlyList<int> ReconcileScreens(IReadOnlyList<WorldScreen> screens);
+    /// <summary>Resolves a state-symbol name on the machine at <paramref name="index"/> to its bus address.</summary>
+    /// <param name="index">The engine screen-surface index.</param>
+    /// <param name="symbol">The symbol name.</param>
+    /// <param name="address">The resolved bus address.</param>
+    /// <returns><see langword="true"/> when the symbol was found on the booted machine's cartridge.</returns>
+    bool TryResolveSymbol(int index, string symbol, out int address);
     /// <summary>Moves declared relative machine content resolution to a new world document.</summary>
     /// <param name="documentPath">The installed world document path.</param>
     void SetDocumentPath(string? documentPath);

@@ -1,4 +1,4 @@
-# Puck.World.Addons — the addon guest host and the screen-machine host
+# Puck.World.Addons — the addon guest host
 
 This project owns the mounted addon guest runtime: `WorldAddonRuntime` (the
 `IWorldAddonHost` implementation), `WorldAddonMutationDecoder` (the addon
@@ -6,55 +6,17 @@ mutation seam's stage 6 hand-walked JSON decode), `WorldAddonWire` (the
 World-side ABI vocabulary mappings — capability bits, grant-rule-to-verdict),
 `AddonMutateRefusal` (the `addon.mutate` door's cataloged refusal reasons),
 and `AddonSimulationPump` (the crossing from a guest's decoded output cells
-to typed, vocabulary-validated submissions). It also owns the screen-machine
-host under `Machines/` (below) — a second, unrelated mounted-guest kind that
-shares the same "references Server, never the reverse" shape. It references
-[`Puck.World.Server`](../Puck.World.Server/README.md) directly — the two
-seam interfaces (`IWorldAddonHost`, `IWorldMachineHost`) and the wire-format
-records they persist (`WorldAddonReceipt`) live there instead, so
-`WorldServer` never names this project's concrete types.
+to typed, vocabulary-validated submissions). It is dedicated strictly to WASM
+scripting guests and remains completely free of emulator or screen-machine
+dependencies (which live in [`Puck.World.Machines`](../Puck.World.Machines/README.md)).
+It references [`Puck.World.Server`](../Puck.World.Server/README.md) directly — the
+seam interface (`IWorldAddonHost`) and the wire-format records it persists
+(`WorldAddonReceipt`) live there instead, so `WorldServer` never names this
+project's concrete types.
 
 Project references: `Puck.World.Server`, `Puck.Scripting` (the WASM guest
-ABI `AddonSimulationPump` validates against), `Puck.Maths`, `Puck.Assets`
-(the module bytes a mount reads), and the screen-machine engines'
-own projects — `Puck.AdvancedGamingBrick`, `Puck.HumbleGamingBrick`,
-`Puck.HumbleGamingBrick.Forge` (the Tune instrument's compile chain).
-
-## Screen machines (`Machines/WorldMachineHost.cs`, `Machines/WorldScreenMachineEngines.cs`)
-
-`WorldMachineHost` — namespaced `Puck.World.Server` (it implements that
-project's `IWorldMachineHost` seam and is constructed only from a
-composition root, never named directly by another Server file) — owns
-boot, per-tick stepping, cable-linking, live reconfiguration, and
-memory-peek/poke for every declared screen's machine. `TryPokeMessage`
-forces one byte in through the SAME `IMachineMemoryPeek` capability
-`TryPeekMessage` reads through — `Server.WorldServer.MachineMemory.cs`'s
-`screens[].memory` Write bindings are its one caller. `WorldScreenMachineEngines.All`
-is the single source of truth for which `IScreenMachineEngine`s this build
-ships (the emulator cores, the Tune instrument), read by both composition
-roots' pre-container `WorldExtensionVocabularyHook` wiring so a
-document-declared engine key validates identically on the desktop and the
-silo. This is the fold that keeps the emulator cores and `Puck.SdfVm` out of
-`Puck.World.Server`'s own references — a machine is a mounted guest, like a
-WASM addon, and a browser or silo build of Server needs neither. See
-[`Puck.World.Server`'s README](../Puck.World.Server/README.md#screen-machines-iworldmachinehostcs)
-for the seam contract, the CAS-pinned boot/select path, and the replay-arm
-latches this host participates in.
-
-A machine source whose `contentPath` ends in `.cartridge.json` names an
-authored `puck.cartridge.v1` document rather than a ROM image.
-`WorldScreenMachineEngines.CartridgeCompilers` pairs each engine that
-compiles one with its own forge (`gaming-brick` with `HgbCartridgeCompiler`,
-`advanced-gaming-brick` with `AgbCartridgeCompiler`), and `WorldMachineHost`
-parses and compiles the document after the engine resolves and boots the
-compiled bytes exactly as it boots a file — the CAS signature still covers the
-bytes read off disk, and the slot records a `WorldMachineCartridge` (the
-source's canonical hash and the image's hash) that `WorldMachineState.Cartridge`
-carries to `screen.state`. A document the forge refuses faults the bind with
-the forge's own message; a cartridge path on an engine with no forge refuses at
-document validation through `WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck`,
-which `WorldScreenMachineEngines.CompilesCartridges` answers. The two shipped
-cartridges live under `src/Puck.World/Assets/cartridges/`.
+ABI `AddonSimulationPump` validates against), `Puck.Maths`, and `Puck.Assets`
+(the module bytes a mount reads).
 
 `IWorldAddonHost` implements the shared `IWorldExtensionRuntime` contract with
 recomputed contributions. Capability-manifest matching is shared with recorded

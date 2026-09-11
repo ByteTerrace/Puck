@@ -568,6 +568,9 @@ public sealed partial class WorldServer {
         bool[]? newRebuildTickCollided = null;
         var rebuildAddonPlanCommitted = false;
 
+        IWorldMachinePreparedPlan? rebuildMachinePlan = null;
+        var rebuildMachinePlanCommitted = false;
+
         // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
         // shape for why: rebuildAddonPlan starts null, so a return before TryPrepare ever succeeds leaves the
         // finally a no-op, and a downstream throw from contention-array staging, Install, or Commit alike still
@@ -612,6 +615,22 @@ public sealed partial class WorldServer {
                 return false;
             }
 
+            if (!m_machines.TryPrepare(
+                candidate: candidate,
+                current: m_definition,
+                plan: out rebuildMachinePlan,
+                reason: out var rebuildMachineReason
+            )) {
+                RejectRebuild(
+                    connectionId: connectionId,
+                    correlationId: correlationId,
+                    reason: $"screen machine {rebuildMachineReason}",
+                    verb: verb
+                );
+
+                return false;
+            }
+
             SwapSolids(solids: rebuildSolids);
             if (request.Kind != WorldRebuildKind.Reset) {
                 m_machines.SetDocumentPath(documentPath: request.PathHint);
@@ -640,9 +659,18 @@ public sealed partial class WorldServer {
                     m_tickCollided = newRebuildTickCollided!;
                 }
             }
+
+            if (rebuildMachinePlan is not null) {
+                m_machines.Commit(plan: rebuildMachinePlan);
+                rebuildMachinePlanCommitted = true;
+            }
         } finally {
             if (!rebuildAddonPlanCommitted) {
                 rebuildAddonPlan?.Dispose();
+            }
+
+            if (!rebuildMachinePlanCommitted) {
+                rebuildMachinePlan?.Dispose();
             }
         }
 
@@ -712,6 +740,10 @@ public sealed partial class WorldServer {
         // ACTUALLY granted under the candidate, never a mount report pinned to the table this rebuild just replaced.
         if (rebuildAddonPlanCommitted) {
             m_addons!.Finish(plan: rebuildAddonPlan!);
+        }
+
+        if (rebuildMachinePlanCommitted) {
+            m_machines.Finish(plan: rebuildMachinePlan!);
         }
 
         // Reset targets the base WITHOUT moving it (the whole point: repeated resets always land on the same base
@@ -1371,6 +1403,9 @@ public sealed partial class WorldServer {
         bool[]? newTickCollided = null;
         var addonPlanCommitted = false;
 
+        IWorldMachinePreparedPlan? machinePlan = null;
+        var machinePlanCommitted = false;
+
         try {
             if (AffectsAddons(mutation: mutation)) {
                 if (m_addons is not { } addonsForPrepare) {
@@ -1407,6 +1442,24 @@ public sealed partial class WorldServer {
                         principal: out newTickWrittenPrincipal,
                         collided: out newTickCollided
                     );
+                }
+            }
+
+            if (AffectsScreens(mutation: mutation)) {
+                if (!m_machines.TryPrepare(
+                    candidate: candidate,
+                    current: m_definition,
+                    plan: out machinePlan,
+                    reason: out var machineReason
+                )) {
+                    Reject(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        mutation: mutation,
+                        reason: (machineReason ?? "screen machine preparation refused")
+                    );
+
+                    return false;
                 }
             }
 
@@ -1454,9 +1507,18 @@ public sealed partial class WorldServer {
                     m_tickCollided = newTickCollided!;
                 }
             }
+
+            if (machinePlan is not null) {
+                m_machines.Commit(plan: machinePlan);
+                machinePlanCommitted = true;
+            }
         } finally {
             if (!addonPlanCommitted) {
                 addonPlan?.Dispose();
+            }
+
+            if (!machinePlanCommitted) {
+                machinePlan?.Dispose();
             }
         }
 
@@ -1468,6 +1530,10 @@ public sealed partial class WorldServer {
 
         if (addonPlanCommitted) {
             m_addons!.Finish(plan: addonPlan!);
+        }
+
+        if (machinePlanCommitted) {
+            m_machines.Finish(plan: machinePlan!);
         }
 
         // A defaults-class mutation edits what the NEXT boot wakes on while the live

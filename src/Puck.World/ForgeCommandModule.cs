@@ -1,16 +1,15 @@
-using Puck.AdvancedGamingBrick.Forge;
 using Puck.Assets.Documents;
 using Puck.Commands;
 using Puck.GamingBricks.Forge;
-using Puck.HumbleGamingBrick.Forge;
 using Puck.World.Protocol;
 using Puck.World.Server;
 
 namespace Puck.World;
 
 /// <summary>Local document authoring and native cartridge compilation, available in every boot shape.</summary>
-internal sealed class ForgeCommandModule(WorldServer server, IServerLink link) : ICommandModule {
+internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, IEnumerable<ICartridgeCompiler>? compilers = null) : ICommandModule {
     private readonly Dictionary<WorldPrincipal, CartridgeDraft> m_drafts = [];
+    private readonly IEnumerable<ICartridgeCompiler>? m_compilers = compilers;
 
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Command(name: "new", grammar: "<cgb|agb> <title>", detail: "Creates a blank cartridge document.");
@@ -30,6 +29,24 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link) :
         bindability: CommandBindability.Unbindable, name: "forge." + name,
         description: $"forge.{name} {grammar} — {detail} Drafts belong to the acting local console or seat; file paths are explicit and relative to the host working directory.",
         handler: (context, args) => Execute(name: name, grammar: grammar, context: context, args: args));
+
+    private ICartridgeCompiler ResolveCompiler(string target) {
+        if (m_compilers is not null) {
+            foreach (var compiler in m_compilers) {
+                if (string.Equals(a: compiler.Target, b: target, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                    return compiler;
+                }
+            }
+        }
+
+        foreach (var compiler in WorldScreenMachineEngines.CartridgeCompilers.Values) {
+            if (string.Equals(a: compiler.Target, b: target, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                return compiler;
+            }
+        }
+
+        throw new InvalidOperationException(message: $"No cartridge compiler registered for target '{target}'.");
+    }
 
     private CommandResult Execute(string name, string grammar, CommandContext context, WireArgs args) {
         var principal = context.ActingPrincipal();
@@ -75,11 +92,32 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link) :
                         if (!server.Grants.Allows(principal: principal, capability: WorldCapability.Control, subject: GrantSubject.Screen(index: index))) { return CommandResult.Error(output: "[forge.play: acting principal lacks Control over the screen]"); }
                     }
                     var document = draft.Check();
-                    ICartridgeCompiler compiler = document.Target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();
+                    var compiler = ResolveCompiler(target: document.Target);
                     var result = compiler.Compile(document: document);
                     var path = name == "build" ? null : Write(path: WorldCommandArguments.RawAfter(context: context, args: in args, tokens: name == "play" ? 2 : 1), bytes: result.Rom);
                     if (name == "play") {
-                        link.SubmitScreenOp(op: new WorldScreenOp.Insert(Index: index, ContentPath: path!, EngineId: result.Target == "agb" ? "advanced-gaming-brick" : "gaming-brick", Options: result.Target == "agb" ? "stub" : "cgb"), principal: principal);
+                        var existing = server.Definition.Screens.FirstOrDefault(s => s.Index == index);
+                        var source = new WorldScreenSource.Machine(
+                            Engine: compiler.EngineId,
+                            ContentPath: path!,
+                            Options: result.Target == "agb" ? "stub" : "cgb",
+                            Cable: (existing?.Source is WorldScreenSource.Machine prevMachine ? prevMachine.Cable : null)
+                        );
+                        var screen = (existing is not null)
+                            ? existing with { Source = source }
+                            : new WorldScreen(
+                                HalfDepth: 0.05f,
+                                HalfHeight: 0.45f,
+                                HalfWidth: 0.8f,
+                                Index: index,
+                                Origin: new DocumentVector3(0f, 1.5f, 0f),
+                                Right: new DocumentVector3(1f, 0f, 0f),
+                                Round: 0.02f,
+                                Route: WorldScreenRoute.Passive,
+                                Source: source,
+                                Up: new DocumentVector3(0f, 1f, 0f)
+                            );
+                        link.Submit(mutation: new WorldMutation.UpsertScreen(Principal: principal, Screen: screen));
                     }
                     var symbols = string.Join(separator: ", ", values: result.Variables.Select(selector: pair => $"{pair.Key}=0x{pair.Value:X8}"));
                     return new CommandResult(Output: $"[forge.{name}: {result.Target} {result.Rom.Length} bytes; source={result.SourceHash}; variables={symbols}{(path is null ? "" : $"; file={path}")}{(name == "play" ? "; insert submitted (server reports acceptance)" : "")}]");
@@ -99,3 +137,4 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link) :
         return path;
     }
 }
+

@@ -21,6 +21,9 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
     private const ushort RasterRowAddress = FrameworkMemoryMap.Scratch + 1;
 
     /// <inheritdoc />
+    public string EngineId => "gaming-brick";
+
+    /// <inheritdoc />
     public string Target => "cgb";
 
     /// <inheritdoc />

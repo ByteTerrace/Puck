@@ -34,6 +34,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     public const string ContentAbsentSignature = "absent";
 
     private readonly WorldExtensionRegistry<IScreenMachineEngine> m_engines;
+    private readonly WorldExtensionRegistry<ICartridgeCompiler> m_compilers;
 
     private bool m_disposed;
     private string? m_documentDirectory;
@@ -44,19 +45,31 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     private readonly List<int> m_reconcileRemovals = new();
     private readonly WorldOutputHub? m_narrationHub;
 
-    /// <summary>Initializes the host over the world's declared screens: a booted machine for each declared machine
-    /// screen whose content file exists and whose engine resolves (a missing file or unknown engine leaves the slot
-    /// unbound with a visible fault — loud data, no crash).</summary>
+    /// <summary>Initializes the host over the world's declared screens using the registered engines.</summary>
     /// <param name="screens">The world's diegetic screens (<see cref="WorldDefinition.Screens"/>).</param>
     /// <param name="engines">The registered screen-machine engines (DI-collected) a declared or inserted machine
     /// resolves against.</param>
     /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
     /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
     /// leave it undelivered — this host carries no single owning server of its own.</param>
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null)
+        : this(screens: screens, engines: engines, compilers: null, documentPath: documentPath, narrationHub: narrationHub) { }
+
+    /// <summary>Initializes the host over the world's declared screens: a booted machine for each declared machine
+    /// screen whose content file exists and whose engine resolves (a missing file or unknown engine leaves the slot
+    /// unbound with a visible fault — loud data, no crash).</summary>
+    /// <param name="screens">The world's diegetic screens (<see cref="WorldDefinition.Screens"/>).</param>
+    /// <param name="engines">The registered screen-machine engines (DI-collected) a declared or inserted machine
+    /// resolves against.</param>
+    /// <param name="compilers">The registered cartridge compilers (DI-collected), or <see langword="null"/> to fall back
+    /// to <see cref="WorldScreenMachineEngines.CartridgeCompilers"/>.</param>
+    /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
+    /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
+    /// leave it undelivered — this host carries no single owning server of its own.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Two engines register one id — a composition-root error, thrown at boot
     /// rather than resolved last-writer-wins.</exception>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null) {
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, IEnumerable<ICartridgeCompiler>? compilers, string? documentPath = null, WorldOutputHub? narrationHub = null) {
         ArgumentNullException.ThrowIfNull(argument: screens);
         ArgumentNullException.ThrowIfNull(argument: engines);
 
@@ -67,6 +80,10 @@ public sealed class WorldMachineHost : IWorldMachineHost {
         m_engines = new WorldExtensionRegistry<IScreenMachineEngine>(
             extensions: engines,
             keyOf: static engine => engine.Id
+        );
+        m_compilers = new WorldExtensionRegistry<ICartridgeCompiler>(
+            extensions: (compilers ?? WorldScreenMachineEngines.CartridgeCompilers.Values),
+            keyOf: static compiler => compiler.EngineId
         );
         m_documentDirectory = DocumentDirectory(documentPath: documentPath);
 
@@ -123,6 +140,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             content: content,
             bytes: out var bytes,
             cartridge: out var cartridge,
+            compilation: out var compilation,
             fault: out var resolveFault
         )) {
             slot.DeclaredFault = resolveFault;
@@ -149,6 +167,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             slot.MachineOptions = machine.Options;
             slot.MachineContentHash = WorldDefinitionFileSource.ComputeContentHash(content: content);
             slot.Cartridge = cartridge;
+            slot.Compilation = compilation;
         } catch (ArgumentException exception) {
             slot.DeclaredFault = exception.Message;
             if (m_narrationHub is { HasNarrationSink: true }) {
@@ -356,6 +375,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             content: content,
             bytes: out var bytes,
             cartridge: out var cartridge,
+            compilation: out var compilation,
             fault: out var resolveFault
         )) {
             MachineLifecycleTap?.Invoke(
@@ -398,6 +418,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
         slot.MachineOptions = options;
         slot.MachineContentHash = contentHash;
         slot.Cartridge = cartridge;
+        slot.Compilation = compilation;
         slot.DeclaredFault = null;
         slot.FramesStepped = 0;
         MachineLifecycleTap?.Invoke(
@@ -416,28 +437,28 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     // (WorldScreenMachineEngines.CartridgeCompilers) — the same compiler forge.export writes with, so a cabinet runs
     // exactly the image the document would export — and any other content is the image itself. A forge refusal is
     // the fault, verbatim, so an author reads the forge's own message from screen.state.
-    private static bool TryResolveContent(IScreenMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out string? fault) {
+    private bool TryResolveContent(IScreenMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out CartridgeCompilation? compilation, out string? fault) {
         if (!WorldScreenSource.Machine.IsCartridgeDocumentPath(contentPath: contentPath)) {
             bytes = content;
             cartridge = null;
+            compilation = null;
             fault = null;
 
             return true;
         }
 
-        if (!WorldScreenMachineEngines.TryCartridgeCompiler(
-            engineId: engine.Id,
-            compiler: out var compiler
-        )) {
+        if (!m_compilers.TryGet(key: engine.Id, extension: out var compiler) &&
+            !WorldScreenMachineEngines.TryCartridgeCompiler(engineId: engine.Id, compiler: out compiler)) {
             bytes = [];
             cartridge = null;
+            compilation = null;
             fault = $"cartridge '{contentPath}' needs a forge, and engine '{engine.Id}' compiles none";
 
             return false;
         }
 
         try {
-            var compilation = compiler.Compile(document: CartridgeDocuments.Parse(utf8: content));
+            compilation = compiler.Compile(document: CartridgeDocuments.Parse(utf8: content));
 
             bytes = compilation.Rom;
             cartridge = new WorldMachineCartridge(
@@ -448,9 +469,10 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             fault = null;
 
             return true;
-        } catch (Exception exception) when ((exception is JsonException or DocumentValidationException or ArgumentException or InvalidOperationException)) {
+        } catch (Exception exception) when ((exception is JsonException or DocumentValidationException or ArgumentException or InvalidOperationException or CartridgeCapacityException)) {
             bytes = [];
             cartridge = null;
+            compilation = null;
             fault = $"cartridge '{contentPath}' refused: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
 
             return false;
@@ -1338,6 +1360,79 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     }
 
     /// <inheritdoc/>
+    public bool TryResolveSymbol(int index, string symbol, out int address) {
+        if (m_slots.TryGetValue(key: index, value: out var slot) &&
+            (slot.Compilation is { } comp) &&
+            comp.Variables.TryGetValue(key: symbol, value: out var variableAddress)) {
+            address = unchecked((int)variableAddress);
+
+            return true;
+        }
+
+        address = 0;
+
+        return false;
+    }
+
+    /// <summary>The prepare/commit plan for screen machine updates.</summary>
+    public sealed class PreparedMachinePlan : IWorldMachinePreparedPlan {
+        internal IReadOnlyList<WorldScreen> CandidateScreens { get; }
+        /// <inheritdoc/>
+        public int MachineCount { get; }
+
+        internal PreparedMachinePlan(IReadOnlyList<WorldScreen> candidateScreens, int machineCount) {
+            CandidateScreens = candidateScreens;
+            MachineCount = machineCount;
+        }
+
+        /// <inheritdoc/>
+        public void Dispose() { }
+    }
+
+    /// <inheritdoc/>
+    public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason) {
+        ArgumentNullException.ThrowIfNull(argument: candidate);
+
+        foreach (var screen in candidate.Screens) {
+            if (screen.Source is WorldScreenSource.Machine machine) {
+                if (!m_engines.TryGet(key: machine.Engine, extension: out _) && !WorldScreenMachineEngines.IsRegistered(key: machine.Engine)) {
+                    plan = null;
+                    reason = $"no screen-machine engine '{machine.Engine}'";
+
+                    return false;
+                }
+            }
+        }
+
+        var machineCount = 0;
+
+        foreach (var screen in candidate.Screens) {
+            if (screen.Source is WorldScreenSource.Machine) {
+                machineCount++;
+            }
+        }
+
+        plan = new PreparedMachinePlan(candidateScreens: candidate.Screens, machineCount: machineCount);
+        reason = null;
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public void Commit(IWorldMachinePreparedPlan plan) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+
+        if (plan is PreparedMachinePlan prepared) {
+            _ = ReconcileScreens(screens: prepared.CandidateScreens);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Finish(IWorldMachinePreparedPlan plan) {
+        ArgumentNullException.ThrowIfNull(argument: plan);
+    }
+
+    /// <inheritdoc/>
     public bool AnyEverPumped { get; private set; }
     /// <inheritdoc/>
     public Action<int, bool>? MachineLifecycleTap { get; set; }
@@ -1364,6 +1459,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     // One declared screen's machine slot: the persistent declared source (so ReconcileScreens can diff it), the
     // magazine + live selector, and at most one booted machine plus the bookkeeping world.save/screen.state need.
     private sealed class MachineSlot {
+        public CartridgeCompilation? Compilation { get; set; }
         public WorldMachineCartridge? Cartridge { get; set; }
         public string? DeclaredFault { get; set; }
         public WorldScreenSource? DeclaredSource { get; set; }
@@ -1388,6 +1484,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             MachineOptions = null;
             MachineContentHash = null;
             Cartridge = null;
+            Compilation = null;
             DeclaredFault = null;
         }
     }

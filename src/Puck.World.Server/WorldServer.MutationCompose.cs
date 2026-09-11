@@ -58,6 +58,9 @@ public sealed partial class WorldServer {
     // these two kinds is the whole trigger a live mutation needs — see IWorldAddonHost.TryPrepare's own remarks.
     private static bool AffectsAddons(WorldMutation mutation) => AnyMember(mutation, AffectsAddons) || (mutation is
         WorldMutation.UpsertAddon or WorldMutation.RemoveAddon);
+    // Whether a mutation touches the screens section — the transactional prepare/commit gate for screen machines.
+    private static bool AffectsScreens(WorldMutation mutation) => AnyMember(mutation, AffectsScreens) || (mutation is
+        WorldMutation.UpsertScreen or WorldMutation.RemoveScreen);
     // Whether a mutation can grow the SDF program past the probed render envelope (screen slabs / creation stamps — an
     // UpsertCreation re-shapes every live placement of it, so it measures too).
     private static bool AffectsRenderEnvelope(WorldMutation mutation) => AnyMember(mutation, AffectsRenderEnvelope) || (mutation is

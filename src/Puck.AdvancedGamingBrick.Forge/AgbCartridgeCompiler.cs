@@ -25,6 +25,9 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     private const uint VoidAddress = 0x02000080u;
 
     /// <inheritdoc />
+    public string EngineId => "advanced-gaming-brick";
+
+    /// <inheritdoc />
     public string Target => "agb";
 
     /// <inheritdoc />

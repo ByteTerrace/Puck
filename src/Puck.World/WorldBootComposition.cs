@@ -5,6 +5,7 @@ using Puck.Abstractions.Machines;
 using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
+using Puck.GamingBricks.Forge;
 using Puck.Hosting;
 using Puck.Input;
 using Puck.Launcher;
@@ -254,14 +255,9 @@ internal static class WorldBootComposition {
         // faults by name (no camera GPU tier) while a parameter binding finds no composed pass to write.
         services.AddWorldProbes();
 
-        // The screen-machine engines — read from WorldScreenMachineEngines.All, the ONLY place a concrete engine type
-        // is named in World (WorldDataHookInstaller reads the SAME list to install the load-time registered-key
-        // check, so the two can never drift). A declared or inserted machine screen resolves against this
-        // DI-registered set by engine id. Core because Server.WorldMachineHost (below) needs them at construction
-        // regardless of boot shape; nothing here opens a GPU device.
-        foreach (var engine in WorldScreenMachineEngines.All) {
-            services.AddSingleton<IScreenMachineEngine>(implementationInstance: engine);
-        }
+        // Register the shipped first-class gaming brick screen machine extensions and cartridge compilers.
+        services.AddHumbleGamingBrick();
+        services.AddAdvancedGamingBrick();
 
         // The reserved derived-face slot range (None-sourced placeholders, so a creation FACE appearing at a later
         // delivery re-points a slot that already exists — the render provider key set is frozen at boot) —
@@ -293,6 +289,7 @@ internal static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => new WorldMachineHost(
             screens: ExpandedScreens(definition: sp.GetRequiredService<WorldDefinition>()),
             engines: sp.GetServices<IScreenMachineEngine>(),
+            compilers: sp.GetServices<ICartridgeCompiler>(),
             documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath,
             narrationHub: sp.GetRequiredService<WorldOutputHub>()
         ));
@@ -302,11 +299,12 @@ internal static class WorldBootComposition {
         services.AddSingleton<IWorldMachineHost>(implementationFactory: static sp => sp.GetRequiredService<WorldMachineHost>());
         // The screen-machine host builder every offline re-drive (WorldReplayTape/WorldReplayInspector/
         // WorldReplaySnapshot) and a spawned instance's own empty host (WorldInstanceHost) construct through —
-        // Puck.World.Server carries no reference to Puck.World.Addons.Machines' WorldMachineHost, so it cannot build
+        // Puck.World.Server carries no reference to Puck.World.Machines' WorldMachineHost, so it cannot build
         // one itself. Mirrors the addon seam's identical factory shape (below).
         services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationInstance: static (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
             screens: screens,
             engines: engines,
+            compilers: WorldScreenMachineEngines.CartridgeCompilers.Values,
             documentPath: documentPath,
             narrationHub: narrationHub
         ));

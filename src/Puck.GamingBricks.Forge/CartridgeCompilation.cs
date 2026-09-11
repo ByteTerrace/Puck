@@ -25,6 +25,8 @@ public sealed class CartridgeCapacityException : Exception {
 
 /// <summary>Compiles validated authored data to standalone native cartridge instructions and assets.</summary>
 public interface ICartridgeCompiler {
+    /// <summary>Gets the machine engine identifier this compiler targets.</summary>
+    string EngineId { get; }
     /// <summary>Gets the supported target token.</summary>
     string Target { get; }
     /// <summary>Validates and compiles a cartridge without reading files, environment variables or host time.</summary>
