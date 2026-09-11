@@ -433,7 +433,7 @@ public static class WorldPlacementStamper {
         }
     }
     // A static instance bakes the placement frame (and, for a parented volume, the parent shape's rest pose) into
-    // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a plume's column is
+    // the volume itself: no slot moves it. A mirrored copy keeps the unmirrored frame — a flow column is
     // symmetric about its own axis, so only its offset would differ, and the mirror plane is not applied here.
     private static void AppendStaticVolumes(CreationDocument creation, Vector3 origin, Quaternion rotation, float scale, ICollection<SdfVolume>? volumes) {
         if (

@@ -195,9 +195,18 @@ internal sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPop
     }
     private string DescribeBudget() {
         var render = ((renderProbe?.Node is { } node)
-            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), stepScale {node.LiveProgramStepScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (march ~{(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: CultureInfo.InvariantCulture)}x baseline)" : string.Empty)}{((node.LiveProgramStepScaleBinder is { } binder) ? $" bound by instance {binder.InstanceIndex} ({binder.Shape} x{binder.Factor.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} at instruction {binder.InstructionIndex}, unscoped)" : string.Empty)}"
+            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), globalStepScale {node.LiveProgramStepScale.ToString(format: "0.######", provider: CultureInfo.InvariantCulture)}{((node.LiveProgramStepScale is > 0f and < 1f) ? $" (global field bound {(1f / node.LiveProgramStepScale).ToString(format: "0.#", provider: CultureInfo.InvariantCulture)}x)" : string.Empty)}{((node.LiveProgramStepScaleBinder is { } binder) ? $" bound by instance {binder.InstanceIndex} ({binder.Shape} x{binder.Factor.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} at instruction {binder.InstructionIndex}, unscoped)" : string.Empty)}"
             : "renderer not built yet"
         );
+        if (renderProbe?.Node is { } rendered) {
+            var clamps = rendered.LiveProgramFieldScopeClamps;
+            render += $", scoped clamps {clamps.Count} ({clamps.Count(static clamp => clamp.ShapeCount > 1)} shared)";
+            if (clamps.Count > 0) {
+                var worst = clamps.MinBy(static clamp => clamp.StepScale);
+                render += string.Create(CultureInfo.InvariantCulture,
+                    $", worst scope stepScale {worst.StepScale:0.######} (field bound {1f / worst.StepScale:0.###}x, instance {worst.InstanceIndex}, instructions {worst.PushInstructionIndex}..{worst.PopInstructionIndex}, {worst.ShapeCount} shape(s))");
+            }
+        }
         var stampPoolWorstCase = (WorldPlacementPolicy.MaxStampRegistrations * WorldPlacementPolicy.MaxShapesPerStamp);
         var stampPool = $"stamp pool {WorldPlacementPolicy.MaxShapesPerStamp} shape(s)/stamp x {WorldPlacementPolicy.MaxStampRegistrations} registration(s) = {stampPoolWorstCase} worst-case instance(s) of {Puck.SignedDistance.SdfProgramBuilder.MaxInstances} ceiling ({(Puck.SignedDistance.SdfProgramBuilder.MaxInstances - stampPoolWorstCase)} headroom for statics/screens/avatars)";
         var farDistance = WorldRenderFarDistance.Resolve(defaults: server.Definition.Render);

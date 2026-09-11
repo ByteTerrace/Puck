@@ -128,7 +128,7 @@ void sdfIntegrateVolume(SdfVolumeData v, float3 localOrigin, float3 localDirecti
     transmissionOut = transmission;
 }
 
-// The one call site: composites every bounded volume whose slab intersects the ray — clipped to `surfaceDistance`
+// Composites every bounded volume whose slab intersects the ray — clipped to `surfaceDistance`
 // so a volume never paints through solid geometry — into `color`, in camera order (the associative
 // front-to-back rule, generalized past two disjoint volumes by an insertion sort on entry distance: farthest
 // composited first as the new background, nearest last so it draws on top).

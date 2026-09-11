@@ -65,7 +65,7 @@ public sealed class CreationEccentricityLawTests {
             Frames: null,
             Noise: null
         );
-    private static SdfProgram EmitStatic(Vector3 scale, bool inScope) {
+    private static SdfProgram EmitStatic(Vector3 scale, bool inScope, CreationDocument? document = null) {
         var builder = new SdfProgramBuilder();
         var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
 
@@ -80,7 +80,7 @@ public sealed class CreationEccentricityLawTests {
 
         CreationStampEmitter.Emit(
             builder: builder,
-            document: Document(scale: scale),
+            document: (document ?? Document(scale: scale)),
             inScope: inScope,
             materialFor: _ => material,
             transform: new CreationStampTransform(
@@ -100,9 +100,9 @@ public sealed class CreationEccentricityLawTests {
         return builder.Build(buildInstanceGrid: false);
     }
     // The dynamic emission path a body-stamped creation renders through (the shipped avatars' path).
-    private static SdfProgram EmitPool(Vector3 scale) {
+    private static SdfProgram EmitPool(Vector3 scale, CreationDocument? document = null) {
         var canonical = CreationCanonicalizer.Canonicalize(
-            document: Document(scale: scale),
+            document: (document ?? Document(scale: scale)),
             source: PrototypeId
         );
         var creation = new WorldPrototype(
@@ -149,6 +149,30 @@ public sealed class CreationEccentricityLawTests {
 
         return builder.Build(buildInstanceGrid: false);
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SharedFlareClampIsVisibleWhenTheGlobalScaleIsOne(bool pooled) {
+        var plain = Document(Vector3.One);
+        var document = plain with {
+            Shapes = [
+                plain.Shapes![0] with { Group = 1, Flare = new ShapeFlareDocument(2f, 0f, 1f) },
+                plain.Shapes[1] with { Group = 1 },
+                plain.Shapes[2] with { Group = 1, Blend = SdfBlendOp.Subtraction },
+            ],
+        };
+        Assert.True(CreationCanonicalizer.Validate(document).Count == 0);
+        var program = pooled
+            ? EmitPool(Vector3.One, document)
+            : EmitStatic(Vector3.One, inScope: true, document);
+        Assert.Equal(1f, program.StepScale);
+        Assert.Null(program.StepScaleBinder);
+        var clamp = Assert.Single(program.FieldScopeClamps);
+        Assert.Equal(3, clamp.ShapeCount);
+        Assert.InRange(clamp.StepScale, float.Epsilon, .99f);
+        Assert.Equal(program.Instructions[clamp.PopInstructionIndex].Data1.Y, clamp.StepScale);
+    }
+
     private static int ScopeCount(SdfProgram program) =>
         program.Instructions.Count(predicate: instruction => (instruction.Op == SdfOp.PushField));
 

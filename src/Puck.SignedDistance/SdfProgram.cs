@@ -243,6 +243,8 @@ public sealed partial class SdfProgram {
         // byte-identical; a factor-1 scope stays unpatched (Data1.y = 0 reads as no scale in the shader).
         var stepScale = AnalyzeLipschitz(convexPolygonProfiles: m_convexPolygonProfiles, instructions: m_instructions, sweepCurves: m_sweepCurves);
 
+        FieldScopeClamps = ReadFieldScopeClamps(instructionOwners);
+
         StepScaleBinder = AnalyzeStepScaleBinder(
             convexPolygonProfiles: m_convexPolygonProfiles,
             instances: m_instances,
@@ -517,6 +519,9 @@ public sealed partial class SdfProgram {
     /// every field scope), or <see langword="null"/> when no unscoped chain carries a factor above 1. The cost-sheet
     /// read-back behind <c>world.budget</c>: a frame-wide march tax names the instance and shape that levy it.</summary>
     public SdfStepScaleBinder? StepScaleBinder { get; }
+    /// <summary>Gets each non-unit clamp baked into a field scope, in instruction order. A shared scope applies
+    /// its clamp to all its shapes. Empty means no scope clamps, not necessarily a unit global step scale.</summary>
+    public IReadOnlyList<SdfFieldScopeClamp> FieldScopeClamps { get; }
     /// <summary>Gets a value indicating whether this program's ring-local cull grid depends on a per-frame dynamic
     /// transform. Static, unmaskable, parked, and grid-disabled programs have an invariant side table that the engine
     /// uploads once with the program; an active maskable dynamic instance requires the existing per-frame rebuild.</summary>

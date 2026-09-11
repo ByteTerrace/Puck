@@ -19,7 +19,7 @@ public sealed class ShapeCellsLawTests {
         Blend: SdfBlendOp.Union, Smooth: 0f, Group: 0, Cells: Cells);
     private static CreationDocument Document(ShapeDocument shape) => new(Schema: CreationDocument.CurrentSchema,
         Name: "cells", Palette: [new("#AAAAAA", null, null, null)], Shapes: [shape], Frames: null);
-    private static SdfProgram Emit(ShapeDocument shape, float scale, bool pooled) {
+    private static SdfProgram Emit(ShapeDocument shape, float scale, bool pooled, bool probe = false, float? probeScale = null) {
         var canonical = CreationCanonicalizer.Canonicalize(Document(shape), "cells");
         var builder = new SdfProgramBuilder();
         if (!pooled) {
@@ -34,7 +34,7 @@ public sealed class ShapeCellsLawTests {
             };
             var pool = new WorldStampPool();
             pool.Reconcile([], [creation], [], [new(0, creation, scale, WorldLookMotion.Default)]);
-            pool.Emit(builder, definition, probeWorstCase: false, maxPlacementScale: scale, slotBase: 0);
+            pool.Emit(builder, definition, probeWorstCase: probe, maxPlacementScale: probeScale ?? scale, slotBase: 0);
         }
         return builder.Build(buildInstanceGrid: false);
     }
@@ -81,6 +81,13 @@ public sealed class ShapeCellsLawTests {
         var plain = CreationStampEmitter.ShapeStampBound(Document(shape with { Cells = null }), 0, new(Vector3.Zero, Quaternion.Identity, 1f, null));
         var displaced = CreationStampEmitter.ShapeStampBound(Document(shape), 0, new(Vector3.Zero, Quaternion.Identity, 1f, null));
         Assert.True(displaced.Radius >= plain.Radius + Cells.Amplitude * .5f * 10f);
+    }
+    [Fact]
+    public void CapacityProbeWithoutPlacementsUsesFiniteCellParameters() {
+        var program = Emit(Shape with { Cells = null }, 1f, pooled: true, probe: true, probeScale: 0f);
+        var cell = program.Instructions.First(i => i.Op == SdfOp.CellDisplace);
+        Assert.Equal(1f, cell.Data0.X);
+        Assert.Equal(.1f, cell.Data0.Y);
     }
     [Fact]
     public void CellsRoundTripWithTheirUnsignedSeedAndMode() {

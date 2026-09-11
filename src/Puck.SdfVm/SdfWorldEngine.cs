@@ -55,7 +55,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int DecalDescriptorCount = MaxScreenSurfaces;
     private const int DecalWordsPerCell = 4; // one uint4 per cell/descriptor (KEEP IN SYNC with sdf-world.hlsli's sdfDecalCells)
     private const uint DynamicTransformBindingIndex = 9; // sdf-vm.hlsli's [[vk::binding(9, 0)]] / register(t2) (world path)
-    private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 Lanes (x = damage, y = thrust, z/w free — DynamicTransform.Lanes) (KEEP IN SYNC with sdf-vm.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in sdf-world.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's thrust read)
+    private const int DynamicTransformByteLength = ((sizeof(float) * 4) * 3); // 48-byte rigid transform: float4 position (xyz + .w = soft-shadow participation: 0 casts / 1 shadow-suppressed) + float4 orientation quaternion + float4 anonymous Lanes (DynamicTransform.Lanes) (KEEP IN SYNC with sdf-vm.hlsli sdfDynamicTransforms: position.w is read by sdfShadowParticipationActive's per-instance skip in sdf-world.hlsli, the third row by SDF_OP_LANE_ERODE's currentLanes and shade-volumes.hlsli's selected intensity lane)
     private const GpuPixelFormat Format = GpuPixelFormat.R8G8B8A8Unorm;
     // Ring-local frame instance grid (binding 47): rebuilt after dynamic transforms only when moving, maskable
     // instances exist; invariant programs seed every slot once at UploadProgram. Instance-cull reads it at t3; views
@@ -875,7 +875,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
                 Kind: GpuComputeBindingKind.StorageBufferRead
             ),
             // The bounded-volume buffer, APPENDED LAST so its SRV resolves to t43 (after the frame instance grid t42) —
-            // shade-volumes.hlsli's one call site at the end of renderView.
+            // shade-volumes.hlsli's renderView and sky-prepass call sites.
             new GpuComputeBinding(
                 Binding: VolumeBindingIndex,
                 Kind: GpuComputeBindingKind.StorageBufferRead

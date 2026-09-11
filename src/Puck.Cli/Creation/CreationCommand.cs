@@ -16,7 +16,7 @@ namespace Puck.Cli.Creation;
 /// usage. Exit codes: 0 succeeded, 1 the patched document was refused (sculpt) or the file failed to load (stats),
 /// 2 a usage error (unknown sculpt/prototype name, missing file).
 /// </summary>
-internal static class CreationCommand {
+internal static partial class CreationCommand {
     public static Command Create() => new(description: "Author creations through the sculpting library — list, apply, and inspect.", name: "creation") {
         SculptsCommand(),
         SculptCommand(),
@@ -57,7 +57,7 @@ internal static class CreationCommand {
     private static Command StatsCommand() {
         var worldOption = new Option<string>(name: "--world") { Description = "The world document to inspect.", Required = true };
         var prototypeOption = new Option<string?>(name: "--prototype") { Description = "Limit to one prototype id (default: every prototype carrying a creation document)." };
-        var command = new Command(description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, and palette slot usage.", name: "stats") { worldOption, prototypeOption };
+        var command = new Command(description: "Reports a creation's per-stamp shape count against the budget, counts by primitive/blend, which shapes use domain/onion/twist/bend/rounding, palette slot usage, and global/shared field clamps for static and pooled rest geometry.", name: "stats") { worldOption, prototypeOption };
 
         command.SetAction(action: parseResult => RunStats(
             prototypeId: parseResult.GetValue(option: prototypeOption),
@@ -167,6 +167,12 @@ internal static class CreationCommand {
                 document: prototype.Document!,
                 id: prototype.Id
             );
+            try {
+                ReportStepClamps(definition, prototype);
+            } catch (Exception exception) when (exception is InvalidOperationException or ArgumentException) {
+                Console.Error.WriteLine($"creation stats: '{prototype.Id}' step-clamp inspection failed — {exception.Message.ReplaceLineEndings(" ")}");
+                return 1;
+            }
         }
 
         return 0;
@@ -186,6 +192,18 @@ internal static class CreationCommand {
             values: shapes.Select(selector: static s => (s.Blend?.ToString() ?? "Union"))
         );
         Console.Out.WriteLine(value: $"  domain: {shapes.Count(predicate: static s => (s.Domain is { Count: > 0 }))}, onion: {shapes.Count(predicate: static s => (s.Onion is > 0))}, twist: {shapes.Count(predicate: static s => (s.Twist is not (null or 0f)))}, bend: {shapes.Count(predicate: static s => (s.Bend is not (null or 0f)))}, rounding: {shapes.Count(predicate: static s => (s.Rounding is > 0))}, dilate: {shapes.Count(predicate: static s => (s.Dilate is > 0))}, lift: {shapes.Count(predicate: static s => (s.Lift is not null))}, chamfer: {shapes.Count(predicate: static s => (s.Chamfer is > 0))}, panel: {shapes.Count(predicate: static s => (s.Panel is not null))}");
+
+        foreach (var shape in shapes) {
+            List<string> facets = [];
+            if (shape.Flare is not null) { facets.Add("flare"); }
+            if (shape.Shear is not null) { facets.Add("shear"); }
+            if (shape.Bumps is { Count: > 0 }) { facets.Add("bumps"); }
+            if (shape.Erode is not null) { facets.Add("erode"); }
+            if (shape.Cells is not null) { facets.Add("cells"); }
+            if (facets.Count > 0) {
+                Console.Out.WriteLine($"  shape {shape.Id} ({shape.Name?.Value ?? shape.Type.ToString()}): {string.Join(", ", facets)}");
+            }
+        }
 
         if (document.Palette is { Count: > 0 } palette) {
             var usage = new int[palette.Count];

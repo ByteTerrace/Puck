@@ -355,9 +355,9 @@ float3 sdfSampleGlyphDecal(uint4 descriptor, float2 uv, float halfWidth, float f
 #endif
 
 // Bounded emissive volumes (Puck.SignedDistance.SdfVolume — a participating medium, never a distance-field shape):
-// one uint4-free, 7-float4-per-volume table, APPENDED LAST in the views set — binding 48, Direct3D 12 register t43
+// one uint4-free, 10-float4-per-volume table, APPENDED LAST in the views set — binding 48, Direct3D 12 register t43
 // (after the frame instance grid t42). Stage 1 is the only kernel that shades, so it is the only one that binds it.
-// Decoded and integrated by shade-volumes.hlsli's one call site at the end of renderView. KEEP IN SYNC with
+// Decoded and integrated by shade-volumes.hlsli in renderView and the sky prepass. KEEP IN SYNC with
 // SdfWorldEngine.PackVolumes / SdfProgramBuilder.MaxVolumes.
 [[vk::binding(48, 0)]] StructuredBuffer<float4> sdfVolumes : register(t43);
 static const uint SdfVolumeCount = 8u;

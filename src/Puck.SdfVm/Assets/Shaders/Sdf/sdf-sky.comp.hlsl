@@ -8,9 +8,9 @@
 //
 // SHARES Stage 1's descriptor-set layout: SdfWorldEngine builds this kernel's pipeline from the SAME bindings array
 // sdf-world-views.comp.hlsl uses, so it binds against the SAME per-slot descriptor set Stage 1 already has — no new
-// descriptor set, no second binding layout. Only `viewports` (binding 2) and `sdfScreenLights` (binding 11, the
-// sky/lighting rows SdfWorldEngine.PackSkyFrame writes) are actually read; every other slot in the shared layout
-// goes untouched here. SDF_SCREEN_SOURCES is required even though this kernel never samples a screen source: it is
+// descriptor set, no second binding layout. Reads viewports, sky/lighting rows, bounded volumes, and the dynamic
+// transforms their frames and optional intensity lanes use. SDF_SCREEN_SOURCES is required even though this
+// kernel never samples a screen source: it is
 // the only configuration under which sdfScreenLights — and the real (non-pinned-literal) skyColor/lighting
 // accessors — are declared at all (sdf-world.hlsli's #else half returns the pinned defaults unconditionally, which
 // would make worldSkyEnabled() always false here). SDF_DYNAMIC_TRANSFORMS is required too: sdf-world.hlsli's
@@ -46,6 +46,10 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     float2 localUv = ((float2(id.xy) + 0.5) / float2(rectDims));
     float3 rayDirection = cameraRayDirection(view, localUv);
     float3 color = skyColor(rayDirection);
+
+    // Empty SDF tiles can still contain participating media. Match renderView's miss branch; a live tile replaces
+    // this result with its own integration clipped to the surface, so emission is never added twice.
+    color = shadeVolumes(color, view.position.xyz, rayDirection, worldFarDistance(view), id.xy, view.position.w);
 
     // render.tonemap: the SAME curve renderView applies to its own miss-branch sky (sdf-world.hlsli), in the same
     // place in the pixel's op order (before the dither), so a beam-culled tile's sky and a live tile's sky stay

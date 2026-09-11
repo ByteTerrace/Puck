@@ -80,6 +80,9 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
     /// <summary>Gets the last uploaded program's step-scale binder (see <see cref="SdfProgram.StepScaleBinder"/>), or
     /// <see langword="null"/> before the first upload and whenever nothing unscoped binds the step scale.</summary>
     public SdfStepScaleBinder? LiveProgramStepScaleBinder { get; private set; }
+    /// <summary>Gets the last uploaded program's non-unit field-scope clamps, or an empty list before upload.
+    /// These candidate-local bounds remain active when <see cref="LiveProgramStepScale"/> is one.</summary>
+    public IReadOnlyList<SdfFieldScopeClamp> LiveProgramFieldScopeClamps { get; private set; } = [];
     /// <summary>Gets whether <paramref name="name"/> is registered in this node's <c>children</c> map (see the
     /// constructor) — the read-back a caller (e.g. a <c>world.view.state</c> echo) uses to tell an unresolved child
     /// binding apart from a live one, since a slot naming an unregistered child falls back to the ordinary SDF
@@ -743,6 +746,7 @@ public sealed partial class SdfEngineNode : IRenderNode, IPassTimingSource, ICap
             LiveProgramInstances = frame.Program.Instances.Count;
             LiveProgramStepScale = frame.Program.StepScale;
             LiveProgramStepScaleBinder = frame.Program.StepScaleBinder;
+            LiveProgramFieldScopeClamps = frame.Program.FieldScopeClamps;
         }
 
         var bindingsTicks = cpuPhaseTimer.Stop();

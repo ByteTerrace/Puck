@@ -810,8 +810,11 @@ public sealed partial class WorldStampPool {
                     cellChain = cellChain.Translate(shapePosition * placementScale)
                         .Rotate(shapeRotation == default ? Quaternion.Identity : shapeRotation);
                 }
-                _ = cellChain.CellDisplace(relief.Frequency / placementScale,
-                    relief.Amplitude * placementScale, relief.Seed, relief.Mode, relief.Randomness);
+                // A capacity probe may have no live placement scale. It reserves instructions,
+                // so its representative relief keeps unit coordinates instead of dividing by zero.
+                var cellScale = probeWorstCase ? 1f : placementScale;
+                _ = cellChain.CellDisplace(relief.Frequency / cellScale,
+                    relief.Amplitude * cellScale, relief.Seed, relief.Mode, relief.Randomness);
             }
             _ = builder.PopField();
             EmitTrims(

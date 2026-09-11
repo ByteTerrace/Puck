@@ -206,7 +206,7 @@ public sealed partial class SdfWorldEngine {
                 : 1f
             );
             floats[(b + 4)] = transform.Orientation.X; floats[(b + 5)] = transform.Orientation.Y; floats[(b + 6)] = transform.Orientation.Z; floats[(b + 7)] = transform.Orientation.W;
-            // Lanes row: any op evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's thrust read)
+            // Lanes row: any op evaluating under this slot (SDF_OP_LANE_ERODE, shade-volumes.hlsli's selected intensity lane)
             // sees the current value through sdfDynamicTransforms[(3*slot)+2]; a shape under no slot reads zero.
             floats[(b + 8)] = transform.Lanes.X; floats[(b + 9)] = transform.Lanes.Y; floats[(b + 10)] = transform.Lanes.Z; floats[(b + 11)] = transform.Lanes.W;
         }

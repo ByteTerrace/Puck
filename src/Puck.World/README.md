@@ -28,7 +28,8 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 ## Run it
 
 For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/moth.md).
-It has inspection cameras, walking and flight poses, and live document reload.
+It pairs a rebuilt SDF avatar with the Moth Study, with inspection cameras,
+walking and flight poses, and live document reload.
 
 For service extensions, use the [configuration guide](../Puck.World.Server/ExtensionConfiguration.md)
 and the [Azure example](Assets/hosting/azure.extensions.example.json). The operator
