@@ -188,6 +188,30 @@ public sealed class TetrisCartridgeTests {
         return digits.ToString();
     }
 
+    [Fact]
+    public void WinningTheSecondModeLaunchesTheRocketAndReturnsToTheTitle() {
+        var result = new HgbCartridgeCompiler().Compile(document: Document());
+        using var machine = new VerifyMachineDriver(rom: result.Rom, label: "tetris-ending");
+
+        // Into the second mode: down on the menu picks it.
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 20);
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 40);
+        machine.RunFrames(buttons: JoypadButtons.Down, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.Start, frames: 4);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 60);
+        Assert.Equal(expected: 1, actual: machine.Read(address: (ushort)result.Variables["gtype"]));
+
+        // Reaching the target is what wins it, so the count is set to the target under the running game.
+        machine.Write(address: (ushort)result.Variables["lines"], value: 25);
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 10);
+        Assert.Equal(expected: 11, actual: machine.Read(address: (ushort)result.Variables["ph"]));
+
+        // The rocket climbs off the top, and the title comes back behind it.
+        machine.RunFrames(buttons: JoypadButtons.None, frames: 60 * 6);
+        Assert.Equal(expected: 8, actual: machine.Read(address: (ushort)result.Variables["ph"]));
+    }
+
     // Boot lands on the title, so a test that wants a game presses through the title and the mode menu. The waits
     // cover a screen painting itself and the well being wiped between them, both of which run a band a frame.
     private static void StartGame(VerifyMachineDriver machine) {

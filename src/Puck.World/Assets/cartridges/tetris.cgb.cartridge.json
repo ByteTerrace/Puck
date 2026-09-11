@@ -1598,6 +1598,14 @@
       "initial": 200
     },
     {
+      "name": "showrocket",
+      "initial": 0
+    },
+    {
+      "name": "rockety",
+      "initial": 200
+    },
+    {
       "name": "awardn",
       "initial": 0
     },
@@ -1672,6 +1680,22 @@
     {
       "name": "pcur",
       "initial": 0
+    },
+    {
+      "name": "rk0",
+      "initial": 200
+    },
+    {
+      "name": "rk1",
+      "initial": 200
+    },
+    {
+      "name": "rk2",
+      "initial": 200
+    },
+    {
+      "name": "rk3",
+      "initial": 200
     }
   ],
   "arrays": [
@@ -2197,7 +2221,419 @@
       "best"
     ]
   },
-  "sounds": [],
+  "sounds": [
+    {
+      "name": "theme-a",
+      "music": {
+        "schema": "puck.audio.v1",
+        "name": "theme-a",
+        "tempo": 9,
+        "patterns": [
+          [
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "B3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "D4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "B3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "D4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "B3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "D4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            }
+          ]
+        ],
+        "order": [
+          0
+        ],
+        "effects": null
+      }
+    },
+    {
+      "name": "theme-b",
+      "music": {
+        "schema": "puck.audio.v1",
+        "name": "theme-b",
+        "tempo": 11,
+        "patterns": [
+          [
+            {
+              "note": "D4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "F4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "F4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "D4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "F4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "F4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "G4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "G4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            }
+          ]
+        ],
+        "order": [
+          0
+        ],
+        "effects": null
+      }
+    },
+    {
+      "name": "theme-c",
+      "music": {
+        "schema": "puck.audio.v1",
+        "name": "theme-c",
+        "tempo": 7,
+        "patterns": [
+          [
+            {
+              "note": "G3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "B3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "D4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "G4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "D4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "B3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "G3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "E4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "C4",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "A3",
+              "duty": null,
+              "envelope": null
+            },
+            {
+              "note": "---",
+              "duty": null,
+              "envelope": null
+            }
+          ]
+        ],
+        "order": [
+          0
+        ],
+        "effects": null
+      }
+    },
+    {
+      "name": "settle",
+      "effect": {
+        "voice": "pulse1",
+        "rows": [
+          {
+            "note": "C3",
+            "duty": null,
+            "envelope": null
+          },
+          {
+            "note": "OFF",
+            "duty": null,
+            "envelope": null
+          }
+        ]
+      },
+      "frames": 2
+    },
+    {
+      "name": "sweepaway",
+      "effect": {
+        "voice": "noise",
+        "rows": [
+          {
+            "note": "C5",
+            "duty": null,
+            "envelope": null
+          },
+          {
+            "note": "C4",
+            "duty": null,
+            "envelope": null
+          },
+          {
+            "note": "OFF",
+            "duty": null,
+            "envelope": null
+          }
+        ]
+      },
+      "frames": 3
+    }
+  ],
   "layers": [],
   "raster": [],
   "rules": [
@@ -3622,6 +4058,10 @@
           ]
         },
         {
+          "kind": "play",
+          "sound": "settle"
+        },
+        {
           "kind": "set",
           "target": {
             "variable": "nfull"
@@ -4145,6 +4585,10 @@
               "value": {
                 "variable": "nfull"
               }
+            },
+            {
+              "kind": "play",
+              "sound": "sweepaway"
             },
             {
               "kind": "set",
@@ -5308,6 +5752,9 @@
               "value": {
                 "constant": 0
               }
+            },
+            {
+              "kind": "stop"
             }
           ]
         }
@@ -7199,6 +7646,33 @@
           ]
         },
         {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "gtype"
+              },
+              "comparison": "eq",
+              "right": {
+                "constant": 0
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "play",
+              "sound": "theme-a"
+            }
+          ],
+          "else": [
+            {
+              "kind": "play",
+              "sound": "theme-b"
+            }
+          ]
+        },
+        {
           "kind": "set",
           "target": {
             "variable": "rcur"
@@ -7634,6 +8108,296 @@
                   }
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "finish",
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 0
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "gtype"
+              },
+              "comparison": "ne",
+              "right": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "lines"
+              },
+              "comparison": "ge",
+              "right": {
+                "constant": 25
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rockety"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 144
+              }
+            },
+            {
+              "kind": "play",
+              "sound": "theme-c"
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "nph"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 11
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "launch",
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 11
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "rockety"
+              },
+              "comparison": "lt",
+              "right": {
+                "constant": 4
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "stop"
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "after"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 8
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "painted"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "beat"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rcur"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "nph"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 12
+              }
+            }
+          ],
+          "else": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rockety"
+              },
+              "operation": "subtract",
+              "value": {
+                "constant": 2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "rocket",
+      "when": [],
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "variable": "showrocket"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "ph"
+              },
+              "comparison": "eq",
+              "right": {
+                "constant": 11
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "showrocket"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rk0"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "rockety"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rk0"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rk1"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "rockety"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rk1"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 8
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rk2"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "rockety"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rk2"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 8
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rk3"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "rockety"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "rk3"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 8
+              }
             }
           ]
         }
@@ -8093,6 +8857,66 @@
       },
       "visible": {
         "variable": "showmark"
+      }
+    },
+    {
+      "name": "rocket0",
+      "tile": {
+        "constant": 1
+      },
+      "x": {
+        "constant": 56
+      },
+      "y": {
+        "variable": "rk0"
+      },
+      "visible": {
+        "variable": "showrocket"
+      }
+    },
+    {
+      "name": "rocket1",
+      "tile": {
+        "constant": 1
+      },
+      "x": {
+        "constant": 48
+      },
+      "y": {
+        "variable": "rk1"
+      },
+      "visible": {
+        "variable": "showrocket"
+      }
+    },
+    {
+      "name": "rocket2",
+      "tile": {
+        "constant": 1
+      },
+      "x": {
+        "constant": 56
+      },
+      "y": {
+        "variable": "rk2"
+      },
+      "visible": {
+        "variable": "showrocket"
+      }
+    },
+    {
+      "name": "rocket3",
+      "tile": {
+        "constant": 1
+      },
+      "x": {
+        "constant": 64
+      },
+      "y": {
+        "variable": "rk3"
+      },
+      "visible": {
+        "variable": "showrocket"
       }
     },
     {
