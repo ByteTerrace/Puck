@@ -60,6 +60,344 @@
         "12121212",
         "21212121"
       ]
+    },
+    {
+      "name": "glyph-0",
+      "pixels": [
+        "01110000",
+        "10001000",
+        "10011000",
+        "10101000",
+        "11001000",
+        "10001000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-1",
+      "pixels": [
+        "00100000",
+        "01100000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-2",
+      "pixels": [
+        "01110000",
+        "10001000",
+        "00001000",
+        "00010000",
+        "00100000",
+        "01000000",
+        "11111000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-3",
+      "pixels": [
+        "11111000",
+        "00010000",
+        "00100000",
+        "00010000",
+        "00001000",
+        "10001000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-4",
+      "pixels": [
+        "00010000",
+        "00110000",
+        "01010000",
+        "10010000",
+        "11111000",
+        "00010000",
+        "00010000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-5",
+      "pixels": [
+        "11111000",
+        "10000000",
+        "11110000",
+        "00001000",
+        "00001000",
+        "10001000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-6",
+      "pixels": [
+        "00110000",
+        "01000000",
+        "10000000",
+        "11110000",
+        "10001000",
+        "10001000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-7",
+      "pixels": [
+        "11111000",
+        "00001000",
+        "00010000",
+        "00100000",
+        "01000000",
+        "01000000",
+        "01000000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-8",
+      "pixels": [
+        "01110000",
+        "10001000",
+        "10001000",
+        "01110000",
+        "10001000",
+        "10001000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-9",
+      "pixels": [
+        "01110000",
+        "10001000",
+        "10001000",
+        "01111000",
+        "00001000",
+        "00010000",
+        "01100000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-a",
+      "pixels": [
+        "01110000",
+        "10001000",
+        "10001000",
+        "11111000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-b",
+      "pixels": [
+        "11110000",
+        "10001000",
+        "10001000",
+        "11110000",
+        "10001000",
+        "10001000",
+        "11110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-c",
+      "pixels": [
+        "01110000",
+        "10001000",
+        "10000000",
+        "10000000",
+        "10000000",
+        "10001000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-e",
+      "pixels": [
+        "11111000",
+        "10000000",
+        "10000000",
+        "11110000",
+        "10000000",
+        "10000000",
+        "11111000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-h",
+      "pixels": [
+        "10001000",
+        "10001000",
+        "10001000",
+        "11111000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-i",
+      "pixels": [
+        "01110000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-l",
+      "pixels": [
+        "10000000",
+        "10000000",
+        "10000000",
+        "10000000",
+        "10000000",
+        "10000000",
+        "11111000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-n",
+      "pixels": [
+        "10001000",
+        "11001000",
+        "10101000",
+        "10011000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-o",
+      "pixels": [
+        "01110000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "01110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-p",
+      "pixels": [
+        "11110000",
+        "10001000",
+        "10001000",
+        "11110000",
+        "10000000",
+        "10000000",
+        "10000000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-r",
+      "pixels": [
+        "11110000",
+        "10001000",
+        "10001000",
+        "11110000",
+        "10100000",
+        "10010000",
+        "10001000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-s",
+      "pixels": [
+        "01111000",
+        "10000000",
+        "10000000",
+        "01110000",
+        "00001000",
+        "00001000",
+        "11110000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-t",
+      "pixels": [
+        "11111000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-v",
+      "pixels": [
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "10001000",
+        "01010000",
+        "00100000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-x",
+      "pixels": [
+        "10001000",
+        "10001000",
+        "01010000",
+        "00100000",
+        "01010000",
+        "10001000",
+        "10001000",
+        "00000000"
+      ]
+    },
+    {
+      "name": "glyph-y",
+      "pixels": [
+        "10001000",
+        "10001000",
+        "01010000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00100000",
+        "00000000"
+      ]
     }
   ],
   "map": [
@@ -108,43 +446,11 @@
     0,
     0,
     2,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    2,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    2,
-    0,
-    0,
-    0,
-    0,
-    0,
+    24,
+    15,
+    21,
+    23,
+    16,
     0,
     0,
     0,
@@ -268,43 +574,11 @@
     0,
     0,
     2,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    2,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    2,
-    0,
-    0,
-    0,
-    0,
-    0,
+    19,
+    16,
+    26,
+    16,
+    19,
     0,
     0,
     0,
@@ -428,6 +702,38 @@
     0,
     0,
     2,
+    19,
+    18,
+    20,
+    16,
+    24,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
     0,
     0,
     0,
@@ -496,6 +802,38 @@
     0,
     0,
     0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    20,
+    16,
+    27,
+    25,
     0,
     0,
     0,
@@ -1220,6 +1558,54 @@
     {
       "name": "showpiece",
       "initial": 0
+    },
+    {
+      "name": "shownext",
+      "initial": 0
+    },
+    {
+      "name": "awardn",
+      "initial": 0
+    },
+    {
+      "name": "awardv",
+      "initial": 0
+    },
+    {
+      "name": "carryv",
+      "initial": 0
+    },
+    {
+      "name": "di",
+      "initial": 0
+    },
+    {
+      "name": "dv",
+      "initial": 0
+    },
+    {
+      "name": "das",
+      "initial": 0
+    },
+    {
+      "name": "dasdir",
+      "initial": 0
+    },
+    {
+      "name": "want",
+      "initial": 0
+    },
+    {
+      "name": "mv",
+      "initial": 0
+    },
+    {
+      "name": "panel",
+      "initial": 0
+    },
+    {
+      "name": "pcur",
+      "initial": 0
     }
   ],
   "arrays": [
@@ -1398,6 +1784,39 @@
         0,
         0,
         0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "score",
+      "initial": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "award",
+      "initial": [
+        0,
+        4,
+        10,
+        30,
+        120
+      ]
+    },
+    {
+      "name": "digits",
+      "initial": [
         0,
         0,
         0,
@@ -1591,6 +2010,24 @@
         200,
         200
       ]
+    },
+    {
+      "name": "nx",
+      "initial": [
+        200,
+        200,
+        200,
+        200
+      ]
+    },
+    {
+      "name": "ny",
+      "initial": [
+        200,
+        200,
+        200,
+        200
+      ]
     }
   ],
   "screens": [],
@@ -1670,21 +2107,31 @@
           }
         },
         {
+          "kind": "set",
+          "target": {
+            "variable": "want"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        },
+        {
           "kind": "if",
           "when": [
             {
               "kind": "key",
               "key": "left",
-              "mode": "pressed"
+              "mode": "held"
             }
           ],
           "then": [
             {
               "kind": "set",
               "target": {
-                "variable": "tx"
+                "variable": "want"
               },
-              "operation": "subtract",
+              "operation": "set",
               "value": {
                 "constant": 1
               }
@@ -1697,19 +2144,220 @@
             {
               "kind": "key",
               "key": "right",
-              "mode": "pressed"
+              "mode": "held"
             }
           ],
           "then": [
             {
               "kind": "set",
               "target": {
-                "variable": "tx"
+                "variable": "want"
               },
-              "operation": "add",
+              "operation": "set",
               "value": {
-                "constant": 1
+                "constant": 2
               }
+            }
+          ]
+        },
+        {
+          "kind": "set",
+          "target": {
+            "variable": "mv"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 0
+          }
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "want"
+              },
+              "comparison": "eq",
+              "right": {
+                "constant": 0
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "dasdir"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "das"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            }
+          ],
+          "else": [
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "want"
+                  },
+                  "comparison": "ne",
+                  "right": {
+                    "variable": "dasdir"
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "dasdir"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "variable": "want"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "das"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 23
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "mv"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 1
+                  }
+                }
+              ],
+              "else": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "das"
+                  },
+                  "operation": "subtract",
+                  "value": {
+                    "constant": 1
+                  }
+                },
+                {
+                  "kind": "if",
+                  "when": [
+                    {
+                      "kind": "compare",
+                      "left": {
+                        "variable": "das"
+                      },
+                      "comparison": "eq",
+                      "right": {
+                        "constant": 0
+                      }
+                    }
+                  ],
+                  "then": [
+                    {
+                      "kind": "set",
+                      "target": {
+                        "variable": "mv"
+                      },
+                      "operation": "set",
+                      "value": {
+                        "constant": 1
+                      }
+                    },
+                    {
+                      "kind": "set",
+                      "target": {
+                        "variable": "das"
+                      },
+                      "operation": "set",
+                      "value": {
+                        "constant": 9
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "mv"
+              },
+              "comparison": "ne",
+              "right": {
+                "constant": 0
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "dasdir"
+                  },
+                  "comparison": "eq",
+                  "right": {
+                    "constant": 1
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "tx"
+                  },
+                  "operation": "subtract",
+                  "value": {
+                    "constant": 1
+                  }
+                }
+              ],
+              "else": [
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "tx"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "constant": 1
+                  }
+                }
+              ]
             }
           ]
         },
@@ -3335,12 +3983,251 @@
             {
               "kind": "set",
               "target": {
+                "variable": "awardv"
+              },
+              "operation": "set",
+              "value": {
+                "array": "award",
+                "index": {
+                  "variable": "nfull"
+                }
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "awardn"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "level"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "awardn"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "nph"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 7
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pay",
+      "when": [
+        {
+          "kind": "compare",
+          "left": {
+            "variable": "ph"
+          },
+          "comparison": "eq",
+          "right": {
+            "constant": 7
+          }
+        }
+      ],
+      "body": [
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "awardn"
+              },
+              "comparison": "eq",
+              "right": {
+                "constant": 0
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
                 "variable": "nph"
               },
               "operation": "set",
               "value": {
                 "constant": 4
               }
+            }
+          ],
+          "else": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "awardn"
+              },
+              "operation": "subtract",
+              "value": {
+                "constant": 1
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "carryv"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "awardv"
+              }
+            },
+            {
+              "kind": "repeat",
+              "count": 5,
+              "index": "k",
+              "body": [
+                {
+                  "kind": "if",
+                  "when": [
+                    {
+                      "kind": "compare",
+                      "left": {
+                        "variable": "carryv"
+                      },
+                      "comparison": "eq",
+                      "right": {
+                        "constant": 0
+                      }
+                    }
+                  ],
+                  "then": [
+                    {
+                      "kind": "break"
+                    }
+                  ]
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "di"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "constant": 4
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "di"
+                  },
+                  "operation": "subtract",
+                  "value": {
+                    "variable": "k"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "dv"
+                  },
+                  "operation": "set",
+                  "value": {
+                    "variable": "carryv"
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "dv"
+                  },
+                  "operation": "mod",
+                  "value": {
+                    "constant": 10
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "carryv"
+                  },
+                  "operation": "div",
+                  "value": {
+                    "constant": 10
+                  }
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "variable": "dv"
+                  },
+                  "operation": "add",
+                  "value": {
+                    "array": "score",
+                    "index": {
+                      "variable": "di"
+                    }
+                  }
+                },
+                {
+                  "kind": "if",
+                  "when": [
+                    {
+                      "kind": "compare",
+                      "left": {
+                        "variable": "dv"
+                      },
+                      "comparison": "ge",
+                      "right": {
+                        "constant": 10
+                      }
+                    }
+                  ],
+                  "then": [
+                    {
+                      "kind": "set",
+                      "target": {
+                        "variable": "dv"
+                      },
+                      "operation": "subtract",
+                      "value": {
+                        "constant": 10
+                      }
+                    },
+                    {
+                      "kind": "set",
+                      "target": {
+                        "variable": "carryv"
+                      },
+                      "operation": "add",
+                      "value": {
+                        "constant": 1
+                      }
+                    }
+                  ]
+                },
+                {
+                  "kind": "set",
+                  "target": {
+                    "array": "score",
+                    "index": {
+                      "variable": "di"
+                    }
+                  },
+                  "operation": "set",
+                  "value": {
+                    "variable": "dv"
+                  }
+                }
+              ]
             }
           ]
         }
@@ -3514,7 +4401,7 @@
       "body": [
         {
           "kind": "repeat",
-          "count": 20,
+          "count": 19,
           "index": "k",
           "body": [
             {
@@ -4576,6 +5463,639 @@
       ]
     },
     {
+      "name": "panel",
+      "when": [],
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "variable": "pcur"
+          },
+          "operation": "add",
+          "value": {
+            "constant": 1
+          }
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "pcur"
+              },
+              "comparison": "ge",
+              "right": {
+                "constant": 11
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "pcur"
+              },
+              "operation": "set",
+              "value": {
+                "constant": 0
+              }
+            }
+          ]
+        },
+        {
+          "kind": "if",
+          "when": [
+            {
+              "kind": "compare",
+              "left": {
+                "variable": "pcur"
+              },
+              "comparison": "lt",
+              "right": {
+                "constant": 5
+              }
+            }
+          ],
+          "then": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "dv"
+              },
+              "operation": "set",
+              "value": {
+                "array": "score",
+                "index": {
+                  "variable": "pcur"
+                }
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "c2"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "pcur"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "c2"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 13
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "dv"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 3
+              }
+            },
+            {
+              "kind": "map",
+              "row": {
+                "constant": 2
+              },
+              "column": {
+                "variable": "c2"
+              },
+              "tile": {
+                "variable": "dv"
+              }
+            }
+          ],
+          "else": [
+            {
+              "kind": "if",
+              "when": [
+                {
+                  "kind": "compare",
+                  "left": {
+                    "variable": "pcur"
+                  },
+                  "comparison": "eq",
+                  "right": {
+                    "constant": 5
+                  }
+                }
+              ],
+              "then": [
+                {
+                  "kind": "map",
+                  "row": {
+                    "constant": 2
+                  },
+                  "column": {
+                    "constant": 18
+                  },
+                  "tile": {
+                    "constant": 3
+                  }
+                }
+              ],
+              "else": [
+                {
+                  "kind": "if",
+                  "when": [
+                    {
+                      "kind": "compare",
+                      "left": {
+                        "variable": "pcur"
+                      },
+                      "comparison": "eq",
+                      "right": {
+                        "constant": 6
+                      }
+                    }
+                  ],
+                  "then": [
+                    {
+                      "kind": "set",
+                      "target": {
+                        "variable": "dv"
+                      },
+                      "operation": "set",
+                      "value": {
+                        "variable": "level"
+                      }
+                    },
+                    {
+                      "kind": "set",
+                      "target": {
+                        "variable": "dv"
+                      },
+                      "operation": "div",
+                      "value": {
+                        "constant": 10
+                      }
+                    },
+                    {
+                      "kind": "set",
+                      "target": {
+                        "variable": "dv"
+                      },
+                      "operation": "add",
+                      "value": {
+                        "constant": 3
+                      }
+                    },
+                    {
+                      "kind": "map",
+                      "row": {
+                        "constant": 6
+                      },
+                      "column": {
+                        "constant": 13
+                      },
+                      "tile": {
+                        "variable": "dv"
+                      }
+                    }
+                  ],
+                  "else": [
+                    {
+                      "kind": "if",
+                      "when": [
+                        {
+                          "kind": "compare",
+                          "left": {
+                            "variable": "pcur"
+                          },
+                          "comparison": "eq",
+                          "right": {
+                            "constant": 7
+                          }
+                        }
+                      ],
+                      "then": [
+                        {
+                          "kind": "set",
+                          "target": {
+                            "variable": "dv"
+                          },
+                          "operation": "set",
+                          "value": {
+                            "variable": "level"
+                          }
+                        },
+                        {
+                          "kind": "set",
+                          "target": {
+                            "variable": "dv"
+                          },
+                          "operation": "mod",
+                          "value": {
+                            "constant": 10
+                          }
+                        },
+                        {
+                          "kind": "set",
+                          "target": {
+                            "variable": "dv"
+                          },
+                          "operation": "add",
+                          "value": {
+                            "constant": 3
+                          }
+                        },
+                        {
+                          "kind": "map",
+                          "row": {
+                            "constant": 6
+                          },
+                          "column": {
+                            "constant": 14
+                          },
+                          "tile": {
+                            "variable": "dv"
+                          }
+                        }
+                      ],
+                      "else": [
+                        {
+                          "kind": "if",
+                          "when": [
+                            {
+                              "kind": "compare",
+                              "left": {
+                                "variable": "pcur"
+                              },
+                              "comparison": "eq",
+                              "right": {
+                                "constant": 8
+                              }
+                            }
+                          ],
+                          "then": [
+                            {
+                              "kind": "set",
+                              "target": {
+                                "variable": "dv"
+                              },
+                              "operation": "set",
+                              "value": {
+                                "variable": "lines"
+                              }
+                            },
+                            {
+                              "kind": "set",
+                              "target": {
+                                "variable": "dv"
+                              },
+                              "operation": "div",
+                              "value": {
+                                "constant": 100
+                              }
+                            },
+                            {
+                              "kind": "set",
+                              "target": {
+                                "variable": "dv"
+                              },
+                              "operation": "add",
+                              "value": {
+                                "constant": 3
+                              }
+                            },
+                            {
+                              "kind": "map",
+                              "row": {
+                                "constant": 10
+                              },
+                              "column": {
+                                "constant": 13
+                              },
+                              "tile": {
+                                "variable": "dv"
+                              }
+                            }
+                          ],
+                          "else": [
+                            {
+                              "kind": "if",
+                              "when": [
+                                {
+                                  "kind": "compare",
+                                  "left": {
+                                    "variable": "pcur"
+                                  },
+                                  "comparison": "eq",
+                                  "right": {
+                                    "constant": 9
+                                  }
+                                }
+                              ],
+                              "then": [
+                                {
+                                  "kind": "set",
+                                  "target": {
+                                    "variable": "dv"
+                                  },
+                                  "operation": "set",
+                                  "value": {
+                                    "variable": "lines"
+                                  }
+                                },
+                                {
+                                  "kind": "set",
+                                  "target": {
+                                    "variable": "dv"
+                                  },
+                                  "operation": "div",
+                                  "value": {
+                                    "constant": 10
+                                  }
+                                },
+                                {
+                                  "kind": "set",
+                                  "target": {
+                                    "variable": "dv"
+                                  },
+                                  "operation": "mod",
+                                  "value": {
+                                    "constant": 10
+                                  }
+                                },
+                                {
+                                  "kind": "set",
+                                  "target": {
+                                    "variable": "dv"
+                                  },
+                                  "operation": "add",
+                                  "value": {
+                                    "constant": 3
+                                  }
+                                },
+                                {
+                                  "kind": "map",
+                                  "row": {
+                                    "constant": 10
+                                  },
+                                  "column": {
+                                    "constant": 14
+                                  },
+                                  "tile": {
+                                    "variable": "dv"
+                                  }
+                                }
+                              ],
+                              "else": [
+                                {
+                                  "kind": "if",
+                                  "when": [
+                                    {
+                                      "kind": "compare",
+                                      "left": {
+                                        "variable": "pcur"
+                                      },
+                                      "comparison": "eq",
+                                      "right": {
+                                        "constant": 10
+                                      }
+                                    }
+                                  ],
+                                  "then": [
+                                    {
+                                      "kind": "set",
+                                      "target": {
+                                        "variable": "dv"
+                                      },
+                                      "operation": "set",
+                                      "value": {
+                                        "variable": "lines"
+                                      }
+                                    },
+                                    {
+                                      "kind": "set",
+                                      "target": {
+                                        "variable": "dv"
+                                      },
+                                      "operation": "mod",
+                                      "value": {
+                                        "constant": 10
+                                      }
+                                    },
+                                    {
+                                      "kind": "set",
+                                      "target": {
+                                        "variable": "dv"
+                                      },
+                                      "operation": "add",
+                                      "value": {
+                                        "constant": 3
+                                      }
+                                    },
+                                    {
+                                      "kind": "map",
+                                      "row": {
+                                        "constant": 10
+                                      },
+                                      "column": {
+                                        "constant": 15
+                                      },
+                                      "tile": {
+                                        "variable": "dv"
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "preview",
+      "when": [],
+      "body": [
+        {
+          "kind": "set",
+          "target": {
+            "variable": "shownext"
+          },
+          "operation": "set",
+          "value": {
+            "constant": 1
+          }
+        },
+        {
+          "kind": "repeat",
+          "count": 4,
+          "index": "k",
+          "body": [
+            {
+              "kind": "set",
+              "target": {
+                "variable": "si"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "nt"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "si"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 16
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "si"
+              },
+              "operation": "add",
+              "value": {
+                "variable": "k"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "s"
+              },
+              "operation": "set",
+              "value": {
+                "array": "shapes",
+                "index": {
+                  "variable": "si"
+                }
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "s"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "shr",
+              "value": {
+                "constant": 2
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "set",
+              "value": {
+                "variable": "s"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "and",
+              "value": {
+                "constant": 3
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 13
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cr"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 8
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "array": "ny",
+                "index": {
+                  "variable": "k"
+                }
+              },
+              "operation": "set",
+              "value": {
+                "variable": "cr"
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "add",
+              "value": {
+                "constant": 13
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "variable": "cc"
+              },
+              "operation": "mul",
+              "value": {
+                "constant": 8
+              }
+            },
+            {
+              "kind": "set",
+              "target": {
+                "array": "nx",
+                "index": {
+                  "variable": "k"
+                }
+              },
+              "operation": "set",
+              "value": {
+                "variable": "cc"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "phase-end",
       "when": [],
       "body": [
@@ -4675,6 +6195,90 @@
       },
       "visible": {
         "variable": "showpiece"
+      }
+    },
+    {
+      "name": "next0",
+      "tile": {
+        "constant": 1
+      },
+      "x": {
+        "array": "nx",
+        "index": {
+          "constant": 0
+        }
+      },
+      "y": {
+        "array": "ny",
+        "index": {
+          "constant": 0
+        }
+      },
+      "visible": {
+        "variable": "shownext"
+      }
+    },
+    {
+      "name": "next1",
+      "tile": {
+        "constant": 1
+      },
+      "x": {
+        "array": "nx",
+        "index": {
+          "constant": 1
+        }
+      },
+      "y": {
+        "array": "ny",
+        "index": {
+          "constant": 1
+        }
+      },
+      "visible": {
+        "variable": "shownext"
+      }
+    },
+    {
+      "name": "next2",
+      "tile": {
+        "constant": 1
+      },
+      "x": {
+        "array": "nx",
+        "index": {
+          "constant": 2
+        }
+      },
+      "y": {
+        "array": "ny",
+        "index": {
+          "constant": 2
+        }
+      },
+      "visible": {
+        "variable": "shownext"
+      }
+    },
+    {
+      "name": "next3",
+      "tile": {
+        "constant": 1
+      },
+      "x": {
+        "array": "nx",
+        "index": {
+          "constant": 3
+        }
+      },
+      "y": {
+        "array": "ny",
+        "index": {
+          "constant": 3
+        }
+      },
+      "visible": {
+        "variable": "shownext"
       }
     }
   ],
