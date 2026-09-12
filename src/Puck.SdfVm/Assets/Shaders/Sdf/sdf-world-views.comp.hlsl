@@ -27,6 +27,9 @@
 // reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.
 // Primary exits renderView before this gather; only the shading dispatch executes its barriers.
 #define SDF_GROUP_SHADOW_GATHER
+#define SDF_PART_RAY_BOUNDS
+// Declared before the shared world include so primary traversal can read the appended part bounds.
+[[vk::binding(3, 0)]] RWStructuredBuffer<float> tiles : register(u0);
 #include "sdf-world.hlsli"
 
 // The program is at binding 1 (sdf-vm.hlsli, register t0), the viewport table at binding 2 (sdf-world.hlsli,
@@ -34,7 +37,6 @@
 // binding 3 (register u0). The per-view source textures (one per viewport, an array) are LAST at binding 4 so their
 // heap slots don't overlap the fixed bindings above on the linear Direct3D 12 descriptor table; Stage 1 writes view N
 // into sources[N] at its view-local pixel.
-[[vk::binding(3, 0)]] RWStructuredBuffer<float> tiles : register(u0);
 [[vk::binding(4, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> sources[5] : register(u1);
 // The surviving-tile bbox group origin from the cull-args pass (sdf-cull-args.comp): the dispatch is origin-anchored,
 // so this offsets each invocation onto the bbox's pixels. The all-empty margins outside the bbox are never dispatched.
@@ -73,6 +75,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     // The per-invocation program-layout cache (sdf-vm.hlsli): primary/shadow marches, AO taps and normal queries
     // repeatedly call the field evaluators. Decode once for this invocation before renderView runs.
     sdfProgramLayout = sdfLoadProgramLayout();
+    sdfPartBoundsViewport = id.z;
 
     // The RENDER extent: the output rect reduced by the view's render scale (worldRenderDims — the identical integer
     // derivation the beam/instance-cull tile coverage and Stage 2's upsample use). The ray grid spans the SAME frustum

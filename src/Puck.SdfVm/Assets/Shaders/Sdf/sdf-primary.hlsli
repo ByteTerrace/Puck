@@ -309,8 +309,14 @@ SdfPrimaryHit sdfTracePrimary(float3 rayOrigin, float3 rayDirection, float march
             if (best.found) {
                 limit = min(limit, best.traveled);
             }
-            if (marchStart <= limit) {
-                SdfPrimarySurface candidate = sdfTracePrimarySurface(rayOrigin, rayDirection, marchStart, firstExit,
+            float entry = marchStart;
+#ifdef SDF_PART_RAY_BOUNDS
+            bool intersects = sdfPartRayInterval(index, rayOrigin, rayDirection, entry, limit);
+#else
+            bool intersects = true;
+#endif
+            if (intersects && entry <= limit) {
+                SdfPrimarySurface candidate = sdfTracePrimarySurface(rayOrigin, rayDirection, entry, firstExit,
                     secondEntry, limit, farDistance, instanceMaskBase, pixelFootprint, part, true);
                 if (candidate.found && (!best.found || candidate.traveled < best.traveled)) {
                     best = candidate;

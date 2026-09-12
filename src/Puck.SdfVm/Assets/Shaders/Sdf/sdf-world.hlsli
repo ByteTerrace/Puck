@@ -805,14 +805,10 @@ static const float NormalProbeEpsilon = 0.0006;
 // estimate up; it mirrors the reference study's own clamp lower bound (src/Puck.World/Assets/studies/moth.glsl, clamp(magnitude,.12,1.5)).
 static const float GradientMagnitudeFloor = 0.12;
 
-// Per-pixel field-evaluation TALLY for debug.view.evals (perf-plan Phase 0 instrumentation). A plain per-thread
-// scalar counter — mirrors sdfMaterialBlendWeight's per-thread-static pattern (sdf-vm.hlsli) — because softShadowVisibility/
-// calcAO/the normal probes below cannot otherwise report their internal map()-family call counts back to
-// renderView's epilogue without threading a return channel through every call site. Kept HERE (never in
-// mapCore/sdf-vm.hlsli): every producing call site already lives in sdf-world.hlsli, so counting stays entirely at
-// the call site, never inside the interpreter itself. renderView resets it to 0 at entry; one scalar add per call
-// site is negligible next to the field eval it accompanies, so the tally is left unconditional (not gated behind
-// the eval view being selected) — every other view simply ignores it.
+// Per-pixel query tally for debug.view.evals, including primary local-part marches and shading probes.
+// Call sites here and in sdf-primary.hlsli count their queries; the interpreter does not. This per-thread
+// scalar follows the material-seam channel's pattern and resets at renderView entry. Counting stays active
+// for every view so selecting the evaluation heatmap does not change the work being measured.
 static float sdfEvalCount = 0.0;
 
 // The 4-tap TETRAHEDRON normal probe, MASKED (world path): estimates the field gradient from 4 samples at the corners
@@ -849,24 +845,26 @@ float3 calculateNormal(float3 p, uint instanceMaskBase, out float gradientMagnit
 // De-scale it to world units: concave creases read negative, convex ridges positive. The primary hit supplies
 // the center unless Detail shapes can change the shading field; those programs query the current field again.
 float3 calculateNormalCurvature(float3 p, uint instanceMaskBase, float primaryCenter, out float curvature, out float gradientMagnitude) {
-    const float2 k = float2(1.0, -1.0);
     const float e = NormalProbeEpsilon;
-
     sdfEvalCount += 4.0;
-
-    float d0 = mapDistanceMasked(p + (k.xyy * e), instanceMaskBase);
-    float d1 = mapDistanceMasked(p + (k.yyx * e), instanceMaskBase);
-    float d2 = mapDistanceMasked(p + (k.yxy * e), instanceMaskBase);
-    float d3 = mapDistanceMasked(p + (k.xxx * e), instanceMaskBase);
+    float3 sum = 0.0;
+    float total = 0.0;
+    // Keep one interpreter call site: unrolling duplicates the large VM body and slows the views kernel.
+    [loop]
+    for (uint probe = 0u; probe < 4u; probe++) {
+        float3 direction = float3((probe == 0u || probe == 3u) ? 1.0 : -1.0,
+            probe >= 2u ? 1.0 : -1.0, (probe & 1u) != 0u ? 1.0 : -1.0);
+        float distance = mapDistanceMasked(p + (direction * e), instanceMaskBase);
+        sum += direction * distance;
+        total += distance;
+    }
     float center = primaryCenter;
     if (!sdfProgramLayout.noDetailShapes) {
         center = mapDistanceMasked(p, instanceMaskBase);
         sdfEvalCount += 1.0;
     }
     float stepScale = sdfStepScale();
-    float3 sum = ((k.xyy * d0) + (k.yyx * d1) + (k.yxy * d2) + (k.xxx * d3));
-
-    curvature = (((d0 + d1 + d2 + d3) - (4.0 * center)) / ((2.0 * e * e) * stepScale));
+    curvature = ((total - (4.0 * center)) / ((2.0 * e * e) * stepScale));
     gradientMagnitude = ((length(sum) / (4.0 * e)) / stepScale);
 
     return normalize(sum);
@@ -2124,6 +2122,9 @@ float marchOvershootDepth(float3 rayOrigin, float3 rayDirection, float marchStar
     return traveled;
 }
 
+#ifdef SDF_PART_RAY_BOUNDS
+#include "sdf-part-bounds.hlsli"
+#endif
 #include "sdf-primary.hlsli"
 
 // `lane` is the caller's index within its 8x8 workgroup and `active` whether this lane owns a rendered pixel: an

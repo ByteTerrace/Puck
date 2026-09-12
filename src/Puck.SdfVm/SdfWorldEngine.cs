@@ -87,6 +87,9 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // disabled), so every plane is a total function.
     // KEEP IN SYNC with WorldTilePlaneCount + worldTilePlaneStride in sdf-world.hlsli / sdf-tile.hlsli.
     private const uint TilePlaneCount = 4;
+    // Two float3 corners per (viewport, live instance), appended after the tile planes.
+    // KEEP IN SYNC with SdfPartBoundFloatCount and sdfPartBoundIndex in sdf-part-bounds.hlsli.
+    private const uint PartBoundFloatCount = 6;
     private const uint TileSize = 16; // KEEP IN SYNC with WorldTileSize in sdf-world.hlsli
     /// <summary>The primary (camera) march's per-pixel step budget. KEEP IN SYNC with <c>MaxSteps</c> in
     /// sdf-world.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
@@ -615,12 +618,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             );
         }
         // The cull buffer is GPU-written by the beam prepass (a UAV), so it is device-local (a Direct3D 12 default heap).
-        // Sized for TilePlaneCount planes (marchStart + firstExit + secondEntry — the four-bound teleport — plus the F1
-        // far bound); cull-args and the compositor read only plane 0, so their (viewport, tile) indexing is unaffected by
-        // the extra capacity.
+        // Four tile planes followed by two world-space bound corners per instance per viewport. The beam refits
+        // those bounds from this frame's poses and camera; primary reads them after the existing compute barrier.
+        // Reserve the construction envelope, but index with live viewport/instance counts, as the masks do.
         m_tileBuffer = gpu.StorageBufferFactory.CreateDeviceLocal(
             deviceContext: device,
-            sizeBytes: ((((((ulong)TilePlaneCount) * m_viewportCapacity) * m_tileGridX) * m_tileGridY) * sizeof(float))
+            sizeBytes: checked((ulong)m_viewportCapacity *
+                ((ulong)TilePlaneCount * m_tileGridX * m_tileGridY + (ulong)PartBoundFloatCount * (uint)m_instanceCapacity) * sizeof(float))
         );
         // One full-extent slice per viewport, like the source textures: changing regions must never overrun a
         // buffer sized for a previous layout. Shared across frame slots; Record orders primary writes before
@@ -629,8 +633,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             deviceContext: device,
             sizeBytes: checked((ulong)width * height * m_viewportCapacity * PrimaryHitByteLength)
         );
-        // The per-tile instance mask: same (viewport, tile) indexing as the cull buffer, GPU-written by the beam
-        // prepass alongside it (a UAV, so device-local too), read by Stage 1 to gate its masked map() calls. The
+        // The per-tile instance mask: same (viewport, tile) indexing as the cull buffer, GPU-written by instance
+        // cull before the beam (a UAV, so device-local too), read by Stage 1 to gate its masked map() calls. The
         // buffer is sized for the CONSTRUCTION program's width (ceil(instanceCount/32) uints, at least 1 —
         // SdfProgram.InstanceMaskWordCount); the kernels index with the LIVE uploaded program's width, pushed per
         // frame (m_liveInstanceMaskWordCount), which UploadProgram caps at this construction width.

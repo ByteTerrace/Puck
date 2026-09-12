@@ -43,6 +43,8 @@ never a Vulkan or DirectX type by name.
   available for comparisons. Authored curvature shading uses four neighboring
   samples and the primary hit's distance. Programs with shading-only details
   need a fifth sample because their shading field differs from the march field.
+  The four neighboring samples run through one loop: spelling out four VM calls
+  duplicates substantial shader code and measured slower on the RTX 4070.
 - *Shading-only detail shapes:* a shape instruction flagged
   `SdfInstruction.Detail` is invisible to every march (beam, fine, shadow, AO)
   and appears only in the hit-only normal/material re-evaluation `renderView`
@@ -119,6 +121,15 @@ repeated part evaluation but can select different sample positions within the
 existing pixel-footprint acceptance band; images need not be bit-identical to
 the full-scene march. Other root compositions keep the reference traversal.
 Both paths share the marcher in `Assets/Shaders/Sdf/sdf-primary.hlsli`.
+
+For admitted programs, the beam also refits a world-space box for each compiled
+part once per viewport. Primary rays intersect those cached boxes to skip missed
+parts and shorten local marches. The box encloses the footprint acceptance band,
+including distance corrections and smooth-blend expansion. Unsupported shapes,
+domains or blends retain the full local interval. The cache occupies six floats
+per instance per viewport after the four tile planes; construction reserves the
+instance envelope, so small views and live program changes do not limit coverage.
+See [bounds](../../docs/sdf-wiki/lod-and-bounds.md#primary-part-bounds) for its scope.
 
 Exact secondary lighting has its own instance masks. Each 8×8 workgroup's
 shadow gather covers the full 65536-instance ceiling; reserved slots cannot

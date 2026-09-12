@@ -38,10 +38,10 @@
 // the engine's beam binding list (program t0, viewports t1, dynamicTransforms t2, instanceMasks t3, brickPool t4).
 #define SDF_SAMPLED_REGIONS
 #define SDF_BRICK_POOL_REGISTER t4
-#include "sdf-world.hlsli"
-
-// The per-tile cull buffer (binding 3), written here and read read-only by the compositor.
+#define SDF_PART_RAY_BOUNDS
+// The tile planes and appended per-view part bounds share one device-local buffer.
 [[vk::binding(3, 0)]] RWStructuredBuffer<float> tiles : register(u0);
+#include "sdf-world.hlsli"
 
 [numthreads(1, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
@@ -136,4 +136,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     tiles[worldTileFirstExitIndex(tileIndex)] = bounds.firstExit;
     tiles[worldTileSecondEntryIndex(tileIndex)] = bounds.secondEntry;
     tiles[worldTileFarBoundIndex(tileIndex)] = bounds.farBound;
+
+    // Each part is refitted once per viewport, even when it has more instances than screen tiles. This work
+    // reads only program/pose/camera data, so it needs no synchronization with other beam invocations.
+    if (sdfCanTracePartsIndependently()) {
+        uint tileCount = params.tileGrid.x * params.tileGrid.y;
+        [loop]
+        for (uint instance = id.y * params.tileGrid.x + id.x;
+            instance < sdfProgramLayout.instanceCount; instance += tileCount) {
+            sdfWritePartBound(id.z, instance, view.position.xyz, farDistance,
+                (2.0 * view.right.w) / max(regionSizePx.y, 1.0));
+        }
+    }
 }

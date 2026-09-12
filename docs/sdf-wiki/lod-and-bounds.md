@@ -16,6 +16,26 @@ Bounds must include transform reach, smooth-blend radius, and scoped field
 expansion. Operations whose influence cannot be bounded conservatively make the
 affected range ineligible for exact skipping.
 
+## Primary part bounds
+
+For hard-union roots admitted to independent part tracing, the beam computes a
+box around each complete compiled part for each viewport. The primary ray can
+skip a box it misses and start its local march at the box entry. Cuts and smooth
+blends still execute as one ordered field; the box never replaces that field.
+
+These boxes enclose the positive distance band accepted by the pixel-footprint
+hit rule. They include the scope and domain distance corrections, smooth-union
+expansion, and the current pose. Starting with the far plane's footprint, two
+further refinements use the previous box's farthest corner to tighten the depth
+limit. Each refinement still contains every possible accepted point.
+
+The implementation in `sdf-part-bounds.hlsli` bounds superellipsoids, boxes,
+screen slabs, cylinders, ellipses and convex polygons, with the compiled part's
+optional scale, axial profile or shear. Unknown formulae publish an unbounded
+sentinel and preserve the original local march. This cache changes primary
+sample positions within the existing hit band; it does not change the field,
+collision queries or secondary-lighting masks.
+
 ## One effective-scale rule
 
 A bound analyzer and the emission it describes must read the same scale. The
