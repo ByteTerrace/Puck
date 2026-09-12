@@ -27,7 +27,7 @@
 #define SDF_DYNAMIC_TRANSFORMS
 // The per-tile instance mask, READ here by the cone march (the instance-cull pass wrote it). register(t3): the
 // Direct3D 12 SRV order follows the engine's beam binding list (program t0, viewports t1, dynamicTransforms t2,
-// instanceMasks t3) — Stage 1 binds the SAME buffer at its own t13 (sdf-vm.hlsli's default register).
+// instanceMasks t3) — the hit passes bind the SAME buffer at their own t37.
 #define SDF_INSTANCE_MASKS
 // The serial tile-beam walk measured faster with its two payload vectors fetched together before the opcode switch;
 // Stage 1's wider per-pixel interpreter benefits from the default case-local loads instead.

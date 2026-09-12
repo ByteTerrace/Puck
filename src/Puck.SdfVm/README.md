@@ -59,39 +59,43 @@ never a Vulkan or DirectX type by name.
   soft-shadow and ambient-occlusion marches, while it still marches for the
   camera and still collides. Both marches also de-scale by the hit's own local
   field gradient magnitude, on top of the program's Lipschitz `stepScale`
-  clamp, so a non-unit-gradient shape (an eccentric ellipsoid, a `FlareY` warp)
-  does not fatten its own penumbra or AO term.
+  clamp. This corrects the scale near the hit; a conservative field farther
+  along the ray can still differ from Euclidean distance and broaden occlusion.
 
 ## 🎬 The render pipeline
 
-Eight kernels run per frame: `sdf-frame-upload.comp` (frame data copied to
+Ten kernels run per frame: `sdf-frame-upload.comp` (frame data copied to
 device-local buffers) → `sdf-sky.comp` (a direct, un-culled pass that
 fills every source pixel with the authored sky, before any tile is culled)
 → `sdf-instance-cull.comp` (the per-tile instance mask) → `sdf-beam.comp`
 (cone march over the tile-masked field) → `sdf-cull-args.comp` →
-`sdf-world-primary.comp` (camera traversal) → the views kernel (hit shading
-and diagnostics) → the composite pass (split-screen assembly).
+`sdf-world-primary.comp` (camera traversal) → `sdf-world-surface.comp`
+(normals and curvature) → `sdf-world-ambient.comp` (ambient occlusion) → the views
+kernel (materials, lighting and diagnostics) → the composite pass (split-screen assembly).
 `SdfWorldEngine.PassLabels` names them for per-pass GPU timing. The views
 kernel ships in three compiled variants
 (`SdfViewsKernelVariant.Full`/`.Folds`/`.CoreOps`). Folds strips heavy operations;
 CoreOps also strips the remaining exotic cases. The program selects the smallest
 variant that supports its operations, reducing shader size and register pressure.
 
-Primary traversal writes a 48-byte hit record per active pixel. It preserves
+The hit buffer reserves an 80-byte record per active pixel. Primary traversal preserves
 depth, hit acceptance, terminal field radius and threshold, material and seam
-data, dynamic frame/lanes, and primary iteration/evaluation counts. The views
-pass reads those records after a compute barrier; normals, detail, lighting,
-and volumes keep their existing evaluation paths. Both dispatches use the same
-indirect bounds and live view dimensions. Child views are skipped by both.
-The buffer reserves `width × height × viewportCapacity × 48` bytes so changing
+data, dynamic frame/lanes, and primary iteration/evaluation counts. Surface adds
+the geometric normal, gradient magnitude and curvature; ambient adds AO and
+their combined query count. Each producer has a compute barrier before its
+consumer. These four dispatches share indirect bounds and live view dimensions,
+and skip child views. Primary, surface and ambient retain the full ISA.
+Material `Soften` changes the later lighting normal; AO uses the geometric normal.
+The buffer reserves `width × height × viewportCapacity × 80` bytes so changing
 view rectangles cannot overrun an allocation sized for an earlier layout.
 It is shared across frame slots under the engine's existing cross-frame barrier.
-The `primary` and `views` timing labels report traversal and shading separately;
-compare the full frame, including the extra buffer traffic and dispatch.
+The `primary`, `surface`, `ambient` and `views` labels expose their separate costs;
+compare the full frame, including buffer traffic and dispatch overhead.
 The iteration count describes the selected march; the evaluation count sums
 queries across all primary marches and attribute resolution, saturating at
-8,388,607. Queries can evaluate different amounts of geometry, so this count
-alone does not measure field work.
+8,388,607. The evaluation diagnostic adds the surface, AO and shading queries.
+Queries can evaluate different amounts of geometry, so this count alone does
+not measure field work.
 
 The beam chooses its work from the program's traversal admission. Programs that
 trace compiled parts independently use at most eight conservative entry samples;
@@ -126,18 +130,25 @@ For admitted programs, the beam also refits a world-space box for each compiled
 part once per viewport. Primary rays intersect those cached boxes to skip missed
 parts and shorten local marches. The box encloses the footprint acceptance band,
 including distance corrections and smooth-blend expansion. Unsupported shapes,
-domains or blends retain the full local interval. The cache occupies six floats
-per instance per viewport after the four tile planes; construction reserves the
-instance envelope, so small views and live program changes do not limit coverage.
+domains or blends retain the full local interval. A second cache band encloses
+each supported complete expression's raw-field sublevel set at 0.15 for AO.
+Together the bands occupy twelve floats per instance per viewport after the four
+tile planes. Construction reserves the instance envelope, so small views and
+live program changes do not limit coverage.
 See [bounds](../../docs/sdf-wiki/lod-and-bounds.md#primary-part-bounds) for its scope.
 
 Exact secondary lighting has its own instance masks. Each 8×8 workgroup's
 shadow gather covers the full 65536-instance ceiling; reserved slots cannot
-silently select camera-tile shadows. Exact ambient occlusion includes every
-live instance, with parked slots removed once per group. Camera visibility
-does not prove that an object is irrelevant to an AO probe outside that ray.
-The two shared masks cost 16 KiB per workgroup. Explicit fast AO and camera-tile
-shadows remain approximation options; exact AO costs more in dense scenes.
+silently select camera-tile shadows. AO candidates cover the group's hit positions
+expanded by the full 0.13 probe reach. For independent hard-union roots, complete
+expressions whose cached sublevel boxes miss that region can be excluded.
+Unsupported expressions remain candidates. Each rung uses this mask only when
+its scale-corrected distance ceiling fits the cached band; otherwise it evaluates
+the full field. Root clipping never seeds a child CSG scope. Each rung contributes
+a nonnegative deficit, so distant clearance cannot cancel closer contact.
+Camera visibility alone never excludes an exact AO candidate. Explicit fast AO
+and camera-tile shadows remain approximation options. Shadow and ambient passes
+each use their own 8 KiB candidate mask.
 
 `SdfWorldEngine`'s construction options (`SdfWorldEngineOptions`) freeze the
 program word capacity, instance capacity, and dynamic-transform capacity for

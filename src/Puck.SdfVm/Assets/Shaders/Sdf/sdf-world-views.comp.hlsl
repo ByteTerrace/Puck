@@ -1,7 +1,7 @@
-// Shared dispatch for primary traversal and hit shading. sdf-world-primary.comp includes this with SDF_PRIMARY_PASS;
-// the ordinary views variants read its hit records and shade each source texture. SDF_MONOLITHIC_VIEWS compiles
-// the original combined walk for shader A/B comparisons. Composite places each source or child into its region.
-// Both dispatches use an 8x8 workgroup and the same indirect tile bbox, camera, masks, and active-pixel tests.
+// Shared dispatch for primary, surface, ambient and views. Each wrapper selects its pass macro; views reads the
+// resulting hit records and shades each source texture. SDF_MONOLITHIC_VIEWS retains the combined reference walk.
+// Composite places each source or child into its region. All four hit passes use an 8x8 workgroup and identical
+// indirect tile bbox, camera, masks and active-pixel tests.
 // The shared layout carries dynamic transforms, screen sources, and the read-only instance mask (binding 7 / t37,
 // after screen sources t5..t36). Instance-cull produces that mask; the beam reads it at its own t3 binding.
 // Primary hit records are appended at binding 49 / u6. Unused shading resources compile out of primary traversal.
@@ -25,7 +25,7 @@
 // The per-tile shadow gather (sdf-world.hlsli's sdfShadowGatherGroup): one groupshared shadow candidate mask per 8x8
 // workgroup, built cooperatively at the uniform seam inside renderView. Every lane — rendered pixel or not — must
 // reach renderView, so CSMain below turns its per-pixel extent test into an `active` flag instead of a return.
-// Primary exits renderView before this gather; only the shading dispatch executes its barriers.
+// Primary and surface exit before group gathers; ambient and views each execute their own uniform gather.
 #define SDF_GROUP_SHADOW_GATHER
 #define SDF_PART_RAY_BOUNDS
 // Declared before the shared world include so primary traversal can read the appended part bounds.
@@ -121,7 +121,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         return;
     }
 
-#ifndef SDF_PRIMARY_PASS
+#if !defined(SDF_PRIMARY_PASS) && !defined(SDF_SURFACE_PASS) && !defined(SDF_AMBIENT_PASS)
     // Dither before the 8-bit store to break gradient banding (sky, distance fog) into blue-ish high-frequency noise:
     // +-0.5 LSB from the integer R2 dither, so BOTH backends add the identical pattern and cross-backend parity holds.
     color += ((sdfR2Dither(pixel) - 0.5) * DitherQuantum);

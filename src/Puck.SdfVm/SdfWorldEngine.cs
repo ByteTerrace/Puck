@@ -7,13 +7,14 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The device-explicit core of the compute SDF world pipeline — the one truth for its buffer/push/binding layouts.
 /// One instance owns a scene program (uploaded to the GPU once, at construction) plus every pipeline/buffer/image the
-/// eight kernels need, and runs the full chain per frame: <c>sdf-frame-upload.comp</c> (copies frame tables to
+/// ten kernels need, and runs the full chain per frame: <c>sdf-frame-upload.comp</c> (copies frame tables to
 /// device-local buffers) → <c>sdf-sky.comp</c> (fills every source pixel with the
 /// authored sky, direct — a beam-culled tile's pixel is otherwise never touched by any later pass) →
 /// <c>sdf-instance-cull.comp</c> (per-tile instance mask) → <c>sdf-beam.comp</c> (tile-cull cone-march prepass) →
 /// <c>sdf-cull-args.comp</c> (GPU-written indirect dispatch args: the surviving-tile bbox) →
-/// <c>sdf-world-primary.comp</c> (primary hit records) → <c>sdf-world-views.comp</c> (hit shading and diagnostics,
-/// both dispatched indirectly from those args) →
+/// <c>sdf-world-primary.comp</c> (primary hit records) → <c>sdf-world-surface.comp</c> (normals and curvature) →
+/// <c>sdf-world-ambient.comp</c> (AO) → <c>sdf-world-views.comp</c> (hit shading and diagnostics),
+/// all four dispatched indirectly from those args →
 /// <c>sdf-world-composite.comp</c> (source-agnostic region composite, also dispatched indirectly). Fully
 /// backend-neutral through the <see cref="IGpuComputeServices"/> seam.
 /// <para>
@@ -68,13 +69,13 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private const int MaxBrickCarvesPerBake = 4096; // request-buffer carve capacity per slot (the debug pool's MaxCarves ceiling)
     private const uint ProgramBindingIndex = 1; // matches sdf-vm.hlsli's [[vk::binding(1, 0)]] / register(t0)
     private const int PushConstantByteLength = (((sizeof(uint) * 4) * 2) + sizeof(uint)); // 36-byte CompositeParams; word 6 = screenMask, word 7 = instanceMaskWordCount, word 8 = sampleIndex (the deterministic tick clock the sky reads). KEEP IN SYNC with sdf-world.hlsli's CompositeParams.
-    private const uint ScreenLightBindingIndex = 11; // shared primary/views layout: sdfScreenLights, register t38 (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
+    private const uint ScreenLightBindingIndex = 11; // shared hit-pass layout: sdfScreenLights, register t38 (per-frame screen glow colors + environment; KEEP IN SYNC with sdf-world.hlsli)
     private const int ScreenLightByteLength = ((sizeof(float) * 4) * ((MaxScreenSurfaces + 8) + SdfEnvironment.RowCount)); // float4 rgb+intensity per screen (0..MaxScreenSurfaces-1) + env (MaxScreenSurfaces) + FOUR grid-lock rows (+1..+4) + the engine-bench params row (+5) + the shadow-policy row (+6) + the far-field row (+7) + the environment block (+8 onward: SdfEnvironment's row layout) — KEEP IN SYNC with sdf-world.hlsli SdfGridWorld..SdfEnvBase
     private const float ScreenLightIntensity = 2.5f; // room-glow gain applied to each screen's average color
     // The FIRST screen-source binding index; screenSource{i} binds at ScreenSourceBindingBase + i (sdf-world.hlsli's
     // vk::binding). The glyph atlas follows the whole run, so ScreenSourceBindingBase + MaxScreenSurfaces is its binding.
     private const uint ScreenSourceBindingBase = 12;
-    private const uint ScreenSurfaceBindingIndex = 10; // shared primary/views layout: screenSurfaces, register t4
+    private const uint ScreenSurfaceBindingIndex = 10; // shared hit-pass layout: screenSurfaces, register t4
     private const int ScreenSurfaceByteLength = ((sizeof(float) * 4) * 3); // 48-byte ScreenSurfaceData: right.xyz+halfWidth, up.xyz+halfHeight, origin.xyz+pad (KEEP IN SYNC with sdf-world.hlsli)
     private const uint TileBindingIndex = 3; // matches sdf-world.hlsli's [[vk::binding(3, 0)]]
     // The tile cull buffer carries FOUR planes per (viewport, tile), each of stride
@@ -87,16 +88,16 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // disabled), so every plane is a total function.
     // KEEP IN SYNC with WorldTilePlaneCount + worldTilePlaneStride in sdf-world.hlsli / sdf-tile.hlsli.
     private const uint TilePlaneCount = 4;
-    // Two float3 corners per (viewport, live instance), appended after the tile planes.
+    // Primary and AO cache bands, each holding two float3 corners per (viewport, live instance), after the tile planes.
     // KEEP IN SYNC with SdfPartBoundFloatCount and sdfPartBoundIndex in sdf-part-bounds.hlsli.
-    private const uint PartBoundFloatCount = 6;
+    private const uint PartBoundFloatCount = 12;
     private const uint TileSize = 16; // KEEP IN SYNC with WorldTileSize in sdf-world.hlsli
     /// <summary>The primary (camera) march's per-pixel step budget. KEEP IN SYNC with <c>MaxSteps</c> in
     /// sdf-world.hlsli. Exposed so a host's cost sheet can quote an authored <see cref="SdfFrame.FarDistance"/>
     /// against the budget that has to reach it (a ray skimming open ground at height <c>h</c> takes roughly one step
     /// per <c>h</c> units of depth, so the far distance is that ray's step count per unit of height).</summary>
     public const int PrimaryMarchSteps = 128;
-    private const uint TimingCapacity = 9; // frame start plus one close per pass; must stay >= TimingMarkCount
+    private const uint TimingCapacity = 11; // frame start plus one close per pass; must stay >= TimingMarkCount
     // One timing pool more than the ring depth, so the pool read back by TryReadPassTimings (frame N−2's — the
     // newest frame the slot fence PROVES complete) is never the one the current frame is about to reset.
     private const int TimingPoolCount = (FrameRingSize + 1);
@@ -108,7 +109,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // list, so its SRV resolves to register t43 (after sdfFrameInstanceGrid t42). KEEP IN SYNC with sdf-world.hlsli.
     private const uint VolumeBindingIndex = 48;
     private const uint PrimaryHitBindingIndex = 49; // sdfPrimaryHits at u6, after the five source images
-    private const int PrimaryHitByteLength = 3 * 16; // three float4 rows; paired with sdf-world.hlsli
+    private const int PrimaryHitByteLength = 5 * 16; // hit, surface and AO data; paired with sdf-world.hlsli
     // Packed flow/cloud volume stride; paired with shade-volumes.hlsli.
     private const int VolumeByteLength = sizeof(float) * 4 * SdfVolume.VectorsPerEntry;
     private const uint WorkgroupEdge = 8;
@@ -259,6 +260,10 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private readonly IGpuComputePipeline m_viewsPipeline;
     private readonly IGpuComputePipeline m_primaryPipeline;
     private readonly IGpuShaderModule m_primaryShaderModule;
+    private readonly IGpuComputePipeline m_surfacePipeline;
+    private readonly IGpuShaderModule m_surfaceShaderModule;
+    private readonly IGpuComputePipeline m_ambientPipeline;
+    private readonly IGpuShaderModule m_ambientShaderModule;
     private readonly IGpuBuffer m_primaryHitBuffer;
     private readonly IGpuShaderModule m_viewsShaderModule;
     private readonly uint m_width;
@@ -327,16 +332,16 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     private IGpuTimingPool[]? m_timingPools;
     private SdfViewsKernelVariant m_viewsVariant;
 
-    // shared primary/views layout: screenSource0..MaxScreenSurfaces-1, registers t5.. — one binding per screen
+    // shared hit-pass layout: screenSource0..MaxScreenSurfaces-1, registers t5.. — one binding per screen
     // index (KEEP IN SYNC with sdf-world.hlsli's screenSource declarations). DERIVED from the base + count so the list
     // can never drift from MaxScreenSurfaces (the D3D12 heap-packing discipline: never hand-count a binding run).
     private static readonly uint[] ScreenSourceBindingIndices = BuildScreenSourceBindingIndices();
-    // shared primary/views layout: the SDF_SHAPE_GLYPH font atlas, register t39 (SRV, after screenLights t38) +
+    // shared hit-pass layout: the SDF_SHAPE_GLYPH font atlas, register t39 (SRV, after screenLights t38) +
     // static sampler s32 (after the 32 screen samplers s0..s31) — APPENDED LAST in viewsBindings so the D3D12 registers
     // land there; DERIVED as the first binding past the 32 screen sources (12..43). KEEP IN SYNC with sdf-vm.hlsli's
     // sdfGlyphAtlas.
     private static readonly uint GlyphAtlasBindingIndex = (ScreenSourceBindingBase + ((uint)MaxScreenSurfaces));
-    // shared primary/views layout: the GLYPH DECAL buffer, register t40 — appended AFTER the glyph atlas
+    // shared hit-pass layout: the GLYPH DECAL buffer, register t40 — appended AFTER the glyph atlas
     // (t39), DERIVED so it can never drift when the screen-source run grows. KEEP IN SYNC with sdf-world.hlsli's
     // sdfDecalCells (Vulkan binding 45).
     private static readonly uint DecalCellsBindingIndex = (GlyphAtlasBindingIndex + 1u);
@@ -346,7 +351,7 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
     // sdf.info verb, the [world-timing] line, and the bench's per-pass feed all surface it with no further change (each
     // reads PassTimingLabels / TryReadPassTimings, never a hardcoded tuple). Keep TimingCapacity at least one larger
     // than the pass count, including skipped-frame closes.
-    private static readonly string[] PassLabels = ["upload", "sky", "mask", "beam", "cull-args", "primary", "views", "composite"];
+    private static readonly string[] PassLabels = ["upload", "sky", "mask", "beam", "cull-args", "primary", "surface", "ambient", "views", "composite"];
     private static readonly uint TimingMarkCount = ((uint)(PassLabels.Length + 1));
     private readonly nint[] m_beamSets = new nint[FrameRingSize];
     // The change-detected descriptor caches are PER RING SLOT: each slot's sets are only rewritten once that slot's
@@ -502,6 +507,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             stage: GpuShaderStage.Compute,
             bytecode: kernels.Primary
         );
+        m_surfaceShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.Surface);
+        m_ambientShaderModule = gpu.ShaderModuleFactory.Create(deviceContext: device, stage: GpuShaderStage.Compute, bytecode: kernels.Ambient);
         m_viewsCoreShaderModule = gpu.ShaderModuleFactory.Create(
             deviceContext: device,
             stage: GpuShaderStage.Compute,
@@ -977,6 +984,26 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
             description: new GpuComputePipelineDescription(
                 Bindings: viewsBindings,
                 Name: "sdf-world-primary",
+                PushConstantBinding: pushConstantBinding,
+                SamplerFilter: GpuSamplerFilter.Nearest
+            ),
+            deviceContext: device
+        );
+        m_surfacePipeline = CreateReloadablePipeline(
+            computeShaderModule: m_surfaceShaderModule,
+            description: new GpuComputePipelineDescription(
+                Bindings: viewsBindings,
+                Name: "sdf-world-surface",
+                PushConstantBinding: pushConstantBinding,
+                SamplerFilter: GpuSamplerFilter.Nearest
+            ),
+            deviceContext: device
+        );
+        m_ambientPipeline = CreateReloadablePipeline(
+            computeShaderModule: m_ambientShaderModule,
+            description: new GpuComputePipelineDescription(
+                Bindings: viewsBindings,
+                Name: "sdf-world-ambient",
                 PushConstantBinding: pushConstantBinding,
                 SamplerFilter: GpuSamplerFilter.Nearest
             ),
@@ -1620,6 +1647,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_cullArgsPipeline.Dispose();
         m_viewsPipeline.Dispose();
         m_primaryPipeline.Dispose();
+        m_surfacePipeline.Dispose();
+        m_ambientPipeline.Dispose();
         m_viewsCorePipeline.Dispose();
         m_viewsFoldsPipeline.Dispose();
         m_skyPipeline.Dispose();
@@ -1645,6 +1674,8 @@ public sealed partial class SdfWorldEngine : IDisposable, ISdfBrickBakeService {
         m_cullArgsShaderModule.Dispose();
         m_viewsShaderModule.Dispose();
         m_primaryShaderModule.Dispose();
+        m_surfaceShaderModule.Dispose();
+        m_ambientShaderModule.Dispose();
         m_viewsCoreShaderModule.Dispose();
         m_viewsFoldsShaderModule.Dispose();
         m_skyShaderModule.Dispose();

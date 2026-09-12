@@ -690,14 +690,14 @@ static int sdfMaterialBlendOther = 0;
 // mapCore/mapGradCore's march-vs-shade mode: false (every march sample — the beam cone, the fine march, shadow, AO,
 // including their rigid-leaf fast paths) skips a
 // SDF_SHAPE_DETAIL_FLAG shape entirely, so it never appears in the marched hit, the collider, or the step bound.
-// sdf-world.hlsli's renderView flips it true for exactly the lifetime of its hit-only material/normal re-evaluation
+// renderView and sdfResolveSurface flip it true for exactly the lifetime of hit-only material/normal re-evaluation
 // at the already-found surface point, so a detail shape's local perturbation and material win only there. False
 // everywhere else, so an unauthored program renders byte-identical.
 static bool sdfDetailShadingActive = false;
 
 // mapCore/mapGradCore's secondary-ray exclusion mode: false (the primary/beam/fine march, the normal probes, and the
 // hit-only shade/detail re-evaluations) carries a SDF_SHAPE_NO_SECONDARY_FLAG shape like any ordinary shape. true
-// (sdf-world.hlsli's renderView, for exactly the lifetime of its softShadowVisibility/calcAO/calcFastAO calls) skips
+// (renderView's shadow calls and sdfResolveAmbient's AO calls, only for their duration) skips
 // it — the study's secondaryScene posture: a shape marked secondary=false still shades and collides, it just casts
 // no shadow and contributes no AO. False everywhere else, so an unauthored program renders byte-identical.
 static bool sdfSecondaryMarchActive = false;
@@ -1268,46 +1268,7 @@ float sdfStar2D(float2 p, float r, float an, float2 ecs) {
 // leaves finite inputs unchanged. At the exact centre p == (0,0) this returns 0 rather than
 // -min(ab): sign(p.y - r.y) is 0 there. That is a deliberate convention at a measure-zero point, and only observable
 // through a Subtraction/Onion of an ellipse exactly at its centre.
-float sdfEllipse2D(float2 p, float2 ab) {
-    p = abs(p);
-
-    if (p.x > p.y) {
-        p = p.yx;
-        ab = ab.yx;
-    }
-
-    float l = ((ab.y * ab.y) - (ab.x * ab.x));
-    float m = ((ab.x * p.x) / l);
-    float m2 = (m * m);
-    float n = ((ab.y * p.y) / l);
-    float n2 = (n * n);
-    float c = (((m2 + n2) - 1.0) / 3.0);
-    float c3 = ((c * c) * c);
-    float q = (c3 + ((m2 * n2) * 2.0));
-    float d = (c3 + (m2 * n2));
-    float g = (m + (m * n2));
-    float co;
-
-    if (d < 0.0) {
-        float h = (acos(q / c3) / 3.0);
-        float s = cos(h);
-        float t = (sin(h) * SDF_SQRT3);
-        float rx = sqrt((-c * ((s + t) + 2.0)) + m2);
-        float ry = sqrt((-c * ((s - t) + 2.0)) + m2);
-        co = ((((ry + (sign(l) * rx)) + (abs(g) / (rx * ry))) - m) / 2.0);
-    } else {
-        float h = ((2.0 * m) * (n * sqrt(d)));
-        float s = (sign(q + h) * pow(abs(q + h), (1.0 / 3.0)));
-        float u = (sign(q - h) * pow(abs(q - h), (1.0 / 3.0)));
-        float rx = ((((-s - u) - (c * 4.0)) + (2.0 * m2)));
-        float ry = ((s - u) * SDF_SQRT3);
-        float rm = sqrt(((rx * rx) + (ry * ry)));
-        co = ((((ry / sqrt(rm - rx)) + ((2.0 * g) / rm)) - m) / 2.0);
-    }
-
-    float2 r = (ab * float2(co, sqrt(saturate(1.0 - (co * co)))));
-    return (length(r - p) * sign(p.y - r.y));
-}
+#include "sdf-ellipse.hlsli"
 
 // --- lifted wrappers (data1.y > 0.5 selects EXTRUDE; else REVOLVE) — what evaluateShape dispatches to ---
 // data1.w is the family-wide EDGE-ROUNDING radius r. The host already inset the Data0 profile params (and, for an
@@ -2381,6 +2342,10 @@ SdfProgramLayout sdfLoadProgramLayout() {
 
 // Only the primary whole-part traversal sets this. Other query paths keep the complete field.
 static bool sdfPrimaryOmitParts = false;
+static float sdfAmbientDistanceCeiling = SDF_FAR_DISTANCE;
+#if defined(SDF_PRIMARY_READ) && defined(SDF_PART_RAY_BOUNDS)
+bool sdfPartCannotImprove(uint instance, float3 p, float distance);
+#endif
 SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) {
     // Every call publishes a fresh fold-safe step bound (stale bounds from a previous sample would be unsound); the
     // fold cases below tighten walkStepBound and the single return publishes it in clamped units.
@@ -2465,7 +2430,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     int parityMaterialDelta = 0;
     SdfHit result;
 
-    result.distance = SDF_FAR_DISTANCE;
+    result.distance = sdfAmbientDistanceCeiling;
     result.material = 0;
     result.lanes = float4(0.0, 0.0, 0.0, 0.0);
     result.frameSlot = -1;
@@ -2514,7 +2479,11 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 partReady = partReady && ((part.z & 0x80000000u) == 0u);
 #endif
                 if (partReady) {
-                    if (!sdfPrimaryOmitParts) {
+                    if (!sdfPrimaryOmitParts
+#if defined(SDF_PRIMARY_READ) && defined(SDF_PART_RAY_BOUNDS)
+                        && !sdfPartCannotImprove(pendingInstance, worldPosition, result.distance)
+#endif
+                    ) {
                         sdfComposePartProgram(result, worldPosition, part, dataOffset, trackMaterial);
                     }
                     sdfNextVisibleInstanceRange(instanceMaskBase, instanceOffset, instanceCount, maskWordIndex,

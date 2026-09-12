@@ -11,6 +11,8 @@ public sealed partial class SdfWorldEngine {
         "sdf-instance-cull" => kernels.InstanceCull,
         "sdf-cull-args" => kernels.CullArgs,
         "sdf-world-primary" => kernels.Primary,
+        "sdf-world-surface" => kernels.Surface,
+        "sdf-world-ambient" => kernels.Ambient,
         "sdf-world-views" => kernels.Views,
         "sdf-world-views-core" => kernels.ViewsCore,
         "sdf-world-views-folds" => kernels.ViewsFolds,
@@ -39,7 +41,7 @@ public sealed partial class SdfWorldEngine {
     /// <param name="kernels">A complete compiled set for this engine's current backend and unchanged host binding ABI.</param>
     /// <returns>The number of changed, active pipelines installed.</returns>
     /// <remarks>Call serially with submission, never from a concurrent command thread. Candidates are created before
-    /// the frame ring drains. The beam/primary/views ISA handshake runs before commit; failures restore the previous set.
+    /// the frame ring drains. The beam/primary/surface/ambient/views ISA handshake runs before commit; failures restore the previous set.
     /// A C# binding or buffer-layout change still requires rebuilding the host. This does not reload child engines
     /// or postprocessing decorators owned by other nodes.</remarks>
     /// <exception cref="ObjectDisposedException">The engine has been disposed.</exception>

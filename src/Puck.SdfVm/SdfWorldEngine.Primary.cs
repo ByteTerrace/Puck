@@ -3,29 +3,29 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldEngine {
-    // The primary and shade dispatches use the same live view rectangles, tile masks, and indirect bbox. Every
-    // active shaded pixel therefore reads a record written this frame. Child views are skipped by both kernels.
-    private void RecordPrimary(nint commandBuffer, nint timingPool) {
+    // Primary, surface, ambient and views share live rectangles, masks and the indirect bbox. Every active
+    // shaded pixel reads a record written this frame. All four kernels skip hosted child views.
+    private void RecordHitPass(nint commandBuffer, nint timingPool, IGpuComputePipeline pipeline, string label, uint timingMark) {
         var recorder = m_gpu.ComputeRecorder;
 
-        recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, label: "primary");
+        recorder.BeginDebugGroup(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle, label: label);
         recorder.BindComputePipeline(
             commandBufferHandle: commandBuffer,
             deviceHandle: m_deviceHandle,
-            pipelineHandle: m_primaryPipeline.Handle
+            pipelineHandle: pipeline.Handle
         );
         recorder.BindComputeDescriptorSet(
             commandBufferHandle: commandBuffer,
             descriptorSetHandle: m_viewsSets[m_currentSlot],
             deviceHandle: m_deviceHandle,
-            pipelineLayoutHandle: m_primaryPipeline.LayoutHandle
+            pipelineLayoutHandle: pipeline.LayoutHandle
         );
         recorder.PushConstants(
             commandBufferHandle: commandBuffer,
             data: m_pushConstant,
             deviceHandle: m_deviceHandle,
             offset: 0,
-            pipelineLayoutHandle: m_primaryPipeline.LayoutHandle,
+            pipelineLayoutHandle: pipeline.LayoutHandle,
             stageFlags: GpuShaderStage.Compute
         );
         recorder.DispatchIndirect(
@@ -35,10 +35,10 @@ public sealed partial class SdfWorldEngine {
             deviceHandle: m_deviceHandle
         );
         recorder.EndDebugGroup(commandBufferHandle: commandBuffer, deviceHandle: m_deviceHandle);
-        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: 6, timingPool: timingPool);
+        WriteTimingMark(commandBuffer: commandBuffer, queryIndex: timingMark, timingPool: timingPool);
         recorder.MemoryBarrier(
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuComputeAccess.ShaderRead,
+            destinationAccessMask: GpuComputeAccess.ShaderRead | GpuComputeAccess.ShaderWrite,
             destinationStageMask: GpuComputeStage.ComputeShader,
             deviceHandle: m_deviceHandle,
             sourceAccessMask: GpuComputeAccess.ShaderWrite,
