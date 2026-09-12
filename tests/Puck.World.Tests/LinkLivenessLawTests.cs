@@ -49,7 +49,7 @@ public sealed class LinkLivenessLawTests {
         // The control for the law above with exactly one value different: livenessGraceSeconds 0 rather than 0.05.
         using var fixture = Fixtures.FreshServer(definition: SeamDocument(graceSeconds: 0f));
 
-        for (var tick = 0; (tick < 32); tick++) {
+        for (var tick = 0; (tick < 4); tick++) {
             fixture.Step();
             Assert.DoesNotContain(collection: fixture.Server.Events.Edges, filter: static edge => (edge.Family is WorldEventFamily.LinkDropped or WorldEventFamily.LinkEstablished));
             Assert.Equal(expected: 0L, actual: fixture.Server.Events.LinkStalenessTicks(adjacencyName: LinkRow));

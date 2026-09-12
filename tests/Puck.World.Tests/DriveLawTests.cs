@@ -539,7 +539,7 @@ public sealed class DriveLawTests {
             .WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One)
             .WithChannel(ordinal: PitchOrdinal, value: FixedQ4816.One);
 
-        for (var tick = 0; (tick < 600); tick++) {
+        for (var tick = 0; (tick < 75); tick++) {
             body.SubmitIntent(intent: intent);
             fixture.Step();
         }

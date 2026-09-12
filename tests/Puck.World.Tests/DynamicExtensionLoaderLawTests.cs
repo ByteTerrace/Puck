@@ -1,5 +1,5 @@
 using Puck.Abstractions.Machines;
-using Puck.GamingBricks.Forge;
+using Puck.Abstractions.Machines;
 using Puck.World.Machines;
 using Puck.World.Server;
 using Xunit;
@@ -211,14 +211,14 @@ public sealed class DynamicExtensionLoaderLawTests {
             }
 
             var serverRegistry = new TestServerExtensionRegistry();
-            var machineExtensions = new List<IGamingBrickExtension>();
+            var machineExtensions = new List<IMachineExtension>();
             var machineRegistry = new WorldMachineExtensionRegistry();
 
             var loaded = WorldExtensionLoader.LoadFromDirectory(
                 directoryPath: tempRoot.FullName,
                 serverRegistry: serverRegistry,
                 onExtensionLoaded: ext => {
-                    if (ext is IGamingBrickExtension brickExt) {
+                    if (ext is IMachineExtension brickExt) {
                         brickExt.Initialize(registry: machineRegistry);
                         machineExtensions.Add(brickExt);
                     }
@@ -267,13 +267,13 @@ public sealed class DynamicExtensionLoaderLawTests {
             var serverRegistry = new TestServerExtensionRegistry();
             var discoveredControlExtensions = new List<Puck.Hosting.IControlExtension>();
             var discoveredAgentExtensions = new List<Puck.World.Protocol.IWorldAgentExtension>();
-            var discoveredBrickExtensions = new List<IGamingBrickExtension>();
+            var discoveredBrickExtensions = new List<IMachineExtension>();
 
             var loaded = WorldExtensionLoader.LoadFromDirectory(
                 directoryPath: tempRoot.FullName,
                 serverRegistry: serverRegistry,
                 onExtensionLoaded: ext => {
-                    if (ext is IGamingBrickExtension be) {
+                    if (ext is IMachineExtension be) {
                         discoveredBrickExtensions.Add(be);
                     }
                     if (ext is Puck.Hosting.IControlExtension ce) {

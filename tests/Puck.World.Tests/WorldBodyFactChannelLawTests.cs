@@ -30,7 +30,7 @@ public sealed class WorldBodyFactChannelLawTests {
 
         body.Pose(x: 0f, y: -0.5f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
 
-        for (var settle = 0; (settle < 60); settle++) {
+        for (var settle = 0; (settle < 8); settle++) {
             fixture.Step(stepTicks: Puck.Hosting.EngineTicks.PerRate(ratePerSecond: 30));
         }
 

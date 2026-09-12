@@ -94,7 +94,7 @@ public sealed class ChannelFrameLawTests {
         var strafeOrdinal = 1;
         var heading = body.FixedYaw;
 
-        for (var tick = 0; (tick < 24); tick++) {
+        for (var tick = 0; (tick < 3); tick++) {
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: strafeOrdinal, value: Puck.Maths.FixedQ4816.One));
             fixture.Step();
         }
@@ -104,7 +104,7 @@ public sealed class ChannelFrameLawTests {
         Assert.Equal(expected: heading, actual: body.FixedYaw);
         Assert.True(condition: (MathF.Abs(x: attitudeYaw) > 1f), userMessage: $"a full strafe should angle the attitude toward its travel; attitude yaw {attitudeYaw}");
 
-        for (var tick = 0; (tick < 4); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             body.SubmitIntent(intent: default);
             fixture.Step();
         }

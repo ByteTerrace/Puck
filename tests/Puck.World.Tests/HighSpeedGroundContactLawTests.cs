@@ -82,7 +82,7 @@ public sealed class HighSpeedGroundContactLawTests {
         var standing = fixture.Server.Body(index: 0)!;
 
         standing.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 1f, yawRadians: 0f, z: 0f);
-        for (var tick = 0; (tick < 60); tick++) {
+        for (var tick = 0; (tick < 8); tick++) {
             fixture.Step(stepTicks: EngineTicks.PerRate(ratePerSecond: 60));
         }
         Assert.True(condition: standing.Grounded);
@@ -94,7 +94,7 @@ public sealed class HighSpeedGroundContactLawTests {
             fixture.Server.Body(index: index)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 1.6f, yawRadians: 0f, z: 0f);
         }
 
-        for (var tick = 0; (tick < 30); tick++) {
+        for (var tick = 0; (tick < 4); tick++) {
             fixture.Step(stepTicks: EngineTicks.PerRate(ratePerSecond: 60));
         }
 

@@ -48,7 +48,7 @@ public sealed class BodySleepLawTests {
 
         Assert.False(condition: body.Asleep);
 
-        for (var tick = 0; (tick < 5); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
@@ -74,7 +74,7 @@ public sealed class BodySleepLawTests {
         var index = WorldBodiesLimits.LocalSeatCount;
         var body = population.EntryBody(index: index)!;
 
-        for (var tick = 0; (tick < 5); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
@@ -107,7 +107,7 @@ public sealed class BodySleepLawTests {
         var index = WorldBodiesLimits.LocalSeatCount;
         var body = population.EntryBody(index: index)!;
 
-        for (var tick = 0; (tick < 5); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 

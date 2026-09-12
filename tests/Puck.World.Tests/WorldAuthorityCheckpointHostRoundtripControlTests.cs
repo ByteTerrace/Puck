@@ -61,7 +61,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
 
-        for (var tick = 0; (tick < 100); tick++) {
+        for (var tick = 0; (tick < 12); tick++) {
             fixture.Step();
         }
 
@@ -103,7 +103,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        for (var tick = 0; (tick < 10); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
@@ -138,7 +138,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         )).Accepted);
 
-        for (var tick = 0; (tick < 10); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
@@ -195,7 +195,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             refusal: out _
         )));
 
-        for (var tick = 0; (tick < 10); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
@@ -253,7 +253,7 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests {
             refusal: out _
         )));
 
-        for (var tick = 0; (tick < 10); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 

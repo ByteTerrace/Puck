@@ -28,7 +28,7 @@ namespace Puck.World.Tests;
 /// </summary>
 internal static class Fixtures {
     /// <summary>The default fixture simulation rate; individual documents may author another rate.</summary>
-    private const uint SimulationRateHz = 240U;
+    private const uint SimulationRateHz = WorldDefinition.UnauthoredSimulationRateHz;
 
     /// <summary>The engine screen-surface index the code-built test-pattern screen occupies — the ENGAGE target
     /// <see cref="EngageAuthorityLawTests"/> routes against. The GPU-side <c>Puck.SdfVm.SdfWorldEngine</c> that
@@ -330,7 +330,7 @@ internal static class Fixtures {
             InputHoldRaw: new WorldInputHoldAuthoring(CeilingSeconds: 0.5f, DefaultSeconds: 0f, EqualizeByDefault: true, LowerAfterSeconds: 0.25f, Participants: []),
             // The engine holds no rate of its own (absence is a rate-0 resident world), so the stepping fixture
             // authors the standard 240 Hz itself, like its views section.
-            Simulation: new WorldSimulationDefaults(RateHz: 240)
+            Simulation: new WorldSimulationDefaults(RateHz: (int)SimulationRateHz)
         );
     }
 
@@ -598,6 +598,24 @@ internal static class Fixtures {
     public static readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> MachineHostFactory =
         static (screens, engines, documentPath, narrationHub) => new WorldMachineHost(screens: screens, engines: engines, documentPath: documentPath, narrationHub: narrationHub);
 
+    private static readonly Lazy<byte[]> s_defaultBytes = new(valueFactory: static () => WorldDefinitionSerialization.Serialize(definition: BuildDocument()));
+
+    /// <summary>One scratch root for the whole run, removed when the process exits.</summary>
+    private static readonly Lazy<string> s_scratchRoot = new(valueFactory: static () => {
+        var root = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
+
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => {
+            try {
+                Directory.Delete(path: root, recursive: true);
+            } catch (IOException) {
+                // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the run.
+            } catch (UnauthorizedAccessException) {
+            }
+        };
+
+        return root;
+    });
+
     /// <summary>Builds a FRESH, isolated, in-process <see cref="WorldServer"/> over <paramref name="definition"/>
     /// (<see cref="BuildDocument"/>'s own output when omitted) — the same construction shape
     /// <see cref="Puck.World.WorldReplaySnapshot.Drive"/> uses to rehydrate an authoritative world for offline
@@ -612,17 +630,79 @@ internal static class Fixtures {
     /// <param name="engines">The screen-machine engines a declared <c>screens</c> row resolves against, or
     /// <see langword="null"/> for none (no screen ever boots a machine) — every existing caller's behavior.</param>
     public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IScreenMachineEngine>? engines = null) {
-        var bytes = WorldDefinitionSerialization.Serialize(definition: (definition ?? BuildDocument()));
+        // The default document's BYTES are serialized once for the whole run. Each fixture still deserializes its
+        // own graph — that is what keeps one test's mutation off the next test's document — but the serialize half
+        // of the round trip is the same work every time and is not worth repeating seven hundred times.
+        var bytes = ((definition is null) ? s_defaultBytes.Value : WorldDefinitionSerialization.Serialize(definition: definition));
 
         definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
 
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(screens: definition.Screens, engines: (engines ?? []));
-        var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
+        // A PATH, not a directory: WorldOwnedWorlds creates and enumerates it itself, so pre-creating it here was a
+        // second round trip to disk for nothing. It sits under one run-wide root that is removed once, rather than
+        // being recursively deleted per fixture — four filesystem operations a test, for a directory exactly one
+        // test file ever reads.
+        var stateDirectory = Path.Combine(path1: s_scratchRoot.Value, path2: Guid.NewGuid().ToString(format: "N"));
         var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
         var server = new WorldServer(definition: definition, population: population, profiles: profiles, envelope: new WorldRenderEnvelope(), machines: machines, narrationSink: new WorldConsoleNarrationSink());
 
         return new WorldFixture(machines: machines, server: server, stateDirectory: stateDirectory);
+    }
+
+    /// <summary>Steps until <paramref name="settled"/> holds, or until <paramref name="ceiling"/> ticks have run.</summary>
+    /// <param name="fixture">The fixture to step.</param>
+    /// <param name="ceiling">The most ticks to run — the same worst-case bound a fixed loop would have spelled.</param>
+    /// <param name="settled">The property the law is waiting for.</param>
+    /// <returns>The tick the property first held on, or <paramref name="ceiling"/> when it never did.</returns>
+    /// <remarks>A law that waits for a body to come to rest or a value to converge wants the SETTLED state, not a
+    /// particular number of ticks. Spelling the wait as a fixed count means picking a number comfortably past the
+    /// worst case and then simulating all of it every run, forever, including the thousands of ticks after the
+    /// answer stopped changing. The ceiling still bounds a law that never settles, and the assertion that follows is
+    /// unchanged — this only stops paying for ticks nobody reads.</remarks>
+    public static int StepUntil(this WorldFixture fixture, int ceiling, Func<bool> settled) {
+        ArgumentNullException.ThrowIfNull(argument: fixture);
+        ArgumentNullException.ThrowIfNull(argument: settled);
+
+        for (var tick = 0; (tick < ceiling); tick++) {
+            if (settled()) {
+                return tick;
+            }
+
+            fixture.Step();
+        }
+
+        return ceiling;
+    }
+
+    /// <summary>Steps until <paramref name="observe"/> reports the same value <paramref name="quiet"/> ticks running,
+    /// or until <paramref name="ceiling"/> ticks have run.</summary>
+    /// <param name="fixture">The fixture to step.</param>
+    /// <param name="ceiling">The most ticks to run.</param>
+    /// <param name="observe">The value whose convergence the law is waiting for.</param>
+    /// <param name="quiet">How many consecutive unchanged reads count as converged.</param>
+    /// <returns>The tick convergence was reached on, or <paramref name="ceiling"/> when it never was.</returns>
+    public static int StepUntilStable(this WorldFixture fixture, int ceiling, Func<long> observe, int quiet = 64) {
+        ArgumentNullException.ThrowIfNull(argument: fixture);
+        ArgumentNullException.ThrowIfNull(argument: observe);
+
+        var last = observe();
+        var held = 0;
+
+        for (var tick = 0; (tick < ceiling); tick++) {
+            fixture.Step();
+
+            var current = observe();
+
+            held = ((current == last) ? (held + 1) : 0);
+            last = current;
+
+            if (held >= quiet) {
+                return tick;
+            }
+        }
+
+        return ceiling;
     }
 
     /// <summary>The tick duration every fixture step advances by — <see cref="EngineTicks.PerRate"/> at the fixed
@@ -780,15 +860,7 @@ internal sealed class WorldFixture : IDisposable {
     /// before/after an apply attempt.</summary>
     public byte[] DefinitionBytes() => WorldDefinitionSerialization.Serialize(definition: Server.Definition);
     /// <inheritdoc/>
-    public void Dispose() {
-        m_machines.Dispose();
-
-        try {
-            Directory.Delete(path: m_stateDirectory, recursive: true);
-        } catch (IOException) {
-            // Best-effort scratch cleanup; a locked handle on a slow CI disk must never fail the test itself.
-        }
-    }
+    public void Dispose() => m_machines.Dispose();
 }
 /// <summary>An <see cref="IWorldAddonHost"/> that mounts and pumps nothing — the addon-less shadow host tests
 /// unrelated to the addon seam wire a <see cref="WorldReplayTape"/>'s required <c>addonHostFactory</c> parameter

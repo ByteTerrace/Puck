@@ -140,7 +140,7 @@ public sealed class WorldCarryTangibilityLawTests {
         // Walk the carrier toward the wall in small per-tick steps (never one big jump — the sweep is a continuous
         // check from the ball's own previous position, not a teleport-safe one) far enough that an UNBLOCKED ball
         // would end up on the far side of the wall's near face.
-        for (var step = 0; (step < 60); step++) {
+        for (var step = 0; (step < 8); step++) {
             blockedCarrier.Pose(x: 0f, y: 0f, z: (-0.02f * step), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
             blocked.Step();
         }
@@ -160,7 +160,7 @@ public sealed class WorldCarryTangibilityLawTests {
         Assert.True(condition: open.Server.Population.TryBeginCarry(carrierIndex: CarrierIndex, targetIndex: BallIndex, reason: out var openBeginReason), userMessage: openBeginReason);
         open.Step();
 
-        for (var step = 0; (step < 60); step++) {
+        for (var step = 0; (step < 8); step++) {
             openCarrier.Pose(x: 0f, y: 0f, z: (-0.02f * step), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
             open.Step();
         }

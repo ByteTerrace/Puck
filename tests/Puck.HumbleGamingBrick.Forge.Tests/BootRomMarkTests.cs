@@ -4,12 +4,39 @@ using Xunit;
 namespace Puck.HumbleGamingBrick.Forge.Tests;
 
 /// <summary>
-/// The boot bitmap decides which cartridges an image runs: a boot program hands off only to a cartridge carrying the
-/// mark it was built with, and wedges on every other one. The pair is exclusive because the Color image has no room
-/// for a second 48-byte table, so the mark is a substitution rather than an addition.
+/// Compatible firmware accepts independently authored logos; the two explicit strict policies still verify their
+/// own table. A header logo is neither a signature nor a restricted-distribution security boundary.
 /// </summary>
 public sealed class BootRomMarkTests {
     private const int InstructionCeiling = 4_000_000;
+
+    [Theory]
+    [InlineData(ConsoleModel.DmgB)]
+    [InlineData(ConsoleModel.CgbD)]
+    public void CompatibleRunsEraHouseAndArbitraryLogos(ConsoleModel model) {
+        var rom = BootRomProbeCartridge.Create(probe: BootRomLayout.For(model: model).Probes[0]);
+        Assert.True(condition: HandsOff(mark: BootRomMark.Compatible, rom: rom, model: model));
+        CartridgeHeader.HouseLogo.CopyTo(destination: rom.AsSpan(start: CartridgeHeader.LogoOffset));
+        Assert.True(condition: HandsOff(mark: BootRomMark.Compatible, rom: rom, model: model));
+        rom.AsSpan(start: CartridgeHeader.LogoOffset, length: CartridgeHeader.Logo.Length).Fill(value: 0xA5);
+        Assert.True(condition: HandsOff(mark: BootRomMark.Compatible, rom: rom, model: model));
+    }
+
+    [Theory]
+    [InlineData(ConsoleModel.DmgB)]
+    [InlineData(ConsoleModel.CgbD)]
+    public void CompatibleStillRefusesCorruptedHeaderChecksum(ConsoleModel model) {
+        var rom = BootRomProbeCartridge.Create(probe: BootRomLayout.For(model: model).Probes[0]);
+        rom[0x014D] ^= 0x01;
+        Assert.False(condition: HandsOff(mark: BootRomMark.Compatible, rom: rom, model: model));
+    }
+
+    [Fact]
+    public void CompatibleIsTheDefaultAndUnknownPolicyIsRefused() {
+        Assert.Equal(expected: BootRomBuilder.Build(model: ConsoleModel.Mgb, mark: BootRomMark.Compatible),
+            actual: BootRomBuilder.Build(model: ConsoleModel.Mgb));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => BootRomBuilder.Build(model: ConsoleModel.Mgb, mark: (BootRomMark)255));
+    }
 
     [Fact]
     public void AForgedCartridgeIsRunByTheHouseImageAndRefusedByTheEraOne() {
@@ -35,12 +62,12 @@ public sealed class BootRomMarkTests {
 
     // Boots the image against the cartridge and reports whether the boot program ever unmapped itself, which is the
     // instant it hands the machine over.
-    private static bool HandsOff(BootRomMark mark, byte[] rom) {
+    private static bool HandsOff(BootRomMark mark, byte[] rom, ConsoleModel model = ConsoleModel.CgbE) {
         using var instance = MachineFactory.Create(
             configuration: new MachineConfiguration(
-                bootRom: BootRomBuilder.Build(model: ConsoleModel.CgbE, mark: mark),
+                bootRom: BootRomBuilder.Build(model: model, mark: mark),
                 cartridgeRom: rom,
-                model: ConsoleModel.CgbE
+                model: model
             ),
             compose: static services => services.AddHumbleGamingBrickComponents()
         );

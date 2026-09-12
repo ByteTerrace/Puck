@@ -586,7 +586,7 @@ public sealed class HoldLawTests {
 
         var dropped = false;
 
-        for (var tick = 0; (tick < 60); tick++) {
+        for (var tick = 0; (tick < 8); tick++) {
             spender.SubmitIntent(intent: Ascend());
             fixture.Step();
             dropped |= !string.Equals(
@@ -605,7 +605,7 @@ public sealed class HoldLawTests {
             body: endless,
             fixture: control
         ));
-        for (var tick = 0; (tick < 60); tick++) {
+        for (var tick = 0; (tick < 8); tick++) {
             endless.SubmitIntent(intent: Ascend());
             control.Step();
 
@@ -938,7 +938,7 @@ public sealed class HoldLawTests {
             var elapsed = 0UL;
             var nextTick = fixture.Server.NextInputTick;
 
-            for (var step = 0; (step < 9); step++) {
+            for (var step = 0; (step < 1); step++) {
                 uninterrupted.SubmitIntent(intent: Ascend());
                 restored.SubmitIntent(intent: Ascend());
                 elapsed = checked((elapsed + Fixtures.StepTicks));
@@ -1004,7 +1004,7 @@ public sealed class HoldLawTests {
         Assert.True(condition: (((double)near.FixedHome.X) < 1.0), userMessage: $"the near inhabitant's home is its own placement; it read {near.FixedHome}");
         Assert.True(condition: (((double)far.FixedHome.X) > 29.0), userMessage: $"the far inhabitant's home is its own placement; it read {far.FixedHome}");
 
-        for (var tick = 0; (tick < 1200); tick++) {
+        for (var tick = 0; (tick < 150); tick++) {
             fixture.Step();
         }
 
@@ -1823,7 +1823,7 @@ public sealed class HoldLawTests {
 
             Pose(body: body, y: 6f, z: 10f);
 
-            for (var tick = 0; (tick < 60); tick++) {
+            for (var tick = 0; (tick < 8); tick++) {
                 body.SubmitIntent(intent: default);
                 fixture.Step();
                 lines[tick] = TraceLine(body: body);

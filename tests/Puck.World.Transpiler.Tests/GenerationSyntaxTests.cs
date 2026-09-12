@@ -206,6 +206,49 @@ public class GenerationSyntaxTests {
     }
 
     [Fact]
+    public void TestAConstantIsComputedOnceNotPerReference() {
+        // A `let` names a value. Re-lowering its expression at every reference made a CHAIN of them exponential:
+        // each layer rebuilt the whole of the layer beneath it, once per element. Six layers over 64 elements is
+        // 64^6 rebuilds if the value is not kept, and finishes immediately if it is — so this stands as a
+        // complexity guard, not merely a correctness one.
+        var lowered = Lower("""
+            let a0 = map(range(0, 64), i => i)
+            let a1 = map(range(0, 64), i => a0[i] + 1)
+            let a2 = map(range(0, 64), i => a1[i] + 1)
+            let a3 = map(range(0, 64), i => a2[i] + 1)
+            let a4 = map(range(0, 64), i => a3[i] + 1)
+            let a5 = map(range(0, 64), i => a4[i] + 1)
+
+            width: a5[10]
+            """);
+
+        Assert.Equal(15L, lowered["width"]?.GetValue<long>());
+    }
+
+    [Fact]
+    public void TestAConstantCannotReadALoopBinding() {
+        // What makes the kept value safe to keep: a `let` is a document-level value, lowered with no locals in
+        // scope, so it reads the same at every reference rather than picking up whichever loop happens to enclose
+        // the one that lowered it first.
+        var rows = Assert.IsType<JsonArray>(Lower("""
+            let i = 99
+            let fixed = i
+
+            prototypes {
+                for i in range(0, 2) {
+                    prototype $"p-{i}" {
+                        span: fixed
+                    }
+                }
+            }
+            """)["prototypes"]);
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(99L, Assert.IsType<JsonObject>(rows[0])["span"]?.GetValue<long>());
+        Assert.Equal(99L, Assert.IsType<JsonObject>(rows[1])["span"]?.GetValue<long>());
+    }
+
+    [Fact]
     public void TestRefusalsAreNamed() {
         Assert.Contains(LowerForDiagnostics("""
             let rows = [1, 2]

@@ -111,7 +111,7 @@ public sealed class PlacementResponseLawTests {
     public void AbsentTraitIsANoOp() {
         using var absent = Fixtures.FreshServer(definition: Document(respond: null));
 
-        for (var index = 0; (index < 20); index++) {
+        for (var index = 0; (index < 2); index++) {
             absent.Step();
         }
 
@@ -124,7 +124,7 @@ public sealed class PlacementResponseLawTests {
             Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 0.5f),
         ]));
 
-        for (var index = 0; (index < 20); index++) {
+        for (var index = 0; (index < 2); index++) {
             present.Step();
         }
 
@@ -147,7 +147,7 @@ public sealed class PlacementResponseLawTests {
             CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation), Creation(id: secondTarget)],
         }));
 
-        for (var index = 0; (index < 5); index++) {
+        for (var index = 0; (index < 1); index++) {
             firstWins.Step();
         }
 
@@ -163,7 +163,7 @@ public sealed class PlacementResponseLawTests {
             CreationsRaw = [Creation(id: BaseCreation), Creation(id: TargetCreation), Creation(id: secondTarget)],
         }));
 
-        for (var index = 0; (index < 5); index++) {
+        for (var index = 0; (index < 1); index++) {
             secondWins.Step();
         }
 
@@ -181,7 +181,7 @@ public sealed class PlacementResponseLawTests {
             Entry(comparison: ActionStateComparison.GreaterOrEqual, prototypeId: TargetCreation, threshold: 999f),
         ]));
 
-        for (var index = 0; (index < 20); index++) {
+        for (var index = 0; (index < 2); index++) {
             fixture.Step();
         }
 
@@ -202,7 +202,7 @@ public sealed class PlacementResponseLawTests {
         using var a = Fixtures.FreshServer(definition: Build());
         using var b = Fixtures.FreshServer(definition: Build());
 
-        for (var index = 0; (index < 20); index++) {
+        for (var index = 0; (index < 2); index++) {
             a.Step();
             b.Step();
 

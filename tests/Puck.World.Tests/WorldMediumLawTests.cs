@@ -521,12 +521,13 @@ public sealed class WorldMediumLawTests {
         var body = fixture.Server.Body(index: actor.Index)!;
 
         // No commanded input at all — the medium's own settle law is the only thing moving the body, so the
-        // settled height is a pure read of the law rather than of any thrust interaction. 5000 ticks is well past
-        // convergence (the body is bit-stable by ~4000 in the recorded trace this law was checked against).
-        for (var tick = 0; (tick < 5000); tick++) {
+        // settled height is a pure read of the law rather than of any thrust interaction. The wait is for the height
+        // to stop moving, bounded by the 5000 ticks this law used to spend unconditionally.
+        _ = fixture.StepUntilStable(ceiling: 5000, observe: () => {
             body.SubmitIntent(intent: default);
-            fixture.Step();
-        }
+
+            return body.FixedPosition.Y.Value;
+        });
 
         var settledY = (double)body.FixedPosition.Y;
         // The medium surface sits at world Y 5 (lattice origin 0 + value 1 * heightScale 5); the row's own

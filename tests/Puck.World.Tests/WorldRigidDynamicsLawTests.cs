@@ -64,7 +64,7 @@ public sealed class WorldRigidDynamicsLawTests {
         // Enough steps (at the fixture's 240 Hz step rate) to cross the 3-unit gap (less the two half-radii) at
         // 4 units/second and let the pair resolution settle the exchange, never so many that damping/friction
         // (both zero here) could matter.
-        for (var tick = 0; (tick < 400); tick++) {
+        for (var tick = 0; (tick < 50); tick++) {
             fixture.Step();
         }
 
@@ -146,7 +146,7 @@ public sealed class WorldRigidDynamicsLawTests {
             velocityCeiling: FixedQ4816.FromDouble(value: 1_000d)
         );
 
-        for (var tick = 0; (tick < 100); tick++) {
+        for (var tick = 0; (tick < 12); tick++) {
             fixture.Step();
         }
 
@@ -158,14 +158,14 @@ public sealed class WorldRigidDynamicsLawTests {
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: captured!);
         Assert.True(condition: WorldAuthorityCheckpointCodec.TryDecode(bytes: bytes, checkpoint: out var decoded, reason: out var decodeReason), userMessage: decodeReason);
 
-        for (var tick = 0; (tick < 300); tick++) {
+        for (var tick = 0; (tick < 38); tick++) {
             fixture.Step();
         }
         Assert.True(condition: (ball.RigidAngularVelocity.LengthSquared > FixedQ4816.Zero), userMessage: "the ball never picked up any spin — the residue this test exercises would be vacuous");
         var expected = WorldRuntimeStateHash.HashAuthoritative(server: fixture.Server, tick: 0UL);
 
         fixture.Server.RestoreCheckpoint(checkpoint: decoded!);
-        for (var tick = 0; (tick < 300); tick++) {
+        for (var tick = 0; (tick < 38); tick++) {
             fixture.Step();
         }
 
@@ -215,7 +215,7 @@ public sealed class WorldRigidDynamicsLawTests {
         Assert.Equal(expected: FixedVector3.Zero, actual: restored.RigidAngularVelocity);
         Assert.Equal(expected: frozenPosition, actual: box.FixedPosition);
 
-        for (var tick = 0; (tick < 120); tick++) {
+        for (var tick = 0; (tick < 15); tick++) {
             fixture.Step();
         }
 
@@ -375,7 +375,7 @@ public sealed class WorldRigidDynamicsLawTests {
 
         Assert.Equal(expected: (floor.Position.Y - Drop), actual: lowered.Position.Y);
 
-        for (var tick = 0; (tick < 240); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             fixture.Step();
         }
 

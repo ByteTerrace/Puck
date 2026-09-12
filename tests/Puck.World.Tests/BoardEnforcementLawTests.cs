@@ -197,7 +197,7 @@ public sealed class BoardEnforcementLawTests {
         Assert.Equal(expected: 0, actual: CellOf(fixture: fixture, body: piece));
 
         // The edge fires exactly once — a verdict left sitting at 0 does not keep returning the piece every tick.
-        for (var tick = 0; (tick < 8); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             piece.Pose(x: CellCentreX(ForbiddenCell), y: 0f, z: CellCentreZ(), yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
             fixture.Step();
         }

@@ -297,7 +297,7 @@ public sealed class HoldGravityFallbackLawTests {
 
             var body = fixture.Server.Body(index: actor.Index)!;
 
-            for (var tick = 0; (tick < 240); tick++) {
+            for (var tick = 0; (tick < 30); tick++) {
                 body.SubmitIntent(intent: default);
                 fixture.Step();
                 lines[tick] = TraceLine(body: body);

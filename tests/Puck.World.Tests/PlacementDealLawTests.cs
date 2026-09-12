@@ -286,7 +286,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
 
         Assert.Empty(collection: Children(server: fixture.Server));
 
-        for (var index = 0; (index < 5); index++) {
+        for (var index = 0; (index < 1); index++) {
             fixture.Step();
         }
 
@@ -454,7 +454,7 @@ public sealed partial class PlacementDealLawTests(ITestOutputHelper output) {
             fixture.Server.EnqueueMutation(mutation: seed);
         }
 
-        for (var tick = 0; (tick < 60); tick++) {
+        for (var tick = 0; (tick < 8); tick++) {
             fixture.Step(stepTicks: width);
         }
 

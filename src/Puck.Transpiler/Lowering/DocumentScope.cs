@@ -69,6 +69,35 @@ public sealed class DocumentScope(
     /// could be lowered again; a local shadows a constant of the same name.</remarks>
     public Dictionary<string, JsonNode?> Locals { get; private init; } = [];
 
+    /// <summary>
+    /// Each constant's lowered value, computed on first reference and reused after.
+    /// <para>A <c>let</c> names a VALUE, so it is worth computing once. Re-lowering the expression at every
+    /// reference made a chain of them exponential — <c>let b = map(range(0, n), i =&gt; a[i])</c> rebuilt the whole
+    /// of <c>a</c> once per element, and a third layer rebuilt that — which is how a 334-line cartridge source with
+    /// sixty-odd whole-map arrays stopped finishing at all.</para>
+    /// <para>Shared with a scope made by <see cref="WithLocals"/> and NOT with one made by
+    /// <see cref="WithConstants"/>: a lambda application or loop iteration sees the same constants, while a template
+    /// invocation rebinds the names and so starts its own.</para>
+    /// </summary>
+    public Dictionary<string, JsonNode?> ConstantValues { get; private init; } = new(StringComparer.Ordinal);
+
+    /// <summary>Gets a scope for lowering a CONSTANT: the same constants and templates, with no locals in scope.</summary>
+    /// <remarks>A <c>let</c> is a document-level value and cannot read a loop binding or a lambda parameter — which
+    /// is both what a reader expects of it and what makes its lowered value safe to keep.</remarks>
+    /// <returns>This scope when it already binds no locals, or a locals-free one.</returns>
+    public DocumentScope ForConstant() => ((Locals.Count == 0) ? this : new(
+        vocabulary: Vocabulary,
+        basePath: BasePath,
+        constants: Constants,
+        templates: Templates,
+        sourceMap: SourceMap,
+        diagnostics: Diagnostics,
+        schema: Schema,
+        currentPointer: CurrentPointer
+    ) {
+        ConstantValues = ConstantValues,
+    });
+
     /// <summary>Creates a scope identical to this one but carrying a different constant set, for a template
     /// invocation's bound parameters.</summary>
     /// <param name="invocationConstants">The constants the nested scope sees.</param>
@@ -101,6 +130,7 @@ public sealed class DocumentScope(
         currentPointer: CurrentPointer
     ) {
         Locals = lambdaLocals,
+        ConstantValues = ConstantValues,
     };
 }
 /// <summary>JSON helpers every lowering pass needs and none should restate.</summary>

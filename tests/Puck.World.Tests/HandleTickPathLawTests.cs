@@ -19,7 +19,7 @@ public sealed class HandleTickPathLawTests(ITestOutputHelper output) {
         using var fixture = Fixtures.FreshServer(definition: definition);
         var width = EngineTicks.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
 
-        for (var tick = 0; (tick < 60); tick++) {
+        for (var tick = 0; (tick < 8); tick++) {
             fixture.Step(stepTicks: width);
         }
 

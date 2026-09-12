@@ -34,7 +34,7 @@ public sealed class BodyUpPolicyLawTests {
         var actor = JoinSeat(fixture: fixture);
         var body = fixture.Server.Body(index: actor.Index)!;
 
-        for (var tick = 0; (tick < 12); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             fixture.Step();
         }
 

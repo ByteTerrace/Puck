@@ -241,7 +241,7 @@ public sealed class SteeringIntentLawTests {
         // Settle the ambient up axis onto the tilted field's own direction before ever running the producer — the
         // kit's Free/Lift hold never grounds, so SurfaceFollowing plays no part; ambient solved gravity alone steers
         // m_up here (WorldBody.Step.cs's ResolveUp).
-        for (var tick = 0; (tick < 480); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             fixture.Step();
         }
 
@@ -520,7 +520,7 @@ public sealed class SteeringIntentLawTests {
 
         approachOnlyBody.SetIntentSource(source: IntentSource.Producer(name: ProducerName));
 
-        for (var tick = 0; (tick < 30); tick++) {
+        for (var tick = 0; (tick < 4); tick++) {
             approachOnly.Step();
 
             Assert.Equal(

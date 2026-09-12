@@ -58,7 +58,7 @@ public sealed class MusicReplayReDerivabilityLawTests {
             fixture.Server.Answer(query: new WorldQuery.MusicState(Index: 1)).Text,
         };
 
-        for (var step = 0; (step < 5); step++) {
+        for (var step = 0; (step < 1); step++) {
             fixture.Step();
         }
 

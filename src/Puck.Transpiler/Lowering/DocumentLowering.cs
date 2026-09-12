@@ -86,7 +86,12 @@ public static class DocumentLowering {
                     return local?.DeepClone();
                 }
                 if (scope.Constants.TryGetValue(key: ident.Name, value: out var constExpr)) {
-                    return LowerValue(expr: constExpr, scope: scope, fieldKey: fieldKey);
+                    if (!scope.ConstantValues.TryGetValue(key: ident.Name, value: out var constant)) {
+                        constant = LowerValue(expr: constExpr, scope: scope.ForConstant(), fieldKey: fieldKey);
+                        scope.ConstantValues[ident.Name] = constant;
+                    }
+
+                    return constant?.DeepClone();
                 }
                 if (string.Equals(a: ident.Name, b: "null", comparisonType: StringComparison.Ordinal)) {
                     return null;

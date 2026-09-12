@@ -81,7 +81,7 @@
       },
       "source": {
         "$type": "machine",
-        "contentPath": "../../../../roms/tetris-world-rev1.gb",
+        "contentPath": "../../../../../roms/tetris-world-rev1.gb",
         "engine": "gaming-brick",
         "options": "cgb"
       },
@@ -113,7 +113,7 @@
       },
       "source": {
         "$type": "machine",
-        "contentPath": "../cartridges/tetris.cgb.cartridge.json",
+        "contentPath": "../../cartridges/tetris.cgb.cartridge.json",
         "engine": "gaming-brick",
         "options": "cgb"
       },

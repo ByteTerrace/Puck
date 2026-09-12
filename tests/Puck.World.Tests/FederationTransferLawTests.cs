@@ -759,7 +759,7 @@ public sealed class FederationTransferLawTests {
 
         // One sparse network update must mean "stick remains held", not "one destination-tick impulse".
         fixture.Server.PublishFederatedIntent(leaseId: 77, submission: in submission);
-        for (var tick = 0; (tick < 120); tick++) {
+        for (var tick = 0; (tick < 15); tick++) {
             fixture.Step();
         }
 
@@ -767,7 +767,7 @@ public sealed class FederationTransferLawTests {
         Assert.True(condition: (body.PlanarSpeed > 3.5f), userMessage: $"held stream settled at only {body.PlanarSpeed:0.###}");
 
         fixture.Server.ReleaseFederatedIntents(leaseId: 77);
-        for (var tick = 0; (tick < 30); tick++) {
+        for (var tick = 0; (tick < 4); tick++) {
             fixture.Step();
         }
 
@@ -795,7 +795,7 @@ public sealed class FederationTransferLawTests {
         var neutral = new IntentSubmission(Tick: 1, EntityIndex: bodyIndex, Intent: default, Principal: principal);
 
         fixture.Server.PublishFederatedIntent(leaseId: 79, submission: in neutral);
-        for (var tick = 0; (tick < 60); tick++) {
+        for (var tick = 0; (tick < 8); tick++) {
             fixture.Step();
         }
 

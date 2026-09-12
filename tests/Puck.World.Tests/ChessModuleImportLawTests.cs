@@ -78,7 +78,7 @@ public sealed class ChessModuleImportLawTests {
 
         body.Pose(x: x, y: SpawnHeight, z: z, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
 
-        for (var tick = 0; (tick < 400); tick++) {
+        for (var tick = 0; (tick < 50); tick++) {
             fixture.Step();
         }
     }
@@ -86,7 +86,7 @@ public sealed class ChessModuleImportLawTests {
     // The first stable physical position seeds accepted state. Later settles are judged
     // against lastLegal; rejected or incomplete observations never replace that baseline.
     private static void SettleFromSpawn(WorldFixture fixture) {
-        for (var tick = 0; (tick < 400); tick++) {
+        for (var tick = 0; (tick < 50); tick++) {
             fixture.Step();
         }
     }

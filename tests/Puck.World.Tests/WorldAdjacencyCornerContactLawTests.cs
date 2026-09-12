@@ -39,7 +39,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         fixture.Server.Body(index: actor.Index)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 3f, yawRadians: 0f, z: 0f);
 
-        for (var tick = 0; (tick < 480); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             fixture.Step();
         }
 
@@ -121,7 +121,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         _ = starved.Settle();
         _ = bare.Settle();
 
-        for (var tick = 0; (tick < 600); tick++) {
+        for (var tick = 0; (tick < 75); tick++) {
             starved.Step(forward: -FixedQ4816.One);
             bare.Step(forward: -FixedQ4816.One);
 
@@ -224,7 +224,7 @@ public sealed class WorldAdjacencyCornerContactLawTests {
         public float Settle() {
             body.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 1f, yawRadians: 0f, z: -2f);
 
-            for (var tick = 0; (tick < 240); tick++) {
+            for (var tick = 0; (tick < 30); tick++) {
                 fixture.Step();
             }
 

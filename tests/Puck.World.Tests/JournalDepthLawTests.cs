@@ -82,7 +82,7 @@ public sealed class JournalDepthLawTests {
         using var fixture = Fixtures.FreshServer(); // default host — JournalDepth 0.
         var row = new WorldStateRow(Name: CellName.Parse(candidate: "probe"), Kind: CellKind.Int);
 
-        for (var index = 0; (index < 30); index++) {
+        for (var index = 0; (index < 4); index++) {
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(Principal: WorldPrincipal.Console, Row: row));
             fixture.Step();
             fixture.Server.EnforceJournalDepth();
@@ -99,7 +99,7 @@ public sealed class JournalDepthLawTests {
 
         fixture.Server.EchoTap = echo => { if (echo.Rejected) { refusals.Add(item: echo.Message); } };
 
-        for (var index = 0; (index < 5); index++) {
+        for (var index = 0; (index < 1); index++) {
             var row = new WorldStateRow(Name: CellName.Parse(candidate: $"probe{index}"), Kind: CellKind.Int);
 
             fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(Principal: WorldPrincipal.Console, Row: row));

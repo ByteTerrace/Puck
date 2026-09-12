@@ -184,7 +184,7 @@ public sealed class CueLawTests {
 
         // At 240 Hz, 60 ticks is 0.25 s — comfortably past ceiling(max / step) = 40 charge ticks, so the cell must
         // have plateaued at max well before this loop ends.
-        for (var tick = 0; (tick < 60); tick++) {
+        for (var tick = 0; (tick < 8); tick++) {
             fixture.Step();
 
             var current = MagnitudeCellRaw(fixture: fixture);

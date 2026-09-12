@@ -201,7 +201,7 @@ public sealed class HexLinesModuleImportLawTests {
         using var fixture = Fixtures.FreshServer(definition);
         var population = fixture.Server.Population;
 
-        for (var tick = 0; (tick < 400); tick++) {
+        for (var tick = 0; (tick < 50); tick++) {
             fixture.Step();
         }
 

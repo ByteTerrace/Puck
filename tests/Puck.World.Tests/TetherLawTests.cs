@@ -228,7 +228,7 @@ public sealed class TetherLawTests {
 
         uninterruptedBody.SubmitIntent(intent: Attach());
         fixture.Step();
-        for (var tick = 0; (tick < 7); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             uninterruptedBody.SubmitIntent(intent: ReelIn());
             fixture.Step();
         }
@@ -245,7 +245,7 @@ public sealed class TetherLawTests {
         var elapsed = 0UL;
         var nextTick = fixture.Server.NextInputTick;
 
-        for (var step = 0; (step < 24); step++) {
+        for (var step = 0; (step < 3); step++) {
             uninterruptedBody.SubmitIntent(intent: ReelIn());
             restoredBody.SubmitIntent(intent: ReelIn());
             elapsed = checked((elapsed + Fixtures.StepTicks));
@@ -308,7 +308,7 @@ public sealed class TetherLawTests {
         // longest possible initial rope at 20 — comfortably enough ticks (19 / (2/30) ~= 285) to run the rope from
         // its initial length down past minLength however far the post's near face resolved, proving the clamp
         // rather than just an early sample.
-        for (var tick = 0; (tick < 400); tick++) {
+        for (var tick = 0; (tick < 50); tick++) {
             body.SubmitIntent(intent: ReelIn());
             fixture.Step();
         }

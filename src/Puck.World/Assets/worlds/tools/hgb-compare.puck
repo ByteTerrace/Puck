@@ -19,8 +19,8 @@ let screenUp = [0, 1, 0]
 let spread = 1.8
 let brick = "gaming-brick"
 let colorOptions = "cgb"
-let reference = "../../../../roms/tetris-world-rev1.gb"
-let authored = "../cartridges/tetris.cgb.cartridge.json"
+let reference = "../../../../../roms/tetris-world-rev1.gb"
+let authored = "../../cartridges/tetris.cgb.cartridge.json"
 
 host {
     authority: null

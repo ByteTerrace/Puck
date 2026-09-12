@@ -161,6 +161,9 @@ Beside them: the [SDF handbook](docs/sdf-handbook/README.md), the
 The [state duplication review](docs/reviews/state-duplication.md) identifies
 shared implementation opportunities and the author semantics they must preserve.
 
+The [screens and machine extensions plan](docs/machine-extensions.md) proposes
+independent machine hosting while preserving cabinet authoring and direct hardware gameplay.
+
 Standing on many shoulders — see [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
 
 ## License

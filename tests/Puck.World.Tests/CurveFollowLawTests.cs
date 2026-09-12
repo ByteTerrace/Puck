@@ -161,7 +161,7 @@ public sealed class CurveFollowLawTests {
         var followBody = JoinFollower(fixture: followFixture);
         var followSpawn = followBody.FixedPosition;
 
-        for (var tick = 0; (tick < 480); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             followFixture.Step();
         }
 
@@ -176,7 +176,7 @@ public sealed class CurveFollowLawTests {
         var controlBody = JoinBody(fixture: controlFixture);
         var controlSpawn = controlBody.FixedPosition;
 
-        for (var tick = 0; (tick < 480); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             controlFixture.Step();
         }
 
@@ -226,7 +226,7 @@ public sealed class CurveFollowLawTests {
 
         Assert.True(condition: tape.TryBeginRecording(name: name, refusal: out var refusal), userMessage: $"refused to arm: {refusal}");
 
-        for (var tick = 0; (tick < 480); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             fixture.Step();
             tape.NoteTick();
         }
@@ -436,7 +436,7 @@ public sealed class CurveFollowLawTests {
         using var fixture = Fixtures.FreshServer(definition: document);
         var body = JoinFollower(fixture: fixture); // selects FollowProgramName, targeting "path".
 
-        for (var tick = 0; (tick < 240); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             fixture.Step();
         }
 
@@ -451,7 +451,7 @@ public sealed class CurveFollowLawTests {
 
         Assert.True(condition: (arcOnLoopFirstTick < (arcOnPathBeforeSwitch / 4)), userMessage: $"selecting a different producer must restart its curve accumulator near zero rather than resume the prior producer's travelled arc; before switching {arcOnPathBeforeSwitch}, one tick after switching {arcOnLoopFirstTick}");
 
-        for (var tick = 0; (tick < 9); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
@@ -468,7 +468,7 @@ public sealed class CurveFollowLawTests {
 
         _ = JoinFollower(fixture: fixture);
 
-        for (var tick = 0; (tick < 240); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             fixture.Step();
         }
 

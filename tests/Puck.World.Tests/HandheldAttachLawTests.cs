@@ -77,7 +77,7 @@ public sealed class HandheldAttachLawTests {
         Assert.Equal(expected: (double)bodyPosition.Y + HandOffset.Y, actual: (double)attachedPosition.Y, precision: 3);
 
         // Walk far enough out of the stand's reach for the region to clear — the release edge fires once.
-        for (var tick = 0; (tick < 200); tick++) {
+        for (var tick = 0; (tick < 25); tick++) {
             SubmitChannel(fixture: fixture, actor: actor, ordinal: ForwardOrdinal, value: FixedQ4816.One);
             fixture.Step();
         }

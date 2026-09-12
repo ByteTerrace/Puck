@@ -283,14 +283,14 @@ public sealed class EscrowedTransferRuleLawTests {
         Assert.Equal(expected: 2L, actual: ReadSlot(definition: fixture.Server.Definition, row: "auctionCurrentBidder"));
 
         // Control: the listing is still active well before its deadline.
-        for (var index = 0; (index < 5); index++) {
+        for (var index = 0; (index < 1); index++) {
             fixture.Step();
         }
         Assert.Equal(expected: 1L, actual: ReadSlot(definition: fixture.Server.Definition, row: "auctionActive"));
 
         // Advance past the deadline — the standing bid settles: item to the winner, coin net of fee to the seller,
         // fee to the shared reserve.
-        for (var index = 0; (index < 20); index++) {
+        for (var index = 0; (index < 2); index++) {
             fixture.Step();
         }
 
@@ -320,7 +320,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Write(fixture: fixture, row: "auctionBidRequest1", value: 155);
         fixture.Step();
 
-        for (var index = 0; (index < 25); index++) {
+        for (var index = 0; (index < 3); index++) {
             fixture.Step();
         }
 
@@ -337,7 +337,7 @@ public sealed class EscrowedTransferRuleLawTests {
         fixture.Step();
         Assert.Equal(expected: 1L, actual: Read(definition: fixture.Server.Definition, row: "goods", key: "0"));
 
-        for (var index = 0; (index < 20); index++) {
+        for (var index = 0; (index < 2); index++) {
             fixture.Step();
         }
 
@@ -372,7 +372,7 @@ public sealed class EscrowedTransferRuleLawTests {
         Write(fixture: fixture, row: "buyoutListRequest", value: 1);
         fixture.Step();
 
-        for (var index = 0; (index < 20); index++) {
+        for (var index = 0; (index < 2); index++) {
             fixture.Step();
         }
 

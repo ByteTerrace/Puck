@@ -44,7 +44,7 @@ public sealed class ModuleAliasImportLawTests {
         Write(fixture: fixture, row: $"{alias}_tttMoveCell", value: cell);
         Write(fixture: fixture, row: $"{alias}_tttMoveRequest", value: request);
 
-        for (var tick = 0; (tick < 4); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
     }

@@ -183,9 +183,7 @@ public sealed class WorldRigidCommandLawTests {
 
         ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
 
-        for (var tick = 0; (tick < 4000); tick++) {
-            fixture.Step();
-        }
+        _ = fixture.StepUntil(ceiling: 4000, settled: () => ball.Resting);
 
         Assert.True(condition: ball.Resting, userMessage: $"the scale-0.05 ball never settled — resting={ball.Resting} v={ball.RigidVelocity} pos={ball.FixedPosition}");
     }
@@ -222,9 +220,7 @@ public sealed class WorldRigidCommandLawTests {
 
         ball.Pose(x: 0f, y: 3f, z: 0f, yawRadians: 0f, pitchRadians: 0f, rollRadians: 0f);
 
-        for (var tick = 0; (tick < 4000); tick++) {
-            fixture.Step();
-        }
+        _ = fixture.StepUntil(ceiling: 4000, settled: () => ball.Resting);
 
         Assert.True(condition: ball.Resting, userMessage: $"scale={scale}: ball never settled before the strike — resting={ball.Resting}");
 
@@ -242,7 +238,7 @@ public sealed class WorldRigidCommandLawTests {
 
         var sawSpin = false;
 
-        for (var tick = 0; (tick < 30); tick++) {
+        for (var tick = 0; (tick < 4); tick++) {
             fixture.Step();
 
             Assert.True(
@@ -290,7 +286,7 @@ public sealed class WorldRigidCommandLawTests {
         ), userMessage: "an ordinary impulse well under the ceiling must still apply");
         Assert.NotEqual(expected: FixedVector3.Zero, actual: ball.RigidVelocity);
 
-        for (var tick = 0; (tick < 60); tick++) {
+        for (var tick = 0; (tick < 8); tick++) {
             fixture.Step();
         }
     }
@@ -337,11 +333,9 @@ public sealed class WorldRigidCommandLawTests {
         }
         Assert.False(condition: fixture.Server.Population.RigidBodiesQuiescent(), userMessage: "the ball is still falling — quiescent must not read true mid-fall");
 
-        // Long enough (at 240 Hz) to land, bleed its bounce through the authored damping/friction, and clear the
-        // rest-hold window.
-        for (var tick = 0; (tick < 3000); tick++) {
-            fixture.Step();
-        }
+        // Bounded by what it takes (at 240 Hz) to land, bleed the bounce through the authored damping/friction, and
+        // clear the rest-hold window — and finished the moment it has.
+        _ = fixture.StepUntil(ceiling: 3000, settled: fixture.Server.Population.RigidBodiesQuiescent);
 
         Assert.True(condition: fixture.Server.Population.RigidBodiesQuiescent(), userMessage: $"the ball never settled — resting={ball.Resting} v={ball.RigidVelocity} pos={ball.FixedPosition}");
     }

@@ -83,7 +83,7 @@ public sealed class KeyedImpressionDedupLawTests {
         fixture.Step();
         Assert.Equal(expected: 32_768L, actual: Read(definition: fixture.Server.Definition, row: "trust")); // 0.5
 
-        for (var index = 0; (index < 4); index++) {
+        for (var index = 0; (index < 1); index++) {
             fixture.Step();
         }
 

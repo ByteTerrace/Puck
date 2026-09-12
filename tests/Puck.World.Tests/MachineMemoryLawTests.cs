@@ -8,8 +8,8 @@ using Puck.World.Protocol;
 namespace Puck.World.Tests;
 
 /// <summary>
-/// The contract under test: a <c>screens[].memory</c> Read binding mirrors the shipped <c>pip.cgb.cartridge.json</c>
-/// machine's own bus byte into an ordinary Int cell every tick, writing only when the peeked value changed; a Write
+/// The contract under test: a <c>screens[].memory</c> Read binding mirrors a shipped cartridge machine's own bus
+/// byte into an ordinary Int cell every tick, writing only when the peeked value changed; a Write
 /// binding pokes a cell's value into the machine's bus when the cell's value has moved, landing before the machine's
 /// own next step; an address outside the engine's addressable bus refuses at validation by name; and a Write
 /// binding whose cell holds still allocates less per tick than one whose cell changes every tick.
@@ -31,18 +31,35 @@ public sealed class MachineMemoryLawTests {
 
         return directory!.FullName;
     }
-    // The machine-host laws carry their OWN cartridges rather than reading whichever ones the game ships. A law
-    // about binding, memory mirroring and symbol resolution is a law about the HOST; coupling it to shipped content
-    // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
-    private static string CartridgePath() => Path.Combine(RepoRoot(), "tests", "Puck.World.Tests", "Fixtures", "cartridges", "pip.cgb.cartridge.json");
+    // The machine-host laws ride a SHIPPED cartridge and READ their expectations out of it. A frozen fixture copy
+    // rots — the cartridge document model is still moving, and a copy nobody migrates breaks on every step while the
+    // shipped cartridges are carried forward with it. Hard-coding the game's own numbers rots the same way for the
+    // same reason: 76 and 68 were pip's authored initials, and every one of them had to be chased by hand the moment
+    // the cabinet's game changed. A law about the HOST asserts the host's contract and derives everything that is a
+    // fact about content.
+    private static string CartridgePath() => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "cartridges", "hgb-mirror.cgb.cartridge.json");
     // The compiled image's own bus address for a named variable — read the same way the machine host reads the
     // booted image, so the law addresses the byte the running cartridge actually owns rather than a guessed offset.
-    private static int VariableAddress(string name) {
-        var compilation = WorldScreenMachineEngines.CartridgeCompilers[CgbEngine].Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: CartridgePath())));
+    private static CartridgeDocument Document() => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: CartridgePath()));
 
-        Assert.True(condition: compilation.Variables.TryGetValue(key: name, value: out var address), userMessage: $"pip.cgb.cartridge.json declares no variable '{name}'");
+    private static int VariableAddress(string name) {
+        var compilation = ((ICartridgeCompiler)WorldScreenMachineEngines.CartridgeCompilers[CgbEngine]).Compile(document: Document());
+
+        Assert.True(condition: compilation.Variables.TryGetValue(key: name, value: out var address), userMessage: $"the cartridge declares no variable '{name}'");
 
         return checked((int)address);
+    }
+
+    /// <summary>The name and authored reset value of a variable the cartridge declares, by position — so the law
+    /// names no game's symbol and carries no game's number.</summary>
+    /// <param name="ordinal">Which declared variable to take.</param>
+    /// <returns>The variable's name and the byte its reset code initializes it to.</returns>
+    private static (string Name, byte Initial) Variable(int ordinal) {
+        var variables = Document().Variables;
+
+        Assert.True(condition: (variables.Length > ordinal), userMessage: $"the cartridge declares no variable at {ordinal}");
+
+        return (variables[ordinal].Name, checked((byte)variables[ordinal].Initial));
     }
     private static WorldDefinition WithMachineScreen(IReadOnlyList<WorldScreenMemory>? memory) {
         var document = Fixtures.BuildDocument();
@@ -87,9 +104,11 @@ public sealed class MachineMemoryLawTests {
     }
     [Fact]
     public void AReadBindingMirrorsTheByteTheCartridgeWrites() {
-        // "x" is initialized by the cartridge's own reset code from its authored "initial": 76 — the byte this law
-        // asserts came from the running cartridge, not from a value the test injected.
-        var xAddress = VariableAddress(name: "x");
+        // The mirrored byte is the variable's own authored reset value, read out of the document rather than
+        // written into the law — so what this asserts is that the binding carried the RUNNING cartridge's byte
+        // across, not that some particular game happens to start at some particular number.
+        var (readName, readInitial) = Variable(ordinal: 0);
+        var xAddress = VariableAddress(name: readName);
         var document = WithMachineScreen(memory: [
             new WorldScreenMemory(Address: xAddress, Width: 1, Row: "pipX", Key: null, Direction: WorldScreenMemoryDirection.Read),
         ]);
@@ -101,17 +120,18 @@ public sealed class MachineMemoryLawTests {
             fixture.Step();
         }
 
-        Assert.Equal(expected: 76L, actual: Slot(definition: fixture.Server.Definition, name: "pipX"));
+        Assert.Equal(expected: (long)readInitial, actual: Slot(definition: fixture.Server.Definition, name: "pipX"));
 
         // The control: peeking the same address directly agrees with the mirror — the binding did not invent a value.
         var (ok, _) = fixture.Server.Machines.TryPeekMessage(index: MachineScreen, address: xAddress, value: out var direct);
 
         Assert.True(condition: ok);
-        Assert.Equal(expected: (byte)76, actual: direct);
+        Assert.Equal(expected: readInitial, actual: direct);
     }
     [Fact]
     public void AWriteBindingsPokeIsVisibleToTheCartridgeOnItsNextFrame() {
-        var yAddress = VariableAddress(name: "y");
+        var (writeName, writeInitial) = Variable(ordinal: 1);
+        var yAddress = VariableAddress(name: writeName);
         var document = WithMachineScreen(memory: [
             new WorldScreenMemory(Address: yAddress, Width: 1, Row: "pipY", Key: null, Direction: WorldScreenMemoryDirection.Write),
         ]);
@@ -123,11 +143,11 @@ public sealed class MachineMemoryLawTests {
             fixture.Step();
         }
 
-        // Before the poke: "y" still carries its own boot-initialized value (68), never the console-side row.
+        // Before the poke the variable still carries its own boot-initialized value, never the console-side row.
         var (beforeOk, _) = fixture.Server.Machines.TryPeekMessage(index: MachineScreen, address: yAddress, value: out var before);
 
         Assert.True(condition: beforeOk);
-        Assert.Equal(expected: (byte)68, actual: before);
+        Assert.Equal(expected: writeInitial, actual: before);
 
         // wall-north/wall-south clamp y to 8..128, so 50 rides through untouched by the cartridge's own rules.
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertStateCell(Principal: WorldPrincipal.Console, Row: "pipY", Key: WorldStateRow.SlotKey.Value, Value: 50, Kind: WorldDocumentWriteKind.Set));
@@ -167,7 +187,7 @@ public sealed class MachineMemoryLawTests {
     // a quiet Write binding against one whose cell changes every sampled tick.
     [Fact]
     public void AQuietMachineAllocatesNothing() {
-        var yAddress = VariableAddress(name: "y");
+        var yAddress = VariableAddress(name: Variable(ordinal: 1).Name);
         var document = WithMachineScreen(memory: [
             new WorldScreenMemory(Address: yAddress, Width: 1, Row: "pipY", Key: null, Direction: WorldScreenMemoryDirection.Write),
         ]);

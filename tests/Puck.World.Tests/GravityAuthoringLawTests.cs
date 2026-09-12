@@ -381,7 +381,7 @@ public sealed class GravityAuthoringLawTests {
         inside.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 100f, yawRadians: 0f, z: 0f);
         outside.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 100f, yawRadians: 0f, z: 0f);
 
-        for (var tick = 0; (tick < 12); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             inside.Step();
             outside.Step();
         }
@@ -390,7 +390,7 @@ public sealed class GravityAuthoringLawTests {
         Assert.True(condition: (outside.Server.Population.EntryBody(index: 0)!.FixedPosition.Y < FixedQ4816.FromInteger(value: 100)));
 
         inside.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 2000f, y: 100f, yawRadians: 0f, z: 0f);
-        for (var tick = 0; (tick < 12); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             inside.Step();
         }
 
@@ -408,7 +408,7 @@ public sealed class GravityAuthoringLawTests {
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         fixture.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 100f, y: 100f, yawRadians: 0f, z: 100f);
 
-        for (var tick = 0; (tick < 12); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             fixture.Step();
         }
 
@@ -431,7 +431,7 @@ public sealed class GravityAuthoringLawTests {
 
         Assert.True(condition: fixture.Server.ApplySession(request: new SessionRequest.Join(actor, actor.Index, null, WorldProtocol.WireProtocolKey)).Accepted);
         fixture.Server.Population.EntryBody(index: 0)!.Pose(pitchRadians: 0f, rollRadians: 0f, x: 100f, y: 100f, yawRadians: 0f, z: 100f);
-        for (var tick = 0; (tick < 8); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
@@ -482,7 +482,7 @@ public sealed class GravityAuthoringLawTests {
 
         Assert.Equal(expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population), actual: WorldReplaySnapshot.HashState(population: restored.Population));
 
-        for (var step = 0; (step < 12); step++) {
+        for (var step = 0; (step < 2); step++) {
             elapsed = checked((elapsed + Fixtures.StepTicks));
             var context = new FixedStepContext(ElapsedTicks: elapsed, StepTicks: Fixtures.StepTicks, Tick: nextTick);
 

@@ -43,7 +43,7 @@ public sealed class WorldFrameProducerLawTests {
         var body = fixture.Server.Population.EntryBody(index: WorldBodiesLimits.LocalSeatCount)!;
         var start = body.FixedPosition;
 
-        for (var tick = 0; (tick < 240); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             fixture.Step();
         }
 

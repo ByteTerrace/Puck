@@ -285,7 +285,7 @@ public sealed class ShapingRowLawTests {
         var target = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: -FixedQ4816.FromDouble(value: 4));
         var expected = SecondOrderState3.AtRest(position: FixedVector3.Zero);
 
-        for (var tick = 0; (tick < 16); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             expected = step.Step(state: expected, target: target, targetVelocity: FixedVector3.Zero);
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
             fixture.Step();
@@ -362,7 +362,7 @@ public sealed class ShapingRowLawTests {
 
             var body = fixture.Server.Body(index: actor.Index)!;
 
-            for (var tick = 0; (tick < 4); tick++) {
+            for (var tick = 0; (tick < 1); tick++) {
                 var intent = default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One);
 
                 if (holdDrift) {
@@ -426,14 +426,14 @@ public sealed class ShapingRowLawTests {
 
         var body = fixture.Server.Body(index: actor.Index)!;
 
-        for (var tick = 0; (tick < 30); tick++) {
+        for (var tick = 0; (tick < 4); tick++) {
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
             fixture.Step();
         }
 
         Assert.Equal(expected: -FixedQ4816.One, actual: body.CaptureTransferState().PlanarVelocity.Z);
 
-        for (var tick = 0; (tick < 15); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             body.SubmitIntent(intent: default);
             fixture.Step();
         }

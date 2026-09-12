@@ -80,7 +80,7 @@ public sealed class StateDynamicsRebaseLawTests {
 
         // 24 further ticks (0.1s at 240 Hz) — well inside the ~1.9s settle horizon for f=1 Hz, ζ=1 — so the second
         // write below rebases from a GENUINELY mid-flight position, never a value already pinned to an endpoint.
-        for (var index = 0; (index < 24); index++) {
+        for (var index = 0; (index < 3); index++) {
             fixture.Step();
         }
 
@@ -166,7 +166,7 @@ public sealed class StateDynamicsRebaseLawTests {
 
         var afterFirstWrite = ReadTrait(definition: fixture.Server.Definition);
 
-        for (var index = 0; (index < 24); index++) {
+        for (var index = 0; (index < 3); index++) {
             fixture.Step();
         }
 

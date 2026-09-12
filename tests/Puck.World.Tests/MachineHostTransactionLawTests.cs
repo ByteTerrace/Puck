@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.GamingBricks.Forge;
 using Puck.World.Server;
 using Xunit;
 
@@ -28,7 +29,10 @@ public sealed class MachineHostTransactionLawTests {
     // The machine-host laws carry their OWN cartridges rather than reading whichever ones the game ships. A law
     // about binding, memory mirroring and symbol resolution is a law about the HOST; coupling it to shipped content
     // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
-    private static string CartridgePath(string file) => Path.Combine(RepoRoot(), "tests", "Puck.World.Tests", "Fixtures", "cartridges", file);
+    /// <summary>The shipped cartridge these laws drive. They assert nothing about which game it is.</summary>
+    private const string CartridgeFile = "hgb-mirror.cgb.cartridge.json";
+
+    private static string CartridgePath(string file) => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "cartridges", file);
 
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();
@@ -70,40 +74,52 @@ public sealed class MachineHostTransactionLawTests {
 
     [Fact]
     public void TryResolveSymbol_ResolvesNamedVariablesOnCompiledCartridge() {
-        var path = CartridgePath(file: "pip.cgb.cartridge.json");
+        // Every symbol and every byte below is READ OUT OF the cartridge rather than written into the law. What is
+        // under test is that the host resolves a declared name to a distinct address and that a peek at it finds the
+        // value the cartridge's own reset code put there — neither of which is a fact about which game is in the
+        // cabinet. Spelling the game's own numbers here is what made these laws break every time the cabinet changed.
+        var path = CartridgePath(file: CartridgeFile);
+        var declared = CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)).Variables;
+
+        Assert.True(condition: (declared.Length >= 2), userMessage: "the cartridge declares too few variables to tell two addresses apart");
+
         using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb"), engines: WorldScreenMachineEngines.All);
 
         Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen));
 
-        // pip defines variables "x" (initial 76), "y" (initial 68), "steps" (initial 0)
-        Assert.True(condition: fixture.Server.Machines.TryResolveSymbol(index: MachineScreen, symbol: "x", address: out var xAddress));
-        Assert.True(condition: (xAddress > 0));
+        var addresses = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        Assert.True(condition: fixture.Server.Machines.TryResolveSymbol(index: MachineScreen, symbol: "y", address: out var yAddress));
-        Assert.True(condition: (yAddress > 0));
-        Assert.NotEqual(expected: xAddress, actual: yAddress);
+        foreach (var variable in declared) {
+            Assert.True(
+                condition: fixture.Server.Machines.TryResolveSymbol(index: MachineScreen, symbol: variable.Name, address: out var address),
+                userMessage: $"'{variable.Name}' is declared but did not resolve");
+            Assert.True(condition: (address > 0), userMessage: $"'{variable.Name}' resolved to {address}");
 
-        Assert.True(condition: fixture.Server.Machines.TryResolveSymbol(index: MachineScreen, symbol: "steps", address: out var stepsAddress));
-        Assert.True(condition: (stepsAddress > 0));
+            addresses[variable.Name] = address;
+        }
 
-        // Unknown symbol fails
+        // Distinct names occupy distinct bytes.
+        Assert.Equal(expected: declared.Length, actual: addresses.Values.Distinct().Count());
+
+        // A name the cartridge does not declare resolves to nothing.
         Assert.False(condition: fixture.Server.Machines.TryResolveSymbol(index: MachineScreen, symbol: "nonexistent_variable", address: out _));
 
-        for (var tick = 0; (tick < 8); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
-        // Peek resolves initial variable value directly from emulator memory once game code initializes WRAM
-        Assert.True(condition: fixture.Server.Machines.TryPeek(screen: MachineScreen, address: xAddress, value: out var xValue));
-        Assert.Equal(expected: 76, actual: xValue);
-
-        Assert.True(condition: fixture.Server.Machines.TryPeek(screen: MachineScreen, address: yAddress, value: out var yValue));
-        Assert.Equal(expected: 68, actual: yValue);
+        // Once the reset code has run, each byte carries the value the document authored for it.
+        foreach (var variable in declared) {
+            Assert.True(
+                condition: fixture.Server.Machines.TryPeek(screen: MachineScreen, address: addresses[variable.Name], value: out var value),
+                userMessage: $"'{variable.Name}' could not be peeked");
+            Assert.Equal(expected: variable.Initial, actual: value);
+        }
     }
 
     [Fact]
     public void TwoPhasePrepareAndCommit_AppliesCandidateDefinition() {
-        var path = CartridgePath(file: "pip.cgb.cartridge.json");
+        var path = CartridgePath(file: CartridgeFile);
         var baseDef = Fixtures.BuildDocument();
         var candidateDef = WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb");
         var host = new WorldMachineHost(screens: [], engines: WorldScreenMachineEngines.All, documentPath: path);
@@ -130,7 +146,7 @@ public sealed class MachineHostTransactionLawTests {
 
     [Fact]
     public void TwoPhasePrepareRollback_DisposedWithoutCommitLeavesHostUnmodified() {
-        var path = CartridgePath(file: "pip.cgb.cartridge.json");
+        var path = CartridgePath(file: CartridgeFile);
         var baseDef = Fixtures.BuildDocument();
         var candidateDef = WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb");
         var host = new WorldMachineHost(screens: [], engines: WorldScreenMachineEngines.All, documentPath: path);

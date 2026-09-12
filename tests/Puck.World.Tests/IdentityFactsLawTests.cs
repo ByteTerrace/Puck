@@ -133,7 +133,7 @@ public sealed class IdentityFactsLawTests(ITestOutputHelper output) {
         Join(fixture: moving, identity: IdentityName);
         Join(fixture: control, identity: IdentityName);
 
-        for (var tick = 0; (tick < 8); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             steady.Step();
             steadyControl.Step();
             moving.Step();

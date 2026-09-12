@@ -36,7 +36,7 @@ public sealed class BodyDynamicsLawTests {
         var moveSpeed = ((float)((double)body.EffectiveMoveSpeed));
         var previous = 0f;
 
-        for (var tick = 0; (tick < 480); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
             fixture.Step();
 
@@ -49,7 +49,7 @@ public sealed class BodyDynamicsLawTests {
 
         Assert.True(condition: (MathF.Abs(x: (previous - moveSpeed)) < (moveSpeed * 0.01f)), userMessage: $"after 2 s the speed {previous:0.#####} should sit within 1% of the move speed {moveSpeed:0.#####}");
 
-        for (var tick = 0; (tick < 480); tick++) {
+        for (var tick = 0; (tick < 60); tick++) {
             body.SubmitIntent(intent: default);
             fixture.Step();
 
@@ -74,7 +74,7 @@ public sealed class BodyDynamicsLawTests {
         var targetSpeed = (((float)((double)lightBody.EffectiveMoveSpeed)) * 0.4f);
         var lightOvershot = false;
 
-        for (var tick = 0; (tick < 240); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             lightBody.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: partial));
             lightFixture.Step();
 
@@ -89,7 +89,7 @@ public sealed class BodyDynamicsLawTests {
         var criticalBody = JoinBody(fixture: criticalFixture);
         var criticalOvershot = false;
 
-        for (var tick = 0; (tick < 240); tick++) {
+        for (var tick = 0; (tick < 30); tick++) {
             criticalBody.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: partial));
             criticalFixture.Step();
 

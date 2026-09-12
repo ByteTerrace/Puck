@@ -250,7 +250,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One).WithChannel(ordinal: TurnOrdinal, value: FixedQ4816.One));
 
-        for (var tick = 0; (tick < 12); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             fixture.Step(); // drive longitudinal/lateral/residual accumulators ramp; gravity falls (no collider); the "surge" OnFact action fires once on the Falling edge.
         }
 
@@ -360,7 +360,7 @@ public sealed class TransferAbortKitWideningLawTests {
 
         body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One).WithChannel(ordinal: UpOrdinal, value: FixedQ4816.One));
 
-        for (var tick = 0; (tick < 12); tick++) {
+        for (var tick = 0; (tick < 2); tick++) {
             fixture.Step(); // the medium's thrust ramp accumulates; Up-channel thrust makes Rising hold, refreshing the Recently(Rising) response row's clock and firing the "surge" OnFact action once on the edge.
         }
 
@@ -463,7 +463,7 @@ public sealed class TransferAbortKitWideningLawTests {
         // The submitted intent is a one-tick image, consumed by each Advance — resubmitted every tick so the
         // follower's own previous-target carry (which the SETTLE round trip below proves) stays genuinely nonzero
         // rather than reverting to the idle (zero) target after the first step.
-        for (var tick = 0; (tick < 24); tick++) {
+        for (var tick = 0; (tick < 3); tick++) {
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One));
             fixture.Step();
         }
@@ -509,7 +509,7 @@ public sealed class TransferAbortKitWideningLawTests {
         var population = fixture.Server.Population;
         var body = fixture.Server.Body(index: actor.Index)!;
 
-        for (var tick = 0; (tick < 24); tick++) {
+        for (var tick = 0; (tick < 3); tick++) {
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: ForwardOrdinal, value: FixedQ4816.One).WithChannel(ordinal: UpOrdinal, value: FixedQ4816.One));
             fixture.Step(); // both the planar and the vertical follower rise toward their commanded targets under the SAME compiled propagator.
         }

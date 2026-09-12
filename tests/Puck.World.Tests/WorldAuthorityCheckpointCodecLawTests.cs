@@ -127,7 +127,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
         ));
         _ = fixture.Server.Population.SetSimulatedCount(count: 3);
 
-        for (var tick = 0; (tick < 500); tick++) {
+        for (var tick = 0; (tick < 62); tick++) {
             fixture.Step();
         }
 
@@ -274,7 +274,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
 
         var body = fixture.Server.Body(index: 0)!;
 
-        for (var tick = 0; (tick < 24); tick++) {
+        for (var tick = 0; (tick < 3); tick++) {
             body.SubmitIntent(intent: default(PlayerIntent).WithChannel(ordinal: 0, value: FixedQ4816.One));
             fixture.Step();
         }
@@ -366,7 +366,7 @@ public sealed class WorldAuthorityCheckpointCodecLawTests {
 
         fixture.Server.Body(index: 0)!.SetIntentSource(source: IntentSource.Producer(name: "follow"));
 
-        for (var tick = 0; (tick < 24); tick++) {
+        for (var tick = 0; (tick < 3); tick++) {
             fixture.Step();
         }
 

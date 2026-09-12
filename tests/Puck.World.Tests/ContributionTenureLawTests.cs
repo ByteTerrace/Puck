@@ -204,7 +204,7 @@ public sealed class ContributionTenureLawTests {
             grant: possession
         );
 
-        for (var index = 0; (index < 400); index++) {
+        for (var index = 0; (index < 50); index++) {
             fixture.Step();
         }
 
@@ -293,7 +293,7 @@ public sealed class ContributionTenureLawTests {
 
         DropLink(fixture: fixture);
 
-        for (var index = 0; (index < 400); index++) {
+        for (var index = 0; (index < 50); index++) {
             fixture.Step();
         }
 
@@ -353,7 +353,7 @@ public sealed class ContributionTenureLawTests {
         endowed.Step();
         DropLink(fixture: endowed);
 
-        for (var index = 0; (index < 400); index++) {
+        for (var index = 0; (index < 50); index++) {
             endowed.Step();
         }
 

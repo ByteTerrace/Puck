@@ -147,7 +147,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         ));
         _ = fixture.Server.Population.SetSimulatedCount(count: 3);
 
-        for (var tick = 0; (tick < 5000); tick++) {
+        for (var tick = 0; (tick < 625); tick++) {
             fixture.Step();
         }
 
@@ -176,7 +176,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
         var uninterruptedTick = fixture.Server.NextInputTick;
         var restoredTick = restoredServer.NextInputTick;
 
-        for (var step = 0; (step < 5000); step++) {
+        for (var step = 0; (step < 625); step++) {
             uninterruptedElapsed = checked((uninterruptedElapsed + Fixtures.StepTicks));
             restoredElapsed = checked((restoredElapsed + Fixtures.StepTicks));
 
@@ -228,7 +228,7 @@ public sealed class WorldAuthorityCheckpointLawTests {
             WireProtocolKey: WorldProtocol.WireProtocolKey
         ));
 
-        for (var tick = 0; (tick < 100); tick++) {
+        for (var tick = 0; (tick < 12); tick++) {
             fixture.Step();
         }
 

@@ -85,7 +85,7 @@ public sealed class ModuleExportsLawTests {
 
         using var fixture = Fixtures.FreshServer(definition: definition);
 
-        for (var tick = 0; (tick < 6); tick++) {
+        for (var tick = 0; (tick < 1); tick++) {
             fixture.Step();
         }
 
