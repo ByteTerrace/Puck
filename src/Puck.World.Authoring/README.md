@@ -110,6 +110,12 @@ not a requirement to fill every slot.
 A creation animates itself from three composable parts, none of which names a
 creature or a vehicle in engine code.
 
+In a world, a placed creation with drivers uses the animated stamp pool even
+without timeline frames. Its root pose supplies motion signals; time and shared
+state signals work without an inhabitant. Such a placement has no body facts or
+body-index state key. Animated placements retain the pool's shape and registration
+limits and cannot use creation noise, distribution or mirror facets.
+
 A creation-level `drivers` list (≤ 8) declares the **driver** — a scalar signal
 read off the body the creation is stamped on, times a cadence, gated by a
 conjunction of condition tokens. Each driver yields a phase φ and an eased weight

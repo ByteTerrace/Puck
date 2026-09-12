@@ -17,6 +17,17 @@ namespace Puck.World.Protocol;
 /// <see cref="WorldMutationKindCatalog"/> (see that type's remarks).</remarks>
 /// <param name="Principal">The acting identity the mutation is checked against.</param>
 public abstract record WorldMutation(WorldPrincipal Principal) {
+    /// <summary>Upserts a named machine. Configuration changes prepare a replacement before admission;
+    /// changing only its running state preserves hardware state and generation.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Machine">The complete instance declaration.</param>
+    [MutationKind(ordinal: 84, section: WorldSection.Machines)]
+    public sealed record UpsertMachine(WorldPrincipal Principal, WorldMachine Machine) : WorldMutation(Principal);
+    /// <summary>Removes an instance after full-document validation proves that its references remain sound.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="Name">The instance to remove.</param>
+    [MutationKind(ordinal: 85, section: WorldSection.Machines)]
+    public sealed record RemoveMachine(WorldPrincipal Principal, string Name) : WorldMutation(Principal);
     /// <summary>Upserts a locomotion kit row addressed by <see cref="WorldKit.Name"/> — replaces the matching row or
     /// appends a new one.</summary>
     /// <param name="Principal">The acting identity.</param>

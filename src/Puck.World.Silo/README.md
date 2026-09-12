@@ -161,16 +161,16 @@ the world's own authored effects; live submissions still refuse a world actor.
 
 ## Document validation
 
-`WorldSiloDataHookInstaller` calls the SAME
-`Puck.World.Client.WorldSchemaVocabularyHooks.Install` the desktop client and
-the test suite do, supplying only the two predicates that live in
-`Puck.World.Server` (`WorldScreenMachineEngines.IsRegistered` and the
-`WorldPostRenderExtensions` shipped-manifest check), so a document declaring a
-`screens[]` machine, a `render.extensions[]` row, a `bindingBar.slotSet` id, or
-an `icons.badges` source validates identically whether `silo.publish`/activation
-loads it here or the desktop boots it. The silo
-mounts no machine or addon host regardless (the checkpoint arm gate already
-refuses a row that pumps one), so a validated key never actually runs here.
+`WorldSiloDataHookInstaller` installs the shared schema hooks for post-render,
+probe, binding, input, and command vocabularies. Machine registration is separate:
+dynamic extensions register into the silo's own immutable `WorldMachineCatalog`.
+Decoding a world without a catalog proves its document-local facts; provider
+admission requires the deployment's explicit catalog. Loading the silo assembly
+cannot replace another host's machine vocabulary.
+
+The silo currently mounts no machine or addon host (the checkpoint gate refuses
+a row that pumps one). A parsed machine declaration does not imply execution or
+restoration of machine state here.
 
 ## Production deployment
 

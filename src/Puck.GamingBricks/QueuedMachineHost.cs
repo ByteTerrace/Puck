@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
@@ -7,8 +8,11 @@ namespace Puck.GamingBricks;
 /// <summary>
 /// Provides the machine-neutral host surface shared by queued screen-machine adapters.
 /// </summary>
-public abstract class QueuedMachineHost : IScreenMachine, IQueuedScreenMachine, IAudioMachine, IFeedbackMachine, ITimeTravelMachine {
+public abstract class QueuedMachineHost : IMachineRuntime, IQueuedMachineRuntime, IMachineContentSlot,
+    IMachineVideoOutputs, IMachineVideoOutput, IMachineAudioOutputs, IAudioMachine,
+    IMachineInputPorts, IMachineInputPort, IFeedbackMachine, ITimeTravelMachine {
     private readonly QueuedMachineWorker m_worker;
+    private MachinePadState m_input = MachinePadState.Neutral;
 
     private string? m_savePath;
 
@@ -21,6 +25,9 @@ public abstract class QueuedMachineHost : IScreenMachine, IQueuedScreenMachine, 
     /// <param name="savePath">The initial battery-save path.</param>
     protected QueuedMachineHost(int width, int height, int maximumPendingSteps, string workerName, int audioSampleRate, string? savePath) {
         m_savePath = savePath;
+        VideoOutputs = new Dictionary<string, IMachineVideoOutput> { ["video"] = this }.ToFrozenDictionary(StringComparer.Ordinal);
+        AudioOutputs = new Dictionary<string, IAudioMachine> { ["audio"] = this }.ToFrozenDictionary(StringComparer.Ordinal);
+        InputPorts = new Dictionary<string, IMachineInputPort> { ["controls"] = this }.ToFrozenDictionary(StringComparer.Ordinal);
         m_worker = new QueuedMachineWorker(
             audioSampleRate: audioSampleRate,
             height: height,
@@ -33,6 +40,24 @@ public abstract class QueuedMachineHost : IScreenMachine, IQueuedScreenMachine, 
     /// <summary>Gets the worker used by machine-specific interfaces and by the cable-link substrate, which lends this
     /// host's core to a <see cref="LinkedMachineGroup"/> through it.</summary>
     public QueuedMachineWorker Worker => m_worker;
+
+    /// <inheritdoc/>
+    public MachineRuntimeStatus Status => QueueFault is not null ? MachineRuntimeStatus.Faulted
+        : IsAssigned ? MachineRuntimeStatus.Running : MachineRuntimeStatus.Empty;
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, IMachineVideoOutput> VideoOutputs { get; }
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, IAudioMachine> AudioOutputs { get; }
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, IMachineInputPort> InputPorts { get; }
+    /// <inheritdoc/>
+    public MachinePadState State => m_input;
+    /// <inheritdoc/>
+    public void SetState(in MachinePadState state) => m_input = state;
+    /// <inheritdoc/>
+    public bool Advance(ulong deltaTicks) => Step(deltaTicks, in m_input);
+    /// <inheritdoc/>
+    public QueuedMachineSubmission Submit(ulong deltaTicks) => Submit(deltaTicks, in m_input);
 
     /// <inheritdoc/>
     public long BackpressureEvents => m_worker.BackpressureEvents;
@@ -109,13 +134,19 @@ public abstract class QueuedMachineHost : IScreenMachine, IQueuedScreenMachine, 
     /// <inheritdoc/>
     public void SetRunahead(int frames) =>
         m_worker.SetRunahead(frames: frames);
-    /// <inheritdoc/>
+    /// <summary>Synchronously advances with an explicit controller image for standalone hardware callers.</summary>
+    /// <param name="deltaTicks">The exact tick budget.</param>
+    /// <param name="input">The controller image held throughout the budget.</param>
+    /// <returns>Whether the machine advanced.</returns>
     public bool Step(ulong deltaTicks, in MachinePadState input) =>
         m_worker.Step(
             deltaTicks: deltaTicks,
             input: in input
         );
-    /// <inheritdoc/>
+    /// <summary>Queues an exact tick and controller segment for standalone hardware callers.</summary>
+    /// <param name="deltaTicks">The exact tick budget.</param>
+    /// <param name="input">The controller image captured by this submission.</param>
+    /// <returns>The submission outcome, including producer backpressure.</returns>
     public QueuedMachineSubmission Submit(ulong deltaTicks, in MachinePadState input) =>
         m_worker.Submit(
             deltaTicks: deltaTicks,

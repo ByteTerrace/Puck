@@ -117,13 +117,13 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 guards[index] = CartridgeCost.Guard(rule: document.Rules[index]);
             }
 
-            var exclusive = CartridgeCost.ExclusiveGuards(rules: document.Rules, guards: guards, scene: document.Scene);
+            var exclusive = CartridgeCost.ExclusiveGuards(rules: document.Rules, guards: guards, scene: document.Scene, document: document);
             var writes = 0;
             var arms = new Dictionary<string, Dictionary<int, int>>(comparer: StringComparer.Ordinal);
             for (var index = 0; index < document.Rules.Length; ++index) {
-                var count = MapWrites(statements: document.Rules[index].Body);
+                var count = CartridgeEffects.MapWrites(statements: document.Rules[index].Body);
                 if (guards[index].Name is not { } name || !exclusive.Contains(item: name)) {
-                    writes += count;
+                    writes = CartridgeEffects.AddMapWrites(writes, count);
                     continue;
                 }
 
@@ -132,15 +132,15 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                     arms[key: name] = byValue;
                 }
 
-                byValue[key: guards[index].Value] = byValue.GetValueOrDefault(key: guards[index].Value) + count;
+                byValue[key: guards[index].Value] = CartridgeEffects.AddMapWrites(byValue.GetValueOrDefault(key: guards[index].Value), count);
             }
 
             foreach (var byValue in arms.Values) {
-                writes += byValue.Values.Max();
+                writes = CartridgeEffects.AddMapWrites(writes, byValue.Values.Max());
             }
 
             if (writes > CartridgeLimits.MapWriteCount) {
-                Error(path: "rules", message: $"A frame can execute {writes} map writes against a queue of {CartridgeLimits.MapWriteCount}; gate the redraws behind branches or spread them across frames.");
+                Error(path: "rules", message: $"A frame can execute at least {writes} map writes against a queue of {CartridgeLimits.MapWriteCount}; gate the redraws behind branches or spread them across frames.");
             }
         }
 
@@ -179,22 +179,6 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
         Value(value: document.ScrollX, path: "scrollX"); Value(value: document.ScrollY, path: "scrollY");
         return m_errors;
-    }
-
-    // A blit repaints its whole rectangle outside the queue, so only map steps are counted. Loops multiply and a
-    // branch takes its heavier arm, matching the cost walk, so gated redraws do not all count at once.
-    private int MapWrites(CartridgeStatement[]? statements) {
-        var total = 0;
-        foreach (var statement in statements ?? []) {
-            total += statement?.Kind switch {
-                "map" => 1,
-                "if" => Math.Max(val1: MapWrites(statements: statement.Then), val2: MapWrites(statements: statement.Else)),
-                "repeat" => Math.Clamp(value: statement.Count ?? 0, min: 0, max: CartridgeLimits.RepeatCount) * MapWrites(statements: statement.Body),
-                _ => 0,
-            };
-        }
-
-        return total;
     }
 
     private void Palettes(int colors, int limit) {
@@ -550,7 +534,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             } else if (!named.Add(item: name)) {
                 Error(path: "save.variables", message: $"'{name}' is persisted more than once.");
             } else {
-                payload += 1;
+                payload += m_widths.GetValueOrDefault(name, 1);
             }
         }
 
@@ -904,7 +888,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
             Error(path: path + ".operation", message: $"Expected one of {CartridgeOperations.CombineNames}, or no operation to assign.");
         }
 
-        WideValue(value: value.Value, path: path + ".value");
+        Expression(value: value.Value, path: path + ".value", wide: wideTarget);
         ConstantFits(value: value.Value, width: (wideTarget ? 2 : 1), path: path + ".value");
         // A literal zero divisor or an out-of-range literal shift is always a defect; the runtime forms are total.
         if ((value.Operation is (ExpressionOp.Divide or ExpressionOp.Modulo)) && (Literal(value: value.Value) == 0)) {
@@ -1043,6 +1027,9 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         foreach (var token in value.Tokens) {
             switch (token) {
                 case ValueToken.Constant constant:
+                    if ((!wide || !bare) && constant.Value > CartridgeLimits.NarrowMaximum) {
+                        Error(path: path, message: $"'{constant.Value}' does not fit a byte expression; only a whole operand paired with a wide slot admits more than {CartridgeLimits.NarrowMaximum}.");
+                    }
                     if (decimal.Truncate(d: constant.Value) != constant.Value) {
                         Error(path: path, message: $"'{constant.Value}' is not a whole number; a cartridge carries no fraction.");
                     }

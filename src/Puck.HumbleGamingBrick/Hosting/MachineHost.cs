@@ -3,20 +3,17 @@ using Puck.Abstractions.Machines;
 namespace Puck.HumbleGamingBrick;
 
 /// <summary>
-/// The SM83-family GamingBrick as an <see cref="IScreenMachine"/> — the first implementation of the neutral
-/// screen-machine contract. A thin adapter that builds a <see cref="HumbleGamingBrickCore"/> and forwards the neutral
+/// The SM83-family GamingBrick as an <see cref="IMachineRuntime"/> with optional video, audio, input, content, and
+/// hardware-access capabilities. A thin adapter builds a <see cref="HumbleGamingBrickCore"/> and forwards the neutral
 /// surface to the shared <see cref="QueuedMachineWorker"/> substrate: the machine is advanced by an exact integer tick
 /// budget (converted to CPU T-cycles through a remainder-carrying accumulator, so it stays a pure function of the engine's
 /// deterministic clock and its sampled input), and its unresampled 160x144 framebuffer is uploaded to a shader-readable
 /// GPU image whose stable view handle a screen source samples directly. It carries the queued/backpressure behavior of the
-/// substrate — a host that recognizes <see cref="IQueuedScreenMachine"/> keeps commercial-ROM CPU work off its
-/// simulation/render pump — and answers a work-RAM peek.
-/// <para>
-/// This is the generic core, without the overworld's presentation costume, viewport resample, fleet-choir mirroring,
-/// serial link, peripherals, or audio output — a machine that steps, shows a frame, and answers a work-RAM peek.
-/// </para>
+/// substrate — a host that recognizes <see cref="IQueuedMachineRuntime"/> keeps commercial-ROM CPU work off its
+/// simulation/render pump. Hardware observations and writes marshal to the same worker or coupled-link boundary.
+/// The synchronous core remains available separately for embedding without a worker or GPU.
 /// </summary>
-public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconfigurableMachine {
+public sealed partial class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconfigurableMachine {
     /// <summary>The machine's native framebuffer width (160).</summary>
     public const int ScreenWidth = Framebuffer.ScreenWidth;
     /// <summary>The machine's native framebuffer height (144).</summary>
@@ -29,6 +26,8 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     private ConsoleModel m_model;
 
     private readonly bool m_dmgSpeed;
+    private readonly MachineBootOptions m_boot;
+    private readonly byte[]? m_bootRom;
 
     /// <summary>Initializes a new machine host. When <paramref name="cartridgeRom"/> is non-null the machine assembles
     /// at once; a null ROM leaves the host UNASSIGNED (a dark framebuffer) until <see cref="QueuedMachineHost.LoadContent"/> runs.</summary>
@@ -42,7 +41,10 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     /// <param name="audioSampleRate">The audio output rate in frames per emulated second the neutral
     /// <see cref="IAudioMachine"/> surface reports, or 0 (the default) when no consumer wants audio from this host —
     /// a silent host performs zero presentation-side audio synthesis.</param>
-    public MachineHost(ConsoleModel model, byte[]? cartridgeRom = null, string? savePath = null, bool dmgSpeed = false, int audioSampleRate = 0)
+    /// <param name="bootMode">Cold startup executes Puck firmware; fast startup skips its presentation.</param>
+    /// <param name="bootRomPath">An external boot image, or null for bundled Puck firmware for the current revision.</param>
+    /// <param name="bootRomImage">An already prepared external boot image. Mutually exclusive with bootRomPath.</param>
+    public MachineHost(ConsoleModel model, byte[]? cartridgeRom = null, string? savePath = null, bool dmgSpeed = false, int audioSampleRate = 0, MachineBootMode bootMode = MachineBootMode.Cold, string? bootRomPath = null, byte[]? bootRomImage = null)
         : base(
         width: ScreenWidth,
         height: ScreenHeight,
@@ -53,6 +55,12 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     ) {
         m_model = model;
         m_dmgSpeed = dmgSpeed;
+        m_boot = new(Mode: bootMode, ImagePath: bootRomPath);
+        if (bootRomPath is not null && bootRomImage is not null) {
+            throw new ArgumentException("Supply a prepared boot image or a boot image path, not both.", nameof(bootRomImage));
+        }
+        m_bootRom = bootRomImage?.ToArray() ?? (bootRomPath is null ? null : File.ReadAllBytes(path: bootRomPath));
+        _ = HgbFirmware.CreateConfiguration(model: model, cartridgeRom: [], bootMode: bootMode, bootRom: m_bootRom);
 
         if (cartridgeRom is not null) {
             LoadContent(
@@ -82,7 +90,8 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     public string Options =>
         GamingBrickEngine.FormatOptions(
         dmgSpeed: m_dmgSpeed,
-        model: m_model
+        model: m_model,
+        boot: m_boot
     );
 
     /// <inheritdoc/>
@@ -93,14 +102,21 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
         ConsoleModel model;
 
         try {
-            (model, _) = GamingBrickEngine.ParseOptions(options: options);
+            var parsed = GamingBrickEngine.ParseOptions(options: options, bootDefaults: m_boot);
+            if (parsed.Boot != m_boot) {
+                reason = "Firmware and startup mode are construction-fixed; create a new machine to change them.";
+                return false;
+            }
+            model = parsed.Model;
         } catch (ArgumentException exception) {
             reason = exception.Message;
 
             return false;
         }
 
-        var (ok, workerReason) = Worker.Reconfigure(options: options);
+        // Only hardware moves live. Image selection was checked above; the core never reloads a host path.
+        var (ok, workerReason) = Worker.Reconfigure(options: GamingBrickEngine.FormatOptions(
+            model: model, dmgSpeed: m_dmgSpeed, boot: new MachineBootOptions(Mode: m_boot.Mode, ImagePath: null)));
 
         if (ok) {
             m_model = model;
@@ -115,6 +131,8 @@ public sealed class MachineHost : QueuedMachineHost, IMachineMemoryPeek, IReconf
     protected override IQueuedMachineCore CreateCore(byte[] data, string? savePath) =>
         new HumbleGamingBrickCore(
         cartridgeRom: data,
+        bootMode: m_boot.Mode,
+        bootRom: m_bootRom,
         dmgSpeed: m_dmgSpeed,
         model: m_model,
         savePath: savePath

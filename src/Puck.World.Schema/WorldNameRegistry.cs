@@ -25,6 +25,10 @@ public enum WorldNameKind : byte {
     Field,
     /// <summary>A <c>dynamics</c> row.</summary>
     Dynamics,
+    /// <summary>A named machine instance.</summary>
+    Machine,
+    /// <summary>A hardware binding local to a machine instance.</summary>
+    MachineBinding,
     /// <summary>Any declaration the document makes, whatever its namespace: an entry of a module's export lists.</summary>
     Any,
 }
@@ -80,6 +84,10 @@ public static partial class WorldNameRegistry {
 
     private static readonly WorldNameField[] Fields = [
         // Declarations.
+        new(typeof(WorldMachine), nameof(WorldMachine.Name), WorldNameKind.Machine, WorldNameRole.Declares),
+        new(typeof(WorldMachineMemory), nameof(WorldMachineMemory.Name), WorldNameKind.MachineBinding, WorldNameRole.Declares),
+        new(typeof(WorldMachineMemory), nameof(WorldMachineMemory.Row), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldMachineMemory), nameof(WorldMachineMemory.Key), WorldNameKind.State, WorldNameRole.Key),
         new(typeof(StateRow), nameof(StateRow.Name), WorldNameKind.State, WorldNameRole.Declares),
         new(typeof(Rule), nameof(Rule.Name), WorldNameKind.Rule, WorldNameRole.Declares),
         new(typeof(TableRow), nameof(TableRow.Name), WorldNameKind.Table, WorldNameRole.Declares),

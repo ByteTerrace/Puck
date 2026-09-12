@@ -55,7 +55,7 @@ public class ShippedWorldsParityTests {
             parseResult.Value,
             basePath: baseDir,
             diagnostics: loweringDiagnostics
-        );
+        , cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(
             loweringDiagnostics.HasErrors,

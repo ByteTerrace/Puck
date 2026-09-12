@@ -484,7 +484,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     public int JournalLength => m_journal.Count;
     /// <summary>Gets the width of the latest authoritative step, or zero before the first step.</summary>
     public ulong LastStepTicks => m_lastStepTicks;
-    /// <summary>Gets the authoritative screen-machine host — owns every booted <c>IScreenMachine</c>, its memory-peek
+    /// <summary>Gets the authoritative screen-machine host — owns every booted <c>IMachineRuntime</c>, its memory-peek
     /// surface (<see cref="IWorldMachineHost"/> extends <see cref="IWorldMachineMemoryPeek"/> directly), and the
     /// screen-op verb surface's runtime target. Always present (never null): machines are booted and stepped in
     /// every boot shape.</summary>
@@ -624,7 +624,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// <param name="population">The entity table (all bodies, seats included).</param>
     /// <param name="profiles">The profile catalog.</param>
     /// <param name="envelope">The render-capacity oracle a scene/screen mutation is checked against at apply time.</param>
-    /// <param name="machines">The authoritative screen-machine host (owns every booted <c>IScreenMachine</c>) — a
+    /// <param name="machines">The authoritative screen-machine host (owns every booted <c>IMachineRuntime</c>) — a
     /// peer singleton, not a private field this constructor builds, so the composition root disposes it (see
     /// <see cref="IWorldMachineHost"/>'s own remarks on why).</param>
     /// <param name="instanceIdentity">This server's own running-instance identity — the draw seed ladder's instance
@@ -644,6 +644,10 @@ public sealed partial class WorldServer : IWorldServerHost {
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
+        if (!WorldDefinitionValidator.TryValidateLocally(definition, machines.ValidationCatalog, out var machineAdmissionReason)) {
+            throw new ArgumentException($"World machine admission refused: {machineAdmissionReason}", nameof(definition));
+        }
+
         if (narrationSink is not null) {
             _ = m_output.AttachNarrationSink(sink: narrationSink);
         }
@@ -655,6 +659,13 @@ public sealed partial class WorldServer : IWorldServerHost {
         );
         BootDerivedFaceScreens = definition.Authoring.DerivedFaceScreens;
         m_machines = machines;
+        if (!machines.TryPrepare(null, definition, out var machinePlan, out var machineReason)) {
+            throw new ArgumentException($"World machine preparation refused: {machineReason}", nameof(definition));
+        }
+        using (machinePlan) {
+            machines.Commit(machinePlan!);
+            machines.Finish(machinePlan!);
+        }
         m_driveDenied = new bool[population.Capacity];
         m_contended = new bool[population.Capacity];
         m_federatedIntents = new FederatedIntentState[population.Capacity];

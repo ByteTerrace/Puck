@@ -1361,7 +1361,23 @@ authority decision is deliberately not modeled as a lattice or quotient
 
 ## Screen machines (`IWorldMachineHost.cs`)
 
-A booted `IScreenMachine` (a diegetic screen's cartridge/cabinet —
+Named `machines` declarations have independent ownership through the same host.
+World construction, live machine-row edits, whole-document rebuilds, and undo
+prepare candidate devices before installing them. Failed and abandoned plans
+dispose their candidate resources and retain the live devices. Each replacement
+gets a fresh generation; changing only `running` or bindings retains the device.
+The `world.row` verbs edit these declarations and `machine.state` reports their
+execution and binding outcomes.
+
+Named memory bindings synchronize after rules and before machine advance. Reads
+use one coherent provider inspection for the whole scalar, retain the last accepted
+world value on failure, and expose availability through `MachineBindingState`.
+Writes use the declared patch/bus semantics and checked/truncating conversion.
+On-change memoization includes generation and binding configuration, so a replaced
+device receives its first write even when the world value did not change. The
+screen-owned route described below remains during the output-reference migration.
+
+A booted `IMachineRuntime` (a diegetic screen's cartridge/cabinet —
 `Puck.Abstractions.Machines`) is CORE state, not presentation-fed, but this
 project carries no reference to the emulator cores or `Puck.SdfVm` — a
 machine is a mounted guest, like a WASM addon. `IWorldMachineHost`, defined
@@ -1375,7 +1391,7 @@ peer DI singleton `WorldServer` takes as a constructor parameter typed
 `IWorldMachineHost`, never a private field it builds, so the container
 disposes the machines it holds. A caller inside this project that needs to
 build one (a spawned instance's empty host, an offline re-drive's shadow
-host) is handed a `Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>,
+host) is handed a `Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>,
 string?, WorldOutputHub?, IWorldMachineHost>` factory by the composition
 root — the same "the server calls out, the composition root supplies the
 capability" shape `IWorldAddonHost`'s `addonHostFactory` uses.

@@ -13,7 +13,7 @@ public class GenerationSyntaxTests {
         var diagnostics = new DiagnosticBag();
         var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
             PuckParser.ParseDocument($"schema: \"puck.world.def.v1\"\n\n{body}"),
-            diagnostics: diagnostics);
+            diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(diagnostics.HasErrors, string.Join("\n", diagnostics.Select(d => $"{d.Code}: {d.Message}")));
 
@@ -25,7 +25,7 @@ public class GenerationSyntaxTests {
 
         WorldDocumentEmitter.LowerWithDiagnostics(
             PuckParser.ParseDocument($"schema: \"puck.world.def.v1\"\n\n{body}"),
-            diagnostics: diagnostics);
+            diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
 
         return diagnostics;
     }

@@ -61,6 +61,9 @@ public sealed partial class WorldServer {
     // Whether a mutation touches the screens section — the transactional prepare/commit gate for screen machines.
     private static bool AffectsScreens(WorldMutation mutation) => AnyMember(mutation, AffectsScreens) || (mutation is
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen);
+    // Machine declarations change runtime ownership, independently of render or population capacity.
+    private static bool AffectsMachines(WorldMutation mutation) => AnyMember(mutation, AffectsMachines) || (mutation is
+        WorldMutation.UpsertMachine or WorldMutation.RemoveMachine);
     // Whether a mutation can grow the SDF program past the probed render envelope (screen slabs / creation stamps — an
     // UpsertCreation re-shapes every live placement of it, so it measures too).
     private static bool AffectsRenderEnvelope(WorldMutation mutation) => AnyMember(mutation, AffectsRenderEnvelope) || (mutation is
@@ -482,6 +485,7 @@ public sealed partial class WorldServer {
     private static WorldSection SectionOf(WorldMutation mutation) => mutation switch {
         WorldMutation.UpsertKit or WorldMutation.RemoveKit or WorldMutation.SetDefaultSeatKit or WorldMutation.SetKitAssignment => WorldSection.Kits,
         WorldMutation.UpsertScreen or WorldMutation.RemoveScreen => WorldSection.Screens,
+        WorldMutation.UpsertMachine or WorldMutation.RemoveMachine => WorldSection.Machines,
         WorldMutation.UpsertCamera or WorldMutation.RemoveCamera => WorldSection.Cameras,
         WorldMutation.SetSpawns => WorldSection.Spawns,
         WorldMutation.SetMotion => WorldSection.Motion,
@@ -872,6 +876,19 @@ public sealed partial class WorldServer {
                 ),
                 });
 
+                return true;
+            case WorldMutation.UpsertMachine m:
+                candidate = current with {
+                    MachinesRaw = Upsert(current.Machines, m.Machine, static row => row.Name),
+                };
+                return true;
+            case WorldMutation.RemoveMachine m:
+                if (!Remove(current.Machines, m.Name, static row => row.Name, out var machines)) {
+                    candidate = current;
+                    reason = $"no machine '{m.Name}'";
+                    return false;
+                }
+                candidate = current with { MachinesRaw = machines };
                 return true;
             case WorldMutation.RemoveScreen m:
                 if (!Remove(

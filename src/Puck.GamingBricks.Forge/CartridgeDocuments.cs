@@ -52,12 +52,25 @@ public static class CartridgeDocuments {
     /// <param name="utf8">The source bytes.</param>
     /// <returns>The validated document.</returns>
     public static CartridgeDocument Parse(ReadOnlySpan<byte> utf8) {
+        return Canonicalize(document: Read(utf8)).Document;
+    }
+
+    /// <summary>Collects syntax and semantic diagnostics without requiring valid source first.</summary>
+    /// <param name="utf8">The authored UTF-8 JSON.</param>
+    /// <returns>Source-path refusals, or an empty list for valid source.</returns>
+    public static IReadOnlyList<DocumentValidationError> Validate(ReadOnlySpan<byte> utf8) {
+        try { return Validate(Read(utf8)); }
+        catch (JsonException error) { return [new DocumentValidationError(error.Path ?? "", error.Message)]; }
+        catch (ArgumentException error) { return [new DocumentValidationError("", error.Message)]; }
+    }
+
+    private static CartridgeDocument Read(ReadOnlySpan<byte> utf8) {
         if (utf8.Length > MaximumSourceBytes) {
             throw new ArgumentException(message: $"Cartridge source exceeds {MaximumSourceBytes} bytes.", paramName: nameof(utf8));
         }
         var document = JsonSerializer.Deserialize<CartridgeDocument>(utf8Json: utf8, options: s_json)
             ?? throw new JsonException(message: "Expected a cartridge document object.");
-        return Canonicalize(document: document).Document;
+        return document;
     }
 
     /// <summary>Validates, normalizes spelling and computes the shared canonical source identity.</summary>

@@ -20,6 +20,9 @@ Post stages are authoritative; update stale skill guidance in the same change.
   and `HumbleGamingBrickCore` APIs and default factory composition. The shared
   `Puck.GamingBricks` README owns the host contract; both Post `embedding` stages
   exercise it without a worker, renderer or audio device.
+- Keep firmware identity separate from startup mode. `MachineBootMode.Fast` skips startup without discarding the
+  selected image; AGB still executes runtime BIOS services from that image. Explicit low-level diagnostic inputs
+  remain supported. Bundled images are generated ahead of packaging, never by a runtime-to-Forge dependency.
 - Keep floating point and host timing beyond a one-way presentation seam.
 - Express console differences through capability gates, not forked SM83 cores.
 - Preserve snapshot, replay, fork, and cross-machine link determinism.

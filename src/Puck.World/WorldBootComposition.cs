@@ -256,25 +256,37 @@ internal static class WorldBootComposition {
         // faults by name (no camera GPU tier) while a parameter binding finds no composed pass to write.
         services.AddWorldProbes();
 
-        // Register the shipped first-class gaming brick screen machine extensions and cartridge compilers.
-        services.AddHumbleGamingBrick();
-        services.AddAdvancedGamingBrick();
+        // Static bundles and installed extensions use the same host-local registration path.
+        var machineRegistry = new WorldMachineExtensionRegistry();
+        new Puck.HumbleGamingBrick.Forge.HumbleGamingBrickExtension().Initialize(machineRegistry);
+        new Puck.AdvancedGamingBrick.Forge.AdvancedGamingBrickExtension().Initialize(machineRegistry);
 
         // Discover optional dynamic extensions.
         var appExtensions = Path.Combine(AppContext.BaseDirectory, "extensions");
 
         if (Directory.Exists(path: appExtensions)) {
-            var machineRegistry = new WorldMachineExtensionRegistry();
             var serverRegistry = new DesktopWorldExtensionRegistry();
 
             WorldExtensionLoader.LoadFromDirectory(
                 directoryPath: appExtensions,
                 serverRegistry: serverRegistry,
                 onExtensionLoaded: ext => {
-                    if (ext is Puck.GamingBricks.Forge.IGamingBrickExtension brickExtension) {
+                    if (ext is Puck.Abstractions.Machines.IMachineExtension brickExtension) {
                         brickExtension.Initialize(registry: machineRegistry);
                     }
                 });
+        }
+
+        var machineCatalog = machineRegistry.Build();
+        services.AddSingleton(machineCatalog);
+        foreach (var engine in machineCatalog.Engines.Values) {
+            services.AddSingleton(engine);
+        }
+        foreach (var provider in machineCatalog.ContentProviders.Values) {
+            services.AddSingleton(provider);
+            if (provider is ICartridgeCompiler compiler) {
+                services.AddSingleton(compiler);
+            }
         }
 
         // The reserved derived-face slot range (None-sourced placeholders, so a creation FACE appearing at a later
@@ -300,14 +312,13 @@ internal static class WorldBootComposition {
             return hub;
         });
 
-        // The authoritative screen-machine host — owns every booted IScreenMachine, in EVERY boot shape: registered
+        // The authoritative screen-machine host — owns every booted IMachineRuntime, in EVERY boot shape: registered
         // here (not under AddWorldPresentation) so a headless boot's cabinets run exactly like a windowed one's. A
         // PEER singleton to WorldServer (which takes it as a constructor parameter), never a private field WorldServer
         // builds, so the container disposes the machines it holds.
         services.AddSingleton(implementationFactory: static sp => new WorldMachineHost(
             screens: ExpandedScreens(definition: sp.GetRequiredService<WorldDefinition>()),
-            engines: sp.GetServices<IScreenMachineEngine>(),
-            compilers: sp.GetServices<ICartridgeCompiler>(),
+            catalog: sp.GetRequiredService<WorldMachineCatalog>(),
             documentPath: sp.GetRequiredService<WorldDefinitionSource>().SourcePath,
             narrationHub: sp.GetRequiredService<WorldOutputHub>()
         ));
@@ -319,10 +330,9 @@ internal static class WorldBootComposition {
         // WorldReplaySnapshot) and a spawned instance's own empty host (WorldInstanceHost) construct through —
         // Puck.World.Server carries no reference to Puck.World.Machines' WorldMachineHost, so it cannot build
         // one itself. Mirrors the addon seam's identical factory shape (below).
-        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationInstance: static (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
+        services.AddSingleton<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(implementationInstance: (screens, engines, documentPath, narrationHub) => new WorldMachineHost(
             screens: screens,
-            engines: engines,
-            compilers: WorldScreenMachineEngines.CartridgeCompilers.Values,
+            catalog: machineCatalog,
             documentPath: documentPath,
             narrationHub: narrationHub
         ));
@@ -403,6 +413,7 @@ internal static class WorldBootComposition {
         // The CURVES section's census read-back — world.curves. Rows are authored through
         // world.row.set curves/world.row.remove curves.
         services.AddSingleton<ICommandModule, WorldCurveCommandModule>();
+        services.AddSingleton<ICommandModule, WorldMachineCommandModule>();
         // The render.lighting read-back — world.lighting. The fields themselves are authored through
         // world.row.set render.
         services.AddSingleton<ICommandModule, WorldLightingCommandModule>();
@@ -459,16 +470,16 @@ internal static class WorldBootComposition {
             liveServer: sp.GetRequiredService<WorldServer>(),
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
             transport: sp.GetRequiredService<LoopbackTransport>(),
-            engines: sp.GetServices<IScreenMachineEngine>(),
-            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            engines: sp.GetServices<IMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
             addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
         ));
         // The tape's read-back (replay.inspect) — walks a saved tape and, with --poses, re-drives it through the
         // same shadow drive the tape's verify uses.
         services.AddSingleton(implementationFactory: static sp => new WorldReplayInspector(
             profiles: sp.GetRequiredService<WorldOwnedWorlds>(),
-            engines: sp.GetServices<IScreenMachineEngine>(),
-            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+            engines: sp.GetServices<IMachineEngine>(),
+            machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
             addonHostFactory: sp.GetRequiredService<Func<WorldDefinition, WorldServer, IWorldAddonHost>>()
         ));
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
@@ -566,7 +577,7 @@ internal static class WorldBootComposition {
                 machineId: sp.GetRequiredService<WorldOwnedWorlds>().MachineId,
                 stateRoot: WorldStateRoot.Resolve(),
                 applicationStopping: sp.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping,
-                machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
+                machineHostFactory: sp.GetRequiredService<Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost>>(),
                 admitsSpawn: true
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();

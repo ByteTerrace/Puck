@@ -26,11 +26,13 @@ internal sealed class QueuedHostAudioStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyAudio(
             attached: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
                 model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create(),
                 audioSampleRate: RequestedSampleRate
             ),
             detached: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
                 model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),

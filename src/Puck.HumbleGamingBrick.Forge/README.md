@@ -6,10 +6,13 @@ Players edit documents through Puck's in-engine console. The shared
 commands, schema, limits and the host-independent compiler/editor APIs.
 The compiler emits a frame loop, SM83 rules, 2bpp tiles, a background map,
 RGB555 palettes and shadow-OAM sprites. Variables occupy bytes from
-`0xC200`; the returned compilation names their addresses. It does not emit
+`0xC200`; the returned compilation names their addresses. Two-byte variables precede byte variables and
+persist both bytes in saves. Byte arithmetic wraps modulo 256; wide assignment, addition and subtraction use
+sixteen bits. It does not emit
 the old games' save, state-machine or victory behavior. A world screen whose
-`contentPath` ends in `.cartridge.json` is compiled through this compiler at
-bind by `Puck.World.Addons`; the guide above describes the read-back.
+`contentPath` names cartridge source is compiled through this compiler at
+bind by `Puck.World.Machines` through `IMachineContentProvider`; the guide above
+describes the read-back. The host receives neutral image and symbol metadata.
 
 The package remains `ByteTerrace.Puck.HumbleGamingBrick.Forge`. It depends
 on the shared cartridge document package, Assets and the HGB emulator;
@@ -51,11 +54,28 @@ existing Tune audio compiler and authored boot-ROM tools remain available.
 
 ## The authored boot ROMs
 
-Each image is a real boot program. It verifies the cartridge logo against
-`CartridgeHeader.Logo` and the header checksum, wedging on either mismatch the
-way the hardware does (the companion console's boot ROM checks neither, and the
-image for those revisions does not either). It scrolls a Puck mark in, plays the
-start-up chime, and — for a cartridge without the color flag — writes the
+`BootRomBuilder.Build(model)` emits Puck's compatible firmware: a real boot
+program with an original, centered `PUCK` pixel wordmark that settles over 32
+frames, and a short rising-fifth pulse chime. Native Color startup uses the
+same ink-and-ivory colors as the Advanced firmware. The companion-console revisions
+retain their silent startup. Pixels and audio come from instructions running on
+the machine; there is no frontend overlay or host audio clip.
+
+The default `BootRomMark.Compatible` policy accepts Puck, ordinary commercial,
+and independently authored cartridge logos. It still verifies the header
+checksum and stops rather than executing a corrupt header. The companion
+console's boot contract checks neither the logo nor checksum, and its images
+preserve that behavior. Cartridge acceptance never changes the wordmark into
+the cartridge's artwork.
+
+The explicit `Era` and `House` policies retain strict comparison against
+`CartridgeHeader.Logo` or `CartridgeHeader.HouseLogo`. These diagnostic images
+display a compact Puck monogram, reserving room for their 48-byte comparison
+table inside the original mapping limits. A matching logo is only an editable
+header convention, not authentication: these policies do not make a secure
+Puck-only distribution.
+
+For a cartridge without the color flag, the program writes the
 compatibility-mode selector and loads the compatibility palettes, then hands over
 the revision's register file and unmaps itself at `0x00FE` so the program counter
 falls into `0x0100`.
@@ -116,10 +136,11 @@ square-channel timer exceeds its own reload period, and the seeded dot phase is
 odd where every instruction boundary lands on a multiple of four dots. Video RAM
 and the framebuffer also differ, because the boot program drew something.
 
-**Machine identity.** `MachineIdentity` fingerprints the boot ROM image, so a
-machine booted through an authored image has a different identity than a seeded
-one and their snapshots do not interchange. That is the intended behaviour; do
-not alias them.
+**Machine identity.** `MachineIdentity` fingerprints the selected boot ROM image.
+Cold and fast startup with the same image share an identity: a full snapshot can
+restore the live boot overlay as well as the cartridge state. A firmware-free
+diagnostic seeded machine has a different identity, as does a machine selecting
+another boot image. Those snapshots do not interchange.
 
 ## Verification and low-level tooling
 
@@ -127,7 +148,9 @@ The document compiler validates source and emits native bytes; arbitrary
 player cartridges do not run a hidden game verifier during compilation.
 The shared compiler tests execute authored input/rule/graphics behavior on
 both emulators and compare ROM identity after canonical JSON round-trips.
-Boot-ROM tests retain their recorded revision hashes.
+Boot-ROM tests pin all 14 compatible images to recorded revision hashes and
+check checksum refusal, independent-logo acceptance, native wordmark pixels,
+animation movement, and audio waveforms before the cartridge begins running.
 
 ```powershell
 dotnet test tests/Puck.HumbleGamingBrick.Forge.Tests -c Release

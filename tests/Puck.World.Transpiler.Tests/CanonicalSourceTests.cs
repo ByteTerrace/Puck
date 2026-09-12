@@ -47,7 +47,7 @@ public class CanonicalSourceTests {
         var lowered = WorldDocumentEmitter.LowerWithDiagnostics(
             basePath: worlds,
             diagnostics: diagnostics,
-            document: parsed);
+            document: parsed, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(diagnostics.HasErrors, string.Join("\n", diagnostics.Select(d => $"{d.Code}: {d.Message}")));
 

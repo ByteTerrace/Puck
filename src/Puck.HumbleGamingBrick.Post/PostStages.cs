@@ -10,6 +10,8 @@ internal static class PostStages {
             // Tier A — core self-tests (self-contained synthetic ROM; run anywhere).
             new DeterminismStage(),
             new EmbeddingStage(),
+            new BundledFirmwareStage(),
+            new FirmwareReconfigureStage(),
             new SnapshotRoundTripStage(),
             new BatterySaveStage(),
             new VictoryRegionStage(),

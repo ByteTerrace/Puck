@@ -172,6 +172,14 @@ table — a row added there grants nothing until relaunch.
   census, runtime screen inserts fold into their document homes) and compacts
   the journal.
 
+Named machine rows use the same mutation and undo pipeline. UpsertMachine and
+RemoveMachine affect machine preparation independently of screen, population,
+solid, and render capacity. Preparation resolves configuration assets and hardware
+bindings before installing a replacement; rejected or abandoned candidates retain
+the live runtime. Changing only running state or bindings preserves its generation.
+The shared world.row verbs author these rows and machine.state reports execution
+and binding availability. Undo prepares the restored machine declarations too.
+
 ## The kind catalog
 
 Every nested record carries `[MutationKind(ordinal, section)]` — the ordinal
@@ -199,6 +207,7 @@ nested records, which are the authority:
 |---|---|
 | Kits | UpsertKit 0, RemoveKit 1, SetDefaultSeatKit 2, SetKitAssignment 3 |
 | Screens | UpsertScreen 4, RemoveScreen 5 |
+| Machines | UpsertMachine 84, RemoveMachine 85 |
 | Cameras | UpsertCamera 6, RemoveCamera 7 |
 | Spawns | SetSpawns 8 |
 | Motion | SetMotion 9 |

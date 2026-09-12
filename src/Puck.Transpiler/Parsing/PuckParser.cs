@@ -18,6 +18,11 @@ public static partial class PuckParser {
         ArgumentNullException.ThrowIfNull(source);
 
         diagnostics ??= new DiagnosticBag();
+        try { SourceLexemes.Validate(source); }
+        catch (PuckParseException error) {
+            diagnostics.ReportError(error.Code, error.Message, new SourceSpan(error.Offset, 1, error.Line, error.Column));
+            return new CompilationResult<DocumentNode>(null, diagnostics);
+        }
         var context = CreateContext(source);
         var schema = defaultSchema;
         string? basis = null;
@@ -104,7 +109,7 @@ public static partial class PuckParser {
         var result = ParseDocumentWithDiagnostics(source, defaultSchema);
         if (result.Diagnostics.HasErrors) {
             var firstError = result.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error);
-            throw new PuckParseException(firstError.Message, firstError.Span.Line, firstError.Span.Column, firstError.Span.Offset);
+            throw new PuckParseException(firstError.Message, offset: firstError.Span.Offset, line: firstError.Span.Line, column: firstError.Span.Column) { Code = firstError.Code };
         }
         return result.Value!;
     }
@@ -114,6 +119,7 @@ public static partial class PuckParser {
     /// <returns>The parsed expression AST.</returns>
     public static ExpressionNode ParseExpression(string source) {
         ArgumentNullException.ThrowIfNull(source);
+        SourceLexemes.Validate(source);
 
         var context = CreateContext(source);
         SkipWhiteSpace(context);
@@ -793,7 +799,8 @@ public static partial class PuckParser {
     // A sign in front of anything that is not a number: `-spread`, `-scale(2)`, `-(a + b)`. A number keeps its own
     // signed-literal reader (ParsePrimaryExpression), because folding the sign into the literal is what lets a unit
     // suffix read against the value it signs; intercepting `-1.5m` here would sign a unit-converted quantity instead.
-    private static ExpressionNode ParseUnaryExpression(ParseContext context) {
+    private static ExpressionNode ParseUnaryExpression(ParseContext context, int depth = 0) {
+        if (depth >= 64) { throw CreateException(context, "Unary expressions nest at most 64 levels"); }
         SkipWhiteSpace(context);
         var cursor = context.Scanner.Cursor;
 
@@ -813,7 +820,7 @@ public static partial class PuckParser {
 
         cursor.Advance();
 
-        var operand = ParseUnaryExpression(context);
+        var operand = ParseUnaryExpression(context, depth + 1);
 
         return new UnaryExpressionNode(Operator: op, Operand: operand, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
     }

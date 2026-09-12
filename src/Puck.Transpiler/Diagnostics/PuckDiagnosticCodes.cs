@@ -150,6 +150,12 @@ public static class PuckDiagnosticCodes {
     /// sequence is <c>map</c>'s job, in value position.</summary>
     public const string ForAssignsAField = "PUCK046";
 
+    /// <summary>Compilation work, source size, collection size or recursive depth exceeds its limit.</summary>
+    public const string EvaluationLimit = "PUCK047";
+
+    /// <summary>A compile-time value is cyclic, invalid or outside its numeric representation.</summary>
+    public const string InvalidValue = "PUCK048";
+
     /// <summary>An unused <c>let</c> binding.</summary>
     public const string LintUnusedLet = "PUCK_LINT_001";
 

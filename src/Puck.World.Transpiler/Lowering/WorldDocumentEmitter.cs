@@ -16,12 +16,14 @@ public static partial class WorldDocumentEmitter {
     /// <param name="basePath">The optional base directory for resolving relative assets such as WASM addons.</param>
     /// <param name="sourceMap">Optional SourceMap to populate with JSON pointer mappings.</param>
     /// <param name="diagnostics">Optional DiagnosticBag to collect lowering diagnostics.</param>
+    /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
     /// <returns>A CompilationResult carrying the structured JsonObject and diagnostics.</returns>
     public static CompilationResult<JsonObject> LowerWithDiagnostics(
         DocumentNode document,
         string? basePath = null,
         SourceMap? sourceMap = null,
-        DiagnosticBag? diagnostics = null
+        DiagnosticBag? diagnostics = null,
+        CancellationToken cancellationToken = default
     ) {
         ArgumentNullException.ThrowIfNull(document);
 
@@ -39,20 +41,17 @@ public static partial class WorldDocumentEmitter {
             sourceMap.Register("/basis", document.BasisSpan);
         }
 
-        var scope = new DocumentScope(WorldDocumentVocabulary.Instance, basePath, sourceMap: sourceMap, diagnostics: diagnostics, schema: document.Schema);
+        var scope = new DocumentScope(WorldDocumentVocabulary.Instance, basePath, sourceMap: sourceMap, diagnostics: diagnostics, schema: document.Schema) {
+            Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken },
+        };
 
-        // Pre-scan let constants and templates
-        foreach (var statement in document.Statements) {
-            if (statement is LetNode letNode) {
-                scope.Constants[letNode.Name] = letNode.Value;
-            } else if (statement is TemplateNode templateNode) {
-                scope.Templates[templateNode.Name] = templateNode;
+        scope.IndexDeclarations(document.Statements);
+        try {
+            foreach (var statement in document.Statements) {
+                ProcessStatement(statement, root, scope);
             }
-        }
-
-        // Process statements
-        foreach (var statement in document.Statements) {
-            ProcessStatement(statement, root, scope);
+        } catch (DocumentEvaluationException error) {
+            diagnostics.ReportError(error.Code, error.Message, error.Span);
         }
 
         var canonicalRoot = (JsonObject)Canonicalize(root)!;
@@ -68,13 +67,15 @@ public static partial class WorldDocumentEmitter {
     /// <param name="document">The document AST to lower.</param>
     /// <param name="basePath">The optional base directory for resolving relative assets such as WASM addons.</param>
     /// <returns>A structured <see cref="JsonObject"/> representation of the world definition.</returns>
+    /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
     public static JsonObject Lower(DocumentNode document, string? basePath = null) =>
-        LowerWithDiagnostics(document, basePath).Value!;
+        LowerWithDiagnostics(document, basePath).RequireValue();
 
     /// <summary>Compiles the document AST into canonical UTF-8 JSON bytes.</summary>
     /// <param name="document">The document AST.</param>
     /// <param name="basePath">The optional base directory for relative assets.</param>
     /// <returns>Deterministic canonical UTF-8 bytes.</returns>
+    /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
     public static byte[] CompileToUtf8Bytes(DocumentNode document, string? basePath = null) {
         var node = Lower(document, basePath);
         return CanonicalJsonDocument.Serialize(node);
@@ -84,12 +85,14 @@ public static partial class WorldDocumentEmitter {
     /// <param name="document">The document AST.</param>
     /// <param name="basePath">The optional base directory for relative assets.</param>
     /// <returns>Deterministic canonical JSON string.</returns>
+    /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
     public static string CompileToJson(DocumentNode document, string? basePath = null) {
         var bytes = CompileToUtf8Bytes(document, basePath);
         return Encoding.UTF8.GetString(bytes);
     }
 
     private static void ProcessStatement(StatementNode statement, JsonObject target, DocumentScope scope) {
+        using var evaluation = scope.Budget.Enter(statement.Span);
         switch (statement) {
             case LetNode:
             case TemplateNode:
@@ -432,4 +435,3 @@ public static partial class WorldDocumentEmitter {
     }
 
 }
-

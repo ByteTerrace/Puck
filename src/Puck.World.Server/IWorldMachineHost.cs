@@ -45,6 +45,38 @@ public readonly record struct WorldMachineCartridge(string Path, string SourceHa
 /// Callers should not need to reach past this interface into the concrete host.
 /// </summary>
 public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemoryPeek {
+    /// <summary>Gets the same host-local catalog used for machine construction and document admission.</summary>
+    IMachineValidationCatalog ValidationCatalog { get; }
+    /// <summary>Gets the declared machine names, including instances without display consumers.</summary>
+    IEnumerable<string> InstanceNames { get; }
+    /// <summary>Reads execution and generation state by instance identity.</summary>
+    /// <param name="name">The authored instance name.</param>
+    WorldMachineInstanceState? InstanceState(string name);
+    /// <summary>Resolves one named instance's video output without creating or advancing it.</summary>
+    /// <param name="instance">The authored instance name.</param>
+    /// <param name="output">The provider's output name.</param>
+    IMachineVideoOutput? VideoOutput(string instance, string output);
+    /// <summary>Resolves one named audio stream; consumers of that stream share a single drain.</summary>
+    /// <param name="instance">The authored instance name.</param>
+    /// <param name="output">The provider's output name.</param>
+    IAudioMachine? AudioOutput(string instance, string output);
+    /// <summary>Observes coherent hardware state with explicit availability and no side effects.</summary>
+    /// <param name="instance">The authored instance name.</param>
+    /// <param name="address">The provider space, unsigned address, and access width.</param>
+    MachineAccessResult Inspect(string instance, MachineMemoryAddress address);
+    /// <summary>Resolves a validated binding's raw or exported-symbol address.</summary>
+    /// <param name="instance">The authored instance.</param>
+    /// <param name="binding">The named binding within the instance.</param>
+    /// <param name="address">The resolved scalar address, on success.</param>
+    bool TryBindingAddress(string instance, string binding, out MachineMemoryAddress address);
+    /// <summary>Applies an already authorized write, refusing stale instance generations. External callers must
+    /// use the ordered authority door; the server's deterministic bindings use this execution seam directly.</summary>
+    /// <param name="instance">The target instance.</param>
+    /// <param name="generation">The expected incarnation.</param>
+    /// <param name="address">The resolved scalar address.</param>
+    /// <param name="value">The converted scalar bit pattern.</param>
+    /// <param name="mode">Patch or bus semantics.</param>
+    MachineAccessResult WriteHardware(string instance, ulong generation, MachineMemoryAddress address, ulong value, MachineAccessMode mode);
     /// <summary>A machine's core is re-executed at the same tick boundaries off the same pinned content and pad
     /// inputs, exactly like a WASM guest — see <see cref="IWorldExtensionRuntime.ReplayPolicy"/>.</summary>
     WorldExtensionReplayPolicy IWorldExtensionRuntime.ReplayPolicy => WorldExtensionReplayPolicy.Recomputed;
@@ -104,10 +136,12 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <summary>Returns the cable link a screen currently belongs to (by name), or <see langword="null"/>.</summary>
     /// <param name="index">The engine screen-surface index.</param>
     string? LinkOf(int index);
-    /// <summary>Returns the live machine on a screen index, for presentation's own frame-publish loop
-    /// (<c>IScreenMachine.PublishFrame</c> is a GPU call this project never makes itself), or <see langword="null"/>.</summary>
+    /// <summary>Returns the runtime currently bound to a screen index, or null.</summary>
     /// <param name="index">The engine screen-surface index.</param>
-    IScreenMachine? MachineAt(int index);
+    IMachineRuntime? MachineAt(int index);
+    /// <summary>Returns the optional video output selected by a screen, or null when no signal is available.</summary>
+    /// <param name="index">The screen's derived render slot.</param>
+    IMachineVideoOutput? VideoOutput(int index);
     /// <summary>Reconciles the declared cable links to a mutated <c>links</c> section.</summary>
     /// <param name="links">The declared cable groups, derived from the live definition's machine sources
     /// (<c>WorldDefinition.MachineCableGroups()</c>).</param>

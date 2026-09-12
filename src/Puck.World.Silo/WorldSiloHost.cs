@@ -187,7 +187,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     // The silo builds the real WorldMachineHost (Puck.World.Addons.Machines) exactly like the desktop, so a hosted
     // row's document-declared engine ids validate and read back identically — the silo simply never wires a real
     // engine set into it, so a Machine-source screen always reports "no screen-machine engine" rather than booting.
-    private static IWorldMachineHost MachineHostFactory(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, string? documentPath, WorldOutputHub? narrationHub) => new WorldMachineHost(
+    private static IWorldMachineHost MachineHostFactory(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, string? documentPath, WorldOutputHub? narrationHub) => new WorldMachineHost(
         screens: screens,
         engines: engines,
         documentPath: documentPath,

@@ -235,12 +235,8 @@ public static partial class WorldDocumentEmitter {
         return BareIdentifier.Replace(input: text, evaluator: match => {
             var name = match.Value;
 
-            if (scope.Locals.TryGetValue(key: name, value: out var local)) {
-                return (DocumentLowering.KeyText(node: local) ?? name);
-            }
-
-            if (scope.Constants.TryGetValue(key: name, value: out var constant)) {
-                return (DocumentLowering.KeyText(node: DocumentLowering.LowerValue(expr: constant, scope: scope)) ?? name);
+            if (scope.TryLowerBinding(name, out var bound)) {
+                return (DocumentLowering.KeyText(node: bound) ?? name);
             }
 
             return name;

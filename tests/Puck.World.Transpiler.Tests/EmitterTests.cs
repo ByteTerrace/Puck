@@ -135,12 +135,12 @@ public class EmitterTests {
 
             template spawnRig(rigId, rigPitch = 0rad) {
                 seatRig rigId {
-                    pitch: rigPitch
+                    pitchRadians: rigPitch
                 }
             }
 
             host {
-                tickInterval: interval
+                tickIntervalSeconds: interval
                 physics {
                     gravity: defaultGravity
                 }
@@ -155,7 +155,7 @@ public class EmitterTests {
         var lowered = WorldDocumentEmitter.Lower(doc);
 
         var host = Assert.IsType<JsonObject>(lowered["host"]);
-        Assert.Equal(0.25, host["tickInterval"]?.GetValue<double>());
+        Assert.Equal(0.25, host["tickIntervalSeconds"]?.GetValue<double>());
 
         var physics = Assert.IsType<JsonObject>(host["physics"]);
         var grav = Assert.IsType<JsonArray>(physics["gravity"]);
@@ -165,7 +165,7 @@ public class EmitterTests {
         var views = Assert.IsType<JsonObject>(lowered["views"]);
         var seatRig = Assert.IsType<JsonObject>(views["seatRig"]);
         Assert.Equal("pilot", seatRig["name"]?.ToString());
-        Assert.True(seatRig["pitch"]?.GetValue<double>() > 0.78);
+        Assert.True(seatRig["pitchRadians"]?.GetValue<double>() > 0.78);
     }
 
     [Fact]

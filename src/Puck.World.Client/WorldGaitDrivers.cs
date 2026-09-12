@@ -33,7 +33,7 @@ public static class WorldGaitDrivers {
 
     private const float TwoPi = (2f * MathF.PI);
 
-    /// <summary>Advances one body's driver phases and weights for a frame. Reseeds — every phase and weight to zero,
+    /// <summary>Advances one registration's driver phases and weights for a frame. Reseeds — every phase and weight to zero,
     /// no signal charged — when the entity address changes or this is the first call for the registration, so a
     /// reused body slot never inherits the previous inhabitant's stride.</summary>
     /// <param name="drivers">The creation's declared drivers; entries past <paramref name="phases"/>'s length are
@@ -50,7 +50,7 @@ public static class WorldGaitDrivers {
     /// <param name="lastAddress">The address latched by the previous call; updated on a reseed.</param>
     /// <param name="easedSpeed">The low-passed rendered speed backing the <c>moving</c>/<c>still</c> gate tokens,
     /// metres per second; updated every call and zeroed on a reseed.</param>
-    /// <param name="address">This call's entity address.</param>
+    /// <param name="address">This call's entity address; uninhabited placements use index -1 with no body facts.</param>
     /// <param name="definition">The live definition a state-cell signal reads, or null when none can.</param>
     /// <param name="tick">The tick a state-cell signal is read at.</param>
     public static void Advance(IReadOnlyList<CreationDriverDocument>? drivers, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldDefinition? definition = null, ulong tick = 0UL) {

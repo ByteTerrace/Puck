@@ -58,8 +58,8 @@ public sealed class BrowserEngineTests {
 
         Assert.True(condition: result.Ok, userMessage: string.Join(separator: "; ", values: (result.Errors ?? []).Select(selector: error => error.Message)));
         Assert.NotNull(@object: result.Document);
-        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "screen-machine engine 'gaming-brick' registration deferred", comparisonType: StringComparison.Ordinal));
-        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "screen-machine engine 'advanced-gaming-brick' registration deferred", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "validation of engine 'gaming-brick' is deferred", comparisonType: StringComparison.Ordinal));
+        Assert.Contains(collection: result.Deferred!, filter: message => message.Contains(value: "validation of engine 'advanced-gaming-brick' is deferred", comparisonType: StringComparison.Ordinal));
     }
     [Fact]
     public void Parse_wrong_schema_refuses_by_name() {

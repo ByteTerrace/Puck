@@ -17,7 +17,7 @@ internal static class WorldPrepareCommand {
     // Hosted storage addresses worlds by canonical file name, independently of repository directories.
     private static int Run(string output, string root) {
 
-        CliWorldVocabulary.EnsureInstalled();
+        var machines = CliWorldVocabulary.EnsureInstalled();
         Directory.CreateDirectory(path: output);
         var pending = new Queue<string>();
         var visited = new HashSet<string>(comparer: StringComparer.Ordinal);
@@ -58,6 +58,9 @@ internal static class WorldPrepareCommand {
                 reason: out reason, sourceName: path, validateAdjacencyClaims: false
             )) {
                 throw new InvalidDataException(message: $"Cannot validate {relative}: {reason}");
+            }
+            if (!WorldDefinitionValidator.TryValidateLocally(definition!, machines, out reason)) {
+                throw new InvalidDataException(message: $"Cannot admit machines in {relative}: {reason}");
             }
             File.WriteAllBytes(Path.Combine(path1: output, path2: name), WorldDefinitionSerialization.Serialize(definition: definition!));
         }

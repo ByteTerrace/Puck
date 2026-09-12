@@ -58,13 +58,14 @@ public static partial class PuckParser {
         return new AndPredicateNode(Operands: operands, Offset: start, Length: len, Line: line, Column: col);
     }
 
-    private static PredicateNode ParseNotGate(ParseContext context, DiagnosticBag? diagnostics) {
+    private static PredicateNode ParseNotGate(ParseContext context, DiagnosticBag? diagnostics, int depth = 0) {
+        if (depth >= 64) { throw CreateException(context, "Negated gates nest at most 64 levels"); }
         SkipWhiteSpace(context);
         var start = context.Scanner.Cursor.Offset;
         var (line, col) = GetLineAndColumn(context.Scanner.Buffer, start);
 
         if (TryMatchKeyword(context, "not")) {
-            var operand = ParseNotGate(context, diagnostics);
+            var operand = ParseNotGate(context, diagnostics, depth + 1);
             var len = context.Scanner.Cursor.Offset - start;
             return new NotPredicateNode(Operand: operand, Offset: start, Length: len, Line: line, Column: col);
         }

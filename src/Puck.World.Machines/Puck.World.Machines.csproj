@@ -12,7 +12,6 @@
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
         <ProjectReference Include="..\Puck.Audio\Puck.Audio.csproj" />
-        <ProjectReference Include="..\Puck.GamingBricks.Forge\Puck.GamingBricks.Forge.csproj" />
         <ProjectReference Include="..\Puck.Maths\Puck.Maths.csproj" />
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
     </ItemGroup>

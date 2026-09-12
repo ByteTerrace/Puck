@@ -11,6 +11,7 @@ using Puck.Cli.Canary;
 using Puck.Cli.Citations;
 using Puck.Cli.Creation;
 using Puck.Cli.DocLinks;
+using Puck.Cli.Firmware;
 using Puck.Cli.FontAtlas;
 using Puck.Cli.Format;
 using Puck.Cli.Landing;
@@ -52,6 +53,7 @@ internal static class PuckRootCommand {
             DeclarationsCommand.Create(),
             DocLinksCommand.Create(),
             DocsBuildCommand.Create(),
+            FirmwareCommand.Create(),
             FontAtlasCommand.Create(),
             FormatCommand.Create(),
             LandingCommand.Create(),

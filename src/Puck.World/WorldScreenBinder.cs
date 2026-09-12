@@ -25,7 +25,7 @@ namespace Puck.World;
 /// <remarks>
 /// This type is a pure reader of <see cref="Server.WorldMachineHost"/>'s outputs
 /// (<see cref="Server.WorldMachineHost.Handle"/>/<see cref="Server.WorldMachineHost.Light"/> for the room), and
-/// <see cref="Publish"/> calls <see cref="IScreenMachine.PublishFrame"/> on the host's live instance — the one
+/// <see cref="Publish"/> calls <see cref="IMachineVideoOutput.PublishFrame"/> on the host's optional output — the one
 /// GPU call this project makes on a machine's behalf, since <c>Puck.World.Server</c> cannot reach a GPU device
 /// context. It also facades several read-only <see cref="WorldMachineHost"/> members (<c>HasMachine</c>,
 /// <c>HasEngine</c>, <c>TryReadMachineInsert</c>, <c>TryMagazine</c>, <c>AudioMachine</c>, <c>TryPeek</c>,
@@ -82,7 +82,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
     // The process's running world instances. Its observation resolver door owns destination lookup, origin adoption,
     // generation resolution and start/reuse, so a screen and a crossing cannot grow independent routing rules.
     private readonly WorldInstanceHost m_instanceHost;
-    // The authoritative screen-machine host — owns every booted IScreenMachine; this binder reads its outputs
+    // The authoritative screen-machine host — owns every booted IMachineRuntime; this binder reads its outputs
     // (Handle/Light/MachineAt) and facades several of its read-only members. Never mutated through here — see this
     // type's own remarks.
     private readonly WorldMachineHost m_machines;
@@ -599,7 +599,7 @@ internal sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPrese
         }
 
         foreach (var slot in m_slots.Values) {
-            m_machines.MachineAt(index: slot.Index)?.NotifyDeviceLost();
+            m_machines.VideoOutput(index: slot.Index)?.NotifyDeviceLost();
             slot.Pattern?.Surface.NotifyDeviceLost();
 
             if (slot.Qr is { } qr) {

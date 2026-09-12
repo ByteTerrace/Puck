@@ -51,14 +51,16 @@ device specifications are incomplete.
 
 ## BIOS profile
 
-The core executes a supplied BIOS rather than providing a complete high-level SWI
-replacement. `AgbBiosProfile` identifies known retail and replacement images for
+The core executes native BIOS code rather than intercepting SWIs in the host.
+It bundles original Puck firmware and also accepts external images.
+`AgbBiosProfile` identifies known retail and replacement images for
 diagnostics. Accuracy and co-simulation runs require the expected retail profile
-unless the caller explicitly permits a replacement BIOS. BIOS images remain
-user-supplied and are never committed to the repository.
+unless the caller explicitly permits a replacement BIOS. Retail BIOS images remain
+user-supplied and are never committed; the separately MIT-licensed Puck firmware
+is an explicit package resource.
 
-The open-source [Cult-of-GBA replacement BIOS](https://github.com/Cult-of-GBA/BIOS)
-is useful for legally distributable development workflows, but it is not evidence
-of retail-BIOS timing parity. See
+The [Puck firmware guide](../../src/Puck.AdvancedGamingBrick/Firmware/README.md)
+owns source provenance and compatibility limits. Neither its bundled identity
+nor another replacement image establishes retail-BIOS timing parity. See
 [Determinism, Savestate, and Replay](determinism-savestate-replay.md) for the
 pre-flight and replay contract.

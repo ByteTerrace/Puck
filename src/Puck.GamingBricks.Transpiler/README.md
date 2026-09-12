@@ -18,6 +18,28 @@ puck compile tetris.cgb.puck --output tetris.cgb.cartridge.json --validate
 `--validate` runs the forge's own document validation (`CartridgeDocuments.Validate`) over the lowered JSON:
 lowering only proves the source was well formed, never that the cartridge is legal.
 
+`puck lint` and the CLI language server select this vocabulary from `schema: "puck.cartridge.v1"`, use the same
+forge validation, and locate errors at their authored rows or properties. Editor completions also follow the
+schema. Without `--output`, compile writes `<source>.cartridge.json` for a cartridge and `<source>.world.json`
+for a world. The regeneration gate covers every committed `.puck` cartridge source.
+
+Runtime value fields accept ordinary expressions: `x: cursor + 1` and `map(row: cursor + 1, column: 0, tile: 0)`
+have the same meaning as quoted operand spellings, including fields inside object literals and generated arrays.
+Compile-time bindings are substituted before native compilation. Byte expressions admit literals in 0..255;
+larger bare values are admitted only where a wide slot is supported. A wide read cannot be assigned to a byte
+destination implicitly. Empty required sections, including `rules []`, survive decompilation.
+
+`puck lint` and the CLI language server select this vocabulary from `schema: "puck.cartridge.v1"`, use the same
+forge validation, and locate errors at their authored rows or properties. Editor completions also follow the
+schema. Without `--output`, compile writes `<source>.cartridge.json` for a cartridge and `<source>.world.json`
+for a world. The regeneration gate covers every committed `.puck` cartridge source.
+
+Runtime value fields accept ordinary expressions: `x: cursor + 1` and `map(row: cursor + 1, column: 0, tile: 0)`
+have the same meaning as quoted operand spellings, including fields inside object literals and generated arrays.
+Compile-time bindings are substituted before native compilation. Byte expressions admit literals in 0..255;
+larger bare values are admitted only where a wide slot is supported. A wide read cannot be assigned to a byte
+destination implicitly. Empty required sections, including `rules []`, survive decompilation.
+
 Decompiling is one-way, like every Puck decompiler — `let` and `template` are a source-only idea and are gone from
 the JSON. The guarantee runs the other way: source written by the decompiler compiles back to the document it was
 read from, byte for byte.
@@ -72,8 +94,7 @@ to a machine variable of the same name, and it shadows a `let` of that name for 
 `map(range(...), i => ...)` remains the spelling for a repeated VALUE inside one row (an array cell, a variable's
 initial contents); `for` is the spelling for a repeated ROW. Neither reaches inside a rule body: a rule's steps are
 parsed by the language's own effect dispatcher, which has no `for` production, and a rule's `repeat <count> as
-<name> { }` is unrelated — it is a loop the MACHINE runs at play time over a runtime count, not a compile-time
-expansion of source text.
+<name> { }` is unrelated: the machine runs it at play time, with a compile-time count in 1..255.
 
 A statement this vocabulary has no case for is refused rather than dropped, so a misspelled row keyword cannot
 silently lose the row and everything nested in it.

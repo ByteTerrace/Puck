@@ -20,7 +20,7 @@ public class RoundTripFidelityTests {
         Assert.False(parseDiagnostics.HasErrors, $"{parseDiagnostics.FormatReport(puck)}{Environment.NewLine}{puck}");
 
         var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics);
+        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics, cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(loweringDiagnostics.HasErrors, $"{loweringDiagnostics.FormatReport(puck)}{Environment.NewLine}{puck}");
 
         return lowered.Value!;
@@ -95,7 +95,7 @@ public class RoundTripFidelityTests {
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport());
 
         var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics);
+        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics, cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(loweringDiagnostics.HasErrors, loweringDiagnostics.FormatReport());
 
         var gain = Assert.IsType<JsonObject>(lowered.Value!["tuning"])["gain"];

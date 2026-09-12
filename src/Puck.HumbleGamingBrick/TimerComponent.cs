@@ -50,7 +50,7 @@ public sealed class TimerComponent : ITimer, IClockedComponent, ISnapshotable {
         m_interrupts = interrupts;
         m_key1 = key1;
 
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             m_counter = BootDivPrediction.Compute(
                 header: header,
                 model: configuration.Model

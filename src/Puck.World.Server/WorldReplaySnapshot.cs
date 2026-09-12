@@ -1341,7 +1341,7 @@ public sealed class WorldReplaySnapshot {
     /// re-run.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug: an authority-entry kind the re-drive switch
     /// below does not handle, which would silently drop a recorded input from the re-drive.</exception>
-    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) => DriveTraces(
+    public ulong[] Drive(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) => DriveTraces(
         profiles: profiles,
         engines: engines,
         machineHostFactory: machineHostFactory,
@@ -1349,7 +1349,7 @@ public sealed class WorldReplaySnapshot {
     ).Pose;
 
     /// <summary>Re-drives once and returns both the pose inspection trace and authoritative state-system trace.</summary>
-    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayHashTraces DriveTraces(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);

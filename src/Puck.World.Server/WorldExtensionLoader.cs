@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using Puck.Abstractions;
+using Puck.Abstractions.Machines;
 
 namespace Puck.World.Server;
 
@@ -12,7 +13,6 @@ namespace Puck.World.Server;
 public sealed class PuckExtensionLoadContext : AssemblyLoadContext {
     private static readonly HashSet<string> SharedHostPrefixes = new(StringComparer.OrdinalIgnoreCase) {
         "Puck.Abstractions",
-        "Puck.GamingBricks.Forge",
         "Puck.World.Server",
         "Puck.World.Machines",
         "Puck.World.Protocol",
@@ -136,7 +136,7 @@ public static class WorldExtensionLoader {
             }
 
             if (typeof(IWorldExtension).IsAssignableFrom(type) ||
-                string.Equals(type.GetInterface("IGamingBrickExtension")?.Name, "IGamingBrickExtension", StringComparison.Ordinal)) {
+                typeof(IMachineExtension).IsAssignableFrom(type)) {
                 if (Activator.CreateInstance(type) is { } extension) {
                     activatedExtensions.Add(extension);
                     DispatchExtension(extension, serverRegistry, onExtensionLoaded);

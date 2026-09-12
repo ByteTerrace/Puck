@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.State;
+using Puck.Transpiler.Parsing;
 
 namespace Puck.Transpiler.Formatting;
 
@@ -10,6 +11,38 @@ public static class PuckFormatter {
     /// <returns>Clean, idiomatic, idempotently formatted Puck code with Egyptian braces and 4-space indentation.</returns>
     public static string Format(string source) {
         ArgumentNullException.ThrowIfNull(source);
+
+        var marker = "__puck_literal_";
+        while (source.Contains(marker, StringComparison.Ordinal)) { marker += "_"; }
+        var literals = new List<string>();
+        var protectedSource = new StringBuilder(source.Length);
+        for (var index = 0; index < source.Length;) {
+            var end = SourceLexemes.End(source, index);
+            if (end > index) {
+                // Comments retain their lexical role; only strings and quoted identifiers are replaced.
+                if (source[index] is '"' or '$' or '`') {
+                    protectedSource.Append('"').Append(marker).Append(literals.Count).Append('"');
+                    literals.Add(source[index..end]);
+                } else { protectedSource.Append(source.AsSpan(index, end - index)); }
+                index = end;
+            } else { protectedSource.Append(source[index++]); }
+        }
+        var formatted = FormatCore(protectedSource.ToString());
+        var restored = new StringBuilder(formatted.Length);
+        var prefix = "\"" + marker;
+        var copied = 0;
+        while (formatted.IndexOf(prefix, copied, StringComparison.Ordinal) is var start && start >= 0) {
+            restored.Append(formatted.AsSpan(copied, start - copied));
+            var end = formatted.IndexOf('"', start + prefix.Length);
+            var ordinal = int.Parse(formatted.AsSpan(start + prefix.Length, end - start - prefix.Length), System.Globalization.CultureInfo.InvariantCulture);
+            restored.Append(literals[ordinal]);
+            copied = end + 1;
+        }
+        restored.Append(formatted.AsSpan(copied));
+        return restored.ToString();
+    }
+
+    private static string FormatCore(string source) {
 
         if (string.IsNullOrWhiteSpace(source)) {
             return string.Empty;

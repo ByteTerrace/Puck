@@ -23,8 +23,9 @@ internal sealed record RenderFloor(RenderFloorSource Source, string RelativePath
 /// and hashes the framebuffer; because the core is fully deterministic, a known-good render must reproduce its FNV-1a
 /// hash exactly. This guards the whole CPU&#8594;bus&#8594;PPU pipeline against silent regressions while the accuracy
 /// frontier is worked. Floors sourced from the corpus (the ppu screen demos) or the commercial-ROM directory skip
-/// individually when their ROM is absent; the stage skips entirely when none is present. Re-capture a shifted floor with
-/// <c>--render-hash</c> after confirming the frame is still visually correct.
+/// individually when their ROM is absent; the stage skips entirely when none is present. Keep BIOS identity and step
+/// budget fixed when comparing builds: replacement firmware need not reach the same frame after the same instruction
+/// count. Explain a changed result before recapturing a floor with <c>--render-hash</c>.
 /// </summary>
 internal sealed class RenderHashStage : IPostStage<PostContext> {
     private readonly IReadOnlyList<RenderFloor> m_floors;
@@ -55,7 +56,7 @@ internal sealed class RenderHashStage : IPostStage<PostContext> {
                 : context.GamesRoot);
 
             // A BIOS-dependent floor renders a blank screen on the zeroed stub, which would never match — skip it there
-            // rather than false-fail; it only reproduces its floor with a real replacement BIOS.
+            // rather than false-fail. Nonzero images run, but the floor's fixed step budget is BIOS-specific.
             if (
                 (root is null) ||
                 (floor.NeedsBios && stubBios)

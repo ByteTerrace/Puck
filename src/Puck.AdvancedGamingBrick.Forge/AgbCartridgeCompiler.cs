@@ -44,15 +44,12 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             throw new ArgumentException(message: "This compiler requires target agb.", paramName: nameof(document));
         }
 
-        // A slot spends one or two bytes of the window depending on its declared ceiling, so addresses accumulate by
-        // width rather than by declaration index. A wide slot is little-endian: low byte first.
+        var layout = new CartridgeStateLayout(document);
         var variables = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
         var widths = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var slotAddress = AgbForgeMemoryMap.GameRam;
-        foreach (var slot in document.Variables) {
-            variables[slot.Name] = slotAddress;
-            widths[slot.Name] = slot.Width;
-            slotAddress += (uint)slot.Width;
+        foreach (var (name, slot) in layout.Slots) {
+            variables[name] = AgbForgeMemoryMap.GameRam + (uint)slot.Offset;
+            widths[name] = slot.Width;
         }
 
         var arrays = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
@@ -105,8 +102,8 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         if (document.Save is { } declared) {
             var defaults = new List<byte>();
             foreach (var name in declared.Variables) {
-                persisted.Add(item: (variables[name], 1));
-                defaults.Add(item: (byte)document.Variables.First(predicate: variable => variable.Name == name).Initial);
+                persisted.Add(item: (variables[name], layout.Slots[name].Width));
+                defaults.AddRange(layout.InitialBytes(name));
             }
 
             foreach (var name in declared.Arrays) {
@@ -939,7 +936,7 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             }
 
             if (CartridgeExpressions.Index(key: state.Key) is { } index) {
-                Element(array: state.Name, index: index, address: LowRegister.R2);
+                Element(array: state.Name, index: index, address: LowRegister.R2, guard: guard);
                 emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
 
                 return;
@@ -1117,11 +1114,11 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
 
         // Leaves the addressed element in the given register, or the zeroed discard sink when the index is past the
         // declared length. The index is consumed in r3 immediately, so a nested array index reuses it safely.
-        void Element(string array, ValueExpression index, LowRegister address) {
+        void Element(string array, ValueExpression index, LowRegister address, bool guard = false) {
             var done = emitter.NewLabel();
             var inside = emitter.NewLabel();
             var length = lengths[key: array];
-            Load(expression: index, register: LowRegister.R3);
+            Load(expression: index, register: LowRegister.R3, guard: guard);
             if (length < CartridgeLimits.ArrayLength) {
                 emitter.CompareImmediate(register: LowRegister.R3, value: (byte)length);
                 emitter.Branch(condition: ThumbCondition.CarryClear, label: inside);

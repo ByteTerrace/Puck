@@ -1,0 +1,873 @@
+// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and
+// compile, never the '.world.json' beside it.
+//
+// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and
+// 'for' in it, none of which the document carries.
+
+schema: "puck.world.def.v1"
+basis: "avatars/moth.world.json"
+documentId: "moth-courtyard"
+
+// Body indices are explicit; metadata and held pose cells share this table.
+let stations = [
+    { index: 0, name: "isolated", p [0, 0, 0], yaw: 0, stride: 0, flight: 0, wings: 0, bank: 0, cruise: 0, crouch: 0, salute: 0 }
+    { index: 1, name: "signal", p [11, 0, 8], yaw: -18, stride: 0, flight: 0, wings: 0.15, bank: 0, cruise: 0, crouch: 0, salute: 1 }
+    { index: 2, name: "banked-flight", p [16, 3.2, 6.2], yaw: 110, stride: 0.5, flight: 1, wings: 1, bank: 1.7, cruise: 1.8, crouch: 0.15, salute: 0 }
+    { index: 3, name: "hover-rear", p [12.5, 1.9, 4.5], yaw: 175, stride: 0, flight: 1, wings: 1, bank: -0.4, cruise: 0, crouch: 0, salute: 0 }
+    { index: 4, name: "lift-off", p [9, 1.15, 4], yaw: 72, stride: 0.2, flight: 0.75, wings: 0.7, bank: 0, cruise: 0.2, crouch: 0.25, salute: 0 }
+    { index: 5, name: "touchdown", p [16, 0, 1], yaw: -38, stride: 0, flight: 0.12, wings: 0.55, bank: 0, cruise: 0, crouch: 0.9, salute: 0 }
+    { index: 6, name: "stride", p [13, 0.08, -0.4], yaw: 38, stride: 1.05, flight: 0, wings: 0, bank: 0, cruise: 0, crouch: 0, salute: 0 }
+    { index: 7, name: "ready", p [10, 0, 0], yaw: -24, stride: 0, flight: 0, wings: 0.1, bank: 0, cruise: 0, crouch: 0.18, salute: 0 }
+]
+
+// A pose channel connects one station column to the inherited Moth driver.
+// Breath is held at zero; air channels replace the studio's existing cells.
+let poseChannels = [
+    { name: "stageStride", field: "stride", driver: "stride" }
+    { name: "stageBreath", field: "breath", driver: "breath", heldZero: true }
+    { name: "stageBank", field: "bank", driver: "bank" }
+    { name: "stageCruise", field: "cruise", driver: "cruise" }
+    { name: "stageCrouch", field: "crouch", driver: "stage-crouch" }
+    { name: "stageSalute", field: "salute", driver: "stage-salute" }
+    { name: "airPose", field: "flight", driver: "flight", replaceCells: true }
+    { name: "airWings", field: "wings", driver: "wings", replaceCells: true }
+]
+
+let captureWidth = 1440
+let captureHeight = 900
+
+// Art target: 7.5 cm spacing, varied knee-high blades, a shared traveling gust.
+// Each tile remains independently bounded. The compiler expands this geometry.
+let meadowSpacing = 0.075
+let meadowHeight = 0.55
+let meadowWidth = 0.019
+let meadowTiles = [
+    [4.15, 5.35], [5.05, 5.35], [5.95, 5.35], [6.85, 5.35]
+    [4.15, 6.25], [5.05, 6.25], [5.95, 6.25], [6.85, 6.25]
+    [4.15, 7.15], [5.05, 7.15], [5.95, 7.15], [6.85, 7.15]
+    [4.15, 8.05], [5.05, 8.05], [5.95, 8.05], [6.85, 8.05]
+]
+let meadowBlades = map(range(0, 144), i => {
+    id: i
+    x: ((i % 12) - 5.5) * meadowSpacing + 0.026 * sine(i * 73.17)
+    z: ((i - i % 12) / 12 - 5.5) * meadowSpacing + 0.026 * sine(i * 39.71 + 1)
+    h: meadowHeight * (0.72 + 0.28 * sine(i * 13.31) + 0.16 * cosine(i * 0.43))
+    yaw: i * 2.39996323
+})
+
+// This order also assigns the number keys. Some cameras come from the studio.
+let inspectionViews = [
+    { name: "ensemble", camera: "ensemble" }
+    { name: "isolated", camera: "three-quarter" }
+    { name: "group", camera: "group" }
+    { name: "group-rear", camera: "group-rear" }
+    { name: "clouds", camera: "clouds" }
+    { name: "face", camera: "face" }
+    { name: "back-close", camera: "back-close" }
+    { name: "meadow", camera: "meadow" }
+]
+
+metadata {
+    title: "Moth courtyard"
+    description: "Eight Moth pose stations in a grassy clearing, with sandy paths, rolling banks, weathered rocks and broadleaf trees."
+    custom {
+        stations: stations
+    }
+}
+
+host {
+    width: captureWidth
+    height: captureHeight
+    targetHertz: 60
+    timing: true
+}
+
+bodies {
+    capacity: length(stations)
+    localSeats: 1
+    networkPlayers: 0
+}
+
+bodyMotionPrograms [
+    {
+        version: "puck.body-motion.v1"
+        name: "display"
+        kind: "Motion"
+        operations [
+            "ResolveYawAttitudeAndPlanarFrame"
+            "CommitPose"
+        ]
+    }
+]
+
+kits {
+    rows [
+        {
+            bodyContact: "Overlap"
+            bodyMotionProgram: "display"
+            collider: null
+            mass: 0
+            motion {
+                facingSnap: false
+                groundStick: 2
+                holds [
+                    {
+                        bond: "Surface"
+                        cone [0, 60]
+                        driveAlignment: 0
+                        envelope {
+                            sinkSpeed: 40
+                        }
+                        forward: "Heading"
+                        gravity {
+                            fall: 46
+                            rise: 28
+                        }
+                        hold: "Gravity"
+                        lift: 0
+                        name: "ground"
+                        onDrive: false
+                        pull: 0
+                        reach: 1.2
+                        thrust: 1
+                        upLean: 0
+                    }
+                    {
+                        bond: "Free"
+                        driveAlignment: 0
+                        forward: "Heading"
+                        gravity {
+                            fall: 46
+                            rise: 28
+                        }
+                        hold: "Lift"
+                        lift: 1
+                        name: "air"
+                        onDrive: false
+                        pull: 0
+                        reach: 0
+                        thrust: 1
+                        upLean: 0
+                    }
+                ]
+                moveFrame: "World"
+                shaping [
+                    {
+                        along {}
+                        turnScale: 1
+                    }
+                ]
+                speed {
+                    value: 2.4
+                }
+                turn {
+                    falloff: 1
+                    maxPitch: 1.2
+                    pitchRate: 0
+                    rate: 2.5
+                }
+            }
+            name: "display"
+        }
+    ]
+}
+
+looks {
+    rows [
+        {
+            name: "moth"
+            motion {
+                poses: null
+            }
+        }
+    ]
+}
+
+// Shape ids and rest pivots address the inherited Moth rig; phases retain their authored precision.
+let limbPoses = [
+    { id: 148, pivot [0.295, 1.4515, 0], swings [
+            { driver: "stride", axis [1, 0, 0], amplitude: 0.34, wave: "sine", phase: 3.1415927 }
+            { driver: "flight", axis [0, 0, 1], amplitude: 0.28, wave: "linear", phase: 0 }
+            { driver: "stage-salute", axis [1, 0, 0], amplitude: -1, wave: "linear", phase: 0 }
+    ] }
+    { id: 159, pivot [0.39, 1.1765, 0.005], swings [
+            { driver: "flight", axis [1, 0, 0], amplitude: -0.25, wave: "linear", phase: 0 }
+            { driver: "stage-salute", axis [1, 0, 0], amplitude: -1.1, wave: "linear", phase: 0 }
+    ] }
+    { id: 174, pivot [0.145, 1.0265, 0], swings [
+            { driver: "stride", axis [1, 0, 0], amplitude: 0.44, wave: "sine", phase: 0 }
+            { driver: "flight", axis [1, 0, 0], amplitude: -0.2, wave: "linear", phase: 0 }
+            { driver: "stage-crouch", axis [1, 0, 0], amplitude: -0.6, wave: "linear", phase: 0 }
+    ] }
+    { id: 180, pivot [0.19, 0.7465, 0], swings [
+            { driver: "stride", axis [1, 0, 0], amplitude: 0.88, wave: "halfSine", phase: 3.1415927 }
+            { driver: "flight", axis [1, 0, 0], amplitude: 0.44, wave: "linear", phase: 0 }
+            { driver: "stage-crouch", axis [1, 0, 0], amplitude: 1.2, wave: "linear", phase: 0 }
+    ] }
+    { id: 195, pivot [0.2, 0.1715, 0.0075], swings [
+            { driver: "stride", axis [1, 0, 0], amplitude: -0.18, wave: "halfSine", phase: 3.1415927 }
+            { driver: "flight", axis [1, 0, 0], amplitude: 0.12, wave: "linear", phase: 0 }
+            { driver: "stage-crouch", axis [1, 0, 0], amplitude: -0.6, wave: "linear", phase: 0 }
+    ] }
+    { id: 242, pivot [-0.145, 1.0265, 0], swings [
+            { driver: "stride", axis [1, 0, 0], amplitude: 0.44, wave: "sine", phase: 3.1415927 }
+            { driver: "flight", axis [1, 0, 0], amplitude: -0.2, wave: "linear", phase: 0 }
+            { driver: "stage-crouch", axis [1, 0, 0], amplitude: -0.6, wave: "linear", phase: 0 }
+    ] }
+    { id: 248, pivot [-0.19, 0.7465, 0], swings [
+            { driver: "stride", axis [1, 0, 0], amplitude: 0.88, wave: "halfSine", phase: 6.2831853 }
+            { driver: "flight", axis [1, 0, 0], amplitude: 0.44, wave: "linear", phase: 0 }
+            { driver: "stage-crouch", axis [1, 0, 0], amplitude: 1.2, wave: "linear", phase: 0 }
+    ] }
+    { id: 263, pivot [-0.2, 0.1715, 0.0075], swings [
+            { driver: "stride", axis [1, 0, 0], amplitude: -0.18, wave: "halfSine", phase: 6.2831853 }
+            { driver: "flight", axis [1, 0, 0], amplitude: 0.12, wave: "linear", phase: 0 }
+            { driver: "stage-crouch", axis [1, 0, 0], amplitude: -0.6, wave: "linear", phase: 0 }
+    ] }
+]
+
+prototypes {
+    prototype "moth" {
+        document {
+            drivers: map([0, 1, 6, 7, 2, 3, 4, 5], i => {
+                name: poseChannels[i]["driver"]
+                signal: $"""state.{poseChannels[i]["name"]}.$body"""
+                when ["always"]
+                cadence: 1
+                blendInSeconds: 0
+                blendOutSeconds: 0
+            })
+
+            shapes: concat([
+                {
+                    id: 1
+                    slides [
+                        { driver: "stage-crouch", axis [0, 1, 0], amplitude: -0.15, phase: 0, wave: "linear" }
+                    ]
+                }
+            ], map(limbPoses, bone => {
+                id: bone["id"]
+                swings: map(bone["swings"], swing => {
+                    driver: swing["driver"]
+                    axis: swing["axis"]
+                    amplitude: swing["amplitude"]
+                    pivot: bone["pivot"]
+                    wave: swing["wave"]
+                    phase: swing["phase"]
+                })
+            }))
+            effectors []
+        }
+    }
+
+    prototype "court-plinth" {
+        document {
+            schema: "puck.creation.v1"
+            name: "court-plinth"
+            palette [
+                {
+                    color: "#5E626E"
+                    roughness: 0.62
+                }
+                {
+                    color: "#C5B186"
+                    roughness: 0.45
+                }
+            ]
+            shape Cylinder "base" {
+                position [0, -0.07, 0]
+                scale [0.85, 0.07, 0.85]
+                rounding: 0.025
+                material: 0
+            }
+
+            shape Cylinder "rim" {
+                position [0, -0.012, 0]
+                scale [0.86, 0.009, 0.86]
+                rounding: 0.008
+                material: 1
+            }
+        }
+    }
+
+    // The inherited solid floor becomes the walkable clearing and rolling banks.
+    // Positions in the tables below are world coordinates; creation X/Z are flipped.
+    prototype "floor" {
+        document {
+            schema: "puck.creation.v1"
+            name: "courtyard-meadow"
+            palette [
+                { color: "#658343", roughness: 0.96, specular: 0.025, weathering {
+                        floor: 0.16, lines: 0.16, scale: 3, seed: 2461
+                        under [
+                            { threshold: 0.18, surface { color: "#78914D", roughness: 0.97, metal: 0 } }]
+                } }
+                { color: "#C9AF7D", roughness: 0.98, specular: 0.015 }
+                { color: "#78914D", roughness: 0.96, specular: 0.025 }
+            ]
+            noise { frequency: 2.4, amplitude: 0.01, octaves: 2, gain: 0.35, seed: 2461 }
+            shape Box "clearing" {
+                id: 0
+                position [0, -0.44, 0]
+                scale [64, 0.36, 64]
+                material: 0
+            }
+            for (bank, i) in [
+                { p [-13, -2, 19], r [12, 4, 10] }
+                { p [16, -3, 27], r [17, 5.5, 12] }
+                { p [35, -2, 15], r [13, 4, 15] }
+                { p [-25, -2, -7], r [14, 3.5, 17] }
+                { p [7, -3, 43], r [23, 6, 15] }
+            ] {
+                shape Ellipsoid $"bank-{i}" {
+                    id: 10 + i
+                    position [-bank["p"][0], bank["p"][1], -bank["p"][2]]
+                    scale: bank["r"]
+                    material: 2
+                    blend: SmoothUnion
+                    smooth: 0.5
+                }
+            }
+            // Low overlapping caps make a worn sandy route rather than raised paving.
+            for (patch, i) in [
+                { p [0, -0.49, 0], r [3.3, 0.5, 2.9] }
+                { p [3.5, -0.49, 0.9], r [3.7, 0.5, 1.9] }
+                { p [7, -0.49, 1.7], r [3.3, 0.5, 2.2] }
+                { p [11.5, -0.49, 2.7], r [4.5, 0.5, 3.5] }
+                { p [15, -0.49, 3], r [3.6, 0.5, 4.1] }
+                { p [11.5, -0.49, 7.3], r [2.6, 0.5, 2.5] }
+                { p [-4, -0.49, 6], r [2.4, 0.5, 1.5] }
+                { p [21, -0.49, -0.8], r [2.8, 0.5, 1.8] }
+            ] {
+                shape Ellipsoid $"sand-{i}" {
+                    id: 30 + i
+                    position [-patch["p"][0], patch["p"][1], -patch["p"][2]]
+                    scale: patch["r"]
+                    material: 1
+                    blend: SmoothUnion
+                    smooth: 0.18
+                }
+            }
+        }
+    }
+
+    prototype "courtyard-rock" {
+        document {
+            schema: "puck.creation.v1"
+            name: "weathered-limestone"
+            palette [
+                { color: "#888778", roughness: 0.93, specular: 0.06 }
+                { color: "#A7A28B", roughness: 0.94, specular: 0.04 }
+                { color: "#657044", roughness: 0.98, specular: 0.01 }
+            ]
+            noise { frequency: 1.8, amplitude: 0.04, octaves: 2, gain: 0.4, seed: 7341 }
+            shape Superellipsoid "stone" {
+                position [0, 0.43, 0]
+                scale [0.95, 0.75, 0.7]
+                exponent: 2.7
+                rotation [0.08, 0.16, -0.06, 0.982]
+                material: 0
+            }
+            shape Superellipsoid "shoulder" {
+                position [0.59, 0.25, 0.17]
+                scale [0.62, 0.46, 0.56]
+                exponent: 2.5
+                material: 1
+                blend: SmoothUnion
+                smooth: 0.16
+            }
+            shape Ellipsoid "moss" {
+                position [-0.18, 0.95, -0.15]
+                scale [0.65, 0.2, 0.46]
+                material: 2
+                blend: SmoothUnion
+                smooth: 0.1
+            }
+        }
+    }
+
+    // A branching broadleaf tree, with visible root flare and an open lower crown.
+    prototype "courtyard-tree" {
+        document {
+            schema: "puck.creation.v1"
+            name: "courtyard-oak"
+            palette [
+                { color: "#624A33", roughness: 0.96, specular: 0.025, weathering {
+                        lines: 0.35, scale: 5, seed: 5123
+                        under [
+                            { threshold: 0.2, surface { color: "#977451", roughness: 0.97, metal: 0 } }]
+                } }
+                { color: "#826344", roughness: 0.94, specular: 0.03 }
+                { color: "#365C37", roughness: 0.94, specular: 0.03, wrap: 0.3 }
+                { color: "#537640", roughness: 0.93, specular: 0.03, wrap: 0.3 }
+                { color: "#73904A", roughness: 0.92, specular: 0.03, wrap: 0.3 }
+            ]
+            noise { frequency: 1.6, amplitude: 0.025, octaves: 2, gain: 0.4, seed: 5123 }
+            shape Cylinder "trunk" {
+                position [0, 1.45, 0]
+                scale [0.36, 1.5, 0.36]
+                material: 0
+            }
+            for i in range(0, 5) {
+                shape Ellipsoid $"root-{i}" {
+                    position [0.48 * cosine((i * 1.2566370614)), 0.14, 0.48 * sine((i * 1.2566370614))]
+                    scale [0.75, 0.24, 0.2]
+                    rotation [0, sine(-(i * 1.2566370614) / 2), 0, cosine(-(i * 1.2566370614) / 2)]
+                    material: 0
+                    blend: SmoothUnion
+                    smooth: 0.16
+                }
+            }
+            // The branch endpoints penetrate the crown, leaving a readable fork below.
+            for (branch, i) in [
+                { p [0.62, 2.75, 0], tilt: -0.65, r: 0.23, h: 1.8 }
+                { p [-0.62, 2.9, 0.25], tilt: 0.75, r: 0.2, h: 1.7 }
+                { p [0.18, 3.2, -0.55], tilt: -0.25, r: 0.18, h: 1.6 }
+            ] {
+                shape Capsule $"branch-{i}" {
+                    position: branch["p"]
+                    scale [branch["r"], branch["h"], branch["r"]]
+                    rotation [0, 0, sine(branch["tilt"] / 2), cosine(branch["tilt"] / 2)]
+                    material: 1
+                    blend: SmoothUnion
+                    smooth: 0.18
+                }
+            }
+            for (crown, i) in [
+                { p [0, 4.5, 0], r [1.8, 1.2, 1.55] }
+                { p [1.4, 4.05, 0.15], r [1.25, 0.95, 1.15] }
+                { p [-1.4, 4.3, 0.35], r [1.3, 1.05, 1.1] }
+                { p [0.25, 4.1, -1.25], r [1.3, 0.9, 1.1] }
+                { p [-0.45, 4.55, 1.1], r [1.25, 1, 1.1] }
+                { p [0.4, 5.2, 0.25], r [1.3, 0.85, 1.2] }
+                { p [-1, 5, -0.65], r [1.15, 0.9, 1] }
+            ] {
+                shape Ellipsoid $"crown-{i}" {
+                    position: crown["p"]
+                    scale: crown["r"]
+                    material: 2 + i % 3
+                    blend: SmoothUnion
+                    smooth: 0.25
+                }
+            }
+        }
+    }
+
+    prototype "courtyard-grass" {
+        document {
+            schema: "puck.creation.v1"
+            name: "meadow-tuft"
+            palette [
+                { color: "#526F35", roughness: 0.97, specular: 0.01 }
+                { color: "#8CA454", roughness: 0.96, specular: 0.01 }
+            ]
+            for i in range(0, 7) {
+                shape Prism $"blade-{i}" {
+                    position [0.08 * cosine((i * 2.39996323)), 0.12 + (i % 3) * 0.03, 0.08 * sine((i * 2.39996323))]
+                    scale [0.024, 0.14 + (i % 3) * 0.035, 0.009]
+                    taper: 0
+                    rotation [
+                        cosine((i * 2.39996323) / 2) * sine((0.15 + (i % 3) * 0.12) / 2),
+                        sine((i * 2.39996323) / 2) * cosine((0.15 + (i % 3) * 0.12) / 2),
+                        -sine((i * 2.39996323) / 2) * sine((0.15 + (i % 3) * 0.12) / 2),
+                        cosine((i * 2.39996323) / 2) * cosine((0.15 + (i % 3) * 0.12) / 2),
+                    ]
+                    material: i % 2
+                }
+            }
+        }
+    }
+    for (tile, tileIndex) in meadowTiles {
+        prototype $"meadow-{tileIndex}" {
+            document {
+                schema: "puck.creation.v1"
+                name: $"meadow-{tileIndex}"
+                palette [
+                    { color: "#698B3E", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+                    { color: "#79964A", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+                    { color: "#849C4F", roughness: 0.9, specular: 0.025, wrap: 0.45 }
+                    { color: "#9EB75C", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+                    { color: "#A5BA63", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+                    { color: "#91AB50", roughness: 0.85, specular: 0.035, wrap: 0.55 }
+                ]
+                drivers [
+                    { name: "gust", signal: "time", cadence: "state.meadowWindSpeed", blendInSeconds: 0 }
+                    { name: "flutter", signal: "time", cadence: "state.meadowFlutterSpeed", blendInSeconds: 0 }
+                    { name: "pose", signal: "state.meadowWindPose", cadence: 1, blendInSeconds: 0 }
+                ]
+                // Elliptical fringe and a clearing around the northern boulder.
+                for blade in filter(filter(meadowBlades, b =>
+                ((tile[0] + b["x"] - 5.5) * (tile[0] + b["x"] - 5.5) / 3.9 +
+                (tile[1] + b["z"] - 6.7) * (tile[1] + b["z"] - 6.7) / 3.65) < 1 + 0.09 * sine(b["id"] * 7.1)), b =>
+                (tile[0] + b["x"] - 6.5) * (tile[0] + b["x"] - 6.5) +
+                (tile[1] + b["z"] - 9.8) * (tile[1] + b["z"] - 9.8) > 2.1) {
+                    shape Prism $"""stem-{blade["id"]}""" {
+                        position [-blade["x"], -0.1 + blade["h"] * 0.3, -blade["z"]]
+                        scale [meadowWidth, blade["h"] * 0.3, 0.002]
+                        rotation [0, sine(blade["yaw"] / 2), 0, cosine(blade["yaw"] / 2)]
+                        taper: 0.55
+                        material: blade["id"] % 3
+                        swings [
+                            { driver: "pose", pivot [-blade["x"], -0.1, -blade["z"]], axis [0.94, 0, 0.342], amplitude: 0.3, wave: "linear" }
+                            { driver: "pose", pivot [-blade["x"], -0.1, -blade["z"]], axis [cosine(blade["yaw"]), 0, sine(blade["yaw"])], amplitude: 0.16, wave: "constant" }
+                            { driver: "gust", pivot [-blade["x"], -0.1, -blade["z"]], axis [0.94, 0, 0.342], amplitude: 0.32, phase: (tile[0] + blade["x"]) * 0.7 + (tile[1] + blade["z"]) * 0.45, wave: "sine" }
+                        ]
+                    }
+                    shape Prism $"""tip-{blade["id"]}""" {
+                        parent: $"""stem-{blade["id"]}"""
+                        position [-blade["x"], -0.1 + blade["h"] * 0.8, -blade["z"]]
+                        scale [meadowWidth * 0.55, blade["h"] * 0.2, 0.0015]
+                        rotation [0, sine(blade["yaw"] / 2), 0, cosine(blade["yaw"] / 2)]
+                        taper: 0
+                        material: 3 + blade["id"] % 3
+                        swings [
+                            { driver: "pose", pivot [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]], axis [cosine(blade["yaw"]), 0, sine(blade["yaw"])], amplitude: 0.28, wave: "constant" }
+                            { driver: "pose", pivot [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]], axis [0.94, 0, 0.342], amplitude: 0.2, wave: "linear" }
+                            { driver: "gust", pivot [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]], axis [0.94, 0, 0.342], amplitude: 0.18, phase: (tile[0] + blade["x"]) * 0.7 + (tile[1] + blade["z"]) * 0.45 - 0.4, wave: "sine" }
+                            { driver: "flutter", pivot [-blade["x"], -0.1 + blade["h"] * 0.6, -blade["z"]], axis [cosine(blade["yaw"]), 0, sine(blade["yaw"])], amplitude: 0.07, phase: blade["yaw"], wave: "sine" }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+    prototype "cloud-bank" {
+        document {
+            schema: "puck.creation.v1"
+            name: "cloud-bank"
+            shapes []
+            volumes [
+                {
+                    kind: "cloud"
+                    enabled: false
+                    position [0, 0, 0]
+                    rotation [0, 0, 0, 1]
+                    halfExtent [7, 2.5, 4]
+                    width: 1.25
+                    speed: 0.08
+                    seed: 139
+                    steps: 40
+                    intensity: 1.4
+                    extinction: 0.7
+                    coverage: 0.37
+                    softness: 0.07
+                    ramp [
+                        {
+                            density: 0
+                            color: "#8493AE"
+                        }
+                        {
+                            density: 0.45
+                            color: "#D7E3ED"
+                        }
+                        {
+                            density: 1
+                            color: "#FFF8EE"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}
+
+placements {
+    for (tile, i) in meadowTiles {
+        placement $"meadow-{i}" {
+            prototype: $"meadow-{i}"
+            position [tile[0], 0, tile[1]]
+        }
+    }
+    // The allocator assigns peers in reverse placement order.
+    for station in sort(filter(stations, station => station["index"] > 0), station => -station["index"]) {
+        placement $"""moth-{station["name"]}""" {
+            prototype: "moth"
+            position: station["p"]
+            yawDegrees: station["yaw"]
+            inhabit {
+                kit: "display"
+                look: "moth"
+                source: "Idle"
+                count: 1
+                distribution {
+                    region: disc(radius: 0)
+                    fill {
+                        name: "additive"
+                        offset: 0
+                        step: 1
+                    }
+                }
+            }
+        }
+    }
+
+    for i in [0, 7, 5, 1] {
+        placement $"""plinth-{stations[i]["name"]}""" {
+            prototype: "court-plinth"
+            position: stations[i]["p"]
+        }
+    }
+
+    // Scenery stays outside the pose stations and the low inspection-camera corridors.
+    for (tree, i) in [
+        { p [-7, 0, 7], scale: 1.15, yaw: 15 }
+        { p [-5, 0.7, 16], scale: 1.25, yaw: 112 }
+        { p [4, 0, 14], scale: 0.9, yaw: 238 }
+        { p [22, 0, 11], scale: 1.1, yaw: 64 }
+        { p [28, 1.1, 17], scale: 1.35, yaw: 190 }
+        { p [14, 1.25, 22], scale: 1.05, yaw: 310 }
+    ] {
+        placement $"oak-{i}" {
+            prototype: "courtyard-tree"
+            position: tree["p"]
+            scale: tree["scale"]
+            yawDegrees: tree["yaw"]
+            solid
+        }
+    }
+
+    for (rock, i) in [
+        { p [-3.8, 0, 5.4], scale: 1.1, yaw: 20 }
+        { p [-5.3, 0, 5.9], scale: 0.55, yaw: 138 }
+        { p [6.5, 0, 9.8], scale: 1.3, yaw: 225 }
+        { p [7.9, 0, 10.4], scale: 0.58, yaw: 320 }
+        { p [20.6, 0, 2.2], scale: 1, yaw: 60 }
+        { p [21.8, 0, 1.4], scale: 0.46, yaw: 180 }
+        { p [25, 0, 10], scale: 1.45, yaw: 270 }
+    ] {
+        placement $"rock-{i}" {
+            prototype: "courtyard-rock"
+            position: rock["p"]
+            scale: rock["scale"]
+            yawDegrees: rock["yaw"]
+            solid
+        }
+    }
+
+    // Small deterministic clusters break up the lawn beside the sand and boulders.
+    for (center, cluster) in [
+        [-3, 2.6], [-2.7, -2.7], [2.5, -2.5], [6.2, -1.5]
+        [8, 7.8], [10, -2.5], [14.7, -2.2], [18.5, 1]
+        [18.2, 6.5], [14.8, 9], [9.5, 10], [-5.5, 8], [21.7, 4.2]
+    ] {
+        for i in range(0, 6) {
+            placement $"grass-{cluster}-{i}" {
+                prototype: "courtyard-grass"
+                position [center[0] + (0.28 + (i % 3) * 0.3) * cosine((i * 2.39996323 + cluster)), 0.025, center[1] + (0.28 + (i % 3) * 0.3) * sine((i * 2.39996323 + cluster))]
+                yawDegrees: i * 67 + cluster * 19
+                scale: 0.75 + (i % 3) * 0.2
+            }
+        }
+    }
+    placement "cloud-0" {
+        prototype: "cloud-bank"
+        position [-3, 9, 14]
+    }
+
+    placement "cloud-1" {
+        prototype: "cloud-bank"
+        position [13, 11, 20]
+        yawDegrees: 43deg
+        scale: 1.2
+    }
+
+    placement "cloud-2" {
+        prototype: "cloud-bank"
+        position [27, 8, 13]
+        yawDegrees: 86deg
+    }
+}
+
+let courtyardCameras = [
+    { name: "meadow", position [3.7, 0.72, 4.1], target [5.8, 0.4, 7.2], fov: 0.85 }
+    { name: "ensemble", position [16, 6, -14], target [8, 1.7, 3], fov: 0.76 }
+    { name: "group", position [18, 4.5, -7], target [12.6, 1.8, 3.5], fov: 0.8 }
+    { name: "group-rear", position [7, 4.2, 15], target [12.5, 1.9, 3], fov: 0.83 }
+    { name: "clouds", position [6, 4, -6], target [12, 10, 12], fov: 0.85 }
+]
+
+cameras: map(courtyardCameras, camera => {
+    name: camera["name"]
+    renderWidth: captureWidth
+    renderHeight: captureHeight
+    rig {
+        version: "puck.camera.v1"
+        name: $"""courtyard-{camera["name"]}"""
+        operations [
+            anchor(opcode: "anchor", subject: worldPoint(point: camera["position"]))
+            lookAt(opcode: "lookAt", subject: worldPoint(point: camera["target"]), focusDistance: 10)
+            fieldOfView(opcode: "fov", fieldOfViewRadians: camera["fov"])
+        ]
+    }
+    anchor: null
+})
+
+views {
+    layouts: concat([
+        { $replace: true }], map(inspectionViews, view => {
+        name: view["name"]
+        seatCount: 0
+        transitionSeconds: 0
+        transitionRenderScale: 1
+        slots [
+            { camera: view["camera"], x: 0, y: 0, width: 1, height: 1 }
+        ]
+    }))
+    study {
+        $replace: true
+    }
+}
+rules [
+    {
+        $replace: true
+    }
+    {
+        name: "toggle-sky"
+        mode: "Edge"
+        gate: compareState(state: "$channel:1:skyToggle", comparison: "Equal", value: 1)
+        effects [
+            setState(state: "skyMode", expression: "0.5 - skyMode")
+        ]
+    }
+]
+
+state {
+    world: concat(
+    map(poseChannels, pose => {
+        name: pose["name"]
+        kind: "Fixed"
+        cells: concat(
+        select(pose["replaceCells"], [
+            { $replace: true }], []),
+        map(stations, station => {
+            key: $"""{station["index"]}"""
+            value: select(pose["heldZero"], "0", $"""{station[pose["field"]]}""")
+        })
+        )
+    }),
+    [
+        { name: "skyMode", kind: "Fixed", value: "0.5" }
+        { name: "meadowWindSpeed", kind: "Fixed", value: "1.15" }
+        { name: "meadowFlutterSpeed", kind: "Fixed", value: "4.3" }
+        { name: "meadowWindPose", kind: "Fixed", value: "0" }]
+    )
+}
+
+let skyStops = [
+    { elevation: -1, color: "#9AABB7" }, { elevation: -0.05, color: "#D5DCE0" }, { elevation: 0.35, color: "#7CA7C6" }, { elevation: 1, color: "#3C658F" }]
+
+render {
+    farDistance: 100
+    sky {
+        layers [
+            gradient(stops: skyStops)
+            fog(density: 0.004)
+            sunDisc(light: 0, radius: 0.018, intensity: 1.5)
+        ]
+    }
+    cycle {
+        state: "skyMode"
+        keys [
+            {
+                at: 0
+                sky {
+                    layers [
+                        gradient(stops: map(skyStops, stop => { elevation: stop["elevation"], color: "#B6B2BA" }))
+                        fog(density: 0)
+                        sunDisc(intensity: 0)
+                    ]
+                }
+            }
+            {
+                at: 0.5
+                sky {
+                    layers [
+                        gradient(stops: skyStops)
+                        fog(density: 0.004)
+                        sunDisc(intensity: 1.5)
+                    ]
+                }
+            }
+        ]
+    }
+}
+
+// Controls retain the studio bindings; absent optional facets lower to null.
+let movementBindings = [
+    { sources ["keyboard.w", "keyboard.arrowUp"], channel: "forward", scale: 1 }
+    { sources ["keyboard.s", "keyboard.arrowDown"], channel: "forward", scale: -1 }
+    { sources ["keyboard.a"], channel: "strafe", scale: -1 }
+    { sources ["keyboard.d"], channel: "strafe", scale: 1 }
+    { sources ["keyboard.arrowLeft"], channel: "turn", scale: 1 }
+    { sources ["keyboard.arrowRight"], channel: "turn", scale: -1 }
+    { sources ["gamepad.leftStick"], command: "player.move.strafe" }
+    { sources ["gamepad.rightStick"], command: "player.look.steer" }
+    { sources ["mouse.button1"], command: "player.orbit" }
+    { sources ["mouse.button2"], command: "player.steer", label: "Steer" }
+    { sources ["keyboard.space", "gamepad.buttonSouth"], channel: "rise", scale: 1 }
+    { sources ["keyboard.controlLeft", "keyboard.controlRight", "gamepad.buttonEast"], channel: "rise", scale: -1 }
+]
+
+bindingOverlays [
+    {
+        id: "bare"
+        document {
+            version: "puck.bindings.v1"
+            modifiers []
+            chords [
+                {
+                    chord []
+                    group: "play"
+                    page {
+                        id: "base"
+                        entries: concat(map(movementBindings, binding => {
+                            activateOn: null
+                            channel: binding["channel"]
+                            command: binding["command"]
+                            id: null
+                            label: binding["label"]
+                            scale: binding["scale"]
+                            sources: binding["sources"]
+                            text: null
+                            value: null
+                        }), map(inspectionViews, (view, i) => {
+                            sources [$"""keyboard.{select(i == 7, 0, i + 1)}"""]
+                            command: "view.override"
+                            value { kind: "Axis1D", raw [i + 1, 0, 0, 0] }
+                        }), [
+                            {
+                                sources: null
+                                activator {
+                                    sequence [
+                                        "keyboard.8"
+                                    ]
+                                    mode: "Tapped"
+                                }
+                                channel: "skyToggle"
+                            }
+                            {
+                                sources [
+                                    "keyboard.9"
+                                ]
+                                command: "world.row.step"
+                                text: "creations.cloud-bank.document.volumes[0].enabled 1"
+                                value {
+                                    kind: "Axis1D"
+                                    raw [1, 0, 0, 0]
+                                }
+                            }
+                        ])
+                    }
+                }
+            ]
+        }
+    }
+]
+
+channels [
+    {
+        name: "skyToggle"
+        shape: "Binary"
+        composition: true
+    }
+]

@@ -43,7 +43,7 @@ public sealed class MachineMemoryLawTests {
     private static CartridgeDocument Document() => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: CartridgePath()));
 
     private static int VariableAddress(string name) {
-        var compilation = ((ICartridgeCompiler)WorldScreenMachineEngines.CartridgeCompilers[CgbEngine]).Compile(document: Document());
+        var compilation = ((ICartridgeCompiler)TestHookInstaller.CreateMachineCatalog().ContentProviders[CgbEngine]).Compile(document: Document());
 
         Assert.True(condition: compilation.Variables.TryGetValue(key: name, value: out var address), userMessage: $"the cartridge declares no variable '{name}'");
 
@@ -82,7 +82,7 @@ public sealed class MachineMemoryLawTests {
                     HalfHeight: 0.27f,
                     HalfDepth: 0.03f,
                     Round: 0f,
-                    Source: new WorldScreenSource.Machine(Engine: CgbEngine, ContentPath: CartridgePath(), Options: "cgb"),
+                    Source: new WorldScreenSource.Machine(Engine: CgbEngine, ContentPath: CartridgePath(), Options: "cgb fast"),
                     Route: WorldScreenRoute.Passive,
                     Memory: memory
                 ),
@@ -112,7 +112,7 @@ public sealed class MachineMemoryLawTests {
         var document = WithMachineScreen(memory: [
             new WorldScreenMemory(Address: xAddress, Width: 1, Row: "pipX", Key: null, Direction: WorldScreenMemoryDirection.Read),
         ]);
-        using var fixture = Fixtures.FreshServer(definition: document, engines: WorldScreenMachineEngines.All);
+        using var fixture = Fixtures.FreshServer(definition: document, machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
         Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen), userMessage: fixture.Server.Machines.State(index: MachineScreen)?.Fault);
 
@@ -135,7 +135,7 @@ public sealed class MachineMemoryLawTests {
         var document = WithMachineScreen(memory: [
             new WorldScreenMemory(Address: yAddress, Width: 1, Row: "pipY", Key: null, Direction: WorldScreenMemoryDirection.Write),
         ]);
-        using var fixture = Fixtures.FreshServer(definition: document, engines: WorldScreenMachineEngines.All);
+        using var fixture = Fixtures.FreshServer(definition: document, machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
         Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen), userMessage: fixture.Server.Machines.State(index: MachineScreen)?.Fault);
 
@@ -199,7 +199,7 @@ public sealed class MachineMemoryLawTests {
         Assert.True(condition: (quiet < changing), userMessage: $"a quiet Write binding allocated {quiet:N0} bytes/tick, not fewer than a changing one's {changing:N0}");
     }
     private static long MeasureWrite(WorldDefinition definition, bool changingEachTick) {
-        using var fixture = Fixtures.FreshServer(definition: definition, engines: WorldScreenMachineEngines.All);
+        using var fixture = Fixtures.FreshServer(definition: definition, machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
         for (var tick = 0; (tick < SettleTicks); tick++) {
             fixture.Step();

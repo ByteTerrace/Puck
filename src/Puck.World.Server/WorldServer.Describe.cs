@@ -124,6 +124,8 @@ public sealed partial class WorldServer {
         WorldMutation.SetKitAssignment m => $"SetKitAssignment '{m.Assignment.Sequence.Name}'",
         WorldMutation.UpsertScreen m => $"UpsertScreen {m.Screen.Index}",
         WorldMutation.RemoveScreen m => $"RemoveScreen {m.Index}",
+        WorldMutation.UpsertMachine m => $"UpsertMachine '{m.Machine.Name}'",
+        WorldMutation.RemoveMachine m => $"RemoveMachine '{m.Name}'",
         WorldMutation.UpsertCamera m => $"UpsertCamera '{m.Camera.Name}'",
         WorldMutation.RemoveCamera m => $"RemoveCamera '{m.Name}'",
         WorldMutation.SetSpawns => "SetSpawns",

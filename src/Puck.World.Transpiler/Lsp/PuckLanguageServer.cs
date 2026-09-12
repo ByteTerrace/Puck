@@ -13,6 +13,8 @@ namespace Puck.World.Transpiler.Lsp;
 public sealed class PuckLanguageServer {
     private readonly Stream m_input;
     private readonly Stream m_output;
+    private readonly Func<DocumentNode, string?, DiagnosticBag, bool>? m_diagnoseDocument;
+    private readonly Func<DocumentNode, JsonArray?>? m_completeDocument;
     private readonly Dictionary<string, string> m_documents = new(StringComparer.OrdinalIgnoreCase);
     private bool m_running = true;
 
@@ -32,9 +34,14 @@ public sealed class PuckLanguageServer {
     /// <summary>Creates a new instance of the Puck Language Server over the given input and output streams.</summary>
     /// <param name="input">The stream to read LSP JSON-RPC messages from (e.g. Console.OpenStandardInput()).</param>
     /// <param name="output">The stream to write LSP JSON-RPC messages to (e.g. Console.OpenStandardOutput()).</param>
-    public PuckLanguageServer(Stream input, Stream output) {
+    /// <param name="diagnoseDocument">An optional schema dispatcher; returns true when it supplies the document's diagnostics.</param>
+    /// <param name="completeDocument">An optional schema completion provider; null retains World completions.</param>
+    public PuckLanguageServer(Stream input, Stream output, Func<DocumentNode, string?, DiagnosticBag, bool>? diagnoseDocument = null,
+        Func<DocumentNode, JsonArray?>? completeDocument = null) {
         m_input = input;
         m_output = output;
+        m_diagnoseDocument = diagnoseDocument;
+        m_completeDocument = completeDocument;
     }
 
     /// <summary>Runs the Language Server loop until shutdown or EOF.</summary>
@@ -173,7 +180,8 @@ public sealed class PuckLanguageServer {
         var diagnosticsBag = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(text, diagnostics: diagnosticsBag);
 
-        if (parseResult.Value is not null) {
+        if (parseResult.Value is not null && !(m_diagnoseDocument?.Invoke(parseResult.Value,
+            TryGetLocalPath(uri, out var localPath) ? localPath : null, diagnosticsBag) ?? false)) {
             PuckLinter.Lint(parseResult.Value, diagnosticsBag);
 
             // Reference resolution needs a real directory to resolve a declared basis/import against, which only a
@@ -226,6 +234,12 @@ public sealed class PuckLanguageServer {
     }
 
     private async Task HandleCompletionAsync(JsonNode? id, JsonObject? @params) {
+        var uri = @params?["textDocument"]?["uri"]?.ToString() ?? "";
+        if (m_completeDocument is not null && m_documents.TryGetValue(uri, out var source) &&
+            PuckParser.ParseDocumentWithDiagnostics(source).Value is { } document && m_completeDocument(document) is { } specialized) {
+            await SendResponseAsync(id, new JsonObject { ["isIncomplete"] = false, ["items"] = specialized }).ConfigureAwait(false);
+            return;
+        }
         var items = new JsonArray();
 
         // 1. Directives & Keywords

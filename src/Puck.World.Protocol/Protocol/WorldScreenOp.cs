@@ -4,7 +4,7 @@ namespace Puck.World.Protocol;
 /// The closed screen-machine-lifecycle union a <see cref="WorldSubmissionPayload.ScreenOp"/> submission carries —
 /// <c>screen.insert</c>/<c>.eject</c>/<c>.select</c>/<c>.options</c>/<c>.link</c>/<c>.unlink</c> travel as this leaf
 /// through the one ordered domain, landing in <c>Server.WorldServer.Machines</c> — the only project that boots, steps, or holds a live
-/// <c>Puck.Abstractions.Machines.IScreenMachine</c>. Applied synchronously at submit, exactly like
+/// <c>Puck.Abstractions.Machines.IMachineRuntime</c>. Applied synchronously at submit, exactly like
 /// <see cref="WorldCommand"/>/<see cref="WorldGrant"/> — never buffered to the tick boundary — because
 /// <c>body.engage</c>'s auto-insert precheck submits a <see cref="Select"/> immediately ahead of the
 /// <see cref="WorldCommand.ComposeControl"/> that follows it in the same batch, and the second submission must observe the

@@ -21,13 +21,14 @@ one System.CommandLine tree (`PuckRootCommand.cs`) every verb hangs off:
 | [`puck schema`](#puck-schema--worlddef-json-schema) | the generated JSON Schema for `puck.world.def.v1`, checked and regenerated. |
 | [`puck creation`](#puck-creation--code-authored-sculpts) | the offline twin of `creation.sculpt(s)`: list registered sculpts, apply one to a world file, or report a creation's shape budget/feature usage. |
 | [`puck registry`](#puck-registry--world-name-registry) | the world name registry `docs/world-name-registry.md`, generated from `WorldNameRegistry` over the document model and checked against it. |
-| [`puck compile`](#the-puck-dsl-verbs) | compiles a `.puck` authoring document to canonical `puck.world.def.v1` JSON; `--validate` composes basis and imports first, `--bundle` inlines the import graph, `--watch` recompiles on change. |
+| [`puck compile`](#the-puck-dsl-verbs) | compiles `.puck` to canonical world or cartridge JSON according to its schema; `--validate` runs that vocabulary's checks, `--bundle` inlines world imports, `--watch` recompiles on change. Default output is `.world.json` or `.cartridge.json`. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source — a one-time import, not a synced mirror. |
 | [`puck fmt`](#the-puck-dsl-verbs) | formats `.puck` sources (distinct from `puck format`, which rewrites this repository's C#). |
 | [`puck lint`](#the-puck-dsl-verbs) | static analysis and symbol resolution over a `.puck` document, composed the same way `compile --validate` composes it. |
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting. |
 | [`puck format`](#puck-format--source-rewriters) | source rewriters for the conventions `.editorconfig` cannot express; `format ci` prepares a PR's patch and `format submit` is CI's trusted applier. |
 | [`puck font-atlas`](#puck-font-atlas--managed-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
+| [`puck firmware`](#puck-firmware--bundled-boot-images) | rebuilds or verifies the HGB boot ROMs and AGB BIOS from their maintained sources. |
 | [`puck shaders`](#puck-shaders--shader-studies) | `shaders study`: compiles one Shadertoy-dialect study source to both backend compute kernels through `glslang`, `spirv-cross`, and `dxc`. |
 | [`puck references`](#puck-references--semantic-symbol-queries) | semantic symbol queries: references, implementers, overrides, derived types. |
 | [`puck declarations`](#puck-declarations--declaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
@@ -90,6 +91,30 @@ sibling) beside the executable. That is the out-of-process build host
 remove it and break every `references` run.
 
 ---
+
+## `puck firmware` — bundled boot images
+
+Firmware images are generated release inputs. Rebuild them explicitly after changing their maintained source;
+ordinary emulator builds consume the checked-in images without depending on Forge or a native compiler.
+From a clean checkout, use `dotnet run --project src/Puck.Cli -c Release -- firmware ...` in place of `puck firmware ...`.
+
+```sh
+puck firmware hgb --output src/Puck.HumbleGamingBrick/Firmware
+puck firmware hgb --output src/Puck.HumbleGamingBrick/Firmware --verify
+puck firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang <clang-executable> --linker <ld.lld-executable>
+puck firmware agb --source src/Puck.AdvancedGamingBrick/Firmware --output src/Puck.AdvancedGamingBrick/Firmware/puck-agb.bin --clang <clang-executable> --linker <ld.lld-executable> --verify
+```
+
+The HGB command runs `BootRomBuilder.Build` with the compatible cartridge policy for every `ConsoleModel`.
+Each image uses its lowercase revision name, such as `dmg0.bin` or `cgbd.bin`.
+The AGB command builds the maintained freestanding C and ARM sources with Clang's `armv4t-none-eabi` target
+and links them with the source directory's `firmware.ld`. Supply native compiler and ELF-linker executable paths;
+no shell, downloaded toolchain, or system C library is involved. Object files and the linked candidate live in a
+fresh temporary directory that the command removes after either success or failure. The candidate must be exactly 16 KiB.
+
+Both commands report SHA-256 hashes. `--verify` rebuilds and compares bytes without creating or repairing the output;
+missing files or different bytes exit 1, and invalid command syntax exits 2. A successful comparison proves reproducible
+generation with that source and toolchain, not hardware compatibility. Emulator and firmware execution tests own that claim.
 
 ## Automation commands
 
@@ -762,9 +787,13 @@ validating, rooted at the source file's own directory — the same order
 field the basis supplies as missing, so a document naming a basis only validates
 correctly this way.
 
-Engine-schema validation runs only on a ROOT — a document declaring
+Cartridge sources select `puck.cartridge.v1` and use `CartridgeDocuments.Validate` through the same adapter in
+`compile --validate`, `lint`, and LSP diagnostics. The language server supplies cartridge completions, including
+for unsaved buffers. Forge paths map back to authored properties and rows.
+
+World engine-schema validation runs only on a ROOT — a document declaring
 `schema: "puck.world.def.v1"`, a `basis`, or both
-(`WorldSemanticValidator.IsRootDocument`). Everything else is a MODULE some
+(`WorldSemanticValidator.IsRootDocument`). A World fragment is a MODULE some
 other, unknown root supplies fields for, and validating it as a world would
 report those fields as missing; `--validate` on a module is therefore a no-op,
 and `puck lint` applies the identical test, so the two verbs never contradict
@@ -778,7 +807,7 @@ Every verb that validates or composes a world document — `compile --validate`,
 `lint`, and `world prepare` — registers the shipped screen-machine engines
 (`gaming-brick`, `advanced-gaming-brick`, `tune-instrument`) and installs
 `Puck.World.Schema`'s vocabulary hooks through the CLI's one installer,
-`Puck.Cli.CliWorldVocabulary.EnsureInstalled` — the same `IGamingBrickExtension`
+`Puck.Cli.CliWorldVocabulary.EnsureInstalled` — the same `IMachineExtension`
 entry points (`HumbleGamingBrickExtension`, `AdvancedGamingBrickExtension`) and
 `WorldMachineExtensionRegistry` the game's dynamic extension loader calls into,
 so a document naming a shipped `screens[]` engine validates identically here and

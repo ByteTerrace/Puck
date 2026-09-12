@@ -15,7 +15,8 @@ internal static class LspCommand {
             using var stdin = Console.OpenStandardInput();
             using var stdout = Console.OpenStandardOutput();
 
-            var server = new PuckLanguageServer(stdin, stdout);
+            var server = new PuckLanguageServer(stdin, stdout, Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose,
+                Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Completions);
             await server.RunAsync().ConfigureAwait(false);
             return 0;
         });

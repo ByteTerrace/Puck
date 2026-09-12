@@ -275,8 +275,8 @@ body at that index. The player defaults to 1 and is bounded to 1..128.
 
 ## Machines: server-authoritative
 
-A booted `IScreenMachine` is CORE state, not presentation-fed. Machine engines are
-engine-neutral (`Puck.Abstractions.Machines`): `IScreenMachineEngine` is a factory
+A booted `IMachineRuntime` is CORE state, not presentation-fed. Machine engines are
+engine-neutral (`Puck.Abstractions.Machines`): `IMachineEngine` is a factory
 keyed by a kebab-case id, DI-collected into `Server.WorldMachineHost` (a peer
 singleton `WorldServer` takes as a constructor parameter — `WorldBootComposition`
 registers `gaming-brick` (SM83 family) and `advanced-gaming-brick` (ARM7TDMI)).

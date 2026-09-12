@@ -75,8 +75,8 @@ public sealed partial class WorldReplayTape {
     private const string Extension = ".puckreplay";
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
-    private readonly IReadOnlyList<IScreenMachineEngine> m_engines;
-    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly IReadOnlyList<IMachineEngine> m_engines;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldServer m_liveServer;
     private readonly WorldOwnedWorlds m_profiles;
     private readonly LoopbackTransport m_transport;
@@ -137,7 +137,7 @@ public sealed partial class WorldReplayTape {
     /// host that never reaches <see cref="WorldServer.AttachAddons"/> re-drives with no guests and produces a MATCH
     /// that proves nothing.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayTape(WorldServer liveServer, WorldOwnedWorlds profiles, LoopbackTransport transport, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
         ArgumentNullException.ThrowIfNull(argument: liveServer);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: transport);

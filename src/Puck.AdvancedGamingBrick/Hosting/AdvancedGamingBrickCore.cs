@@ -4,12 +4,12 @@ namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
 /// The native ARM7TDMI AdvancedGamingBrick core adapted to the machine-neutral <see cref="IQueuedMachineCore"/>: it builds
-/// and direct-boots the machine, loads any battery save, and exposes the run/framebuffer/input/save surface a
+/// and starts the machine in its configured boot mode, loads any battery save, and exposes the run/framebuffer/input/save surface a
 /// <see cref="QueuedMachineWorker"/> or a caller's own update loop drives. All machine-facing calls must run on one owning thread.
 /// Restoring state requests a battery flush independently of the emulated dirty flag. Saves are flushed to a
 /// temporary file beside their destination and then replace it; write failures retain the previous save for retry.
 /// </summary>
-public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
+public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     private const ulong MachineCyclesPerSecond = 16_777_216UL;
 
     private readonly AgbMachineInstance m_instance;
@@ -20,6 +20,13 @@ public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
     // Host persistence state: the disk cannot rewind with an emulated snapshot's SaveDirty flag.
     private bool m_saveNeedsFlush;
 
+    /// <summary>Builds a native machine with bundled Puck firmware, without a renderer or background worker.</summary>
+    /// <param name="cartridgeRom">The native AGB cartridge image.</param>
+    /// <param name="bootMode">Cold startup by default; fast startup skips presentation while retaining BIOS services.</param>
+    /// <param name="savePath">The optional battery-save path.</param>
+    public AdvancedGamingBrickCore(byte[] cartridgeRom, MachineBootMode bootMode = MachineBootMode.Cold, string? savePath = null)
+        : this(configuration: AgbFirmware.CreateConfiguration(cartridgeRom: cartridgeRom, bootMode: bootMode), savePath: savePath) { }
+
     /// <summary>Builds, save-loads, and direct-boots the native machine.</summary>
     /// <param name="bios">An explicit 16 KiB BIOS image. Zeroed images support only BIOS-independent diagnostics.</param>
     /// <param name="cartridgeRom">The native AGB cartridge image.</param>
@@ -29,7 +36,7 @@ public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
 
     /// <summary>Builds a core for an external host's own update loop. No renderer, worker thread or disk save is
     /// required. The host supplies cycle budgets and input, drains output, and disposes the core on its owning thread.</summary>
-    /// <param name="configuration">Explicit BIOS, cartridge and per-machine options.</param>
+    /// <param name="configuration">Explicit BIOS, cartridge, startup mode and per-machine options.</param>
     /// <param name="savePath">Optional battery-save path; null keeps saves in memory.</param>
     public AdvancedGamingBrickCore(AgbMachineConfiguration configuration, string? savePath = null) {
         m_savePath = savePath;
@@ -38,7 +45,9 @@ public sealed class AdvancedGamingBrickCore : IQueuedMachineCore {
         m_cartridge = m_instance.GetRequiredService<AgbCartridge>();
 
         LoadBatterySave();
-        m_machine.DirectBoot();
+        if (configuration.BootMode == MachineBootMode.Fast) {
+            m_machine.DirectBoot();
+        }
     }
 
     /// <summary>Gets the owned machine instance for peripheral, cartridge and link access. Use it only on the

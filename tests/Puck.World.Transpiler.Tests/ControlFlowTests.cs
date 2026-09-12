@@ -25,7 +25,7 @@ public class ControlFlowTests {
     private static DiagnosticBag LowerForDiagnostics(string source) {
         var diagnostics = new DiagnosticBag();
 
-        WorldDocumentEmitter.LowerWithDiagnostics(PuckParser.ParseDocument(source), diagnostics: diagnostics);
+        WorldDocumentEmitter.LowerWithDiagnostics(PuckParser.ParseDocument(source), diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
 
         return diagnostics;
     }

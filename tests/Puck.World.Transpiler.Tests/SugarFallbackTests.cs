@@ -18,7 +18,7 @@ public class SugarFallbackTests {
         Assert.False(parseDiagnostics.HasErrors, parseDiagnostics.FormatReport(puck));
 
         var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics);
+        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics, cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(loweringDiagnostics.HasErrors, loweringDiagnostics.FormatReport(puck));
 
         return lowered.Value!;
@@ -104,7 +104,7 @@ public class SugarFallbackTests {
         Assert.False(parseResult.Diagnostics.HasErrors, parseResult.Diagnostics.FormatReport(source));
 
         var diagnostics = new DiagnosticBag();
-        WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics);
+        WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
 
         var finding = Assert.Single(diagnostics, d => d.Code == PuckDiagnosticCodes.UnrecognizedSectionStatement);
         Assert.Contains(spelling, finding.Message, StringComparison.Ordinal);

@@ -58,6 +58,10 @@ public sealed partial class AgbApu : ISnapshotable {
         m_fifoARefill = reader.ReadBoolean();
         m_fifoBRefill = reader.ReadBoolean();
         m_samplePhase.Phase = reader.ReadInt64();
+        // Drained PCM belongs to the abandoned presentation timeline, not the restored machine. Keep the
+        // restored emit phase but discard pending output so rewind cannot replay a stale startup chime.
+        m_outputRead = 0;
+        m_outputWrite = 0;
     }
 
 }

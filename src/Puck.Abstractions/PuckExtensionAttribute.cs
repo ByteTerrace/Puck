@@ -8,7 +8,7 @@ namespace Puck.Abstractions;
 public sealed class PuckExtensionAttribute(Type extensionType) : Attribute {
     /// <summary>
     /// Gets the concrete type of the extension that implements an extension interface (such as
-    /// <c>IGamingBrickExtension</c> or <c>IWorldExtension</c>).
+    /// <c>IMachineExtension</c> or <c>IWorldExtension</c>).
     /// </summary>
     public Type ExtensionType { get; } = extensionType;
 }

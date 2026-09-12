@@ -8,9 +8,9 @@ namespace Puck.HumbleGamingBrick;
 /// prevents a documented top cause of desync (loading a snapshot against the wrong model or cartridge). It fingerprints
 /// the format version, the emulated console model, and the immutable ROM images (the cartridge ROM and, when present,
 /// the boot ROM); a restore compares this against the live machine's identity and faults on any difference rather than
-/// silently corrupting state. The DMG/CGB machine has no user BIOS image the way the Advanced machine does — its boot
-/// behaviour is either a seeded post-boot handoff or an optional boot ROM — so the boot-ROM fingerprint stands in for
-/// the Advanced machine's BIOS fingerprint (the empty-span fingerprint when no boot ROM was configured).
+/// silently corrupting state. Both cold and fast startup retain the selected boot-ROM fingerprint. Startup mode is
+/// not a separate compatibility gate: the snapshot already captures the boot overlay and complete running state.
+/// Only an explicitly firmware-free diagnostic configuration uses the empty-span fingerprint.
 /// </summary>
 /// <param name="Version">The snapshot format version.</param>
 /// <param name="Model">The emulated console model (its <see cref="ConsoleModel"/> integer).</param>
@@ -24,8 +24,8 @@ public readonly record struct MachineIdentity(int Version, int Model, ulong Boot
 
     /// <summary>Computes an identity for a console model and its immutable ROM images using a stable FNV-1a fingerprint.</summary>
     /// <param name="model">The emulated console model.</param>
-    /// <param name="bootRom">The boot ROM image bytes, or an empty span when the machine starts at the seeded post-boot
-    /// handoff state.</param>
+    /// <param name="bootRom">The selected boot ROM image bytes, including when startup was skipped; an empty span
+    /// only when no firmware image was configured.</param>
     /// <param name="rom">The cartridge ROM image bytes.</param>
     /// <returns>The identity stamp.</returns>
     public static MachineIdentity Compute(ConsoleModel model, ReadOnlySpan<byte> bootRom, ReadOnlySpan<byte> rom) =>

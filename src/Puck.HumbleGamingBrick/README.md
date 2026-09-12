@@ -23,9 +23,9 @@ supplies only the SM83-family hardware itself.
   (`ConsoleModeRecipes`) that flip a cartridge's own cached hardware-detection
   bytes, so a running game re-renders natively on its new hardware with its
   shared-RAM progress untouched.
-- *Queued, backpressured hosting:* `MachineHost` (the `IScreenMachineEngine`
+- *Queued, backpressured hosting:* `MachineHost` (the `IMachineEngine`
   adapter, engine id `gaming-brick`) forwards the neutral
-  `IScreenMachine`/`IQueuedScreenMachine`/`IAudioMachine`/`IFeedbackMachine`
+  `IMachineRuntime`/`IQueuedMachineRuntime`/`IAudioMachine`/`IFeedbackMachine`
   surface to `Puck.GamingBricks`'s `QueuedMachineWorker`, converting engine
   ticks to CPU T-cycles through a remainder-carrying accumulator.
 - *Deterministic peripheral link:* `SerialLinkSession`, `IrLinkSession`, and
@@ -43,10 +43,10 @@ flowchart LR
     Bytes["cartridge bytes + options"] --> Engine["GamingBrickEngine.Create"]
     Engine --> Host["MachineHost : QueuedMachineHost"]
     Host --> Worker["Puck.GamingBricks QueuedMachineWorker"]
-    Worker --> Surface["IScreenMachine / IQueuedScreenMachine / IAudioMachine"]
+    Worker --> Surface["IMachineRuntime / IQueuedMachineRuntime / IAudioMachine"]
 ```
 
-`GamingBrickEngine` (`Id = "gaming-brick"`) is the `IScreenMachineEngine`
+`GamingBrickEngine` (`Id = "gaming-brick"`) is the `IMachineEngine`
 implementation a host resolves by id; its options string is an
 order-independent, space-separated token set — a model keyword plus an optional
 `dmgspeed` fairness pin that holds the tick-to-cycle budget fixed regardless of
@@ -54,6 +54,30 @@ the KEY1 double-speed latch. A family token (`dmg`/`cgb`/`agb`, default `dmg`)
 selects that family's target revision — `DmgC`, `CgbE`, `Agb` — and a revision
 token (`dmg0`, `dmgb`, `dmgc`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgba`, `cgbb`,
 `cgbc`, `cgbd`, `cgbe`, `ags`) names one exactly.
+
+### Firmware and startup
+
+The screen engine and the convenience `HumbleGamingBrickCore(model, cartridgeRom)`
+constructor cold-boot through bundled Puck firmware. Each hardware revision has
+its own generated image, embedded in the runtime package: consumers do not need
+Forge, an assembler, or a separate firmware download. `HgbFirmware.GetImage(model)`
+returns a private copy. Its generation and native presentation are owned by the
+[Forge firmware guide](../Puck.HumbleGamingBrick.Forge/README.md).
+
+Add `fast` to engine options, or pass `bootMode: MachineBootMode.Fast`, to begin
+at the seeded handoff. The selected firmware still participates in snapshot
+identity. `cgb fast bios=C:\Firmware Files\boot.bin` uses an external image;
+the final `bios=` path consumes the remaining text. Ordinary cartridges and
+Puck-authored cartridges use the same bundled firmware: header branding is not
+an admission policy.
+
+The low-level `MachineConfiguration` remains explicit for diagnostics. Without
+an image it seeds the handoff; supplying an image defaults to executing it.
+Its optional `bootMode` can skip execution while retaining that image. Cold
+startup without an image is refused. Live model reconfiguration does not
+replace the construction-fixed firmware or restart the machine.
+Changing the model is refused while the boot ROM is still mapped; wait for
+cartridge handoff first. Repeating the current model remains harmless during boot.
 
 `GamingBrickEngine` also implements `IMachineLinkingEngine`: two running
 machines cable-link into one `LinkedMachineGroup`, which takes ownership of both
@@ -120,9 +144,9 @@ For Puck's queued screen-machine adapter:
 using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick;
 
-IScreenMachineEngine engine = new GamingBrickEngine();
+IMachineEngine engine = new GamingBrickEngine();
 
-IScreenMachine machine = engine.Create(
+IMachineRuntime machine = engine.Create(
     options: "cgb dmgspeed",       // the target Color revision, fixed-speed fairness pin
     contentBytes: cartridgeRom,     // the cartridge ROM image
     savePath: "save.sav",           // battery-save path, or null for in-memory only
@@ -161,7 +185,7 @@ that has to satisfy it read the same data.
 | Audio | `ApuComponent`, `ApuGeneratorClock`, `AudioOutputComponent` | The four-channel APU and its host-facing output ring. |
 | Cartridges | `Cartridge`, `CartridgeHeader`, `CartridgeBase`, `MapperKind`, `RomOnlyCartridge`, `Mbc1Cartridge`…`Mbc7Cartridge`, `HuC1Cartridge`, `HuC3Cartridge`, `Mmm01Cartridge`, `CameraCartridge` | Header-selected mapper implementations and the camera peripheral. |
 | Link | `SerialComponent`, `SerialLinkSession`, `InfraredPort`, `IInfraredPeer`, `IInfraredCartridge`, `GamePrinterDevice`, `GamePrinterLinkSession` | The deterministic serial/infrared/printer link sessions. |
-| Hosting | `MachineHost`, `GamingBrickEngine`, `HumbleGamingBrickCore`, `BrickPad`, `HumbleGamingBrickLookahead`, `SerialLinkGroupCore` | The `IScreenMachineEngine`/`IMachineLinkingEngine` adapter over `Puck.GamingBricks`'s queued-host and cable-link substrate. |
+| Hosting | `MachineHost`, `GamingBrickEngine`, `HumbleGamingBrickCore`, `BrickPad`, `HumbleGamingBrickLookahead`, `SerialLinkGroupCore` | The `IMachineEngine`/`IMachineLinkingEngine` adapter over `Puck.GamingBricks`'s queued-host and cable-link substrate. |
 
 ## 🧪 Verification
 
@@ -183,7 +207,7 @@ serialization/fork/queued-host substrate this core builds on.
 ## 📦 Packaging
 
 `ByteTerrace.Puck.HumbleGamingBrick` depends on `Puck.Abstractions` (the
-`IScreenMachineEngine`/`IScreenMachine` contracts it implements),
+`IMachineEngine`/`IMachineRuntime` contracts it implements),
 `Puck.GamingBricks` (snapshot, fork, and queued-host substrate), and
 `Puck.Maths` (fixed-point and hashing primitives). `Puck.World.Schema` and
 everything layered above it depend on this package for the SM83 machine family.

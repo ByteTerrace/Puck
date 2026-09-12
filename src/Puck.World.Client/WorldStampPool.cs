@@ -142,9 +142,9 @@ public sealed partial class WorldStampPool {
         // index and creation hash, so a same-content edit never inherits a stale follower position across it).
         public int RootEpoch = -1;
 
-        // The per-driver animation state of the body this registration rides, advanced once per PackTransforms by
-        // WorldGaitDrivers. A registration with no BodyIndex never advances them, so its weights stay zero and every
-        // authored swing/slide on it composes the identity — a placed creation has no body facts to gate on.
+        // The per-driver animation state of this registration, advanced once per PackTransforms by
+        // WorldGaitDrivers. A placement without a body reads its root pose and world state with no body facts;
+        // time and ungated/state-driven swings work there too.
         public bool DriverSeeded;
         public WorldEntityAddress DriverAddress;
         public Vector3 DriverPosition;
@@ -1454,25 +1454,23 @@ public sealed partial class WorldStampPool {
 
             live.PoseFrame = SelectPose(client: client, live: live);
 
-            if (live.BodyIndex is { } drivenBody) {
-                WorldGaitDrivers.Advance(
-                    address: client.EntityAddress(index: drivenBody),
-                    deltaSeconds: deltaSeconds,
-                    drivers: drivers,
-                    facts: client.Facts(index: drivenBody),
-                    easedSpeed: ref live.DriverSpeed,
-                    lastAddress: ref live.DriverAddress,
-                    lastOrientation: ref live.DriverOrientation,
-                    lastPosition: ref live.DriverPosition,
-                    orientation: rootRotation,
-                    phases: live.DriverPhase,
-                    position: rootPosition,
-                    seeded: ref live.DriverSeeded,
-                    weights: live.DriverWeight,
-                    definition: client.Definition,
-                    tick: client.Tick
-                );
-            }
+            WorldGaitDrivers.Advance(
+                address: live.BodyIndex is { } drivenBody ? client.EntityAddress(index: drivenBody) : new WorldEntityAddress(string.Empty, -1, 0),
+                deltaSeconds: deltaSeconds,
+                drivers: drivers,
+                facts: live.BodyIndex is { } factBody ? client.Facts(index: factBody) : default,
+                easedSpeed: ref live.DriverSpeed,
+                lastAddress: ref live.DriverAddress,
+                lastOrientation: ref live.DriverOrientation,
+                lastPosition: ref live.DriverPosition,
+                orientation: rootRotation,
+                phases: live.DriverPhase,
+                position: rootPosition,
+                seeded: ref live.DriverSeeded,
+                weights: live.DriverWeight,
+                definition: client.Definition,
+                tick: client.Tick
+            );
 
             var shapes = (document.Shapes ?? []);
             var poses = FramePoses(

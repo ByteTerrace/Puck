@@ -181,9 +181,9 @@ both runtimes already cross-check.
 
 ## Verified scope boundary: no emulator core, no shader catalog, no probe kinds
 
-`WorldDefinitionValidator` reads four injection seams before any document
+`WorldDefinitionValidator` reads two injection seams before any document
 parses — `WorldExtensionVocabularyHook.PostRenderExtensionCheck`,
-`.ScreenMachineEngineCheck`, `.ScreenMachineCartridgeCheck`, and
+and
 `WorldProbeVocabularyHook.ProbeKindCheck` — normally wired by a composition
 root's module initializer (`Puck.World.Client.WorldSchemaVocabularyHooks` for
 the desktop client) to a real catalog answering `true`/`false`. Each is REQUIRED
@@ -197,7 +197,10 @@ of its own (Architecture.props' exact-closure profile denies
 `Puck.World.Protocol` and every extension-owning assembly), so "this host has
 no catalog to check against" is the honest answer — distinct from a real
 catalog's `false` refusal, and never a stub that would silently admit a
-document naming a capability this engine cannot run.
+document naming a capability this engine cannot run. Machine checks use an
+explicit `IMachineValidationCatalog` per invocation. This browser supplies none,
+so machine admission appears in the deferred collection; its assembly initializer
+cannot change another host's machine catalog.
 
 **Verified consequence**: `Parse()`/`ComposeTree()` on the composed flagship
 island (`puck.world.json` over `standard.basis.json`) succeeds, its `deferred[]`

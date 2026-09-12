@@ -50,11 +50,12 @@ Exit code 0 means every selected stage passed or skipped. Exit code 1 means a
 check failed. Exit code 2 means infrastructure prevented a stage from running,
 or an accept was refused.
 
-Every run writes four files under the artifacts directory: `post-report.txt`
-(the table, with a duration column), `summary.json` (per-stage verdict,
-duration, and case counts), `results.junit.xml` (one test case per ledger row
+Every run writes four files under the artifacts directory: by default,
+`artifacts/hgb-post/post-report.txt` (the table, with a duration column),
+`artifacts/hgb-post/summary.json` (per-stage verdict, duration, and case counts),
+`artifacts/hgb-post/results.junit.xml` (one test case per ledger row
 or vector family, named `path[model]`, which any continuous-integration
-reporter reads), and `Expectations.candidate.json` (what this run measured,
+reporter reads), and `artifacts/hgb-post/Expectations.candidate.json` (what this run measured,
 merged over the rows it did not). A screenshot row that mismatches also leaves
 `<suite>/<path>[model].actual.png` and `.diff.png` beside them.
 
@@ -75,6 +76,10 @@ commercial-cartridge stages run only when their cartridge is named.
 The `embedding` Tier-A stage exercises default factory composition and the
 public synchronous core: input, native pixels, stereo audio, nonpositive
 cycle budgets, snapshot replay and lookahead, without host infrastructure.
+It uses the firmware-free diagnostic configuration. Queued-host and link
+substrate probes explicitly select fast startup so their timing budgets measure
+the cartridge and host behavior, not startup animation. Bundled cold startup
+has its own [`bundled-firmware` stage](#the-authored-boot-rom).
 
 Every case has a wall-clock budget derived from its frame cap — real time for
 the frames plus a fixed allowance — and a case that exceeds it is an `error`
@@ -87,13 +92,14 @@ that.
 
 | Tier | Coverage | Assets |
 |---|---|---|
-| A | determinism; snapshot and battery-save round trips; victory metadata; fork determinism; AGB costume; authored-boot-ROM handoff; trio lockstep; camera capture; queued-host substrate contract; live cable-linked queued hosts and their coupled rewind; throughput; zero-alloc-per-frame | none |
+| A | determinism; snapshot and battery-save round trips; victory metadata; fork determinism; AGB costume; bundled-firmware startup and restoration; live firmware-reconfiguration boundary; authored-boot-ROM handoff; trio lockstep; camera capture; queued-host substrate contract; live cable-linked queued hosts and their coupled rewind; throughput; zero-alloc-per-frame | none |
 | B | SingleStepTests/sm83 per-instruction vectors (498 of 500 families asserted; `10`/`fb` are documented oracle-conflict skips); the ledger-gated corpus — every suite under the reference-ROM root, see [Corpus ledger](#corpus-ledger); the parallel-equivalence proof | the two corpora in `corpora.json` (fetched once), or `--sst`/`--roms` |
 | C | synthetic link exchange for DMG/CGB/AGB costume pairings; snapshot churn; commercial link-game replay; cross-gen trade-cart save acceptance and complete trade | synthetic stages need none; commercial stages need `--link-rom` or `--trade-rom` |
 
 Missing optional assets produce a skip rather than a failure (or, under
-`--require-assets`, an infra failure) rather than a check failure. ROMs and
-boot images are never committed to the repository.
+`--require-assets`, an infra failure) rather than a check failure. External
+cartridge and vendor boot images are not committed to the repository. Puck's
+own generated firmware is checked in and bundled by the runtime package.
 
 ## Corpus ledger
 
@@ -207,7 +213,8 @@ expected image) is caught exactly like a regression into `fail`.
 
 ## Accepting
 
-There is no recording run. Every run writes `Expectations.candidate.json`:
+There is no recording run. Every run writes a candidate ledger, by default
+`artifacts/hgb-post/Expectations.candidate.json`:
 the existing ledger with every row this run measured replaced, every row of a
 discovered suite whose ROM is no longer on disk removed, and every row of a
 suite this run did not discover (an unselected `--tier`/`--filter`/`--lane`,
@@ -247,12 +254,33 @@ manifest; they are named per run with `--link-rom` and `--trade-rom`.
 
 ## The authored boot ROM
 
+Puck's [firmware authoring contract](../Puck.HumbleGamingBrick.Forge/README.md#the-authored-boot-roms)
+describes the native artwork, cartridge compatibility, and exact handoff.
+The `bundled-firmware` Tier-A stage checks all 14 packaged images against their
+generator and proves each retrieval returns a private copy. For every revision
+it exercises the public core's default cold startup, fast startup with retained
+firmware identity, native pixels and pre-handoff audio, mid-boot snapshot
+restore into both startup modes, independent forks, and actual cartridge
+execution. It also checks the screen engine's default cold and explicit fast
+startup, a caller-supplied native image, unchanged state on a wrong-image
+snapshot refusal, and malformed startup inputs. These are self-contained
+integration checks, not claims about an external cartridge corpus.
+
+The `firmware-reconfigure` Tier-A stage exercises the live hardware-change
+boundary through both the synchronous core and queued host. A running boot ROM
+permits an unchanged model but refuses DMG-to-Color and Color-to-DMG changes;
+both changes become available after cartridge handoff. Firmware and startup
+mode remain fixed: refused selections preserve full snapshots and canonical
+host options, and cartridge execution continues. An external-image host keeps
+its exact original bytes and path even after the source file is changed or
+deleted; live reconfiguration never reloads that path.
+
 The `boot-rom-handoff` Tier-A stage boots every revision through the image
 `Puck.HumbleGamingBrick.Forge`'s `BootRomBuilder` emits, against ten synthetic
 headers (both licensee buckets, both color flags, the title checksums the Color
 handoff branches on, and the checksums its boot timing tells apart by the fourth
-title letter) plus the first few reference-corpus cartridges whose logo and
-header checksum the hardware would accept. Each boot is compared, field by field,
+title letter) plus the seven named mooneye divider-reference cartridges when
+present. Each boot is compared, field by field,
 against the same cartridge on a machine started at the seeded post-boot state,
 and the first differing field is named.
 
@@ -266,14 +294,14 @@ any executing program: the sub-register phase of the picture processor's pixel
 pipeline and of the audio generators, which the seeded handoff sets to captured
 constants (the seeded square-channel timer exceeds its own reload period; the
 seeded dot phase is odd where every instruction boundary lands on a multiple of
-four dots). On the revisions whose seeded handoff parks on the first line the
-status register's LY-comparison bit is masked for the same reason: the seeded
-state holds that latch clear with LY and LYC both zero, and the running processor
-recomputes it every dot.
+four dots). The status register's LY-comparison bit is included without masking:
+the seeded state and the running boot both carry the comparison latch for their
+handoff line.
 
-`MachineIdentity` fingerprints the boot ROM image, so a machine booted through an
-authored image has a different identity than a seeded one; their snapshots do not
-interchange, and nothing aliases them.
+`MachineIdentity` fingerprints the selected boot image, including in fast mode.
+Cold and fast machines selecting the same image can exchange full snapshots;
+restoring one also restores whether the overlay is mapped. A firmware-free
+diagnostic machine has a different identity and cannot accept those snapshots.
 
 ## Snapshot identity
 
@@ -399,10 +427,11 @@ divergence in the requested budget (a trailing run-length difference at the
 content divergence was found, exit 2 means infrastructure (bad arguments, or
 `sb-trace.exe` itself failed).
 
-A run of fewer than about 60 frames compares only the boot ROM: the DMG logo
-scroll occupies them, so every ROM yields the same stream and the same record
-count. Give a comparison at least 120 frames, and treat two ROMs reporting an
-identical record count as evidence the ROMs never ran.
+A short run may compare only the selected boot ROM: Puck's artwork scrolls for
+32 frames, while other firmware can take longer. Give a cartridge comparison at
+least 120 frames and confirm that execution reached its entry point. Identical
+record counts from different cartridges are a warning to check that handoff,
+not independent proof that their code ran.
 
 The trace is a stream of conceptual events, not raw internal state — raw
 fetcher-step equality would flag the documented object-fetcher oracle skew
@@ -462,7 +491,8 @@ bash build/sbtrace/build.sh
 
 run from the SameBoy checkout root. The script recompiles `Core/*.c` (with
 `-DGB_INTERNAL`), the `Windows/*.c` compatibility shims, and `trace_main.c`
-with clang targeting `x86_64-pc-windows`, then links `build/sbtrace/sb-trace.exe`.
+with clang targeting `x86_64-pc-windows`, then links
+`<SameBoy checkout>/build/sbtrace/sb-trace.exe`.
 Pass `--display` to only recompile `Core/display.c` when the rest of `Core` is
 already built. Note that `trace_main.c` sits outside `Core/`, so a change there
 needs its own compile before the link.

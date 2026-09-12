@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Machines;
 using Puck.Assets.Documents;
 using Puck.World.Authoring;
 using Puck.Maths;
@@ -15,6 +16,9 @@ namespace Puck.World;
 /// platform-facing invariants instead of silently overwriting duplicate indices or discovering bad extents on a GPU
 /// allocation path.</summary>
 /// <remarks>
+/// <para>Machine-provider admission uses an explicit <see cref="IMachineValidationCatalog"/>. Overloads without
+/// one validate document-owned facts and can collect deferred machine checks. Semantic tools must report those
+/// deferrals; authoritative hosts use their runtime catalog.</para>
 /// <para><b>Field taxonomy — the checklist a future field lands against.</b> A definition field is one of two kinds,
 /// and that kind decides its numeric contract:</para>
 /// <para><b>Sim-affecting</b> — quantized to fixed point once at compile via the <c>Fixed*</c> compilers (exactly the
@@ -938,6 +942,7 @@ public static partial class WorldDefinitionValidator {
     // read once ValidateCore's own call to its owning Validate* method has run, the same dependency order the
     // un-scoped locals already followed.
     private sealed class ValidationScope {
+        public IMachineValidationCatalog? Machines { get; init; }
         public HashSet<string> Cameras { get; set; } = [];
         public HashSet<string> DestinationNames { get; set; } = [];
         public HashSet<string> FontNames { get; set; } = [];
@@ -957,11 +962,11 @@ public static partial class WorldDefinitionValidator {
     // overload needs (BrowserErrorPaths, the ratchet test) without a second walk of the whole document. deferredSink
     // carries ValidateAdmission's platform-deferred notices (see TrustListEntry.ValidateShape/ValidateKeyMaterial) —
     // never populated when throwOnErrors is true, since none of those callers read it.
-    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink) {
+    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink, IMachineValidationCatalog? machines = null) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var errors = new List<string>();
-        var scope = new ValidationScope();
+        var scope = new ValidationScope { Machines = machines };
 
         if (!string.Equals(
             a: definition.Schema,
@@ -1975,6 +1980,8 @@ public static partial class WorldDefinitionValidator {
             )} both do.");
         }
 
+        ValidateMachines(definition, scope.Machines, errors, deferredSink);
+
         // The machine cable groups derive from the declared screens rows' own machine sources, validated beside them.
         ValidateMachineCables(
             screens: definition.Screens,
@@ -2162,13 +2169,51 @@ public static partial class WorldDefinitionValidator {
     /// <param name="compilation">The validated programs, or <see langword="null"/> when any message was added.</param>
     /// <returns><see langword="true"/> when no message was added.</returns>
     public static bool TryValidateLocally(WorldDefinition definition, ICollection<string> errors, ICollection<string>? deferred, out WorldRuleCompilation? compilation) {
+        return TryValidateLocally(definition, machines: null, errors, deferred, out compilation);
+    }
+
+    /// <summary>Validates document-local facts against an explicitly selected machine catalog.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="machines">The deployment's machine vocabulary, or null for structural validation with deferred provider notices.</param>
+    /// <param name="errors">The collected structural and provider refusals.</param>
+    /// <param name="deferred">The collected checks this environment cannot prove.</param>
+    /// <param name="compilation">The validated rule programs, or null on refusal.</param>
+    /// <returns>Whether validation added no errors.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, IMachineValidationCatalog? machines, ICollection<string> errors, ICollection<string>? deferred, out WorldRuleCompilation? compilation) {
         ArgumentNullException.ThrowIfNull(argument: errors);
 
         var before = errors.Count;
 
-        compilation = ValidateCore(definition, neighbours: null, validateAdjacencyClaims: false, retainCompilation: true, throwOnErrors: false, errorSink: errors, deferredSink: deferred);
+        compilation = ValidateCore(definition, neighbours: null, validateAdjacencyClaims: false, retainCompilation: true, throwOnErrors: false, errorSink: errors, deferredSink: deferred, machines: machines);
 
-        return (errors.Count == before);
+        if (errors.Count != before) {
+            compilation = null;
+            return false;
+        }
+        return true;
+    }
+
+    /// <summary>Validates local structure and machine admission using this deployment's catalog.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="machines">The selected machine vocabulary.</param>
+    /// <param name="reason">The collapsed refusal, or an empty string.</param>
+    /// <returns>Whether the candidate is admitted.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, IMachineValidationCatalog machines, out string reason) {
+        return TryValidateLocally(definition, machines, out reason, out _);
+    }
+
+    /// <summary>Validates local structure and machine admission, retaining the validated programs.</summary>
+    /// <param name="definition">The candidate definition.</param>
+    /// <param name="machines">The selected machine vocabulary.</param>
+    /// <param name="reason">The collapsed refusal, or an empty string.</param>
+    /// <param name="compilation">The validated programs, or null on refusal.</param>
+    /// <returns>Whether the candidate is admitted.</returns>
+    public static bool TryValidateLocally(WorldDefinition definition, IMachineValidationCatalog machines, out string reason, out WorldRuleCompilation? compilation) {
+        ArgumentNullException.ThrowIfNull(machines);
+        var errors = new List<string>();
+        var valid = TryValidateLocally(definition, machines, errors, deferred: null, out compilation);
+        reason = string.Join(" ", errors);
+        return valid;
     }
 
     private static bool TryValidateLocallyCore(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation) {

@@ -49,7 +49,7 @@ public class SamplesCompileTests {
             parseResult.Value,
             basePath: Path.GetDirectoryName(path),
             diagnostics: diagnostics
-        );
+        , cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(sourceText: source, filePath: path));
     }

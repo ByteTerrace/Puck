@@ -1,5 +1,4 @@
 using Puck.Abstractions.Machines;
-using Puck.Abstractions.Machines;
 using Puck.World.Machines;
 using Puck.World.Server;
 using Xunit;
@@ -124,13 +123,15 @@ public sealed class DynamicExtensionLoaderLawTests {
     [Fact]
     public void LoadFromAssembly_LoadsAndRegistersExtension() {
         var assemblyPath = FindHgbForgeAssembly();
-        var loaded = WorldMachineExtensionLoader.LoadFromAssembly(assemblyPath: assemblyPath);
+        var registry = new WorldMachineExtensionRegistry();
+        var loaded = WorldMachineExtensionLoader.LoadFromAssembly(assemblyPath: assemblyPath, registry: registry);
+        var catalog = registry.Build();
 
         Assert.NotEmpty(loaded);
         Assert.Contains(loaded, extension => string.Equals(extension.Name, "HumbleGamingBrick", StringComparison.Ordinal));
-        Assert.True(WorldScreenMachineEngines.IsRegistered("gaming-brick"));
-        Assert.True(WorldScreenMachineEngines.CompilesCartridges("gaming-brick"));
-        Assert.True(WorldScreenMachineEngines.CartridgeCompilers.ContainsKey("gaming-brick"));
+        Assert.True(catalog.IsRegistered("gaming-brick"));
+        Assert.True(catalog.ContentProviders.ContainsKey("gaming-brick"));
+        Assert.False(new WorldMachineExtensionRegistry().Build().IsRegistered("gaming-brick"));
     }
 
     [Fact]
@@ -170,7 +171,7 @@ public sealed class DynamicExtensionLoaderLawTests {
                 File.Copy(sourceFileName: depsFile, destFileName: Path.Combine(subDir, "Puck.HumbleGamingBrick.Forge.deps.json"), overwrite: true);
             }
 
-            var loaded = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: tempRoot.FullName);
+            var loaded = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: tempRoot.FullName, registry: new WorldMachineExtensionRegistry());
 
             Assert.NotEmpty(loaded);
             Assert.Contains(loaded, extension => string.Equals(extension.Name, "HumbleGamingBrick", StringComparison.Ordinal));
@@ -309,7 +310,7 @@ public sealed class DynamicExtensionLoaderLawTests {
             File.WriteAllText(path: fakeDll, contents: "corrupted assembly data");
 
             var logMessages = new List<string>();
-            var loaded = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: tempRoot.FullName, log: msg => logMessages.Add(msg));
+            var loaded = WorldMachineExtensionLoader.LoadFromDirectory(directoryPath: tempRoot.FullName, registry: new WorldMachineExtensionRegistry(), log: msg => logMessages.Add(msg));
 
             Assert.Empty(loaded);
             Assert.NotEmpty(logMessages);
@@ -325,16 +326,13 @@ public sealed class DynamicExtensionLoaderLawTests {
         var context = new PuckExtensionLoadContext(pluginPath: assemblyPath);
 
         try {
-            var hostAbstractionsAssembly = typeof(IScreenMachineEngine).Assembly;
+            var hostAbstractionsAssembly = typeof(IMachineEngine).Assembly;
             var loadedAbstractionsAssembly = context.LoadFromAssemblyName(assemblyName: hostAbstractionsAssembly.GetName());
 
             // Proves type identity matches the host's AssemblyLoadContext.Default
             Assert.Same(expected: hostAbstractionsAssembly, actual: loadedAbstractionsAssembly);
 
-            var hostForgeAssembly = typeof(ICartridgeCompiler).Assembly;
-            var loadedForgeAssembly = context.LoadFromAssemblyName(assemblyName: hostForgeAssembly.GetName());
-
-            Assert.Same(expected: hostForgeAssembly, actual: loadedForgeAssembly);
+            Assert.Same(expected: hostAbstractionsAssembly, actual: typeof(IMachineContentProvider).Assembly);
 
             var hostServerAssembly = typeof(WorldServer).Assembly;
             var loadedServerAssembly = context.LoadFromAssemblyName(assemblyName: hostServerAssembly.GetName());

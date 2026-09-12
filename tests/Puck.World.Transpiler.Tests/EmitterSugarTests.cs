@@ -15,7 +15,7 @@ public class EmitterSugarTests {
         Assert.False(parseResult.Diagnostics.HasErrors, parseResult.Diagnostics.FormatReport(source));
 
         var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics);
+        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
         return (loweringResult.Value!, diagnostics);
     }
 

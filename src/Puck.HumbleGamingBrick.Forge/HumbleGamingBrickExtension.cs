@@ -1,5 +1,5 @@
 using Puck.Abstractions;
-using Puck.GamingBricks.Forge;
+using Puck.Abstractions.Machines;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Tune;
 
@@ -8,17 +8,17 @@ using Puck.HumbleGamingBrick.Forge.Tune;
 namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>
-/// First-class extension publishing the Humble Gaming Brick engines and compiler.
+/// Publishes the Humble Gaming Brick engines and authored-content provider.
 /// </summary>
-public sealed class HumbleGamingBrickExtension : IGamingBrickExtension {
+public sealed class HumbleGamingBrickExtension : IMachineExtension {
     /// <inheritdoc/>
     public string Name => "HumbleGamingBrick";
 
     /// <inheritdoc/>
-    public void Initialize(IGamingBrickExtensionRegistry registry) {
+    public void Initialize(IMachineExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
 
-        registry.RegisterEngine(engine: new GamingBrickEngine(), compiler: new HgbCartridgeCompiler());
+        registry.RegisterEngine(engine: new GamingBrickEngine(), contentProvider: new HgbCartridgeCompiler());
         registry.RegisterEngine(engine: new TuneInstrumentEngine());
     }
 }

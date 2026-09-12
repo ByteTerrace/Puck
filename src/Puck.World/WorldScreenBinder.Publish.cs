@@ -162,7 +162,7 @@ internal sealed partial class WorldScreenBinder {
         var patternTicks = 0L;
 
         foreach (var slot in m_slots.Values) {
-            if (m_machines.MachineAt(index: slot.Index) is { } machine) {
+            if (m_machines.VideoOutput(index: slot.Index) is { } machine) {
                 phaseStart = (timingEnabled
                     ? Stopwatch.GetTimestamp()
                     : 0L

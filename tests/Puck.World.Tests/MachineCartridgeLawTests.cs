@@ -16,8 +16,8 @@ namespace Puck.World.Tests;
 
 /// <summary>
 /// CONTRACT UNDER TEST: a <c>machine</c> screen whose content path names a <c>puck.cartridge.v1</c> document
-/// (<see cref="WorldScreenSource.Machine.CartridgeDocumentSuffix"/>) compiles through the engine's own forge at bind
-/// (<see cref="WorldScreenMachineEngines.CartridgeCompilers"/>) and boots the compiled image exactly as it boots a ROM
+/// compiles through the engine's own content provider at bind
+/// (<c>WorldMachineCatalog.ContentProviders</c>) and boots the compiled image exactly as it boots a ROM
 /// file; the slot pins the source's canonical hash beside the image's; a document the forge refuses faults the bind
 /// with the forge's own message; a cartridge path on an engine with no forge refuses at validation by name; and the
 /// shipped arcade module boots its three cabinets under alias <c>arcade</c> from a minimal host.
@@ -86,7 +86,7 @@ public sealed class MachineCartridgeLawTests {
         return Assert.Single(collection: (row!.Cells ?? []), predicate: static cell => (cell.Key == WorldStateRow.SlotKey)).Value;
     }
     private static CartridgeCompilation CompileOutOfBand(string engine, string path) =>
-        ((ICartridgeCompiler)WorldScreenMachineEngines.CartridgeCompilers[engine]).Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)));
+        ((ICartridgeCompiler)TestHookInstaller.CreateMachineCatalog().ContentProviders[engine]).Compile(document: CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: path)));
     // The compiled image's picture after SettleFrames frames from reset, on the forge's own verify driver, folded
     // FNV-1a over the pixel words; the distinct-pixel count rides along as the content gate (a blank frame never
     // reaches the pinned comparison).
@@ -130,7 +130,7 @@ public sealed class MachineCartridgeLawTests {
     [InlineData("pip.agb.cartridge.json", AgbEngine, "stub")]
     public void ACartridgePathBindsAndTheMachineRunsTheCompiledImage(string file, string engine, string options) {
         var path = CartridgePath(file: file);
-        using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: engine, contentPath: path, options: options), engines: WorldScreenMachineEngines.All);
+        using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: engine, contentPath: path, options: options), machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
         Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen), userMessage: fixture.Server.Machines.State(index: MachineScreen)?.Fault);
 
@@ -173,8 +173,8 @@ public sealed class MachineCartridgeLawTests {
     [Fact]
     public void TheSameDocumentCompilesToByteIdenticalImagesAcrossTwoBinds() {
         var path = CartridgePath(file: "hgb-mirror.cgb.cartridge.json");
-        using var first = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb"), engines: WorldScreenMachineEngines.All);
-        using var second = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb"), engines: WorldScreenMachineEngines.All);
+        using var first = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb"), machineCatalog: TestHookInstaller.CreateMachineCatalog());
+        using var second = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb"), machineCatalog: TestHookInstaller.CreateMachineCatalog());
         var declared = first.Server.Machines.State(index: MachineScreen)!.Value.Cartridge;
         var again = second.Server.Machines.State(index: MachineScreen)!.Value.Cartridge;
 
@@ -200,17 +200,17 @@ public sealed class MachineCartridgeLawTests {
 
         var badPath = files.WriteText(name: "bad.cartridge.json", text: good.ToJsonString());
         var forgeMessage = Assert.Throws<DocumentValidationException>(testCode: () => CartridgeDocuments.Parse(utf8: File.ReadAllBytes(path: badPath))).Message.ReplaceLineEndings(replacementText: " ");
-        using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: badPath, options: "cgb"), engines: WorldScreenMachineEngines.All);
+        using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: badPath, options: "cgb"), machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
         // Declared at boot: the slot faults by name with the forge's message and never boots.
         Assert.False(condition: fixture.Server.Machines.HasMachine(index: MachineScreen));
-        Assert.Equal(expected: $"cartridge '{badPath}' refused: {forgeMessage}", actual: fixture.Server.Machines.State(index: MachineScreen)!.Value.Fault);
+        Assert.Equal(expected: $"content '{badPath}' refused: {forgeMessage}", actual: fixture.Server.Machines.State(index: MachineScreen)!.Value.Fault);
 
         // Inserted live: the same refusal, the source file still pinned for the tape.
         var (ok, message, contentHash) = fixture.Server.Machines.TryInsert(index: MachineScreen, contentPath: badPath, engineId: CgbEngine, options: "cgb");
 
         Assert.False(condition: ok);
-        Assert.Equal(expected: $"cartridge '{badPath}' refused: {forgeMessage}", actual: message);
+        Assert.Equal(expected: $"content '{badPath}' refused: {forgeMessage}", actual: message);
         Assert.Equal(expected: WorldDefinitionFileSource.ComputeContentHash(content: File.ReadAllBytes(path: badPath)), actual: contentHash);
         Assert.False(condition: fixture.Server.Machines.HasMachine(index: MachineScreen));
 
@@ -225,12 +225,13 @@ public sealed class MachineCartridgeLawTests {
         var denied = WithMachineScreen(engine: "tune-instrument", contentPath: CartridgeFile, options: null);
         var admitted = WithMachineScreen(engine: CgbEngine, contentPath: CartridgeFile, options: "cgb");
 
-        Assert.False(condition: WorldDefinitionValidator.TryValidate(definition: denied, neighbours: null, reason: out var deniedReason));
+        var catalog = TestHookInstaller.CreateMachineCatalog();
+        Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(definition: denied, machines: catalog, reason: out var deniedReason));
         Assert.Contains(
-            expectedSubstring: $"screens[1].source.machine.contentPath '{CartridgeFile}' names a cartridge document (.cartridge.json), but engine 'tune-instrument' compiles none.",
+            expectedSubstring: $"screens[1].source.machine.contentPath '{CartridgeFile}' requires a content provider, but engine 'tune-instrument' recognizes none.",
             actualString: deniedReason,
             comparisonType: StringComparison.Ordinal);
-        Assert.True(condition: WorldDefinitionValidator.TryValidate(definition: admitted, neighbours: null, reason: out var controlReason), userMessage: controlReason);
+        Assert.True(condition: WorldDefinitionValidator.TryValidateLocally(definition: admitted, machines: catalog, reason: out var controlReason), userMessage: controlReason);
     }
     [Fact]
     public void TheArcadeModuleBootsUnderItsAliasFromAMinimalHost() {
@@ -278,7 +279,7 @@ public sealed class MachineCartridgeLawTests {
         Assert.Contains(collection: definition.SpawnPoints.Select(selector: static point => point.Id), expected: "arcade-arrival");
 
         var population = new WorldPopulation(definition: definition);
-        var machines = new WorldMachineHost(screens: definition.Screens, engines: WorldScreenMachineEngines.All, documentPath: hostPath);
+        var machines = new WorldMachineHost(screens: definition.Screens, catalog: TestHookInstaller.CreateMachineCatalog(), documentPath: hostPath);
         var stateDirectory = Directory.CreateTempSubdirectory(prefix: "puck-world-tests-").FullName;
         var profiles = new WorldOwnedWorlds(template: definition, directory: stateDirectory, machineId: Guid.NewGuid());
         using var fixture = new WorldFixture(

@@ -14,8 +14,8 @@ namespace Puck.GamingBricks;
 /// The bounded queue semantics of the single-core worker apply to the group as ONE unit: <see cref="Submit"/> accepts
 /// exact tick/seat-input segments up to a finite pending window and applies producer backpressure at capacity rather
 /// than dropping or coalescing authoritative history, and <see cref="Step"/> is the synchronous submit-and-drain path
-/// <see cref="IMachineLink"/> exposes. While the link is live, a member's own <see cref="IScreenMachine.Step"/> is a
-/// no-op and its <see cref="IQueuedScreenMachine.Submit"/> is rejected: the host steps the link instead.
+/// <see cref="IMachineLink"/> exposes. While the link is live, a member's own <see cref="IMachineRuntime.Advance"/> is a
+/// no-op and its <see cref="IQueuedMachineRuntime.Submit"/> is rejected: the host steps the link instead.
 /// </para>
 /// <para>
 /// Time travel is coupled. One <see cref="MachineTimeTravel{TInput}"/> rides the group core, whose state image carries
@@ -35,7 +35,7 @@ namespace Puck.GamingBricks;
 public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     private readonly IMachineGroupCore m_core;
     private readonly QueuedWorkerLifecycle<GroupWorkItem> m_lifecycle;
-    private readonly IScreenMachine[] m_machines;
+    private readonly IMachineRuntime[] m_machines;
     private readonly int m_maximumPendingSteps;
     private readonly MachineTimeTravel<MachineLinkPads> m_timeTravel;
     private readonly QueuedMachineWorker[] m_workers;
@@ -61,7 +61,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
     /// <exception cref="InvalidOperationException">A member carries no content, or its core is already lent to another
     /// link.</exception>
     public LinkedMachineGroup(
-        IReadOnlyList<IScreenMachine> machines,
+        IReadOnlyList<IMachineRuntime> machines,
         IReadOnlyList<QueuedMachineWorker> workers,
         Func<IReadOnlyList<IQueuedMachineCore>, IMachineGroupCore> createCore,
         int maximumPendingSteps = 8,
@@ -154,7 +154,7 @@ public sealed class LinkedMachineGroup : IMachineLink, IMachineCoreLender {
         }
     }
     /// <inheritdoc/>
-    public IReadOnlyList<IScreenMachine> Machines =>
+    public IReadOnlyList<IMachineRuntime> Machines =>
         m_machines;
     /// <summary>Gets the maximum number of accepted group segments that may remain incomplete.</summary>
     public int MaximumPendingSteps =>

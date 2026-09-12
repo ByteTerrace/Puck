@@ -91,7 +91,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // the emulator cores or the Tune instrument engine, so it cannot construct Puck.World.Addons.Machines'
     // WorldMachineHost itself — the same "the server calls out, the composition root supplies the capability" shape
     // as m_addonHostFactory (WorldReplaySnapshot).
-    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     // The transport-neutral local resolver ResolveAndEnqueueCoalescedTransfers consumes to turn a
     // destinations row plus a traveling cohort into a scoped generation/instance name — see
     // WorldSessionResolver. TryStop notifies it so a reaped/stopped instance's cache entry does not
@@ -1135,7 +1135,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// desktop's own spawn/resolve arms need this; a hosted silo refuses it by name, since a row there exists only
     /// through the activation door.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, string stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true) {
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, string stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true) {
         ArgumentNullException.ThrowIfNull(argument: seats);
         ArgumentNullException.ThrowIfNull(argument: resolver);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: stateRoot);

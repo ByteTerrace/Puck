@@ -177,6 +177,7 @@ public sealed partial class WorldServer {
         WorldPrincipal[]? newTickWrittenPrincipal = null;
         bool[]? newTickCollided = null;
         var addonPlanCommitted = false;
+        IWorldMachinePreparedPlan? machinePlan = null;
 
         // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
         // shape for why: addonPlan starts null, so a refusal before TryPrepare ever succeeds leaves the finally a
@@ -209,6 +210,11 @@ public sealed partial class WorldServer {
                 }
             }
 
+            if (!m_machines.TryPrepare(m_definition, candidate, out machinePlan, out var machineReason)) {
+                return RefuseUndo(connectionId: connectionId, correlationId: correlationId,
+                    refusal: $"undo refused: the restored document's machines could not prepare — {machineReason}");
+            }
+
             var previousDefinition = m_definition;
 
             SwapSolids(solids: undoSolids);
@@ -221,6 +227,9 @@ public sealed partial class WorldServer {
                 current: candidate
             );
 
+            m_machines.Commit(machinePlan!);
+            m_machines.Finish(machinePlan!);
+
             if (addonPlan is not null) {
                 m_addons!.Commit(plan: addonPlan);
                 addonPlanCommitted = true;
@@ -232,6 +241,7 @@ public sealed partial class WorldServer {
                 }
             }
         } finally {
+            machinePlan?.Dispose();
             if (!addonPlanCommitted) {
                 addonPlan?.Dispose();
             }

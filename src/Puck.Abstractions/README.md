@@ -3,7 +3,7 @@
 Puck.Abstractions is the engine's neutral contract layer: the backend- and
 platform-agnostic interfaces and small value types that everything else in the
 engine is written against. A render node asks for a *surface presenter*, not for
-Vulkan or Direct3D 12; a host drives an *`IScreenMachine`*, not a specific
+Vulkan or Direct3D 12; a host drives an *`IMachineRuntime`*, not a specific
 emulator; a component allocates through an *`IAllocator`*, not through a
 particular platform heap. The concrete implementations live in the backend,
 platform, and content projects; this project is only the shape they agree on.
@@ -16,7 +16,7 @@ headless stand-in be swapped without touching the code that drives them.
 
 ## ✨ Key features
 
-- *One seam per capability:* presentation, windowing, screen-machines, GPU
+- *One seam per capability:* presentation, windowing, machine runtimes, GPU
   compute, capture, recording, lamp arrays, allocation, and pacing each get a
   small, explicit contract instead of a concrete dependency.
 - *Backend- and platform-neutral:* no GPU API types, no OS handles in the public
@@ -26,7 +26,7 @@ headless stand-in be swapped without touching the code that drives them.
   can be shared everywhere without creating a cycle or dragging in a backend.
 - *Value types carry no behavior:* the records and enums here (surface formats,
   present modes, lamp colors, pad state) are plain data the contracts exchange.
-- *Determinism-friendly by construction:* the screen-machine and pacing seams
+- *Determinism-friendly by construction:* the machine and pacing seams
   are shaped around whole-tick, host-owned advancement rather than wall-clock
   callbacks.
 
@@ -45,7 +45,7 @@ graph TD
     subgraph Abstractions ["Puck.Abstractions — the neutral contracts"]
         Present["🖼️ ISurfacePresenter · Surface"]
         Window["🪟 INativeWindow · IClipboardService"]
-        Machine["🕹️ IScreenMachine · IMachineLink"]
+        Machine["🕹️ IMachineRuntime · IMachineLink"]
         Compute["⚙️ IGpuComputeServices"]
         Mem["🧵 IAllocator · pacing"]
     end
@@ -64,7 +64,7 @@ graph TD
 |---|---|---|
 | **Presentation** | `ISurfacePresenter`, `Surface`, `SurfaceFormat`, `PresentMode`, `PresentationOptions`, present-timing and device-lost feedback, `OffscreenRenderBudget` (the one per-produced-frame offscreen-submit budget the view stack's refresh share and the world validator's window ceiling both read) | the GPU backends and their presentation projects |
 | **Windowing** | `INativeWindow`, `INativeWindowFactory`, `IClipboardService`, per-platform `NativeSurfaceBinding` (Win32, Wayland, Xcb, Vi) | `Puck.Platform` |
-| **Machines** | `IScreenMachine`, `IScreenMachineEngine`, `IMachineLink`, `ITimeTravelMachine`, `IReconfigurableMachine`, `MachinePadState` | the GamingBrick emulators and other hosted machines |
+| **Machines** | `IMachineRuntime`, `IMachineEngine`; optional `IMachineVideoOutputs`, `IMachineAudioOutputs`, `IMachineInputPorts`, `IMachineContentSlot`, `IMachineLink`, `ITimeTravelMachine`, `IReconfigurableMachine` | the GamingBrick emulators and other hosted machines |
 | **Gpu** | `IGpuComputeServices` | the GPU backends |
 | **Capture / Recording** | `IFrameCaptureSource`, `ICaptureSink`, `IVideoEncoder`, `IAudioCaptureSource`, `RecordedPacket` | `Puck.Platform` and `Puck.Recording` |
 | **Lighting** | `ILampArrayDevice`, `LampColor`, `LampInfo`, `LampPurposes` | `Puck.Platform` |
@@ -98,7 +98,7 @@ implementations and hands them to the code that only knows the contracts.
 - **Platform** — `Puck.Platform` implements windowing, clipboard, capture, lamp
   arrays, allocation, and pacing against the current OS.
 - **Machines** — `Puck.HumbleGamingBrick` and `Puck.AdvancedGamingBrick`
-  implement the screen-machine contracts; `Puck.Hosting` drives them.
+  implement runtime and optional hardware/presentation contracts; `Puck.Hosting` drives them.
 
 ## 🗺️ Where to go next
 

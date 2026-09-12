@@ -5,6 +5,12 @@ read it, learn from it, and use it for noncommercial purposes for free — but i
 **not** open source, and commercial use requires a paid license. This page explains
 who needs what.
 
+These are the engine's default terms. Separately licensed components retain
+their own terms: in particular, the bundled HGB and AGB firmware is available
+under MIT, without changing the licenses of the managed emulator cores or Forge
+tools. See the [firmware inventory](THIRD-PARTY-NOTICES.md#bundled-gamingbrick-firmware)
+for the source and package-local notices.
+
 > This document is a plain-language summary for humans. The binding legal terms are in
 > [`LICENSE.md`](LICENSE.md) (the noncommercial license) and in the commercial license
 > agreement you receive when you purchase one. Where this summary and those documents
@@ -109,7 +115,7 @@ dependency forces the engine's own source open or blocks offering it under paid 
 The redistributable firmware carries its own conditions rather than copyleft ones, satisfied by
 shipping its license alongside the binary. Full inventory:
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md), the bare-metal subtree's
-[`NOTICE.md`](experimental/Puck.BareMetal/NOTICE.md), and [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
+[bare-metal notice](experimental/Puck.BareMetal/NOTICE.md), and [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
 
 > **Note:** the AMD firmware is subject to U.S. export regulations (EAR / ITAR), and mbedTLS
 > contains cryptography; anyone redistributing the bare-metal binaries internationally is
@@ -134,4 +140,4 @@ implying endorsement).
 - [`CLA.md`](CLA.md) — the Contributor License Agreement (required before a first contribution).
 - [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) — third-party components and their licenses.
 
-_Last updated: July 5, 2026._
+_Last updated: September 12, 2026._

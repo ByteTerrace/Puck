@@ -4,7 +4,7 @@ using Puck.Abstractions.Machines;
 namespace Puck.HumbleGamingBrick.Forge.Tune;
 
 /// <summary>
-/// The <see cref="IScreenMachineEngine"/> for a diegetic, player-operated instrument — a screen whose content is a
+/// The <see cref="IMachineEngine"/> for a diegetic, player-operated instrument — a screen whose content is a
 /// <c>puck.audio.v1</c> document (see <see cref="Puck.Assets.Documents.AudioDocument"/>) rather than a cartridge ROM.
 /// Its <see cref="Id"/> is <c>tune-instrument</c>; it takes no options. <see cref="Create"/> parses, validates, and
 /// normalizes the content through <see cref="Puck.Assets.Documents.AudioCanonicalizer"/>, compiles it to a jukebox
@@ -14,12 +14,12 @@ namespace Puck.HumbleGamingBrick.Forge.Tune;
 /// other screen machine, plus <see cref="Puck.Abstractions.Machines.IInstrumentClockSource"/> — the tempo capability
 /// no other engine here reports.
 /// </summary>
-public sealed class TuneInstrumentEngine : IScreenMachineEngine {
+public sealed partial class TuneInstrumentEngine : IMachineEngine {
     /// <inheritdoc/>
     public string Id => "tune-instrument";
 
     /// <inheritdoc/>
-    public IScreenMachine Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) =>
+    public IMachineRuntime Create(string? options, byte[]? contentBytes = null, string? savePath = null, int audioSampleRate = 0) =>
         new TuneInstrumentMachine(
             audioSampleRate: audioSampleRate,
             content: contentBytes,

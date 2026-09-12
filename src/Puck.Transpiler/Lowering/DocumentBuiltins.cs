@@ -103,13 +103,18 @@ public static class DocumentBuiltins {
             return Refuse(scope: scope, call: call, message: "range(start, count) takes two arguments");
         }
 
-        if (!TryWholeNumber(node: DocumentLowering.LowerValue(expr: args[0].Value, scope: scope), value: out var start) ||
-            !TryWholeNumber(node: DocumentLowering.LowerValue(expr: args[1].Value, scope: scope), value: out var count)) {
+        if (!TryWholeNumber(node: DocumentLowering.EvaluateValue(expr: args[0].Value, scope: scope), value: out var start) ||
+            !TryWholeNumber(node: DocumentLowering.EvaluateValue(expr: args[1].Value, scope: scope), value: out var count)) {
             return Refuse(scope: scope, call: call, message: "range(start, count) takes two whole numbers known at compile time");
         }
 
         if (count < 0) {
             return Refuse(scope: scope, call: call, message: "range count is never negative");
+        }
+
+        scope.Budget.Collection(count, call.Span);
+        if (count > 0 && start > long.MaxValue - (count - 1)) {
+            return Refuse(scope, call, "range exceeds the signed 64-bit integer range");
         }
 
         var arr = new JsonArray();
@@ -126,7 +131,7 @@ public static class DocumentBuiltins {
             return Refuse(scope: scope, call: call, message: "length(value) takes one argument");
         }
 
-        return DocumentLowering.LowerValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) switch {
+        return DocumentLowering.EvaluateValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) switch {
             JsonArray arr => JsonValue.Create(value: (long)arr.Count),
             JsonObject obj => JsonValue.Create(value: (long)obj.Count),
             JsonValue value when value.TryGetValue<string>(value: out var text) => JsonValue.Create(value: (long)text.Length),
@@ -138,17 +143,18 @@ public static class DocumentBuiltins {
         var arr = new JsonArray();
 
         foreach (var arg in args) {
-            var lowered = DocumentLowering.LowerValue(expr: arg.Value, scope: scope, fieldKey: fieldKey);
+            var lowered = DocumentLowering.EvaluateValue(expr: arg.Value, scope: scope, fieldKey: fieldKey);
+            scope.Budget.Collection(arr.Count + (lowered is JsonArray list ? list.Count : 1), arg.Span);
 
             if (lowered is JsonArray nested) {
                 foreach (var item in nested.ToList()) {
-                    arr.AppendNode(item: item?.DeepClone());
+                    arr.AppendNode(item: scope.Budget.Copy(item, arg.Span));
                 }
 
                 continue;
             }
 
-            arr.AppendNode(item: lowered);
+            arr.AppendNode(item: scope.Budget.Copy(lowered, arg.Span));
         }
 
         return arr;
@@ -166,7 +172,7 @@ public static class DocumentBuiltins {
         var arr = new JsonArray();
 
         for (var index = 0; (index < source!.Count); ++index) {
-            arr.AppendNode(item: Apply(lambda: lambda, scope: scope, fieldKey: fieldKey, first: source[index], second: JsonValue.Create(value: (long)index)));
+            arr.AppendNode(item: scope.Budget.Copy(Apply(lambda: lambda, scope: scope, fieldKey: fieldKey, first: source[index], second: JsonValue.Create(value: (long)index)), call.Span));
         }
 
         return arr;
@@ -187,7 +193,7 @@ public static class DocumentBuiltins {
             var kept = Apply(lambda: lambda, scope: scope, fieldKey: fieldKey, first: source[index], second: JsonValue.Create(value: (long)index));
 
             if (DocumentLowering.IsTruthy(node: kept)) {
-                arr.AppendNode(item: source[index]?.DeepClone());
+                arr.AppendNode(item: scope.Budget.Copy(source[index], call.Span));
             }
         }
 
@@ -199,7 +205,7 @@ public static class DocumentBuiltins {
             return Refuse(scope: scope, call: call, message: "reduce(array, seed, lambda) takes three arguments");
         }
 
-        if (DocumentLowering.LowerValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray source) {
+        if (DocumentLowering.EvaluateValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray source) {
             return Refuse(scope: scope, call: call, message: "reduce's first argument is an array");
         }
 
@@ -211,7 +217,8 @@ public static class DocumentBuiltins {
             return Refuse(scope: scope, call: call, message: "reduce's lambda takes the running value and the item");
         }
 
-        var accumulated = DocumentLowering.LowerValue(expr: args[1].Value, scope: scope, fieldKey: fieldKey);
+        scope.Budget.Collection(source.Count, call.Span);
+        var accumulated = DocumentLowering.EvaluateValue(expr: args[1].Value, scope: scope, fieldKey: fieldKey);
 
         foreach (var item in source.ToList()) {
             accumulated = Apply(lambda: lambda, scope: scope, fieldKey: fieldKey, first: accumulated, second: item);
@@ -227,20 +234,20 @@ public static class DocumentBuiltins {
             return Refuse(scope: scope, call: call, message: "distinct(array) takes one argument");
         }
 
-        if (DocumentLowering.LowerValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray source) {
+        if (DocumentLowering.EvaluateValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray source) {
             return Refuse(scope: scope, call: call, message: "distinct(array) reads an array");
         }
 
         var arr = new JsonArray();
-        var seen = new List<JsonNode?>();
+        scope.Budget.Collection(source.Count, call.Span);
+        var seen = new HashSet<JsonNode?>(DocumentValueEqualityComparer.Instance);
 
         foreach (var item in source.ToList()) {
-            if (seen.Exists(match: kept => JsonNode.DeepEquals(node1: kept, node2: item))) {
+            if (!seen.Add(item)) {
                 continue;
             }
 
-            seen.Add(item: item);
-            arr.AppendNode(item: item?.DeepClone());
+            arr.AppendNode(item: scope.Budget.Copy(item, call.Span));
         }
 
         return arr;
@@ -254,7 +261,7 @@ public static class DocumentBuiltins {
             return Refuse(scope: scope, call: call, message: "sort(array) or sort(array, lambda) takes one or two arguments");
         }
 
-        if (DocumentLowering.LowerValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray source) {
+        if (DocumentLowering.EvaluateValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray source) {
             return Refuse(scope: scope, call: call, message: "sort's first argument is an array");
         }
 
@@ -273,6 +280,7 @@ public static class DocumentBuiltins {
         }
 
         var items = source.ToList();
+        scope.Budget.Collection(items.Count, call.Span);
         var keyed = new List<(JsonNode? Key, JsonNode? Item)>(capacity: items.Count);
 
         for (var index = 0; (index < items.Count); ++index) {
@@ -286,7 +294,7 @@ public static class DocumentBuiltins {
         var arr = new JsonArray();
 
         foreach (var entry in keyed.OrderBy(keySelector: static entry => entry.Key, comparer: DocumentValueComparer.Instance)) {
-            arr.AppendNode(item: entry.Item?.DeepClone());
+            arr.AppendNode(item: scope.Budget.Copy(entry.Item, call.Span));
         }
 
         return arr;
@@ -318,7 +326,7 @@ public static class DocumentBuiltins {
                 grouped[propertyName: name] = bucket;
             }
 
-            bucket.AppendNode(item: source[index]?.DeepClone());
+            bucket.AppendNode(item: scope.Budget.Copy(source[index], call.Span));
         }
 
         return grouped;
@@ -342,7 +350,7 @@ public static class DocumentBuiltins {
             return false;
         }
 
-        if (DocumentLowering.LowerValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray arr) {
+        if (DocumentLowering.EvaluateValue(expr: args[0].Value, scope: scope, fieldKey: fieldKey) is not JsonArray arr) {
             Refuse(scope: scope, call: call, message: $"{call.Name}'s first argument is an array");
 
             return false;
@@ -354,6 +362,7 @@ public static class DocumentBuiltins {
             return false;
         }
 
+        scope.Budget.Collection(arr.Count, call.Span);
         source = arr;
         lambda = written;
 
@@ -363,27 +372,22 @@ public static class DocumentBuiltins {
     // The lambda's parameters are bound as locals rather than as constants: a bound value is an already-lowered
     // JSON node, not an expression that could be lowered again.
     private static JsonNode? Apply(LambdaExpressionNode lambda, DocumentScope scope, string? fieldKey, JsonNode? first, JsonNode? second) {
+        if (lambda.Parameters.Count > 1 && lambda.Parameters[0] == lambda.Parameters[1]) {
+            throw new DocumentEvaluationException("A lambda cannot repeat a parameter name.", lambda.Span, PuckDiagnosticCodes.InvalidValue);
+        }
         var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
-            [lambda.Parameters[0]] = first?.DeepClone(),
+            [lambda.Parameters[0]] = first,
         };
 
         if (lambda.Parameters.Count > 1) {
-            locals[lambda.Parameters[1]] = second?.DeepClone();
+            locals[lambda.Parameters[1]] = second;
         }
 
-        return DocumentLowering.LowerValue(expr: lambda.Body, scope: scope.WithLocals(lambdaLocals: locals), fieldKey: fieldKey);
+        return DocumentLowering.EvaluateValue(expr: lambda.Body, scope: scope.WithLocals(lambdaLocals: locals), fieldKey: fieldKey);
     }
 
     private static bool TryWholeNumber(JsonNode? node, out long value) {
-        value = 0;
-
-        if (!DocumentLowering.TryReadNumber(node: node, number: out var number) || (number != Math.Truncate(d: number))) {
-            return false;
-        }
-
-        value = (long)number;
-
-        return true;
+        return DocumentNumbers.TryInteger(node, out value);
     }
 
     private static JsonNode? Refuse(DocumentScope scope, CallExpressionNode call, string message) {

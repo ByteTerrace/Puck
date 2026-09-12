@@ -29,6 +29,16 @@ public sealed class MachineBootOptionsTests {
         Assert.Equal(expected: new MachineBootOptions(Mode: MachineBootMode.Fast, ImagePath: null), actual: options);
     }
 
+    [Fact]
+    public void HardwareOnlyReconfigurationRetainsExplicitFirmwareAndStartup() {
+        var original = new MachineBootOptions(Mode: MachineBootMode.Fast, ImagePath: "external.bin");
+        var unchanged = MachineBootOptions.Parse(options: "cgb", machineTokens: out _, defaults: original);
+        Assert.Equal(expected: original, actual: unchanged);
+        var replaced = MachineBootOptions.Parse(options: "bios=puck", machineTokens: out _, defaults: original);
+        Assert.Equal(expected: MachineBootMode.Fast, actual: replaced.Mode);
+        Assert.Null(@object: replaced.ImagePath);
+    }
+
     [Theory]
     [InlineData("cold fast")]
     [InlineData("fast cold bios=puck")]

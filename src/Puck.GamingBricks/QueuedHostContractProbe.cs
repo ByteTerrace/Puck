@@ -25,8 +25,8 @@ public readonly record struct QueuedHostProbeResult(bool Passed, string Detail) 
 /// each core's Post battery exercises against its own host. It pins the observable behavior the substrate owns: the
 /// bounded pending-segment window with producer backpressure, exactly-once completion, an immutable frame lease across a
 /// blocked GPU upload, and device-loss/disposal serialization with the uploader. A host supplies factories that build it
-/// with the core's own synthetic content; the probe drives only the neutral
-/// <see cref="IScreenMachine"/>/<see cref="IQueuedScreenMachine"/> surface, so both hosts run the identical checks.
+/// with the core's own synthetic content; the probe drives the shared <see cref="QueuedMachineHost"/> substrate,
+/// including its standalone tick/input API and optional media capabilities, so both hosts run identical checks.
 /// </summary>
 public static class QueuedHostContractProbe {
     private const int BudgetProbeInterval = 8;
@@ -40,7 +40,7 @@ public static class QueuedHostContractProbe {
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromSeconds(value: 15);
 
     private static void DriveOrderedPokeSchedule<THost>(THost host, int steps, ulong budget, in MachinePadState input, int scratchAddress)
-        where THost : IScreenMachine, IQueuedScreenMachine, IMachineMemoryPeek {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, IMachineMemoryPeek {
         for (var step = 0; (step < steps); ++step) {
             _ = host.Step(
                 deltaTicks: budget,
@@ -53,7 +53,7 @@ public static class QueuedHostContractProbe {
         }
     }
     private static void DriveSchedule<THost>(THost host, int from, int count, ulong budget)
-        where THost : IScreenMachine {
+        where THost : QueuedMachineHost {
         for (var frame = from; (frame < (from + count)); ++frame) {
             var input = ScheduledInput(frame: frame);
 
@@ -94,7 +94,7 @@ public static class QueuedHostContractProbe {
         return region;
     }
     private static QueuedHostProbeResult? VerifyConcurrentPokeStress<THost>(Func<THost> withContent, ulong budget, in MachinePadState input, int scratchAddress, int hammers)
-        where THost : IScreenMachine, IQueuedScreenMachine, IMachineMemoryPeek {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, IMachineMemoryPeek {
         var padState = input;
 
         using var host = withContent();
@@ -157,7 +157,7 @@ public static class QueuedHostContractProbe {
         );
     }
     private static QueuedHostProbeResult? VerifyDeviceLossSerialization<THost>(Func<THost> empty)
-        where THost : IScreenMachine {
+        where THost : QueuedMachineHost {
         using var host = empty();
         using var firstUpload = new BlockingSurfaceUpload();
         using var replacementUpload = new BlockingSurfaceUpload(blockFirstCall: false);
@@ -242,7 +242,7 @@ public static class QueuedHostContractProbe {
         return null;
     }
     private static QueuedHostProbeResult? VerifyDisposalSerialization<THost>(Func<THost> empty)
-        where THost : IScreenMachine {
+        where THost : QueuedMachineHost {
         var host = empty();
         using var upload = new BlockingSurfaceUpload();
         var gpu = new TestGpuComputeServices(factory: new TestSurfaceTransferFactory(upload));
@@ -311,7 +311,7 @@ public static class QueuedHostContractProbe {
         return null;
     }
     private static QueuedHostProbeResult? VerifyFastForwardCap<THost>(Func<THost> withContent, ulong budget)
-        where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, ITimeTravelMachine {
         using var host = withContent();
         var input = MachinePadState.Neutral;
         var cap = MachineTimeTravel<MachinePadState>.MaxFastForwardFactor;
@@ -336,7 +336,7 @@ public static class QueuedHostContractProbe {
         return null;
     }
     private static QueuedHostProbeResult? VerifyFastForwardSubsteps<THost>(Func<THost> withContent, Func<THost, long> observe, ulong budget)
-        where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, ITimeTravelMachine {
         using var accelerated = withContent();
         using var baseline = withContent();
 
@@ -375,7 +375,7 @@ public static class QueuedHostContractProbe {
         );
     }
     private static QueuedHostProbeResult? VerifyPeekIsSideEffectFree<THost>(Func<THost> withContent, int steps, ulong budget, in MachinePadState input, int regionStart, int regionLength)
-        where THost : IScreenMachine, IQueuedScreenMachine, IMachineMemoryPeek {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, IMachineMemoryPeek {
         var padState = input;
         byte[] hammeredRegion;
 
@@ -451,7 +451,7 @@ public static class QueuedHostContractProbe {
         return null;
     }
     private static QueuedHostProbeResult? VerifyPublicationLease<THost>(Func<THost> withContent)
-        where THost : IScreenMachine, IQueuedScreenMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime {
         using var host = withContent();
         using var upload = new BlockingSurfaceUpload();
         var gpu = new TestGpuComputeServices(factory: new TestSurfaceTransferFactory(upload));
@@ -682,7 +682,7 @@ public static class QueuedHostContractProbe {
         );
     }
     private static QueuedHostProbeResult? VerifyRewindClearsAudio<THost>(Func<THost> withAudio, ulong budget)
-        where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine, IAudioMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, ITimeTravelMachine, IAudioMachine {
         using var host = withAudio();
         var input = MachinePadState.Neutral;
 
@@ -732,7 +732,7 @@ public static class QueuedHostContractProbe {
         );
     }
     private static QueuedHostProbeResult? VerifyRewindDeterminism<THost>(Func<THost> withContent, Func<THost, long> observe, ulong budget)
-        where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, ITimeTravelMachine {
         // Held input over remainder-bearing 60 Hz submissions: the timeline is then a pure function of the tick→cycle
         // phase alone, so restoring the wrong accumulator on a rewind is the only thing that can stop a re-driven suffix
         // from re-tracing the original tail. Fingerprint the authority after every submission so the re-drive can be
@@ -835,7 +835,7 @@ public static class QueuedHostContractProbe {
         );
     }
     private static QueuedHostProbeResult? VerifyRunaheadLead<THost>(Func<THost> withContent, Func<THost, long> observe, ulong budget)
-        where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine, IFeedbackMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, ITimeTravelMachine, IFeedbackMachine {
         // Held input over a long horizon (60 Hz submissions vs the ~59.73 Hz native cadence, so the authority completes
         // a native frame only ~every submission) plus a fast-forward pass: the measured lead must stay pinned to N the
         // whole way, within one native frame. The reported lead is the fork's own native-frame index minus the
@@ -917,7 +917,7 @@ public static class QueuedHostContractProbe {
     /// <param name="requestedRate">The nonzero rate <paramref name="attached"/> requests.</param>
     /// <returns>The contract result.</returns>
     public static QueuedHostProbeResult VerifyAudio<THost>(Func<THost> attached, Func<THost> detached, int requestedRate)
-        where THost : IScreenMachine, IAudioMachine {
+        where THost : QueuedMachineHost, IAudioMachine {
         using var silentHost = detached();
         var input = MachinePadState.Neutral;
 
@@ -972,7 +972,7 @@ public static class QueuedHostContractProbe {
     /// <param name="withContent">Builds a fresh assigned host (with the core's synthetic content).</param>
     /// <returns>The contract result.</returns>
     public static QueuedHostProbeResult VerifyBackpressure<THost>(Func<THost> withContent)
-        where THost : IScreenMachine, IQueuedScreenMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime {
         using var host = withContent();
         var input = MachinePadState.Neutral;
         var accepted = 0L;
@@ -1041,7 +1041,7 @@ public static class QueuedHostContractProbe {
     /// <param name="regionLength">The length of that compared region.</param>
     /// <returns>The contract result.</returns>
     public static QueuedHostProbeResult VerifyConcurrentMemoryAccess<THost>(Func<THost> withContent, int scratchAddress, int regionStart, int regionLength)
-        where THost : IScreenMachine, IQueuedScreenMachine, IMachineMemoryPeek {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, IMachineMemoryPeek {
         const int Steps = 90;
         const int Hammers = 400;
 
@@ -1133,7 +1133,7 @@ public static class QueuedHostContractProbe {
     /// <param name="empty">Builds a fresh empty (unassigned) host.</param>
     /// <returns>The contract result.</returns>
     public static QueuedHostProbeResult VerifyFramePublication<THost>(Func<THost> withContent, Func<THost> empty)
-        where THost : IScreenMachine, IQueuedScreenMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime {
         var publication = VerifyPublicationLease(withContent: withContent);
 
         if (publication is not null) {
@@ -1164,7 +1164,7 @@ public static class QueuedHostContractProbe {
     /// <param name="observe">A deterministic fingerprint of the authoritative machine's current state.</param>
     /// <returns>The contract result.</returns>
     public static QueuedHostProbeResult VerifyTimeTravel<THost>(Func<THost> withContent, Func<THost> withAudio, Func<THost, long> observe)
-        where THost : IScreenMachine, IQueuedScreenMachine, ITimeTravelMachine, IAudioMachine, IFeedbackMachine {
+        where THost : QueuedMachineHost, IQueuedMachineRuntime, ITimeTravelMachine, IAudioMachine, IFeedbackMachine {
         // A remainder-bearing per-frame budget: 60 Hz submissions against a ~59.73 Hz native cadence leave a tick→cycle
         // remainder every frame, so both the accumulator restoration (rewind) and the mismatched-cadence lead (runahead)
         // are genuinely exercised rather than hidden behind a whole-cycle budget.

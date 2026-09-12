@@ -63,9 +63,11 @@ there. What a cartridge still restates, and the shape that would replace it:
 **D1 — The gate is behavioral determinism, not a byte diff.** Reimplementation
 gives up any oracle against a retail image, so "this game works" is carried by
 machinery already here: a forged image replayed from a recorded input script must
-produce identical state hashes run to run and across both cycle-accurate
-backends. `HashDivergenceProbe`, `CosimDiagnostic` and the BESS snapshot path are
-its parts.
+produce identical machine-state hashes on repeated runs of each backend. Cross-target parity compares normalized
+authored variables and arrays at the same completed game-frame boundary, using each compilation's symbol map;
+native addresses, registers, timing state and ROM bytes differ between machines. Independent expected-value
+tests establish correctness: deterministic replay alone can repeat the same wrong answer. `HashDivergenceProbe`,
+`CosimDiagnostic` and the snapshot paths provide per-target evidence, not interchangeable hardware hashes.
 
 **D2 — A cartridge consumes `Puck.State`'s vocabulary rather than restating it,
 and the forges are code-generating backends for it.** No second language, and no
@@ -217,10 +219,9 @@ running one. Two gates are shared across all of them.
 - **The round-trip gate** compiles the committed source and compares bytes
   against the committed document, so source and JSON cannot drift as either
   grows.
-- **The determinism gate** of D1: a forged image replayed from a recorded input
-  script produces identical state hashes run to run and on both backends. This is
-  the gate that scales, because it needs no hand-written expectation per
-  behavior.
+- **The determinism gate** of D1: repeated runs match on each backend; the two backends agree on normalized
+  authored state at matched game-frame boundaries. Independent expected-value tests cover arithmetic, guards,
+  storage and persistence. A reproducible mistake must still fail the correctness gate.
 
 Capacity remains the one hard refusal: every way an image can outgrow its machine
 raises `CartridgeCapacityException` naming what overran, and nothing here converts

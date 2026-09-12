@@ -463,8 +463,9 @@ Facts a script needs:
 Players create and edit CGB/AGB ROM source directly in the console with the
 `forge.*` commands. Source is a `puck.cartridge.v1` document: tiles, palettes,
 maps, variables, sprites and ordered input rules. `forge.save` persists the
-source, `forge.export` writes native ROM bytes, and `forge.play` submits the
-normal authoritative screen insertion. There are no shipped sample ROMs.
+source, `forge.export` writes native ROM bytes, and `forge.play` saves canonical
+source and submits its path through the normal authoritative insertion. The
+machine's content provider preserves the source identity and exported symbols.
 See the [cartridge authoring guide](../Puck.GamingBricks.Forge/README.md) for
 an executable walkthrough and the explicit first-version limits.
 
@@ -938,7 +939,7 @@ tape-covered for BOTH `Insert` and a Machine-magazine `Select` — a failed
 boot is a failed op, never a disguised success) rather than calling a
 presentation binder directly. `WorldScreenBinder.cs` is a PURE READER for a
 machine-owning index (its framebuffer handle/light,
-`IScreenMachine.PublishFrame` each produced frame — the one GPU call this
+`IMachineVideoOutput.PublishFrame` each produced frame — the one GPU call this
 project still makes on a machine's behalf), recreates its own slot for a
 screen index removed and later restored by `world.reset`/`.load` exactly as
 `WorldMachineHost` does (bounded to indices the render engine's boot-frozen

@@ -1,5 +1,4 @@
 using System.Text.Json.Nodes;
-using Puck.World;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Validation;
 using Xunit;
@@ -8,12 +7,8 @@ namespace Puck.Cli.Tests;
 
 /// <summary>Exercises <see cref="CliWorldVocabulary.EnsureInstalled"/> — the CLI process's one vocabulary-hook
 /// installer, which every verb that validates or composes a world document goes through.</summary>
-/// <remarks><see cref="WorldScreenMachineEngines"/> and the schema vocabulary hooks are process-global and never
-/// un-register, so these assertions are written to hold whatever else in the assembly ran first.</remarks>
 public sealed class CliWorldVocabularyTests {
-    // A passive machine screen with an empty contentPath skips the cartridge-compiler check entirely (only a
-    // cartridge document path — a ".cartridge.json" suffix — triggers it), isolating this document to exercising
-    // WorldExtensionVocabularyHook.ScreenMachineEngineCheck alone.
+    // An empty content path isolates engine registration from source-format preparation.
     private const string ScreenJsonTemplate = """
         {
           "schema": "puck.world.def.v1",
@@ -38,14 +33,14 @@ public sealed class CliWorldVocabularyTests {
     [InlineData("gaming-brick")]
     [InlineData("advanced-gaming-brick")]
     public void EnsureInstalledRegistersEveryShippedScreenMachineEngine(string engine) {
-        CliWorldVocabulary.EnsureInstalled();
+        var catalog = CliWorldVocabulary.EnsureInstalled();
 
-        Assert.True(WorldScreenMachineEngines.IsRegistered(engine));
+        Assert.True(catalog.IsRegistered(engine));
 
         var diagnostics = new DiagnosticBag();
         var root = JsonNode.Parse(ScreenJsonTemplate.Replace("{ENGINE}", engine, StringComparison.Ordinal))!.AsObject();
 
-        var validated = WorldSemanticValidator.ValidateWorld(root, sourceMap: null, diagnostics: diagnostics);
+        var validated = WorldSemanticValidator.ValidateWorld(root, sourceMap: null, diagnostics: diagnostics, machines: catalog);
 
         Assert.True(validated, userMessage: string.Join(separator: Environment.NewLine, values: diagnostics.Select(selector: d => d.Message)));
     }
@@ -53,15 +48,25 @@ public sealed class CliWorldVocabularyTests {
     // The refusal half: with the hooks installed, an engine nobody registered is still rejected, so a passing
     // registration assertion above cannot be an inert check that accepts anything.
     [Fact]
-    public void AnUnregisteredScreenMachineEngineIsStillRefused() {
-        CliWorldVocabulary.EnsureInstalled();
+    public void SemanticValidationReportsAnUnavailableProviderCatalog() {
+        _ = CliWorldVocabulary.EnsureInstalled();
+        var diagnostics = new DiagnosticBag();
+        var root = JsonNode.Parse(ScreenJsonTemplate.Replace("{ENGINE}", "gaming-brick", StringComparison.Ordinal))!.AsObject();
 
-        Assert.False(WorldScreenMachineEngines.IsRegistered("no-such-brick"));
+        Assert.False(WorldSemanticValidator.ValidateWorld(root, sourceMap: null, diagnostics: diagnostics));
+        Assert.Contains(diagnostics, diagnostic => diagnostic.Message.Contains("no machine catalog", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnUnregisteredScreenMachineEngineIsStillRefused() {
+        var catalog = CliWorldVocabulary.EnsureInstalled();
+
+        Assert.False(catalog.IsRegistered("no-such-brick"));
 
         var diagnostics = new DiagnosticBag();
         var root = JsonNode.Parse(ScreenJsonTemplate.Replace("{ENGINE}", "no-such-brick", StringComparison.Ordinal))!.AsObject();
 
-        var validated = WorldSemanticValidator.ValidateWorld(root, sourceMap: null, diagnostics: diagnostics);
+        var validated = WorldSemanticValidator.ValidateWorld(root, sourceMap: null, diagnostics: diagnostics, machines: catalog);
 
         Assert.False(validated);
         Assert.Contains(diagnostics, d => d.Message.Contains("'no-such-brick' names no registered screen-machine engine", StringComparison.Ordinal));

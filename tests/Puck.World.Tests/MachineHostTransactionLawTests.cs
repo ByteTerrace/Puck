@@ -57,19 +57,20 @@ public sealed class MachineHostTransactionLawTests {
     }
 
     [Fact]
-    public void WorldScreenMachineEngines_ExposesEnginesAndCompilers() {
-        Assert.True(condition: WorldScreenMachineEngines.IsRegistered(key: "gaming-brick"));
-        Assert.True(condition: WorldScreenMachineEngines.IsRegistered(key: "advanced-gaming-brick"));
-        Assert.True(condition: WorldScreenMachineEngines.IsRegistered(key: "tune-instrument"));
-        Assert.False(condition: WorldScreenMachineEngines.IsRegistered(key: "unknown-xyz"));
+    public void WorldMachineCatalog_ExposesEnginesAndContentProviders() {
+        var catalog = TestHookInstaller.CreateMachineCatalog();
+        Assert.True(condition: catalog.IsRegistered(engineId: "gaming-brick"));
+        Assert.True(condition: catalog.IsRegistered(engineId: "advanced-gaming-brick"));
+        Assert.True(condition: catalog.IsRegistered(engineId: "tune-instrument"));
+        Assert.False(condition: catalog.IsRegistered(engineId: "unknown-xyz"));
 
-        Assert.True(condition: WorldScreenMachineEngines.CompilesCartridges(key: "gaming-brick"));
-        Assert.True(condition: WorldScreenMachineEngines.CompilesCartridges(key: "advanced-gaming-brick"));
-        Assert.False(condition: WorldScreenMachineEngines.CompilesCartridges(key: "tune-instrument"));
+        Assert.True(condition: catalog.ContentProviders.ContainsKey(key: "gaming-brick"));
+        Assert.True(condition: catalog.ContentProviders.ContainsKey(key: "advanced-gaming-brick"));
+        Assert.False(condition: catalog.ContentProviders.ContainsKey(key: "tune-instrument"));
 
-        Assert.True(condition: WorldScreenMachineEngines.CartridgeCompilers.ContainsKey(key: "gaming-brick"));
-        Assert.True(condition: WorldScreenMachineEngines.CartridgeCompilers.ContainsKey(key: "advanced-gaming-brick"));
-        Assert.False(condition: WorldScreenMachineEngines.CartridgeCompilers.ContainsKey(key: "tune-instrument"));
+        Assert.True(condition: TestHookInstaller.CreateMachineCatalog().ContentProviders.ContainsKey(key: "gaming-brick"));
+        Assert.True(condition: TestHookInstaller.CreateMachineCatalog().ContentProviders.ContainsKey(key: "advanced-gaming-brick"));
+        Assert.False(condition: TestHookInstaller.CreateMachineCatalog().ContentProviders.ContainsKey(key: "tune-instrument"));
     }
 
     [Fact]
@@ -83,7 +84,7 @@ public sealed class MachineHostTransactionLawTests {
 
         Assert.True(condition: (declared.Length >= 2), userMessage: "the cartridge declares too few variables to tell two addresses apart");
 
-        using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb"), engines: WorldScreenMachineEngines.All);
+        using var fixture = Fixtures.FreshServer(definition: WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb fast"), machineCatalog: TestHookInstaller.CreateMachineCatalog());
 
         Assert.True(condition: fixture.Server.Machines.HasMachine(index: MachineScreen));
 
@@ -104,9 +105,9 @@ public sealed class MachineHostTransactionLawTests {
         // A name the cartridge does not declare resolves to nothing.
         Assert.False(condition: fixture.Server.Machines.TryResolveSymbol(index: MachineScreen, symbol: "nonexistent_variable", address: out _));
 
-        for (var tick = 0; (tick < 1); tick++) {
-            fixture.Step();
-        }
+        // Fast boot skips firmware presentation, but the cartridge still runs its own initialization.
+        _ = Fixtures.StepUntil(fixture, ceiling: 120, settled: () => declared.All(variable =>
+            fixture.Server.Machines.TryPeek(MachineScreen, addresses[variable.Name], out var value) && value == variable.Initial));
 
         // Once the reset code has run, each byte carries the value the document authored for it.
         foreach (var variable in declared) {
@@ -121,8 +122,8 @@ public sealed class MachineHostTransactionLawTests {
     public void TwoPhasePrepareAndCommit_AppliesCandidateDefinition() {
         var path = CartridgePath(file: CartridgeFile);
         var baseDef = Fixtures.BuildDocument();
-        var candidateDef = WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb");
-        var host = new WorldMachineHost(screens: [], engines: WorldScreenMachineEngines.All, documentPath: path);
+        var candidateDef = WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb fast");
+        var host = new WorldMachineHost(screens: [], catalog: TestHookInstaller.CreateMachineCatalog(), documentPath: path);
 
         Assert.False(condition: host.HasMachine(index: MachineScreen));
 
@@ -148,8 +149,8 @@ public sealed class MachineHostTransactionLawTests {
     public void TwoPhasePrepareRollback_DisposedWithoutCommitLeavesHostUnmodified() {
         var path = CartridgePath(file: CartridgeFile);
         var baseDef = Fixtures.BuildDocument();
-        var candidateDef = WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb");
-        var host = new WorldMachineHost(screens: [], engines: WorldScreenMachineEngines.All, documentPath: path);
+        var candidateDef = WithMachineScreen(engine: CgbEngine, contentPath: path, options: "cgb fast");
+        var host = new WorldMachineHost(screens: [], catalog: TestHookInstaller.CreateMachineCatalog(), documentPath: path);
 
         Assert.True(condition: host.TryPrepare(current: baseDef, candidate: candidateDef, plan: out var plan, reason: out var reason), userMessage: reason);
         Assert.NotNull(@object: plan);

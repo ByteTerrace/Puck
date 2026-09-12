@@ -1445,7 +1445,7 @@ public sealed partial class WorldServer {
                 }
             }
 
-            if (AffectsScreens(mutation: mutation)) {
+            if (AffectsScreens(mutation: mutation) || AffectsMachines(mutation)) {
                 if (!m_machines.TryPrepare(
                     candidate: candidate,
                     current: m_definition,

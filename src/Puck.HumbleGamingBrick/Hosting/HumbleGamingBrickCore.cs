@@ -10,7 +10,7 @@ namespace Puck.HumbleGamingBrick;
 /// stepping and the debug peek/poke alike — must run on one owning thread (a queued worker or the caller's own loop),
 /// so a peek/poke never races the running core.
 /// </summary>
-public sealed class HumbleGamingBrickCore : IQueuedMachineCore {
+public sealed partial class HumbleGamingBrickCore : IQueuedMachineCore {
     // The machine's CPU T-cycle rate (2^22 per second); with EngineTicks.PerSecond it forms the exact rational the tick
     // accumulator carries remainders in.
     private const ulong MachineCyclesPerSecond = 4_194_304UL;
@@ -36,8 +36,10 @@ public sealed class HumbleGamingBrickCore : IQueuedMachineCore {
     /// <param name="savePath">The cartridge's battery-save path, or <see langword="null"/> for an in-memory-only save.</param>
     /// <param name="dmgSpeed">When <see langword="true"/>, the FAIRNESS pin: the tick-to-cycle budget stays at the DMG rate
     /// regardless of the KEY1 double-speed latch, so the budget is a function of configuration alone.</param>
-    public HumbleGamingBrickCore(ConsoleModel model, byte[] cartridgeRom, string? savePath = null, bool dmgSpeed = false)
-        : this(configuration: new MachineConfiguration(model: model, cartridgeRom: cartridgeRom), savePath: savePath, dmgSpeed: dmgSpeed) { }
+    /// <param name="bootMode">Cold startup runs the bundled Puck firmware; fast startup skips its presentation.</param>
+    /// <param name="bootRom">An external boot image, or null for bundled Puck firmware.</param>
+    public HumbleGamingBrickCore(ConsoleModel model, byte[] cartridgeRom, string? savePath = null, bool dmgSpeed = false, MachineBootMode bootMode = MachineBootMode.Cold, byte[]? bootRom = null)
+        : this(configuration: HgbFirmware.CreateConfiguration(model: model, cartridgeRom: cartridgeRom, bootMode: bootMode, bootRom: bootRom), savePath: savePath, dmgSpeed: dmgSpeed) { }
 
     /// <summary>Builds a core for an external host's own update loop, with optional boot ROM and clock configuration.
     /// No renderer or background worker is required. Drive and dispose the core on its owning thread.</summary>
@@ -148,15 +150,30 @@ public sealed class HumbleGamingBrickCore : IQueuedMachineCore {
             );
         }
     }
-    /// <inheritdoc/>
+    /// <summary>Retargets the live hardware after the boot ROM has unmapped. Firmware selection and startup mode
+    /// remain construction-fixed; refusing an option leaves the running machine unchanged.</summary>
+    /// <param name="options">Hardware options, optionally repeating the current startup mode. Image paths are not accepted.</param>
+    /// <param name="reason">The refusal reason, or a note when a cartridge has no live detection recipe.</param>
+    /// <returns>Whether the hardware selection was accepted.</returns>
     public bool Reconfigure(string? options, out string reason) {
         ConsoleModel model;
 
         try {
-            (model, _) = GamingBrickEngine.ParseOptions(options: options);
+            var boot = new MachineBootOptions(Mode: m_machine.Configuration.BootMode, ImagePath: null);
+            var parsed = GamingBrickEngine.ParseOptions(options: options, bootDefaults: boot);
+            if ((parsed.Boot != boot) || (options?.Contains(value: "bios=", comparisonType: StringComparison.OrdinalIgnoreCase) == true)) {
+                reason = "Firmware and startup mode are construction-fixed; create a new core to change them.";
+                return false;
+            }
+            model = parsed.Model;
         } catch (ArgumentException exception) {
             reason = exception.Message;
 
+            return false;
+        }
+
+        if ((model != m_machine.Machine.Model) && ((m_systemBus.DebugReadByte(address: 0xFF50) & 1) == 0)) {
+            reason = "The boot ROM is still running; wait for cartridge handoff before changing hardware model.";
             return false;
         }
 

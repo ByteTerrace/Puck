@@ -24,7 +24,7 @@ of its own — that lives in each brick that references it.
 - *Machine-neutral queued hosting:* `QueuedMachineWorker` owns one
   machine-owning thread and a bounded FIFO. A full queue backpressures the
   producer instead of dropping or coalescing authoritative input history;
-  `QueuedMachineHost` forwards the neutral `IScreenMachine`/`IQueuedScreenMachine`/
+  `QueuedMachineHost` forwards the neutral `IMachineRuntime`/`IQueuedMachineRuntime`/
   `IAudioMachine`/`IFeedbackMachine`/`ITimeTravelMachine` surfaces to one worker.
   `QueuedWorkerLifecycle<TWorkItem>` is the one thread/queue/backpressure/fault
   lifecycle behind both that worker and `LinkedMachineGroup`, so the stop, drain
@@ -44,12 +44,20 @@ of its own — that lives in each brick that references it.
   workers' cores, steps them as one group through an `IMachineGroupCore`
   medium, and publishes each member back through its own worker — with the
   group's own bounded queue, backpressure, and coupled time travel.
-- *Shared contract proof:* `QueuedHostContractProbe` drives the neutral
-  `IScreenMachine`/`IQueuedScreenMachine` surface through the same checks —
+- *Shared contract proof:* `QueuedHostContractProbe` drives the shared
+  `QueuedMachineHost` substrate and its standalone tick/input API through the same checks —
   backpressure, frame publication, audio, coherent memory access,
   deterministic rewind, runahead lead, fast-forward bounds, upload leases,
   device loss, and disposal serialization — so both cores' Post batteries
   exercise identical substrate guarantees.
+
+The neutral runtime contract lives in `Puck.Abstractions.Machines` and requires no
+display or controller. `QueuedMachineHost` exposes the bricks' named `video`, `audio`,
+and `controls` capabilities through that contract. `AccessHardware` marshals a
+coherent inspection or a validated patch/bus operation to the owning worker or
+coupled link. Successful state-changing accesses invalidate rewind history in the
+same ordered work item; unavailable or unsupported hardware returns an explicit
+status rather than a substitute zero.
 
 ## 🚀 Quick start — forking a machine
 
@@ -111,6 +119,21 @@ contract; constructing a core starts no worker or rendering infrastructure.
 The `embedding` stage in each Post battery exercises this path without a
 worker, graphics backend or audio device.
 
+### Firmware and startup
+
+`MachineBootMode.Cold` executes the selected firmware from reset.
+`MachineBootMode.Fast` starts at the seeded cartridge handoff while retaining
+that firmware's identity. On AGB the same BIOS continues serving software
+interrupts and hardware interrupts; skipping the animation is not a substitute
+for these services.
+
+The screen engines share `cold`/`fast` tokens and a final `bios=<path>` option.
+The path consumes the rest of the option string, so paths with spaces work;
+matching surrounding double quotes are optional. `bios=puck` selects bundled
+firmware. Machine-specific options, such as HGB's `cgb dmgspeed`, precede the
+path. The [HGB guide](../Puck.HumbleGamingBrick/README.md#firmware-and-startup)
+owns revision-specific startup behavior.
+
 ## 🎮 Queued screen-machine hosting
 
 `QueuedMachineHost` is the base class exposed to machine-specific adapters. A
@@ -146,7 +169,7 @@ The worker owns the cross-thread policy:
 - `Submit` enqueues asynchronously. When the finite pending window is full, the
   producer waits until capacity opens and receives
   `AcceptedAfterBackpressure`; work is never dropped or coalesced.
-- `Step` is the compatibility path for a generic `IScreenMachine`: it submits
+- `Step` is the compatibility path for a generic `IMachineRuntime`: it submits
   one segment and drains through a barrier before returning.
 - Engine ticks become core cycles through a remainder-carrying integer
   accumulator (`Puck.Hosting.EngineTicks.PerSecond`). A core may change

@@ -63,8 +63,9 @@ public sealed class BootRomLayout {
     /// shape.</summary>
     public bool SupportsColor =>
         Model.SupportsColor();
-    /// <summary>Gets a value indicating whether the boot program verifies the cartridge logo and header checksum. The
-    /// companion console's boot ROM forwards the header instead of checking it.</summary>
+    /// <summary>Gets a value indicating whether the boot program verifies the header checksum and, under a strict
+    /// <see cref="BootRomMark"/> policy, the cartridge logo. The companion console's boot ROM forwards the header
+    /// instead of checking it.</summary>
     public bool VerifiesHeader =>
         !Model.IsSuperGameBoy();
     /// <summary>Gets a value indicating whether the handoff counter is a function of the cartridge header rather than a

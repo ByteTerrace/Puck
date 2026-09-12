@@ -36,7 +36,7 @@ public class LinterCoverageTests {
             basePath: Path.GetDirectoryName(fullPath),
             sourceMap: sourceMap,
             diagnostics: diagnostics
-        );
+        , cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(loweringResult.Value);
 
         PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics, sourcePath: fullPath);
@@ -74,7 +74,7 @@ public class LinterCoverageTests {
             basePath: Path.GetDirectoryName(fullPath),
             sourceMap: sourceMap,
             diagnostics: loweringDiagnostics
-        );
+        , cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(loweringResult.Value);
 
         var referenceDiagnostics = new DiagnosticBag();
@@ -111,7 +111,7 @@ public class LinterCoverageTests {
             basePath: Path.GetDirectoryName(fullPath),
             sourceMap: sourceMap,
             diagnostics: loweringDiagnostics
-        );
+        , cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(loweringResult.Value);
         Assert.Null(loweringResult.Value["basis"]);
         Assert.True(WorldSemanticValidator.IsRootDocument(loweringResult.Value));
@@ -158,7 +158,7 @@ public class LinterCoverageTests {
             basePath: Path.GetDirectoryName(fullPath),
             sourceMap: sourceMap,
             diagnostics: diagnostics
-        );
+        , cancellationToken: TestContext.Current.CancellationToken);
         Assert.NotNull(loweringResult.Value);
         Assert.Null(loweringResult.Value["basis"]);
 

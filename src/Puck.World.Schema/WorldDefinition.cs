@@ -83,7 +83,8 @@ public sealed record WorldDefinition(
     [property: JsonPropertyName("navigation"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldNavigationSection? NavigationRaw = null,
     [property: JsonPropertyName("patterns"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PatternRow>? PatternsRaw = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<TableRow>? Tables = null,
-    [property: JsonPropertyName("search"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSearchSection? SearchRaw = null
+    [property: JsonPropertyName("search"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSearchSection? SearchRaw = null,
+    [property: JsonPropertyName("machines"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldMachine>? MachinesRaw = null
 ) {
     /// <summary>The document schema version. A loader rejects any other value; the canonical writer always emits it.</summary>
     public const string SchemaVersion = "puck.world.def.v1";
@@ -400,6 +401,9 @@ public sealed record WorldDefinition(
     /// <summary>Gets the diegetic screens standing in the plaza — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldScreen> Screens => (ScreensRaw ?? []);
+    /// <summary>Gets the named machine instances. An absent section runs no declared devices.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldMachine> Machines => MachinesRaw ?? [];
     /// <summary>Gets the declared probe rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);

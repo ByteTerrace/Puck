@@ -1,7 +1,7 @@
 namespace Puck.Abstractions.Machines;
 
 /// <summary>
-/// Optional haptic-feedback capability for an <see cref="IScreenMachine"/> whose cartridge drives a rumble motor — the
+/// Optional haptic-feedback capability for an <see cref="IMachineRuntime"/> whose cartridge drives a rumble motor — the
 /// neutral seam a controller-haptics sink drains, mirroring <see cref="IAudioMachine"/>'s optional-capability shape
 /// exactly (attach-at-construction, zero cost when no consumer asked for it). The motor line is presentation-side
 /// feedback, never state-affecting: a machine's simulation state never depends on whether (or how) a consumer reads

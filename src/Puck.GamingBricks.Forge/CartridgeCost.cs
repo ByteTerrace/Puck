@@ -13,9 +13,8 @@ namespace Puck.GamingBricks.Forge;
 /// <para>
 /// Weights come from measured sustained capacity on both real machines, never from counting an emitter's instructions:
 /// cost per iteration is inversely proportional to the iterations a machine sustains at full frame rate, and
-/// <c>CartridgeCostMeasurement</c> reports those capacities. Each weight is the worst of the two targets' ratios, so
-/// one unit means the same amount of work on either machine; how many units a machine grants per frame is its
-/// <see cref="CartridgeCostProfile"/>.
+/// <c>CartridgeCostMeasurement</c> reports those capacities. Each machine has its own weights and reservation on
+/// <see cref="CartridgeCostProfile"/>; unit counts are not comparable between targets.
 /// </para>
 /// <para>
 /// An operation with no measured weight yields <see cref="CostBound.Unmodeled"/>, so a document using one is reported
@@ -46,7 +45,9 @@ public static class CartridgeCost {
 
         var payload = 0L;
         if (document.Save is { } save) {
-            payload += save.Variables?.Length ?? 0;
+            foreach (var name in save.Variables ?? []) {
+                payload += document.Variables?.FirstOrDefault(variable => variable?.Name == name)?.Width ?? 0;
+            }
             foreach (var name in save.Arrays ?? []) {
                 payload += document.Arrays?.FirstOrDefault(predicate: array => array?.Name == name)?.Initial?.Length ?? 0;
             }
@@ -75,7 +76,7 @@ public static class CartridgeCost {
             guards[index] = Guard(rule: rules[index]);
         }
 
-        var exclusive = ExclusiveGuards(rules: rules, guards: guards, scene: document.Scene);
+        var exclusive = ExclusiveGuards(rules: rules, guards: guards, scene: document.Scene, document: document);
         for (var index = 0; index < rules.Length; ++index) {
             if (guards[index].Name is not { } name || !exclusive.Contains(item: name)) {
                 total = CostBound.Add(left: total, right: bodies[index]);
@@ -132,6 +133,7 @@ public static class CartridgeCost {
     /// <param name="rules">The document's rules, in evaluation order.</param>
     /// <param name="guards">Each rule's guard, from <see cref="Guard"/>.</param>
     /// <param name="scene">The document's declared scene variable, or null.</param>
+    /// <param name="document">The document naming load and clock destinations, or null for conservative analysis.</param>
     /// <returns>The names that partition.</returns>
     /// <remarks>
     /// An UNDECLARED guard only partitions if nothing can change it while the rules keyed to it are still being
@@ -140,7 +142,7 @@ public static class CartridgeCost {
     /// advance step is, and it is harmless. The document's declared <c>scene</c> is exempt: the frame compares every
     /// guard on it against a snapshot taken before any rule runs.
     /// </remarks>
-    public static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards, string? scene = null) {
+    public static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards, string? scene = null, CartridgeDocument? document = null) {
         var candidates = new HashSet<string>(comparer: StringComparer.Ordinal);
         foreach (var guard in guards) {
             if (guard.Name is { } name) {
@@ -158,7 +160,7 @@ public static class CartridgeCost {
             var first = Array.FindIndex(array: guards, match: guard => guard.Name == name);
             var last = Array.FindLastIndex(array: guards, match: guard => guard.Name == name);
             for (var index = first; index <= last; ++index) {
-                if (Writes(statements: rules[index]?.Body, name: name)) {
+                if (CartridgeEffects.Writes(statements: rules[index]?.Body, name: name, document: document)) {
                     candidates.Remove(item: name);
                     break;
                 }
@@ -167,32 +169,6 @@ public static class CartridgeCost {
 
         return candidates;
     }
-
-    private static bool Writes(CartridgeStatement[]? statements, string name) {
-        foreach (var statement in statements ?? []) {
-            if (statement is null) {
-                continue;
-            }
-
-            if ((statement.Target is { Key: null } target) && (target.State == name)) {
-                return true;
-            }
-
-            // A counted loop writes its own index, which can be a guard variable elsewhere in the document.
-            if (statement.Index == name) {
-                return true;
-            }
-
-            if (Writes(statements: statement.Then, name: name)
-                || Writes(statements: statement.Else, name: name)
-                || Writes(statements: statement.Body, name: name)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
 
     // A gate prices as the comparisons it reaches. Composition costs nothing of its own: all and any are the branch
     // structure the arms were already charged for, and not swaps a branch condition rather than adding work.

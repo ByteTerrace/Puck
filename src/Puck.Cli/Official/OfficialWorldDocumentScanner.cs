@@ -28,11 +28,7 @@ internal static class OfficialWorldDocumentScanner {
         composed = [];
         composedDefinition = null;
 
-        // The validator asks which screen-machine engines ship and which compile a cartridge. Setting those two
-        // hooks is not enough on its own: the answers come from a registry the shipped brick extensions have to be
-        // fed into first, so a scan that only pointed the hooks at an EMPTY registry refused the island's own
-        // arcade cabinets by name. CliWorldVocabulary is the CLI's one installer and does both.
-        CliWorldVocabulary.EnsureInstalled();
+        var machines = CliWorldVocabulary.EnsureInstalled();
 
         var full = Path.GetFullPath(path: worldsDirectory);
         var rootPath = Path.Combine(path1: full, path2: RootDocumentName);
@@ -85,6 +81,11 @@ internal static class OfficialWorldDocumentScanner {
         if (!WorldDefinitionFileSource.TryParseComposed(definition: out var definition, json: tree!.ToJsonString(), neighbours: null, reason: out reason, sourceName: rootPath, validateAdjacencyClaims: false)) {
             reason = $"parsing composed {RootDocumentName}: {reason}";
 
+            return false;
+        }
+
+        if (!WorldDefinitionValidator.TryValidateLocally(definition!, machines, out reason)) {
+            reason = $"machine admission in {RootDocumentName}: {reason}";
             return false;
         }
 

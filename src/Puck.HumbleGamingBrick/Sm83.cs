@@ -97,7 +97,7 @@ public sealed partial class Sm83 : ICpu, ISnapshotable, IModeSwitchable {
 
         // With a boot ROM the CPU powers on cold — every register zero and PC at 0x0000, the overlay's reset vector —
         // and the boot program itself produces the handoff state. Without one, the documented handoff is seeded.
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             SeedPostBootState(
                 model: configuration.Model,
                 header: header

@@ -25,6 +25,7 @@ internal sealed class QueuedHostMemoryAccessStage : IPostStage<PostContext> {
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyConcurrentMemoryAccess(
             withContent: () => new MachineHost(
+                bootMode: MachineBootMode.Fast,
                 model: ConsoleModel.DmgC,
                 cartridgeRom: SyntheticRom.Create()
             ),

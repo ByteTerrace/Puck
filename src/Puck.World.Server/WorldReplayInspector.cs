@@ -39,8 +39,8 @@ public sealed class WorldReplayInspector {
     private const string WherePrefix = "[body.where: ";
 
     private readonly Func<WorldDefinition, WorldServer, IWorldAddonHost> m_addonHostFactory;
-    private readonly IReadOnlyList<IScreenMachineEngine> m_engines;
-    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
+    private readonly IReadOnlyList<IMachineEngine> m_engines;
+    private readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> m_machineHostFactory;
     private readonly WorldOwnedWorlds m_profiles;
 
     /// <summary>Initializes the inspector over the same things a re-drive needs — the profile catalog seats
@@ -53,7 +53,7 @@ public sealed class WorldReplayInspector {
     /// <param name="addonHostFactory">Builds the shadow addon host over a re-deserialized definition and its shadow
     /// server — wrapped here in the per-tick observer, never replaced.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldReplayInspector(WorldOwnedWorlds profiles, IEnumerable<IScreenMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
+    public WorldReplayInspector(WorldOwnedWorlds profiles, IEnumerable<IMachineEngine> engines, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> machineHostFactory, Func<WorldDefinition, WorldServer, IWorldAddonHost> addonHostFactory) {
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: engines);
         ArgumentNullException.ThrowIfNull(argument: machineHostFactory);

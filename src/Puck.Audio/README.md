@@ -9,7 +9,7 @@ triangle, seeded noise, ADSR, control-rate pitch sweep/vibrato, one
 state-variable filter per voice), `AudioSnapshot` (the immutable
 per-block input: listener pose, emitter table, seeded synth triggers), and
 `MachineAudioRate` (the machine-audio output rate every booted
-`IScreenMachine` shares with the mixer).
+`IMachineRuntime` shares with the mixer).
 
 This is presentation-adjacent state: it carries no replay/hash contract of
 its own, and its own byte-identity proofs (when they exist) are

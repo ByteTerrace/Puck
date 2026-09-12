@@ -173,3 +173,6 @@ use (including by individuals, schools, universities, and government bodies) is
 free under the [PolyForm Noncommercial License 1.0.0](LICENSE.md); commercial use
 requires a paid license. See [LICENSING.md](LICENSING.md) for who needs what and
 how to obtain a commercial license.
+
+Separately licensed components, including the bundled GamingBrick firmware,
+retain their own terms; see the [license inventory](THIRD-PARTY-NOTICES.md).

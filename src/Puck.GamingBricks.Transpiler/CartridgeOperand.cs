@@ -15,6 +15,46 @@ namespace Puck.GamingBricks.Transpiler;
 /// parsing is substitute the document's compile-time bindings: a <c>let</c> or <c>for</c> name is not machine state,
 /// so it is replaced by the value it stands for wherever it appears in the expression, at any depth.</remarks>
 public static class CartridgeOperand {
+    /// <summary>Lowers an authored expression without folding machine state as compile-time data.</summary>
+    /// <param name="expression">The parsed expression.</param>
+    /// <param name="scope">The compile-time bindings.</param>
+    /// <param name="reason">The refusal, if any.</param>
+    /// <returns>The canonical runtime operand.</returns>
+    public static JsonNode? FromExpression(ExpressionNode expression, DocumentScope scope, out string? reason) {
+        using var evaluation = scope.Budget.Enter(expression.Span);
+        if (!Runtime(expression)) {
+            return FromLoweredValue(DocumentLowering.LowerValue(expression, scope), scope, out reason);
+        }
+        return FromText(Spell(expression), scope, out reason);
+
+        bool Runtime(ExpressionNode node) {
+            using var checking = scope.Budget.Enter(node.Span);
+            return node switch {
+            IdentifierExpressionNode name => !scope.Constants.ContainsKey(name.Name) && !scope.Locals.ContainsKey(name.Name),
+            BinaryExpressionNode binary => Runtime(binary.Left) || Runtime(binary.Right),
+            UnaryExpressionNode unary => Runtime(unary.Operand),
+            IndexExpressionNode index => Runtime(index.Target) || Runtime(index.Index),
+            CallExpressionNode call => call.Arguments.Any(argument => Runtime(argument.Value)),
+            _ => false,
+            };
+        }
+        string Spell(ExpressionNode node) {
+            using var spelling = scope.Budget.Enter(node.Span);
+            if (!Runtime(node)) {
+                var lowered = FromLoweredValue(DocumentLowering.LowerValue(node, scope), scope, out var error);
+                if (error is not null) { throw new DocumentEvaluationException(error, node.Span, Puck.Transpiler.Diagnostics.PuckDiagnosticCodes.InvalidValue); }
+                return lowered!.GetValue<string>();
+            }
+            return node switch {
+                IdentifierExpressionNode name => $"`{name.Name}`",
+                BinaryExpressionNode binary => $"({Spell(binary.Left)} {binary.Operator} {Spell(binary.Right)})",
+                UnaryExpressionNode unary => $"({unary.Operator}{Spell(unary.Operand)})",
+                IndexExpressionNode index => $"{Spell(index.Target)}[{Spell(index.Index)}]",
+                CallExpressionNode call => $"{call.Name}({string.Join(", ", call.Arguments.Select(argument => Spell(argument.Value)))})",
+                _ => throw new DocumentEvaluationException("This value is not a cartridge expression.", node.Span),
+            };
+        }
+    }
     /// <summary>Converts a parsed row reference into a write target.</summary>
     /// <param name="rowRef">The reference, whose key — when present — is the array index.</param>
     /// <param name="scope">The lowering scope.</param>
@@ -113,6 +153,7 @@ public static class CartridgeOperand {
     }
 
     private static List<ValueToken>? Resolve(IReadOnlyList<ValueToken> tokens, DocumentScope scope, out string? reason) {
+        using var evaluation = scope.Budget.Enter(default);
         reason = null;
 
         var result = new List<ValueToken>(capacity: tokens.Count);
@@ -134,13 +175,7 @@ public static class CartridgeOperand {
                 case ValueToken.State { Key: null } state: {
                         // A name bound by a `for` is not machine state either, and it shadows a constant of the same
                         // name: the loop already lowered its value, so it needs no second pass.
-                        var bound = (scope.Locals.TryGetValue(key: state.Name, value: out var local)
-                            ? local
-                            : (scope.Constants.TryGetValue(key: state.Name, value: out var constant)
-                                ? DocumentLowering.LowerValue(expr: constant, scope: scope)
-                                : null));
-
-                        if (bound is null) {
+                        if (!scope.TryLowerBinding(state.Name, out var bound)) {
                             result.Add(item: state);
 
                             break;
@@ -198,7 +233,9 @@ public static class CartridgeOperand {
         if (value.TryGetValue<decimal>(value: out var exact)) { return exact; }
         if (value.TryGetValue<long>(value: out var integral)) { return integral; }
         if (value.TryGetValue<int>(value: out var narrow)) { return narrow; }
-        if (value.TryGetValue<double>(value: out var real)) { return (decimal)real; }
+        if (value.TryGetValue<double>(value: out var real) && double.IsFinite(real) && real >= 0 && real <= CartridgeLimits.WideMaximum) {
+            return (decimal)real;
+        }
 
         return null;
     }

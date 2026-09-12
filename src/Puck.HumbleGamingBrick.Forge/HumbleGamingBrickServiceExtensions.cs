@@ -18,8 +18,8 @@ public static class HumbleGamingBrickServiceExtensions {
     public static IServiceCollection AddHumbleGamingBrick(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
-        services.AddSingleton<IScreenMachineEngine, GamingBrickEngine>();
-        services.AddSingleton<IScreenMachineEngine, TuneInstrumentEngine>();
+        services.AddSingleton<IMachineEngine, GamingBrickEngine>();
+        services.AddSingleton<IMachineEngine, TuneInstrumentEngine>();
         services.AddSingleton<ICartridgeCompiler, HgbCartridgeCompiler>();
 
         return services;

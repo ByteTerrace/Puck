@@ -5,6 +5,7 @@ using Puck.Commands;
 using Puck.World.Protocol;
 using Puck.Assets.Qr;
 using Puck.World.Server;
+using Puck.World.Machines;
 
 namespace Puck.World;
 
@@ -17,7 +18,7 @@ namespace Puck.World;
 /// <c>screen.state</c>/<c>screen.peek</c>/<c>screen.camera</c>/<c>world.machines</c> are read-only queries that make the
 /// live state pipe-assertable. The world speaks the engine-neutral machine vocabulary.
 /// </summary>
-internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer server, IServerLink link) : ICommandModule {
+internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer server, IServerLink link, WorldMachineCatalog machines) : ICommandModule {
     private readonly WorldScreenBinder m_binder = binder;
     private readonly WorldEngagement m_engagement = server.Engagement;
     private readonly WorldServer m_server = server;
@@ -180,7 +181,7 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
 
         if (
             (token < args.Count) &&
-            WorldScreenMachineEngines.IsRegistered(key: args[token].ToString())
+            machines.IsRegistered(engineId: args[token].ToString())
         ) {
             engineId = args[token].ToString();
             token++;
@@ -208,17 +209,17 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             if (existing?.Source is WorldScreenSource.Machine m && !string.IsNullOrEmpty(m.Engine)) {
                 engineId = m.Engine;
             } else {
-                var allEngines = WorldScreenMachineEngines.All;
+                var allEngines = machines.Engines.Values.ToArray();
 
-                if (allEngines.Count == 1) {
+                if (allEngines.Length == 1) {
                     engineId = allEngines[0].Id;
-                } else if (allEngines.Count > 1) {
+                } else if (allEngines.Length > 1) {
                     engineId = "gaming-brick";
                 }
             }
         }
 
-        if (engineId is null || !WorldScreenMachineEngines.IsRegistered(key: engineId)) {
+        if (engineId is null || !machines.IsRegistered(engineId: engineId)) {
             return CommandResult.Error(output: $"[screen.insert: no screen-machine engine '{engineId ?? "unspecified"}' registered]");
         }
 
@@ -260,15 +261,15 @@ internal sealed class ScreenCommandModule(WorldScreenBinder binder, WorldServer 
             return refusal;
         }
 
-        var engines = WorldScreenMachineEngines.All;
-        var compilers = WorldScreenMachineEngines.CartridgeCompilers;
+        var engines = machines.Engines.Values.ToArray();
+        var compilers = machines.ContentProviders;
         var sb = new StringBuilder();
         _ = sb.Append("[world.machines: ");
 
-        if (engines.Count == 0) {
+        if (engines.Length == 0) {
             _ = sb.Append("none registered");
         } else {
-            for (var i = 0; (i < engines.Count); i++) {
+            for (var i = 0; (i < engines.Length); i++) {
                 if (i > 0) {
                     _ = sb.Append(", ");
                 }

@@ -10,7 +10,7 @@ namespace Puck.GamingBricks;
 /// <summary>
 /// The machine-neutral queued-host substrate: one machine-owning worker thread executes exact tick/input segments in FIFO
 /// order and swaps only complete native frames into a synchronized front buffer. A host wraps this around an
-/// <see cref="IQueuedMachineCore"/> and forwards the neutral <see cref="IScreenMachine"/>/<see cref="IQueuedScreenMachine"/>
+/// <see cref="IQueuedMachineCore"/> and forwards the neutral <see cref="IMachineRuntime"/>/<see cref="IQueuedMachineRuntime"/>
 /// surface to it; both the SM83-family and the ARM7TDMI hosts are thin adapters over this one component.
 /// <para>
 /// The generic <see cref="Step"/> remains synchronous (submit-and-drain); hosts that recognize the queued capability use
@@ -260,7 +260,16 @@ public sealed class QueuedMachineWorker : IDisposable {
     // ring in the SAME work item as the mutation (atomic order, not mutate-then-queue): the poked byte is an unrecorded
     // input the history could no longer reconstruct.
     private void ExecuteMemoryAccess(IQueuedMachineCore core, MemoryRequest request) {
-        if (request.IsWrite) {
+        if (request.HardwareAddress is { } address) {
+            request.HardwareResult = core is IMachineHardwareAccess hardware
+                ? request.IsWrite
+                    ? hardware.Write(address, request.HardwareValue, request.HardwareMode)
+                    : hardware.Read(address, request.HardwareMode)
+                : new(MachineAccessStatus.Unsupported, Reason: "The core does not expose hardware access.");
+            if (request.Mutated) {
+                m_timeTravel?.Reset();
+            }
+        } else if (request.IsWrite) {
             core.PokeByte(
                 address: request.Address,
                 value: request.Value
@@ -470,7 +479,7 @@ public sealed class QueuedMachineWorker : IDisposable {
                 request: request
             );
 
-            if (request.IsWrite) {
+            if (request.Mutated) {
                 m_lender?.InvalidateLinkHistory();
             }
         })) {
@@ -1090,6 +1099,26 @@ public sealed class QueuedMachineWorker : IDisposable {
             arg: factor,
             op: TimeTravelOp.SetFastForward
         );
+
+    /// <summary>Runs a validated hardware access at the worker or coupled-link boundary. Reads are coherent, and
+    /// successful state-changing accesses invalidate rewind history in the same work item.</summary>
+    /// <param name="address">The provider-owned space, unsigned address, and scalar width.</param>
+    /// <param name="mode">The requested inspection, patch, or bus semantics.</param>
+    /// <param name="value">A scalar to write, or null for a read.</param>
+    /// <returns>Explicit availability and any observed value.</returns>
+    public MachineAccessResult AccessHardware(MachineMemoryAddress address, MachineAccessMode mode, ulong? value = null) {
+        if (QueueFault is { } beforeFault) {
+            return new(MachineAccessStatus.Faulted, Reason: beforeFault);
+        }
+        var request = new MemoryRequest {
+            HardwareAddress = address, HardwareMode = mode, HardwareValue = value.GetValueOrDefault(),
+            IsWrite = value.HasValue,
+        };
+        RunMemoryAccess(request);
+        return request.HardwareResult.Status == MachineAccessStatus.Unavailable && QueueFault is { } fault
+            ? new(MachineAccessStatus.Faulted, Reason: fault)
+            : request.HardwareResult;
+    }
     /// <summary>Arms or disarms the rewind ring (marshaled onto the worker thread).</summary>
     /// <param name="enabled">Whether to capture rewind history.</param>
     public void SetRewindEnabled(bool enabled) =>
@@ -1161,6 +1190,12 @@ public sealed class QueuedMachineWorker : IDisposable {
         public bool IsWrite;
         public byte Result;
         public byte Value;
+        public MachineMemoryAddress? HardwareAddress;
+        public MachineAccessMode HardwareMode;
+        public ulong HardwareValue;
+        public MachineAccessResult HardwareResult;
+        public bool Mutated => HardwareAddress is null ? IsWrite
+            : HardwareResult.Status == MachineAccessStatus.Available && (IsWrite || HardwareMode == MachineAccessMode.Bus);
     }
     // A marshaled time-travel command + its result box, filled on the worker thread and read by the producer after the
     // barrier completes.

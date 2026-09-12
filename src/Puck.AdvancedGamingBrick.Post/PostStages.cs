@@ -11,6 +11,12 @@ internal static class PostStages {
             new SmokeStage(),
             new LifecycleStage(),
             new HostPersistenceStage(),
+            new BundledFirmwareStage(),
+            new FirmwareResetStage(),
+            new FirmwarePresentationStage(),
+            new FirmwareLegacySoundStage(),
+            new FirmwareSoundGuardStage(),
+            new FirmwareSequenceStage(),
             new EmbeddingStage(),
             new PpuCompositionStage(),
             new PpuTextRowStage(),
@@ -28,6 +34,8 @@ internal static class PostStages {
             new AllocationStage(),
             // Tier A — the solar sensor's GPIO protocol, proven directly against AgbCartridge (no ROM asset).
             new SolarDeviceStage(),
+            // Tier B — functional firmware comparisons require a locally supplied, verified retail BIOS.
+            new FirmwareOracleStage(),
             // Tier B — reference conformance suites (r12 verdict register; skip when the corpus is absent).
             new ConformanceRomStage(
         cases: [("arm/arm.gba", "arm"), ("thumb/thumb.gba", "thumb"), ("memory/memory.gba", "memory")],
@@ -44,10 +52,9 @@ internal static class PostStages {
             // Tier B — ARM/Thumb fuzz-corpus coverage (EWRAM failure marker; skip when absent).
             new ArmFuzzStage(),
             // Tier B — deterministic render-hash floors. The ppu screen demos are BIOS-independent direct-boot ROMs from
-            // the corpus; the two commercial games are user-supplied and BIOS-dependent (they run BIOS SWIs during boot),
-            // so their floors were captured with a real replacement BIOS — portable across the real BIOSes on hand — and
-            // skip on the zeroed stub. Re-capture a shifted floor with --render-hash after confirming the frame is still
-            // visually correct.
+            // the corpus; the game and aging cartridge are user-supplied and BIOS-dependent (they run BIOS SWIs during
+            // boot), and skip on the zeroed stub. A fixed instruction budget is not portable across BIOS implementations:
+            // hold image identity fixed and explain a shifted floor before recapturing it with --render-hash.
             new RenderHashStage(floors: [
                 new RenderFloor(
         ExpectedHash: 0x19E7C5AF1FB0BF25ul,
@@ -95,6 +102,8 @@ internal static class PostStages {
             new AgsStage(),
             // Tier C — cross-machine link determinism (two consoles on one cable, stepped through AgbLinkSession;
             // self-contained hand-assembled micro-ROMs, so it runs anywhere).
+            new FirmwareMultiBootStage(),
+            new SerialClockStage(),
             new LinkReplayStage(),
             // Tier C — the same link cable proven transparent to a mid-exchange suspend/snapshot/restore/reconnect
             // churn (AgbLinkSession's credit-preserving resume token), doubled within one run; self-contained.

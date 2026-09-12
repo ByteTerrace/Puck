@@ -248,9 +248,9 @@
         <PuckArchitectureProfile Include="Puck.World.Addons" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Scripting;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
         <!-- The screen-machine host, split out of Puck.World.Addons so Addons remains strictly dedicated to
              WASM scripting guests — everything Puck.World.Server's profile carries (Machines references
-             Server directly), plus Puck.GamingBricks.Forge (the ICartridgeCompiler interface for document compilation)
-             and Puck.Abstractions (IScreenMachine, IScreenMachineEngine). No concrete emulator cores are referenced. -->
-        <PuckArchitectureProfile Include="Puck.World.Machines" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.GamingBricks.Forge;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
+             Server directly), plus Puck.Abstractions' machine and content-provider contracts. Content parsing,
+             compilation, and symbols are extension-owned; neither a forge nor concrete emulator is referenced. -->
+        <PuckArchitectureProfile Include="Puck.World.Machines" Closure="Puck.Abstractions;Puck.Assets;Puck.Attestation;Puck.Audio;Puck.Commands;Puck.Hosting;Puck.Maths;Puck.Networking;Puck.Physics;Puck.Shaders;Puck.SignedDistance;Puck.State;Puck.Storage;Puck.Text;Puck.World.Authoring;Puck.World.Protocol;Puck.World.Schema;Puck.World.Server" />
         <!-- The control plane that follows the authority (docs/project-map.md's Puck.World.Console row):
              IWorldConsoleAuthority and the server-only console modules moved out of Puck.World (world.grant/
              .revoke/.grants/.why, world.groups/.ownership, world.looks/.population.spawn, world.market, world.peers,

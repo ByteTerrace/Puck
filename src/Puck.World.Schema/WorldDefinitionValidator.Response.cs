@@ -172,7 +172,7 @@ public static partial class WorldDefinitionValidator {
         }
     }
     // A prototype a response facet could show at runtime (the row's own base id, or a response entry's target) must
-    // resolve to a declared creation carrying no timeline frames — a response only ever swaps between STATIC
+    // resolve to a declared creation carrying no timeline frames or drivers — a response only ever swaps between STATIC
     // creations, never animates a row that validated as a static stamp.
     private static void RequireStaticCreation(string prototypeId, HashSet<string> prototypeIds, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (!prototypeIds.Contains(item: prototypeId)) {
@@ -182,8 +182,8 @@ public static partial class WorldDefinitionValidator {
         if (WorldDefinitionRows.FindCreation(
             creations: creations,
             id: prototypeId
-        ) is { Document.Frames.Count: > 0 }) {
-            errors.Add(item: $"{path} '{prototypeId}' carries timeline frames — a response facet only ever swaps between static creations.");
+        ) is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 }) {
+            errors.Add(item: $"{path} '{prototypeId}' carries timeline frames or drivers — a response facet only ever swaps between static creations.");
         }
     }
 }

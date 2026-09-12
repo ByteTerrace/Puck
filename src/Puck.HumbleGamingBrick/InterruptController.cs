@@ -22,7 +22,7 @@ public sealed class InterruptController : IInterruptController, ISnapshotable {
 
         // The boot ROM runs through at least one vertical blank with IE clear, so the machine hands off with the VBlank
         // request flag already set (IF reads 0xE1) — state some titles and the timing oracles observe.
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             m_requested = InterruptKind.VBlank;
         }
     }

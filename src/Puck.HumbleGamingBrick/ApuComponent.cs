@@ -222,7 +222,7 @@ public sealed class ApuComponent : IApu, IClockedComponent, ISnapshotable, IMode
 
         // With a boot ROM the unit powers on silent and unpowered — the boot program writes NR52 and plays its own
         // beep. Without one, the beep's register handoff is seeded directly.
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             m_powered = true;
 
             // The boot beep's register handoff, common to both models.

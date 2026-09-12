@@ -12,6 +12,10 @@ public enum AgbBiosKind {
     /// cartridges, with no SWI services or IRQ dispatch; unsuitable for cycle parity.</summary>
     ReplacementStub,
 
+    /// <summary>The byte-verified bundled Puck firmware. This identifies the image, not retail cycle parity or
+    /// an assertion that every runtime service has passed commercial compatibility testing.</summary>
+    Puck,
+
     /// <summary>A non-zero image that is not the verified retail BIOS (an open-source replacement, a wrong dump, or a
     /// corrupted file) — usable for direct boot but NOT for cycle parity.</summary>
     Unknown,
@@ -70,6 +74,14 @@ public static class AgbBiosProfile {
             return new AgbBiosIdentity {
                 Description = "replacement (zeroed stub)",
                 Kind = AgbBiosKind.ReplacementStub,
+                Sha1 = sha1,
+            };
+        }
+
+        if (AgbFirmware.Matches(image: image)) {
+            return new AgbBiosIdentity {
+                Description = "Puck firmware (bundled image verified)",
+                Kind = AgbBiosKind.Puck,
                 Sha1 = sha1,
             };
         }

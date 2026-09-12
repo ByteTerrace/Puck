@@ -41,7 +41,7 @@ internal static class LintCommand {
     }
 
     public static int Execute(string path, bool strict) {
-        CliWorldVocabulary.EnsureInstalled();
+        var machines = CliWorldVocabulary.EnsureInstalled();
         var fullPath = Path.GetFullPath(path);
 
         if (Directory.Exists(fullPath)) {
@@ -49,7 +49,7 @@ internal static class LintCommand {
             var failureCount = 0;
 
             foreach (var file in files) {
-                var code = LintFile(file, strict);
+                var code = LintFile(file, strict, machines);
                 if (code != 0) {
                     failureCount++;
                 }
@@ -59,14 +59,14 @@ internal static class LintCommand {
         }
 
         if (File.Exists(fullPath)) {
-            return LintFile(fullPath, strict);
+            return LintFile(fullPath, strict, machines);
         }
 
         Console.Error.WriteLine($"error: Path '{path}' not found.");
         return 2;
     }
 
-    private static int LintFile(string filePath, bool strict) {
+    private static int LintFile(string filePath, bool strict, Puck.Abstractions.Machines.IMachineValidationCatalog machines) {
         string sourceText;
         try {
             sourceText = File.ReadAllText(filePath);
@@ -79,7 +79,7 @@ internal static class LintCommand {
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(sourceText, diagnostics: diagnostics);
         var documentNode = parseResult.Value;
 
-        if (documentNode is not null) {
+        if (documentNode is not null && !Puck.GamingBricks.Transpiler.CartridgeLanguageServices.Diagnose(documentNode, filePath, diagnostics)) {
             PuckLinter.Lint(documentNode, diagnostics);
 
             // Attempt lowering for semantic check
@@ -98,7 +98,7 @@ internal static class LintCommand {
                 // Only a root composes to a full engine schema; validating a module as one reports as missing
                 // every field whichever root imports it supplies.
                 if (WorldSemanticValidator.IsRootDocument(loweringResult.Value)) {
-                    WorldSemanticValidator.ValidateComposedWorld(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath);
+                    WorldSemanticValidator.ValidateComposedWorld(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath, machines: machines);
                 }
                 PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics, sourcePath: filePath);
             }

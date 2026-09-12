@@ -32,6 +32,7 @@ internal static class BootRomColorTiming {
     /// <param name="header">The cartridge header offsets to read.</param>
     /// <param name="machineCyclesPerLine">The machine cycles one scanline spans.</param>
     /// <param name="labels">The labels the emitted tables and the palette-copy routine sit at.</param>
+    /// <param name="branded">Whether the native Color startup uses Puck's ink-and-ivory palette.</param>
     public static void Emit(
         Sm83Emitter emitter,
         BootRomLayout layout,
@@ -39,7 +40,8 @@ internal static class BootRomColorTiming {
         BootRomScratch scratch,
         BootRomHeaderPorts header,
         int machineCyclesPerLine,
-        BootRomColorLabels labels
+        BootRomColorLabels labels,
+        bool branded
     ) {
         EmitTitleChecksum(
             emitter: emitter,
@@ -53,7 +55,8 @@ internal static class BootRomColorTiming {
             labels: labels,
             layout: layout,
             machineCyclesPerLine: machineCyclesPerLine,
-            scratch: scratch
+            scratch: scratch,
+            branded: branded
         );
         EmitCounterLookup(
             emitter: emitter,
@@ -138,7 +141,7 @@ internal static class BootRomColorTiming {
     }
     // Stages the handoff register bytes, the compatibility-mode selector, the color cartridge's white background
     // palettes, and the enable distance for the cartridge's header class. B holds the title checksum on entry.
-    private static void EmitHandoffStaging(Sm83Emitter emitter, BootRomLayout layout, BootRomCalibration calibration, BootRomScratch scratch, BootRomHeaderPorts header, int machineCyclesPerLine, BootRomColorLabels labels) {
+    private static void EmitHandoffStaging(Sm83Emitter emitter, BootRomLayout layout, BootRomCalibration calibration, BootRomScratch scratch, BootRomHeaderPorts header, int machineCyclesPerLine, BootRomColorLabels labels, bool branded) {
         var firstParty = emitter.NewLabel();
         var notFirstParty = emitter.NewLabel();
         var afterParty = emitter.NewLabel();
@@ -233,7 +236,7 @@ internal static class BootRomColorTiming {
             scratch: scratch,
             value: 0x0D
         );
-        EmitBootPalette(emitter: emitter);
+        EmitBootPalette(emitter: emitter, branded: branded);
         StagePaletteReadPorts(
             data: BackgroundPaletteData,
             emitter: emitter,
@@ -580,8 +583,11 @@ internal static class BootRomColorTiming {
     }
     // The shades the mark is drawn against while the boot runs. The handoff whitens all of it again, which is what the
     // seeded state carries, so this palette lives only for the length of the scroll.
-    private static void EmitBootPalette(Sm83Emitter emitter) {
-        ReadOnlySpan<ushort> shades = [0x7FFF, 0x56B5, 0x294A, 0x0000];
+    private static void EmitBootPalette(Sm83Emitter emitter, bool branded) {
+        // The native Color and Advanced firmware share ink, ivory, and mint; handoff later restores hardware palettes.
+        ReadOnlySpan<ushort> shades = branded
+            ? [0x1C83, 0x5F6C, 0x294A, 0x6FBC]
+            : [0x7FFF, 0x56B5, 0x294A, 0x0000];
         var fill = emitter.NewLabel();
 
         emitter.LoadAImmediate(value: 0x80);

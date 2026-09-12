@@ -1,9 +1,7 @@
 using System.CommandLine;
-using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
 using Puck.Transpiler.Diagnostics;
-using Puck.GamingBricks.Forge;
 using Puck.GamingBricks.Transpiler;
 using Puck.World.Transpiler.Lowering;
 using Puck.Transpiler.Modules;
@@ -19,7 +17,7 @@ namespace Puck.Cli.Transpiler;
 internal static class CompileCommand {
     public static Command Create() {
         var pathArgument = new Argument<string>(name: "path") { Description = "Path to the .puck source file to compile." };
-        var outputOption = new Option<string?>(name: "--output", aliases: ["-o"]) { Description = "Destination output JSON path (defaults to <path>.world.json)." };
+        var outputOption = new Option<string?>(name: "--output", aliases: ["-o"]) { Description = "Destination JSON path (defaults to .cartridge.json for cartridges, .world.json for worlds)." };
         var watchOption = new Option<bool>(name: "--watch", aliases: ["-w"]) { Description = "Watch the source file and its imported dependencies for changes and recompile automatically." };
         var strictOption = new Option<bool>(name: "--strict") { Description = "Treat warnings as errors." };
         var validateOption = new Option<bool>(name: "--validate") { Description = "Validate semantic engine schema rules on the emitted document." };
@@ -61,9 +59,7 @@ internal static class CompileCommand {
             return 2;
         }
 
-        var outputPath = output is not null
-            ? Path.GetFullPath(path: output)
-            : ComputeDefaultOutputPath(sourcePath: fullPath);
+        var outputPath = output is not null ? Path.GetFullPath(path: output) : null;
 
         if (!watch) {
             return ExecuteCompilation(
@@ -86,7 +82,7 @@ internal static class CompileCommand {
 
     private static int ExecuteCompilation(
         string sourcePath,
-        string outputPath,
+        string? outputPath,
         bool strict,
         bool validate,
         bool bundle
@@ -151,17 +147,17 @@ internal static class CompileCommand {
 
         var jsonObject = loweringResult.Value ?? new JsonObject();
         var jsonBytes = CanonicalJsonDocument.Serialize(node: jsonObject);
-        var json = Encoding.UTF8.GetString(bytes: jsonBytes);
 
         // A module is a fragment whichever root imports it supplies fields for, so validating one as a world
         // reports refusals that belong to that root, not to this file. `lint` applies the same rule.
         if (validate && !diagnostics.HasErrors && isCartridge) {
-            ValidateCartridge(diagnostics: diagnostics, json: json, sourcePath: sourcePath);
+            CartridgeLanguageServices.Validate(jsonObject, sourceMap, diagnostics, effectiveAst.Span);
         }
 
         if (validate && !diagnostics.HasErrors && !isCartridge && WorldSemanticValidator.IsRootDocument(jsonObject)) {
-            CliWorldVocabulary.EnsureInstalled();
+            var machineCatalog = CliWorldVocabulary.EnsureInstalled();
             WorldSemanticValidator.ValidateComposedWorld(
+                machines: machineCatalog,
                 diagnostics: diagnostics,
                 loweredJson: jsonObject,
                 sourceMap: sourceMap,
@@ -182,6 +178,7 @@ internal static class CompileCommand {
         }
 
         try {
+            outputPath ??= Path.ChangeExtension(sourcePath, isCartridge ? ".cartridge.json" : ".world.json");
             var outputDirectory = Path.GetDirectoryName(path: outputPath);
 
             if (!string.IsNullOrEmpty(value: outputDirectory) && !Directory.Exists(path: outputDirectory)) {
@@ -198,24 +195,9 @@ internal static class CompileCommand {
         }
     }
 
-    // `--validate` on a cartridge means the forge's own document validation: names resolve, arrays fit, every
-    // operand is in range. Lowering only proves the SOURCE was well formed.
-    private static void ValidateCartridge(DiagnosticBag diagnostics, string json, string sourcePath) {
-        try {
-            var document = CartridgeDocuments.Parse(utf8: Encoding.UTF8.GetBytes(s: json));
-
-            foreach (var refusal in CartridgeDocuments.Validate(document: document)) {
-                diagnostics.ReportError(PuckDiagnosticCodes.SemanticValidation, $"{refusal.Path}: {refusal.Message}", default);
-            }
-        }
-        catch (Exception ex) {
-            diagnostics.ReportError(PuckDiagnosticCodes.SchemaRejected, $"{Path.GetFileName(path: sourcePath)}: {ex.Message}", default);
-        }
-    }
-
     private static int RunWatchMode(
         string sourcePath,
-        string outputPath,
+        string? outputPath,
         bool strict,
         bool validate,
         bool bundle
@@ -287,16 +269,4 @@ internal static class CompileCommand {
         Console.Error.Write(value: report);
     }
 
-    private static string ComputeDefaultOutputPath(string sourcePath) {
-        var dir = Path.GetDirectoryName(path: sourcePath) ?? "";
-        var fileName = Path.GetFileName(path: sourcePath);
-
-        if (fileName.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
-            var withoutExt = fileName[..^5];
-
-            return Path.Combine(path1: dir, path2: withoutExt + ".world.json");
-        }
-
-        return Path.Combine(path1: dir, path2: Path.GetFileNameWithoutExtension(path: sourcePath) + ".world.json");
-    }
 }

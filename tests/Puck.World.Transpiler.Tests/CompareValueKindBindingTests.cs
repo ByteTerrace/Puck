@@ -17,7 +17,7 @@ public class CompareValueKindBindingTests {
         Assert.False(parseResult.Diagnostics.HasErrors, parseResult.Diagnostics.FormatReport(source));
 
         var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics);
+        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(source));
         return loweringResult.Value!;
     }
@@ -84,7 +84,7 @@ public class CompareValueKindBindingTests {
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(puck, diagnostics: parseDiagnostics);
         Assert.False(parseDiagnostics.HasErrors, parseDiagnostics.FormatReport(puck));
         var loweringDiagnostics = new DiagnosticBag();
-        var recompiled = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics).Value!;
+        var recompiled = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics, cancellationToken: TestContext.Current.CancellationToken).Value!;
         Assert.False(loweringDiagnostics.HasErrors, loweringDiagnostics.FormatReport(puck));
 
         var mismatch = JsonMismatch.Find(JsonNode.Parse(json), recompiled, "");
@@ -150,7 +150,7 @@ public class CompareValueKindBindingTests {
         Assert.False(parseDiagnostics.HasErrors, parseDiagnostics.FormatReport(puck));
 
         var loweringDiagnostics = new DiagnosticBag();
-        var recompiled = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics).Value!;
+        var recompiled = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics, cancellationToken: TestContext.Current.CancellationToken).Value!;
         Assert.False(loweringDiagnostics.HasErrors, loweringDiagnostics.FormatReport(puck));
 
         Assert.Null(JsonMismatch.Find(JsonNode.Parse(json), recompiled, ""));

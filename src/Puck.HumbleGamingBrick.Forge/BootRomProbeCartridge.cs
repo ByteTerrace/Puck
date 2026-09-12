@@ -2,7 +2,7 @@ namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>
 /// Builds the throwaway cartridge a boot image is booted against while its timing is solved. It carries a real logo and
-/// a real header checksum because the boot program refuses anything else, a header the caller varies to reach a
+/// a real header checksum so it also passes strict logo-checking firmware, a header the caller varies to reach a
 /// different row of the timing tables, and a two-byte spin at the entry point so the machine stays somewhere harmless
 /// after the handoff.
 /// </summary>

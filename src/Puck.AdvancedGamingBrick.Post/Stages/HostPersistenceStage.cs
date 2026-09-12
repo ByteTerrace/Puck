@@ -19,7 +19,7 @@ internal sealed class HostPersistenceStage : IPostStage<PostContext> {
         try {
             CheckBios(directory: directory);
             CheckPersistence(directory: directory);
-            return PostStageOutcome.Pass(detail: "BIOS required, explicit stub accepted, zero/wrong-sized BIOS rejected; new save, clean restore, forced flush and disposal persisted; replacement failure preserved old save and retried on Windows");
+            return PostStageOutcome.Pass(detail: "bundled cold/fast defaults and explicit stub accepted, zero/wrong-sized BIOS rejected; new save, clean restore, forced flush and disposal persisted; replacement failure preserved old save and retried on Windows");
         } catch (InvalidOperationException exception) {
             return PostStageOutcome.Fail(detail: exception.Message);
         }
@@ -27,9 +27,11 @@ internal sealed class HostPersistenceStage : IPostStage<PostContext> {
 
     private static void CheckBios(string directory) {
         var engine = new AdvancedGamingBrickEngine();
-        foreach (var options in new string?[] { null, "", "direct", "unknown" }) {
+        foreach (var options in new[] { "direct", "unknown", "fast cold", "bios=" }) {
             RequireRejected(engine: engine, options: options);
         }
+        using var bundled = engine.Create(options: null);
+        using var fast = engine.Create(options: "fast");
         using var stub = engine.Create(options: "stub", contentBytes: SyntheticRom.Create());
         var biosPath = Path.Combine(path1: directory, path2: "bios.bin");
         var bios = new byte[ReplacementBios.ImageSize];

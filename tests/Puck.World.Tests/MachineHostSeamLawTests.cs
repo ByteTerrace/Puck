@@ -49,6 +49,7 @@ public sealed class MachineHostSeamLawTests {
         Assert.False(condition: referenced.Contains("Puck.AdvancedGamingBrick"), userMessage: "Puck.World.Machines must not reference concrete Puck.AdvancedGamingBrick.");
         Assert.False(condition: referenced.Contains("Puck.HumbleGamingBrick.Forge"), userMessage: "Puck.World.Machines must not reference concrete Puck.HumbleGamingBrick.Forge.");
         Assert.False(condition: referenced.Contains("Puck.AdvancedGamingBrick.Forge"), userMessage: "Puck.World.Machines must not reference concrete Puck.AdvancedGamingBrick.Forge.");
+        Assert.False(condition: referenced.Contains("Puck.GamingBricks.Forge"), userMessage: "Machine extension and content contracts belong in Puck.Abstractions.");
     }
     [Fact]
     public void SiloAssemblyReferencesNoConcreteEmulatorProjects() {

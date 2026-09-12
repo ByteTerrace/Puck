@@ -57,6 +57,9 @@ public enum WorldSection : byte {
     /// <summary>The diegetic screen rows.</summary>
     Screens,
 
+    /// <summary>The independently hosted machine instance declarations.</summary>
+    Machines,
+
     /// <summary>The placeable camera rows.</summary>
     Cameras,
 

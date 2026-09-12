@@ -16,10 +16,9 @@ project supplies only the AGB hardware itself.
   stateful peripherals with another and a snapshot can capture it completely.
 - *Direct boot or BIOS boot:* a cartridge can start at
   `AdvancedGamingBrickMachine.CartridgeEntryPoint` (0x08000000) with the CPU's
-  registers seeded to their post-BIOS state, or execute the real boot
-  sequence against a caller-supplied `IBios` image through the lower-level
-  machine API. The screen-machine host always direct-boots and requires an
-  explicit BIOS configuration.
+  registers seeded to their post-BIOS state, or execute native firmware from
+  reset. The screen engine defaults to bundled Puck firmware and cold startup;
+  fast startup and external firmware are independent choices.
 - *Cartridge detection with a documented override table:*
   `AgbCartridge` scans the ROM for save-type strings; `AgbGameOverrides`
   corrects the known-broken minority (anti-piracy decoy strings,
@@ -33,7 +32,7 @@ project supplies only the AGB hardware itself.
   give a credit-preserving reconnect that requires every console to be
   transfer-idle first.
 - *Queued, backpressured hosting:* `AdvancedMachineHost` (the
-  `IScreenMachineEngine` adapter, engine id `advanced-gaming-brick`) forwards
+  `IMachineEngine` adapter, engine id `advanced-gaming-brick`) forwards
   the neutral machine surface to `Puck.GamingBricks`'s `QueuedMachineWorker`.
 
 ## 📐 Hosting
@@ -43,22 +42,30 @@ flowchart LR
     Bytes["cartridge bytes + BIOS option"] --> Engine["AdvancedGamingBrickEngine.Create"]
     Engine --> Host["AdvancedMachineHost : QueuedMachineHost"]
     Host --> Worker["Puck.GamingBricks QueuedMachineWorker"]
-    Worker --> Surface["IScreenMachine / IQueuedScreenMachine / IAudioMachine"]
+    Worker --> Surface["IMachineRuntime / IQueuedMachineRuntime / IAudioMachine"]
 ```
 
 `AdvancedGamingBrickEngine` (`Id = "advanced-gaming-brick"`) is the
-`IScreenMachineEngine` implementation a host resolves by id. Its options
-string must select `bios=<path>`, loading a 16 KiB image from disk for BIOS
-calls and IRQ dispatch during cartridge execution. Missing options, `direct`,
-and zero-filled BIOS files are rejected. Direct boot skips the startup
-sequence; the cartridge still needs BIOS services at runtime.
+`IMachineEngine` implementation a host resolves by id. Its options
+string accepts `cold` (the default), `fast`, and an optional final `bios=<path>`.
+Without a path, the runtime package supplies Puck firmware; `bios=puck` selects
+it explicitly. An external path consumes the remaining text, allowing spaces.
+`direct`, unknown tokens, conflicting modes, and zero-filled BIOS files are
+rejected. Fast startup skips the presentation but retains the selected BIOS
+for software interrupts and IRQ dispatch during cartridge execution.
 
 `stub` explicitly selects a zero-filled image for BIOS-independent diagnostics
-and polling cartridges. It implements no BIOS services or IRQ handler. Both
-options direct-boot the cartridge. Callers constructing `AdvancedMachineHost`
-directly must supply `biosImage`; an explicit zero-filled array has the same
+and polling cartridges. It implements no BIOS services or IRQ handler and
+always selects fast startup. Callers constructing `AdvancedMachineHost`
+directly supply `biosImage` and may select `bootMode`; an explicit zero-filled array has the same
 limitations as `stub`. Nonzero replacement BIOS images are accepted, but
 their service completeness is the caller's responsibility.
+
+The [native firmware guide](Firmware/README.md) owns implementation coverage,
+provenance and remaining compatibility limits. The image is MIT-licensed and
+embedded in the runtime package; an application does not need Forge, LLVM or
+a separate BIOS download. `AgbFirmware.GetImage()` returns a private copy.
+`AgbBiosKind.Puck` verifies exact bundled bytes, not retail cycle parity.
 
 Battery saves use a flushed temporary file beside the destination followed
 by replacement, so a failed write preserves the previous save and remains
@@ -78,9 +85,7 @@ using Puck.AdvancedGamingBrick;
 using Puck.Abstractions.Machines;
 
 using var core = new AdvancedGamingBrickCore(
-    configuration: new AgbMachineConfiguration(
-        bios: File.ReadAllBytes(args[0]), // caller-supplied 16 KiB BIOS
-        rom: File.ReadAllBytes(args[1])));
+    cartridgeRom: File.ReadAllBytes(args[0])); // bundled firmware, native cold startup
 
 core.ConfigureAudio(sampleRate: 48_000);
 core.ApplyInput(input: new MachinePadState());
@@ -96,6 +101,12 @@ exposes `SaveData` and `LoadSave` for a host's own persistence service.
 The shared [core hosting contract](../Puck.GamingBricks/README.md#synchronous-core-hosting)
 covers threading, buffer lifetime, cycle pacing, audio and snapshots.
 
+Pass `bootMode: MachineBootMode.Fast` to skip startup. For an external BIOS,
+use `AgbFirmware.CreateConfiguration(cartridgeRom, bios: image, bootMode: mode)`.
+The existing explicit `AgbMachineConfiguration(bios, rom)` and two-image core
+constructor retain their fast diagnostic default; the lower-level machine
+factory still leaves explicit boot execution to its caller.
+
 `AgbMachineConfiguration.Options` takes an immutable `AgbMachineOptions`.
 `DisableRtc` and `DisablePrefetch` are diagnostic hardware overrides, both
 off by default. `BusTrace` is an optional synchronous `Action<string>`;
@@ -110,9 +121,9 @@ For Puck's queued screen-machine adapter:
 using Puck.Abstractions.Machines;
 using Puck.AdvancedGamingBrick;
 
-IScreenMachineEngine engine = new AdvancedGamingBrickEngine();
+IMachineEngine engine = new AdvancedGamingBrickEngine();
 
-IScreenMachine machine = engine.Create(
+IMachineRuntime machine = engine.Create(
     options: "bios=GBA_bios.rom",    // caller-supplied 16 KiB BIOS image
     contentBytes: cartridgeRom,      // the cartridge ROM image
     savePath: "save.sav",            // battery-save path, or null for in-memory only
@@ -126,7 +137,8 @@ and an optional composition callback for pre-registering a decorating or
 test-only subsystem — a tracing bus, a flat test bus — before the standard
 `TryAddScoped` registrations defer to it. The factory returns an unbooted
 machine; call `DirectBoot` for the seeded cartridge handoff or step it from
-reset to execute the supplied BIOS. The synchronous core always direct-boots.
+reset to execute the supplied BIOS. The synchronous core follows its configured
+startup mode; its bundled-firmware convenience constructor defaults to cold boot.
 
 ## 📋 Core types
 
@@ -138,9 +150,9 @@ reset to execute the supplied BIOS. The synchronous core always direct-boots.
 | Video/audio | `AgbPpu`, `IAgbPpu`, `AgbApu`, `IAgbApu`, `ApuPulseChannel`, `ApuWaveChannel`, `ApuNoiseChannel` | The PPU and four-channel APU. |
 | Timing/interrupts | `AgbTimerController`, `IAgbTimerController`, `AgbInterruptController`, `IAgbInterruptController`, `InterruptSource`, `AgbDmaController`, `IAgbDmaController` | Timers, the interrupt controller, and DMA. |
 | Cartridge | `AgbCartridge`, `CartridgeBackup`, `AgbGameOverride`, `AgbGameOverrides` | ROM signature scanning and header game-code overrides for save/RTC/GPIO detection. |
-| BIOS | `IBios`, `ReplacementBios`, `AgbBiosProfile` | The BIOS image contract, owned image storage, and content-hash BIOS identification. |
+| BIOS | `IBios`, `ReplacementBios`, `AgbBiosProfile`, `AgbFirmware` | The BIOS image contract, owned image storage, content-hash identification, and bundled firmware configuration. |
 | Link | `AgbLinkCable`, `AgbLinkSession`, `AgbLinkResumeToken`, `IAgbLink`, `NullAgbLink`, `AgbSerialController`, `IAgbSerialController` | The deterministic, instruction-atomic multi-machine link cable. |
-| Hosting | `AdvancedMachineHost`, `AdvancedGamingBrickEngine`, `AdvancedGamingBrickCore`, `AdvancedPad`, `AdvancedGamingBrickLookahead` | The `IScreenMachineEngine` adapter over `Puck.GamingBricks`'s queued-host substrate. |
+| Hosting | `AdvancedMachineHost`, `AdvancedGamingBrickEngine`, `AdvancedGamingBrickCore`, `AdvancedPad`, `AdvancedGamingBrickLookahead` | The `IMachineEngine` adapter over `Puck.GamingBricks`'s queued-host substrate. |
 
 ## 🧪 Verification
 
@@ -214,7 +226,7 @@ should retain the interpreter and support runtimes without dynamic code.
 ## 📦 Packaging
 
 `ByteTerrace.Puck.AdvancedGamingBrick` depends on `Puck.Abstractions` (the
-`IScreenMachineEngine`/`IScreenMachine` contracts it implements),
+`IMachineEngine`/`IMachineRuntime` contracts it implements),
 `Puck.GamingBricks` (snapshot, fork, and queued-host substrate), and
 `Puck.Maths` (fixed-point and hashing primitives). `Puck.World.Schema` and
 everything layered above it depend on this package for the native AGB

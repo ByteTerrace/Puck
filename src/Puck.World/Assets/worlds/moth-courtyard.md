@@ -5,6 +5,70 @@
 the courtyard supplies pose drivers, placement, cameras and environment.
 This is a diagnostic scene for visual inspection and GPU profiling.
 
+## Landscape
+
+The pose stations sit in a grassy clearing connected by irregular sandy patches.
+Five low banks give the surrounding ground relief. Six broadleaf trees frame the
+clearing with root flares, branching trunks and layered crowns; seven mossy rocks
+and thirteen clusters of grass tufts break up the edges of the sandy route.
+
+The floor, trees and rocks are solid. The banks and sandy patches have modeled
+relief, while surface weathering adds color variation to the grass and bark.
+Fine noise relief is visual: contact follows the underlying shapes, with the
+ground's displacement limited to one centimeter. Grass tufts are decorative.
+Keep the central stations and inspection-camera corridors open when adjusting
+the scenery tables in the source.
+
+The dense meadow beside the path uses sixteen bounded tiles containing 1,994 two-part blades.
+Their roots stay planted while a spatially phased gust bends the stems and
+lighter flutter moves the tips. Dark roots and lighter tips give the patch
+depth; varied heights, orientations and an irregular edge break up the grid.
+The northern edge leaves a clearing around the boulder. This is an art prototype
+using expanded animated geometry, with no distance LOD or body interaction yet.
+
+`meadowSpacing`, `meadowHeight`, `meadowWidth`, `meadowTiles` and `meadowBlades`
+hold the source parameters. Tile centers assume twelve samples at 0.075 m spacing;
+adjust their separation with spacing to keep the field continuous. Wind phase
+uses world X/Z so gusts cross tile boundaries. Live `meadowWindSpeed` and
+`meadowFlutterSpeed` state cells control cadence; set both to zero to hold their
+current phases. `meadowWindPose` adds a shared bend for comparing silhouettes.
+Reload before comparisons that require identical initial phases.
+
+For the optimization pass, preserve the patch's coverage, varied blade silhouettes,
+buried root pivots, continuous gust phase across tiles and independent tip flutter.
+The low `meadow` camera exposes these together. Thin-blade edge aliasing remains
+visible in the 800×500 art captures; it is a rendering issue to resolve, not part
+of the desired style. Use the native-resolution, warmed measurement recipe below
+before drawing performance conclusions from this deliberately expanded prototype.
+
+## Authoring
+
+[moth-courtyard.puck](moth-courtyard.puck) is the canonical source;
+[moth-courtyard.world.json](moth-courtyard.world.json) is its compiled runtime
+output. Edit the source and regenerate the JSON. Do not decompile over the
+source again: that would discard its constants and collection expressions.
+
+```powershell
+dotnet run --project src/Puck.Cli -c Release -- compile src/Puck.World/Assets/worlds/moth-courtyard.puck -o src/Puck.World/Assets/worlds/moth-courtyard.world.json --validate
+```
+
+The `stations` table supplies the metadata, held pose cells, body placements and
+plinth positions. Peer placements expand in descending body-index order because
+the allocator assigns them in reverse. `poseChannels` connects station columns
+to the inherited drivers, and `limbPoses` holds the existing shape ids, pivots
+and swing parameters. `inspectionViews` supplies both the layouts and their
+number-key bindings; `courtyardCameras` supplies the additional cameras.
+Shared sky stops keep the default lighting and the blue-sky cycle key aligned.
+The `floor`, `courtyard-tree`, `courtyard-rock` and `courtyard-grass` prototypes
+define the landscape; their placement loops control the grove and grass clusters.
+
+Use the full DSL freely; JSON-to-source round-trip fidelity and parity with the
+pre-refactor JSON are not requirements for this world. Check source changes with
+`puck fmt`, `puck lint --strict`, and `puck compile --validate`; run the compiled
+world to verify its intended behavior.
+
+## Run the courtyard
+
 From the repository root, open it with:
 
 ```powershell
@@ -29,6 +93,7 @@ Start a fresh session for the full keyboard/console input vocabulary: the new
 | 7 | Isolated back close-up |
 | 8 | Toggle blue sky/fog/sun and a neutral studio background |
 | 9 | Toggle three volumetric cloud banks; initially off |
+| 0 | Low view across the dense meadow |
 
 The corresponding console controls work without keyboard focus:
 
@@ -38,8 +103,12 @@ view.override layout isolated
 view.override layout group
 view.override layout group-rear
 view.override layout clouds
+view.override layout meadow
 body.press skyToggle 1 0.02 0
 world.row.step creations.cloud-bank.document.volumes[0].enabled 1
+world.state.cell.set meadowWindSpeed $value 0
+world.state.cell.set meadowFlutterSpeed $value 0
+world.state.cell.set meadowWindPose $value 1
 ```
 
 The sky binding uses a tapped activator so a press and release drained together

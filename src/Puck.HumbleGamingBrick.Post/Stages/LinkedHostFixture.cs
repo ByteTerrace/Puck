@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.GamingBricks;
 using Puck.Hosting;
 
 namespace Puck.HumbleGamingBrick.Post;
@@ -113,6 +114,7 @@ internal static class LinkedHostFixture {
     /// <returns>The host. The caller owns it and must dispose it.</returns>
     public static MachineHost NewHost(bool internalClock, int audioSampleRate = 0) =>
         new(
+            bootMode: MachineBootMode.Fast,
             audioSampleRate: audioSampleRate,
             cartridgeRom: SeatRom(internalClock: internalClock),
             model: ConsoleModel.DmgC

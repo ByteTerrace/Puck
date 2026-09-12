@@ -421,9 +421,10 @@
       "document": {
         "drivers": [
           {
+            "blendInSeconds": 0,
             "cadence": 1.4,
             "name": "sway",
-            "signal": "time"
+            "signal": "state.station"
           }
         ],
         "frames": [

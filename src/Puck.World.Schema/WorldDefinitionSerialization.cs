@@ -54,6 +54,7 @@ namespace Puck.World;
 // only expose the typed WorldJsonContext.Default.<Type> accessors the verbs deserialize through.
 [JsonSerializable(typeof(WorldKit))]
 [JsonSerializable(typeof(WorldScreen))]
+[JsonSerializable(typeof(WorldMachine))]
 [JsonSerializable(typeof(WorldCamera))]
 // An authored camera rig is an ordered op-list program (the bodyMotionPrograms pattern promoted to cameras).
 [JsonSerializable(typeof(WorldCameraProgram))]
@@ -377,6 +378,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<WorldStateRow> WorldStateRow => Get<WorldStateRow>();
     /// <summary>Gets the type info for <see cref="WorldScreen"/>.</summary>
     public JsonTypeInfo<WorldScreen> WorldScreen => Get<WorldScreen>();
+    /// <summary>Gets the metadata for an independently hosted machine declaration.</summary>
+    public JsonTypeInfo<WorldMachine> WorldMachine => Get<WorldMachine>();
     /// <summary>Gets the type info for <see cref="WorldPrototype"/>.</summary>
     public JsonTypeInfo<WorldPrototype> WorldPrototype => Get<WorldPrototype>();
     /// <summary>Gets the type info for <see cref="WorldPlacement"/>.</summary>

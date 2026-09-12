@@ -1,40 +1,43 @@
 using System.Numerics;
-using System.Text.Json;
 using Puck.Abstractions.Machines;
-using Puck.Assets.Documents;
 using Puck.Audio.Mixing;
-using Puck.GamingBricks.Forge;
+using Puck.World.Machines;
 
 namespace Puck.World.Server;
 
 /// <summary>
 /// Owns every declared screen's live machine: booting, stepping, cable-linking, memory-peeking, and reconfiguring a
-/// deterministic <see cref="IScreenMachine"/> are all server-side, so ROM state is sim state and a headless boot's
+/// deterministic <see cref="IMachineRuntime"/> are all server-side, so ROM state is sim state and a headless boot's
 /// cabinets run exactly like a windowed one's. Camera/capture/window-capture/jumbotron-view/test-pattern screen
 /// sources are deliberately outside this type's concern — they stay genuinely presentation, composed by
 /// <c>Puck.World.WorldScreenBinder</c>, which reads this type's machine outputs (framebuffer handle, light, audio)
 /// as a pure reader, not an owner of machine state. Screen index is machine identity for screen-hosted machines,
-/// matching the document convention (<c>docs</c>'s "screens are position-addressed"). The concrete engines (the
-/// emulator cores, the Tune instrument) are named only here and in <see cref="Puck.World.WorldScreenMachineEngines"/>
-/// — <see cref="WorldServer"/> and every other <c>Puck.World.Server</c> type reach a booted machine only through
+/// matching the current document convention. Engines and content providers come from this host's
+/// <see cref="WorldMachineCatalog"/>; the host carries no dependency on their implementations.
+/// <see cref="WorldServer"/> and every other <c>Puck.World.Server</c> type reach a booted machine only through
 /// <see cref="IWorldMachineHost"/>.
 /// </summary>
 /// <remarks>Single-threaded, like every other simulation type here: constructed once at boot (or replay
 /// rehydration), then only ever touched from <see cref="WorldServer.Step"/>'s tick thread (<see cref="Advance"/>) or
 /// a synchronously-applied <see cref="WorldServer"/> screen-op apply (<see cref="TryInsert"/> and friends), so no
-/// lock guards this state. Holds native machine resources (an <see cref="IScreenMachine"/> may own emulator-core
+/// lock guards this state. Holds native machine resources (an <see cref="IMachineRuntime"/> may own emulator-core
 /// memory) — <see cref="Dispose"/> tears every booted machine and live link down; the composition root registers
 /// this type as its own DI singleton (not a private field of <see cref="WorldServer"/>) precisely so the container
 /// disposes it.</remarks>
-public sealed class WorldMachineHost : IWorldMachineHost {
+public sealed partial class WorldMachineHost : IWorldMachineHost {
     /// <summary>The CAS signature <see cref="TryBootMachine"/> records when it could not read the content file at
     /// all (missing, unreadable) — distinct from any real <c>sha256-64/…</c> hash so it can never collide with one.
     /// A recorded op pinning this sentinel demands the same absence on replay; a file that has since appeared (or
     /// become readable) refuses by name, exactly like a changed hash does.</summary>
     public const string ContentAbsentSignature = "absent";
 
-    private readonly WorldExtensionRegistry<IScreenMachineEngine> m_engines;
-    private readonly WorldExtensionRegistry<ICartridgeCompiler> m_compilers;
+    private readonly WorldExtensionRegistry<IMachineEngine> m_engines;
+    private readonly WorldExtensionRegistry<IMachineContentProvider> m_compilers;
+
+    /// <summary>Gets this host's immutable registration catalog.</summary>
+    public WorldMachineCatalog Catalog { get; }
+    /// <inheritdoc/>
+    public IMachineValidationCatalog ValidationCatalog => Catalog;
 
     private bool m_disposed;
     private string? m_documentDirectory;
@@ -52,7 +55,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
     /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
     /// leave it undelivered — this host carries no single owning server of its own.</param>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null)
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, string? documentPath = null, WorldOutputHub? narrationHub = null)
         : this(screens: screens, engines: engines, compilers: null, documentPath: documentPath, narrationHub: narrationHub) { }
 
     /// <summary>Initializes the host over the world's declared screens: a booted machine for each declared machine
@@ -61,28 +64,34 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     /// <param name="screens">The world's diegetic screens (<see cref="WorldDefinition.Screens"/>).</param>
     /// <param name="engines">The registered screen-machine engines (DI-collected) a declared or inserted machine
     /// resolves against.</param>
-    /// <param name="compilers">The registered cartridge compilers (DI-collected), or <see langword="null"/> to fall back
-    /// to <see cref="WorldScreenMachineEngines.CartridgeCompilers"/>.</param>
+    /// <param name="compilers">The content providers selected for this host, or null for none.</param>
     /// <param name="documentPath">The world document path used to resolve declared relative content paths.</param>
     /// <param name="narrationHub">The hub this host's narration is delivered through, or <see langword="null"/> to
     /// leave it undelivered — this host carries no single owning server of its own.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">Two engines register one id — a composition-root error, thrown at boot
     /// rather than resolved last-writer-wins.</exception>
-    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IScreenMachineEngine> engines, IEnumerable<ICartridgeCompiler>? compilers, string? documentPath = null, WorldOutputHub? narrationHub = null) {
-        ArgumentNullException.ThrowIfNull(argument: screens);
-        ArgumentNullException.ThrowIfNull(argument: engines);
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, IEnumerable<IMachineEngine> engines, IEnumerable<IMachineContentProvider>? compilers, string? documentPath = null, WorldOutputHub? narrationHub = null)
+        : this(screens, new WorldMachineCatalog(engines, compilers), documentPath, narrationHub) { }
 
+    /// <summary>Initializes a host with the exact catalog selected by its composition root.</summary>
+    /// <param name="screens">The authored screen declarations.</param>
+    /// <param name="catalog">The immutable engine and content-provider registrations.</param>
+    /// <param name="documentPath">The document origin for relative content paths.</param>
+    /// <param name="narrationHub">The optional diagnostic output hub.</param>
+    public WorldMachineHost(IReadOnlyList<WorldScreen> screens, WorldMachineCatalog catalog, string? documentPath = null, WorldOutputHub? narrationHub = null) {
+        ArgumentNullException.ThrowIfNull(argument: screens);
+        ArgumentNullException.ThrowIfNull(argument: catalog);
+
+        Catalog = catalog;
         m_narrationHub = narrationHub;
 
-        // The same registry the load-time key check reads through WorldExtensionVocabularyHook, so a key that
-        // validated is a key this host can resolve.
-        m_engines = new WorldExtensionRegistry<IScreenMachineEngine>(
-            extensions: engines,
+        m_engines = new WorldExtensionRegistry<IMachineEngine>(
+            extensions: catalog.Engines.Values,
             keyOf: static engine => engine.Id
         );
-        m_compilers = new WorldExtensionRegistry<ICartridgeCompiler>(
-            extensions: (compilers ?? WorldScreenMachineEngines.CartridgeCompilers.Values),
+        m_compilers = new WorldExtensionRegistry<IMachineContentProvider>(
+            extensions: catalog.ContentProviders.Values,
             keyOf: static compiler => compiler.EngineId
         );
         m_documentDirectory = DocumentDirectory(documentPath: documentPath);
@@ -270,7 +279,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
                     key: member,
                     value: out var slot
                 ) &&
-                    (slot.Machine is IQueuedScreenMachine queued)
+                    (slot.Machine is IQueuedMachineRuntime queued)
                 ) {
                     slot.FramesStepped = queued.CompletedSteps;
                 }
@@ -386,7 +395,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             return (Ok: false, Message: resolveFault!, ContentHash: contentHash);
         }
 
-        IScreenMachine created;
+        IMachineRuntime created;
 
         try {
             created = engine.Create(
@@ -432,13 +441,34 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             ? $" cartridge hash {compiled.SourceHash} rom {compiled.RomHash}"
             : "")}", ContentHash: contentHash);
     }
-    // The bytes a machine boots, from the bytes read off disk: a content path naming a cartridge document
-    // (WorldScreenSource.Machine.IsCartridgeDocumentPath) parses and compiles through the engine's own forge
-    // (WorldScreenMachineEngines.CartridgeCompilers) — the same compiler forge.export writes with, so a cabinet runs
-    // exactly the image the document would export — and any other content is the image itself. A forge refusal is
-    // the fault, verbatim, so an author reads the forge's own message from screen.state.
-    private bool TryResolveContent(IScreenMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out CartridgeCompilation? compilation, out string? fault) {
-        if (!WorldScreenSource.Machine.IsCartridgeDocumentPath(contentPath: contentPath)) {
+    // Providers own format recognition, parsing, compilation, and exported addresses. The host pins the input
+    // bytes and the executable image without depending on a provider's source-document or compiler types.
+    private bool TryResolveContent(IMachineEngine engine, string contentPath, byte[] content, out byte[] bytes, out WorldMachineCartridge? cartridge, out PreparedMachineContent? compilation, out string? fault) {
+        _ = m_compilers.TryGet(key: engine.Id, extension: out var compiler);
+
+        if (compiler is not null && compiler.Recognizes(contentPath: contentPath)) {
+            try {
+                compilation = compiler.Prepare(content: content);
+                bytes = compilation.Image;
+                cartridge = new WorldMachineCartridge(
+                    Path: contentPath,
+                    SourceHash: compilation.SourceHash,
+                    RomHash: WorldDefinitionFileSource.ComputeContentHash(content: bytes)
+                );
+                fault = null;
+
+                return true;
+            } catch (MachineContentException exception) {
+                bytes = [];
+                cartridge = null;
+                compilation = null;
+                fault = $"content '{contentPath}' refused: {exception.Message}";
+
+                return false;
+            }
+        }
+
+        if (!Catalog.RequiresPreparation(contentPath)) {
             bytes = content;
             cartridge = null;
             compilation = null;
@@ -447,39 +477,15 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             return true;
         }
 
-        if (!m_compilers.TryGet(key: engine.Id, extension: out var compiler) &&
-            !WorldScreenMachineEngines.TryCartridgeCompiler(engineId: engine.Id, compiler: out compiler)) {
-            bytes = [];
-            cartridge = null;
-            compilation = null;
-            fault = $"cartridge '{contentPath}' needs a forge, and engine '{engine.Id}' compiles none";
+        bytes = [];
+        cartridge = null;
+        compilation = null;
+        fault = $"content '{contentPath}' needs a content provider, and engine '{engine.Id}' recognizes none";
 
-            return false;
-        }
-
-        try {
-            compilation = compiler.Compile(document: CartridgeDocuments.Parse(utf8: content));
-
-            bytes = compilation.Rom;
-            cartridge = new WorldMachineCartridge(
-                Path: contentPath,
-                SourceHash: compilation.SourceHash,
-                RomHash: WorldDefinitionFileSource.ComputeContentHash(content: compilation.Rom)
-            );
-            fault = null;
-
-            return true;
-        } catch (Exception exception) when ((exception is JsonException or DocumentValidationException or ArgumentException or InvalidOperationException or CartridgeCapacityException)) {
-            bytes = [];
-            cartridge = null;
-            compilation = null;
-            fault = $"cartridge '{contentPath}' refused: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
+        return false;
     }
     private (IMachineLink? Link, string? Reason) TryEstablishLink(IReadOnlyList<int> members) {
-        var machines = new List<IScreenMachine>(capacity: members.Count);
+        var machines = new List<IMachineRuntime>(capacity: members.Count);
         IMachineLinkingEngine? linkingEngine = null;
         string? engineId = null;
 
@@ -572,7 +578,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             return false;
         }
     }
-    private bool TryResolveEngine(string? engineId, out IScreenMachineEngine engine, out string error) {
+    private bool TryResolveEngine(string? engineId, out IMachineEngine engine, out string error) {
         if (engineId is { } id) {
             if (m_engines.TryGet(
                 extension: out var named,
@@ -615,6 +621,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             return;
         }
 
+        AdvanceInstances(stepTicks);
         StepLiveLinks(
             stepTicks: stepTicks,
             pads: pads.Span
@@ -643,15 +650,23 @@ public sealed class WorldMachineHost : IWorldMachineHost {
 
             AnyEverPumped = true;
 
-            if (machine is IQueuedScreenMachine queued) {
+            if (machine is IMachineInputPorts ports) {
+                if (ports.InputPorts.Count > 1) {
+                    throw new InvalidOperationException($"Screen {slot.Index} requires an explicit machine input port.");
+                }
+                foreach (var port in ports.InputPorts.Values) {
+                    port.SetState(in input);
+                }
+            }
+
+            if (machine is IQueuedMachineRuntime queued) {
                 var submission = queued.Submit(
-                    deltaTicks: stepTicks,
-                    input: in input
+                    deltaTicks: stepTicks
                 );
 
                 if (
                     (submission == QueuedMachineSubmission.Rejected) &&
-                    machine.IsAssigned
+                    machine.Status is MachineRuntimeStatus.Running or MachineRuntimeStatus.Faulted
                 ) {
                     throw new InvalidOperationException(message: ($"Screen {slot.Index}'s queued machine rejected an authoritative tick/input segment" +
                                  ((queued.QueueFault is { } fault)
@@ -660,9 +675,8 @@ public sealed class WorldMachineHost : IWorldMachineHost {
                 }
 
                 slot.FramesStepped = queued.CompletedSteps;
-            } else if (machine.Step(
-                deltaTicks: stepTicks,
-                input: in input
+            } else if (machine.Advance(
+                deltaTicks: stepTicks
             )) {
                 ++slot.FramesStepped;
             }
@@ -673,7 +687,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
         ((m_slots.TryGetValue(
             key: index,
             value: out var slot
-        ) && (slot.Machine is IAudioMachine audio))
+        ) && (slot.Machine is IMachineAudioOutputs outputs) && outputs.AudioOutputs.TryGetValue("audio", out var audio))
             ? audio
             : null
         );
@@ -728,18 +742,14 @@ public sealed class WorldMachineHost : IWorldMachineHost {
 
         m_links.Clear();
 
+        DisposeInstances();
+
         foreach (var slot in m_slots.Values) {
             slot.Machine?.Dispose();
         }
     }
     /// <inheritdoc/>
-    public nint Handle(int index) => ((m_slots.TryGetValue(
-        key: index,
-        value: out var slot
-    ) && (slot.Machine is { } machine))
-        ? machine.NativeImageViewHandle
-        : 0
-    );
+    public nint Handle(int index) => VideoOutput(index)?.NativeImageViewHandle ?? 0;
     /// <inheritdoc/>
     public bool HasEngine(string engineId) => m_engines.IsRegistered(key: engineId);
     /// <inheritdoc/>
@@ -748,13 +758,11 @@ public sealed class WorldMachineHost : IWorldMachineHost {
         value: out var slot
     ) && (slot.Machine is not null));
     /// <inheritdoc/>
-    public Vector3 Light(int index) => ((m_slots.TryGetValue(
-        key: index,
-        value: out var slot
-    ) && (slot.Machine is { } machine))
-        ? machine.EmittedLight
-        : Vector3.Zero
-    );
+    public Vector3 Light(int index) => VideoOutput(index)?.EmittedLight ?? Vector3.Zero;
+    /// <inheritdoc/>
+    public IMachineVideoOutput? VideoOutput(int index) =>
+        MachineAt(index) is IMachineVideoOutputs outputs && outputs.VideoOutputs.TryGetValue("video", out var output)
+            ? output : null;
     /// <inheritdoc/>
     public string? LinkOf(int index) => (m_slots.TryGetValue(
         key: index,
@@ -764,7 +772,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
         : null
     );
     /// <inheritdoc/>
-    public IScreenMachine? MachineAt(int index) => (m_slots.TryGetValue(
+    public IMachineRuntime? MachineAt(int index) => (m_slots.TryGetValue(
         key: index,
         value: out var slot
     )
@@ -1013,7 +1021,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             return null;
         }
 
-        var queued = (slot.Machine as IQueuedScreenMachine);
+        var queued = (slot.Machine as IQueuedMachineRuntime);
 
         return new WorldMachineState(
             Assigned: (slot.Machine is not null),
@@ -1363,8 +1371,10 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     public bool TryResolveSymbol(int index, string symbol, out int address) {
         if (m_slots.TryGetValue(key: index, value: out var slot) &&
             (slot.Compilation is { } comp) &&
-            comp.Variables.TryGetValue(key: symbol, value: out var variableAddress)) {
-            address = unchecked((int)variableAddress);
+            comp.Symbols.TryGetValue(key: symbol, value: out var exported) &&
+            string.Equals(a: exported.Space, b: "bus", comparisonType: StringComparison.Ordinal) &&
+            exported.Address <= int.MaxValue) {
+            address = (int)exported.Address;
 
             return true;
         }
@@ -1377,25 +1387,33 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     /// <summary>The prepare/commit plan for screen machine updates.</summary>
     public sealed class PreparedMachinePlan : IWorldMachinePreparedPlan {
         internal IReadOnlyList<WorldScreen> CandidateScreens { get; }
+        internal PreparedInstances Instances { get; }
         /// <inheritdoc/>
         public int MachineCount { get; }
 
-        internal PreparedMachinePlan(IReadOnlyList<WorldScreen> candidateScreens, int machineCount) {
+        internal PreparedMachinePlan(IReadOnlyList<WorldScreen> candidateScreens, int machineCount, PreparedInstances instances) {
             CandidateScreens = candidateScreens;
-            MachineCount = machineCount;
+            MachineCount = machineCount + instances.Candidate.Count;
+            Instances = instances;
         }
 
         /// <inheritdoc/>
-        public void Dispose() { }
+        public void Dispose() => Instances.Dispose();
     }
 
     /// <inheritdoc/>
     public bool TryPrepare(WorldDefinition? current, WorldDefinition candidate, out IWorldMachinePreparedPlan? plan, out string? reason) {
         ArgumentNullException.ThrowIfNull(argument: candidate);
 
+        if (!WorldDefinitionValidator.TryValidateLocally(candidate, Catalog, out var validationReason)) {
+            plan = null;
+            reason = validationReason;
+            return false;
+        }
+
         foreach (var screen in candidate.Screens) {
             if (screen.Source is WorldScreenSource.Machine machine) {
-                if (!m_engines.TryGet(key: machine.Engine, extension: out _) && !WorldScreenMachineEngines.IsRegistered(key: machine.Engine)) {
+                if (!m_engines.TryGet(key: machine.Engine, extension: out _)) {
                     plan = null;
                     reason = $"no screen-machine engine '{machine.Engine}'";
 
@@ -1412,7 +1430,11 @@ public sealed class WorldMachineHost : IWorldMachineHost {
             }
         }
 
-        plan = new PreparedMachinePlan(candidateScreens: candidate.Screens, machineCount: machineCount);
+        if (!TryPrepareInstances(current, candidate, out var instances, out reason)) {
+            plan = null;
+            return false;
+        }
+        plan = new PreparedMachinePlan(candidateScreens: candidate.Screens, machineCount: machineCount, instances!);
         reason = null;
 
         return true;
@@ -1423,6 +1445,7 @@ public sealed class WorldMachineHost : IWorldMachineHost {
         ArgumentNullException.ThrowIfNull(argument: plan);
 
         if (plan is PreparedMachinePlan prepared) {
+            CommitInstances(prepared.Instances);
             _ = ReconcileScreens(screens: prepared.CandidateScreens);
         }
     }
@@ -1430,6 +1453,9 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     /// <inheritdoc/>
     public void Finish(IWorldMachinePreparedPlan plan) {
         ArgumentNullException.ThrowIfNull(argument: plan);
+        if (plan is PreparedMachinePlan prepared) {
+            prepared.Instances.Dispose();
+        }
     }
 
     /// <inheritdoc/>
@@ -1459,14 +1485,14 @@ public sealed class WorldMachineHost : IWorldMachineHost {
     // One declared screen's machine slot: the persistent declared source (so ReconcileScreens can diff it), the
     // magazine + live selector, and at most one booted machine plus the bookkeeping world.save/screen.state need.
     private sealed class MachineSlot {
-        public CartridgeCompilation? Compilation { get; set; }
+        public PreparedMachineContent? Compilation { get; set; }
         public WorldMachineCartridge? Cartridge { get; set; }
         public string? DeclaredFault { get; set; }
         public WorldScreenSource? DeclaredSource { get; set; }
         public long FramesStepped { get; set; }
         public required int Index { get; init; }
         public string? LinkName { get; set; }
-        public IScreenMachine? Machine { get; set; }
+        public IMachineRuntime? Machine { get; set; }
         public string? MachineContentHash { get; set; }
         public string? MachineContentPath { get; set; }
         public string? MachineEngine { get; set; }

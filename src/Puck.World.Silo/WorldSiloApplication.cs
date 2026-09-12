@@ -41,6 +41,7 @@ public static class WorldSiloApplication {
             return 1;
         }
         var loadedExtensions = LoadDynamicExtensions(explicitDir: parseResult.GetValue(option: extensionsDirOption));
+        var machineCatalog = loadedExtensions.Machines.Build();
         if (!WorldSiloDefinitionSerialization.TryLoadFile(
             clusteringKinds: WorldSiloExtensions.ClusteringKinds,
             definition: out var definition,
@@ -57,6 +58,7 @@ public static class WorldSiloApplication {
         builder.Logging.AddFilter(category: "Orleans", level: LogLevel.Warning);
         builder.Logging.AddFilter(category: "Microsoft.Orleans", level: LogLevel.Warning);
         builder.Services.AddSingleton(implementationInstance: definition!);
+        builder.Services.AddSingleton(machineCatalog);
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: builder.Services);
         WorldSiloExtensions.Add(builder.Services, definition!);
         builder.Services.AddSingleton<SiloConsoleTagging>();
@@ -92,6 +94,7 @@ public static class WorldSiloApplication {
         builder.Services.AddSingleton<Puck.World.Protocol.IServerLink, SiloServerLink>();
         builder.Services.AddSingleton<Puck.World.Protocol.WorldDeferredVerbEchoes>();
         builder.Services.AddSingleton<ICommandModule, WorldStateCommandModule>();
+        builder.Services.AddSingleton<ICommandModule, WorldMachineCommandModule>();
         // A bare router/registry: the silo embodies no local seats and drives no physical input, so the bindings and
         // principal resolver below bind nothing and claim no principal — HeadlessTickHostedService still requires exactly
         // one IFixedStepSimulation paired with exactly one InputRouter, so this is the minimal pair that satisfies it
@@ -163,6 +166,7 @@ public static class WorldSiloApplication {
     }
 
     private sealed class LoadedExtensions {
+        public WorldMachineExtensionRegistry Machines { get; } = new();
         public List<IControlExtension> ControlExtensions { get; } = [];
         public List<Puck.World.Protocol.IWorldAgentExtension> AgentExtensions { get; } = [];
     }
@@ -188,15 +192,15 @@ public static class WorldSiloApplication {
 
     private static LoadedExtensions LoadDynamicExtensions(string? explicitDir) {
         var serverRegistry = new WorldSiloExtensions.Registry();
-        var machineRegistry = new WorldMachineExtensionRegistry();
         var loaded = new LoadedExtensions();
+        var machineRegistry = loaded.Machines;
 
         void Scan(string dir) {
             WorldExtensionLoader.LoadFromDirectory(
                 directoryPath: dir,
                 serverRegistry: serverRegistry,
                 onExtensionLoaded: ext => {
-                    if (ext is Puck.GamingBricks.Forge.IGamingBrickExtension brickExtension) {
+                    if (ext is Puck.Abstractions.Machines.IMachineExtension brickExtension) {
                         brickExtension.Initialize(registry: machineRegistry);
                     }
                     if (ext is IControlExtension controlExtension) {

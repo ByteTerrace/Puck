@@ -10,8 +10,6 @@ namespace Puck.HumbleGamingBrick;
 public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     // The boot overlay's read windows: every model maps the first 256 bytes; Color additionally maps 0x200-0x8FF,
     // leaving the cartridge header visible through the 0x100-0x1FF hole.
-    /// <summary>The KEY0 value the Color boot ROM writes for a cartridge without the color flag.</summary>
-
     private const ushort BootRomLowEnd = 0x00FF;
     private const ushort CgbBootRomHighEnd = 0x08FF;
     private const ushort CgbBootRomHighStart = 0x0200;
@@ -46,8 +44,8 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
     private readonly TimerComponent m_timer;
 
     // The FF50 latch: the boot ROM overlay is readable until the first nonzero write, which unmaps it for the life of
-    // the machine (only a reset — a fresh machine — brings it back). A machine configured without a boot ROM starts
-    // with the latch already tripped, so the seeded post-boot path reads FF50 exactly as hardware does after boot.
+    // the machine (only a reset — a fresh machine — brings it back). Fast startup begins with the latch already
+    // tripped even when an image is retained, so the seeded path reads FF50 exactly as hardware does after boot.
     private bool m_bootRomMapped;
     // The derived cartridge-window cache (F2): ROM fetch — the dominant bus traffic — and the pure-array-access
     // mappers' RAM window are resolved once per control write instead of chasing the slot property + mapper virtual
@@ -97,7 +95,7 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
 
         m_apu = apu;
         m_bootRom = configuration.BootRom;
-        m_bootRomMapped = (configuration.BootRom is not null);
+        m_bootRomMapped = configuration.ExecutesBootRom;
         m_cartridgeSlot = cartridgeSlot;
         m_dmgCompatibility = dmgCompatibility;
         m_hdma = hdma;
@@ -125,10 +123,10 @@ public sealed class SystemBus : ISystemBus, ISnapshotable, IModeSwitchable {
         m_ioRegisters[(0xFF73 - MemoryMap.IoRegistersStart)] = 0x00;
         m_ioRegisters[(0xFF74 - MemoryMap.IoRegistersStart)] = 0x00;
         m_ioRegisters[(0xFF75 - MemoryMap.IoRegistersStart)] = 0x00;
-        // KEY0 is undecoded, so it lives in the fallback byte page. Without a boot ROM the Color handoff is seeded, and
+        // KEY0 is undecoded, so it lives in the fallback byte page. Fast startup seeds the Color handoff, and
         // that includes the compatibility-mode byte the Color boot ROM writes for a cartridge without the color flag.
         if (
-            (configuration.BootRom is null) &&
+            !configuration.ExecutesBootRom &&
             dmgCompatibility.IsActive
         ) {
             m_ioRegisters[(MemoryMap.SystemModeSelect - MemoryMap.IoRegistersStart)] = DmgCompatibilityState.Key0CompatibilityBit;

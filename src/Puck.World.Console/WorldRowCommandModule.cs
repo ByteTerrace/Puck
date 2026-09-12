@@ -169,6 +169,19 @@ public sealed class WorldRowCommandModule(IWorldConsoleAuthority authority, ISer
             select: static server => server.Definition.Screens
         )
     ),
+        ["machines"] = new RowSection(
+        RowType: typeof(WorldMachine),
+        Upsert: Upsert(
+            info: WorldJsonContext.Default.WorldMachine,
+            toMutation: static (principal, machine) => new WorldMutation.UpsertMachine(principal, machine)
+        ),
+        Remove: RemoveByName(remove: static (principal, name) => new WorldMutation.RemoveMachine(principal, name)),
+        Read: ReadRowByKey(
+            info: WorldJsonContext.Default.WorldMachine,
+            keyOf: static row => row.Name,
+            select: static server => server.Definition.Machines
+        )
+    ),
         ["speakers"] = new RowSection(
         RowType: typeof(WorldSpeaker),
         Upsert: Upsert(

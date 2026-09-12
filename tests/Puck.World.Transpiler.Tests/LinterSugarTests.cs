@@ -31,7 +31,7 @@ public class LinterSugarTests {
                 basePath: Path.GetDirectoryName(fullPath),
                 sourceMap: sourceMap,
                 diagnostics: diagnostics
-            );
+            , cancellationToken: TestContext.Current.CancellationToken);
             if (loweringResult.Value is not null) {
                 PuckLinter.LintReferences(loweringResult.Value, sourceMap, diagnostics, sourcePath: fullPath);
             }

@@ -62,6 +62,7 @@ public static class CartridgeDecompiler {
         }
 
         if (document["rules"] is JsonArray rules) {
+            if (rules.Count == 0) { sb.Append("\nrules []\n"); }
             foreach (var rule in rules.OfType<JsonObject>()) {
                 sb.Append('\n');
                 WriteRule(sb: sb, rule: rule);

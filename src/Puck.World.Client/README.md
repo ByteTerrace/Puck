@@ -149,6 +149,10 @@ separate constraint on dense populations; reusable appearances do not remove it.
   else. Both reseed on `WorldClient.PoseEpoch` moving (an
   activation, a teleport, an over-threshold correction) rather than streak a
   discontinuous pose.
+  Creations with drivers also use the animated placement pool without timeline
+  frames. Uninhabited placements advance from their root pose, presentation time
+  and world state, with no body facts and no body-key substitution. This lets
+  scenery use the same swings and parent chains as inhabitants.
 - `WorldSessionSceneEmitter.cs`, `WorldAdjacencySceneEmitter.cs` — the session
   projection's and adjacency neighbour's own content emission, parallel to
   `WorldSceneEmitter`'s boot-world path.

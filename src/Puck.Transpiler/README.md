@@ -50,7 +50,7 @@ per element, in place; the document carries the statements it produced and never
 bound as locals for the length of one iteration and are gone once it ends, so they never leak into what follows the
 loop and never collide with a `let` constant of the same name declared outside it. The sequence itself is an array
 known at compile time or the `for` is refused (PUCK044). This is distinct from a cartridge rule's `repeat`, which is
-a loop the machine itself runs at play time over a runtime count.
+a loop the machine runs at play time with a compile-time count in 1..255.
 
 ## Strings: plain, interpolated, raw
 
@@ -115,7 +115,8 @@ The two evaluators fold a name differently, on purpose:
   own `ExpressionArithmetic` rather than reimplemented here. Integers are exact in both evaluators, so delegating
   makes a numeric disagreement between a rule and a document impossible rather than merely unlikely.
 - Everything else the document language can fold — `absolute`, `ceiling`, `clamp`, `floor`, `maximum`, `minimum`,
-  `round`, `sign`, `sine`, `cosine`, `squareRoot` — folds in `double`. Routing an authored `0.7071068` through the
+  `round`, `sign`, `sine`, `cosine`, `squareRoot` — uses `double` for fractional operations, while whole-number
+  inputs to integer-preserving functions retain their signed 64-bit precision. Routing an authored `0.7071068` through the
   rule language's `Q48.16` fixed point to agree with it bit-for-bit would quantize the authored value to 1/65536
   for no gain: the folded number is document DATA, baked into JSON at compile time, and never simulation state. The
   double fold already agrees with the fixed-point one exactly on whole numbers.
@@ -208,6 +209,23 @@ The one place the core itself asserts a dimension is `schedule <row> in 250ms`, 
 name — says the operand is a time.
 
 ## Verification
+
+Lowering keeps compile-time values immutable and borrows cached arrays for reads. Indexing one element does not
+copy its containing array; a copy is made when a value enters output. `distinct` uses structural hashing and
+retains the first occurrence. Objects compare independently of property order, and integer comparison, sorting,
+group keys and integer functions preserve values above 2^53.
+
+Constants and templates have lexical definition scopes. Template arguments capture the caller's loop or lambda
+bindings; defaults can refer to earlier parameters. Each constant's unit conversion is checked separately for
+each destination field. Duplicate declarations, missing or duplicate arguments, unknown templates, cyclic
+bindings, integer overflow and non-finite numeric results produce diagnostics. Convenience compilation methods
+throw when lowering reports errors, so callers cannot accidentally publish partial output.
+
+One compilation admits at most four million source characters, one million elements per collection, 64 levels
+of source nesting or active evaluation, and four million work units across evaluation, expansion and output
+copies. Copied strings charge their length. These bounds are checked before bulk allocation; `PUCK047` asks the
+author to split excessive generated data. Both vocabulary emitters accept a cancellation token. Raw and
+interpolated string contents survive formatting unchanged, including indentation and blank lines.
 
 There is no test project of this project's own: `tests/Puck.World.Transpiler.Tests` (parser, formatter, linter,
 emitter, decompiler and LSP against `puck.world.def.v1`) and `tests/Puck.GamingBricks.Transpiler.Tests` (compile and

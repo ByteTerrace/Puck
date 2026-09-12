@@ -781,13 +781,13 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path} stamps {stampShapes} shapes, exceeding the {WorldPlacementPolicy.MaxShapesPerStamp}-shape per-stamp budget.");
             }
 
-            // A creation-level field op cannot span the per-shape dynamic instances the stamp pool emits for a framed
+            // A creation-level field op cannot span the per-shape dynamic instances the stamp pool emits for an animated
             // creation — noise is a static-stamp facet.
             if (
                 (creation.Document.Noise is not null) &&
-                (creation.Document.Frames is { Count: > 0 })
+                (creation.Document.Frames is { Count: > 0 } || creation.Document.Drivers is { Count: > 0 })
             ) {
-                errors.Add(item: $"{path}.doc.noise is refused on an animated (framed) creation — noise relief is a static-stamp facet.");
+                errors.Add(item: $"{path}.doc.noise is refused on an animated creation — noise relief is a static-stamp facet.");
             }
 
             foreach (var run in (creation.Document.TextRuns ?? [])) {
@@ -908,8 +908,8 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{facePath}.portal sits on a placement that ATTACHES to a live body — a portal's frame is derived once per document revision from the row's own authored transform, which an attached row does not have; move the door onto a static placement.");
                 } else if (placement.Inhabit is not null) {
                     errors.Add(item: $"{facePath}.portal sits on an INHABITED placement — its stamp rides a live body's pose rather than the row's authored transform, so the door's frame would be stale every tick; move the door onto a static placement.");
-                } else if (creation is { Document.Frames.Count: > 0 }) {
-                    errors.Add(item: $"{facePath}.portal sits on an ANIMATED placement (creation '{placement.PrototypeId}' carries timeline frames) — a replaying stamp's surface moves on the render clock while the derived frame does not; move the door onto a static placement.");
+                } else if (creation is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 }) {
+                    errors.Add(item: $"{facePath}.portal sits on an ANIMATED placement (creation '{placement.PrototypeId}' carries timeline frames or drivers) — a replaying stamp's surface moves on the render clock while the derived frame does not; move the door onto a static placement.");
                 }
 
                 // The derived face itself: its shape kind must open an aperture (WorldFaceApertures), and its frame
@@ -1501,7 +1501,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         // The stamp-pool charge: every row that renders through Client.WorldStampPool's reserved registrations rather
-        // than as a static stamp — an ANIMATED row (a framed creation) or an ATTACHED one (rooted on a live body).
+        // than as a static stamp — an ANIMATED row (a creation with frames or drivers) or an ATTACHED one (rooted on a live body).
         var stampRegistrationCount = 0;
         // The document-global dynamic-instance total (WorldDynamicGeometryCeilings.MaxContributedDynamicInstances):
         // every animated placement's single replay instance plus every inhabited placement's declared body count,
@@ -1785,7 +1785,7 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
-            // The animated-row constraints: a placement of a framed creation replays through the reserved dynamic
+            // The animated-row constraints: a placement of a creation with frames or drivers replays through the reserved dynamic
             // pool — single copy only (pattern/mirror are static-stamp facets), and at most the reserved pool count.
             _ = TryFindRow(
                 key: placement.PrototypeId,
@@ -1793,7 +1793,7 @@ public static partial class WorldDefinitionValidator {
                 row: out var animatedCreation
             );
 
-            var isAnimated = (animatedCreation is { Document.Frames.Count: > 0 });
+            var isAnimated = (animatedCreation is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 });
 
             if (isAnimated) {
                 stampRegistrationCount++;
@@ -1803,7 +1803,7 @@ public static partial class WorldDefinitionValidator {
                     (placement.Distribution is not null) ||
                     (placement.Mirror is not null)
                 ) {
-                    errors.Add(item: $"{path} is ANIMATED (its creation carries timeline frames) — distribution/mirror facets are static-stamp-only.");
+                    errors.Add(item: $"{path} is ANIMATED (its creation carries timeline frames or drivers) — distribution/mirror facets are static-stamp-only.");
                 }
             } else if (placement.Attach is not null) {
                 // An ATTACHED row renders through the SAME reserved stamp pool (rooted on its body instead of a static

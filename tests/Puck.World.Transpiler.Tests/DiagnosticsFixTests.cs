@@ -20,7 +20,7 @@ public class DiagnosticsFixTests {
         var source = $"schema: \"puck.world.def.v1\"\n\n{body}";
         var diagnostics = new DiagnosticBag();
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(source, diagnostics: diagnostics);
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics);
+        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
         return (lowered.Value ?? [], diagnostics);
     }
 

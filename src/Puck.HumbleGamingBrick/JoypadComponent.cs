@@ -39,7 +39,7 @@ public sealed class JoypadComponent : IJoypad, ISnapshotable {
 
         // With a boot ROM the register powers on with both groups selected and the boot program writes the selection it
         // hands off; without one, the selection that program would have left is seeded.
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             m_select = ((configuration.Model.DeselectsJoypadOnBoot() || dmgCompatibility.IsActive)
                 ? SelectMask
                 : (byte)0x00);

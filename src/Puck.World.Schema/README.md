@@ -17,6 +17,16 @@ vocabulary layered on top of this document model; the runtime that folds
 against both is [`Puck.World.Server`](../Puck.World.Server/README.md); the
 process that composes everything is [`Puck.World`](../Puck.World/README.md).
 
+Named `machines` rows carry an instance name, engine identifier, versioned provider
+`configuration`, `running` flag, and optional ordered `memory` bindings. The host's
+selected machine catalog validates provider fields; parsing without it preserves
+the data and reports deferred provider checks. Configuration uses ordinary DSL
+blocks and arrays. `WorldNameRegistry` includes machine and binding declarations
+and each binding's state-row reference, so import aliases rewrite those names.
+Hardware addresses are unsigned; formats, access modes, update policy, and
+conversion policy are explicit. Construction resolves content symbols and checks
+the actual runtime's hardware capabilities before admission.
+
 ## Discrete boards, cards, and turns
 
 The discrete substrate shares `state.lattices` with physical fields. Declare a
@@ -561,6 +571,12 @@ before the world itself was retired) survives only in git history; no shipped wo
 today. The loader resolves an explicit `--world` file or the shipped default
 document and refuses a missing, unreadable, or invalid file by name;
 `WorldDefinitionLoader.cs` owns that boundary.
+
+Creations carrying timeline frames or drivers render placements through the
+animated stamp pool. Driver-only scenery can read presentation time and shared
+world state without a body. These placements use the same registration limits
+and static-facet restrictions as timeline animation: no distribution, mirror,
+creation noise, portal surfaces or response-driven prototype swaps.
 
 **Placement facets.** A `WorldPlacement` row (the `placements` section) is a
 creation stamp plus optional facets — `Solid`, `Emission`, `Inhabit`,

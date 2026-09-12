@@ -51,8 +51,9 @@ public static class CartridgeDocumentEmitter {
     /// <param name="document">The parsed document.</param>
     /// <param name="diagnostics">The bag refusals are reported into, or <see langword="null"/> for a fresh one.</param>
     /// <param name="sourceMap">The JSON-pointer-to-span map to fill, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
     /// <returns>The canonical object, paired with the diagnostics raised while building it.</returns>
-    public static CompilationResult<JsonObject> LowerWithDiagnostics(DocumentNode document, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null) {
+    public static CompilationResult<JsonObject> LowerWithDiagnostics(DocumentNode document, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(document);
 
         diagnostics ??= new DiagnosticBag();
@@ -63,14 +64,19 @@ public static class CartridgeDocumentEmitter {
             sourceMap: sourceMap,
             diagnostics: diagnostics,
             schema: (document.Schema ?? CartridgeVocabulary.Schema)
-        );
+        ) { Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken } };
 
         if (document.Schema is not null) {
             root["schema"] = document.Schema;
         }
 
-        foreach (var statement in document.Statements) {
-            ProcessStatement(statement, root, scope);
+        scope.IndexDeclarations(document.Statements);
+        try {
+            foreach (var statement in document.Statements) {
+                ProcessStatement(statement, root, scope);
+            }
+        } catch (DocumentEvaluationException error) {
+            diagnostics.ReportError(error.Code, error.Message, error.Span);
         }
 
         return new CompilationResult<JsonObject>((JsonObject)DocumentLowering.Canonicalize(node: root)!, diagnostics);
@@ -79,55 +85,35 @@ public static class CartridgeDocumentEmitter {
     /// <summary>Lowers a parsed document and serializes it to canonical JSON bytes.</summary>
     /// <param name="document">The parsed document.</param>
     /// <returns>Deterministic canonical UTF-8 bytes.</returns>
+    /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
     public static byte[] CompileToUtf8Bytes(DocumentNode document) =>
-        CanonicalJsonDocument.Serialize(node: LowerWithDiagnostics(document: document).Value!);
+        CanonicalJsonDocument.Serialize(node: LowerWithDiagnostics(document: document).RequireValue());
 
     /// <summary>Lowers a parsed document and serializes it to canonical JSON text.</summary>
     /// <param name="document">The parsed document.</param>
     /// <returns>Canonical JSON text.</returns>
+    /// <exception cref="InvalidOperationException">Lowering reports an error.</exception>
     public static string CompileToJson(DocumentNode document) =>
         Encoding.UTF8.GetString(bytes: CompileToUtf8Bytes(document: document));
 
-    // The document fields outside a rule body that carry an expression. KEEP IN SYNC with the expression-typed members
-    // of the document records; a field missing here lowers as a bare scalar and is refused when the document is read.
-    private static readonly HashSet<string> s_expressionFields = new(comparer: StringComparer.Ordinal) {
-        "angle", "behindBackground", "centreX", "centreY", "clear", "flipX", "flipY", "palette", "scale", "scrollX",
-        "scrollY", "tile", "turn", "visible", "x", "y",
-    };
-
     private static void ProcessStatement(StatementNode statement, JsonObject target, DocumentScope scope) {
+        using var evaluation = scope.Budget.Enter(statement.Span);
         switch (statement) {
-            case LetNode let:
-                scope.Constants[let.Name] = let.Value;
-
-                break;
-
-            case TemplateNode template:
-                scope.Templates[template.Name] = template;
-
+            case LetNode:
+            case TemplateNode:
                 break;
 
             case PropertyNode property: {
                     var lowered = DocumentLowering.LowerValue(expr: property.Value, scope: scope, fieldKey: property.Name);
 
-                    // A field that carries an expression is converted here rather than left as whatever scalar the
-                    // generic lowering produced, which is what lets `x: 80` and `visible: showpiece` stay the natural
-                    // spellings while the document carries one expression shape.
-                    if (s_expressionFields.Contains(item: property.Name)) {
-                        lowered = CartridgeOperand.FromLoweredValue(node: lowered, scope: scope, reason: out var reason);
-                        if (lowered is null) {
-                            Refuse(scope: scope, span: property.Span, message: reason!);
-
-                            break;
-                        }
-                    }
-
+                    scope.SourceMap?.Register($"{scope.CurrentPointer}/{property.Name}", property.Span);
                     DocumentLowering.AssignOrExtend(target, property.Name, lowered);
 
                     break;
                 }
 
             case RuleBlockNode rule:
+                scope.SourceMap?.Register($"{scope.CurrentPointer}/rules/{(target["rules"] as JsonArray)?.Count ?? 0}", rule.Span);
                 Append(target: target, section: "rules", item: LowerRule(rule: rule, scope: scope));
 
                 break;
@@ -177,7 +163,8 @@ public static class CartridgeDocumentEmitter {
         // interpolated name (`sound $"tone-{index}" { }`) and land as its own row rather than as a nameless section.
         var name = DocumentLowering.ResolveBlockName(block: block, scope: scope);
 
-        scope.CurrentPointer = $"{pointer}/{block.Identifier}";
+        var section = Pluralize(block.Identifier);
+        scope.CurrentPointer = name is null ? $"{pointer}/{block.Identifier}" : $"{pointer}/{section}/{(target[section] as JsonArray)?.Count ?? 0}";
         scope.SourceMap?.Register(scope.CurrentPointer, block.Span);
 
         foreach (var statement in block.Statements) {
@@ -432,10 +419,8 @@ public static class CartridgeDocumentEmitter {
 
         foreach (var argument in call.Arguments) {
             var key = (argument.Name ?? CartridgeVocabulary.Instance.NameCallArgument(callName: call.Name, positionalIndex: positionalIndex) ?? $"arg{positionalIndex}");
-            var lowered = DocumentLowering.LowerValue(expr: argument.Value, scope: scope, fieldKey: key);
-
             if (s_operandArguments.Contains(item: key)) {
-                var operand = CartridgeOperand.FromLoweredValue(node: lowered, scope: scope, reason: out var reason);
+                var operand = CartridgeOperand.FromExpression(argument.Value, scope, out var reason);
 
                 if (operand is null) {
                     Refuse(scope: scope, span: argument.Value.Span, message: $"'{key}': {reason}");
@@ -445,7 +430,7 @@ public static class CartridgeDocumentEmitter {
 
                 result[key] = operand;
             } else {
-                result[key] = lowered;
+                result[key] = DocumentLowering.LowerValue(expr: argument.Value, scope: scope, fieldKey: key);
             }
 
             positionalIndex++;

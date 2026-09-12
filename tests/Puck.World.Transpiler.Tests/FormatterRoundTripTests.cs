@@ -87,7 +87,7 @@ public class FormatterRoundTripTests {
             parseResult.Value,
             basePath: Path.GetDirectoryName(fullPath),
             diagnostics: loweringDiagnostics
-        );
+        , cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(loweringDiagnostics.HasErrors, $"Lowering errors for {relativePath}:{Environment.NewLine}{loweringDiagnostics.FormatReport(source)}");
         Assert.NotNull(loweringResult.Value);
 

@@ -28,8 +28,8 @@ public sealed class DocumentValueComparer : IComparer<JsonNode?> {
             return left.CompareTo(value: right);
         }
 
-        if ((left == 0) && DocumentLowering.TryReadNumber(node: x, number: out var xNumber) && DocumentLowering.TryReadNumber(node: y, number: out var yNumber)) {
-            return xNumber.CompareTo(value: yNumber);
+        if (left == 0) {
+            return DocumentNumbers.Compare(x, y);
         }
 
         if ((left == 1) && (x is JsonValue xValue) && (y is JsonValue yValue) &&

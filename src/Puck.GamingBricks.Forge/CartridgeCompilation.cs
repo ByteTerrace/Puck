@@ -1,3 +1,5 @@
+using Puck.Abstractions.Machines;
+
 namespace Puck.GamingBricks.Forge;
 
 /// <summary>The deterministic output of a target compiler, with source identity and a state-symbol map for inspection.</summary>
@@ -25,38 +27,17 @@ public sealed class CartridgeCapacityException : Exception {
 }
 
 /// <summary>Compiles validated authored data to standalone native cartridge instructions and assets.</summary>
-public interface ICartridgeCompiler {
-    /// <summary>Gets the machine engine identifier this compiler targets.</summary>
-    string EngineId { get; }
+public interface ICartridgeCompiler : IMachineContentProvider {
     /// <summary>Gets the supported target token.</summary>
     string Target { get; }
     /// <summary>Validates and compiles a cartridge without reading files, environment variables or host time.</summary>
     /// <param name="document">The complete cartridge source.</param>
     /// <returns>The ROM and its source/state metadata.</returns>
     CartridgeCompilation Compile(CartridgeDocument document);
-}
 
-/// <summary>
-/// Entry point for a gaming brick extension package, supporting both static DI composition
-/// and dynamic runtime loading without compile-time host coupling.
-/// </summary>
-public interface IGamingBrickExtension {
-    /// <summary>Gets the user-friendly name of the extension.</summary>
-    string Name { get; }
-    /// <summary>Initializes and registers the extension's engines and compilers.</summary>
-    /// <param name="registry">The registry to register components into.</param>
-    void Initialize(IGamingBrickExtensionRegistry registry);
-}
+    bool IMachineContentProvider.Recognizes(string contentPath) =>
+        contentPath.EndsWith(value: ".cartridge.json", comparisonType: StringComparison.OrdinalIgnoreCase);
 
-/// <summary>
-/// Registry provided to an extension during initialization to register engines and compilers.
-/// </summary>
-public interface IGamingBrickExtensionRegistry {
-    /// <summary>Registers a screen-machine engine and an optional companion cartridge forge compiler.</summary>
-    /// <param name="engine">The screen-machine engine.</param>
-    /// <param name="compiler">The optional cartridge compiler.</param>
-    void RegisterEngine(Puck.Abstractions.Machines.IScreenMachineEngine engine, ICartridgeCompiler? compiler = null);
-    /// <summary>Registers a cartridge compiler.</summary>
-    /// <param name="compiler">The cartridge compiler.</param>
-    void RegisterCompiler(ICartridgeCompiler compiler);
+    PreparedMachineContent IMachineContentProvider.Prepare(ReadOnlyMemory<byte> content) =>
+        CartridgeContentProvider.Prepare(compiler: this, content: content);
 }

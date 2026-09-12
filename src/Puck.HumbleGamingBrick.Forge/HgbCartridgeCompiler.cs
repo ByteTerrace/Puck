@@ -47,15 +47,12 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             throw new ArgumentException(message: "This compiler requires target cgb.", paramName: nameof(document));
         }
 
-        // A slot spends one or two bytes of the window depending on its declared ceiling, so addresses accumulate by
-        // width rather than by declaration index. A wide slot is little-endian: low byte first.
+        var layout = new CartridgeStateLayout(document);
         var variables = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
         var widths = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
-        var slotAddress = (uint)FrameworkMemoryMap.GameRam;
-        foreach (var slot in document.Variables) {
-            variables[slot.Name] = slotAddress;
-            widths[slot.Name] = slot.Width;
-            slotAddress += (uint)slot.Width;
+        foreach (var (name, slot) in layout.Slots) {
+            variables[name] = (uint)FrameworkMemoryMap.GameRam + (uint)slot.Offset;
+            widths[name] = slot.Width;
         }
 
         var arrays = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
@@ -75,8 +72,8 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
         var defaults = new List<byte>();
         if (document.Save is { } declared) {
             foreach (var name in declared.Variables) {
-                persisted.Add(item: (variables[name], 1));
-                defaults.Add(item: (byte)document.Variables.First(predicate: variable => variable.Name == name).Initial);
+                persisted.Add(item: (variables[name], layout.Slots[name].Width));
+                defaults.AddRange(layout.InitialBytes(name));
             }
 
             foreach (var name in declared.Arrays) {
@@ -344,16 +341,16 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 // borrow out of one subtraction chain rather than needing a signed test.
                 var swap = compare.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual);
 
-                LoadWide(expression: (swap ? compare.Right : compare.Left), pair: Reg16.Hl);
+                LoadWide(expression: (swap ? compare.Right : compare.Left), pair: Reg16.Hl, guard: true);
                 emitter.Push(pair: StackPair.Hl);
-                LoadWide(expression: (swap ? compare.Left : compare.Right), pair: Reg16.De);
+                LoadWide(expression: (swap ? compare.Left : compare.Right), pair: Reg16.De, guard: true);
                 emitter.Pop(pair: StackPair.Hl);
                 if (compare.Comparison is (ActionStateComparison.Equal or ActionStateComparison.NotEqual)) {
                     var differs = emitter.NewLabel();
 
                     emitter.Load(destination: Reg8.A, source: Reg8.L);
                     emitter.Arithmetic(op: AluOp.Compare, source: Reg8.E);
-                    emitter.JumpAbsolute(condition: Condition.NotZero, label: differs);
+                    emitter.JumpAbsolute(condition: Condition.NotZero, label: compare.Comparison == ActionStateComparison.Equal ? fail : differs);
                     emitter.Load(destination: Reg8.A, source: Reg8.H);
                     emitter.Arithmetic(op: AluOp.Compare, source: Reg8.D);
                     if (compare.Comparison is ActionStateComparison.Equal) {
@@ -851,7 +848,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
 
         // Reads an operand as sixteen bits into the given pair. A narrow operand zero-extends, so a wide slot and a
         // byte compare and combine on the same terms.
-        void LoadWide(ValueExpression expression, Reg16 pair) {
+        void LoadWide(ValueExpression expression, Reg16 pair, bool guard = false) {
             var low = ((pair == Reg16.Hl) ? Reg8.L : Reg8.E);
             var high = ((pair == Reg16.Hl) ? Reg8.H : Reg8.D);
 
@@ -861,8 +858,8 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                 return;
             }
 
-            if (Bare(expression: expression) is { } name) {
-                var address = (ushort)variables[name];
+            if (Bare(expression: expression) is { } name && variables.TryGetValue(name, out var variableAddress)) {
+                var address = guard && name == document.Scene ? SceneAddress : (ushort)variableAddress;
 
                 emitter.LoadAFromAddress(address: address);
                 emitter.Load(destination: low, source: Reg8.A);
@@ -873,7 +870,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                     return;
                 }
             } else {
-                Load(expression: expression, guard: true);
+                Load(expression: expression, guard: guard);
                 emitter.Load(destination: low, source: Reg8.A);
             }
 
@@ -936,7 +933,7 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             }
 
             if (CartridgeExpressions.Index(key: state.Key) is { } index) {
-                Element(array: state.Name, index: index);
+                Element(array: state.Name, index: index, guard: guard);
                 emitter.Load(destination: Reg8.A, source: Reg8.Memory);
 
                 return;
@@ -1096,11 +1093,11 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
         }
 
         // Leaves HL at the addressed element, or at the zeroed discard sink when the index is past the declared length.
-        void Element(string array, ValueExpression index) {
+        void Element(string array, ValueExpression index, bool guard = false) {
             var length = lengths[key: array];
             var done = emitter.NewLabel();
             var inside = emitter.NewLabel();
-            Load(expression: index);
+            Load(expression: index, guard: guard);
             if (length < CartridgeLimits.ArrayLength) {
                 emitter.ArithmeticImmediate(op: AluOp.Compare, value: (byte)length);
                 emitter.JumpRelative(condition: Condition.Carry, label: inside);

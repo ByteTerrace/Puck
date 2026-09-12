@@ -16,7 +16,7 @@ namespace Puck.Transpiler.Lowering;
 /// document DATA and never simulation state.</para>
 /// <para>So: an <see cref="ExpressionDomain.Integer"/> function is evaluated by the engine's own
 /// <see cref="ExpressionArithmetic"/> — integers are exact in both, so delegating makes disagreement impossible.
-/// Everything else folds in double, and agrees with the rule evaluator exactly on whole numbers.</para>
+/// Integer-preserving functions retain whole-number inputs exactly; fractional operations fold in double.</para>
 /// </summary>
 public static class DocumentScalars {
     /// <summary>The names folded in double, because their domain includes fractions. Every
@@ -65,18 +65,42 @@ public static class DocumentScalars {
                 fieldKey: fieldKey);
         }
 
+        if (function.Domain == ExpressionDomain.Integer) {
+            return Delegated(call: call, function: function, scope: scope, fieldKey: fieldKey);
+        }
+
         var numbers = new double[function.Arity];
+        var integers = new long[function.Arity];
+        var allIntegers = true;
 
         for (var index = 0; (index < function.Arity); ++index) {
-            var lowered = DocumentLowering.LowerValue(expr: call.Arguments[index].Value, scope: scope, fieldKey: fieldKey);
+            var lowered = DocumentLowering.EvaluateValue(expr: call.Arguments[index].Value, scope: scope, fieldKey: fieldKey);
+            allIntegers &= DocumentNumbers.TryInteger(lowered, out integers[index]);
 
             if (!DocumentLowering.TryReadNumber(node: lowered, number: out numbers[index])) {
                 return Refuse(scope: scope, call: call, message: $"{call.Name} reads numbers known at compile time");
             }
         }
 
-        if (function.Domain == ExpressionDomain.Integer) {
-            return Delegated(call: call, function: function, numbers: numbers, scope: scope);
+        if (call.Name == "clamp" && (allIntegers ? integers[1] > integers[2] : numbers[1] > numbers[2])) {
+            return Refuse(scope, call, "clamp's minimum must not exceed its maximum");
+        }
+        if (call.Name == "squareRoot" && numbers[0] < 0) {
+            return Refuse(scope, call, "squareRoot takes a nonnegative number");
+        }
+
+        if (allIntegers && call.Name is not ("cosine" or "sine" or "squareRoot")) {
+            if (call.Name == "absolute" && integers[0] == long.MinValue) {
+                return Refuse(scope, call, "absolute overflows a signed 64-bit integer");
+            }
+            return JsonValue.Create(call.Name switch {
+                "absolute" => Math.Abs(integers[0]),
+                "clamp" => Math.Clamp(integers[0], integers[1], integers[2]),
+                "maximum" => Math.Max(integers[0], integers[1]),
+                "minimum" => Math.Min(integers[0], integers[1]),
+                "sign" => Math.Sign(integers[0]),
+                _ => integers[0],
+            });
         }
 
         return DocumentLowering.NumberNode(value: call.Name switch {
@@ -92,20 +116,19 @@ public static class DocumentScalars {
             "sine" => Math.Sin(a: numbers[0]),
             "squareRoot" => Math.Sqrt(d: numbers[0]),
             _ => 0,
-        });
+        }, span: call.Span);
     }
 
     // An integer-domain function is the engine's to evaluate: integers are exact in both languages, so calling the
     // rule evaluator is what makes a numeric disagreement impossible rather than merely unlikely.
-    private static JsonNode? Delegated(CallExpressionNode call, ExpressionFunction function, double[] numbers, DocumentScope scope) {
+    private static JsonNode? Delegated(CallExpressionNode call, ExpressionFunction function, DocumentScope scope, string? fieldKey) {
         var arguments = new long[function.Arity];
 
-        for (var index = 0; (index < numbers.Length); ++index) {
-            if (numbers[index] != Math.Truncate(d: numbers[index])) {
-                return Refuse(scope: scope, call: call, message: $"{call.Name} reads whole numbers");
+        for (var index = 0; (index < arguments.Length); ++index) {
+            var argument = DocumentLowering.EvaluateValue(call.Arguments[index].Value, scope, fieldKey);
+            if (!DocumentNumbers.TryInteger(argument, out arguments[index])) {
+                return Refuse(scope: scope, call: call, message: $"{call.Name} reads signed 64-bit whole numbers");
             }
-
-            arguments[index] = (long)numbers[index];
         }
 
         if (!ExpressionArithmetic.TryFunction(operation: function.Operation, kind: CellKind.Int, arguments: arguments, value: out var value)) {

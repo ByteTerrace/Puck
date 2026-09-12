@@ -49,9 +49,16 @@ public static class DocumentLowering {
     /// through an array, object, range, arithmetic or <c>let</c> indirection) validates against the field it
     /// actually lands on. <see langword="null"/> when no such key applies.</param>
     /// <returns>The lowered node, or <see langword="null"/> for a null literal or an unrecognized expression.</returns>
-    public static JsonNode? LowerValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) {
+    public static JsonNode? LowerValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) =>
+        scope.Budget.Copy(EvaluateValue(expr, scope, fieldKey), expr.Span);
+
+    // Internal evaluation returns borrowed, read-only values. Clone when constructing an output container, never
+    // merely to inspect a value or select one element of a cached array.
+    internal static JsonNode? EvaluateValue(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) {
         ArgumentNullException.ThrowIfNull(expr);
         ArgumentNullException.ThrowIfNull(scope);
+        using var evaluation = scope.Budget.Enter(expr.Span);
+        if (scope.Vocabulary.TryLowerValue(expr, scope, fieldKey, out var specialized)) { return specialized; }
 
         switch (expr) {
             case LiteralExpressionNode lit:
@@ -72,8 +79,10 @@ public static class DocumentLowering {
 
                             break;
                     }
+                    if (built.Length > DocumentEvaluationBudget.TextLimit) {
+                        throw new DocumentEvaluationException("The interpolated string exceeds the text limit.", expr.Span);
+                    }
                 }
-
                 return JsonValue.Create(value: built.ToString());
             }
 
@@ -81,17 +90,8 @@ public static class DocumentLowering {
                 return JsonValue.Create(value: color.Hex);
 
             case IdentifierExpressionNode ident:
-                // A lambda parameter shadows a constant of the same name, for the length of one application.
-                if (scope.Locals.TryGetValue(key: ident.Name, value: out var local)) {
-                    return local?.DeepClone();
-                }
-                if (scope.Constants.TryGetValue(key: ident.Name, value: out var constExpr)) {
-                    if (!scope.ConstantValues.TryGetValue(key: ident.Name, value: out var constant)) {
-                        constant = LowerValue(expr: constExpr, scope: scope.ForConstant(), fieldKey: fieldKey);
-                        scope.ConstantValues[ident.Name] = constant;
-                    }
-
-                    return constant?.DeepClone();
+                if (scope.TryEvaluateBinding(ident.Name, fieldKey, out var bound)) {
+                    return bound;
                 }
                 if (string.Equals(a: ident.Name, b: "null", comparisonType: StringComparison.Ordinal)) {
                     return null;
@@ -109,6 +109,7 @@ public static class DocumentLowering {
                 return JsonValue.Create(value: ident.Name);
 
             case ArrayExpressionNode arr: {
+                scope.Budget.Collection(arr.Elements.Count, arr.Span);
                 var jsonArr = new JsonArray();
 
                 foreach (var elem in arr.Elements) {
@@ -192,39 +193,59 @@ public static class DocumentLowering {
         ArgumentNullException.ThrowIfNull(call);
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(sink);
+        using var expansion = scope.Budget.Enter(call.Span);
 
         if (!scope.Templates.TryGetValue(key: call.Name, value: out var template)) {
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, $"Unknown template '{call.Name}'.", call.Span);
             return;
         }
 
-        var localConstants = new Dictionary<string, ExpressionNode>(dictionary: scope.Constants);
+        var definitionScope = scope.TemplateDefinitionScope(call.Name);
+        var localConstants = new Dictionary<string, ExpressionNode>(dictionary: definitionScope.Constants);
+        var invocationScope = definitionScope.WithConstants(invocationConstants: localConstants);
+        var consumed = new HashSet<int>();
 
         for (var index = 0; (index < template.Parameters.Count); ++index) {
             var param = template.Parameters[index];
             ExpressionNode? boundValue = null;
 
-            foreach (var arg in call.Arguments) {
+            for (var argumentIndex = 0; argumentIndex < call.Arguments.Count; ++argumentIndex) {
+                var arg = call.Arguments[argumentIndex];
                 if (string.Equals(a: arg.Name, b: param.Name, comparisonType: StringComparison.Ordinal)) {
+                    if (boundValue is not null) {
+                        scope.Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, $"Argument '{param.Name}' is supplied more than once.", arg.Span);
+                        return;
+                    }
                     boundValue = arg.Value;
-
-                    break;
+                    consumed.Add(argumentIndex);
                 }
             }
 
             if ((boundValue is null) && (index < call.Arguments.Count) && (call.Arguments[index].Name is null)) {
                 boundValue = call.Arguments[index].Value;
+                consumed.Add(index);
             }
 
+            var isDefault = boundValue is null;
             boundValue ??= param.DefaultValue;
 
             if (boundValue is not null) {
-                localConstants[param.Name] = boundValue;
+                invocationScope.BindArgument(param.Name, boundValue, isDefault ? invocationScope : scope);
+            } else {
+                scope.Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, $"Template '{call.Name}' requires argument '{param.Name}'.", call.Span);
+                return;
             }
         }
 
-        var invocationScope = scope.WithConstants(invocationConstants: localConstants);
+        if (consumed.Count != call.Arguments.Count) {
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, $"Template '{call.Name}' received an unknown or duplicate argument.", call.Span);
+            return;
+        }
+
+        invocationScope.IndexDeclarations(template.Body.Statements);
 
         foreach (var stmt in template.Body.Statements) {
+            scope.Budget.Spend(1, stmt.Span);
             sink(Rename(statement: stmt, scope: invocationScope), target, invocationScope);
         }
     }
@@ -253,11 +274,11 @@ public static class DocumentLowering {
     // differently named row per invocation.
     private static StatementNode Rename(StatementNode statement, DocumentScope scope) {
         if ((statement is not BlockNode block) || (block.Name is null) ||
-            !scope.Constants.TryGetValue(key: block.Name, value: out var nameExpr)) {
+            !scope.TryLowerBinding(block.Name, out var nameValue)) {
             return statement;
         }
 
-        return (block with { Name = (LowerValue(expr: nameExpr, scope: scope)?.ToString() ?? block.Name) });
+        return (block with { Name = (nameValue?.ToString() ?? block.Name) });
     }
 
     /// <summary>Expands a <c>for</c> block, emitting its body once per element of the sequence.</summary>
@@ -325,12 +346,13 @@ public static class DocumentLowering {
     public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope) {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(scope);
+        using var expansion = scope.Budget.Enter(loop.Span);
 
         if (!ValidateForBody(loop: loop, scope: scope)) {
             yield break;
         }
 
-        if (LowerValue(expr: loop.Sequence, scope: scope) is not JsonArray sequence) {
+        if (EvaluateValue(expr: loop.Sequence, scope: scope) is not JsonArray sequence) {
             scope.Diagnostics.ReportError(PuckDiagnosticCodes.ForSequenceRefused, "a 'for' walks an array known at compile time", loop.Sequence.Span);
 
             yield break;
@@ -338,7 +360,7 @@ public static class DocumentLowering {
 
         for (var index = 0; (index < sequence.Count); ++index) {
             var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
-                [loop.Item] = sequence[index]?.DeepClone(),
+                [loop.Item] = sequence[index],
             };
 
             if (loop.Index is { } ordinal) {
@@ -348,6 +370,7 @@ public static class DocumentLowering {
             var iteration = scope.WithLocals(lambdaLocals: locals);
 
             foreach (var statement in loop.Body) {
+                scope.Budget.Spend(1, statement.Span);
                 yield return (statement, iteration);
             }
         }
@@ -419,6 +442,15 @@ public static class DocumentLowering {
             return true;
         }
 
+        if (value.TryGetValue<int>(out var asInt)) {
+            number = asInt;
+            return true;
+        }
+        if (value.TryGetValue<decimal>(out var exact)) {
+            number = (double)exact;
+            return true;
+        }
+
         return false;
     }
 
@@ -461,6 +493,9 @@ public static class DocumentLowering {
             return text;
         }
 
+        if (DocumentNumbers.TryInteger(node, out var integer)) {
+            return integer.ToString(CultureInfo.InvariantCulture);
+        }
         return TryReadNumber(node: node, number: out var number)
             ? ((number == Math.Truncate(d: number)) ? ((long)number).ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : number.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))
             : null;
@@ -490,9 +525,13 @@ public static class DocumentLowering {
     /// <summary>Narrows an integral result back to a long, so arithmetic and a written literal reach the document as
     /// the same JSON kind.</summary>
     /// <param name="value">The folded number.</param>
+    /// <param name="span">The expression responsible for the result.</param>
     /// <returns>A long-valued node when the value is integral, a double-valued one otherwise.</returns>
-    public static JsonNode NumberNode(double value) {
-        if (Math.Abs(value: (value % 1)) < double.Epsilon) {
+    public static JsonNode NumberNode(double value, SourceSpan span = default) {
+        if (!double.IsFinite(value)) {
+            throw new DocumentEvaluationException("The calculation is outside the finite numeric range.", span, PuckDiagnosticCodes.InvalidValue);
+        }
+        if (value >= long.MinValue && value < 9223372036854775808d && Math.Truncate(value) == value) {
             return JsonValue.Create(value: (long)value);
         }
 
@@ -527,6 +566,9 @@ public static class DocumentLowering {
             return JsonValue.Create(value: longVal);
         }
 
+        if (!double.IsFinite(numVal)) {
+            throw new DocumentEvaluationException("The literal is outside the finite numeric range.", lit.Span, PuckDiagnosticCodes.InvalidValue);
+        }
         return JsonValue.Create(value: numVal);
     }
 
@@ -537,7 +579,7 @@ public static class DocumentLowering {
         var dimension = ((fieldKey is null) ? UnitDimension.None : scope.Vocabulary.ClassifyField(fieldKey: fieldKey));
 
         if (UnitConversion.TryConvert(dimension: dimension, numericValue: numVal, unit: unit, converted: out var converted)) {
-            return NumberNode(value: converted);
+            return NumberNode(value: converted, span: span);
         }
 
         if (dimension == UnitDimension.None) {
@@ -554,19 +596,28 @@ public static class DocumentLowering {
     // The operand is lowered under the SAME fieldKey, so a unit inside it converts against the field the sign is
     // written for; the sign is then applied to the converted number.
     private static JsonNode? EvaluateUnary(UnaryExpressionNode un, DocumentScope scope, string? fieldKey) {
-        if (!TryReadNumber(node: LowerValue(expr: un.Operand, scope: scope, fieldKey: fieldKey), number: out var number)) {
+        var operand = EvaluateValue(un.Operand, scope, fieldKey);
+        if (DocumentNumbers.TryInteger(operand, out var integer)) {
+            if (un.Operator == "-" && integer == long.MinValue) {
+                throw new DocumentEvaluationException("Integer negation exceeds the signed 64-bit range.", un.Span, PuckDiagnosticCodes.InvalidValue);
+            }
+            return JsonValue.Create(un.Operator == "-" ? -integer : integer);
+        }
+        if (!TryReadNumber(node: operand, number: out var number)) {
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, "A unary numeric operator needs a number.", un.Span);
             return null;
         }
 
-        return NumberNode(value: ((un.Operator == "-") ? -number : number));
+        return NumberNode(value: ((un.Operator == "-") ? -number : number), span: un.Span);
     }
 
     private static JsonNode? EvaluateIndex(IndexExpressionNode indexed, DocumentScope scope, string? fieldKey) {
-        var target = LowerValue(expr: indexed.Target, scope: scope, fieldKey: fieldKey);
-        var index = LowerValue(expr: indexed.Index, scope: scope);
+        var target = EvaluateValue(expr: indexed.Target, scope: scope, fieldKey: fieldKey);
+        var index = EvaluateValue(expr: indexed.Index, scope: scope);
 
         if ((target is JsonObject obj) && (index is JsonValue key) && key.TryGetValue<string>(value: out var name)) {
-            return obj[name]?.DeepClone();
+            obj.TryGetPropertyValue(name, out var member);
+            return member;
         }
 
         if (target is not JsonArray arr) {
@@ -575,7 +626,7 @@ public static class DocumentLowering {
             return null;
         }
 
-        if (!TryReadNumber(node: index, number: out var ordinal) || (ordinal != Math.Truncate(d: ordinal))) {
+        if (!DocumentNumbers.TryInteger(index, out var ordinal)) {
             scope.Diagnostics.ReportError(PuckDiagnosticCodes.IndexRefused, "an array index is a whole number known at compile time", indexed.Span);
 
             return null;
@@ -587,32 +638,54 @@ public static class DocumentLowering {
             return null;
         }
 
-        return arr[(int)ordinal]?.DeepClone();
+        return arr[(int)ordinal];
     }
 
     private static JsonNode? EvaluateBinary(BinaryExpressionNode bin, DocumentScope scope, string? fieldKey) {
-        var leftNode = LowerValue(expr: bin.Left, scope: scope, fieldKey: fieldKey);
-        var rightNode = LowerValue(expr: bin.Right, scope: scope, fieldKey: fieldKey);
+        var leftNode = EvaluateValue(expr: bin.Left, scope: scope, fieldKey: fieldKey);
+        var rightNode = EvaluateValue(expr: bin.Right, scope: scope, fieldKey: fieldKey);
 
         if (!TryReadNumber(node: leftNode, number: out var lNum) || !TryReadNumber(node: rightNode, number: out var rNum)) {
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.InvalidValue, $"'{bin.Operator}' needs numbers known at compile time.", bin.Span);
             return null;
         }
 
         // A comparison is worth 1 or 0, never a JSON boolean — the rule language has no boolean either, so this is
         // what keeps `cleared + (row > 0)` meaning the same thing on both sides of the compiler. `IsTruthy` reads a
         // non-zero number as true, so a comparison still reads as a condition wherever one is wanted.
+        var order = DocumentNumbers.Compare(leftNode, rightNode);
         var comparison = bin.Operator switch {
-            "==" => (lNum == rNum),
-            "!=" => (lNum != rNum),
-            "<" => (lNum < rNum),
-            "<=" => (lNum <= rNum),
-            ">" => (lNum > rNum),
-            ">=" => (lNum >= rNum),
+            "==" => order == 0,
+            "!=" => order != 0,
+            "<" => order < 0,
+            "<=" => order <= 0,
+            ">" => order > 0,
+            ">=" => order >= 0,
             _ => (bool?)null,
         };
 
         if (comparison is { } verdict) {
             return JsonValue.Create(value: (verdict ? 1L : 0L));
+        }
+
+        if (DocumentNumbers.TryInteger(leftNode, out var left) && DocumentNumbers.TryInteger(rightNode, out var right)) {
+            try {
+                long? exact = bin.Operator switch {
+                    "+" => checked(left + right),
+                    "-" => checked(left - right),
+                    "*" => checked(left * right),
+                    "%" => right is 0 or -1 ? 0 : left % right,
+                    "/" when right == 0 => 0,
+                    "/" when right == -1 => checked(-left),
+                    "/" when left % right == 0 => left / right,
+                    _ => null,
+                };
+                if (exact is { } result) {
+                    return JsonValue.Create(result);
+                }
+            } catch (OverflowException) {
+                throw new DocumentEvaluationException("Integer arithmetic exceeds the signed 64-bit range.", bin.Span, PuckDiagnosticCodes.InvalidValue);
+            }
         }
 
         return NumberNode(value: bin.Operator switch {
@@ -626,6 +699,6 @@ public static class DocumentLowering {
             // A zero divisor yields zero rather than failing, matching division.
             "%" => ((rNum != 0) ? (lNum % rNum) : 0),
             _ => 0,
-        });
+        }, span: bin.Span);
     }
 }

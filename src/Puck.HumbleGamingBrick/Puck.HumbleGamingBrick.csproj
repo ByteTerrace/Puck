@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <Description>The shared SM83 machine across every DMG, MGB, SGB, CGB, and AGB-compatibility hardware revision: CPU, PPU, APU, timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer link, hosted through the IScreenMachineEngine adapter over Puck.GamingBricks. Hardware differences are expressed as named capability gates on one core, never as forked implementations.</Description>
+        <Description>The shared SM83 machine across every DMG, MGB, SGB, CGB, and AGB-compatibility hardware revision: CPU, PPU, APU, timers, DMA, cartridge mappers and battery saves, and serial/infrared/printer link, hosted through the IMachineEngine adapter over Puck.GamingBricks. Hardware differences are expressed as named capability gates on one core, never as forked implementations.</Description>
         <IsPackable>true</IsPackable>
         <PackageId>ByteTerrace.Puck.HumbleGamingBrick</PackageId>
         <PackageTags>agb;cgb;determinism;dmg;emulation;sm83</PackageTags>
@@ -8,8 +8,8 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <!--
-        The SM83-family GamingBrick core, including its IScreenMachineEngine adapter (Hosting/): GamingBrickEngine
-        (IScreenMachineEngine, id "gaming-brick") builds a MachineHost (IScreenMachine + IMachineMemoryPeek) that hosts
+        The SM83-family GamingBrick core, including its IMachineEngine adapter (Hosting/): GamingBrickEngine
+        (IMachineEngine, id "gaming-brick") builds a MachineHost (IMachineRuntime + IMachineMemoryPeek) that hosts
         the machine as a frame + input endpoint — advanced by an exact integer tick budget, read as an unresampled
         160x144 framebuffer image handle, fed a neutral MachinePadState folded to the console's joypad by the internal
         BrickPad adapter. A host wires it by engine id and never names the emulator. Backend-neutral: only the IGpu*
@@ -23,6 +23,12 @@
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.GamingBricks" />
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Firmware\*.bin" LogicalName="Puck.HumbleGamingBrick.Firmware.%(Filename)%(Extension)" />
+        <!-- Explicit items avoid the default glob's RecursiveDir being appended to the package path. -->
+        <None Remove="Firmware\LICENSE;Firmware\README.md" />
+        <None Include="Firmware\LICENSE;Firmware\README.md" Pack="true" PackagePath="Firmware\" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />

@@ -4,9 +4,10 @@ namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>
 /// Builds the boot ROM image a revision executes from reset. The image is a real boot program: it verifies the
-/// cartridge logo and header checksum, shows a mark while the divider runs, plays the start-up chime, selects the
+/// cartridge header checksum and, optionally, its logo, shows Puck artwork, selects the
 /// compatibility mode a cartridge without the color flag needs, hands the cartridge the revision's register file, and
 /// unmaps itself through <c>0xFF50</c> at <c>0x00FE</c> so execution falls into <c>0x0100</c>.
+/// Compatible handheld images play an original start-up chime; companion-console images preserve silent startup.
 /// <para>
 /// The handoff is timed rather than incidental. The divider counter a cartridge reads at <c>0x0100</c> is the boot
 /// program's running time, and <see cref="BootDivPrediction"/> holds the per-revision, per-header counter the hardware
@@ -17,9 +18,9 @@ namespace Puck.HumbleGamingBrick.Forge;
 /// </para>
 /// </summary>
 /// <remarks>
-/// A machine booted through one of these images has a different <see cref="MachineIdentity"/> than a machine started at
-/// the seeded post-boot handoff, because the identity fingerprints the boot ROM image. The two are not
-/// interchangeable for snapshot restore.
+/// The selected image is part of <see cref="MachineIdentity"/> even when fast startup skips its execution. Cold and
+/// fast machines selecting the same image can exchange full snapshots. A firmware-free diagnostic machine has a
+/// different identity and cannot exchange snapshots with either one.
 /// </remarks>
 public static class BootRomBuilder {
     /// <summary>The length of the monochrome boot image, mapped over <c>0x0000</c>-<c>0x00FF</c>.</summary>
@@ -35,26 +36,33 @@ public static class BootRomBuilder {
 
     /// <summary>Builds the boot ROM image for a revision.</summary>
     /// <param name="model">The revision whose boot program to emit.</param>
-    /// <param name="mark">The boot bitmap the image scrolls in and hands off to; the era one by default.</param>
+    /// <param name="mark">The cartridge-logo acceptance policy; compatible with both Puck and era cartridges by default.</param>
     /// <returns>A 256-byte monochrome image, or a 2304-byte Color image.</returns>
     /// <remarks>
-    /// The mark changes 48 bytes of table and nothing else, so the solved straight-line constants are the same for
-    /// both and a house image keeps the revision's handoff exactly.
+    /// Strict policies retain a compact Puck monogram to reserve space for their logo table. The compatible image
+    /// uses that space for the full wordmark and original chime. Every image retains the revision's timed handoff.
     /// </remarks>
-    public static byte[] Build(ConsoleModel model, BootRomMark mark = BootRomMark.Era) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="mark"/> is not a defined policy.</exception>
+    /// <exception cref="InvalidOperationException">The emitted image exceeds its mapped window or its timing cannot be solved.</exception>
+    public static byte[] Build(ConsoleModel model, BootRomMark mark = BootRomMark.Compatible) {
+        if (!Enum.IsDefined(value: mark)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(mark));
+        }
+
         var layout = BootRomLayout.For(model: model);
-        // The solve runs on the era image whatever mark is asked for: it works by BOOTING the image against probe
-        // cartridges, and those carry the era bitmap, so a house image would wedge before it ever handed off.
+        // Strict policies have identical instructions; the era logo lets the calibration probes pass their check.
+        var calibrationMark = ((mark == BootRomMark.House) ? BootRomMark.Era : mark);
         var image = Emit(
             calibration: BootRomCalibration.Zero,
             layout: layout,
-            mark: BootRomMark.Era
+            mark: calibrationMark
         );
 
         return Emit(
             calibration: Calibrate(
                 image: image,
-                layout: layout
+                layout: layout,
+                mark: calibrationMark
             ),
             layout: layout,
             mark: mark
@@ -111,7 +119,7 @@ public static class BootRomBuilder {
     // the handoff line is exactly the seeded one). The two are independent — the divider is reset after the enable — so
     // each converges on its own. Solving them by BOOTING the emitted image keeps the constants a measurement of this
     // machine rather than a hand count of instruction timings.
-    private static BootRomCalibration Calibrate(BootRomLayout layout, byte[] image) {
+    private static BootRomCalibration Calibrate(BootRomLayout layout, byte[] image, BootRomMark mark) {
         var calibration = BootRomCalibration.Zero;
 
         for (var attempt = 0; (attempt < 16); ++attempt) {
@@ -161,7 +169,7 @@ public static class BootRomBuilder {
             image = Emit(
                 calibration: calibration,
                 layout: layout,
-                mark: BootRomMark.Era
+                mark: mark
             );
         }
 

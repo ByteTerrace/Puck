@@ -351,7 +351,7 @@ public sealed partial class Ppu : IPpu, IClockedComponent, ISnapshotable, IModeS
         // frame — and the boot program raises all of it itself. Without one, the documented handoff is seeded: the LCD
         // on with the background enabled, the monochrome palettes set, and (on Color) the frame position the boot ROM
         // leaves, which the hardware-accurate reference starts from exactly.
-        if (configuration.BootRom is null) {
+        if (!configuration.ExecutesBootRom) {
             m_lcdc = 0x91;
             m_backgroundPalette = 0xFC;
             m_objectPalette0 = 0xFF;

@@ -65,6 +65,18 @@ For a DMG result-signature reader, observe the intended SB write through
 `SerialComponent.ByteQueued`; the output routine can re-arm an unfinished
 normal-clock transfer.
 
+### AGB serial clock ownership
+
+- Normal 8/32-bit external-clock transfers stay armed without scheduling a local
+  completion, even with a cable partner attached. Only an internally clocked
+  peer supplies the completing transfer. Internal-clock transfers can finish
+  alone and receive idle-high data.
+- A peer-delivered completion cancels any superseded local completion event;
+  changing clock selection while busy must not leave a second interrupt queued.
+- `serial-clock` gates both normal widths and rates, delayed master startup,
+  busy release and single-interrupt delivery. `firmware-multiboot` separately
+  checks native normal-mode payload exchange and multiplayer download.
+
 ### Audio
 
 Integer PCM12/PCM34 channel outputs are the emulated contract, and they are
@@ -132,7 +144,7 @@ brick re-exposes its own closure under its historical bare name (`MachineFork`/
 `AgbMachineInstance` for `Puck.AdvancedGamingBrick`) through a `global using`
 alias in that project's `GlobalUsings.cs` — searching for a declared
 `class AgbMachineInstance` finds nothing; the type lives in
-`Puck.GamingBricks.MachineInstance.cs` under the generic name.
+`src/Puck.GamingBricks/MachineInstance.cs` under the generic name.
 
 - Snapshot bytes are the state-of-record determinism surface.
 - `--hash-divergence` localizes a mismatch between two executions in one
@@ -148,10 +160,17 @@ alias in that project's `GlobalUsings.cs` — searching for a declared
   wait indefinitely inside a step, because queued input and linked peers
   must run to produce keypad or serial wake requests. Wake latency stays on
   the bus, and snapshots preserve the halted pipeline.
-- The AGB screen engine requires `bios=<path>`; `stub` is an explicit opt-in
-  for BIOS-independent diagnostics, not a BIOS implementation. Direct boot
-  alone does not provide SWI services or IRQ dispatch. The host constructor
-  likewise requires an explicit BIOS image.
+- Both screen engines default to bundled Puck firmware and cold startup.
+  `fast` skips startup but retains the selected firmware; AGB still executes
+  SWI services and IRQ dispatch from that image. An optional final `bios=<path>`
+  selects an external image. AGB's standalone `stub` remains an explicit fast
+  diagnostic mode, not a BIOS implementation. Explicit low-level configurations
+  retain their documented diagnostic defaults; `AgbFirmware` and `HgbFirmware`
+  own the bundled-image configuration helpers.
+- Restoring AGB state clears queued presentation PCM while retaining the
+  serialized emit phase. The output rate remains host configuration; configure
+  an audio-rendering fork before restoring its snapshot. Firmware presentation
+  gates check typed/raw restore and fresh PCM replay.
 - AGB save restoration requests a host-side flush independently of the
   serialized dirty flag. Disk writes flush a same-directory temporary before
   replacement and retain pending state on failure. Keep this persistence
@@ -386,6 +405,10 @@ self-checking Post stage or golden replay is a gate.
   `LinkGameReplayStage` before relying on this limitation; when implemented,
   update the stage and this reference together.
 
-Keep ROMs, BIOS images, and external corpora outside the repository. Use the
+Keep proprietary ROMs, retail BIOS images, and external corpora outside the repository.
+Original bundled Puck firmware is the exception: its generated images and
+permissive licenses are package inputs, verified against their source by `puck firmware`.
+Local retail images may serve as black-box test oracles, never as bundled
+payloads or instruction sources for replacement firmware. Use the
 current Post README and command-line parser as the authority for environment
 variables and supported diagnostic switches.

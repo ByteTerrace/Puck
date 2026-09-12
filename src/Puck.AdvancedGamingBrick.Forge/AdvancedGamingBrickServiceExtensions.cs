@@ -17,7 +17,7 @@ public static class AdvancedGamingBrickServiceExtensions {
     public static IServiceCollection AddAdvancedGamingBrick(this IServiceCollection services) {
         ArgumentNullException.ThrowIfNull(argument: services);
 
-        services.AddSingleton<IScreenMachineEngine, AdvancedGamingBrickEngine>();
+        services.AddSingleton<IMachineEngine, AdvancedGamingBrickEngine>();
         services.AddSingleton<ICartridgeCompiler, AgbCartridgeCompiler>();
 
         return services;

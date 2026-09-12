@@ -22,6 +22,7 @@ internal sealed class QueuedHostBackpressureStage : IPostStage<PostContext> {
     /// <inheritdoc/>
     public PostStageOutcome Run(PostContext context) {
         var result = QueuedHostContractProbe.VerifyBackpressure(withContent: () => new MachineHost(
+            bootMode: MachineBootMode.Fast,
             model: ConsoleModel.DmgC,
             cartridgeRom: SyntheticRom.Create()
         ));

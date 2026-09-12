@@ -1,16 +1,15 @@
-using System.Numerics;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Machines;
 
 namespace Puck.HumbleGamingBrick.Forge.Tune;
 
 /// <summary>
 /// A player-operated diegetic instrument: a <c>puck.audio.v1</c> document compiled to a jukebox cart
-/// (<see cref="TuneRom.Build"/>) and hosted on a real <see cref="MachineHost"/> — every <see cref="IScreenMachine"/>/
+/// (<see cref="TuneRom.Build"/>) and hosted on a real <see cref="MachineHost"/> — every <see cref="IMachineRuntime"/>/
 /// <see cref="IAudioMachine"/> member composes straight through to it, so this wrapper's only job is owning the
 /// content-to-cart compile step and reporting <see cref="TicksPerBeat"/>.
 /// </summary>
-internal sealed class TuneInstrumentMachine : IScreenMachine, IAudioMachine, IInstrumentClockSource, IDisposable {
+internal sealed class TuneInstrumentMachine : IMachineRuntime, IMachineContentSlot, IMachineVideoOutputs,
+    IMachineAudioOutputs, IMachineInputPorts, IAudioMachine, IInstrumentClockSource {
     /// <summary>One authored pattern row's engine-tick length, in the SAME fixed-tick domain
     /// <c>Puck.Audio.Simulation.MusicClock</c> uses: <c>Puck.Assets.Documents.AudioDocument.Tempo</c> is frames per
     /// row at the framework's 60 fps sound-driver reference, and <c>Puck.World.FixedTickConversion.TicksPerSecond</c>
@@ -21,7 +20,7 @@ internal sealed class TuneInstrumentMachine : IScreenMachine, IAudioMachine, IIn
 
     /// <summary>Initializes the instrument, booting <paramref name="content"/> immediately when supplied (a null
     /// content leaves it empty, awaiting <see cref="LoadContent"/> — the same contract every other engine's
-    /// <see cref="IScreenMachineEngine.Create"/> follows).</summary>
+    /// <see cref="IMachineEngine.Create"/> follows).</summary>
     public TuneInstrumentMachine(int audioSampleRate, byte[]? content, string? savePath) {
         var document = ((content is null) ? null : TuneInstrumentEngine.ParseContent(content: content));
 
@@ -40,9 +39,13 @@ internal sealed class TuneInstrumentMachine : IScreenMachine, IAudioMachine, IIn
     /// <inheritdoc/>
     public bool IsAssigned => m_inner.IsAssigned;
     /// <inheritdoc/>
-    public nint NativeImageViewHandle => m_inner.NativeImageViewHandle;
+    public MachineRuntimeStatus Status => m_inner.Status;
     /// <inheritdoc/>
-    public Vector3 EmittedLight => m_inner.EmittedLight;
+    public IReadOnlyDictionary<string, IMachineVideoOutput> VideoOutputs => m_inner.VideoOutputs;
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, IAudioMachine> AudioOutputs => m_inner.AudioOutputs;
+    /// <inheritdoc/>
+    public IReadOnlyDictionary<string, IMachineInputPort> InputPorts => m_inner.InputPorts;
     /// <inheritdoc/>
     public int SampleRate => m_inner.SampleRate;
 
@@ -68,17 +71,7 @@ internal sealed class TuneInstrumentMachine : IScreenMachine, IAudioMachine, IIn
         TicksPerBeat = (document.Tempo!.Value * TicksPerRowFrame);
     }
     /// <inheritdoc/>
-    public void NotifyDeviceLost() => m_inner.NotifyDeviceLost();
-    /// <inheritdoc/>
-    public void PublishFrame(IGpuDeviceContext deviceContext, IGpuComputeServices gpu) => m_inner.PublishFrame(
-        deviceContext: deviceContext,
-        gpu: gpu
-    );
-    /// <inheritdoc/>
     public int ReadSamples(Span<short> destination) => m_inner.ReadSamples(destination: destination);
     /// <inheritdoc/>
-    public bool Step(ulong deltaTicks, in MachinePadState input) => m_inner.Step(
-        deltaTicks: deltaTicks,
-        input: in input
-    );
+    public bool Advance(ulong deltaTicks) => m_inner.Advance(deltaTicks);
 }

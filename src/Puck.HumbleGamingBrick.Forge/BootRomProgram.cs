@@ -2,7 +2,7 @@ namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>
 /// Emits one revision's boot program. The program runs in two halves. Everything before the divider reset — the video
-/// setup, the logo and header-checksum verification, the mark's scroll, and the table lookups that resolve the
+/// setup, the selected header verification, the mark's scroll and chime, and the table lookups that resolve the
 /// revision's handoff counter — costs whatever it costs. Everything after it is straight-line, so the handoff counter
 /// is exactly the delay the program computed plus a constant the builder solves by booting the image.
 /// </summary>
@@ -32,7 +32,7 @@ internal static class BootRomProgram {
     private const ushort HeaderNewLicensee = 0x0144;
     private const ushort HeaderOldLicensee = 0x014B;
     private const ushort MarkTileData = 0x8010;
-    private const ushort MarkTileMapEntry = 0x9909;
+    private const ushort MarkTileMapEntry = 0x9908;
     private const ushort UnmapAddress = 0x00FE;
     private const ushort WaveRamStart = 0xFF30;
     private const byte WaveRamLength = 16;
@@ -51,17 +51,26 @@ internal static class BootRomProgram {
     private static ReadOnlySpan<byte> MarkBitmap =>
         [0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00];
 
+    // Four original 6x7 glyphs, one per tile. The spacing is part of the artwork, not a host font.
+    private static ReadOnlySpan<byte> WordmarkBitmap => [
+        0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00,
+        0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00,
+        0x3C, 0x66, 0x60, 0x60, 0x60, 0x66, 0x3C, 0x00,
+        0x66, 0x6C, 0x78, 0x70, 0x78, 0x6C, 0x66, 0x00,
+    ];
+
     /// <summary>Emits the program bytes for a layout at a solved calibration.</summary>
     /// <param name="layout">The revision's layout.</param>
     /// <param name="calibration">The straight-line machine-cycle counts to subtract.</param>
-    /// <param name="bitmap">The boot bitmap the program hands off to.</param>
+    /// <param name="bitmap">The cartridge-logo acceptance policy.</param>
     /// <returns>The assembled program, to be placed at the layout's code base.</returns>
-    public static byte[] Emit(BootRomLayout layout, BootRomCalibration calibration, BootRomMark bitmap = BootRomMark.Era) {
+    public static byte[] Emit(BootRomLayout layout, BootRomCalibration calibration, BootRomMark bitmap = BootRomMark.Compatible) {
         var emitter = new Sm83Emitter();
         var logo = emitter.NewLabel();
         var mark = emitter.NewLabel();
         var registerTable = emitter.NewLabel();
         var delay = emitter.NewLabel();
+        var playsChime = ((bitmap == BootRomMark.Compatible) && !layout.Model.IsSuperGameBoy());
         var colorLabels = new BootRomColorLabels(
             AmbiguousRows: emitter.NewLabel(),
             ChecksumExceptions: emitter.NewLabel(),
@@ -74,13 +83,15 @@ internal static class BootRomProgram {
         EmitVideoSetup(
             emitter: emitter,
             layout: layout,
-            mark: mark
+            mark: mark,
+            compatible: (bitmap == BootRomMark.Compatible)
         );
 
         if (layout.VerifiesHeader) {
             EmitHeaderVerification(
                 emitter: emitter,
-                logo: logo
+                logo: logo,
+                compatible: (bitmap == BootRomMark.Compatible)
             );
         }
 
@@ -89,7 +100,8 @@ internal static class BootRomProgram {
                 calibration: calibration,
                 emitter: emitter,
                 labels: colorLabels,
-                layout: layout
+                layout: layout,
+                branded: (bitmap == BootRomMark.Compatible)
             );
         }
 
@@ -98,7 +110,18 @@ internal static class BootRomProgram {
         emitter.LoadAImmediate(value: 0x91);
         emitter.StoreAToHighPage(port: 0x40);
 
-        EmitScroll(emitter: emitter);
+        if (playsChime) {
+            EmitRegisterWrites(emitter: emitter, layout: layout, registerTable: registerTable);
+            // D5 followed by A5: a quiet, original rising fifth. Register handoff remains independently exact.
+            emitter.LoadAImmediate(value: 0x83);
+            emitter.StoreAToHighPage(port: 0x12);
+            emitter.LoadAImmediate(value: 0x20);
+            emitter.StoreAToHighPage(port: 0x13);
+            emitter.LoadAImmediate(value: 0x87);
+            emitter.StoreAToHighPage(port: 0x14);
+        }
+
+        EmitScroll(emitter: emitter, playsChime: playsChime);
 
         if (layout.Model.IsSuperGameBoy()) {
             EmitSuperTiming(
@@ -152,7 +175,7 @@ internal static class BootRomProgram {
     // the mark, whitens the color palettes a color cartridge gets, and lights the LCD. Every video-memory write happens
     // before the LCD comes on, so none of it can be locked out, and every write here is prologue: the divider is reset
     // afterwards, so none of it reaches the handoff counter.
-    private static void EmitVideoSetup(Sm83Emitter emitter, BootRomLayout layout, int mark) {
+    private static void EmitVideoSetup(Sm83Emitter emitter, BootRomLayout layout, int mark, bool compatible) {
         // A call before the stack pointer is set would push over the interrupt-enable register; the handoff sets the
         // same value again, so this is the boot program's own stack rather than part of the handoff.
         emitter.LoadStackPointer(value: 0xFFFE);
@@ -173,7 +196,7 @@ internal static class BootRomProgram {
 
         emitter.LoadImmediate(pair: Reg16.Hl, value: MarkTileData);
         emitter.LoadImmediateAddressOf(pair: Reg16.De, label: mark);
-        emitter.LoadImmediate(destination: Reg8.C, value: ((byte)MarkBitmap.Length));
+        emitter.LoadImmediate(destination: Reg8.C, value: ((byte)(compatible ? WordmarkBitmap.Length : MarkBitmap.Length)));
 
         var row = emitter.NewLabel();
 
@@ -188,12 +211,14 @@ internal static class BootRomProgram {
             label: row
         );
 
-        emitter.LoadImmediate(pair: Reg16.Hl, value: MarkTileMapEntry);
+        emitter.LoadImmediate(pair: Reg16.Hl, value: (compatible ? MarkTileMapEntry : (ushort)(MarkTileMapEntry + 1)));
         emitter.LoadAImmediate(value: 0x01);
-        emitter.Load(
-            destination: Reg8.Memory,
-            source: Reg8.A
-        );
+        for (var tile = 0; tile < (compatible ? 4 : 1); ++tile) {
+            emitter.StoreAToHlIncrement();
+            if (compatible && tile < 3) {
+                emitter.Increment(register: Reg8.A);
+            }
+        }
     }
     // Writes the alternating 0x00/0xFF pattern the Color boot ROMs leave in wave RAM. The wave channel is silent for
     // the whole boot, so every byte lands at its own address rather than following a live sample position.
@@ -247,9 +272,8 @@ internal static class BootRomProgram {
             label: clear
         );
     }
-    // Refuses a cartridge whose logo or header checksum does not check out, the way the hardware does: the machine
-    // wedges rather than handing off.
-    private static void EmitHeaderVerification(Sm83Emitter emitter, int logo) {
+    // Refuses a corrupt header checksum, and a mismatching logo only under the explicit strict policies.
+    private static void EmitHeaderVerification(Sm83Emitter emitter, int logo, bool compatible) {
         var compare = emitter.NewLabel();
         var lockUp = emitter.NewLabel();
         var start = emitter.NewLabel();
@@ -260,26 +284,28 @@ internal static class BootRomProgram {
         emitter.JumpRelative(label: lockUp);
         emitter.MarkLabel(label: start);
 
-        emitter.LoadImmediate(pair: Reg16.Hl, value: CartridgeHeader.LogoOffset);
-        emitter.LoadImmediateAddressOf(pair: Reg16.De, label: logo);
-        emitter.LoadImmediate(destination: Reg8.C, value: ((byte)CartridgeHeader.Logo.Length));
-        emitter.MarkLabel(label: compare);
-        emitter.LoadAFromDe();
-        emitter.Increment(pair: Reg16.De);
-        emitter.Arithmetic(
-            op: AluOp.Compare,
-            source: Reg8.Memory
-        );
-        emitter.JumpRelative(
-            condition: Condition.NotZero,
-            label: lockUp
-        );
-        emitter.Increment(pair: Reg16.Hl);
-        emitter.Decrement(register: Reg8.C);
-        emitter.JumpRelative(
-            condition: Condition.NotZero,
-            label: compare
-        );
+        if (!compatible) {
+            emitter.LoadImmediate(pair: Reg16.Hl, value: CartridgeHeader.LogoOffset);
+            emitter.LoadImmediateAddressOf(pair: Reg16.De, label: logo);
+            emitter.LoadImmediate(destination: Reg8.C, value: ((byte)CartridgeHeader.Logo.Length));
+            emitter.MarkLabel(label: compare);
+            emitter.LoadAFromDe();
+            emitter.Increment(pair: Reg16.De);
+            emitter.Arithmetic(
+                op: AluOp.Compare,
+                source: Reg8.Memory
+            );
+            emitter.JumpRelative(
+                condition: Condition.NotZero,
+                label: lockUp
+            );
+            emitter.Increment(pair: Reg16.Hl);
+            emitter.Decrement(register: Reg8.C);
+            emitter.JumpRelative(
+                condition: Condition.NotZero,
+                label: compare
+            );
+        }
 
         var accumulate = emitter.NewLabel();
 
@@ -309,7 +335,7 @@ internal static class BootRomProgram {
     }
     // Falls the mark in from above, one scroll step per frame. Pure prologue: it runs before the divider is reset, so
     // its cost never reaches the handoff.
-    private static void EmitScroll(Sm83Emitter emitter) {
+    private static void EmitScroll(Sm83Emitter emitter, bool playsChime) {
         var step = emitter.NewLabel();
         var enterVBlank = emitter.NewLabel();
         var leaveVBlank = emitter.NewLabel();
@@ -321,6 +347,16 @@ internal static class BootRomProgram {
             source: Reg8.B
         );
         emitter.StoreAToHighPage(port: 0x42);
+        if (playsChime) {
+            var keepNote = emitter.NewLabel();
+            emitter.ArithmeticImmediate(op: AluOp.Compare, value: ScrollSteps / 2);
+            emitter.JumpRelative(condition: Condition.NotZero, label: keepNote);
+            emitter.LoadAImmediate(value: 0x6B);
+            emitter.StoreAToHighPage(port: 0x13);
+            emitter.LoadAImmediate(value: 0x87);
+            emitter.StoreAToHighPage(port: 0x14);
+            emitter.MarkLabel(label: keepNote);
+        }
         emitter.MarkLabel(label: enterVBlank);
         emitter.LoadAFromHighPage(port: 0x44);
         emitter.ArithmeticImmediate(
@@ -689,8 +725,6 @@ internal static class BootRomProgram {
     }
     // The register file the cartridge wakes up to, then the unmap.
     private static void EmitHandoff(Sm83Emitter emitter, BootRomLayout layout, int registerTable) {
-        var write = emitter.NewLabel();
-
         // The cartridge wakes to a cleared high page. The Color program stages its computed bytes at the bottom of that
         // page and calls, so it clears everything above the staged bytes here and the staged bytes themselves once the
         // register file has read them. A monochrome program stages nothing and only pushes when it carries the delay
@@ -706,27 +740,7 @@ internal static class BootRomProgram {
             emitter.StoreAToHighPage(port: 0xFD);
         }
 
-        emitter.LoadImmediateAddressOf(
-            pair: Reg16.Hl,
-            label: registerTable
-        );
-        emitter.LoadImmediate(
-            destination: Reg8.B,
-            value: ((byte)(RegisterWrites(layout: layout).Length / 2))
-        );
-        emitter.MarkLabel(label: write);
-        emitter.LoadAFromHlIncrement();
-        emitter.Load(
-            destination: Reg8.C,
-            source: Reg8.A
-        );
-        emitter.LoadAFromHlIncrement();
-        emitter.StoreAToHighPageC();
-        emitter.Decrement(register: Reg8.B);
-        emitter.JumpRelative(
-            condition: Condition.NotZero,
-            label: write
-        );
+        EmitRegisterWrites(emitter: emitter, layout: layout, registerTable: registerTable);
 
         EmitHandoffRegisters(
             emitter: emitter,
@@ -781,30 +795,9 @@ internal static class BootRomProgram {
 
         var handoff = MonochromeHandoff(model: layout.Model);
 
-        emitter.LoadImmediate(
-            destination: Reg8.B,
-            value: handoff.B
-        );
-        emitter.LoadImmediate(
-            destination: Reg8.C,
-            value: handoff.C
-        );
-        emitter.LoadImmediate(
-            destination: Reg8.D,
-            value: handoff.D
-        );
-        emitter.LoadImmediate(
-            destination: Reg8.E,
-            value: handoff.E
-        );
-        emitter.LoadImmediate(
-            destination: Reg8.H,
-            value: handoff.H
-        );
-        emitter.LoadImmediate(
-            destination: Reg8.L,
-            value: handoff.L
-        );
+        emitter.LoadImmediate(pair: Reg16.Bc, value: (ushort)((handoff.B << 8) | handoff.C));
+        emitter.LoadImmediate(pair: Reg16.De, value: (ushort)((handoff.D << 8) | handoff.E));
+        emitter.LoadImmediate(pair: Reg16.Hl, value: (ushort)((handoff.H << 8) | handoff.L));
     }
     // Leaves the flags the revision hands off with. Every instruction after this one is an immediate load or a
     // high-page store, neither of which disturbs them.
@@ -845,14 +838,27 @@ internal static class BootRomProgram {
         (layout.SupportsColor
         ? ((byte)0x11)
         : MonochromeHandoff(model: layout.Model).A);
+
+    private static void EmitRegisterWrites(Sm83Emitter emitter, BootRomLayout layout, int registerTable) {
+        var write = emitter.NewLabel();
+        emitter.LoadImmediateAddressOf(pair: Reg16.Hl, label: registerTable);
+        emitter.LoadImmediate(destination: Reg8.B, value: ((byte)(RegisterWrites(layout: layout).Length / 2)));
+        emitter.MarkLabel(label: write);
+        emitter.LoadAFromHlIncrement();
+        emitter.Load(destination: Reg8.C, source: Reg8.A);
+        emitter.LoadAFromHlIncrement();
+        emitter.StoreAToHighPageC();
+        emitter.Decrement(register: Reg8.B);
+        emitter.JumpRelative(condition: Condition.NotZero, label: write);
+    }
     private static void EmitTables(Sm83Emitter emitter, BootRomLayout layout, int logo, int mark, BootRomMark bitmap, int registerTable, BootRomColorLabels labels) {
         emitter.MarkLabel(label: mark);
-        emitter.EmitData(value: MarkBitmap);
+        emitter.EmitData(value: (bitmap == BootRomMark.Compatible) ? WordmarkBitmap : MarkBitmap);
 
         emitter.MarkLabel(label: registerTable);
         emitter.EmitData(value: RegisterWrites(layout: layout));
 
-        if (layout.VerifiesHeader) {
+        if (layout.VerifiesHeader && bitmap != BootRomMark.Compatible) {
             emitter.MarkLabel(label: logo);
             emitter.EmitData(value: (bitmap == BootRomMark.House)
                 ? CartridgeHeader.HouseLogo
@@ -911,8 +917,9 @@ internal static class BootRomProgram {
             _ => (0x01, 0xB0, 0x00, 0x13, 0x00, 0xD8, 0x01, 0x4D),
         };
 
-    private static void EmitColorTiming(Sm83Emitter emitter, BootRomLayout layout, BootRomCalibration calibration, BootRomColorLabels labels) =>
+    private static void EmitColorTiming(Sm83Emitter emitter, BootRomLayout layout, BootRomCalibration calibration, BootRomColorLabels labels, bool branded) =>
         BootRomColorTiming.Emit(
+            branded: branded,
             calibration: calibration,
             emitter: emitter,
             labels: labels,

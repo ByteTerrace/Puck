@@ -1,5 +1,8 @@
 using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Units;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
+using System.Text.Json.Nodes;
 
 namespace Puck.GamingBricks.Transpiler;
 
@@ -22,9 +25,22 @@ public sealed class CartridgeVocabulary : IDocumentVocabulary {
     /// <summary>The shared instance; the vocabulary is a pure lookup and carries no per-pass state.</summary>
     public static CartridgeVocabulary Instance { get; } = new();
 
+    private static readonly HashSet<string> s_expressionFields = new(StringComparer.Ordinal) {
+        "angle", "behindBackground", "centreX", "centreY", "clear", "flipX", "flipY", "palette", "scale", "scrollX",
+        "scrollY", "tile", "turn", "visible", "x", "y",
+    };
+
     /// <inheritdoc />
-    /// <remarks>Every value in a cartridge is an unsigned byte the hardware reads literally, so no field admits a
-    /// unit suffix and every one of them is PUCK024.</remarks>
+    public bool TryLowerValue(ExpressionNode expression, DocumentScope scope, string? fieldKey, out JsonNode? value) {
+        value = null;
+        if (fieldKey is null || !s_expressionFields.Contains(fieldKey)) { return false; }
+        value = CartridgeOperand.FromExpression(expression, scope, out var reason);
+        if (reason is not null) { scope.Diagnostics.ReportError(PuckDiagnosticCodes.SemanticValidation, reason, expression.Span); }
+        return true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Cartridge numeric fields use literal hardware units and admit no unit suffix; suffixed values are PUCK024.</remarks>
     public UnitDimension ClassifyField(string fieldKey) => UnitDimension.None;
 
     /// <inheritdoc />

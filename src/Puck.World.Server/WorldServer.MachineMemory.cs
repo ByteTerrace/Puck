@@ -26,6 +26,7 @@ public sealed partial class WorldServer {
     private readonly Dictionary<(int Screen, int Address), long> m_machineMemoryWriteObserved = [];
 
     private void SyncMachineMemory(ulong tick) {
+        SyncNamedMachineMemory(tick);
         var screens = m_definition.Screens;
 
         for (var index = 0; (index < screens.Count); index++) {

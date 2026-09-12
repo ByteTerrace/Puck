@@ -28,19 +28,20 @@ SM83 code, 2bpp tiles, maps and palettes. `AgbCartridgeCompiler` in
 `Puck.AdvancedGamingBrick.Forge` emits Thumb code and mode-0 4bpp graphics.
 Both consume the same rules, variables, sprites and input conditions. Source
 data determines behavior; never add a game-name switch or copy gameplay into
-a C# template. No sample games or built ROM assets remain.
+a C# template. Authored sample sources and generated cartridge JSON live under `src/Puck.World/Assets/cartridges`.
 
 `src/Puck.World/ForgeCommandModule.cs` provides local console/seat drafts and
 `forge.new/open/show/set/remove/undo/check/build/save/export/play` in every
 boot shape. JSON tails retain quotes through `WorldCommandArguments`.
 Draft edits can temporarily violate the schema; compile/save/play always
 validate. Failed edits leave the draft intact. Source paths are explicit;
-there are no environment-variable settings. `forge.play` exports then submits
-`WorldScreenOp.Insert` with the acting principal through `IServerLink`.
+there are no environment-variable settings. `forge.play` saves canonical
+cartridge source, then submits `WorldScreenOp.Insert` with the acting principal
+through `IServerLink`; the registered content provider compiles that source.
 Never bypass the server's screen authority or replay/content hashing.
 
 The current schema has explicit limits and omissions: cgb/agb targets,
-byte state, addressable byte arrays, 8x8 sprites, runtime background writes,
+byte and two-byte state, addressable byte arrays, 8x8 or tall sprites, runtime background writes,
 cartridge audio, battery-backed state, and rule bodies that are step TREES
 (`set`/`if`/`repeat`/`break`/`map`/`blit`/`play`/`stop`/`save`/`load`), not flat
 action lists. An operand is a `Puck.State.ValueExpression` in its infix spelling
@@ -51,9 +52,10 @@ button reads through `$key:<button>:<mode>`, which is why input composes under
 `not`. A write target is `{state, key}`, the key being a bare number, a bare cell
 read, or `$expr:` plus the index's infix spelling.
 
-The schema does not claim DMG or ROM banking. EVERY primitive runs on both
-targets; nothing is target-gated, and adding a gate would be a design decision
-rather than a shortcut.
+The schema does not claim DMG or ROM banking. Common primitives preserve their authored semantics on both
+targets; hardware-specific features have explicit validation gates. Consult the validator before describing
+a feature as portable. Wide slots precede byte slots in the shared layout, and saves persist every byte.
+Byte expressions reject wide literals and reads instead of truncating them differently across targets.
 
 Colour is per-palette, not global: `palettes.background` / `palettes.object` hold
 up to 8 palettes on cgb and 16 on agb, `mapPalettes` picks one per background
@@ -187,8 +189,9 @@ native execution tests, not by a hidden special case.
   governs line n+1, so a band starting at line L is written from entry L-1.
   Rows republish in the vertical blank, never mid-picture — a burst must not
   read the table while it is being written.
-- AGB document output uses direct boot without BIOS calls/IRQs. World play
-  supplies `stub` explicitly. The lower-level builder accepts an optional
+- AGB document output does not require BIOS calls/IRQs. World play uses the
+  bundled Puck cold startup by default; explicit `fast` skips its presentation
+  while retaining firmware services. The lower-level builder accepts an optional
   caller-supplied logo for retail BIOS boot; document output does not claim it.
 - A rule's comparison and a `set` step's operation are named from `Puck.State`,
   not from a forge list: `ActionStateComparison` (Equal, NotEqual, Less,
@@ -240,19 +243,19 @@ shares the integer note-period calculations with the audio subsystem.
 `BootRomBuilder.Build(ConsoleModel)` emits the boot ROM a revision executes from
 reset: 256 bytes for a monochrome revision, 2304 for a Color one (mapped
 0x0000-0x00FF and 0x0200-0x08FF, the cartridge header showing through the gap).
-It is a real boot program — logo and header-checksum verification with a wedge on
-mismatch (the companion-console revisions check neither), a mark scrolled in, the
-start-up chime, the compatibility-mode selector and compatibility-palette load for
+It is a real boot program — header-checksum verification with a wedge on mismatch
+(the companion-console revisions check neither logo nor checksum), an original
+PUCK wordmark scrolled in, a rising-fifth pulse chime (silent on companion revisions),
+the compatibility-mode selector and compatibility-palette load for
 a cartridge without the color flag, the revision's register handoff, and the unmap
 at 0x00FE so the program counter falls into 0x0100.
 
-- **The mark decides which cartridges an image runs.** `BootRomBuilder.Build(model, mark)` emits the same program
-  with one of two 48-byte bitmaps: the era one, or `CartridgeHeader.HouseLogo` — the ByteTerrace wordmark every
-  cartridge `HgbCartridgeCompiler` forges carries. It is a SUBSTITUTION, not an addition: the Color image spends
-  nearly all of its 0x700 bytes, with no room for a second table, so a house image refuses era cartridges and an era
-  image refuses forged ones. The solve always runs on the era image, because it works by booting against probe
-  cartridges that carry the era bitmap. The emitted program draws its own one-tile mark and never expands the
-  cartridge's bitmap into video memory, so the header logo is verified but not displayed.
+- **Presentation and admission are independent.** `BootRomBuilder.Build(model, mark)` defaults to
+  `BootRomMark.Compatible`, which displays the original four-tile PUCK wordmark and accepts ordinary, Puck and
+  independently authored header logos. Explicit `Era` and `House` remain strict diagnostic policies with a compact
+  monogram and a 48-byte comparison table. A header bitmap is editable data, not authentication or an enforceable
+  Puck-only distribution. Calibration boots the matching emitted policy; never calibrate one instruction layout
+  against another. No policy expands cartridge artwork into the framebuffer.
 - **The handoff counter is the contract.** `BootDivPrediction`'s tables are the
   budget; the Color image carries those same tables and computes its target from
   the cartridge header, plus the revision's own offset from those shared tables
@@ -297,8 +300,24 @@ at 0x00FE so the program counter falls into 0x0100.
   from an executing program. The LY-comparison bit is IN it and is not masked:
   a revision whose seeded handoff parks at LY==LYC==0 carries the latch set, so
   its status register reads 0x84.
-- `MachineIdentity` fingerprints the boot image, so a booted machine's snapshots
-  never interchange with a seeded machine's.
+- Runtime packages embed explicitly generated images; they never reference Forge or calibrate while loading a game.
+  `HgbFirmware.GetImage(model)` returns a private copy. Regenerate with the owning `puck firmware` verb and verify
+  its bytes before packaging.
+- `MachineBootMode` selects cold or fast startup independently of image selection. Fast startup retains the selected
+  image's `MachineIdentity` fingerprint; cold and fast instances of that same image can restore complete snapshots.
+  A firmware-free seeded diagnostic remains a different identity. Component power-on initialization uses
+  `MachineConfiguration.ExecutesBootRom`, not a null-image test.
+
+The native ARM7TDMI firmware is separate from `BootRomBuilder`'s SM83 `Agb`/`Ags`
+compatibility images. Its source and build contract live in
+[`Puck.AdvancedGamingBrick/Firmware`](../../../src/Puck.AdvancedGamingBrick/Firmware/README.md).
+Use `puck firmware agb --verify` with that document's explicit LLVM paths to
+check the generated image; never substitute a runtime Forge dependency or a
+managed SWI shortcut. Keep its permissive provenance and package-local notices
+with the image. Route native service, music-driver and download changes through
+the [Advanced Post firmware stages](../../../src/Puck.AdvancedGamingBrick.Post/README.md#tiers),
+using local retail firmware only as a black-box functional oracle and never as
+source or a bundled asset.
 
 ## Per-frame cost is measured, never estimated
 
@@ -312,12 +331,9 @@ each sustains at full frame rate; cost per iteration is inversely proportional t
 that capacity. Never hand-count an emitter's instruction sequence into a weight,
 and never adjust a weight to make a document fit.
 
-Each weight is the WORSE of the two targets' ratios, and the reservation is the
-Color machine's, which is the smaller. That is what lets a document carry one
-portable unit count and still be safe on either backend, so flipping `/target`
-cannot change whether it holds frame cadence. The two targets genuinely disagree
-on relative cost — a multiply is expensive on SM83 and nearly free in Thumb — so
-a per-target weight table would not be portable.
+`CartridgeCostProfile` carries separate weights and reservations for each target. A multiply has different
+relative cost on SM83 and Thumb, so changing `/target` can change the estimate and cadence. Never compare raw
+unit totals across targets or describe the advisory estimate as a proof of frame timing.
 
 A blit SUSPENDS frame production rather than costing work: with the display off no
 vertical blank arrives, so the frame counter does not advance. Measured, a

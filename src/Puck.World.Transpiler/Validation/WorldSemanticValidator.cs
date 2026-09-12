@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Composition;
 using Puck.Transpiler.Diagnostics;
+using Puck.Abstractions.Machines;
 
 namespace Puck.World.Transpiler.Validation;
 
@@ -33,8 +34,9 @@ public static class WorldSemanticValidator {
     /// <param name="loweredJson">The lowered JsonObject.</param>
     /// <param name="sourceMap">The SourceMap linking JSON pointer paths to source AST spans.</param>
     /// <param name="diagnostics">The DiagnosticBag to report semantic errors into.</param>
+    /// <param name="machines">The deployment's machine vocabulary; unavailable provider checks are reported as errors.</param>
     /// <returns>True if the world passed semantic validation without errors.</returns>
-    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics) {
+    public static bool ValidateWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, IMachineValidationCatalog? machines = null) {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
@@ -50,7 +52,7 @@ public static class WorldSemanticValidator {
         }
 
         var errors = new List<string>();
-        WorldDefinitionValidator.TryValidateLocally(definition, errors, out _);
+        WorldDefinitionValidator.TryValidateLocally(definition, machines, errors, deferred: errors, out _);
 
         foreach (var error in errors) {
             var span = ExtractSpanFromError(error, sourceMap);
@@ -70,8 +72,9 @@ public static class WorldSemanticValidator {
     /// <param name="diagnostics">The DiagnosticBag to report composition and semantic errors into.</param>
     /// <param name="sourcePath">The <c>.puck</c> source file's own resolved path — basis and import references
     /// resolve relative to its directory.</param>
+    /// <param name="machines">The deployment's machine vocabulary, supplied without loading code from the document.</param>
     /// <returns>True if the composed world passed semantic validation without errors.</returns>
-    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath) {
+    public static bool ValidateComposedWorld(JsonObject loweredJson, SourceMap? sourceMap, DiagnosticBag diagnostics, string sourcePath, IMachineValidationCatalog? machines = null) {
         ArgumentNullException.ThrowIfNull(loweredJson);
         ArgumentNullException.ThrowIfNull(diagnostics);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -84,7 +87,7 @@ public static class WorldSemanticValidator {
             return false;
         }
 
-        return ValidateWorld(composed ?? loweredJson, sourceMap, diagnostics);
+        return ValidateWorld(composed ?? loweredJson, sourceMap, diagnostics, machines);
     }
 
     private static SourceSpan ExtractSpanFromError(string error, SourceMap? sourceMap) {

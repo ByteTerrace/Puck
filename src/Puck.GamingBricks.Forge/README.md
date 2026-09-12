@@ -8,6 +8,13 @@ the [AGB compiler](../Puck.AdvancedGamingBrick.Forge/README.md) emits AGB
 cartridges. The exported bytes run on their native emulators without a managed
 game interpreter. There are no embedded sample games.
 
+`ICartridgeCompiler` implements the neutral `IMachineContentProvider` contract
+from `Puck.Abstractions.Machines`. The adapter recognizes cartridge document
+paths, validates and compiles their bytes, and exports source identity and named
+bus addresses. Generic machine hosts consume `PreparedMachineContent` without
+referencing this package or its cartridge schema. Static and dynamic machine
+registration use `IMachineExtension` from the same neutral contract layer.
+
 ## Author inside the engine
 
 Open Puck's console. The same commands work through process stdin, including
@@ -24,19 +31,20 @@ forge.check
 forge.build
 forge.save player.cartridge.json
 forge.export player.gbc
-forge.play 0 player.gbc
+forge.play 0 player.cartridge.json
 ```
 
 This creates a movable tile sprite. The blank document starts with one blank
 tile, an empty map, explicit palettes, and no behavior. Authors supply their
 own rules and art. Screen 0 must already be declared in the world, and the
-acting author must hold Control over it. `forge.play` writes the ROM and
-submits the ordinary screen insertion; the server reports acceptance or
-refusal. Existing engagement and pad mappings provide player input.
+acting author must hold Control over it. `forge.play` writes canonical source
+and submits it through the machine's content provider, preserving the source
+hash and symbols at bind. The server reports acceptance or refusal. Existing
+engagement and pad mappings provide player input.
 
 `forge.new agb PLAYER` starts an AGB source instead. To change an existing
-CGB source to AGB, set `/target` to `"agb"` and replace `/palette` with 16
-RGB555 integers. Check the result before building.
+CGB source to AGB, set `/target` to `"agb"` and widen each palette under `/palettes/background` and
+`/palettes/object` to 16 RGB555 integers. Check target-specific features before building.
 
 | Command | Effect |
 |---|---|
@@ -50,7 +58,7 @@ RGB555 integers. Check the result before building.
 | `forge.build` | Compile in memory; report target, ROM size, hash and variable addresses. |
 | `forge.save <source-path>` | Atomically write validated canonical JSON. |
 | `forge.export <rom-path>` | Compile and atomically write ROM bytes. |
-| `forge.play <screen-index> <rom-path>` | Export and submit a normal authoritative screen insert. |
+| `forge.play <screen-index> <source.cartridge.json>` | Save canonical source and submit a normal authoritative insert. |
 
 Paths are explicit, relative to the host working directory unless absolute.
 Their parent directories must exist. Save/export replace an existing file.
@@ -100,12 +108,12 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `clock` | Optional naming of state slots a `clock` step fills from the cartridge's real-time clock. `seconds`, `minutes` and `hours` work on both targets. The rest do not, because the two machines carry different devices: `days` is a count of days since the cartridge started and is cgb only, while `day`, `month` and `year` are a calendar date and are agb only. |
 | `affine` | Optional `{map,angle,scale,centreX,centreY,visible}` background that rotates and scales. Angle is a turn in 256 steps, scale is sixteenths (16 = life size). AGB only. |
 | `tallSprites` | Draws sprites 8×16; a sprite's tile index then names a pair and its low bit is ignored. |
-| `variables` | Up to 128 `{name,initial,max}` unsigned slots. `max` is the largest value the slot must hold, 1 through 65535; absent is 255. A slot whose ceiling fits a byte spends one byte, a wider one spends two, little-endian, and the variable window bounds the total BYTES rather than the slot count. Arithmetic wraps at `max` + 1. A wide slot is admitted as a set step's target or value and as a comparison operand; every other field reads a byte and refuses one by name. Assignment, `Add` and `Subtract` have sixteen-bit forms; the rest are refused against a wide target. |
+| `variables` | Up to 128 `{name,initial,max}` unsigned slots. `max` selects the representation and bounds the initial value, 1 through 65535; absent is 255. A slot whose ceiling fits a byte spends one byte, a wider one spends two, little-endian. Wide slots precede byte slots, keeping halfwords aligned; compilation exposes their addresses by name. Arithmetic wraps modulo 256 or 65536 according to storage width. Assignment, `Add`, `Subtract` and comparisons support wide slots; byte destinations and composed byte expressions refuse wide reads and literals above 255. |
 | `scene` | Optional name of a declared variable whose value partitions a frame. Every rule guarded by one equality of it against a constant belongs to that value's scene, and at most one scene's rules run per frame. The frame snapshots it before any rule evaluates, so a rule that writes it names the NEXT frame's scene: a phase machine no longer has to name its successor in a staging variable adopted by a trailing ungated rule, and the estimate charges the dearest scene wherever the write sits. |
 | `arrays` | Up to 32 named `{name,initial}` byte runs, 7168 bytes in total. `initial` fixes the length at 1–256; a byte index cannot address more. |
 | `screens` | Up to 16 named `{name,width,tiles,palettes}` rectangles, at most 120 tiles, painted by a blit step. `palettes` is optional and gives one background palette index per tile. |
 | `sounds` | Up to 8 named sounds, each exactly one of `music` (1–4 `{voice,part,waveform}` voice parts, one to a channel, each part a looping audio document), `effect` (a one-shot on the pulse-1, noise or wave voice, with `frames` per row, and a 32-entry `waveform` for the wave voice), or `sample` (signed 8-bit recorded audio; AGB only). A voice any track's part occupies is refused to every effect, so an effect can never cut a line of the music off. |
-| `save` | Optional `{version,variables,arrays}` battery-backed state, at most 72 bytes. |
+| `save` | Optional `{version,variables,arrays}` battery-backed state, at most 72 bytes. Variables contribute their full one- or two-byte representation; arrays contribute all elements. |
 | `rules` | Up to 1024 `{name,body,when}` rules; a gate reaches at most 8 comparisons however it composes them, and one body holds at most 64 steps nested at most 8 deep. Rules cost CODE, which the image's own windows bound, so the real refusal is `CartridgeCapacityException`; declaring `scene` is what keeps per-frame work flat as the count grows. |
 | `sprites` | Up to 40 `{name,tile,x,y,visible,palette}` 8×8 sprites. Every value field is an expression; `palette` is optional and selects an object palette. |
 | `scrollX`, `scrollY` | Background offsets in pixels, each an expression. |
@@ -293,25 +301,26 @@ engine's own vocabulary (`Puck.State.ActionStateComparison`): `Equal`,
 Operations are named from the engine's opcodes (`Puck.State.ExpressionOp`):
 `Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `BitAnd`, `BitOr`, `BitXor`,
 `ShiftLeft` and `ShiftRight`; an ABSENT operation assigns, which is the one
-combination no opcode spells. Arithmetic is unsigned and wraps modulo 256 on
-both targets. A runtime zero divisor yields zero and a runtime shift of eight or more
+combination no opcode spells. Byte arithmetic is unsigned and wraps modulo 256 on
+both targets; wide assignment, addition and subtraction use sixteen bits. A runtime zero divisor yields zero and a runtime shift of eight or more
 yields zero, so no operand can trap; the literal forms of both are refused at
 validation instead. A sprite with zero visibility, an invalid runtime
 tile index, or a top-left position outside the native viewport is hidden.
 The viewports are 160×144 and 240×160 pixels respectively.
 
-The compiler enforces code/data capacity, and validation bounds per-frame work
-with `CartridgeCost`. That model counts abstract work units — one unit is an
+The compiler enforces code/data capacity, and validation bounds the VRAM write queue with saturating arithmetic.
+Scene guards read the frame snapshot even inside array indices. Inferred exclusive guards lose that discount
+when a direct write, saved-state load or clock read can change their variable.
+`CartridgeCost` advises on per-frame work. That model counts abstract work units — one unit is an
 eleventh of a `set` step writing a literal to a variable — and compares the
 total against a per-frame reservation. The weights are measured, not estimated:
 `CartridgeCostMeasurement` boots documents on both real machines and reports the
 largest per-frame iteration count each sustains at full frame rate, and cost per
-iteration is inversely proportional to that. Each weight is the worse of the two
-targets, so a document that fits also fits either target alone and flipping
-`/target` cannot change whether it holds frame cadence.
+iteration is inversely proportional to that. Each target has its own weights and reservation;
+changing `/target` can change the estimate and observed cadence. Cross-target unit totals are not comparable.
 
-A primitive with no measured weight prices as `Unmodeled` and the document is
-refused, rather than admitted against an invented number. Adding a primitive
+A primitive with no measured weight prices as `Unmodeled`, leaving the document without usable cost advice.
+Cost alone does not refuse compilation. Adding a primitive
 therefore means measuring it. To re-measure, raise the reservation so the
 harness can probe past it, run
 `PUCK_FORGE_MEASURE=1 dotnet test tests/Puck.AdvancedGamingBrick.Forge.Tests`,
@@ -320,13 +329,10 @@ fold the reported capacities into the weights, and restore the reservation. CGB 
 engine's hash of exported ROM bytes. `CartridgeCompilation.Variables` and `.Arrays` map source names to native
 memory addresses for debugging and memory watches.
 
-This version supports background maps written at run time, byte-state rules,
+This version supports background maps written at run time, byte and wide state,
 addressable byte arrays, sprites, cartridge audio and battery-backed state on both
-targets. ROM banking, persistent variable saves, dynamic map
-banked large games and visual editing are not yet part of this document schema. A blit compiles and runs on both targets but carries no
-measured per-frame weight, so a document using one is refused until that cost is
-characterized; build screens from the initial `map` and runtime `map` writes
-instead. Existing Tune audio
+targets. ROM banking and visual editing are not yet part of this document schema. A blit compiles and runs on both targets;
+its display-off interval is not priced as ordinary frame work. Existing Tune audio
 documents retain their separate compiler. These boundaries are explicit so
 an editor cannot silently discard unsupported authored data.
 
@@ -344,11 +350,12 @@ bind it to a byte offset, resolve it at fixup time, and refuse a branch naming
 a label nothing bound. Both `Sm83Emitter` and `ThumbEmitter` hold one; the
 fixup lists and patch encodings stay per-instruction-set.
 
-AGB output uses direct boot without BIOS calls. `forge.play` explicitly selects
-the engine's `stub` option. A retail BIOS/hardware boot needs a valid supplied
-logo; the lower-level AGB cartridge builder accepts it, but this source version
-targets direct boot. CGB may use the emulator's seeded post-boot state. Neither
-document compiler bundles a BIOS.
+The document compilers emit programs without a firmware dependency. The hosted
+engines provide their own bundled firmware and `forge.play` uses their cold-boot
+defaults. Fast boot remains an explicit engine option and retains firmware
+services. A retail BIOS/hardware boot needs an appropriate supplied logo;
+the lower-level AGB builder accepts one, but the source compiler does not claim
+retail-boot compatibility. Firmware belongs to the machine, not the cartridge.
 
 Run the native compiler/editor and emitter tests with:
 

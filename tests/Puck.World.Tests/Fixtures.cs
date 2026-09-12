@@ -13,6 +13,7 @@ using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.World.Protocol;
 using Puck.World.Server;
+using Puck.World.Machines;
 using Puck.Physics.Motion;
 
 namespace Puck.World.Tests;
@@ -595,8 +596,13 @@ internal static class Fixtures {
     /// <summary>The <c>machineHostFactory</c> every <see cref="WorldReplayTape"/>/<see cref="WorldReplaySnapshot"/>/
     /// <see cref="WorldInstanceHost"/> construction here wires — the real <see cref="WorldMachineHost"/>
     /// (<c>Puck.World.Addons.Machines</c>), the same type <see cref="FreshServer"/> constructs directly.</summary>
-    public static readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IScreenMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> MachineHostFactory =
-        static (screens, engines, documentPath, narrationHub) => new WorldMachineHost(screens: screens, engines: engines, documentPath: documentPath, narrationHub: narrationHub);
+    public static readonly Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, string?, WorldOutputHub?, IWorldMachineHost> MachineHostFactory =
+        static (screens, engines, documentPath, narrationHub) => {
+            var selected = engines.ToArray();
+            var providers = TestHookInstaller.CreateMachineCatalog().ContentProviders.Values
+                .Where(provider => selected.Any(engine => engine.Id == provider.EngineId));
+            return new WorldMachineHost(screens: screens, engines: selected, compilers: providers, documentPath: documentPath, narrationHub: narrationHub);
+        };
 
     private static readonly Lazy<byte[]> s_defaultBytes = new(valueFactory: static () => WorldDefinitionSerialization.Serialize(definition: BuildDocument()));
 
@@ -629,7 +635,8 @@ internal static class Fixtures {
     /// <param name="definition">The document to boot the server from, or <see langword="null"/> for <see cref="BuildDocument"/>.</param>
     /// <param name="engines">The screen-machine engines a declared <c>screens</c> row resolves against, or
     /// <see langword="null"/> for none (no screen ever boots a machine) — every existing caller's behavior.</param>
-    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IScreenMachineEngine>? engines = null) {
+    /// <param name="machineCatalog">An explicit catalog including content providers, instead of engine-only registration.</param>
+    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null) {
         // The default document's BYTES are serialized once for the whole run. Each fixture still deserializes its
         // own graph — that is what keeps one test's mutation off the next test's document — but the serialize half
         // of the round trip is the same work every time and is not worth repeating seven hundred times.
@@ -638,7 +645,7 @@ internal static class Fixtures {
         definition = WorldDefinitionSerialization.Deserialize(utf8Json: bytes);
 
         var population = new WorldPopulation(definition: definition);
-        var machines = new WorldMachineHost(screens: definition.Screens, engines: (engines ?? []));
+        var machines = new WorldMachineHost(screens: definition.Screens, catalog: machineCatalog ?? new WorldMachineCatalog(engines ?? []));
         // A PATH, not a directory: WorldOwnedWorlds creates and enumerates it itself, so pre-creating it here was a
         // second round trip to disk for nothing. It sits under one run-wide root that is removed once, rather than
         // being recursively deleted per fixture — four filesystem operations a test, for a directory exactly one

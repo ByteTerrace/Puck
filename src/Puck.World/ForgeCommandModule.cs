@@ -22,7 +22,7 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
         yield return Command(name: "build", grammar: "", detail: "Compiles native ROM bytes and prints the source hash and variable addresses.");
         yield return Command(name: "save", grammar: "<source-path>", detail: "Writes canonical validated source JSON atomically.");
         yield return Command(name: "export", grammar: "<rom-path>", detail: "Compiles and atomically writes a standalone cartridge ROM.");
-        yield return Command(name: "play", grammar: "<screen-index> <rom-path>", detail: "Exports a build and submits an authoritative screen insert. AGB uses explicit stub direct boot; no BIOS is bundled.");
+        yield return Command(name: "play", grammar: "<screen-index> <source.cartridge.json>", detail: "Saves canonical source and submits an authoritative insert through the machine's content provider. The machine uses its bundled firmware default.");
     }
 
     private CommandDefinition Command(string name, string grammar, string detail) => CommandDefinition.WithWireArgs(
@@ -36,12 +36,6 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                 if (string.Equals(a: compiler.Target, b: target, comparisonType: StringComparison.OrdinalIgnoreCase)) {
                     return compiler;
                 }
-            }
-        }
-
-        foreach (var compiler in WorldScreenMachineEngines.CartridgeCompilers.Values) {
-            if (string.Equals(a: compiler.Target, b: target, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                return compiler;
             }
         }
 
@@ -94,13 +88,20 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                     var document = draft.Check();
                     var compiler = ResolveCompiler(target: document.Target);
                     var result = compiler.Compile(document: document);
-                    var path = name == "build" ? null : Write(path: WorldCommandArguments.RawAfter(context: context, args: in args, tokens: name == "play" ? 2 : 1), bytes: result.Rom);
+                    string? path = null;
+                    if (name != "build") {
+                        var outputPath = WorldCommandArguments.RawAfter(context: context, args: in args, tokens: name == "play" ? 2 : 1);
+                        if (name == "play" && !((Puck.Abstractions.Machines.IMachineContentProvider)compiler).Recognizes(outputPath)) {
+                            return CommandResult.Error(output: "[forge.play: source path must end in .cartridge.json]");
+                        }
+                        path = Write(path: outputPath, bytes: name == "play" ? CartridgeDocuments.Canonicalize(document).Bytes : result.Rom);
+                    }
                     if (name == "play") {
                         var existing = server.Definition.Screens.FirstOrDefault(s => s.Index == index);
                         var source = new WorldScreenSource.Machine(
                             Engine: compiler.EngineId,
                             ContentPath: path!,
-                            Options: result.Target == "agb" ? "stub" : "cgb",
+                            Options: result.Target == "agb" ? null : "cgb",
                             Cable: (existing?.Source is WorldScreenSource.Machine prevMachine ? prevMachine.Cable : null)
                         );
                         var screen = (existing is not null)
@@ -137,4 +138,3 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
         return path;
     }
 }
-

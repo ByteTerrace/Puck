@@ -2,8 +2,8 @@
 
 ByteTerrace.Puck is distributed under the repository license (PolyForm Noncommercial 1.0.0 for
 noncommercial use; a separate paid license for commercial use — see [`LICENSE.md`](LICENSE.md)
-and [`LICENSING.md`](LICENSING.md)). Only the combined whole and the ByteTerrace-authored code
-are under the Puck license.
+and [`LICENSING.md`](LICENSING.md)). Separately licensed components retain their
+own terms, including the ByteTerrace-authored GamingBrick firmware described below.
 
 The components below are **not** original to Puck. Each keeps its **own** license and copyright;
 those licenses permit redistribution inside this work. **None of them is copyleft** — no
@@ -33,6 +33,21 @@ are credited in [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
 (LunarG), and CsWin32 (Microsoft, source generator) are used to build Puck but are not shipped;
 their compiled outputs (DXIL/SPIR-V, generated interop) are part of Puck's own build. They are
 credited in [`ACKNOWLEDGMENTS.md`](ACKNOWLEDGMENTS.md).
+
+### Bundled GamingBrick firmware
+
+The HGB boot images and native AGB firmware are separately MIT-licensed,
+including ByteTerrace's original firmware code, pixel lettering and chimes.
+Their package-local notices are
+[`Puck.HumbleGamingBrick/Firmware/LICENSE`](src/Puck.HumbleGamingBrick/Firmware/LICENSE)
+and [`Puck.AdvancedGamingBrick/Firmware/LICENSE`](src/Puck.AdvancedGamingBrick/Firmware/LICENSE).
+This does not change the licenses of the managed emulator cores or Forge tools.
+
+The AGB exception/IRQ foundation adapts **Cult-of-GBA/BIOS** at commit
+`a30e9a96df083628b650724b7d4d7112b4070b98`, copyright 2020–2021 DenSinH and
+fleroviux, under MIT. Its notice travels with the AGB firmware. The
+[firmware provenance record](src/Puck.AdvancedGamingBrick/Firmware/README.md#provenance-and-compatibility-scope)
+identifies the upstream source and excluded files; no retail BIOS image is bundled.
 
 ---
 

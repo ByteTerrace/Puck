@@ -34,7 +34,7 @@ public class CartridgeRoundTripTests {
 
         Assert.NotNull(document);
 
-        var lowered = CartridgeDocumentEmitter.LowerWithDiagnostics(document: document, diagnostics: diagnostics);
+        var lowered = CartridgeDocumentEmitter.LowerWithDiagnostics(document: document, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(diagnostics.HasErrors, string.Join("\n", diagnostics.Select(d => $"{d.Code}: {d.Message}")));
         Assert.NotNull(lowered.Value);
@@ -59,14 +59,17 @@ public class CartridgeRoundTripTests {
         Assert.Equal(canonicalOriginal, Canonical(recompiled));
     }
 
-    [Fact]
-    public void TestCommittedSourceCompilesToTheCommittedDocument() {
-        var sourcePath = Path.ChangeExtension(s_tetrisPath.Replace(".cartridge.json", ".json"), ".puck");
+    public static IEnumerable<object[]> CommittedSources() => Directory.EnumerateFiles(Path.GetDirectoryName(s_tetrisPath)!, "*.puck", SearchOption.AllDirectories)
+        .Order(StringComparer.Ordinal).Select(path => new object[] { path });
+
+    [Theory]
+    [MemberData(nameof(CommittedSources))]
+    public void TestCommittedSourceCompilesToTheCommittedDocument(string sourcePath) {
         var compiled = CanonicalJsonDocument.Serialize(Compile(File.ReadAllText(sourcePath)));
 
         // Both artifacts are committed, so this is the regeneration gate: the source and the document it generates
         // can never drift apart without failing here.
-        Assert.Equal(File.ReadAllBytes(s_tetrisPath), compiled);
+        Assert.Equal(File.ReadAllBytes(Path.ChangeExtension(sourcePath, ".cartridge.json")), compiled);
     }
 
     [Fact]
@@ -281,7 +284,7 @@ public class CartridgeRoundTripTests {
 
         Assert.NotNull(document);
 
-        CartridgeDocumentEmitter.LowerWithDiagnostics(document: document, diagnostics: diagnostics);
+        CartridgeDocumentEmitter.LowerWithDiagnostics(document: document, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
 
         // Dropping it silently is the failure this refusal exists to prevent: a misspelled row keyword would lose
         // the row and everything nested in it without a word.

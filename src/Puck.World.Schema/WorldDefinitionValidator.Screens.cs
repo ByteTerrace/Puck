@@ -875,32 +875,14 @@ public static partial class WorldDefinitionValidator {
                 if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
                     errors.Add(item: $"{path}.machine.engine is required.");
                 } else {
-                    // Deny-by-default: an engine key a host WITH A CATALOG never registered refuses HERE, at load,
-                    // by name — not a per-slot boot fault discovered only once WorldMachineHost tries to resolve it
-                    // (screen.state reported the fault, but boot itself succeeded regardless). A host with NO
-                    // catalog at all (Puck.World.Browser) defers the answer instead — never a refusal, never a
-                    // silent pass. The hook is REQUIRED, never skipped when absent: an unchecked key is the one
-                    // outcome this refusal exists to prevent.
-                    var engineRegistered = WorldExtensionVocabularyHook.IsRegisteredScreenMachineEngine(engineId: machine.Engine);
-
-                    if (engineRegistered == false) {
-                        errors.Add(item: $"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
-                    } else if (engineRegistered is null) {
-                        deferred?.Add(item: $"{path}.machine.engine: screen-machine engine '{machine.Engine}' registration deferred — this host carries no screen-machine engine catalog.");
-                    } else if (machine.NamesCartridgeDocument) {
-                        // A cartridge document is compiled at bind through the engine's own forge; an engine with no
-                        // forge would boot the JSON bytes as a ROM. Refused here, by name, like an unregistered
-                        // engine key; deferred, like the engine check above, on a host with no catalog at all.
-                        var cartridgeCompiling = WorldExtensionVocabularyHook.IsCartridgeCompilingScreenMachineEngine(engineId: machine.Engine);
-
-                        if (cartridgeCompiling == false) {
-                            errors.Add(item: $"{path}.machine.contentPath '{machine.ContentPath}' names a cartridge document ({WorldScreenSource.Machine.CartridgeDocumentSuffix}), but engine '{machine.Engine}' compiles none.");
-                        } else if (cartridgeCompiling is null) {
-                            deferred?.Add(item: $"{path}.machine.contentPath: engine '{machine.Engine}' cartridge-compilation registration deferred — this host carries no screen-machine engine catalog.");
-                        }
+                    if (scope.Machines is not { } machines) {
+                        deferred?.Add($"{path}.machine.engine: validation of engine '{machine.Engine}' is deferred because no machine catalog was supplied.");
+                    } else if (!machines.IsRegistered(machine.Engine)) {
+                        errors.Add($"{path}.machine.engine '{machine.Engine}' names no registered screen-machine engine.");
+                    } else if (machines.RequiresPreparation(machine.ContentPath) && !machines.CanPrepare(machine.Engine, machine.ContentPath)) {
+                        errors.Add($"{path}.machine.contentPath '{machine.ContentPath}' requires a content provider, but engine '{machine.Engine}' recognizes none.");
                     }
                 }
-
                 // An empty contentPath is a valid "unconfigured" screen; the binder faults the slot gracefully at boot.
                 // A present-but-missing file is a runtime fact, not a structural authoring error, and so is a cartridge
                 // document the forge refuses — the bind faults with the forge's own message.

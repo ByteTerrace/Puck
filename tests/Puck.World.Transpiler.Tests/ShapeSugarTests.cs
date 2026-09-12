@@ -16,7 +16,7 @@ public class ShapeSugarTests {
         Assert.False(parseResult.Diagnostics.HasErrors, parseResult.Diagnostics.FormatReport(source));
 
         var diagnostics = new DiagnosticBag();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics);
+        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: diagnostics, cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(source));
         return loweringResult.Value!;
     }
@@ -259,7 +259,7 @@ public class ShapeSugarTests {
         var parseResult = PuckParser.ParseDocumentWithDiagnostics(puck, diagnostics: diagnostics);
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(puck));
         var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics);
+        var lowered = WorldDocumentEmitter.LowerWithDiagnostics(parseResult.Value!, diagnostics: loweringDiagnostics, cancellationToken: TestContext.Current.CancellationToken);
         Assert.False(loweringDiagnostics.HasErrors, loweringDiagnostics.FormatReport(puck));
 
         var original = JsonNode.Parse(json)!["prototypes"];

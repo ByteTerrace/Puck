@@ -1,7 +1,7 @@
 namespace Puck.Abstractions.Machines;
 
 /// <summary>
-/// An optional capability of an <see cref="IScreenMachine"/> — a debug window onto the machine's whole bus address
+/// An optional capability of an <see cref="IMachineRuntime"/> — a debug window onto the machine's whole bus address
 /// space. A machine advertises it by also implementing this interface; a host tests for it
 /// (<c>machine is IMachineMemoryPeek</c>) before using it and reports its absence loudly rather than assuming it. The
 /// address space is machine-defined and covers the CPU's entire view (an SM83 brick's <c>0x0000</c>-<c>0xFFFF</c>: ROM,

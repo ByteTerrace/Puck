@@ -11,8 +11,8 @@ namespace Puck.HumbleGamingBrick.Forge.Framework;
 /// 0x0150..0x3FFF and data in 0x4000..0x7FFF. The header/logo/checksum machinery is the framework's own — a
 /// deliberate self-contained copy, not a shared dependency.
 ///
-/// <para>Puck's <c>--rom</c> path runs no boot ROM (it starts at the seeded post-boot handoff, A = 0x11), so the
-/// logo/checksums are not required to boot here; they are written so the <c>.gbc</c> is valid on real hardware.</para>
+/// <para>The header checksum supports Puck's compatible boot firmware. The default era logo also supports hardware
+/// firmware that validates that bitmap; a caller may supply the Puck house logo for its own cartridges.</para>
 /// </summary>
 public static class FrameworkCartridge {
     private const ushort EntryPoint = 0x0100;
@@ -34,8 +34,8 @@ public static class FrameworkCartridge {
     /// <param name="statHandlerAddress">The display status handler's address, or zero to leave that vector inert.</param>
     /// <param name="banks">Payloads for banks two and up, each at most <see cref="BankSize"/> bytes. Each is paged
     /// into 0x4000..0x7FFF by writing its number to 0x2000, so a bank's contents are only readable while selected.</param>
-    /// <param name="logo">The 48-byte boot bitmap the header carries, or null for the era one. A boot program only
-    /// hands off to a cartridge whose bitmap it recognizes, so this decides which consoles will run the image.</param>
+    /// <param name="logo">The 48-byte logo the header carries, or null for the era one. Puck's compatible firmware
+    /// accepts either logo; strict Era/House boot policies and hardware firmware may require a matching bitmap.</param>
     /// <returns>The ROM image, sized to hold every bank.</returns>
     public static byte[] Build(string title, byte[] routine, byte[] data, IReadOnlyList<byte[]>? banks = null, bool clock = false, ushort statHandlerAddress = 0, byte[]? logo = null) {
         ArgumentException.ThrowIfNullOrEmpty(title);

@@ -19,7 +19,7 @@ BIOS the BIOS-dependent stages skip.
 | `--tier A|B|C` | Run one tier. |
 | `--filter <text>` | Run stages whose names contain the text. |
 | `--parallelism <n>` | Cases measured at once inside a corpus stage; default one per logical processor. |
-| `--bios <file>` | The 16 KiB BIOS image every machine boots with; a zeroed stub without it. |
+| `--bios <file>` | The 16 KiB comparison/test BIOS; a zeroed diagnostic stub without it. Bundled-firmware stages always use the packaged Puck image. |
 | `--roms <directory>` | A conformance-corpus root instead of the cached `gba-tests` corpus. |
 | `--fuzz <directory>` | A fuzz-corpus root instead of the cached `fuzzarm` corpus. |
 | `--games <directory>` | The commercial-ROM directory for the render-hash floors. |
@@ -33,9 +33,11 @@ BIOS the BIOS-dependent stages skip.
 
 Exit code 0 means every selected stage passed or skipped. Exit code 1 means a
 check failed. Exit code 2 means infrastructure prevented a stage from running.
-Every run writes `post-report.txt`, `summary.json`, and `results.junit.xml`
-(one test case per conformance ROM, fuzz ROM, or render floor) under the
-artifacts directory. Corpus stages run their cases on every processor at
+Every run writes a text report, a JSON summary and JUnit results under the
+artifacts directory: by default `artifacts/agb-post/post-report.txt`,
+`artifacts/agb-post/summary.json` and `artifacts/agb-post/results.junit.xml`.
+JUnit contains one test case per conformance ROM, fuzz ROM, or render floor.
+Corpus stages run their cases on every processor at
 once; the self-contained Tier-A stages run at the same time as each other,
 except the throughput and zero-alloc measurements, which run alone.
 
@@ -43,9 +45,9 @@ except the throughput and zero-alloc measurements, which run alone.
 
 | Tier | Coverage | Assets |
 |---|---|---|
-| A | CPU and bus smoke vectors; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; text tile-row sampling; cycle-budget execution parity; determinism; state round trip; fork determinism; save round trip; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none; execution-parity IRQ variants additionally use a verified retail BIOS when available |
-| B | conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite; AGS aging cartridge | assets listed below; stages skip when absent |
-| C | deterministic multiplayer cable replay and a commercial link-game replay | synthetic replay needs none; commercial replay needs a retail BIOS and `--link-game` |
+| A | CPU and bus smoke vectors; bundled firmware services, reset, presentation and legacy sound; exhaustive BG/OBJ priority and transparency combinations with window/effect cases; text tile-row sampling; cycle-budget execution parity; determinism; state round trip; fork determinism; save round trip; bounded queued-host backpressure and immutable frame publication; throughput; zero-alloc-per-frame | none; selected firmware and execution-parity fixtures additionally use a verified retail BIOS when available |
+| B | firmware result oracle; conformance CPU/save/misc suites; ARM fuzz corpus; render hashes; accuracy suite; AGS aging cartridge | assets listed below; stages skip when absent |
+| C | normal serial clock ownership; native firmware download; deterministic multiplayer cable replay and a commercial link-game replay | synthetic replay and firmware download need none; commercial replay needs a retail BIOS and `--link-game` |
 
 The asset-free `lifecycle` stage checks HALT/STOP cycle budgets, keypad wake
 and snapshot replay, DMA during HALT, the fourteen-bit DMA0–2 and sixteen-bit
@@ -53,12 +55,98 @@ DMA3 count boundaries, and audio disable/drain/re-enable. `host-persistence`
 checks BIOS option validation, clean-snapshot save restoration, forced flush,
 and disposal. On Windows it also holds a destination open without delete
 sharing to prove a failed replacement preserves the old save and retries
-without another emulated write. These stages use explicit zero-filled BIOS
-images only with BIOS-independent cartridges.
+without another emulated write. BIOS-independent lifecycle and persistence
+probes use explicit zero-filled images; host option probes also exercise the
+bundled default and its independent cold/fast selection.
 
 `embedding` checks the synchronous public core without host infrastructure,
 including per-machine option isolation, trace callbacks, configured forks,
 typed snapshot compatibility, input, video, audio and replay.
+
+`bundled-firmware` always executes the bundled image, independently of `--bios`.
+It checks image identity and copy isolation, cold/fast startup selection and
+snapshot interoperability, then calls the real ARM and Thumb SWI vectors for
+arithmetic, transfers, affine transforms, codecs, sound control and interrupt
+waits. Its VBlank callback exercises native IRQ dispatch and return. These
+are functional vectors, not retail timing or complete music/link conformance.
+
+`firmware-reset` executes nonreturning SoftReset into original ROM and EWRAM
+entry programs, checks cleared registers and banked stacks, and exercises
+HardReset through the native cold presentation. Selective RAM/register reset
+and Halt/Stop/CustomHalt fixtures check memory boundaries, wake-source filtering
+and snapshot replay. These sleep checks do not establish hardware STOP clock
+freezing or retail instruction timing. Sound reset must clear stale playing
+samples and partial writes, then queue silence; it does not leave empty FIFOs.
+The stage runs 44 bundled-image cases and, when available, 42 verified-retail
+controls. HardReset is Puck-only: its
+original calling cartridge does not satisfy the retail boot header gate.
+
+`firmware-presentation` also always uses the bundled image. It compares all
+38,400 native pixels with readable PUCK/BYTETERRACE geometry and the
+ink/ivory/mint palette, captures fade-in, full wordmark, fade-out and cartridge
+handoff under `firmware-presentation/`, and checks centered two-note PCM at
+48 kHz. A mid-boot snapshot must replay and fork to identical machine bytes,
+pixels and fresh PCM; typed and raw restore must discard queued samples.
+Original cartridges with different logo fields and deliberately malformed
+metadata pin the firmware's unchecked-header policy. These checks do not prove
+commercial-game compatibility or retail timing parity.
+
+The separate `render-hash` stage uses fixed instruction budgets. Keep the BIOS
+image identical across compared builds: another firmware implementation may
+reach a different frame within that budget. A shifted floor needs an explanation,
+not an automatic update merely because a replacement BIOS can draw a picture.
+
+`firmware-oracle` compares the bundled image with a locally supplied, verified
+retail BIOS through original ARM and Thumb calling cartridges. It compares
+documented arithmetic results, affine outputs (including zero and odd byte
+strides), transfers, bit unpacking and
+decompression in RAM, plus SoundBias direction and output-resolution bits in
+its I/O register. It reports bounded mismatch examples and per-service
+totals; it neither reads out firmware code nor treats timing or unspecified
+register clobbers as functional equality. Without a verified retail image,
+this stage skips instead of claiming independent evidence.
+Explicit non-unit numerators divided by zero are reported separately: both
+images must remain within BIOS for a two-million-instruction observation,
+advance clocks and preserve snapshot replay. That is bounded nonreturn evidence,
+not a proof of infinite execution or a successful arithmetic result. Every
+unexpected timeout in a returning-result case remains a failure.
+
+`firmware-legacy-sound` checks music-player management, exported commands,
+installed command/note/PSG callbacks and all four PSG voice layouts. It also
+checks exact stereo PCM blocks, fractional-rate interpolation, release and fade
+progression, modulation, reverb feedback and mixer overflow. A verified retail
+image additionally runs the same black-box fixtures. These bounded cases do not
+establish exhaustive sequencer, mixed-audio or retail timing parity.
+
+`firmware-sound-guards` uses an original native callback to observe the busy
+marker and attempt bounded reentry into SoundDriverMain. Separate fixtures check
+that rejected calls preserve caller-owned sound state and that VSyncOff/On
+transitions handle the guard, DMA controls and PCM buffers consistently. These
+are state contracts, not sound timing measurements.
+
+`firmware-sequence` runs original native songs through jumps, one- and
+three-level pattern calls and returns, bounded observations of endless repeat,
+finite repeats, note gates with optional length extensions, explicit and implicit
+tied-note endings, and a fixed-rate waveform loop. It checks authored command
+positions and note-lifetime boundaries, then compares selected caller-owned
+records and 96 stereo 8-bit PCM samples per tick with a verified retail BIOS
+when supplied. These fixtures are not complete sequencer or timing conformance.
+
+`firmware-multiboot` connects an original native sender cartridge invoking
+SWI `0x25` to the bundled cold-boot receiver. A separately written protocol
+model checks the wire exchanges, encryption and checksum before the downloaded
+EWRAM program proves its handoff. It covers normal 32-bit modes at 256 kHz and
+2 MHz, plus multiplayer with one and three children. The single-child
+multiplayer fixture also exercises mid-transfer snapshot/reconnect replay and
+rejects a corrupted wire checksum. Empty and erased cartridge slots enter the
+receiver. This is not evidence for Joybus download, physical cable behavior or
+retail timing.
+
+`serial-clock` checks that an externally clocked normal receiver remains busy
+until its sender supplies the clock. It covers both normal widths and rates,
+delayed startup, final-clock completion, clock changes while armed, cancellation
+of superseded events and one interrupt per completed transfer. The 32-bit cases
+also verify payload exchange in both directions.
 
 ## External assets
 
@@ -182,11 +270,7 @@ the cosim oracle. Normalize the traces before interpreting a mismatch:
 Use a minimal self-checking ROM when isolating one timing rule. Store the result
 in emulated memory and compare the observable value before using an instruction
 trace to explain it.
-
-
-
-extra failure-detail logging for matching accuracy-suite names; `--ags-trace`
-enables detailed AGS tracing. `--no-rtc`, `--no-prefetch` and `--bus-trace`
+`--ags-trace` enables detailed AGS tracing. `--no-rtc`, `--no-prefetch` and `--bus-trace`
 map to `AgbMachineOptions`; the trace goes to standard error. These overrides
 are supported by `--render`, `--probe`, `--ags`, `--accuracy-suite`,
 `--lockstep`, `--pctrace`, `--statetrace`, `--trace-cycles`, `--trace-crash`,

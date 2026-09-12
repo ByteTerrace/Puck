@@ -1,10 +1,8 @@
 using System.Runtime.CompilerServices;
-using Puck.AdvancedGamingBrick;
 using Puck.AdvancedGamingBrick.Forge;
-using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
-using Puck.HumbleGamingBrick.Forge.Tune;
 using Puck.World.Client;
+using Puck.World.Machines;
 
 namespace Puck.World.Tests;
 
@@ -14,18 +12,18 @@ namespace Puck.World.Tests;
 /// rather than a stand-in that could drift from them.
 /// </summary>
 internal static class TestHookInstaller {
+    internal static WorldMachineCatalog CreateMachineCatalog() {
+        var registry = new WorldMachineExtensionRegistry();
+        new HumbleGamingBrickExtension().Initialize(registry);
+        new AdvancedGamingBrickExtension().Initialize(registry);
+        return registry.Build();
+    }
+
     [ModuleInitializer]
     internal static void Install() {
-        WorldScreenMachineEngines.Register(engine: new GamingBrickEngine(), compiler: new HgbCartridgeCompiler());
-        WorldScreenMachineEngines.Register(engine: new TuneInstrumentEngine());
-        WorldScreenMachineEngines.Register(engine: new AdvancedGamingBrickEngine(), compiler: new AgbCartridgeCompiler());
         WorldSchemaVocabularyHooks.Install(
             postRenderExtensionCheck: static _ => true,
-            probeKindCheck: static _ => true,
-            screenMachineCartridgeCheck: WorldScreenMachineEngines.CompilesCartridges,
-            screenMachineEngineCheck: static _ => true
+            probeKindCheck: static _ => true
         );
     }
 }
-
-
