@@ -13,7 +13,7 @@ adversarial review's job, not this file's.
 
 | leg kind | flavor | legs | statements |
 | --- | --- | --- | --- |
-| classical | — | 802 | 523 |
+| classical | — | 806 | 527 |
 | presented-twin | — | 9 | 8 |
 | in-tree-independent | — | 31 | 25 |
 | shared-substrate | fused-substrate | 36 | 34 |
@@ -23,15 +23,15 @@ adversarial review's job, not this file's.
 | shared-substrate | intra-presented | 82 | 47 |
 | shared-substrate | shared-upstream | 22 | 15 |
 | relative-canary | — | 18 | 17 |
-| structural | — | 1180 | 588 |
-| **total** | | **2273** | **744** |
+| structural | — | 1186 | 594 |
+| **total** | | **2283** | **751** |
 
 ## Counts by surface
 
 | surface | statements | agreement legs | structural legs | statements with no independent leg |
 | --- | --- | --- | --- | --- |
 | law: Deep | 112 | 148 | 123 | 21 |
-| law: Default | 603 | 874 | 1056 | 184 |
+| law: Default | 610 | 878 | 1062 | 187 |
 | law: Exhaustive | 7 | 23 | 11 | 1 |
 | law: Smoke | 22 | 30 | 8 | 2 |
 
@@ -257,6 +257,16 @@ adversarial review's job, not this file's.
 | core.bitwise-pair-signed-narrow-and-wide-carriers | law: Default | classical | — | BitwisePair<long,Int128> over the same eight-row shape at the wide width — both lanes at long.MinValue, MinValue against zero either side, MaxValue against MinValue, both lanes at −1, and one bit-derived pattern | a bit-by-bit interleave reference over the full sixty-four-bit two's-complement pattern of each operand, assembled in UInt128 and cast to Int128 through the same unchecked bit reinterpretation the subject's SWAR fallback performs, sharing no loop and no idea with it | — | — |
 | core.bitwise-pair-signed-narrow-and-wide-carriers | law: Default | structural | — | the unpair is the exact inverse at every row of both ladders, recovering the ORIGINAL signed value bit for bit — not merely its truncated magnitude — because CreateTruncating's narrowing back to the signed result type re-sign-extends the same low bits it was built from | — | — | — |
 | core.bitwise-pair-signed-narrow-and-wide-carriers | law: Default | structural | — | ENVELOPE: this is the SIGNED complement to the two existing pairing cases. core.binary-integer-contracts sweeps BitwisePair<uint,ulong> over the non-negative range [0,32)x[0,32), which reaches the switch's `case int: case uint:` branch, and scalar.binary-integer-wide-carrier-vs-oracle sweeps BitwisePair<ulong,UInt128> over 30000 drawn non-negative ulong pairs on the SWAR default path — neither reaches the `case short: case ushort:` branch at all, and neither ever passes a negative operand through any branch, which is exactly where a sign-extension leak into the interleaved bits — the historical 'polluted bits' defect — would show up first | — | — | — |
+| core.cost-bound-arithmetic-vs-oracle | law: Default | classical | — | Known cost addition and multiplication, including their operators, across edge, random and frontier pairs | Oracles.CostSum and CostProduct form the whole result in BigInteger and then classify carrier overflow, independently of the subject's subtraction/division guards. ENVELOPE: clearing the raw sign bit folds the full signed sample onto non-negative costs; negative construction and multipliers belong to the structural siblings. | — | — |
+| core.cost-bound-arithmetic-vs-oracle | law: Default | structural | — | Max returns the larger sampled known operand. Every arithmetic result checks the complete state projection, including absent reasons and saturation at overflow. | — | — | — |
+| core.cost-bound-construction | law: Default | structural | — | CostBound's complete state projection: default and Zero are known zero; constructor and Known preserve non-negative values through long.MaxValue and turn negative endpoints into Overflow; Unmodeled preserves its reason and refuses null/blank reasons with exception type and parameter name. Every state checks kind, cycles, reason, all three predicates and saturating projection. The enum has precisely the declared byte carrier and 0/1/2 tags. | — | — | — |
+| core.cost-bound-status-propagation | law: Default | structural | — | All ordered pairs of known, two distinct unmodeled reasons and overflow match an explicit winner table: overflow dominates, then the leftmost unmodeled reason. Zero multiplication eliminates every status; negative multipliers overflow. Both multiplication operator orientations and addition preserve the same stated result. | — | — | — |
+| core.cost-bound-status-propagation | law: Default | classical | — | The known entry of the multiplier ladder, including long.MaxValue | Oracles.CostProduct forms an arbitrary-width BigInteger product before deciding representability, sharing no overflow branch or division with CostBound.Multiply. | — | — |
+| core.cost-model-budgets-vs-oracle | law: Default | classical | — | Authored budget and admission across sampled full-width positive frequencies and valid shares, at rates 0, 1, 2, 3, 7, 60, 240 and 50400; each budget is tested at its boundary, adjacent representable costs and a separately sampled cost | Oracles.CostBudget computes the exact rational floor in BigInteger. Oracles.CostAdmitted compares the UNDIVIDED three-factor work demand against the reservation in arbitrary width, unlike the subject's comparison with a divided allowance. ENVELOPE: sign-bit clearing maps signed samples to non-negative values, zero frequency/share components map to one and the numerator is clamped to the denominator; this biases shares toward one. Invalid shares have their own refusal law. | — | — |
+| core.cost-model-budgets-vs-oracle | law: Default | structural | — | Unmodeled and Overflow never certify a deadline, at any rate in the ladder. | — | — | — |
+| core.cost-model-construction | law: Default | structural | — | CostModelProfile retains all supplied fields through signed-64 maximum and minimum positive inputs, and refuses null/blank names, non-positive frequency/share components and shares greater than one with exact exception types and parameter names. Portable is the authored policy (puck.portable64.v1, 3000000000, 1/2); the clock is 50400 engine ticks per second. These are policy and unit contracts, not measured hardware calibration. | — | — | — |
+| core.cost-model-conversions-vs-oracle | law: Default | classical | — | ReferenceEngineTicks returns an upward-rounded duration or throws OverflowException if its result exceeds long.MaxValue; ReferenceStepFraction retains the exact widened numerator and authored denominator, with the explicit 0/1 representation at rate zero | Oracles.CostReferenceTicks uses BigInteger.DivRem and a remainder test for the ceiling, never the subject's Int128 CeilingDivide helper; CostStepFraction widens a BigInteger product independently of the subject's Int128 multiplication. The oracle's clock is the independently stated 50400 unit contract. ENVELOPE: sign-bit clearing folds cycles onto non-negative values and zero sampled frequency maps to one; the rate ladder is 0, 1, 2, 3, 7, 60, 240 and 50400. Negative arguments are pinned by the refusal sibling. | — | — |
+| core.cost-model-rate-contract | law: Default | structural | — | Every positive divisor of 50400 yields a period whose product with the rate is exactly 50400. Rate zero yields no period, budget, fraction or admission, including zero cost. All rate-taking methods reject a ladder of negative, non-dividing and excessive rates with the documented exception type and rateHz parameter, even when the bound is already Overflow. Negative cycle counts are refused with parameter cycles, including the zero-rate fraction path. | — | — | — |
 | core.deep-multiplicity-factors-without-stack-growth | law: Default | structural | — | an operand of multiplicity two hundred thousand -- 2^200000, and the same with an odd cofactor of three -- returns every factor rather than exhausting the native stack. A LIVENESS statement: the evidence is that the call returns at all, since a stack overflow is not a recoverable exception and a compact 25 KiB operand used to control the call depth directly | — | — | — |
 | core.discrete-measure-exact-and-compiled | law: Default | structural | — | the rational boundary/range/inverse identities and every throwing/Try compiled twin over the 4/3 rate with 1/3 offset, plus real compiler outcomes for rational-numerator and radicand coefficient refusal, for surd-numerator coefficient refusal under both a rational and an irrational rate, and for irrational-rate envelope refusal | — | — | — |
 | core.discrete-measure-exact-and-compiled | law: Default | in-tree-independent | — | compiled quadratic cumulative and amount queries over four square-equivalent radical spellings and both signed-long endpoints | the unbounded exact DiscreteMeasure boundary kernel | — | the query ladders assert exact equality after successful compilation; endpoint probes compare refusal with mathematical signed-long representability |
@@ -2517,6 +2527,9 @@ EXCLUDED and live in the canary register above.
 | contribution-fold.raw-sum-order-independent | law: Default | 1 |
 | contribution-fold.terminal-quantization-idempotent | law: Default | 1 |
 | core.binary-integer-contracts | law: Default | 1 |
+| core.cost-bound-construction | law: Default | 1 |
+| core.cost-model-construction | law: Default | 1 |
+| core.cost-model-rate-contract | law: Default | 1 |
 | core.deep-multiplicity-factors-without-stack-growth | law: Default | 1 |
 | core.monotonic-partitioner-bucket-count-refusals | law: Default | 1 |
 | core.monotonic-partitioner-fast-invariants | law: Default | 1 |

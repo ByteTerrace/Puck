@@ -32,7 +32,7 @@ public readonly record struct CostBound {
         Reason = reason;
     }
 
-    /// <summary>Initializes a new known cost bound.</summary>
+    /// <summary>Initializes a known non-negative cost bound; a negative count produces <see cref="Overflow"/>.</summary>
     public CostBound(long cycles) : this(
         kind: ((cycles < 0L) ? CostBoundKind.Overflow : CostBoundKind.Known),
         cycles: Math.Max(0L, cycles),
@@ -49,10 +49,10 @@ public readonly record struct CostBound {
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
         return new(CostBoundKind.Unmodeled, 0L, reason);
     }
-    /// <summary>Creates a known non-negative cycle bound.</summary>
+    /// <summary>Creates a known non-negative cycle bound; a negative count produces <see cref="Overflow"/>.</summary>
     public static CostBound Known(long cycles) => new(cycles);
 
-    /// <summary>Adds two cost bounds, propagating overflow and unmodeled status.</summary>
+    /// <summary>Adds two cost bounds. Overflow takes precedence, followed by the leftmost unmodeled reason.</summary>
     public static CostBound Add(CostBound left, CostBound right) {
         if (left.IsOverflow || right.IsOverflow) {
             return Overflow;
@@ -86,7 +86,7 @@ public readonly record struct CostBound {
         return new(bound.Cycles * multiplier);
     }
 
-    /// <summary>Takes the maximum of two cost bounds.</summary>
+    /// <summary>Takes the maximum of two cost bounds. Overflow takes precedence, followed by the leftmost unmodeled reason.</summary>
     public static CostBound Max(CostBound left, CostBound right) {
         if (left.IsOverflow || right.IsOverflow) {
             return Overflow;

@@ -768,6 +768,7 @@ internal static partial class LawRegistry {
     [
         .. SmokeCases(),
         .. RootCoreCases(),
+        .. CostModelCases(),
         .. FixedQ4816Cases(),
         .. FixedQ1648Cases(),
         .. FixedQ3232Cases(),

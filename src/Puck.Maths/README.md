@@ -333,6 +333,7 @@ surface, including parameters, return values, and exceptions.
 |------|------|
 | `Rational` / `RealQuadraticField` / `RealQuadratic` / `ContinuedFraction` | The exact rational (reduced on construction); the descriptor of a real quadratic field `ℚ(√d)`, its radicand canonicalized once; the exact value `(a + b·√d)/c` of such a field, with conjugate, norm and trace; and the repeating continued-fraction expansions of those values — including the convergents, the best rational approximations — without floating point. |
 | `SimplestRational` | Locate the minimal-denominator fraction strictly inside an exact interval, by Stern–Brocot descent. |
+| `CostBound` / `CostModelProfile` | Preserve known, unmodeled, and overflowed costs; compute exact budgets and deadline conversions under an authored service-rate policy. These abstract cycles do not measure a processor's frequency or certify hardware performance. |
 | `DiscreteMeasure` / `CompiledDiscreteMeasure64` / `DiscreteMeasureCompilationFailure` | Allocate an exact integer amount across integer intervals, then compile supported measures into a bounded, allocation-free form for frequently run code. |
 | `NumberTheoryFunctions` / `BigIntegerFunctions` | Provide prime enumeration, modular roots and inverses, primality, and factorization when the calculation needs arbitrary-width integers. |
 | `Combinatorics` | Count subsets and permutations exactly, and give them dense integer identities; see [combination and permutation ranks](#combination-and-permutation-ranks). |

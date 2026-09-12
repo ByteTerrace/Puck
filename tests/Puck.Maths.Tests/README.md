@@ -64,6 +64,10 @@ for a member the committed manifest does not already mention — the failing run
 member as uncovered. (Bootstrapping is the one exception: with no committed manifest at all, the whole surface is
 written once, backlog included.)
 
+For example, [cost-model laws](laws/cost-model.json) pair complete status and refusal tables with independent
+`BigInteger` arithmetic for `CostBound` and `CostModelProfile`. They check overflow boundaries, exact budget
+admission and upward deadline rounding; they establish the abstract arithmetic contract, not hardware calibration.
+
 Coverage is credited only from cases the runner executes. Every entry in `LawRegistry` is a law `LawTests` runs and
 asserts; the bench has no registry declaration, so timing work never counts as coverage.
 

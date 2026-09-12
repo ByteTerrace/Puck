@@ -3168,6 +3168,254 @@
       ]
     },
     {
+      "Id": "Puck.Maths.CostBound..ctor(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Add(Puck.Maths.CostBound,Puck.Maths.CostBound)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-arithmetic-vs-oracle",
+        "core.cost-bound-status-propagation"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Cycles",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.IsKnown",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.IsOverflow",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.IsUnmodeled",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Kind",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Known(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Max(Puck.Maths.CostBound,Puck.Maths.CostBound)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-arithmetic-vs-oracle",
+        "core.cost-bound-status-propagation"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Multiply(Puck.Maths.CostBound,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-arithmetic-vs-oracle",
+        "core.cost-bound-status-propagation"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Overflow",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Reason",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.ToSaturatingCycles()",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Unmodeled(System.String)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.Zero",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.op_Addition(Puck.Maths.CostBound,Puck.Maths.CostBound)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-arithmetic-vs-oracle",
+        "core.cost-bound-status-propagation"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.op_Multiply(Puck.Maths.CostBound,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-arithmetic-vs-oracle",
+        "core.cost-bound-status-propagation"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBound.op_Multiply(System.Int64,Puck.Maths.CostBound)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-arithmetic-vs-oracle",
+        "core.cost-bound-status-propagation"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBoundKind.Known",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBoundKind.Overflow",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBoundKind.Unmodeled",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostBoundKind.value__",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-bound-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile..ctor(System.String,System.Int64,System.Int64,System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.Admits(Puck.Maths.CostBound,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-budgets-vs-oracle",
+        "core.cost-model-rate-contract"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.AuthoredBudgetCycles(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-budgets-vs-oracle",
+        "core.cost-model-rate-contract"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.CyclesPerSecond",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.EngineTicksPerSecond",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.Name",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.Portable",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.ReferenceEngineTicks(System.Int64)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-conversions-vs-oracle",
+        "core.cost-model-rate-contract"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.ReferenceStepFraction(System.Int64,System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-conversions-vs-oracle",
+        "core.cost-model-rate-contract"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.StepPeriodEngineTicks(System.Int32)",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-rate-contract"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.SubsystemShareDenominator",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-construction"
+      ]
+    },
+    {
+      "Id": "Puck.Maths.CostModelProfile.SubsystemShareNumerator",
+      "State": "covered",
+      "CoveredBy": [
+        "core.cost-model-construction"
+      ]
+    },
+    {
       "Id": "Puck.Maths.CountingMaterial.Add(System.Numerics.BigInteger,System.Numerics.BigInteger)",
       "State": "covered",
       "CoveredBy": [

@@ -1,0 +1,316 @@
+[
+  {
+    "Id": "core.cost-bound-construction",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Known"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Unmodeled"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Zero"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Overflow"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Kind"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Cycles"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Reason"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "IsKnown"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "IsUnmodeled"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "IsOverflow"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "ToSaturatingCycles"
+      },
+      {
+        "Type": "Puck.Maths.CostBoundKind",
+        "Name": "Known"
+      },
+      {
+        "Type": "Puck.Maths.CostBoundKind",
+        "Name": "Unmodeled"
+      },
+      {
+        "Type": "Puck.Maths.CostBoundKind",
+        "Name": "Overflow"
+      },
+      {
+        "Type": "Puck.Maths.CostBoundKind",
+        "Name": "value__"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "CostBound's complete state projection: default and Zero are known zero; constructor and Known preserve non-negative values through long.MaxValue and turn negative endpoints into Overflow; Unmodeled preserves its reason and refuses null/blank reasons with exception type and parameter name. Every state checks kind, cycles, reason, all three predicates and saturating projection. The enum has precisely the declared byte carrier and 0/1/2 tags.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.cost-bound-status-propagation",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "All ordered pairs of known, two distinct unmodeled reasons and overflow match an explicit winner table: overflow dominates, then the leftmost unmodeled reason. Zero multiplication eliminates every status; negative multipliers overflow. Both multiplication operator orientations and addition preserve the same stated result.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "The known entry of the multiplier ladder, including long.MaxValue",
+        "Against": "Oracles.CostProduct forms an arbitrary-width BigInteger product before deciding representability, sharing no overflow branch or division with CostBound.Multiply.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.cost-bound-arithmetic-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Add"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Max"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "Multiply"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "op_Addition"
+      },
+      {
+        "Type": "Puck.Maths.CostBound",
+        "Name": "op_Multiply"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Known cost addition and multiplication, including their operators, across edge, random and frontier pairs",
+        "Against": "Oracles.CostSum and CostProduct form the whole result in BigInteger and then classify carrier overflow, independently of the subject's subtraction/division guards. ENVELOPE: clearing the raw sign bit folds the full signed sample onto non-negative costs; negative construction and multipliers belong to the structural siblings.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Max returns the larger sampled known operand. Every arithmetic result checks the complete state projection, including absent reasons and saturation at overflow.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.cost-model-construction",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": ".ctor"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "Name"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "CyclesPerSecond"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "SubsystemShareNumerator"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "SubsystemShareDenominator"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "EngineTicksPerSecond"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "Portable"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "CostModelProfile retains all supplied fields through signed-64 maximum and minimum positive inputs, and refuses null/blank names, non-positive frequency/share components and shares greater than one with exact exception types and parameter names. Portable is the authored policy (puck.portable64.v1, 3000000000, 1/2); the clock is 50400 engine ticks per second. These are policy and unit contracts, not measured hardware calibration.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.cost-model-rate-contract",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "StepPeriodEngineTicks"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "AuthoredBudgetCycles"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "ReferenceStepFraction"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "ReferenceEngineTicks"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "Admits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Every positive divisor of 50400 yields a period whose product with the rate is exactly 50400. Rate zero yields no period, budget, fraction or admission, including zero cost. All rate-taking methods reject a ladder of negative, non-dividing and excessive rates with the documented exception type and rateHz parameter, even when the bound is already Overflow. Negative cycle counts are refused with parameter cycles, including the zero-rate fraction path.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.cost-model-budgets-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "AuthoredBudgetCycles"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "Admits"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Authored budget and admission across sampled full-width positive frequencies and valid shares, at rates 0, 1, 2, 3, 7, 60, 240 and 50400; each budget is tested at its boundary, adjacent representable costs and a separately sampled cost",
+        "Against": "Oracles.CostBudget computes the exact rational floor in BigInteger. Oracles.CostAdmitted compares the UNDIVIDED three-factor work demand against the reservation in arbitrary width, unlike the subject's comparison with a divided allowance. ENVELOPE: sign-bit clearing maps signed samples to non-negative values, zero frequency/share components map to one and the numerator is clamped to the denominator; this biases shares toward one. Invalid shares have their own refusal law.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "Unmodeled and Overflow never certify a deadline, at any rate in the ladder.",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "core.cost-model-conversions-vs-oracle",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "ReferenceEngineTicks"
+      },
+      {
+        "Type": "Puck.Maths.CostModelProfile",
+        "Name": "ReferenceStepFraction"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "ReferenceEngineTicks returns an upward-rounded duration or throws OverflowException if its result exceeds long.MaxValue; ReferenceStepFraction retains the exact widened numerator and authored denominator, with the explicit 0/1 representation at rate zero",
+        "Against": "Oracles.CostReferenceTicks uses BigInteger.DivRem and a remainder test for the ceiling, never the subject's Int128 CeilingDivide helper; CostStepFraction widens a BigInteger product independently of the subject's Int128 multiplication. The oracle's clock is the independently stated 50400 unit contract. ENVELOPE: sign-bit clearing folds cycles onto non-negative values and zero sampled frequency maps to one; the rate ladder is 0, 1, 2, 3, 7, 60, 240 and 50400. Negative arguments are pinned by the refusal sibling.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]
