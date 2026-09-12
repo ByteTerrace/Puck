@@ -3,6 +3,8 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers runtime background writes reaching the display, and the bound that keeps the queue from dropping one.</summary>
@@ -22,7 +24,7 @@ public sealed class CartridgeMapWriteTests {
             ],
             Rules = [new CartridgeRule(
                 Name: "paint",
-                When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: "eq", Right: new CartridgeValue(Constant: 0))],
+                When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))],
                 Body: [
                     // A run of solid cells along the top row, written through the queue at run time.
                     new CartridgeStatement(Kind: "repeat", Count: 4, Index: "col", Body: [
@@ -32,7 +34,7 @@ public sealed class CartridgeMapWriteTests {
                             Column: new CartridgeValue(Variable: "col"),
                             Tile: new CartridgeValue(Constant: 1)),
                     ]),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "done"), Operation: "set", Value: new CartridgeValue(Constant: 1)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "done"), Operation: null, Value: new CartridgeValue(Constant: 1)),
                 ])],
         };
         using var machine = Run(document: document, frames: 16, out _);
@@ -62,7 +64,7 @@ public sealed class CartridgeMapWriteTests {
         Assert.Empty(collection: CartridgeDocuments.Validate(document: document with {
             Rules = [new CartridgeRule(Name: "r", When: [], Body: [new CartridgeStatement(
                 Kind: "if",
-                When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "i"), Comparison: "eq", Right: new CartridgeValue(Constant: 0))],
+                When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "i"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))],
                 Then: [new CartridgeStatement(Kind: "repeat", Count: 20, Index: "i", Body: [write])],
                 Else: [new CartridgeStatement(Kind: "repeat", Count: 20, Index: "i", Body: [write])])])],
         }));

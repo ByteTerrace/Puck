@@ -1,7 +1,7 @@
 # Moth flight studio
 
 [moth.world.json](moth.world.json) contains a playable SDF character rebuilt from
-[the Moth Study](../studies/moth.glsl). The creation starts with new shape IDs,
+[the Moth Study](../../studies/moth.glsl). The creation starts with new shape IDs,
 directly authored dimensions and a new rig. The earlier character's geometry,
 pose frames and `mothScale` / `mothRot` / `mothJoints` bindings are retired.
 
@@ -17,13 +17,13 @@ edge weathering. Fine sculpting and surface finish still differ from the Study.
 Run from the repository root:
 
 ```powershell
-dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/moth.world.json --state-dir artifacts/moth-demo/state --exit-after-seconds 0
+dotnet run --project src/Puck.World -c Release -- --world src/Puck.World/Assets/worlds/avatars/moth.world.json --state-dir artifacts/moth-demo/state --exit-after-seconds 0
 ```
 
 With an existing Release build:
 
 ```powershell
-dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/moth.world.json --state-dir artifacts/moth-demo/state --exit-after-seconds 0
+dotnet src/Puck.World/bin/Release/net10.0/Puck.World.dll --world src/Puck.World/Assets/worlds/avatars/moth.world.json --state-dir artifacts/moth-demo/state --exit-after-seconds 0
 ```
 
 The initial view is the native model's three-quarter inspection. In the running
@@ -102,7 +102,7 @@ camera-program names are refused. Reload the world to restore the saved view.
 Standalone `face`, `face-side`, `head`, `rear`, `back-close`, `shoulder`, `boots`,
 `boots-side` and `boots-rear` layouts remain available through `view.override`.
 
-The [Study workflow](../../README.md#shader-studies) describes shader edits and
+The [Study workflow](../../../README.md#shader-studies) describes shader edits and
 its pose controls. The native rig responds to the world body independently of
 the Study's selected pose.
 
@@ -140,7 +140,7 @@ a directional ground gait or a dedicated impact-and-recovery animation.
 Check document admission and the stamp budget:
 
 ```powershell
-dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll creation stats --world src/Puck.World/Assets/worlds/moth.world.json --prototype moth
+dotnet src/Puck.Cli/bin/Release/net10.0/Puck.Cli.dll creation stats --world src/Puck.World/Assets/worlds/avatars/moth.world.json --prototype moth
 ```
 
 Then inspect the live front, rear and face views. Exercise takeoff and landing:

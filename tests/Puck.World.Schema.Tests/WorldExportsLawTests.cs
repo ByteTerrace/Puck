@@ -155,7 +155,7 @@ public sealed class WorldExportsLawTests {
         Assert.Equal(expected: WorldExportFacet.Action, actual: facets["rules[].effects[][generate].row"]);
         Assert.Equal(expected: WorldExportFacet.Binding, actual: facets["hud.panels[].elements[].binding"]);
         Assert.Equal(expected: WorldExportFacet.Binding, actual: facets["hud.panels[].elements[].template"]);
-        Assert.Equal(expected: WorldExportFacet.Binding, actual: facets["views.seatRig.operations[][select].key"]);
+        Assert.Equal(expected: WorldExportFacet.Binding, actual: facets["views.seatRig.operations[][selectProgram].key"]);
         Assert.Equal(expected: WorldExportFacet.Read, actual: facets["exports.reads"]);
         Assert.Equal(expected: WorldExportFacet.Action, actual: facets["exports.actions"]);
         Assert.Equal(expected: WorldExportFacet.Binding, actual: facets["exports.bindings"]);

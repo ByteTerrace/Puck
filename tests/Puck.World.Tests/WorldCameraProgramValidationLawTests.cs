@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 /// validates, so a law can never pass because the whole document was malformed for some other reason.
 /// </summary>
 public sealed class WorldCameraProgramValidationLawTests {
-    private static WorldCameraProgramOp Fov(float radians = 0.9f) => new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: radians));
+    private static WorldCameraProgramOp Fov(float radians = 0.9f) => new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: radians));
     private static WorldCameraProgram Program(string name, params WorldCameraProgramOp[] operations) => new(
         Name: name,
         Operations: operations,
@@ -73,7 +73,7 @@ public sealed class WorldCameraProgramValidationLawTests {
         Assert.Equal(expected: 6, actual: rig.Operations.Count);
         Assert.Equal(
             actual: rig.Operations.Select(selector: static op => op.Opcode),
-            expected: ["anchor", "clampPitch", "orbit", "lookAt", "fov", "dynamics"]
+            expected: ["anchor", "clampPitch", "orbit", "lookAt", "fieldOfView", "dynamics"]
         );
         Assert.Equal(expected: 0.5f, actual: rig.OrbitOp!.Pitch.Literal);
         Assert.Equal(expected: "probe", actual: rig.DynamicsOp!.Row);
@@ -85,8 +85,8 @@ public sealed class WorldCameraProgramValidationLawTests {
         var json = System.Text.Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: document))
             .Replace(
                 comparisonType: StringComparison.Ordinal,
-                newValue: "\"$type\": \"fov\", \"smoothRate\": 6",
-                oldValue: "\"$type\": \"fov\""
+                newValue: "\"$type\": \"fieldOfView\", \"smoothRate\": 6",
+                oldValue: "\"$type\": \"fieldOfView\""
             );
 
         var thrown = Assert.ThrowsAny<Exception>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: json)));
@@ -103,7 +103,7 @@ public sealed class WorldCameraProgramValidationLawTests {
             .Replace(
                 comparisonType: StringComparison.Ordinal,
                 newValue: "\"$type\": \"dolly\"",
-                oldValue: "\"$type\": \"fov\""
+                oldValue: "\"$type\": \"fieldOfView\""
             );
 
         _ = Assert.ThrowsAny<Exception>(testCode: () => WorldDefinitionSerialization.Deserialize(utf8Json: System.Text.Encoding.UTF8.GetBytes(s: json)));

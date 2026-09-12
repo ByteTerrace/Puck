@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Puck.Assets.Documents;
 
+using Puck.State;
 namespace Puck.GamingBricks.Forge;
 
 internal sealed class CartridgeValidation(CartridgeDocument document) {
@@ -8,6 +9,8 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
     private readonly Dictionary<string, int> m_arrays = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<string, (int Width, int Height)> m_screens = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_variables = new(comparer: StringComparer.Ordinal);
+    // Each declared slot's byte width, so a constant can be refused against the width of what it is written to.
+    private readonly Dictionary<string, int> m_widths = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_recordings = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> m_sounds = new(comparer: StringComparer.Ordinal);
     private bool m_clocks;
@@ -69,13 +72,29 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 Error(path: "mapPalettes", message: "A cell names a background palette that is not declared.");
             }
         }
+        // A slot spends one or two bytes of the variable window depending on its declared ceiling, so the window is
+        // what a wide document runs out of rather than the slot count.
+        var windowBytes = 0;
         for (var index = 0; index < document.Variables.Length; ++index) {
             var variable = document.Variables[index];
             if (variable is null) { Error(path: $"variables[{index}]", message: "A variable cannot be null."); continue; }
             Name(name: variable.Name, names: m_variables, path: $"variables[{index}]");
-            if (variable.Initial is < 0 or > 255) {
-                Error(path: $"variables[{index}].initial", message: "Expected a byte in 0..255.");
+            if (variable.Max is { } ceiling && ceiling is < 1 or > CartridgeLimits.WideMaximum) {
+                Error(path: $"variables[{index}].max", message: $"Expected a ceiling in 1..{CartridgeLimits.WideMaximum}.");
+
+                continue;
             }
+
+            if ((variable.Initial < 0) || (variable.Initial > variable.Ceiling)) {
+                Error(path: $"variables[{index}].initial", message: $"Expected a value in 0..{variable.Ceiling}.");
+            }
+
+            m_widths[variable.Name] = variable.Width;
+            windowBytes += variable.Width;
+        }
+
+        if (windowBytes > CartridgeLimits.VariableCount) {
+            Error(path: "variables", message: $"The declared slots need {windowBytes} bytes; the variable window holds {CartridgeLimits.VariableCount}.");
         }
 
         Arrays();
@@ -89,6 +108,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         Sounds();
         Save();
         Rules();
+        Scene();
         if (m_errors.Count == 0) {
             // Rules that cannot share a frame do not share the queue either, so a set of phase arms needs room for the
             // heaviest of them rather than for all. This is the same partition the cost estimate reads.
@@ -97,7 +117,7 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
                 guards[index] = CartridgeCost.Guard(rule: document.Rules[index]);
             }
 
-            var exclusive = CartridgeCost.ExclusiveGuards(rules: document.Rules, guards: guards);
+            var exclusive = CartridgeCost.ExclusiveGuards(rules: document.Rules, guards: guards, scene: document.Scene);
             var writes = 0;
             var arms = new Dictionary<string, Dictionary<int, int>>(comparer: StringComparer.Ordinal);
             for (var index = 0; index < document.Rules.Length; ++index) {
@@ -619,6 +639,23 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
     }
 
+    // The declared scene names an ordinary variable. Nothing else is asked of it: which values are scenes is decided by
+    // the rules that guard on it, and a value no rule guards is simply a frame in which only the ungated rules run.
+    private void Scene() {
+        if (document.Scene is not { } scene) {
+            return;
+        }
+
+        if (!m_variables.Contains(item: scene)) {
+            Error(path: "scene", message: $"'{scene}' names no declared variable.");
+
+            return;
+        }
+
+        // The frame's snapshot is one byte.
+        Narrow(value: new CartridgeValue(Variable: scene), path: "scene");
+    }
+
     private void Rules() {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
         for (var index = 0; index < document.Rules.Length; ++index) {
@@ -857,17 +894,24 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
 
     private void Action(CartridgeStatement value, string path) {
         Target(target: value.Target, path: path + ".target");
-        if (value.Operation is not ("set" or "add" or "subtract" or "and" or "or" or "xor" or "mul" or "div" or "mod" or "shl" or "shr")) {
-            Error(path: path + ".operation", message: "Expected set, add, subtract, and, or, xor, mul, div, mod, shl or shr.");
+        var wideTarget = ((value.Target?.Variable is { } destination) && m_widths.TryGetValue(key: destination, value: out var destinationWidth) && (destinationWidth != 1));
+
+        if (wideTarget && (value.Operation is not (null or ExpressionOp.Add or ExpressionOp.Subtract))) {
+            Error(path: path + ".operation", message: $"'{value.Operation}' has no sixteen-bit form; a wide slot takes assignment, {nameof(ExpressionOp.Add)} or {nameof(ExpressionOp.Subtract)}.");
         }
 
-        Value(value: value.Value, path: path + ".value");
+        if (!CartridgeOperations.AdmitsCombine(operation: value.Operation)) {
+            Error(path: path + ".operation", message: $"Expected one of {CartridgeOperations.CombineNames}, or no operation to assign.");
+        }
+
+        WideValue(value: value.Value, path: path + ".value");
+        ConstantFits(value: value.Value, width: WidthOf(value: new CartridgeValue(Variable: value.Target?.Variable)), path: path + ".value");
         // A literal zero divisor or an out-of-range literal shift is always a defect; the runtime forms are total.
-        if (value.Operation is "div" or "mod" && value.Value?.Constant == 0) {
+        if (value.Operation is (ExpressionOp.Divide or ExpressionOp.Modulo) && value.Value?.Constant == 0) {
             Error(path: path + ".value", message: "A literal zero divisor is refused; a runtime zero divisor yields zero.");
         }
 
-        if (value.Operation is "shl" or "shr" && value.Value?.Constant >= 8) {
+        if (CartridgeOperations.Shifts(operation: value.Operation) && value.Value?.Constant >= 8) {
             Error(path: path + ".value", message: "A literal shift of eight or more is refused; it can only produce zero.");
         }
     }
@@ -890,9 +934,11 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
 
                 break;
             case "compare":
-                Value(value: value.Left, path: path + ".left"); Value(value: value.Right, path: path + ".right");
-                if (value.Comparison is not ("eq" or "ne" or "lt" or "le" or "gt" or "ge")) {
-                    Error(path: path + ".comparison", message: "Expected eq, ne, lt, le, gt or ge.");
+                WideValue(value: value.Left, path: path + ".left"); WideValue(value: value.Right, path: path + ".right");
+                ConstantFits(value: value.Right, width: WidthOf(value: value.Left), path: path + ".right");
+                ConstantFits(value: value.Left, width: WidthOf(value: value.Right), path: path + ".left");
+                if (value.Comparison is null) {
+                    Error(path: path + ".comparison", message: "A comparison is required; the strict enum reader refuses any spelling outside the engine's own.");
                 }
 
                 if (value.Key is not null || value.Mode is not null) {
@@ -926,7 +972,37 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         Element(array: target.Array!, index: target.Index, path: path);
     }
 
+    // How many bytes an operand occupies: a declared slot's own width, and one for everything else (an array element
+    // and a literal are bytes). An undeclared name is reported elsewhere and reads as narrow here.
+    private int WidthOf(CartridgeValue? value) => (((value?.Variable is { } name) && m_widths.TryGetValue(key: name, value: out var width))
+        ? width
+        : 1);
+
+    // A literal wider than the slot it is paired with is a defect rather than an always-false comparison or a silently
+    // truncated write, so it is refused where the pairing is known.
+    private void ConstantFits(CartridgeValue? value, int width, string path) {
+        if ((value?.Constant is not { } constant) || (width != 1) || (constant <= CartridgeLimits.NarrowMaximum)) {
+            return;
+        }
+
+        Error(path: path + ".constant", message: $"{constant} does not fit the one-byte slot it is paired with; declare that slot a wider max.");
+    }
+
+    // A wide slot is two bytes, and only three places read one: a set step's target and value, and a comparison's
+    // operands. Every other field on both machines is a byte — a map cell, a sprite coordinate, an array index, a
+    // loop counter — so a wide slot there is refused by name rather than silently truncated to its low half.
+    private void Narrow(CartridgeValue? value, string path) {
+        if ((value?.Variable is { } name) && m_widths.TryGetValue(key: name, value: out var width) && (width != 1)) {
+            Error(path: path, message: $"'{name}' is a wide slot; this field reads a byte.");
+        }
+    }
+
     private void Value(CartridgeValue? value, string path) {
+        Narrow(value: value, path: path);
+        WideValue(value: value, path: path);
+    }
+
+    private void WideValue(CartridgeValue? value, string path) {
         if (value is null) { Error(path: path, message: "Supply exactly one of constant, variable or array."); return; }
         var supplied = (value.Constant is not null ? 1 : 0) + (value.Variable is not null ? 1 : 0) + (value.Array is not null ? 1 : 0);
         if (supplied != 1) {
@@ -935,8 +1011,10 @@ internal sealed class CartridgeValidation(CartridgeDocument document) {
         }
 
         if (value.Constant is { } constant) {
-            if (constant is < 0 or > 255) {
-                Error(path: path + ".constant", message: "Expected a byte in 0..255.");
+            // A literal is admitted against the WIDEST slot the document could hold it in; whether it fits the slot it
+            // is actually paired with is asked where that pairing is known.
+            if (constant is < 0 or > CartridgeLimits.WideMaximum) {
+                Error(path: path + ".constant", message: $"Expected a value in 0..{CartridgeLimits.WideMaximum}.");
             }
 
             if (value.Index is not null) {

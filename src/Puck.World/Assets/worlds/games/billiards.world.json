@@ -538,7 +538,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "min(cue[0] + 0.1, 3.0)",
+          "expression": "minimum(cue[0] + 0.1, 3.0)",
           "key": "0",
           "state": "cue"
         }

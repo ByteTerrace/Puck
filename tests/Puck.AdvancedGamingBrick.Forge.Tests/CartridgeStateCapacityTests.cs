@@ -3,6 +3,8 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers state that runs past the fixed work-RAM page into the switchable bank pinned at boot.</summary>
@@ -22,11 +24,11 @@ public sealed class CartridgeStateCapacityTests {
             Arrays = arrays,
             Rules = [new CartridgeRule(
                 Name: "touch",
-                When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: "eq", Right: new CartridgeValue(Constant: 0))],
+                When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "done"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 0))],
                 Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "block27", Index: new CartridgeValue(Constant: 249)), Operation: "set", Value: new CartridgeValue(Constant: 200)),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "readBack"), Operation: "set", Value: new CartridgeValue(Array: "block27", Index: new CartridgeValue(Constant: 249))),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "done"), Operation: "set", Value: new CartridgeValue(Constant: 1)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "block27", Index: new CartridgeValue(Constant: 249)), Operation: null, Value: new CartridgeValue(Constant: 200)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "readBack"), Operation: null, Value: new CartridgeValue(Array: "block27", Index: new CartridgeValue(Constant: 249))),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "done"), Operation: null, Value: new CartridgeValue(Constant: 1)),
                 ])],
         };
         ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();

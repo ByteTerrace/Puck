@@ -144,10 +144,15 @@ public static partial class WorldDocumentEmitter {
                 break;
             }
 
+            case ForStatementNode loop:
+                DocumentLowering.ExpandFor(loop, target, scope, ProcessStatement);
+
+                break;
+
             case PropertyNode propNode: {
                 var childPointer = $"{scope.CurrentPointer}/{propNode.Name}";
                 scope.SourceMap?.Register(childPointer, propNode.Span);
-                target[propNode.Name] = LowerExpression(propNode.Value, scope, propNode.Name);
+                DocumentLowering.AssignOrExtend(target, propNode.Name, LowerExpression(propNode.Value, scope, propNode.Name));
                 break;
             }
 
@@ -235,8 +240,8 @@ public static partial class WorldDocumentEmitter {
             var addonObj = LowerBlockToObject(block, scope);
             scope.CurrentPointer = oldPointer;
 
-            if (block.Name is not null) {
-                addonObj["name"] = block.Name;
+            if (DocumentLowering.ResolveBlockName(block, scope) is { } resolvedaddonObj) {
+                addonObj["name"] = resolvedaddonObj;
             }
             ResolveAddonHash(addonObj, scope, block.Span);
             addonsArr.AppendNode(addonObj);
@@ -278,8 +283,8 @@ public static partial class WorldDocumentEmitter {
             var matObj = LowerBlockToObject(block, scope);
             scope.CurrentPointer = oldPointer;
 
-            if (block.Name is not null) {
-                matObj["name"] = block.Name;
+            if (DocumentLowering.ResolveBlockName(block, scope) is { } resolvedmatObj) {
+                matObj["name"] = resolvedmatObj;
             }
             materialsArr.AppendNode(matObj);
             return;
@@ -304,8 +309,8 @@ public static partial class WorldDocumentEmitter {
             var blockObj = LowerBlockToObject(block, scope);
             scope.CurrentPointer = oldPointer;
 
-            if (block.Name is not null) {
-                blockObj["name"] = block.Name;
+            if (DocumentLowering.ResolveBlockName(block, scope) is { } resolvedblockObj) {
+                blockObj["name"] = resolvedblockObj;
             }
             if (block.Target is not null) {
                 blockObj["target"] = block.Target;
@@ -336,6 +341,12 @@ public static partial class WorldDocumentEmitter {
     }
 
     private static void ProcessViewsStatement(StatementNode stmt, JsonObject viewsObj, DocumentScope scope) {
+        if (stmt is ForStatementNode loop) {
+            DocumentLowering.ExpandFor(loop, viewsObj, scope, ProcessViewsStatement);
+
+            return;
+        }
+
         if (stmt is BlockNode subBlock) {
             var subId = subBlock.Identifier.ToLowerInvariant();
             if (subId is "layout" or "layouts") {
@@ -370,7 +381,7 @@ public static partial class WorldDocumentEmitter {
                 viewsObj[subBlock.Identifier] = LowerBlockToObject(subBlock, scope);
             }
         } else if (stmt is PropertyNode prop) {
-            viewsObj[prop.Name] = LowerExpression(prop.Value, scope);
+            DocumentLowering.AssignOrExtend(viewsObj, prop.Name, LowerExpression(prop.Value, scope));
         } else if (stmt is ExpressionStatementNode exprStmt && exprStmt.Expression is CallExpressionNode call) {
             ExpandTemplateInvocation(call, viewsObj, scope, isViewsContext: true);
         }

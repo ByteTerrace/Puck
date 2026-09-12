@@ -3,6 +3,8 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>
@@ -32,7 +34,7 @@ public sealed class CartridgeCostMeasurement {
     [InlineData("cgb")]
     [InlineData("agb")]
     public void TheHarnessCanStillReachTheMachine(string target) {
-        var body = new[] { Set(target: "sink", operation: "set", value: new CartridgeValue(Constant: 1)) };
+        var body = new[] { Set(target: "sink", operation: null, value: new CartridgeValue(Constant: 1)) };
 
         // Far past what the target's reservation grants, which the search needs to be able to reach: nothing refuses a
         // document for being slow, so a probe compiles and simply misses frames.
@@ -63,7 +65,7 @@ public sealed class CartridgeCostMeasurement {
             // A second granularity separates per-loop setup from per-iteration overhead. Sprites, map writes and blits
             // are charged against the same frame, so each weight comes from the capacity a known count of them costs;
             // map writes cannot be measured inside the loop because the queue they feed is bounded per frame.
-            var step = Set(target: "sink", operation: "set", value: new CartridgeValue(Constant: 1));
+            var step = Set(target: "sink", operation: null, value: new CartridgeValue(Constant: 1));
             log.AppendLine(value: $"{target} {"step-grain-double",-18} {LargestSustained(target: target, body: [step], granularity: grain * 2, sprites: 0)}");
             log.AppendLine(value: $"{target} {"step-sprites40",-18} {LargestSustained(target: target, body: [step], granularity: grain, sprites: 40)}");
             log.AppendLine(value: $"{target} {"step-maps24",-18} {LargestSustained(target: target, body: [step], granularity: grain, sprites: 0, maps: 24)}");
@@ -91,22 +93,22 @@ public sealed class CartridgeCostMeasurement {
         var constant = new CartridgeValue(Constant: 1);
         var variable = new CartridgeValue(Variable: "a");
         var element = new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "i"));
-        var step = Set(target: "sink", operation: "set", value: constant);
-        var addConstant = Set(target: "sink", operation: "add", value: constant);
+        var step = Set(target: "sink", operation: null, value: constant);
+        var addConstant = Set(target: "sink", operation: ExpressionOp.Add, value: constant);
         return [
             ("step", [step]),
             ("step-twice", [step, step]),
             ("add-constant", [addConstant]),
-            ("read-variable", [Set(target: "sink", operation: "add", value: variable)]),
-            ("read-array", [Set(target: "sink", operation: "add", value: element)]),
-            ("write-array", [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "cells", Index: new CartridgeValue(Variable: "i")), Operation: "set", Value: constant)]),
-            ("compare-taken", [new CartridgeStatement(Kind: "if", When: [new CartridgeCondition(Kind: "compare", Left: variable, Comparison: "ge", Right: constant)], Then: [addConstant])]),
-            ("compare-skipped", [new CartridgeStatement(Kind: "if", When: [new CartridgeCondition(Kind: "compare", Left: variable, Comparison: "lt", Right: constant)], Then: [addConstant])]),
+            ("read-variable", [Set(target: "sink", operation: ExpressionOp.Add, value: variable)]),
+            ("read-array", [Set(target: "sink", operation: ExpressionOp.Add, value: element)]),
+            ("write-array", [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "cells", Index: new CartridgeValue(Variable: "i")), Operation: null, Value: constant)]),
+            ("compare-taken", [new CartridgeStatement(Kind: "if", When: [new CartridgeCondition(Kind: "compare", Left: variable, Comparison: ActionStateComparison.GreaterOrEqual, Right: constant)], Then: [addConstant])]),
+            ("compare-skipped", [new CartridgeStatement(Kind: "if", When: [new CartridgeCondition(Kind: "compare", Left: variable, Comparison: ActionStateComparison.Less, Right: constant)], Then: [addConstant])]),
             ("key-condition", [new CartridgeStatement(Kind: "if", When: [new CartridgeCondition(Kind: "key", Key: "a", Mode: "held")], Then: [addConstant])]),
-            ("multiply", [Set(target: "sink", operation: "mul", value: new CartridgeValue(Constant: 3))]),
-            ("divide", [Set(target: "sink", operation: "div", value: new CartridgeValue(Constant: 3))]),
-            ("modulo", [Set(target: "sink", operation: "mod", value: new CartridgeValue(Constant: 3))]),
-            ("shift", [Set(target: "sink", operation: "shl", value: new CartridgeValue(Constant: 1))]),
+            ("multiply", [Set(target: "sink", operation: ExpressionOp.Multiply, value: new CartridgeValue(Constant: 3))]),
+            ("divide", [Set(target: "sink", operation: ExpressionOp.Divide, value: new CartridgeValue(Constant: 3))]),
+            ("modulo", [Set(target: "sink", operation: ExpressionOp.Modulo, value: new CartridgeValue(Constant: 3))]),
+            ("shift", [Set(target: "sink", operation: ExpressionOp.ShiftLeft, value: new CartridgeValue(Constant: 1))]),
         ];
     }
 
@@ -178,7 +180,7 @@ public sealed class CartridgeCostMeasurement {
                 new CartridgeStatement(Kind: "repeat", Count: outer, Index: "o", Body: [
                     new CartridgeStatement(Kind: "repeat", Count: granularity, Index: "i", Body: body),
                 ]),
-                Set(target: "ticks", operation: "add", value: new CartridgeValue(Constant: 1)),
+                Set(target: "ticks", operation: ExpressionOp.Add, value: new CartridgeValue(Constant: 1)),
             ])],
         };
     }
@@ -190,6 +192,6 @@ public sealed class CartridgeCostMeasurement {
         Schema: Puck.Assets.Documents.AudioDocument.CurrentSchema, Name: "t", Tempo: 8,
         Patterns: [[new Puck.Assets.Documents.AudioRowDocument(Note: "C4", Duty: null, Envelope: null)]], Order: [0], Effects: null);
 
-    private static CartridgeStatement Set(string target, string operation, CartridgeValue value) =>
+    private static CartridgeStatement Set(string target, ExpressionOp? operation, CartridgeValue value) =>
         new(Kind: "set", Target: new CartridgeTarget(Variable: target), Operation: operation, Value: value);
 }

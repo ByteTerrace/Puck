@@ -36,7 +36,7 @@ public sealed class CartridgeWindowTests {
                 Y: new CartridgeValue(Constant: 72),
                 Visible: new CartridgeValue(Variable: "shown")),
             Rules = [new CartridgeRule(Name: "hold", When: [], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "shown"), Operation: "set", Value: new CartridgeValue(Variable: "shown")),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "shown"), Operation: null, Value: new CartridgeValue(Variable: "shown")),
             ])],
         };
         using var machine = Run(document: document, frames: 20);

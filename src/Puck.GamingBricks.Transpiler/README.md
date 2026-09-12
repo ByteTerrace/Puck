@@ -38,7 +38,9 @@ variables: [
 ]
 ```
 
-The language's array builtins run at compile time, which is what keeps a cartridge's big data sections short:
+The language's collection builtins (`range`, `length`, `concat`, `map`, `filter`, `reduce`, `distinct`, `sort`,
+`groupBy` — [`Puck.Transpiler`](../Puck.Transpiler/README.md#collection-builtins-and-lambdas)) run at compile time,
+which is what keeps a cartridge's big data sections short:
 
 ```
 arrays [
@@ -46,6 +48,35 @@ arrays [
     { name: "speeds", initial: map(range(0, 21), level => 48 - (level * 2)) }
 ]
 ```
+
+The named scalar functions (`squareRoot`, `remainder`, `greatestCommonDivisor`, and the rest of
+[`Puck.State`'s shared vocabulary](../Puck.Transpiler/README.md#scalar-functions-come-from-puckstate-not-from-here))
+fold the same way here as in any other document — an integer-domain one exactly, by delegating to
+`ExpressionArithmetic`, everything else in `double`.
+
+`for` is the core language's compile-time loop, and it expands here exactly as it does in a world document: a
+`for` written where a `rule` or a section row belongs emits its body once per element, and the document carries the
+rows it produced, never the loop. An interpolated header names each generated row apart:
+
+```
+for (level, index) in [4, 9, 16] {
+    variable $"speed{index}" {
+        initial: level
+    }
+}
+```
+
+The bound names are compile-time values, so a loop variable used as an operand lowers to a literal byte rather than
+to a machine variable of the same name, and it shadows a `let` of that name for the length of one iteration.
+
+`map(range(...), i => ...)` remains the spelling for a repeated VALUE inside one row (an array cell, a variable's
+initial contents); `for` is the spelling for a repeated ROW. Neither reaches inside a rule body: a rule's steps are
+parsed by the language's own effect dispatcher, which has no `for` production, and a rule's `repeat <count> as
+<name> { }` is unrelated — it is a loop the MACHINE runs at play time over a runtime count, not a compile-time
+expansion of source text.
+
+A statement this vocabulary has no case for is refused rather than dropped, so a misspelled row keyword cannot
+silently lose the row and everything nested in it.
 
 A `rule` carries a gate and a body:
 

@@ -1,11 +1,14 @@
 using Puck.Assets.Documents;
 using Puck.GamingBricks.Forge;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge;
 
 /// <summary>Compiles cartridge documents into BIOS-independent Thumb code and mode-0 graphics.</summary>
 /// <remarks>
 /// EWRAM layout above <c>AgbForgeMemoryMap.GameRam</c>: 0x02000040..0x020000BF variables, 0x020000C0 discard sink,
+/// 0x020000C1 the frame's scene snapshot,
 /// 0x020000C4 map-write queue count, 0x020000C8 the queue's 24 entries of (row, column, tile, palette), 0x02000130 the
 /// four sound voices' state, 0x02000200 the save mirror, 0x02000160 the digital sound engine, 0x020003F0 the clock's reply, 0x02000400 the surface's fill word, 0x02000500 the per-scanline
 /// scroll table, and arrays from 0x02000900. The queue drains right
@@ -23,6 +26,9 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
     private const uint SaveMirrorAddress = 0x02000200u;
     private const uint SoundStateAddress = 0x02000130u;
     private const uint VoidAddress = 0x020000C0u;
+    // The declared scene variable, read once before any rule evaluates. Every guard on it compares against THIS byte,
+    // so a rule that writes the variable changes which scene runs next frame and never opens a second one in this.
+    private const uint SceneAddress = 0x020000C1u;
 
     /// <inheritdoc />
     public string EngineId => "advanced-gaming-brick";
@@ -38,7 +44,17 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             throw new ArgumentException(message: "This compiler requires target agb.", paramName: nameof(document));
         }
 
-        var variables = document.Variables.Select(selector: (v, i) => (v.Name, Address: (uint)(AgbForgeMemoryMap.GameRam + i))).ToDictionary(keySelector: v => v.Name, elementSelector: v => v.Address, comparer: StringComparer.Ordinal);
+        // A slot spends one or two bytes of the window depending on its declared ceiling, so addresses accumulate by
+        // width rather than by declaration index. A wide slot is little-endian: low byte first.
+        var variables = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
+        var widths = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var slotAddress = AgbForgeMemoryMap.GameRam;
+        foreach (var slot in document.Variables) {
+            variables[slot.Name] = slotAddress;
+            widths[slot.Name] = slot.Width;
+            slotAddress += (uint)slot.Width;
+        }
+
         var arrays = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
         var lengths = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var next = ArrayBaseAddress;
@@ -193,8 +209,15 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         emitter.SubtractImmediate(register: LowRegister.R1, value: 1);
         emitter.Branch(condition: ThumbCondition.NotEqual, label: clear);
         foreach (var variable in document.Variables) {
-            emitter.MoveImmediate(destination: LowRegister.R0, value: (byte)variable.Initial);
             emitter.LoadConstant(destination: LowRegister.R2, value: variables[variable.Name]);
+            if (variable.Width == 2) {
+                emitter.LoadConstant(destination: LowRegister.R0, value: (uint)variable.Initial);
+                emitter.StoreHalf(source: LowRegister.R0, baseRegister: LowRegister.R2, byteOffset: 0);
+
+                continue;
+            }
+
+            emitter.MoveImmediate(destination: LowRegister.R0, value: (byte)variable.Initial);
             emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
         }
         // Arrays pack contiguously from ArrayBaseAddress, so one ROM table seeds every one of them.
@@ -258,6 +281,14 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
         audio?.EmitFrameTick();
         digital?.EmitFrameTick();
         Flush();
+        if (document.Scene is { } frameScene) {
+            emitter.LoadConstant(destination: LowRegister.R2, value: variables[frameScene]);
+            emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: LowRegister.R0);
+            emitter.LoadConstant(destination: LowRegister.R2, value: SceneAddress);
+            emitter.StoreByte(baseRegister: LowRegister.R2, byteOffset: 0, source: LowRegister.R0);
+            Flush();
+        }
+
         foreach (var rule in document.Rules) {
             var end = emitter.NewLabel();
             Conditions(conditions: rule.When, fail: end);
@@ -526,15 +557,15 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
                     emitter.Alu(op: ThumbAlu.Test, destination: LowRegister.R0, source: LowRegister.R1);
                     Require(condition: ThumbCondition.NotEqual, end: fail);
                 } else {
-                    Load(value: condition.Left!, register: LowRegister.R0);
-                    Load(value: condition.Right!, register: LowRegister.R1);
+                    LoadGuard(value: condition.Left!, register: LowRegister.R0);
+                    LoadGuard(value: condition.Right!, register: LowRegister.R1);
                     emitter.Alu(op: ThumbAlu.Compare, destination: LowRegister.R0, source: LowRegister.R1);
                     Require(condition: condition.Comparison switch {
-                        "eq" => ThumbCondition.Equal,
-                        "ne" => ThumbCondition.NotEqual,
-                        "lt" => ThumbCondition.CarryClear,
-                        "le" => ThumbCondition.UnsignedLowerOrSame,
-                        "gt" => ThumbCondition.UnsignedHigher,
+                        ActionStateComparison.Equal => ThumbCondition.Equal,
+                        ActionStateComparison.NotEqual => ThumbCondition.NotEqual,
+                        ActionStateComparison.Less => ThumbCondition.CarryClear,
+                        ActionStateComparison.LessOrEqual => ThumbCondition.UnsignedLowerOrSame,
+                        ActionStateComparison.Greater => ThumbCondition.UnsignedHigher,
                         _ => ThumbCondition.CarrySet,
                     }, end: fail);
                 }
@@ -760,38 +791,82 @@ public sealed class AgbCartridgeCompiler : ICartridgeCompiler {
             }
         }
 
-        // A "set" evaluates the operand first because the destination address computation leaves r0 alone; every other
+        // A plain assignment evaluates the operand first because the destination address computation leaves r0 alone; every other
         // operation keeps the operand in r1 and the destination address in r4, so an indexed destination is computed once.
         void Act(CartridgeStatement action) {
-            if (action.Operation == "set") {
+            if (action.Operation is null) {
                 Load(value: action.Value!, register: LowRegister.R0);
                 Address(target: action.Target!);
-                emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 0, source: LowRegister.R0);
+                Store(target: action.Target!, source: LowRegister.R0);
+
                 return;
             }
 
             Load(value: action.Value!, register: LowRegister.R1);
             Address(target: action.Target!);
-            emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 0, destination: LowRegister.R0);
-            switch (action.Operation) {
-                case "add": emitter.AddRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1); break;
-                case "subtract": emitter.SubtractRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1); break;
-                case "mul": arithmetic.EmitMultiply(); break;
-                case "div": arithmetic.EmitDivide(); break;
-                case "mod": arithmetic.EmitDivide(); emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R5); break;
-                case "shl": arithmetic.EmitShiftLeft(); break;
-                case "shr": arithmetic.EmitShiftRight(); break;
-                default: emitter.Alu(op: action.Operation switch { "and" => ThumbAlu.And, "or" => ThumbAlu.Or, _ => ThumbAlu.ExclusiveOr }, destination: LowRegister.R0, source: LowRegister.R1); break;
+            if (Wide(target: action.Target!)) {
+                emitter.LoadHalf(destination: LowRegister.R0, baseRegister: LowRegister.R4, byteOffset: 0);
+            } else {
+                emitter.LoadByte(baseRegister: LowRegister.R4, byteOffset: 0, destination: LowRegister.R0);
             }
-            emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 0, source: LowRegister.R0);
+
+            switch (action.Operation) {
+                case ExpressionOp.Add: emitter.AddRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1); break;
+                case ExpressionOp.Subtract: emitter.SubtractRegister(destination: LowRegister.R0, source: LowRegister.R0, operand: LowRegister.R1); break;
+                case ExpressionOp.Multiply: arithmetic.EmitMultiply(); break;
+                case ExpressionOp.Divide: arithmetic.EmitDivide(); break;
+                case ExpressionOp.Modulo: arithmetic.EmitDivide(); emitter.MoveRegister(destination: LowRegister.R0, source: LowRegister.R5); break;
+                case ExpressionOp.ShiftLeft: arithmetic.EmitShiftLeft(); break;
+                case ExpressionOp.ShiftRight: arithmetic.EmitShiftRight(); break;
+                default: emitter.Alu(op: action.Operation switch { ExpressionOp.BitAnd => ThumbAlu.And, ExpressionOp.BitOr => ThumbAlu.Or, _ => ThumbAlu.ExclusiveOr }, destination: LowRegister.R0, source: LowRegister.R1); break;
+            }
+            Store(target: action.Target!, source: LowRegister.R0);
+        }
+
+        // A slot's declared width decides the store: a byte truncates at 256, a halfword at 65536, which is what makes
+        // arithmetic wrap at the ceiling the document declared rather than always at a byte.
+        bool Wide(CartridgeTarget target) => ((target.Variable is { } name) && (widths[name] == 2));
+
+        void Store(CartridgeTarget target, LowRegister source) {
+            if (Wide(target: target)) {
+                emitter.StoreHalf(source: source, baseRegister: LowRegister.R4, byteOffset: 0);
+
+                return;
+            }
+
+            emitter.StoreByte(baseRegister: LowRegister.R4, byteOffset: 0, source: source);
+        }
+
+        // A rule's own gate reads the scene through the frame's snapshot; everything else reads live state.
+        void LoadGuard(CartridgeValue value, LowRegister register) {
+            if ((document.Scene is { } scene) && (value.Variable == scene)) {
+                emitter.LoadConstant(destination: LowRegister.R2, value: SceneAddress);
+                emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
+
+                return;
+            }
+
+            Load(value: value, register: register);
         }
 
         void Load(CartridgeValue value, LowRegister register) {
             if (value.Constant is { } constant) {
+                // A literal paired with a wide slot exceeds a byte, so it comes in through the constant pool rather
+                // than the eight-bit immediate form.
+                if (constant > CartridgeLimits.NarrowMaximum) {
+                    emitter.LoadConstant(destination: register, value: (uint)constant);
+
+                    return;
+                }
+
                 emitter.MoveImmediate(destination: register, value: (byte)constant);
             } else if (value.Variable is { } name) {
                 emitter.LoadConstant(destination: LowRegister.R2, value: variables[name]);
-                emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
+                if (widths[name] == 2) {
+                    emitter.LoadHalf(destination: register, baseRegister: LowRegister.R2, byteOffset: 0);
+                } else {
+                    emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);
+                }
             } else {
                 Element(array: value.Array!, index: value.Index!, address: LowRegister.R2);
                 emitter.LoadByte(baseRegister: LowRegister.R2, byteOffset: 0, destination: register);

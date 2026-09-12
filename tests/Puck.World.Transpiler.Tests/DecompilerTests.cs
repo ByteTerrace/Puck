@@ -26,7 +26,7 @@ public class DecompilerTests {
         Assert.Contains("views {", decompiledPuck);
         Assert.Contains("layout \"study\" {", decompiledPuck);
         Assert.Contains("orbit(distance: 0.01, pitch: 0, yaw: 0)", decompiledPuck);
-        Assert.Contains("fov(fieldOfViewRadians: 0.001)", decompiledPuck);
+        Assert.Contains("fieldOfView(fieldOfViewRadians: 0.001)", decompiledPuck);
         Assert.Contains("study \"moth-study\" {", decompiledPuck);
 
         // 2. Parse .puck DSL -> AST

@@ -1,0 +1,334 @@
+// hgb-mirror's cartridge — the same brook the diorama is built from, drawn as a Color
+// overworld.
+//
+// The tiles below are the ART; everything else is DERIVED. The background map is not a
+// thousand hand-placed numbers: it is the same plateau, cascade and pool ellipses the
+// world's own `let` block carries, classified per cell and resolved to a tile and a
+// palette. Change a radius here and in hgb-mirror.puck and both pictures move together.
+//
+// The cartridge simulates nothing. The world pokes the canonical position, the facing and
+// the two water phases into ax/ay/af/wp/lp, and the one rule below resolves each into the
+// tile that draws it. Variable declaration order IS the bus layout (0xC200 upward), which
+// is what the world's screens[].memory bindings address.
+
+schema: "puck.cartridge.v1"
+
+target: "cgb"
+
+title: "HGBMIRROR"
+
+gameCode: "HGBM"
+
+// ---- the geometry, in picture pixels — KEEP IN SYNC with hgb-mirror.puck --------------
+let cells = 1024
+let mapStride = 32
+let cliffPixels = 24
+
+let plateauCx = 60
+let plateauCy = 34
+let plateauRx = 56
+let plateauRy = 30
+let plateauLimit = plateauRx * plateauRx * plateauRy * plateauRy
+
+let streamLeft = 56
+let streamRight = 72
+
+let poolCx = 72
+let poolCy = 112
+let poolRx = 52
+let poolRy = 26
+let poolLimit = poolRx * poolRx * poolRy * poolRy
+
+let shoreRx = 60
+let shoreRy = 34
+let shoreLimit = shoreRx * shoreRx * shoreRy * shoreRy
+
+let deepRx = 34
+let deepRy = 17
+let deepLimit = deepRx * deepRx * deepRy * deepRy
+
+// ---- colour ---------------------------------------------------------------------------
+// RGB555, one ramp per material: ink, dark, mid, light. A tile is drawn through whichever
+// ramp its cell's class names, which is what lets the grass tiles serve the plateau too —
+// the same blades, two elevations.
+let ink = 3202
+let grassRamp = [ink, 5509, 8810, 12080]
+let plateauRamp = [ink, 8843, 13170, 19449]
+let rockRamp = [ink, 5319, 8558, 13909]
+let waterRamp = [ink, 17634, 27110, 32661]
+let sandRamp = [ink, 7534, 13942, 21373]
+let heroRamp = [0, 4195, 6361, 23454]
+let fallRamp = [0, 17634, 27110, 32661]
+
+palettes {
+    background [
+        grassRamp
+        plateauRamp
+        rockRamp
+        waterRamp
+        sandRamp
+        grassRamp
+        grassRamp
+        grassRamp
+    ]
+    object [
+        heroRamp
+        fallRamp
+        fallRamp
+        fallRamp
+        heroRamp
+        heroRamp
+        heroRamp
+        heroRamp
+    ]
+}
+
+// ---- the art ----------------------------------------------------------------------------
+tiles [
+    { name: "ground", pixels [
+        "22222222", "22212222", "22222232", "21222222",
+        "22222212", "22322222", "22222122", "22222222"
+    ] }
+    { name: "groundBlades", pixels [
+        "22222222", "22122222", "21212222", "22222122",
+        "22221212", "22222222", "21222222", "22222222"
+    ] }
+    { name: "groundBloom", pixels [
+        "22222222", "22232222", "22322322", "22232222",
+        "22222222", "23222232", "22222222", "22222222"
+    ] }
+    { name: "cliffTop", pixels [
+        "00000000", "33333333", "22222222", "21222212",
+        "22222222", "22122221", "11111111", "00000000"
+    ] }
+    { name: "cliffCourse", pixels [
+        "33333333", "22222222", "21222212", "22222222",
+        "22122221", "22222222", "11111111", "00000000"
+    ] }
+    { name: "cliffFoot", pixels [
+        "33333333", "22222222", "21222212", "22222222",
+        "22122221", "11111111", "11111111", "00000000"
+    ] }
+    { name: "water", pixels [
+        "22222222", "23322332", "22222222", "32222223",
+        "22222222", "22333222", "22222222", "33222233"
+    ] }
+    { name: "waterDeep", pixels [
+        "11111111", "13311331", "11111111", "31111113",
+        "11111111", "11333111", "11111111", "33111133"
+    ] }
+    { name: "sand", pixels [
+        "22222222", "22122222", "21222212", "22222122",
+        "22122222", "22222212", "21222122", "22222222"
+    ] }
+    { name: "chute", pixels [
+        "11111111", "11211211", "11111111", "12111121",
+        "11111111", "11211211", "11111111", "12111121"
+    ] }
+
+    // Four frames of falling water, each the 8 px pattern stepped two pixels down, so one
+    // cycle advances it exactly one period — the same quarter-period step the diorama's
+    // crests slide by.
+    { name: "fall0", pixels [
+        "12233221", "12333321", "12233221", "11222211",
+        "12222221", "12233221", "11222211", "12222221"
+    ] }
+    { name: "fall1", pixels [
+        "11222211", "12222221", "12233221", "12333321",
+        "12233221", "11222211", "12222221", "12233221"
+    ] }
+    { name: "fall2", pixels [
+        "12222221", "12233221", "11222211", "12222221",
+        "12233221", "12333321", "12233221", "11222211"
+    ] }
+    { name: "fall3", pixels [
+        "12233221", "11222211", "12222221", "12233221",
+        "12333321", "12233221", "11222211", "12222221"
+    ] }
+
+    // Two crest frames half a period apart, the pool's own moving highlight.
+    { name: "crest0", pixels [
+        "00000000", "00022000", "00233200", "00022000",
+        "00000000", "20000002", "32000023", "20000002"
+    ] }
+    { name: "crest1", pixels [
+        "00000000", "20000002", "32000023", "20000002",
+        "00000000", "00022000", "00233200", "00022000"
+    ] }
+
+    // The figure, one frame per facing: south, north, west, east.
+    { name: "heroS", pixels [
+        "00111100", "01222210", "01232310", "01222210",
+        "00133100", "01333310", "01300310", "00300300"
+    ] }
+    { name: "heroN", pixels [
+        "00111100", "01222210", "01222210", "01222210",
+        "00133100", "01333310", "01300310", "00300300"
+    ] }
+    { name: "heroW", pixels [
+        "00111100", "01222210", "03222210", "01222210",
+        "00133100", "01333310", "00330310", "00330300"
+    ] }
+    { name: "heroE", pixels [
+        "00111100", "01222210", "01222230", "01222210",
+        "00133100", "01333310", "01303300", "00303300"
+    ] }
+]
+
+// ---- tile and palette tables, by class --------------------------------------------------
+let tGround = 0
+let tBlades = 1
+let tBloom = 2
+let tCliffTop = 3
+let tCliffCourse = 4
+let tCliffFoot = 5
+let tWater = 6
+let tWaterDeep = 7
+let tSand = 8
+let tChute = 9
+let tFallFirst = 10
+let tCrestFirst = 14
+let tHeroFirst = 16
+
+let fallPeriod = 8
+let fallPhases = 4
+let ripplePeriod = 8
+let ripplePhases = 2
+
+// Classes: 0 lowland, 1 plateau, 2 cliff, 3 stream, 4 falls, 5 pool, 6 shore.
+let paletteOfClass = [0, 1, 2, 3, 3, 3, 4]
+
+// ---- the picture, classified from the geometry -------------------------------------------
+// One `let` per question, each a whole-map array, so the classifier reads as the sequence of
+// tests it is rather than as one unreadable expression.
+let cellX = map(range(0, cells), i => (i % mapStride) * 8 + 4)
+let cellY = map(range(0, cells), i => floor(i / mapStride) * 8 + 4)
+let onScreen = map(range(0, cells), i => select((i % mapStride) < 20, select(floor(i / mapStride) < 18, 1, 0), 0))
+
+let onPlateau = map(range(0, cells), i => select(
+    (cellX[i] - plateauCx) * (cellX[i] - plateauCx) * plateauRy * plateauRy
+    + (cellY[i] - plateauCy) * (cellY[i] - plateauCy) * plateauRx * plateauRx <= plateauLimit, 1, 0))
+
+let inPool = map(range(0, cells), i => select(
+    (cellX[i] - poolCx) * (cellX[i] - poolCx) * poolRy * poolRy
+    + (cellY[i] - poolCy) * (cellY[i] - poolCy) * poolRx * poolRx <= poolLimit, 1, 0))
+
+let inDeep = map(range(0, cells), i => select(
+    (cellX[i] - poolCx) * (cellX[i] - poolCx) * deepRy * deepRy
+    + (cellY[i] - poolCy) * (cellY[i] - poolCy) * deepRx * deepRx <= deepLimit, 1, 0))
+
+let inShore = map(range(0, cells), i => select(
+    (cellX[i] - poolCx) * (cellX[i] - poolCx) * shoreRy * shoreRy
+    + (cellY[i] - poolCy) * (cellY[i] - poolCy) * shoreRx * shoreRx <= shoreLimit, 1, 0))
+
+let inStream = map(range(0, cells), i => select(cellX[i] >= streamLeft, select(cellX[i] < streamRight, 1, 0), 0))
+
+// How much of the drop this cell shows: the count of pixel depths above it that still lie on
+// the plateau. A vertical wall projects to nothing from directly above, so the face is drawn
+// in proportion to how far the rim faces south — full across the middle of the arc, nothing
+// at its extremes. It is decoration over lowland either way: the diorama's wall is the
+// plateau's own side, and neither side's WALKABLE ground moves with it.
+let cliffDepth = map(range(0, cells), i => select(onPlateau[i] == 1, 0, length(filter(
+    range(1, cliffPixels + 1),
+    d => (cellX[i] - plateauCx) * (cellX[i] - plateauCx) * plateauRy * plateauRy
+        + (cellY[i] - d - plateauCy) * (cellY[i] - d - plateauCy) * plateauRx * plateauRx <= plateauLimit))))
+
+let class = map(range(0, cells), i => select(onScreen[i] == 0, 0,
+    select(inStream[i] == 1,
+        select(onPlateau[i] == 1, 3, select(cliffDepth[i] > 0, 4, select(inPool[i] == 1, 5, select(inShore[i] == 1, 6, 0)))),
+        select(inPool[i] == 1, 5,
+            select(cliffDepth[i] > 0, 2,
+                select(onPlateau[i] == 1, 1,
+                    select(inShore[i] == 1, 6, 0)))))))
+
+// A cheap deterministic scatter, so the ground is not one tile repeated 300 times.
+let scatter = map(range(0, cells), i => (i * 7 + floor(i / mapStride) * 5) % 23)
+
+let groundTile = map(range(0, cells), i => select(scatter[i] == 0, tBlades, select(scatter[i] == 7, tBloom, tGround)))
+
+// The cliff's own courses: the lit lip at the top of the face, its foot where it meets the
+// ground, the repeating course between.
+let cliffTile = map(range(0, cells), i => select(cliffDepth[i] > cliffPixels - 8, tCliffTop,
+    select(cliffDepth[i] <= 8, tCliffFoot, tCliffCourse)))
+
+map: map(range(0, cells), i => select(class[i] == 0, groundTile[i],
+    select(class[i] == 1, groundTile[i],
+        select(class[i] == 2, cliffTile[i],
+            select(class[i] == 3, tWater,
+                select(class[i] == 4, tChute,
+                    select(class[i] == 5, select(inDeep[i] == 1, tWaterDeep, tWater), tSand)))))))
+
+mapPalettes: map(range(0, cells), i => paletteOfClass[class[i]])
+
+variables [
+    { name: "ax", initial: 76 }
+    { name: "ay", initial: 20 }
+    { name: "wp", initial: 0 }
+    { name: "lp", initial: 0 }
+    { name: "af", initial: 0 }
+    { name: "wt", initial: 10 }
+    { name: "lt", initial: 14 }
+    { name: "ht", initial: 16 }
+]
+
+arrays []
+
+screens []
+
+// The animated water is sprites, not runtime map writes: a whole column of falling water
+// and a scatter of pool crests each cost one variable, and the background never changes.
+let fallCells = filter(range(0, cells), i => class[i] == 4)
+let crestCells = filter(range(0, cells), i => select(class[i] == 5, select(floor(i / mapStride) % 3 == 1, select((i % mapStride + floor(i / mapStride)) % 4 == 0, 1, 0), 0), 0) == 1)
+
+sprites: concat(
+    map(fallCells, c => {
+        name: $"fall{c}"
+        tile: { variable: "wt" }
+        x: { constant: (c % mapStride) * 8 }
+        y: { constant: floor(c / mapStride) * 8 }
+        visible: { constant: 1 }
+        palette: { constant: 1 }
+    }),
+    map(crestCells, c => {
+        name: $"crest{c}"
+        tile: { variable: "lt" }
+        x: { constant: (c % mapStride) * 8 }
+        y: { constant: floor(c / mapStride) * 8 }
+        visible: { constant: 1 }
+        palette: { constant: 1 }
+    }),
+    [{
+        name: "hero"
+        tile: { variable: "ht" }
+        x: { variable: "ax" }
+        y: { variable: "ay" }
+        visible: { constant: 1 }
+        palette: { constant: 0 }
+    }]
+)
+
+layers []
+
+raster []
+
+sounds []
+
+scrollX {
+    constant: 0
+}
+
+scrollY {
+    constant: 0
+}
+
+rule "frames" {
+    wt = wp
+    wt &= 3
+    wt += 10
+    lt = lp
+    lt &= 1
+    lt += 14
+    ht = af
+    ht &= 3
+    ht += 16
+}

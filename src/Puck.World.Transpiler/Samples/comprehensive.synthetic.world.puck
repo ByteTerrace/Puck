@@ -27,7 +27,7 @@ template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
         version: "puck.camera.v1"
         operations [
             orbit(distance: dist, pitch: angle, yaw: 0)
-            fov(fieldOfViewRadians: 0.001)
+            fieldOfView(fieldOfViewRadians: 0.001)
         ]
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.State;
 
 namespace Puck.GamingBricks.Forge;
 
@@ -23,8 +24,17 @@ public sealed record CartridgeDocument {
     public required int[] Map { get; init; }
     /// <summary>Gets the background palette index of each map cell, or null to place every cell on palette zero.</summary>
     public int[]? MapPalettes { get; init; }
-    /// <summary>Gets the named unsigned byte state slots and their initial values.</summary>
+    /// <summary>Gets the named unsigned state slots, their initial values and their declared ceilings.</summary>
     public required CartridgeVariable[] Variables { get; init; }
+    /// <summary>Gets the declared variable whose value partitions a frame, or null when no scene is declared.
+    /// <para>Every rule guarded by one equality of this variable against a constant belongs to that value's scene, and
+    /// at most one scene's rules run in a frame. Declaring it makes the partition STRUCTURAL rather than inferred: the
+    /// frame snapshots the variable before any rule evaluates and every such guard compares against the snapshot, so a
+    /// rule that writes the variable mid-frame changes which scene runs NEXT frame and never lets a second scene run in
+    /// this one. That is what lets <see cref="CartridgeCost"/> charge the dearest scene rather than the sum without
+    /// asking where the write sits, and what frees a phase machine from having to name its successor in a staging
+    /// variable adopted by a trailing ungated rule.</para></summary>
+    public string? Scene { get; init; }
     /// <summary>Gets the named unsigned byte arrays, addressed at run time by a byte index.</summary>
     public required CartridgeArray[] Arrays { get; init; }
     /// <summary>Gets the named rectangles of tile indices a blit step paints into the background map.</summary>
@@ -90,11 +100,24 @@ public sealed record CartridgePalettes(int[][] Background, int[][] Object);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeTile(string Name, string[] Pixels);
 
-/// <summary>A mutable unsigned byte of cartridge state.</summary>
+/// <summary>A mutable unsigned slot of cartridge state. Its declared envelope, not its name, decides how many bytes
+/// the backend spends on it.</summary>
 /// <param name="Name">The case-sensitive state name.</param>
-/// <param name="Initial">The initial value, 0 through 255.</param>
+/// <param name="Initial">The initial value, 0 through <paramref name="Max"/>.</param>
+/// <param name="Max">The largest value the slot must hold, 1 through <see cref="CartridgeLimits.WideMaximum"/>.
+/// Absent is <see cref="CartridgeLimits.NarrowMaximum"/> — one byte, which is what every slot was before an envelope
+/// could be declared. A larger ceiling makes the slot two bytes, little-endian, and arithmetic on it wraps at
+/// <paramref name="Max"/> + 1 rather than at 256.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeVariable(string Name, int Initial);
+public sealed record CartridgeVariable(string Name, int Initial, int? Max = null) {
+    /// <summary>Gets the declared ceiling, defaulting to one byte.</summary>
+    [JsonIgnore]
+    public int Ceiling => (Max ?? CartridgeLimits.NarrowMaximum);
+
+    /// <summary>Gets how many bytes the slot occupies: one while its ceiling fits a byte, two otherwise.</summary>
+    [JsonIgnore]
+    public int Width => ((Ceiling > CartridgeLimits.NarrowMaximum) ? 2 : 1);
+}
 
 /// <summary>
 /// A named run of mutable unsigned bytes. The initial contents fix the length. Elements are addressed by a byte index,
@@ -321,15 +344,18 @@ public sealed record CartridgeValue(int? Constant = null, string? Variable = nul
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CartridgeTarget(string? Variable = null, string? Array = null, CartridgeValue? Index = null);
 
-/// <summary>A rule's conjunction. A key condition tests held/pressed/released input; a compare condition compares two unsigned bytes.</summary>
+/// <summary>A rule's conjunction. A key condition tests held/pressed/released input; a compare condition compares two
+/// unsigned values, sixteen bits wide when either operand is a wide slot.</summary>
 /// <param name="Kind">key or compare.</param>
 /// <param name="Key">For key: a, b, start, select, up, down, left or right.</param>
 /// <param name="Mode">For key: held, pressed or released.</param>
 /// <param name="Left">For compare: the left operand.</param>
-/// <param name="Comparison">For compare: eq, ne, lt, le, gt or ge.</param>
+/// <param name="Comparison">For compare: the question asked of the two bytes, from the engine's own comparison
+/// vocabulary (<see cref="ActionStateComparison"/>) rather than a second spelling of it — a cartridge rule and a
+/// world rule ask the same six questions, so neither can grow an arm the other lacks.</param>
 /// <param name="Right">For compare: the right operand.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CartridgeCondition(string Kind, string? Key = null, string? Mode = null, CartridgeValue? Left = null, string? Comparison = null, CartridgeValue? Right = null);
+public sealed record CartridgeCondition(string Kind, string? Key = null, string? Mode = null, CartridgeValue? Left = null, ActionStateComparison? Comparison = null, CartridgeValue? Right = null);
 
 /// <summary>
 /// One step of a rule body: a state write, a branch, a counted loop, or a loop exit. <paramref name="Kind"/> selects
@@ -337,7 +363,10 @@ public sealed record CartridgeCondition(string Kind, string? Key = null, string?
 /// </summary>
 /// <param name="Kind">set, if, repeat, break, map, blit, save, load, play, stop, clock or fade.</param>
 /// <param name="Target">For set: the destination slot or array element.</param>
-/// <param name="Operation">For set: set, add, subtract, and, or, xor, mul, div, mod, shl or shr.</param>
+/// <param name="Operation">For set: how the value combines with the destination's current contents, named from the
+/// engine's opcode vocabulary (<see cref="ExpressionOp"/>) — Add, Subtract, Multiply, Divide, Modulo, BitAnd, BitOr,
+/// BitXor, ShiftLeft or ShiftRight. Absent replaces the destination outright, which is what "set" means and what no
+/// opcode spells. <see cref="CartridgeOperations.Combines"/> is the admitted subset.</param>
 /// <param name="Value">For set: the source operand, evaluated when the step executes.</param>
 /// <param name="When">For if: all conditions must hold; empty always holds.</param>
 /// <param name="Then">For if: the steps taken when every condition holds.</param>
@@ -362,7 +391,7 @@ public sealed record CartridgeCondition(string Kind, string? Key = null, string?
 public sealed record CartridgeStatement(
     string Kind,
     CartridgeTarget? Target = null,
-    string? Operation = null,
+    ExpressionOp? Operation = null,
     CartridgeValue? Value = null,
     CartridgeCondition[]? When = null,
     CartridgeStatement[]? Then = null,

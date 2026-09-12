@@ -516,7 +516,7 @@ indices 8 through 10; the island's own screens stay below 8, and every index
 stays below the derived-face band.
 
 Content paths inside the module are spelled relative to the importing
-document's directory (`../cartridges/pip.cgb.cartridge.json` from
+document's directory (`../cartridges/hgb-mirror.cgb.cartridge.json` from
 `Assets/worlds`), as every asset row's path is; a host elsewhere mirrors that
 layout.
 

@@ -2,19 +2,24 @@ using Puck.Assets.Documents;
 using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.State;
+
 namespace Puck.HumbleGamingBrick.Forge;
 
 /// <summary>Compiles cartridge documents into native CGB machine code and graphics.</summary>
 /// <remarks>
 /// Work-RAM layout above <c>FrameworkMemoryMap.GameRam</c>:
-/// 0xC200..0xC27F variables, 0xC280 prior held input, 0xC281 operand spill, 0xC282 discard sink, 0xC283..0xDFFF arrays, spanning the fixed page and the switchable bank pinned at boot.
+/// 0xC200..0xC27F variables, 0xC280 prior held input, 0xC281 operand spill, 0xC282 discard sink, 0xC283 the frame's scene snapshot, 0xC284..0xDFFF arrays, spanning the fixed page and the switchable bank pinned at boot.
 /// </remarks>
 public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
-    private const ushort ArrayBaseAddress = 0xC283;
+    private const ushort ArrayBaseAddress = 0xC284;
     private const ushort ArrayLimitAddress = 0xE000;
     private const ushort HeldInputAddress = 0xC280;
     private const ushort ScratchAddress = 0xC281;
     private const ushort VoidAddress = 0xC282;
+    // The declared scene variable, read once before any rule evaluates. Every guard on it compares against THIS byte,
+    // so a rule that writes the variable changes which scene runs next frame and never opens a second one in this.
+    private const ushort SceneAddress = 0xC283;
     /// <summary>The mid-picture walk's cursor; the row triples follow it.</summary>
     private const ushort RasterCursorAddress = FrameworkMemoryMap.Scratch;
     /// <summary>The first row triple: scanline, horizontal scroll, vertical scroll.</summary>
@@ -42,7 +47,17 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             throw new ArgumentException(message: "This compiler requires target cgb.", paramName: nameof(document));
         }
 
-        var variables = document.Variables.Select(selector: (v, i) => (v.Name, Address: (uint)(FrameworkMemoryMap.GameRam + i))).ToDictionary(keySelector: v => v.Name, elementSelector: v => v.Address, comparer: StringComparer.Ordinal);
+        // A slot spends one or two bytes of the window depending on its declared ceiling, so addresses accumulate by
+        // width rather than by declaration index. A wide slot is little-endian: low byte first.
+        var variables = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
+        var widths = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
+        var slotAddress = (uint)FrameworkMemoryMap.GameRam;
+        foreach (var slot in document.Variables) {
+            variables[slot.Name] = slotAddress;
+            widths[slot.Name] = slot.Width;
+            slotAddress += (uint)slot.Width;
+        }
+
         var arrays = new Dictionary<string, uint>(comparer: StringComparer.Ordinal);
         var lengths = new Dictionary<string, int>(comparer: StringComparer.Ordinal);
         var next = (uint)ArrayBaseAddress;
@@ -216,6 +231,12 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             foreach (var variable in document.Variables) {
                 emitter.LoadAImmediate(value: (byte)variable.Initial);
                 emitter.StoreAToAddress(address: (ushort)variables[variable.Name]);
+                if (variable.Width != 2) {
+                    continue;
+                }
+
+                emitter.LoadAImmediate(value: (byte)(variable.Initial >> 8));
+                emitter.StoreAToAddress(address: (ushort)(variables[variable.Name] + 1));
             }
 
             if (arrayInitial.Length != 0) {
@@ -223,6 +244,11 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             }
         }
         void Frame() {
+            if (document.Scene is { } scene) {
+                emitter.LoadAFromAddress(address: (ushort)variables[scene]);
+                emitter.StoreAToAddress(address: SceneAddress);
+            }
+
             foreach (var rule in document.Rules) {
                 var end = emitter.NewLabel();
                 Conditions(conditions: rule.When, fail: end);
@@ -283,17 +309,55 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
                     }
                     emitter.ArithmeticImmediate(op: AluOp.And, value: Key(key: condition.Key!));
                     emitter.JumpAbsolute(condition: Condition.Zero, label: fail);
+                } else if (WideValue(value: condition.Left) || WideValue(value: condition.Right)) {
+                    // Sixteen bits compare a byte at a time. > and <= swap their operands so every case reads the
+                    // borrow out of one subtraction chain rather than needing a signed test.
+                    var swap = condition.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual);
+
+                    LoadWide(value: (swap ? condition.Right! : condition.Left!), pair: Reg16.Hl);
+                    LoadWide(value: (swap ? condition.Left! : condition.Right!), pair: Reg16.De);
+                    if (condition.Comparison is (ActionStateComparison.Equal or ActionStateComparison.NotEqual)) {
+                        var differs = emitter.NewLabel();
+
+                        emitter.Load(destination: Reg8.A, source: Reg8.L);
+                        emitter.Arithmetic(op: AluOp.Compare, source: Reg8.E);
+                        emitter.JumpAbsolute(condition: Condition.NotZero, label: differs);
+                        emitter.Load(destination: Reg8.A, source: Reg8.H);
+                        emitter.Arithmetic(op: AluOp.Compare, source: Reg8.D);
+                        if (condition.Comparison is ActionStateComparison.Equal) {
+                            emitter.JumpAbsolute(condition: Condition.NotZero, label: fail);
+                            emitter.MarkLabel(label: differs);
+                        } else {
+                            var same = emitter.NewLabel();
+
+                            emitter.JumpAbsolute(condition: Condition.NotZero, label: differs);
+                            emitter.MarkLabel(label: same);
+                            emitter.JumpAbsolute(label: fail);
+                            emitter.MarkLabel(label: differs);
+                        }
+
+                        continue;
+                    }
+
+                    emitter.Load(destination: Reg8.A, source: Reg8.L);
+                    emitter.Arithmetic(op: AluOp.Subtract, source: Reg8.E);
+                    emitter.Load(destination: Reg8.A, source: Reg8.H);
+                    emitter.Arithmetic(op: AluOp.SubtractWithCarry, source: Reg8.D);
+                    // Carry out of the chain is the borrow: set means the first operand is the smaller one.
+                    emitter.JumpAbsolute(
+                        condition: ((condition.Comparison is (ActionStateComparison.Less or ActionStateComparison.Greater)) ? Condition.NoCarry : Condition.Carry),
+                        label: fail);
                 } else {
                     // Reverse > and <= so all comparisons use carry/zero without signed arithmetic.
-                    var reverse = condition.Comparison is "gt" or "le";
-                    Load(value: reverse ? condition.Left! : condition.Right!);
+                    var reverse = condition.Comparison is (ActionStateComparison.Greater or ActionStateComparison.LessOrEqual);
+                    LoadGuard(value: reverse ? condition.Left! : condition.Right!);
                     emitter.Load(destination: Reg8.B, source: Reg8.A);
-                    Load(value: reverse ? condition.Right! : condition.Left!);
+                    LoadGuard(value: reverse ? condition.Right! : condition.Left!);
                     emitter.Arithmetic(op: AluOp.Compare, source: Reg8.B);
                     emitter.JumpAbsolute(condition: condition.Comparison switch {
-                        "eq" => Condition.NotZero,
-                        "ne" => Condition.Zero,
-                        "lt" or "gt" => Condition.NoCarry,
+                        ActionStateComparison.Equal => Condition.NotZero,
+                        ActionStateComparison.NotEqual => Condition.Zero,
+                        ActionStateComparison.Less or ActionStateComparison.Greater => Condition.NoCarry,
                         _ => Condition.Carry,
                     }, label: fail);
                 }
@@ -524,10 +588,41 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             }
         }
 
-        // A "set" spills the operand and recovers it once the destination address is known; every other operation keeps
+        // A plain assignment spills the operand and recovers it once the destination address is known; every other operation keeps
         // the operand in B and the destination address on the stack, so an indexed destination is computed exactly once.
         void Act(CartridgeStatement action) {
-            if (action.Operation == "set") {
+            // A wide slot is two bytes, so its assignment and its add/subtract run through the pair registers instead of
+            // the accumulator. Validation has already refused every other operation against one.
+            if (WideTarget(target: action.Target) || WideValue(value: action.Value)) {
+                LoadWide(value: action.Value!, pair: Reg16.De);
+                if (action.Operation is null) {
+                    StoreWide(target: action.Target!, pair: Reg16.De);
+
+                    return;
+                }
+
+                if (action.Operation is ExpressionOp.Add) {
+                    LoadWide(value: new CartridgeValue(Variable: action.Target!.Variable), pair: Reg16.Hl);
+                    emitter.AddToHl(pair: Reg16.De);
+                    StoreWide(target: action.Target!, pair: Reg16.Hl);
+
+                    return;
+                }
+
+                // Subtract has no sixteen-bit form on this processor: the low byte borrows into the high one.
+                var wideAddress = (ushort)variables[action.Target!.Variable!];
+
+                emitter.LoadAFromAddress(address: wideAddress);
+                emitter.Arithmetic(op: AluOp.Subtract, source: Reg8.E);
+                emitter.StoreAToAddress(address: wideAddress);
+                emitter.LoadAFromAddress(address: (ushort)(wideAddress + 1));
+                emitter.Arithmetic(op: AluOp.SubtractWithCarry, source: Reg8.D);
+                emitter.StoreAToAddress(address: (ushort)(wideAddress + 1));
+
+                return;
+            }
+
+            if (action.Operation is null) {
                 Load(value: action.Value!);
                 emitter.StoreAToAddress(address: ScratchAddress);
                 Address(target: action.Target!);
@@ -542,17 +637,17 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter.Push(pair: StackPair.Hl);
             emitter.Load(destination: Reg8.A, source: Reg8.Memory);
             switch (action.Operation) {
-                case "mul": arithmetic.EmitMultiply(); break;
-                case "div": arithmetic.EmitDivide(); break;
-                case "mod": arithmetic.EmitDivide(); emitter.Load(destination: Reg8.A, source: Reg8.C); break;
-                case "shl": arithmetic.EmitShiftLeft(); break;
-                case "shr": arithmetic.EmitShiftRight(); break;
+                case ExpressionOp.Multiply: arithmetic.EmitMultiply(); break;
+                case ExpressionOp.Divide: arithmetic.EmitDivide(); break;
+                case ExpressionOp.Modulo: arithmetic.EmitDivide(); emitter.Load(destination: Reg8.A, source: Reg8.C); break;
+                case ExpressionOp.ShiftLeft: arithmetic.EmitShiftLeft(); break;
+                case ExpressionOp.ShiftRight: arithmetic.EmitShiftRight(); break;
                 default:
                     emitter.Arithmetic(op: action.Operation switch {
-                        "add" => AluOp.Add,
-                        "subtract" => AluOp.Subtract,
-                        "and" => AluOp.And,
-                        "or" => AluOp.Or,
+                        ExpressionOp.Add => AluOp.Add,
+                        ExpressionOp.Subtract => AluOp.Subtract,
+                        ExpressionOp.BitAnd => AluOp.And,
+                        ExpressionOp.BitOr => AluOp.Or,
                         _ => AluOp.Xor,
                     }, source: Reg8.B);
                     break;
@@ -706,6 +801,57 @@ public sealed class HgbCartridgeCompiler : ICartridgeCompiler {
             emitter.Pop(pair: StackPair.Hl);
             emitter.Pop(pair: StackPair.Af);
             emitter.ReturnFromInterrupt();
+        }
+
+        bool WideValue(CartridgeValue? value) => ((value?.Variable is { } name) && (widths[name] == 2));
+        bool WideTarget(CartridgeTarget? target) => ((target?.Variable is { } name) && (widths[name] == 2));
+
+        // Reads an operand as sixteen bits into the given pair. A narrow operand zero-extends, so a wide slot and a
+        // byte compare and combine on the same terms.
+        void LoadWide(CartridgeValue value, Reg16 pair) {
+            var low = ((pair == Reg16.Hl) ? Reg8.L : Reg8.E);
+            var high = ((pair == Reg16.Hl) ? Reg8.H : Reg8.D);
+            if (value.Constant is { } constant) {
+                emitter.LoadImmediate(pair: pair, value: (ushort)constant);
+
+                return;
+            }
+
+            var address = (ushort)variables[value.Variable!];
+
+            emitter.LoadAFromAddress(address: address);
+            emitter.Load(destination: low, source: Reg8.A);
+            if (widths[value.Variable!] == 2) {
+                emitter.LoadAFromAddress(address: (ushort)(address + 1));
+                emitter.Load(destination: high, source: Reg8.A);
+
+                return;
+            }
+
+            emitter.XorA();
+            emitter.Load(destination: high, source: Reg8.A);
+        }
+
+        void StoreWide(CartridgeTarget target, Reg16 pair) {
+            var low = ((pair == Reg16.Hl) ? Reg8.L : Reg8.E);
+            var high = ((pair == Reg16.Hl) ? Reg8.H : Reg8.D);
+            var address = (ushort)variables[target.Variable!];
+
+            emitter.Load(destination: Reg8.A, source: low);
+            emitter.StoreAToAddress(address: address);
+            emitter.Load(destination: Reg8.A, source: high);
+            emitter.StoreAToAddress(address: (ushort)(address + 1));
+        }
+
+        // A rule's own gate reads the scene through the frame's snapshot; everything else reads live state.
+        void LoadGuard(CartridgeValue value) {
+            if ((document.Scene is { } scene) && (value.Variable == scene)) {
+                emitter.LoadAFromAddress(address: SceneAddress);
+
+                return;
+            }
+
+            Load(value: value);
         }
 
         void Load(CartridgeValue value) {

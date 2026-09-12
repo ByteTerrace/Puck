@@ -1,6 +1,8 @@
 using Puck.GamingBricks.Forge;
 using Puck.HumbleGamingBrick.Forge;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>
@@ -22,7 +24,7 @@ public sealed class CartridgeCapacityTests {
                 Body: [.. Enumerable.Range(start: 0, count: CartridgeLimits.StatementCount).Select(selector: static step => new CartridgeStatement(
                     Kind: "set",
                     Target: new CartridgeTarget(Array: "cells", Index: new CartridgeValue(Variable: "i")),
-                    Operation: "div",
+                    Operation: ExpressionOp.Divide,
                     Value: new CartridgeValue(Array: "cells", Index: new CartridgeValue(Variable: "x"))))]))],
         };
 

@@ -4,6 +4,8 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers authored music reaching the sound hardware, and the target gate on cartridge audio.</summary>
@@ -19,8 +21,8 @@ public sealed class CartridgeSoundTests {
                 At(phase: 2, body: [new CartridgeStatement(Kind: "play", Sound: "theme")]),
                 At(phase: 10, body: [new CartridgeStatement(Kind: "stop")]),
                 // The counter advances every frame, so the gates above fire on the frames they name.
-                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "lt", Right: new CartridgeValue(Constant: 200))],
-                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: "add", Value: new CartridgeValue(Constant: 1))]),
+                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 200))],
+                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1))]),
             ],
         };
         ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();
@@ -51,8 +53,8 @@ public sealed class CartridgeSoundTests {
             Rules = [
                 At(phase: 2, body: [new CartridgeStatement(Kind: "play", Sound: "theme")]),
                 At(phase: 30, body: [new CartridgeStatement(Kind: "stop")]),
-                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "lt", Right: new CartridgeValue(Constant: 200))],
-                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: "add", Value: new CartridgeValue(Constant: 1))]),
+                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 200))],
+                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1))]),
             ],
         };
         ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();
@@ -88,8 +90,8 @@ public sealed class CartridgeSoundTests {
             Rules = [
                 At(phase: 2, body: [new CartridgeStatement(Kind: "play", Sound: "theme")]),
                 At(phase: 6, body: [new CartridgeStatement(Kind: "play", Sound: "blip")]),
-                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "lt", Right: new CartridgeValue(Constant: 200))],
-                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: "add", Value: new CartridgeValue(Constant: 1))]),
+                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 200))],
+                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1))]),
             ],
         };
         ICartridgeCompiler compiler = target == "agb" ? new AgbCartridgeCompiler() : new HgbCartridgeCompiler();
@@ -187,7 +189,7 @@ public sealed class CartridgeSoundTests {
 
     private static CartridgeRule At(int phase, CartridgeStatement[] body) => new(
         Name: $"phase{phase}",
-        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "eq", Right: new CartridgeValue(Constant: phase))],
+        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: phase))],
         Body: body);
 
     // The sequencer's live pointer and the channel's envelope byte, wherever each machine keeps them.

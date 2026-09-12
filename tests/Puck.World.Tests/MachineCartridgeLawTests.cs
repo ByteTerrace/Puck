@@ -44,7 +44,16 @@ public sealed class MachineCartridgeLawTests {
 
         return directory!.FullName;
     }
-    private static string CartridgePath(string file) => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "cartridges", file);
+    // The machine-host laws carry their OWN cartridges rather than reading whichever ones the game ships. A law
+    // about binding, memory mirroring and symbol resolution is a law about the HOST; coupling it to shipped content
+    // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
+    private static string CartridgePath(string file) => Path.Combine(RepoRoot(), "tests", "Puck.World.Tests", "Fixtures", "cartridges", file);
+
+    /// <summary>A cartridge the GAME ships, for the one law that boots a shipped module and must therefore stage
+    /// what that module names.</summary>
+    /// <param name="file">The cartridge file name.</param>
+    /// <returns>The absolute path under the world's own assets.</returns>
+    private static string ShippedCartridgePath(string file) => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "cartridges", file);
     private static string ModulePath() => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "modules", "arcade.world.json");
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();
@@ -217,8 +226,8 @@ public sealed class MachineCartridgeLawTests {
 
         // The shipped layout: the host beside the worlds, the cartridges one directory up, so the module's own
         // "../cartridges/" spellings resolve against the host document exactly as they do under Assets/worlds.
-        foreach (var file in (ReadOnlySpan<string>)["pip.cgb.cartridge.json", "pip.agb.cartridge.json"]) {
-            _ = files.WriteBytes(name: Path.Combine("cartridges", file), bytes: File.ReadAllBytes(path: CartridgePath(file: file)));
+        foreach (var file in (ReadOnlySpan<string>)["hgb-mirror.cgb.cartridge.json", "pip.agb.cartridge.json"]) {
+            _ = files.WriteBytes(name: Path.Combine("cartridges", file), bytes: File.ReadAllBytes(path: ShippedCartridgePath(file: file)));
         }
 
         var host = JsonNode.Parse(json: Encoding.UTF8.GetString(bytes: Fixtures.DefaultWorldBytes()))!.AsObject();
@@ -266,7 +275,7 @@ public sealed class MachineCartridgeLawTests {
             stateDirectory: stateDirectory
         );
 
-        foreach (var (screen, engine, file) in (ReadOnlySpan<(int, string, string)>)[(8, CgbEngine, "pip.cgb.cartridge.json"), (9, AgbEngine, "pip.agb.cartridge.json"), (10, CgbEngine, "pip.cgb.cartridge.json")]) {
+        foreach (var (screen, engine, file) in (ReadOnlySpan<(int, string, string)>)[(8, CgbEngine, "hgb-mirror.cgb.cartridge.json"), (9, AgbEngine, "pip.agb.cartridge.json"), (10, CgbEngine, "hgb-mirror.cgb.cartridge.json")]) {
             var state = fixture.Server.Machines.State(index: screen);
 
             Assert.NotNull(@object: state);

@@ -4,6 +4,8 @@ using Puck.State;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Lowering;
 
+using Puck.GamingBricks.Forge;
+
 namespace Puck.GamingBricks.Transpiler;
 
 /// <summary>Reads and writes a <c>CartridgeValue</c>: exactly one of a literal byte, a named variable, or an
@@ -63,8 +65,10 @@ public static class CartridgeOperand {
 
         switch (tokens[0]) {
             case ValueToken.Constant constant: {
-                if ((constant.Value != decimal.Truncate(d: constant.Value)) || (constant.Value < 0) || (constant.Value > 255)) {
-                    reason = $"'{text}' is not a whole number in 0..255";
+                // The widest slot a document may declare. Whether a literal fits the slot it is actually paired with
+                // is the forge validator's question, since only it knows that slot's declared ceiling.
+                if ((constant.Value != decimal.Truncate(d: constant.Value)) || (constant.Value < 0) || (constant.Value > CartridgeLimits.WideMaximum)) {
+                    reason = $"'{text}' is not a whole number in 0..{CartridgeLimits.WideMaximum}";
 
                     return null;
                 }
@@ -74,6 +78,12 @@ public static class CartridgeOperand {
 
             case ValueToken.State state: {
                 if (state.Key is null) {
+                    // A name bound by a `for` is not a machine variable either, and it shadows a constant of the
+                    // same name: the loop already lowered its value, so it needs no second pass.
+                    if (scope.Locals.TryGetValue(key: state.Name, value: out var local)) {
+                        return FromLoweredValue(node: local, scope: scope, reason: out reason);
+                    }
+
                     // A `let` name is not a machine variable: it stands for the value it was bound to, resolved at
                     // compile time exactly as it would be anywhere else in the document.
                     if (scope.Constants.TryGetValue(key: state.Name, value: out var constant)) {
@@ -131,8 +141,8 @@ public static class CartridgeOperand {
         }
 
         if (value.TryGetValue<long>(value: out var number)) {
-            if ((number < 0) || (number > 255)) {
-                reason = $"{number.ToString(provider: CultureInfo.InvariantCulture)} is not in 0..255";
+            if ((number < 0) || (number > CartridgeLimits.WideMaximum)) {
+                reason = $"{number.ToString(provider: CultureInfo.InvariantCulture)} is not in 0..{CartridgeLimits.WideMaximum}";
 
                 return null;
             }

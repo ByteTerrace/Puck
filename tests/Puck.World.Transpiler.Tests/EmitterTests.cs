@@ -88,7 +88,7 @@ public class EmitterTests {
                     version: "puck.camera.v1"
                     operations [
                         orbit(distance: 0.01, pitch: 0, yaw: 0)
-                        fov(fieldOfViewRadians: 0.001)
+                        fieldOfView(fieldOfViewRadians: 0.001)
                     ]
                 }
 
@@ -121,7 +121,7 @@ public class EmitterTests {
         Assert.Equal(0.01, op0["distance"]?.GetValue<double>());
 
         var op1 = Assert.IsType<JsonObject>(ops[1]);
-        Assert.Equal("fov", op1["$type"]?.ToString());
+        Assert.Equal("fieldOfView", op1["$type"]?.ToString());
         Assert.Equal(0.001, op1["fieldOfViewRadians"]?.GetValue<double>());
     }
 

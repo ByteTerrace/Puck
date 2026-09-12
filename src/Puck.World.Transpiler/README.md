@@ -50,6 +50,12 @@ its qualified `call.argument` key, an ordinary property by its bare name: `orbit
 converts, a `yaw:` property on any other block is not in the table at all and is refused. A call `name(k: v, ...)` lowers to `{"$type":"name","k":v,...}` — the
 universal escape hatch for any `$type` object; positional args are special-cased only for `orbit`/`fov`.
 
+The core language's `[a]`/`["k"]` indexing, `for`, and `$"..."`/`"""..."""` string forms are ordinary parts of this
+grammar too — a world document is where they earn their keep: a rigged part authors one `positions`/`rotations`
+array per bone and a `for i in range(0, n) { shape ... $"name-{i}" { position: positions[i] } }` to place one shape
+per element, rather than n hand-written blocks. They are the core's, not this vocabulary's own, so their rules
+(compile-time-only sequences, no escapes in a raw string, `[` adjacency) are [`Puck.Transpiler`](../Puck.Transpiler/README.md)'s to state.
+
 ### `when` gates
 
 ```

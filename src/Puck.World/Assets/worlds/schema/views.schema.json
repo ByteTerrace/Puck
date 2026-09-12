@@ -93,8 +93,8 @@
           "description": "Gets the program\u0027s ClampPitch op, or null."
         },
         "fovOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpFovNullable",
-          "description": "Gets the program\u0027s Fov op, or null."
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpFieldOfViewNullable",
+          "description": "Gets the program\u0027s FieldOfView op, or null."
         },
         "lookAtOp": {
           "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpLookAtNullable",
@@ -117,8 +117,8 @@
           "description": "Gets the program\u0027s Dynamics op, or null."
         },
         "selectOp": {
-          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSelectNullable",
-          "description": "Gets the program\u0027s Select op, or null."
+          "$ref": "./common.schema.json#/$defs/WorldCameraProgramOpSelectProgramNullable",
+          "description": "Gets the program\u0027s SelectProgram op, or null."
         }
       },
       "required": [

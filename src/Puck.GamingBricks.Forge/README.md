@@ -18,7 +18,7 @@ forge.new cgb PLAYER
 forge.set /variables/- {"name":"x","initial":32}
 forge.set /tiles/- {"name":"block","pixels":["11111111","11111111","11111111","11111111","11111111","11111111","11111111","11111111"]}
 forge.set /sprites/- {"name":"player","tile":{"constant":1},"x":{"variable":"x"},"y":{"constant":40},"visible":{"constant":1}}
-forge.set /rules/- {"name":"move","when":[{"kind":"key","key":"right","mode":"held"}],"body":[{"kind":"set","target":{"variable":"x"},"operation":"add","value":{"constant":1}}]}
+forge.set /rules/- {"name":"move","when":[{"kind":"key","key":"right","mode":"held"}],"body":[{"kind":"set","target":{"variable":"x"},"operation":"Add","value":{"constant":1}}]}
 forge.show /rules
 forge.check
 forge.build
@@ -100,12 +100,13 @@ document; applications can obtain the same data with `CartridgeDocuments.Create`
 | `clock` | Optional naming of state slots a `clock` step fills from the cartridge's real-time clock. `seconds`, `minutes` and `hours` work on both targets. The rest do not, because the two machines carry different devices: `days` is a count of days since the cartridge started and is cgb only, while `day`, `month` and `year` are a calendar date and are agb only. |
 | `affine` | Optional `{map,angle,scale,centreX,centreY,visible}` background that rotates and scales. Angle is a turn in 256 steps, scale is sixteenths (16 = life size). AGB only. |
 | `tallSprites` | Draws sprites 8×16; a sprite's tile index then names a pair and its low bit is ignored. |
-| `variables` | Up to 128 `{name,initial}` unsigned bytes. |
+| `variables` | Up to 128 `{name,initial,max}` unsigned slots. `max` is the largest value the slot must hold, 1 through 65535; absent is 255. A slot whose ceiling fits a byte spends one byte, a wider one spends two, little-endian, and the variable window bounds the total BYTES rather than the slot count. Arithmetic wraps at `max` + 1. A wide slot is admitted as a set step's target or value and as a comparison operand; every other field reads a byte and refuses one by name. Assignment, `Add` and `Subtract` have sixteen-bit forms; the rest are refused against a wide target. |
+| `scene` | Optional name of a declared variable whose value partitions a frame. Every rule guarded by one equality of it against a constant belongs to that value's scene, and at most one scene's rules run per frame. The frame snapshots it before any rule evaluates, so a rule that writes it names the NEXT frame's scene: a phase machine no longer has to name its successor in a staging variable adopted by a trailing ungated rule, and the estimate charges the dearest scene wherever the write sits. |
 | `arrays` | Up to 32 named `{name,initial}` byte runs, 7168 bytes in total. `initial` fixes the length at 1–256; a byte index cannot address more. |
 | `screens` | Up to 16 named `{name,width,tiles,palettes}` rectangles, at most 120 tiles, painted by a blit step. `palettes` is optional and gives one background palette index per tile. |
 | `sounds` | Up to 8 named sounds, each exactly one of `music` (1–4 `{voice,part,waveform}` voice parts, one to a channel, each part a looping audio document), `effect` (a one-shot on the pulse-1, noise or wave voice, with `frames` per row, and a 32-entry `waveform` for the wave voice), or `sample` (signed 8-bit recorded audio; AGB only). A voice any track's part occupies is refused to every effect, so an effect can never cut a line of the music off. |
 | `save` | Optional `{version,variables,arrays}` battery-backed state, at most 72 bytes. |
-| `rules` | Up to 64 `{name,when,body}` rules; at most 8 conditions per rule and 64 steps anywhere in one body, nested at most 8 deep. |
+| `rules` | Up to 1024 `{name,when,body}` rules; at most 8 conditions per rule and 64 steps anywhere in one body, nested at most 8 deep. Rules cost CODE, which the image's own windows bound, so the real refusal is `CartridgeCapacityException`; declaring `scene` is what keeps per-frame work flat as the count grows. |
 | `sprites` | Up to 40 `{name,tile,x,y,visible,palette}` 8×8 sprites. Every value field accepts constants or variables; `palette` is optional and selects an object palette. |
 | `scrollX`, `scrollY` | Constant/variable background offsets in pixels. |
 
@@ -129,7 +130,7 @@ the literal: `{"variable":"score"}` or `{"array":"field","index":{...}}`.
 A rule body is a tree of steps, not a flat list. Each step is one of:
 
 ```json
-{"kind":"set","target":{"variable":"score"},"operation":"add","value":{"constant":1}}
+{"kind":"set","target":{"variable":"score"},"operation":"Add","value":{"constant":1}}
 {"kind":"if","when":[...],"then":[...],"else":[...]}
 {"kind":"repeat","count":18,"index":"row","body":[...]}
 {"kind":"break"}
@@ -206,10 +207,13 @@ The estimate charges rules that cannot share a frame only once. Rules each
 guarded by one equality of the same variable against a different constant are
 alternatives, so the dearest of them is charged rather than all — which is what a
 phase machine is, and summing it would report several times what any frame
-really costs. The saving depends on the guard holding still: anything that writes
-that variable between the first of those rules and the last gives it up, so a
-phase names its successor in a second variable and one ungated rule, placed after
-every arm, adopts it.
+really costs. For an INFERRED guard the saving depends on the guard holding
+still: anything that writes that variable between the first of those rules and
+the last gives it up, so a phase names its successor in a second variable and one
+ungated rule, placed after every arm, adopts it. Declaring the variable as
+`scene` removes that condition entirely — the frame compares every guard on it
+against a snapshot taken before any rule runs, so the partition holds wherever
+the write sits and the advance step can live inside its own arm.
 
 Compilation refuses a document only for what makes the image wrong — a shape the
 machine has no room for — never for what makes it slow. A cartridge that misses
@@ -253,16 +257,19 @@ Conditions have either of these shapes:
 
 ```json
 {"kind":"key","key":"a","mode":"pressed"}
-{"kind":"compare","left":{"variable":"score"},"comparison":"ge","right":{"constant":10}}
+{"kind":"compare","left":{"variable":"score"},"comparison":"GreaterOrEqual","right":{"constant":10}}
 ```
 
 Keys are `a`, `b`, `start`, `select`, `up`, `down`, `left`, `right`. Modes are
-`held`, `pressed`, `released`. Comparisons are unsigned `eq`, `ne`, `lt`, `le`,
-`gt`, `ge`. An action is
-`{"target":{"variable":"score"},"operation":"add","value":{"constant":1}}`.
-Operations are `set`, `add`, `subtract`, `and`, `or`, `xor`, `mul`, `div`,
-`mod`, `shl` and `shr`; arithmetic is unsigned and wraps modulo 256 on both
-targets. A runtime zero divisor yields zero and a runtime shift of eight or more
+`held`, `pressed`, `released`. Comparisons are unsigned and are named from the
+engine's own vocabulary (`Puck.State.ActionStateComparison`): `Equal`,
+`NotEqual`, `Less`, `LessOrEqual`, `Greater`, `GreaterOrEqual`. An action is
+`{"target":{"variable":"score"},"operation":"Add","value":{"constant":1}}`.
+Operations are named from the engine's opcodes (`Puck.State.ExpressionOp`):
+`Add`, `Subtract`, `Multiply`, `Divide`, `Modulo`, `BitAnd`, `BitOr`, `BitXor`,
+`ShiftLeft` and `ShiftRight`; an ABSENT operation assigns, which is the one
+combination no opcode spells. Arithmetic is unsigned and wraps modulo 256 on
+both targets. A runtime zero divisor yields zero and a runtime shift of eight or more
 yields zero, so no operand can trap; the literal forms of both are refused at
 validation instead. A sprite with zero visibility, an invalid runtime
 tile index, or a top-left position outside the native viewport is hidden.

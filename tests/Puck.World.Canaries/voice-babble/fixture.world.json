@@ -146,7 +146,7 @@
           "worldAxes": false
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.9599311
         }
       ]

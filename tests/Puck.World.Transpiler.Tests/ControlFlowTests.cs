@@ -154,7 +154,7 @@ public class ControlFlowTests {
     [Fact]
     public void TestACallOnTheLeftOfAComparisonIsStillAComparison() {
         var rule = ParseOneRule("""
-                when min(a, b) == 3
+                when minimum(a, b) == 3
                 score[total] += 1
             """);
         var gate = Assert.IsType<WhenStatementNode>(rule.Statements[0]);
@@ -163,7 +163,7 @@ public class ControlFlowTests {
         var comparison = Assert.IsType<ComparisonPredicateNode>(gate.Predicate);
 
         Assert.Equal("==", comparison.Comparator);
-        Assert.Equal("min(a, b)", comparison.LeftText);
+        Assert.Equal("minimum(a, b)", comparison.LeftText);
     }
 
     [Fact]

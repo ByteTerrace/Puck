@@ -129,7 +129,7 @@ public sealed class IslandLawTests {
         var definition = AuthoredGameFixtures.Nexus;
         var captures = Assert.IsType<WorldCapturesSection>(definition.Captures);
         var select = Assert.Single(definition.Cameras, camera => camera.Name == "district-select");
-        var op = Assert.IsType<WorldCameraProgramOp.Select>(Assert.Single(select.Rig.Operations));
+        var op = Assert.IsType<WorldCameraProgramOp.SelectProgram>(Assert.Single(select.Rig.Operations));
 
         Assert.Contains(definition.Views.Layouts, layout => (layout.Name == "parity") && (layout.Slots[0].Camera == "district-select"));
 

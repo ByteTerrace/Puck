@@ -398,7 +398,7 @@
           "opcode": "lookAt"
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.9599311,
           "opcode": "fov"
         },
@@ -2777,7 +2777,7 @@
               "value": null,
               "target": "Self",
               "key": "score",
-              "expression": "max(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))"
+              "expression": "maximum(0, solitaireKlondike[score] + ((solitaireKlondike[to] >= 10) ? 10 : ((solitaireKlondike[from] >= 10) ? -15 : ((solitaireKlondike[from] == 1) ? 5 : 0))))"
             },
             {
               "$type": "setState",
@@ -2904,7 +2904,7 @@
               "value": null,
               "target": "Self",
               "key": "drawLeft",
-              "expression": "min(solitaireKlondike[activeOption], $reduce:count:solitaireKlondikePile0)"
+              "expression": "minimum(solitaireKlondike[activeOption], $reduce:count:solitaireKlondikePile0)"
             },
             {
               "$type": "setState",
@@ -3561,7 +3561,7 @@
           "value": null,
           "target": "Self",
           "key": "gatherStep",
-          "expression": "solitaireKlondike[stage] == 0 ? 0 : min(11, solitaireKlondike[gatherStep] + 1)"
+          "expression": "solitaireKlondike[stage] == 0 ? 0 : minimum(11, solitaireKlondike[gatherStep] + 1)"
         }
       ],
       "gate": {

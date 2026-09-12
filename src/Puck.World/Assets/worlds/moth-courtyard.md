@@ -1,7 +1,7 @@
 # Moth courtyard
 
 [moth-courtyard.world.json](moth-courtyard.world.json) imports
-[the Moth studio](moth.md) through `basis`. All eight bodies share its creation;
+[the Moth studio](avatars/moth.md) through `basis`. All eight bodies share its creation;
 the courtyard supplies pose drivers, placement, cameras and environment.
 This is a diagnostic scene for visual inspection and GPU profiling.
 

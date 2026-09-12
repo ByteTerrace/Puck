@@ -10,7 +10,7 @@ The current owner-selected prototype is **Moth**, from the subsequent character
 collage: ivory/lilac armor, warm brown skin, an open hood, a side braid, and folding
 flight vanes. Virtual On and Power Stone join the broad style references. These
 choices supersede the island-ranger palette and helmet defaults below. The
-[Moth studio guide](../src/Puck.World/Assets/worlds/moth.md) owns the current authored
+[Moth studio guide](../src/Puck.World/Assets/worlds/avatars/moth.md) owns the current authored
 model, controls, and live iteration recipe; the quality priorities here still apply.
 
 The [Moth concept pack](art/moth-concept-pack-2026-09-09/README.md) expands the selected

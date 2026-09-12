@@ -27,7 +27,7 @@ project is for is [`docs/project-map.md`](../../docs/project-map.md).
 
 ## Run it
 
-For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/moth.md).
+For the standalone avatar prototype, see the [Moth flight studio](Assets/worlds/avatars/moth.md).
 It pairs a rebuilt SDF avatar with the Moth Study, with inspection cameras,
 walking and flight poses, and live document reload.
 

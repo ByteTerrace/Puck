@@ -90,13 +90,13 @@ public sealed class ExpressionSpellingLawTests {
         Assert.Equal([S("$table:t:$cell:minion:$each")], Parse("$table:t[minion[$each]]"));
         Assert.Equal("buffs[minion[$each]]", ExpressionSpelling.Print([S("buffs", "$cell:minion:$each")]));
         Assert.Equal("$table:moves:power[$bind:move] + $table:armor[7]", ExpressionSpelling.Print([S("$table:moves:power:$bind:move"), S("$table:armor:7"), new ValueToken.Add()]));
-        Assert.Equal([S("damage"), S("hp"), new ValueToken.Min()], Parse("min(damage, hp)"));
+        Assert.Equal([S("damage"), S("hp"), new ValueToken.Min()], Parse("minimum(damage, hp)"));
         Assert.Equal([S("v"), C(0m), C(10m), new ValueToken.Clamp()], Parse("clamp(v, 0, 10)"));
         Assert.Equal([S("v"), C(8m), C(4m), new ValueToken.BitField()], Parse("bitField(v, 8, 4)"));
         Assert.Equal([S("m"), new ValueToken.BoardShift("board", "north")], Parse("boardShift(m, board, north)"));
         Assert.Equal([S("m"), new ValueToken.BoardFill("board", "north")], Parse("boardFill(m, board, north)"));
         Assert.Equal([S("m"), new ValueToken.BoardImage("board", "rot180")], Parse("boardImage(m, board, rot180)"));
-        Assert.Equal([S("m"), new ValueToken.PopCount()], Parse("popCount(m)"));
+        Assert.Equal([S("m"), new ValueToken.PopCount()], Parse("setBitCount(m)"));
         Assert.Equal([S("c"), S("a"), S("b"), new ValueToken.Select()], Parse("select(c, a, b)"));
     }
 
@@ -104,8 +104,8 @@ public sealed class ExpressionSpellingLawTests {
     [InlineData("", "empty")]
     [InlineData("a +", "reached the end")]
     [InlineData("foo(1)", "not a function")]
-    [InlineData("min(1)", "expected ','")]
-    [InlineData("min(1, 2, 3)", "argument")]
+    [InlineData("minimum(1)", "expected ','")]
+    [InlineData("minimum(1, 2, 3)", "argument")]
     [InlineData("1 2", "unexpected '2'")]
     [InlineData("`open", "not closed")]
     [InlineData("a ? b", "expected ':'")]
@@ -128,9 +128,9 @@ public sealed class ExpressionSpellingLawTests {
     [InlineData("(c ? a : b) + 1")]
     [InlineData("c ? a : d ? b : e")]
     [InlineData("(c ? a : b) ? 1 : 0")]
-    [InlineData("min(damage, hp[$each]) * 2 - `seat-1`[hp]")]
+    [InlineData("minimum(damage, hp[$each]) * 2 - `seat-1`[hp]")]
     [InlineData("boardShift($board:mask, board, north) & ~boardImage(m, board, rot180)")]
-    [InlineData("clamp(v, 0, 10) >> popCount(m) == 3 ? 0.5 : 1.25")]
+    [InlineData("clamp(v, 0, 10) >> setBitCount(m) == 3 ? 0.5 : 1.25")]
     [InlineData("bitInsert(v, f, 8, 4) | parallelBitExtract(v, 0xFF)")]
     [InlineData("$table:moves:power[$bind:move] * $table:armor[$each]")]
     [InlineData("buffs[minion[$each]] + $table:t[minion[owner]]")]

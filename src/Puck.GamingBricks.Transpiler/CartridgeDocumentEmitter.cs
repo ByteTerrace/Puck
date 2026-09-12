@@ -6,31 +6,33 @@ using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Lowering;
 
+using Puck.State;
+
 namespace Puck.GamingBricks.Transpiler;
 
 /// <summary>Lowers a parsed Puck DSL document into canonical <c>puck.cartridge.v1</c> JSON.</summary>
 public static class CartridgeDocumentEmitter {
-    // The compound-assignment spellings, and the `set` operation each stands for.
+    // The compound-assignment spellings, and the engine opcode each stands for. A plain `=` carries no opcode.
     private static readonly Dictionary<string, string> s_operations = new(StringComparer.Ordinal) {
-        ["&"] = "and",
-        ["-"] = "subtract",
-        ["*"] = "mul",
-        ["/"] = "div",
-        ["%"] = "mod",
-        ["^"] = "xor",
-        ["|"] = "or",
-        ["<<"] = "shl",
-        [">>"] = "shr",
+        ["&"] = nameof(ExpressionOp.BitAnd),
+        ["-"] = nameof(ExpressionOp.Subtract),
+        ["*"] = nameof(ExpressionOp.Multiply),
+        ["/"] = nameof(ExpressionOp.Divide),
+        ["%"] = nameof(ExpressionOp.Modulo),
+        ["^"] = nameof(ExpressionOp.BitXor),
+        ["|"] = nameof(ExpressionOp.BitOr),
+        ["<<"] = nameof(ExpressionOp.ShiftLeft),
+        [">>"] = nameof(ExpressionOp.ShiftRight),
     };
 
-    // The infix comparators, and the cartridge comparison each stands for.
+    // The infix comparators, and the engine comparison each stands for.
     private static readonly Dictionary<string, string> s_comparisons = new(StringComparer.Ordinal) {
-        ["=="] = "eq",
-        ["!="] = "ne",
-        ["<"] = "lt",
-        ["<="] = "le",
-        [">"] = "gt",
-        [">="] = "ge",
+        ["=="] = nameof(ActionStateComparison.Equal),
+        ["!="] = nameof(ActionStateComparison.NotEqual),
+        ["<"] = nameof(ActionStateComparison.Less),
+        ["<="] = nameof(ActionStateComparison.LessOrEqual),
+        [">"] = nameof(ActionStateComparison.Greater),
+        [">="] = nameof(ActionStateComparison.GreaterOrEqual),
     };
 
     // Which call-form action arguments are operands rather than plain strings. A `CartridgeValue` field named here
@@ -98,7 +100,7 @@ public static class CartridgeDocumentEmitter {
                 break;
 
             case PropertyNode property:
-                target[property.Name] = DocumentLowering.LowerValue(expr: property.Value, scope: scope, fieldKey: property.Name);
+                DocumentLowering.AssignOrExtend(target, property.Name, DocumentLowering.LowerValue(expr: property.Value, scope: scope, fieldKey: property.Name));
 
                 break;
 
@@ -116,14 +118,41 @@ public static class CartridgeDocumentEmitter {
                 LowerBlock(block: block, target: target, scope: scope);
 
                 break;
+
+            // A `for` is a compile-time loop: the document carries the rows it produced, never the loop. A cartridge
+            // author generates repeated rules and section rows exactly as a world author generates repeated shapes.
+            case ForStatementNode loop:
+                DocumentLowering.ExpandFor(loop: loop, target: target, scope: scope, sink: ProcessStatement);
+
+                break;
+
+            // A statement no case above admits would otherwise be dropped without a trace — a misspelled row keyword
+            // silently losing the whole row and everything nested in it.
+            default:
+                Refuse(scope: scope, span: statement.Span, message: $"{Spell(statement: statement)} has no place in a cartridge document");
+
+                break;
         }
     }
+
+    // How a refused statement is named back to its author: what they wrote, never the parser's type for it.
+    private static string Spell(StatementNode statement) => statement switch {
+        BlockNode block => $"a '{block.Identifier}' block",
+        FlagStatementNode flag => $"a bare '{flag.Name}'",
+        ImportNode => "an 'import'",
+        PropertyNode property => $"a '{property.Name}' property",
+        ExpressionStatementNode => "an expression statement",
+        _ => "this statement",
+    };
 
     // A named block is one row of the section its identifier names (`sound "chime" { }` appends to `sounds`); an
     // unnamed one is that section's own object (`palettes { }`).
     private static void LowerBlock(BlockNode block, JsonObject target, DocumentScope scope) {
         var obj = new JsonObject();
         var pointer = scope.CurrentPointer;
+        // Resolved rather than read straight off the node, so a row generated inside a `for` can carry an
+        // interpolated name (`sound $"tone-{index}" { }`) and land as its own row rather than as a nameless section.
+        var name = DocumentLowering.ResolveBlockName(block: block, scope: scope);
 
         scope.CurrentPointer = $"{pointer}/{block.Identifier}";
         scope.SourceMap?.Register(scope.CurrentPointer, block.Span);
@@ -134,13 +163,13 @@ public static class CartridgeDocumentEmitter {
 
         scope.CurrentPointer = pointer;
 
-        if (block.Name is null) {
+        if (name is null) {
             target[block.Identifier] = obj;
 
             return;
         }
 
-        obj["name"] = block.Name;
+        obj["name"] = name;
 
         Append(target: target, section: Pluralize(identifier: block.Identifier), item: obj);
     }
@@ -231,10 +260,10 @@ public static class CartridgeDocumentEmitter {
     private static JsonNode? LowerAction(StatementNode statement, DocumentScope scope) {
         switch (statement) {
             case SetCellStatementNode set:
-                return LowerAssignment(target: set.Target, operation: "set", rhs: set.Rhs, span: set.Span, scope: scope);
+                return LowerAssignment(target: set.Target, operation: null, rhs: set.Rhs, span: set.Span, scope: scope);
 
             case AddCellStatementNode add:
-                return LowerAssignment(target: add.Target, operation: "add", rhs: add.Rhs, span: add.Span, scope: scope);
+                return LowerAssignment(target: add.Target, operation: nameof(ExpressionOp.Add), rhs: add.Rhs, span: add.Span, scope: scope);
 
             case CompoundAssignStatementNode compound: {
                 if (!s_operations.TryGetValue(key: compound.Operator, value: out var operation)) {
@@ -288,7 +317,7 @@ public static class CartridgeDocumentEmitter {
                 return LowerCallAction(call: call, scope: scope);
 
             default:
-                Refuse(scope: scope, span: statement.Span, message: $"'{statement.GetType().Name}' is not a cartridge rule step");
+                Refuse(scope: scope, span: statement.Span, message: $"{Spell(statement: statement)} is not a cartridge rule step");
 
                 return null;
         }
@@ -306,7 +335,8 @@ public static class CartridgeDocumentEmitter {
         return arr;
     }
 
-    private static JsonNode? LowerAssignment(RowRefNode target, string operation, RhsNode rhs, SourceSpan span, DocumentScope scope) {
+    // A null operation is plain assignment, which no opcode spells: the field is omitted rather than carrying a name.
+    private static JsonNode? LowerAssignment(RowRefNode target, string? operation, RhsNode rhs, SourceSpan span, DocumentScope scope) {
         var destination = CartridgeOperand.FromRowRef(rowRef: target, scope: scope, reason: out var targetReason);
 
         if (destination is null) {
@@ -329,12 +359,17 @@ public static class CartridgeDocumentEmitter {
             return null;
         }
 
-        return new JsonObject {
+        var step = new JsonObject {
             ["kind"] = "set",
             ["target"] = destination,
-            ["operation"] = operation,
             ["value"] = value,
         };
+
+        if (operation is not null) {
+            step["operation"] = operation;
+        }
+
+        return step;
     }
 
     private static JsonNode? LowerCallAction(CallExpressionNode call, DocumentScope scope) {

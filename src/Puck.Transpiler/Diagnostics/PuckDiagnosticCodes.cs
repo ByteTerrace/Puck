@@ -135,6 +135,17 @@ public static class PuckDiagnosticCodes {
     /// and nothing else.</summary>
     public const string LambdaOutsideBuiltin = "PUCK042";
 
+    /// <summary>PUCK043: an index read that cannot be resolved at compile time — a non-array, a fractional or
+    /// unknown ordinal, or one outside the array.</summary>
+    public const string IndexRefused = "PUCK043";
+
+    /// <summary>PUCK044: a <c>for</c> whose sequence is not an array known at compile time.</summary>
+    public const string ForSequenceRefused = "PUCK044";
+
+    /// <summary>PUCK045: a template or <c>for</c> nested past the expansion ceiling — what a template that invokes
+    /// itself looks like from inside the expander.</summary>
+    public const string TemplateExpansionTooDeep = "PUCK045";
+
     /// <summary>An unused <c>let</c> binding.</summary>
     public const string LintUnusedLet = "PUCK_LINT_001";
 

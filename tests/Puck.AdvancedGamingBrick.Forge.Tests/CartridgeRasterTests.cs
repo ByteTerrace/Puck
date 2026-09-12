@@ -3,6 +3,8 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers scroll changes applied part way down the picture, which split it into independently moving bands.</summary>
@@ -109,9 +111,9 @@ public sealed class CartridgeRasterTests {
                 ScrollY: new CartridgeValue(Constant: 0)))],
             Rules = [new CartridgeRule(Name: "work", When: [], Body: [
                 new CartridgeStatement(Kind: "repeat", Count: 200, Index: "i", Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "sink"), Operation: "add", Value: new CartridgeValue(Constant: 1)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "sink"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
                 ]),
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ticks"), Operation: "add", Value: new CartridgeValue(Constant: 1)),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ticks"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
             ])],
         };
 

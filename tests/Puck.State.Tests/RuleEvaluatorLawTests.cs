@@ -279,7 +279,7 @@ public sealed class RuleEvaluatorLawTests {
     [Fact]
     public void AGateWhoseExpressionFaultsIsACountedRefusalNotASilentClose() {
         var (host, evaluator, rules, latch) = Arrange(
-            rules: [R(name: "phantom", gate: new ActionPredicate.CompareValue(Left: Expr(text: "prime(999)"), Comparison: ActionStateComparison.Greater, Right: Expr(text: "0"), Kind: CellKind.Int), effects: new ActionEffect.AddState(State: "hits", Value: 1m))],
+            rules: [R(name: "phantom", gate: new ActionPredicate.CompareValue(Left: Expr(text: "primeAt(999)"), Comparison: ActionStateComparison.Greater, Right: Expr(text: "0"), Kind: CellKind.Int), effects: new ActionEffect.AddState(State: "hits", Value: 1m))],
             rows: [Slot(name: "hits", value: 0L)]
         );
 

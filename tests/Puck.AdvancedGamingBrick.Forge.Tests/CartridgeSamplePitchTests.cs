@@ -1,5 +1,7 @@
 using Puck.GamingBricks.Forge;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>
@@ -88,12 +90,12 @@ public sealed class CartridgeSamplePitchTests {
             Rules = [
                 new CartridgeRule(
                     Name: "fire",
-                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "eq", Right: new CartridgeValue(Constant: 2))],
+                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 2))],
                     Body: [new CartridgeStatement(Kind: "play", Sound: "note", Rate: new CartridgeValue(Constant: rate))]),
                 new CartridgeRule(
                     Name: "tick",
-                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "lt", Right: new CartridgeValue(Constant: 200))],
-                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: "add", Value: new CartridgeValue(Constant: 1))]),
+                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 200))],
+                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1))]),
             ],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);

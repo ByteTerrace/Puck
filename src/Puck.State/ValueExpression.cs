@@ -346,6 +346,13 @@ public abstract record ValueToken {
     public sealed record LayerSize : ValueToken;
     /// <summary>The square root: the floor root of a non-negative int, or the fixed-point root of a non-negative fixed value.</summary>
     public sealed record SquareRoot : ValueToken;
+    /// <summary>The largest whole number no greater than the value. An int expression is already whole, so it is
+    /// the identity there; a fixed expression rounds its fraction away toward negative infinity.</summary>
+    public sealed record Floor : ValueToken;
+    /// <summary>The smallest whole number no less than the value; the identity on an int expression.</summary>
+    public sealed record Ceiling : ValueToken;
+    /// <summary>The nearest whole number, halves to even; the identity on an int expression.</summary>
+    public sealed record Round : ValueToken;
     /// <summary>The sine of a fixed-point angle in radians; fixed expressions only.</summary>
     public sealed record Sine : ValueToken;
     /// <summary>The cosine of a fixed-point angle in radians; fixed expressions only.</summary>

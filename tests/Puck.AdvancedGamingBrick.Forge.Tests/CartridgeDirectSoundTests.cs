@@ -1,5 +1,7 @@
 using Puck.GamingBricks.Forge;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers recorded one-shots reaching the advanced machine's digital sound path.</summary>
@@ -19,10 +21,10 @@ public sealed class CartridgeDirectSoundTests {
             Variables = [new CartridgeVariable(Name: "phase", Initial: 0)],
             Sounds = [new CartridgeSound(Name: "boom", Sample: sample)],
             Rules = [
-                new CartridgeRule(Name: "fire", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "eq", Right: new CartridgeValue(Constant: 3))],
+                new CartridgeRule(Name: "fire", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: 3))],
                     Body: [new CartridgeStatement(Kind: "play", Sound: "boom")]),
-                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "lt", Right: new CartridgeValue(Constant: 200))],
-                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: "add", Value: new CartridgeValue(Constant: 1))]),
+                new CartridgeRule(Name: "tick", When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 200))],
+                    Body: [new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1))]),
             ],
         };
         var result = new AgbCartridgeCompiler().Compile(document: document);

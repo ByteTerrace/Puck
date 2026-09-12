@@ -71,7 +71,7 @@ public sealed class WorldExpressionAuthoringLawTests {
     public void ARuleAuthoredInfixCompilesToTheSameProgramAsItsTokens() {
         var infix = Fixtures.BuildDocument() with {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(CellName.Parse("hp"), CellKind.Int, Cells: [new StateCell(WorldStateRow.SlotKey, 5L)])]),
-            Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "hp", Expression: ValueExpression.Parse("max(hp - 1, 0)"))])],
+            Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "hp", Expression: ValueExpression.Parse("maximum(hp - 1, 0)"))])],
         };
         var tokens = infix with {
             Rules = [new WorldRule(CellName.Parse("r"), [new ActionEffect.SetState(State: "hp", Expression: new ValueExpression([
@@ -81,6 +81,6 @@ public sealed class WorldExpressionAuthoringLawTests {
         var fromInfix = WorldDefinitionSerialization.Deserialize(WorldDefinitionSerialization.Serialize(infix));
         var fromTokens = WorldDefinitionSerialization.Deserialize(WorldDefinitionSerialization.Serialize(tokens));
         Assert.Equal(WorldRuleCompiler.CompileAll(fromTokens)[0].Effects[0].Describe, WorldRuleCompiler.CompileAll(fromInfix)[0].Effects[0].Describe);
-        Assert.Contains("\"expression\": \"max(hp - 1, 0)\"", System.Text.Encoding.UTF8.GetString(WorldDefinitionSerialization.Serialize(fromInfix)), StringComparison.Ordinal);
+        Assert.Contains("\"expression\": \"maximum(hp - 1, 0)\"", System.Text.Encoding.UTF8.GetString(WorldDefinitionSerialization.Serialize(fromInfix)), StringComparison.Ordinal);
     }
 }

@@ -25,7 +25,7 @@ public sealed class WorldDocumentVocabulary : IDocumentVocabulary {
             };
         }
 
-        if (string.Equals(a: callName, b: "fov", comparisonType: StringComparison.OrdinalIgnoreCase)) {
+        if (string.Equals(a: callName, b: "fieldOfView", comparisonType: StringComparison.OrdinalIgnoreCase)) {
             return "fieldOfViewRadians";
         }
 

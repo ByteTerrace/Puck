@@ -123,7 +123,7 @@ public sealed class AbsentDerivationLawTests {
             "operations": [
               { "$type": "orbit", "distance": 5.4626001, "yaw": 0, "pitch": 0.4145069, "pivotOffset": [0, 0, 0] },
               { "$type": "lookAt", "subject": { "$type": "reference" }, "targetOffset": [0, 1, 0], "worldAxes": false },
-              { "$type": "fov", "fieldOfViewRadians": 0.9599311 },
+              { "$type": "fieldOfView", "fieldOfViewRadians": 0.9599311 },
               { "$type": "dynamics", "row": "chase" }
             ]
           }

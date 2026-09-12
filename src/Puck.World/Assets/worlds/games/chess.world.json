@@ -2557,7 +2557,7 @@
         {
           "$type": "setState",
           "state": "boardCollisions",
-          "expression": "$reduce:count:pieceCell:between:0:63 + popCount($board:mask:board:0:0) - 64"
+          "expression": "$reduce:count:pieceCell:between:0:63 + setBitCount($board:mask:board:0:0) - 64"
         }
       ],
       "gate": {
@@ -2676,7 +2676,7 @@
           "name": "mover"
         },
         {
-          "expression": "(move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (abs($bind:mover) == 6) & (abs(move[to] - move[from]) == 2) ? 4 : (abs($bind:mover) == 1) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1",
+          "expression": "(move[from] < 0) | (move[to] < 0) | (move[to] > 63) ? 0 : (absolute($bind:mover) == 6) & (absolute(move[to] - move[from]) == 2) ? 4 : (absolute($bind:mover) == 1) & (((move[from] ^ move[to]) & 7) != 0) & (lastLegal[move[to]] == 0) ? 3 : lastLegal[move[to]] != 0 ? 2 : 1",
           "kind": "Int",
           "name": "kind"
         }
@@ -2753,12 +2753,12 @@
           "name": "rookUnique"
         },
         {
-          "expression": "(($bind:from >= 0) * (1 << max($bind:from, 0))) | (($bind:to >= 0) * (1 << max($bind:to, 0))) | ($bind:clearUnique * (1 << clamp($bind:clear, 0, 63))) | ($bind:rookUnique * (1 << clamp($bind:rook, 0, 63)))",
+          "expression": "(($bind:from >= 0) * (1 << maximum($bind:from, 0))) | (($bind:to >= 0) * (1 << maximum($bind:to, 0))) | ($bind:clearUnique * (1 << clamp($bind:clear, 0, 63))) | ($bind:rookUnique * (1 << clamp($bind:rook, 0, 63)))",
           "kind": "Int",
           "name": "footprint"
         },
         {
-          "expression": "(abs(move[mover]) == 1) & ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]",
+          "expression": "(absolute(move[mover]) == 1) & ($bind:to / 8 == (turn == 0 ? 7 : 0)) ? board[move[to]] : move[mover]",
           "kind": "Int",
           "name": "landed"
         }
@@ -2766,12 +2766,12 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "popCount($bind:changed & ~$bind:footprint) + ($bind:from >= 0) * (board[move[from]] != 0) + ($bind:to >= 0) * (board[move[to]] != $bind:landed) + $bind:clearUnique * (board[($bind:clear)] != 0) + $bind:rookUnique * (board[($bind:rook)] != 4 * $bind:sign)",
+          "expression": "setBitCount($bind:changed & ~$bind:footprint) + ($bind:from >= 0) * (board[move[from]] != 0) + ($bind:to >= 0) * (board[move[to]] != $bind:landed) + $bind:clearUnique * (board[($bind:clear)] != 0) + $bind:rookUnique * (board[($bind:rook)] != 4 * $bind:sign)",
           "state": "boardMismatch"
         },
         {
           "$type": "setState",
-          "expression": "popCount($bind:changed)",
+          "expression": "setBitCount($bind:changed)",
           "state": "boardChanged"
         }
       ],
@@ -2889,12 +2889,12 @@
     {
       "bindings": [
         {
-          "expression": "abs(move[mover])",
+          "expression": "absolute(move[mover])",
           "kind": "Int",
           "name": "piece"
         },
         {
-          "expression": "abs(move[to] % 8 - move[from] % 8)",
+          "expression": "absolute(move[to] % 8 - move[from] % 8)",
           "kind": "Int",
           "name": "dx"
         },
@@ -2904,12 +2904,12 @@
           "name": "dy"
         },
         {
-          "expression": "max(max(max($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])",
+          "expression": "maximum(maximum(maximum($match:chessRayEmpty:lastLegal:N:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:S:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:E:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:W:cell[move[to]] == move[from])",
           "kind": "Int",
           "name": "straight"
         },
         {
-          "expression": "max(max(max($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])",
+          "expression": "maximum(maximum(maximum($match:chessRayEmpty:lastLegal:NE:cell[move[to]] == move[from], $match:chessRayEmpty:lastLegal:SE:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:SW:cell[move[to]] == move[from]), $match:chessRayEmpty:lastLegal:NW:cell[move[to]] == move[from])",
           "kind": "Int",
           "name": "diagonal"
         },
@@ -2919,7 +2919,7 @@
           "name": "middle"
         },
         {
-          "expression": "($bind:dx == 0) & (lastLegal[move[to]] == 0) & max($bind:dy == 1, ($bind:dy == 2) & (move[from] / 8 == (turn == 0 ? 1 : 6)) & (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) & ($bind:dy == 1) & max(move[kind] == 2, (move[kind] == 3) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))",
+          "expression": "($bind:dx == 0) & (lastLegal[move[to]] == 0) & maximum($bind:dy == 1, ($bind:dy == 2) & (move[from] / 8 == (turn == 0 ? 1 : 6)) & (lastLegal[($bind:middle)] == 0)) | ($bind:dx == 1) & ($bind:dy == 1) & maximum(move[kind] == 2, (move[kind] == 3) & (move[to] == enPassantTarget) & (move[captured] == 2 * turn - 1))",
           "kind": "Int",
           "name": "pawn"
         }
@@ -2927,7 +2927,7 @@
       "effects": [
         {
           "$type": "setState",
-          "expression": "$bind:piece == 1 ? $bind:pawn : $bind:piece == 2 ? $bind:dx * abs($bind:dy) == 2 : $bind:piece == 3 ? $bind:diagonal : $bind:piece == 4 ? $bind:straight : $bind:piece == 5 ? max($bind:diagonal, $bind:straight) : $bind:piece == 6 ? max((max($bind:dx, abs($bind:dy)) == 1) & (move[kind] != 4), castleLegal) : 0",
+          "expression": "$bind:piece == 1 ? $bind:pawn : $bind:piece == 2 ? $bind:dx * absolute($bind:dy) == 2 : $bind:piece == 3 ? $bind:diagonal : $bind:piece == 4 ? $bind:straight : $bind:piece == 5 ? maximum($bind:diagonal, $bind:straight) : $bind:piece == 6 ? maximum((maximum($bind:dx, absolute($bind:dy)) == 1) & (move[kind] != 4), castleLegal) : 0",
           "state": "shapeLegal"
         }
       ],
@@ -3114,7 +3114,7 @@
           "name": "sign"
         },
         {
-          "expression": "(abs(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0))",
+          "expression": "(absolute(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0))",
           "kind": "Int",
           "name": "promotes"
         },
@@ -3124,7 +3124,7 @@
           "name": "replacement"
         },
         {
-          "expression": "(popCount($board:mask:board:6:6) == 1) & (popCount($board:mask:board:-6:-6) == 1)",
+          "expression": "(setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)",
           "kind": "Int",
           "name": "kings"
         }
@@ -3185,7 +3185,7 @@
             "$type": "compareValue",
             "comparison": "Equal",
             "kind": "Int",
-            "left": "(abs(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (popCount($board:mask:board:6:6) == 1) & (popCount($board:mask:board:-6:-6) == 1)",
+            "left": "(absolute(move[mover]) == 1) & (move[to] / 8 == (turn == 0 ? 7 : 0)) & (board[move[to]] == move[mover]) & shapeLegal & (boardMismatch == 0) & (boardCollisions == 0) & (inCheck[turn[$value]] == 0) & (setBitCount($board:mask:board:6:6) == 1) & (setBitCount($board:mask:board:-6:-6) == 1)",
             "right": "1"
           }
         ]
@@ -3226,7 +3226,7 @@
             },
             {
               "$type": "setState",
-              "expression": "(abs(move[mover]) == 1) & (abs(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1",
+              "expression": "(absolute(move[mover]) == 1) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1",
               "state": "enPassantTarget"
             },
             {

@@ -25,7 +25,10 @@ public sealed class MachineHostTransactionLawTests {
         return directory!.FullName;
     }
 
-    private static string CartridgePath(string file) => Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "cartridges", file);
+    // The machine-host laws carry their OWN cartridges rather than reading whichever ones the game ships. A law
+    // about binding, memory mirroring and symbol resolution is a law about the HOST; coupling it to shipped content
+    // meant that retiring a cabinet's game broke ten host laws that had nothing to say about which game it was.
+    private static string CartridgePath(string file) => Path.Combine(RepoRoot(), "tests", "Puck.World.Tests", "Fixtures", "cartridges", file);
 
     private static WorldDefinition WithMachineScreen(string engine, string contentPath, string? options) {
         var document = Fixtures.BuildDocument();

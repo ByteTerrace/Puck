@@ -57,6 +57,19 @@ public static partial class ExpressionArithmetic {
                         ? FixedQ4816.Sqrt(value: FixedQ4816.FromRawBits(value: arguments[0])).Value
                         : ((long)((ulong)arguments[0]).SquareRoot()));
                     return true;
+                case ExpressionOp.Floor:
+                case ExpressionOp.Ceiling:
+                case ExpressionOp.Round:
+                    // An int expression is already whole, so all three are the identity there; only a fixed
+                    // expression has a fraction to resolve. Ties go to even, the same rule the document language's
+                    // own `round` uses, so one spelling never means two roundings.
+                    if (kind != CellKind.Fixed) { value = arguments[0]; return true; }
+                    value = (operation switch {
+                        ExpressionOp.Floor => FixedQ4816.Floor(value: FixedQ4816.FromRawBits(value: arguments[0])),
+                        ExpressionOp.Ceiling => FixedQ4816.Ceiling(value: FixedQ4816.FromRawBits(value: arguments[0])),
+                        _ => FixedQ4816.Round(value: FixedQ4816.FromRawBits(value: arguments[0])),
+                    }).Value;
+                    return true;
                 case ExpressionOp.Sine:
                     value = FixedQ4816.Sin(angle: FixedQ4816.FromRawBits(value: arguments[0])).Value;
                     return true;

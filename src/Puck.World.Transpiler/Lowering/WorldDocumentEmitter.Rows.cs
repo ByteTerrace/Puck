@@ -18,8 +18,9 @@ public static partial class WorldDocumentEmitter {
         // The shared block grammar puts a lone identifier before '{' into Name (no target); with a second one, the
         // first is Target and the second Name. `shape` always carries a type, optionally a name, so the type is
         // whichever slot the lone-identifier case fills and the name is Name only when Target is also present.
-        var type = block.Target ?? block.Name;
-        var shapeName = (block.Target is not null) ? block.Name : null;
+        var resolvedName = DocumentLowering.ResolveBlockName(block, scope);
+        var type = block.Target ?? resolvedName;
+        var shapeName = (block.Target is not null) ? resolvedName : null;
 
         var shapeIdx = shapesArr.Count;
         var shapePointer = $"{scope.CurrentPointer}/shapes/{shapeIdx}";
@@ -63,27 +64,80 @@ public static partial class WorldDocumentEmitter {
         var oldPointer = scope.CurrentPointer;
         scope.SourceMap?.Register(placementsPointer, block.Span);
 
-        foreach (var stmt in block.Statements) {
+        foreach (var (stmt, rowScope) in Expand(block.Statements, scope)) {
             if (stmt is BlockNode { Identifier: "placement" } row) {
                 var rowIdx = rowsArr.Count;
-                scope.CurrentPointer = $"{placementsPointer}/rows/{rowIdx}";
-                scope.SourceMap?.Register(scope.CurrentPointer, row.Span);
-                rowsArr.AppendNode(LowerPlacementRow(row, scope));
+                rowScope.CurrentPointer = $"{placementsPointer}/rows/{rowIdx}";
+                rowScope.SourceMap?.Register(rowScope.CurrentPointer, row.Span);
+                rowsArr.AppendNode(LowerPlacementRow(row, rowScope));
             } else if (stmt is PropertyNode prop) {
-                scope.CurrentPointer = placementsPointer;
-                placementsObj[prop.Name] = LowerExpression(prop.Value, scope, prop.Name);
-            } else if (stmt is BlockNode { Name: null, Target: null } nested) {
+                rowScope.CurrentPointer = placementsPointer;
+                DocumentLowering.AssignOrExtend(placementsObj, prop.Name, LowerExpression(prop.Value, rowScope, prop.Name));
+            } else if (stmt is BlockNode { Name: null, Target: null, NameExpression: null } nested) {
                 // An object-valued field of the section, written in block form: `policy { }` is the section's own
                 // `policy` object, the same field the property spelling fills.
-                scope.CurrentPointer = $"{placementsPointer}/{nested.Identifier}";
-                scope.SourceMap?.Register(scope.CurrentPointer, nested.Span);
-                placementsObj[nested.Identifier] = LowerBlockToObject(nested, scope);
+                rowScope.CurrentPointer = $"{placementsPointer}/{nested.Identifier}";
+                rowScope.SourceMap?.Register(rowScope.CurrentPointer, nested.Span);
+                placementsObj[nested.Identifier] = LowerBlockToObject(nested, rowScope);
             } else {
-                ReportUnrecognizedSectionStatement("placements", "'placement' rows, nested field blocks and plain properties", stmt, scope);
+                ReportUnrecognizedSectionStatement("placements", "'placement' rows, nested field blocks and plain properties", stmt, rowScope);
             }
         }
 
         scope.CurrentPointer = oldPointer;
+    }
+
+    // A section whose rows are read by a dedicated dispatcher still admits `for` and a template invocation: both
+    // are flattened to the statements they produce before the dispatcher sees them, so a generated row is
+    // indistinguishable from a written one. Flattening RECURSES, so a template may contain a loop, a loop may
+    // invoke a template, and a template may invoke another — the dispatcher never learns that any of it happened.
+    private static IEnumerable<(StatementNode Statement, DocumentScope Scope)> Expand(IReadOnlyList<StatementNode> statements, DocumentScope scope) {
+        foreach (var stmt in statements) {
+            foreach (var produced in ExpandOne(statement: stmt, scope: scope, depth: 0)) {
+                yield return produced;
+            }
+        }
+    }
+
+    // A template that invokes itself would otherwise expand forever; the depth ceiling turns that into a refusal
+    // naming the row, which is what an author needs to see.
+    private const int MaxExpansionDepth = 32;
+
+    private static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandOne(StatementNode statement, DocumentScope scope, int depth) {
+        if (depth > MaxExpansionDepth) {
+            scope.Diagnostics.ReportError(
+                PuckDiagnosticCodes.TemplateExpansionTooDeep,
+                $"a template or 'for' nested past {MaxExpansionDepth} levels — a template that invokes itself never finishes expanding",
+                statement.Span
+            );
+
+            yield break;
+        }
+
+        switch (statement) {
+            case ForStatementNode loop:
+                foreach (var (produced, iteration) in DocumentLowering.ExpandForStatements(loop, scope)) {
+                    foreach (var nested in ExpandOne(statement: produced, scope: iteration, depth: (depth + 1))) {
+                        yield return nested;
+                    }
+                }
+
+                break;
+
+            case ExpressionStatementNode { Expression: CallExpressionNode call } when scope.Templates.ContainsKey(key: call.Name):
+                foreach (var (produced, invocation) in DocumentLowering.ExpandTemplateStatements(call, scope)) {
+                    foreach (var nested in ExpandOne(statement: produced, scope: invocation, depth: (depth + 1))) {
+                        yield return nested;
+                    }
+                }
+
+                break;
+
+            default:
+                yield return (statement, scope);
+
+                break;
+        }
     }
 
     // A statement the section's grammar has no slot for would otherwise be dropped without a trace — a one-letter
@@ -106,8 +160,8 @@ public static partial class WorldDocumentEmitter {
 
         // Deviates from the addon/shape precedent of mapping a block's quoted name to "name": WorldPlacement's
         // identity field is literally Id.
-        if (!rowObj.ContainsKey("id") && !string.IsNullOrEmpty(row.Name)) {
-            rowObj["id"] = row.Name;
+        if (!rowObj.ContainsKey("id") && (DocumentLowering.ResolveBlockName(row, scope) is { Length: > 0 } rowId)) {
+            rowObj["id"] = rowId;
         }
 
         if (rowObj["prototype"] is { } prototypeNode) {
@@ -149,15 +203,15 @@ public static partial class WorldDocumentEmitter {
         var oldPointer = scope.CurrentPointer;
         scope.SourceMap?.Register(prototypesPointer, block.Span);
 
-        foreach (var stmt in block.Statements) {
+        foreach (var (stmt, rowScope) in Expand(block.Statements, scope)) {
             if (stmt is BlockNode { Identifier: "prototype" } row) {
                 var rowIdx = protoArr.Count;
-                scope.CurrentPointer = $"{prototypesPointer}/{rowIdx}";
-                scope.SourceMap?.Register(scope.CurrentPointer, row.Span);
-                protoArr.AppendNode(LowerPrototypeRow(row, scope));
+                rowScope.CurrentPointer = $"{prototypesPointer}/{rowIdx}";
+                rowScope.SourceMap?.Register(rowScope.CurrentPointer, row.Span);
+                protoArr.AppendNode(LowerPrototypeRow(row, rowScope));
             } else {
                 // `prototypes` lowers to a bare array, so there is no object for a property to land on either.
-                ReportUnrecognizedSectionStatement("prototypes", "'prototype' rows only", stmt, scope);
+                ReportUnrecognizedSectionStatement("prototypes", "'prototype' rows only", stmt, rowScope);
             }
         }
 
@@ -170,8 +224,8 @@ public static partial class WorldDocumentEmitter {
     private static JsonObject LowerPrototypeRow(BlockNode row, DocumentScope scope) {
         var rowObj = LowerBlockToObject(row, scope);
 
-        if (!rowObj.ContainsKey("id") && !string.IsNullOrEmpty(row.Name)) {
-            rowObj["id"] = row.Name;
+        if (!rowObj.ContainsKey("id") && (DocumentLowering.ResolveBlockName(row, scope) is { Length: > 0 } rowId)) {
+            rowObj["id"] = rowId;
         }
 
         return rowObj;

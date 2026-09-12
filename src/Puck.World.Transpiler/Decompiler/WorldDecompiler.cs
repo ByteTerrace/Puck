@@ -28,13 +28,14 @@ public static partial class WorldDecompiler {
 
         var sb = new StringBuilder();
 
-        // 0. Header: every decompiled file is a one-time import — 'let'/'template' cannot be recovered, and
-        // re-running the decompiler will not preserve hand-authored constants or templates added after this file
-        // was generated.
-        sb.AppendLine("// Decompiled from a canonical Puck world document — a one-time import.");
-        sb.AppendLine("// 'let'/'template' cannot be recovered; re-running the decompiler will not");
-        sb.AppendLine("// preserve hand-authored constants or templates added after this file was");
-        sb.AppendLine("// generated. Treat this file as a starting point, not a synced mirror.");
+        // 0. Header: the source is what a reader edits, so the file says which direction is authoritative. A
+        // decompile BOOTSTRAPS a source from a document and is one-way -- `let`, `template` and `for` are a source
+        // idea the JSON no longer carries, so re-running it over an edited source discards that work.
+        sb.AppendLine("// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and");
+        sb.AppendLine("// compile, never the '.world.json' beside it.");
+        sb.AppendLine("//");
+        sb.AppendLine("// Decompiling again would OVERWRITE this file and discard every 'let', 'template' and");
+        sb.AppendLine("// 'for' in it, none of which the document carries.");
         sb.AppendLine();
 
         // 1. Headers: schema, basis, documentId

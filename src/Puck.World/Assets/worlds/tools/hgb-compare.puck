@@ -78,7 +78,7 @@ cameras [
             operations [
                 anchor(subject: worldPoint(point: [0, eyeHeight, eyeDistance]))
                 lookAt(subject: worldPoint(point: [0, eyeHeight, 0]))
-                fov(fieldOfViewRadians: fieldOfView)
+                fieldOfView(fieldOfViewRadians: fieldOfView)
             ]
             version: "puck.camera.v1"
         }
@@ -111,7 +111,7 @@ views {
         version: "puck.camera.v1"
         operations [
             orbit(distance: 1, pitch: 0, yaw: 0)
-            fov(fieldOfViewRadians: fieldOfView)
+            fieldOfView(fieldOfViewRadians: fieldOfView)
         ]
     }
 }

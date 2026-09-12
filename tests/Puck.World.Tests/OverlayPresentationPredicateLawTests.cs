@@ -17,7 +17,7 @@ public sealed class OverlayPresentationPredicateLawTests {
         Rig: new WorldCameraProgram(
             Name: "portrait-rig",
             Version: WorldCameraProgram.CurrentVersion,
-            Operations: [new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0.9f))]
+            Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f))]
         ),
         RenderWidth: 320U,
         RenderHeight: 240U,

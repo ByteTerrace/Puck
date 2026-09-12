@@ -66,10 +66,10 @@ public class DecompilerSugarTests {
     }
 
     [Fact]
-    public void HeaderMarksOneTimeImport() {
+    public void HeaderNamesTheSourceAsCanonicalAndWarnsAgainstReDecompiling() {
         var puck = DecompileWorld("games/chess.world.json");
-        Assert.StartsWith("// Decompiled from a canonical Puck world document — a one-time import.", puck, StringComparison.Ordinal);
-        Assert.Contains("'let'/'template' cannot be recovered", puck, StringComparison.Ordinal);
+        Assert.StartsWith("// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and", puck, StringComparison.Ordinal);
+        Assert.Contains("would OVERWRITE this file", puck, StringComparison.Ordinal);
     }
 
     // The shipped corpus authors every `prototypes[].document.shapes` array as a plain object/array literal (no

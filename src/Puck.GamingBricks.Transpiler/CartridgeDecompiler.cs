@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 
+using Puck.State;
+
 namespace Puck.GamingBricks.Transpiler;
 
 /// <summary>Writes a <c>puck.cartridge.v1</c> document back out as Puck DSL source.</summary>
@@ -11,29 +13,28 @@ namespace Puck.GamingBricks.Transpiler;
 public static class CartridgeDecompiler {
     private const string Indent = "    ";
 
-    // The `set` operations, and the compound-assignment spelling each is written as. "set" is plain `=`.
+    // The engine opcodes, and the compound-assignment spelling each is written as. An absent operation is plain `=`.
     private static readonly Dictionary<string, string> s_assignments = new(StringComparer.Ordinal) {
-        ["add"] = "+=",
-        ["and"] = "&=",
-        ["div"] = "/=",
-        ["mod"] = "%=",
-        ["mul"] = "*=",
-        ["or"] = "|=",
-        ["set"] = "=",
-        ["shl"] = "<<=",
-        ["shr"] = ">>=",
-        ["subtract"] = "-=",
-        ["xor"] = "^=",
+        [nameof(ExpressionOp.Add)] = "+=",
+        [nameof(ExpressionOp.BitAnd)] = "&=",
+        [nameof(ExpressionOp.BitOr)] = "|=",
+        [nameof(ExpressionOp.BitXor)] = "^=",
+        [nameof(ExpressionOp.Divide)] = "/=",
+        [nameof(ExpressionOp.Modulo)] = "%=",
+        [nameof(ExpressionOp.Multiply)] = "*=",
+        [nameof(ExpressionOp.ShiftLeft)] = "<<=",
+        [nameof(ExpressionOp.ShiftRight)] = ">>=",
+        [nameof(ExpressionOp.Subtract)] = "-=",
     };
 
-    // The cartridge comparisons, and the infix comparator each is written as.
+    // The engine comparisons, and the infix comparator each is written as.
     private static readonly Dictionary<string, string> s_comparators = new(StringComparer.Ordinal) {
-        ["eq"] = "==",
-        ["ge"] = ">=",
-        ["gt"] = ">",
-        ["le"] = "<=",
-        ["lt"] = "<",
-        ["ne"] = "!=",
+        [nameof(ActionStateComparison.Equal)] = "==",
+        [nameof(ActionStateComparison.Greater)] = ">",
+        [nameof(ActionStateComparison.GreaterOrEqual)] = ">=",
+        [nameof(ActionStateComparison.Less)] = "<",
+        [nameof(ActionStateComparison.LessOrEqual)] = "<=",
+        [nameof(ActionStateComparison.NotEqual)] = "!=",
     };
 
     // The order sections are written in: the cartridge's own identity first, then its data, then its behaviour.
@@ -111,7 +112,7 @@ public static class CartridgeDecompiler {
 
         switch (step["kind"]?.GetValue<string>()) {
             case "set": {
-                var operation = (step["operation"]?.GetValue<string>() ?? "set");
+                var operation = (step["operation"]?.GetValue<string>() ?? string.Empty);
                 var spelling = (s_assignments.TryGetValue(key: operation, value: out var found) ? found : "=");
 
                 sb.Append(pad)

@@ -1,0 +1,697 @@
+// hgb-mirror — one brook rendered twice, side by side.
+//
+// The left panel is a forged Color cartridge; the right panel is a `view` screen
+// sampling a second camera pointed at an SDF diorama that sits far behind the compare
+// camera, out of its frustum. Both pictures read the SAME authoritative position, so a
+// step is a step in either: the world integrates (ax, ay, hy) from the seat's channels,
+// screens[0].memory POKES that into the cartridge's own variables, and the diorama's
+// figure is carried by creation slides reading the identical cells.
+//
+// EVERY length here is derived from the machine's own picture. Author in picture pixels
+// (160 x 144, x east, y south); `unit` converts to world units. The companion rasterizer
+// (hgb-mirror.py) reads these same `let` values out of this file and rasterizes the
+// cartridge's tiles from them, so the two sides cannot describe two different brooks.
+//
+// Creation geometry is authored in the AUTHOR frame, a 180-degree yaw about +Y away from
+// the engine's: author = (-x, y, -z). The `A`-suffixed lets below are already converted,
+// which is why a plateau at picture x 60 reads +5 rather than -5.
+
+schema: "puck.world.def.v1"
+documentId: "puck-hgb-mirror-v1"
+
+// ---- the picture, and what one of its pixels is worth ----------------------------
+let pictureWidth = 160
+let pictureHeight = 144
+let unit = 0.25
+let axMax = 160 - 8
+let ayMax = 144 - 8
+let cliffPixels = 24
+let tier = cliffPixels * unit // the drop, in world units
+
+// ---- the terrain, in picture pixels ---------------------------------------------
+let plateauCx = 60
+let plateauCy = 34
+let plateauRx = 56
+let plateauRy = 30
+let streamLeft = 56
+let streamRight = 72
+let poolCx = 72
+let poolCy = 112
+let poolRx = 52
+let poolRy = 26
+let shoreRx = 60
+let shoreRy = 34
+
+// ---- the same terrain, in author-frame world units -------------------------------
+let platAx = (80 - plateauCx) * unit
+let platAz = (72 - plateauCy) * unit
+let platRx = plateauRx * unit
+let platRz = plateauRy * unit
+let poolAx = (80 - poolCx) * unit
+let poolAz = (72 - poolCy) * unit
+let poolHx = poolRx * unit
+let poolHz = poolRy * unit
+let shoreHx = shoreRx * unit
+let shoreHz = shoreRy * unit
+let streamAx = (80 - (streamLeft + streamRight) / 2) * unit
+let streamHx = (streamRight - streamLeft) / 2 * unit
+
+// The cascade stands clear of the widest stratum, and its run-out reaches the pool's own
+// northern lip at the stream's column — the pool ellipse solved at that column.
+let cascadeAz = platAz - platRz - 0.78
+let poolLipAz = poolAz + poolHz * squareRoot(1 - (streamAx - poolAx) * (streamAx - poolAx) / (poolHx * poolHx))
+let runOutAz = (cascadeAz + poolLipAz) / 2
+let runOutHz = (cascadeAz - poolLipAz) / 2 + 0.2
+
+// ---- the animated water -----------------------------------------------------------
+// Both patterns repeat over 8 picture pixels. The cartridge steps its tile a quarter of
+// that per phase; the diorama slides its crests by the same quarter, so a full cycle
+// advances exactly one period on both sides and the loop closes with no jump.
+let fallPeriod = 8
+let fallPhases = 4
+let ripplePeriod = 8
+let ripplePhases = 2
+let crestSpacing = fallPeriod * unit
+let crestStep = crestSpacing / fallPhases
+let rippleSpacing = ripplePeriod * unit
+let rippleStep = rippleSpacing / ripplePhases
+
+// ---- the cliff's courses ----------------------------------------------------------
+let strata = 5
+let strataHalf = (tier - 0.3) / (2 * strata)
+let strataFlare = 0.34
+
+// ---- the figure --------------------------------------------------------------------
+// Its body is parked at the diorama's origin and never moves. The rest pose is picture
+// pixel (0, 0) at tier zero, so each slide is a bare scale of its cell with no phase
+// offset; the rise rides the DRIVER's cadence because one slide's amplitude is capped at
+// four world units and the cliff is six.
+let heroAx = (80 - 4) * unit
+let heroAz = (72 - 4) * unit
+let heroRiseAmplitude = 3
+let heroRiseCadence = tier / heroRiseAmplitude
+
+// ---- the compare rig, the same shape hgb-compare uses --------------------------------
+let eyeHeight = 1.5
+let eyeDistance = -5
+let fieldOfView = 0.9
+let viewWidth = 1280
+let viewHeight = 720
+let panelHalfWidth = 1.6
+let panelHalfHeight = 1.44
+let spread = 1.8
+// The lit face is right x up, so +X reads LEFT from the compare camera: the cartridge
+// sits at +spread and the diorama's own camera feed at -spread. Both vectors are written
+// out at each panel rather than held in a `let`: an array-valued `let` used as a Vector3
+// property currently lowers to a non-finite element.
+
+// The diorama sits behind the compare camera, which looks from -Z toward +Z.
+let dioramaZ = -400
+let isoHeight = 28
+let isoBack = 34
+
+// ---- the machine's variable window ---------------------------------------------------
+// Declaration order IS the bus layout (0xC200 upward), so these five addresses are the
+// cartridge's own ax, ay, wp, lp, af and the sixth is the tile it derives from wp.
+let busAx = 0xC200
+let busAy = 0xC201
+let busWp = 0xC202
+let busLp = 0xC203
+let busAf = 0xC204
+let busWt = 0xC205
+
+// ---- templates -------------------------------------------------------------------------
+let crestCount = 5
+let poolCrestCount = floor(2 * poolHx / rippleSpacing)
+
+// ---- host -------------------------------------------------------------------------------
+metadata {
+    title: "hgb-mirror"
+    description: "One brook rendered twice, side by side: a forged Color cartridge and an SDF diorama, sharing one authoritative position at 0.25 world units per picture pixel."
+}
+
+host {
+    authority: null
+    backend: "auto"
+    exitAfterSeconds: 0
+    fullscreen: false
+    genlock: null
+    height: viewHeight
+    journalDepth: 2000
+    listen: null
+    presentMode: "Immediate"
+    presentation: "Windowed"
+    rayQuery: true
+    surfaceFormat: "r8g8b8a8"
+    targetHertz: 60
+    timing: false
+    width: viewWidth
+}
+
+simulation {
+    rateHz: 60
+}
+
+bodies {
+    capacity: 8
+    localSeats: 1
+    networkPlayers: 0
+    seatSpawns ["hgb-mirror-arrival"]
+}
+
+defaultSeatKit: "display"
+
+spawnPoints [
+    { id: "hgb-mirror-arrival", position [0, 0, dioramaZ], yawDegrees: 0 }
+]
+
+// The program is CommitPose alone, so nothing in the kit below integrates: a body holds
+// the spawn pose it was placed at and its creation's own slides carry the figure. The
+// speed, turn and gravity values are the validator's positive-and-finite floor, not a
+// policy this world has any use for.
+bodyMotionPrograms [
+    { version: "puck.body-motion.v1", name: "display", kind: "Motion", operations ["CommitPose"] }
+]
+
+kits {
+    rows [
+        {
+            name: "display"
+            bodyContact: "Overlap"
+            bodyMotionProgram: "display"
+            collider: null
+            mass: 0
+            motion {
+                facingSnap: false
+                holds [
+                    {
+                        name: "still"
+                        bond: "Free"
+                        hold: "Lift"
+                        lift: 0
+                        gravity { fall: 46, rise: 28 }
+                        envelope { sinkSpeed: 40 }
+                        thrust: 0
+                        forward: "Heading"
+                    }
+                ]
+                speed { value: 2.4 }
+                turn { rate: 2.5 }
+            }
+        }
+    ]
+}
+
+collision {
+    contactSkin: 0.02
+    defaultHold: false
+    gradientProbe: 0
+    gridCellSize: 0
+    maxIterations: 4
+    maxSlopeDegrees: 60
+    requirements []
+}
+
+gravity {
+    attractors []
+    gravitationalConstant: 0
+    isActive: true
+    softeningLength: 0.5
+    solver: "Pairwise"
+    uniform [0, -18, 0]
+}
+
+looks {
+    assignment {
+        rows ["hero"]
+        sequence { name: "r1", offset: 0, step: 0 }
+    }
+    rows [
+        { name: "hero", scale: 1, source: creation(prototypeId: "hgbMirrorHero"), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
+        { name: "falls", scale: 1, source: creation(prototypeId: "hgbMirrorFalls"), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
+        { name: "ripples", scale: 1, source: creation(prototypeId: "hgbMirrorRipples"), motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 } }
+    ]
+}
+
+// ---- the diorama ---------------------------------------------------------------------
+prototypes {
+    prototype "hgbMirrorTerrain" {
+        document {
+            schema: "puck.creation.v1"
+            name: "hgbMirrorTerrain"
+            palette [
+                { color: "#2E5B22", roughness: 0.96 } // 0 lowland grass
+                { color: "#467C2E", roughness: 0.94 } // 1 plateau grass
+                { color: "#6B5945", roughness: 0.92 } // 2 cliff rock, lit course
+                { color: "#4C3E31", roughness: 0.93 } // 3 cliff rock, shadowed
+                { color: "#1B5386", roughness: 0.5, specular: 0.22 } // 4 water
+                { color: "#A8905F", roughness: 0.96 } // 5 shore sand
+            ]
+
+            shape Box "lowland" {
+                position [0, -0.6, 0]
+                scale [pictureWidth / 2 * unit, 0.6, pictureHeight / 2 * unit]
+                material: 0
+            }
+
+            // The cliff is a stack of courses, the same banding the picture draws down its
+            // face: alternating shade, flaring slightly toward the foot.
+            for k in range(0, strata) {
+                shape Superellipsoid $"stratum{k}" {
+                    position [platAx, strataHalf * (1 + 2 * k), platAz]
+                    scale [
+                        platRx + 0.1 + strataFlare * (strata - 1 - k) / (strata - 1)
+                        strataHalf
+                        platRz + 0.1 + strataFlare * (strata - 1 - k) / (strata - 1)
+                    ]
+                    material: 2 + k % 2
+                    exponent: 2.6
+                }
+            }
+
+            shape Superellipsoid "plateauTop" {
+                position [platAx, tier - 0.16, platAz]
+                scale [platRx, 0.3, platRz]
+                material: 1
+                exponent: 2.6
+            }
+
+            shape Box "streamBed" {
+                position [streamAx, tier + 0.14, platAz]
+                scale [streamHx, 0.1, platRz]
+                material: 4
+            }
+
+            shape Box "cascade" {
+                position [streamAx, tier / 2, cascadeAz]
+                scale [streamHx * 0.92, tier / 2, 0.16]
+                material: 4
+            }
+
+            shape Box "runOut" {
+                position [streamAx, 0.28, runOutAz]
+                scale [streamHx * 0.92, 0.1, runOutHz]
+                material: 4
+            }
+
+            shape Superellipsoid "shore" {
+                position [poolAx, 0.1, poolAz]
+                scale [shoreHx, 0.16, shoreHz]
+                material: 5
+                exponent: 3
+            }
+
+            shape Superellipsoid "pool" {
+                position [poolAx, 0.22, poolAz]
+                scale [poolHx, 0.2, poolHz]
+                material: 4
+                exponent: 3
+            }
+        }
+    }
+
+    prototype "hgbMirrorFalls" {
+        document {
+            schema: "puck.creation.v1"
+            name: "hgbMirrorFalls"
+            palette [
+                { color: "#CFE6F7", roughness: 0.35, specular: 0.4 }]
+            drivers [
+                { name: "fall", signal: "state.wp", cadence: 1, when ["always"], blendInSeconds: 0, blendOutSeconds: 0 }]
+
+            // One crest per period, covering the sheet plus one period below it, which is
+            // what lets the wrap read as continuous flow rather than a jump.
+            for k in range(0, crestCount) {
+                shape Box $"crest{k}" {
+                    position [0, crestSpacing * (k - 1), 0]
+                    scale [streamHx * 0.96, crestSpacing / 12, 0.06]
+                    material: 0
+                    slides [
+                        { driver: "fall", axis [0, -1, 0], amplitude: crestStep, phase: 0, wave: "linear" }
+                    ]
+                }
+            }
+        }
+    }
+
+    prototype "hgbMirrorRipples" {
+        document {
+            schema: "puck.creation.v1"
+            name: "hgbMirrorRipples"
+            palette [
+                { color: "#7FB3D6", roughness: 0.45, specular: 0.25 }]
+            drivers [
+                { name: "ripple", signal: "state.lp", cadence: 1, when ["always"], blendInSeconds: 0, blendOutSeconds: 0 }]
+
+            // Short staggered strokes on the same 8 px lattice the cartridge's two ripple
+            // tiles carry, each shortened to sit inside the pool's own ellipse and thrown
+            // to alternating sides of it so the surface reads as chop rather than as a comb.
+            for k in range(0, poolCrestCount) {
+                shape Box $"wave{k}" {
+                    position [
+                        0 - poolHx + rippleSpacing * k + rippleSpacing / 2
+                        0
+                        poolHz * squareRoot(1 - (0 - poolHx + rippleSpacing * k + rippleSpacing / 2) * (0 - poolHx + rippleSpacing * k + rippleSpacing / 2) / ((poolHx + 1) * (poolHx + 1))) * 0.86 * 0.58 * (1 - 2 * (k % 2))
+                    ]
+                    scale [
+                        rippleSpacing / 22
+                        0.025
+                        poolHz * squareRoot(1 - (0 - poolHx + rippleSpacing * k + rippleSpacing / 2) * (0 - poolHx + rippleSpacing * k + rippleSpacing / 2) / ((poolHx + 1) * (poolHx + 1))) * 0.86 * 0.42
+                    ]
+                    material: 0
+                    slides [
+                        { driver: "ripple", axis [-1, 0, 0], amplitude: rippleStep, phase: 0, wave: "linear" }
+                    ]
+                }
+            }
+        }
+    }
+
+    prototype "hgbMirrorHero" {
+        document {
+            schema: "puck.creation.v1"
+            name: "hgbMirrorHero"
+            palette [
+                { color: "#B4403A", roughness: 0.7 }
+                { color: "#E8C9A0", roughness: 0.65 }
+                { color: "#3B3630", roughness: 0.8 }
+            ]
+            drivers [
+                { name: "heroX", signal: "state.ax", cadence: 1, when ["always"], blendInSeconds: 0, blendOutSeconds: 0 }
+                { name: "heroZ", signal: "state.ay", cadence: 1, when ["always"], blendInSeconds: 0, blendOutSeconds: 0 }
+                { name: "heroY", signal: "state.hy", cadence: heroRiseCadence, when ["always"], blendInSeconds: 0, blendOutSeconds: 0 }
+            ]
+
+            shape Superellipsoid "trunk" {
+                position [heroAx, 0.85, heroAz]
+                scale [0.8, 0.85, 0.62]
+                material: 0
+                exponent: 3
+                slides [
+                    { driver: "heroX", axis [-1, 0, 0], amplitude: unit, phase: 0, wave: "linear" }
+                    { driver: "heroZ", axis [0, 0, -1], amplitude: unit, phase: 0, wave: "linear" }
+                    { driver: "heroY", axis [0, 1, 0], amplitude: heroRiseAmplitude, phase: 0, wave: "linear" }
+                ]
+            }
+
+            shape Sphere "head" {
+                position [heroAx, 2, heroAz]
+                scale [0.6, 0.6, 0.6]
+                material: 1
+                parent: "trunk"
+            }
+
+            shape Cylinder "brim" {
+                position [heroAx, 2.32, heroAz]
+                scale [0.95, 0.08, 0.95]
+                material: 2
+                parent: "trunk"
+            }
+
+            shape Cylinder "crown" {
+                position [heroAx, 2.6, heroAz]
+                scale [0.5, 0.28, 0.5]
+                material: 2
+                parent: "trunk"
+            }
+        }
+    }
+}
+
+// Placements are WORLD space, never the author frame, so the diorama's own engine
+// coordinates appear here with their signs unflipped.
+placements {
+    placement "hgbMirrorLand" {
+        prototype: "hgbMirrorTerrain"
+        position [0, 0, dioramaZ]
+    }
+
+    placement "hgbMirrorCascade" {
+        prototype: "hgbMirrorFalls"
+        position [0 - streamAx, 0, dioramaZ - cascadeAz + 0.2]
+        inhabit {
+            kit: "display"
+            look: "falls"
+            source: "Idle"
+            count: 1
+            distribution {
+                region: disc(radius: 0)
+                fill { name: "additive", offset: 0, step: 1 }
+            }
+        }
+    }
+
+    placement "hgbMirrorSurface" {
+        prototype: "hgbMirrorRipples"
+        position [0 - poolAx, 0.46, dioramaZ - poolAz]
+        inhabit {
+            kit: "display"
+            look: "ripples"
+            source: "Idle"
+            count: 1
+            distribution {
+                region: disc(radius: 0)
+                fill { name: "additive", offset: 0, step: 1 }
+            }
+        }
+    }
+}
+
+screens [
+    {
+        index: 0
+        origin [spread, eyeHeight, 0]
+        right [-1, 0, 0]
+        up [0, 1, 0]
+        halfWidth: panelHalfWidth
+        halfHeight: panelHalfHeight
+        halfDepth: 0.01
+        round: 0
+        source: machine(engine: "gaming-brick", contentPath: "../../cartridges/hgb-mirror.cgb.cartridge.json", options: "cgb")
+        route { engageable: false, engageRadius: 0 }
+        // The campfire seam, both ways: five Write bindings poke the canonical position
+        // and the two phases into the machine's own variables, and one Read binding
+        // mirrors the tile the cartridge derived from them back into world state, which
+        // is what `screen.state 0` echoes.
+        memory [
+            { address: busAx, width: 1, row: "ax", direction: "Write" }
+            { address: busAy, width: 1, row: "ay", direction: "Write" }
+            { address: busWp, width: 1, row: "wp", direction: "Write" }
+            { address: busLp, width: 1, row: "lp", direction: "Write" }
+            { address: busAf, width: 1, row: "af", direction: "Write" }
+            { address: busWt, width: 1, row: "wtEcho", direction: "Read" }
+        ]
+    }
+    {
+        index: 1
+        origin [0 - spread, eyeHeight, 0]
+        right [-1, 0, 0]
+        up [0, 1, 0]
+        halfWidth: panelHalfWidth
+        halfHeight: panelHalfHeight
+        halfDepth: 0.01
+        round: 0
+        source: view(cameraName: "diorama")
+        route { engageable: false, engageRadius: 0 }
+    }
+]
+
+state {
+    world [
+        { name: "ax", kind: "Int", min: 0, max: axMax, value: 76 }
+        { name: "ay", kind: "Int", min: 0, max: ayMax, value: 20 }
+        { name: "af", kind: "Int", min: 0, max: 3, value: 0 }
+        { name: "hy", kind: "Int", min: 0, max: 1, value: 1 }
+        { name: "wp", kind: "Int", min: 0, max: fallPhases - 1, value: 0 }
+        { name: "lp", kind: "Int", min: 0, max: ripplePhases - 1, value: 0 }
+        { name: "wtEcho", kind: "Int", min: 0, max: 255, value: 0 }
+        { name: "wclock", kind: "Int", nonNegative: true, value: 0, advance { rateNumerator: 1, rateDenominator: 6 } }
+        { name: "lclock", kind: "Int", nonNegative: true, value: 0, advance { rateNumerator: 1, rateDenominator: 12 } }
+    ]
+}
+
+// The canonical position is integer picture pixels, integrated from the seat's own
+// channels — no float ever reaches it, so both renderings read the same whole number.
+// The bounds are the sprite's own 8 px inset from the picture, named once above.
+rule "hero-east" {
+    when $channel:1:strafe >= 0.5 and ax < axMax
+    mode: "Level"
+    ax += 1
+    af = 3
+}
+
+rule "hero-west" {
+    when $channel:1:strafe <= -0.5 and ax > 0
+    mode: "Level"
+    ax += -1
+    af = 2
+}
+
+rule "hero-north" {
+    when $channel:1:forward >= 0.5 and ay > 0
+    mode: "Level"
+    ay += -1
+    af = 1
+}
+
+rule "hero-south" {
+    when $channel:1:forward <= -0.5 and ay < ayMax
+    mode: "Level"
+    ay += 1
+    af = 0
+}
+
+// The figure's own centre pixel against the plateau ellipse, in exact integers: the same
+// test the rasterizer classifies a picture pixel with, cross-multiplied so it needs no
+// division. Both arms gate on hy already differing, so neither writes every tick.
+rule "tier-plateau" {
+    gate: all(predicates: [
+        compareValue(kind: "Int", comparison: "LessOrEqual", left: "(ax - 56) * (ax - 56) * 900 + (ay - 30) * (ay - 30) * 3136", right: "2822400")
+        compareState(state: "hy", comparison: "NotEqual", value: 1)
+    ])
+    mode: "Level"
+    hy = 1
+}
+
+rule "tier-lowland" {
+    gate: all(predicates: [
+        compareValue(kind: "Int", comparison: "Greater", left: "(ax - 56) * (ax - 56) * 900 + (ay - 30) * (ay - 30) * 3136", right: "2822400")
+        compareState(state: "hy", comparison: "NotEqual", value: 0)
+    ])
+    mode: "Level"
+    hy = 0
+}
+
+rule "fall-phase" {
+    when (wp != wclock % 4 : Int)
+    mode: "Level"
+    wp = wclock % 4
+}
+
+rule "ripple-phase" {
+    when (lp != lclock % 2 : Int)
+    mode: "Level"
+    lp = lclock % 2
+}
+
+channels [
+    { name: "forward", role: "MoveAdvance", shape: "Bipolar", frame: "Heading" }
+    { name: "strafe", role: "MoveStrafe", shape: "Bipolar", frame: "Heading" }
+]
+
+bindingOverlays [
+    {
+        id: "hgb-mirror"
+        document {
+            version: "puck.bindings.v1"
+            modifiers []
+            chords [
+                {
+                    chord []
+                    group: "play"
+                    page {
+                        id: "base"
+                        entries [
+                            { channel: "forward", scale: 1, sources ["keyboard.w", "keyboard.arrowUp"] }
+                            { channel: "forward", scale: -1, sources ["keyboard.s", "keyboard.arrowDown"] }
+                            { channel: "strafe", scale: -1, sources ["keyboard.a", "keyboard.arrowLeft"] }
+                            { channel: "strafe", scale: 1, sources ["keyboard.d", "keyboard.arrowRight"] }
+                            { command: "player.move.strafe", sources ["gamepad.leftStick"] }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+]
+
+cameras [
+    {
+        name: "compare"
+        renderWidth: viewWidth
+        renderHeight: viewHeight
+        anchor: null
+        rig {
+            version: "puck.camera.v1"
+            name: "compare"
+            operations [
+                anchor(subject: worldPoint(point: [0, eyeHeight, eyeDistance]))
+                lookAt(subject: worldPoint(point: [0, eyeHeight, 0]))
+                fieldOfView(fieldOfViewRadians: fieldOfView)
+            ]
+        }
+    }
+    {
+        // Rendered at the machine's own 10:9, so the two panels carry the same picture
+        // shape at the same size on the flat compare wall.
+        name: "diorama"
+        renderWidth: pictureWidth * 4
+        renderHeight: pictureHeight * 4
+        anchor: null
+        rig {
+            version: "puck.camera.v1"
+            name: "diorama"
+            operations [
+                anchor(subject: worldPoint(point: [0, isoHeight, dioramaZ + isoBack]))
+                lookAt(subject: worldPoint(point: [0, 1.5, dioramaZ + 1]))
+                fieldOfView(fieldOfViewRadians: 0.86)
+            ]
+        }
+    }
+]
+
+views {
+    layout "compare" {
+        seatCount: 0
+        slots [
+            { camera: "compare", height: 1, width: 1, x: 0, y: 0 }
+        ]
+        transitionRenderScale: 1
+        transitionSeconds: 0.25
+    }
+
+    seatControl {
+        maxPitch: 0.01
+        minPitch: -0.01
+        yawReference: "World"
+    }
+
+    seatRig "seat" {
+        version: "puck.camera.v1"
+        operations [
+            orbit(distance: 1, pitch: 0, yaw: 0)
+            fieldOfView(fieldOfViewRadians: fieldOfView)
+        ]
+    }
+}
+
+render {
+    farDistance: 120
+    tonemap: "Filmic"
+    lighting {
+        lights [
+            directional(direction: [3, 5, 4], color: "#FFF0D8", weight: 0.72, shadows: true, angularRadius: 0.2)
+            directional(direction: [-0.7, 0.35, -0.6], color: "#C3D2F0", weight: 0.16)
+            hemisphere(color: "#C8D6E2", base: 0.16, gradient: 0.1)
+        ]
+    }
+    sky {
+        layers [
+            gradient(stops: [
+                { elevation: -1, color: "#8FA3B2" }
+                { elevation: -0.05, color: "#CBD8E0" }
+                { elevation: 0.35, color: "#77A6C8" }
+                { elevation: 1, color: "#375F88" }
+            ])
+            fog(density: 0.0015)
+            sunDisc(light: 0, radius: 0.02, intensity: 1.4)
+        ]
+    }
+    environment {
+        softboxes [
+            { direction [0.6, 1, 0.5], size [0.25, 0.5], color: "#FFEFD8", weight: 0.8, blur: 0.15 }
+            { direction [-0.6, 0.75, -0.6], size [0.24, 0.6], color: "#D4DEF2", weight: 0.35, blur: 0.18 }
+        ]
+        horizon { low: "#1B1F24", high: "#6B7A88" }
+    }
+}

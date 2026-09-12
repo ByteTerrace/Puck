@@ -1183,7 +1183,7 @@
       "body": [
         {
           "kind": "set",
-          "operation": "subtract",
+          "operation": "Subtract",
           "value": {
             "constant": 1
           },
@@ -1205,7 +1205,7 @@
       "body": [
         {
           "kind": "set",
-          "operation": "add",
+          "operation": "Add",
           "value": {
             "constant": 1
           },
@@ -1227,7 +1227,7 @@
       "body": [
         {
           "kind": "set",
-          "operation": "subtract",
+          "operation": "Subtract",
           "value": {
             "constant": 1
           },
@@ -1249,7 +1249,7 @@
       "body": [
         {
           "kind": "set",
-          "operation": "add",
+          "operation": "Add",
           "value": {
             "constant": 1
           },
@@ -1267,7 +1267,7 @@
           "left": {
             "variable": "x"
           },
-          "comparison": "lt",
+          "comparison": "Less",
           "right": {
             "constant": 8
           }
@@ -1276,7 +1276,6 @@
       "body": [
         {
           "kind": "set",
-          "operation": "set",
           "value": {
             "constant": 8
           },
@@ -1294,7 +1293,7 @@
           "left": {
             "variable": "x"
           },
-          "comparison": "gt",
+          "comparison": "Greater",
           "right": {
             "constant": 224
           }
@@ -1303,7 +1302,6 @@
       "body": [
         {
           "kind": "set",
-          "operation": "set",
           "value": {
             "constant": 224
           },
@@ -1321,7 +1319,7 @@
           "left": {
             "variable": "y"
           },
-          "comparison": "lt",
+          "comparison": "Less",
           "right": {
             "constant": 8
           }
@@ -1330,7 +1328,6 @@
       "body": [
         {
           "kind": "set",
-          "operation": "set",
           "value": {
             "constant": 8
           },
@@ -1348,7 +1345,7 @@
           "left": {
             "variable": "y"
           },
-          "comparison": "gt",
+          "comparison": "Greater",
           "right": {
             "constant": 144
           }
@@ -1357,7 +1354,6 @@
       "body": [
         {
           "kind": "set",
-          "operation": "set",
           "value": {
             "constant": 144
           },
@@ -1375,7 +1371,7 @@
           "left": {
             "variable": "steps"
           },
-          "comparison": "lt",
+          "comparison": "Less",
           "right": {
             "constant": 255
           }
@@ -1389,7 +1385,7 @@
       "body": [
         {
           "kind": "set",
-          "operation": "add",
+          "operation": "Add",
           "value": {
             "constant": 1
           },

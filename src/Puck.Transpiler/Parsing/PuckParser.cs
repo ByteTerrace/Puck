@@ -180,6 +180,10 @@ public static partial class PuckParser {
             return new LetNode(Name: varName, Value: val, Offset: startOffset, Length: len, Line: line, Column: col);
         }
 
+        if (TryMatchKeyword(context, "for")) {
+            return ParseForStatement(context, startOffset, line, col, diagnostics);
+        }
+
         if (TryMatchKeyword(context, "import")) {
             SkipWhiteSpace(context);
             if (!TryReadString(context, out var importPath)) {
@@ -395,6 +399,22 @@ public static partial class PuckParser {
             return new FlagStatementNode(Name: firstId, Offset: startOffset, Length: (afterFirstIdOffset - startOffset), Line: line, Column: col);
         }
 
+        // A block header whose name is an interpolation: `shape Superellipsoid $"braid-{i}" { … }`. The name is
+        // not known until lowering, so it rides the node as an expression instead of a string.
+        if ((cursor.Current == '$') && (cursor.PeekNext() == '"')) {
+            if (TryReadStringExpression(context, out var nameExpr) && (nameExpr is not null)) {
+                SkipWhiteSpace(context);
+
+                if (cursor.Current == '{') {
+                    var interpolated = ParseBlock(context, identifier: firstId, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
+
+                    return (interpolated with { NameExpression = nameExpr });
+                }
+            }
+
+            throw CreateException(context, $"Expected '{{' after an interpolated name for '{firstId}'");
+        }
+
         // Otherwise, named block or block with target:
         // Examples: layout "study" { ... }
         //           solid Prism "p1" { ... }
@@ -403,6 +423,20 @@ public static partial class PuckParser {
             SkipWhiteSpace(context);
             if (cursor.Current == '{') {
                 return ParseBlock(context, identifier: firstId, name: secondId, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
+            }
+
+            if ((cursor.Current == '$') && (cursor.PeekNext() == '"')) {
+                if (TryReadStringExpression(context, out var targetedName) && (targetedName is not null)) {
+                    SkipWhiteSpace(context);
+
+                    if (cursor.Current == '{') {
+                        var interpolated = ParseBlock(context, identifier: firstId, name: null, target: secondId, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
+
+                        return (interpolated with { NameExpression = targetedName });
+                    }
+                }
+
+                throw CreateException(context, $"Expected '{{' after an interpolated name for '{firstId} {secondId}'");
             }
 
             if (TryReadIdentifierOrString(context, out var thirdId)) {
@@ -435,6 +469,73 @@ public static partial class PuckParser {
             $"'{identifier}{separator} {opener}' - a {shape} is written without the '{separator}': use '{identifier} {opener}'",
             new SourceSpan(startOffset, (cursor.Offset - startOffset), line, col)
         );
+    }
+
+    // `for item in sequence { … }` and `for (item, index) in sequence { … }`.
+    private static ForStatementNode ParseForStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
+
+        SkipWhiteSpace(context);
+
+        string item;
+        string? index = null;
+
+        if (cursor.Current == '(') {
+            cursor.Advance();
+            SkipWhiteSpace(context);
+
+            if (!TryReadIdentifier(context, out item)) {
+                throw CreateException(context, "Expected an item name after 'for ('");
+            }
+
+            SkipWhiteSpace(context);
+
+            if (TryConsume(context, ',')) {
+                SkipWhiteSpace(context);
+
+                if (!TryReadIdentifier(context, out index)) {
+                    throw CreateException(context, "Expected an index name after 'for (item,'");
+                }
+            }
+
+            SkipWhiteSpace(context);
+
+            if (!TryConsume(context, ')')) {
+                throw CreateException(context, "Expected ')' closing a 'for' binding list");
+            }
+        } else if (!TryReadIdentifier(context, out item)) {
+            throw CreateException(context, "Expected an item name after 'for'");
+        }
+
+        SkipWhiteSpace(context);
+
+        if (!TryMatchKeyword(context, "in")) {
+            throw CreateException(context, "Expected 'in' after a 'for' binding");
+        }
+
+        var sequence = ParseExpression(context);
+
+        SkipWhiteSpace(context);
+
+        if (!TryConsume(context, '{')) {
+            throw CreateException(context, "Expected '{' starting a 'for' body");
+        }
+
+        var body = new List<StatementNode>();
+
+        SkipWhiteSpace(context);
+
+        while (!cursor.Eof && (cursor.Current != '}')) {
+            body.Add(ParseStatement(context, diagnostics));
+            ConsumeSeparator(context);
+            SkipWhiteSpace(context);
+        }
+
+        if (!TryConsume(context, '}')) {
+            throw CreateException(context, "Expected '}' closing a 'for' body");
+        }
+
+        return new ForStatementNode(item, index, sequence, body, startOffset, (cursor.Offset - startOffset), line, col);
     }
 
     private static BlockNode ParseBlock(ParseContext context, string identifier, string? name, string? target, int startOffset, int line, int col, DiagnosticBag? diagnostics = null) {
@@ -721,10 +822,14 @@ public static partial class PuckParser {
         var expr = ParsePrimaryExpression(context);
 
         while (true) {
+            var beforeTrivia = context.Scanner.Cursor.Offset;
+
             SkipWhiteSpace(context);
+
+            var trivia = context.Scanner.Buffer.AsSpan(beforeTrivia, (context.Scanner.Cursor.Offset - beforeTrivia));
+            var separated = (trivia.IndexOf('\n') >= 0);
             var cur = context.Scanner.Cursor.Current;
 
-            // Member access: expr.member
             if (cur == '.' && context.Scanner.Cursor.PeekNext() != '.') {
                 context.Scanner.Cursor.Advance();
                 SkipWhiteSpace(context);
@@ -733,6 +838,24 @@ public static partial class PuckParser {
                 }
                 var len = context.Scanner.Cursor.Offset - expr.Offset;
                 expr = new MemberAccessExpressionNode(Target: expr, Member: member, Offset: expr.Offset, Length: len, Line: expr.Line, Column: expr.Column);
+                continue;
+            }
+
+            // Index read: expr[index]. The '[' must be ADJACENT — an array's elements are newline-separated, so a
+            // '[' that opens the next line is the next element, never an index on the previous one.
+            if ((cur == '[') && !separated) {
+                context.Scanner.Cursor.Advance();
+
+                var index = ParseExpression(context);
+
+                SkipWhiteSpace(context);
+
+                if (!TryConsume(context, ']')) {
+                    throw CreateException(context, "Expected ']' closing an index");
+                }
+
+                expr = new IndexExpressionNode(Target: expr, Index: index, Offset: expr.Offset, Length: (context.Scanner.Cursor.Offset - expr.Offset), Line: expr.Line, Column: expr.Column);
+
                 continue;
             }
 
@@ -784,12 +907,12 @@ public static partial class PuckParser {
             return ParseHexColor(context);
         }
 
-        // String literal: "..."
-        if (cursor.Current == '"') {
-            if (TryReadString(context, out var strVal)) {
-                var len = cursor.Offset - startOffset;
-                return new LiteralExpressionNode(Value: strVal, Unit: null, Offset: startOffset, Length: len, Line: line, Column: col);
+        // Every string form: "…", """…""", and either with a `$` prefix.
+        if ((cursor.Current == '"') || ((cursor.Current == '$') && (cursor.PeekNext() == '"'))) {
+            if (TryReadStringExpression(context, out var stringNode) && (stringNode is not null)) {
+                return stringNode;
             }
+
             throw CreateException(context, "Malformed string literal");
         }
 

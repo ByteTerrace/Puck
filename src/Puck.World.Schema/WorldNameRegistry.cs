@@ -290,7 +290,7 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldGroupKind), nameof(WorldGroupKind.SharedStateScope), "a group scope token"),
         new(typeof(WorldCameraProgramOp.Blend), nameof(WorldCameraProgramOp.Blend.A), "a camera program name"),
         new(typeof(WorldCameraProgramOp.Blend), nameof(WorldCameraProgramOp.Blend.B), "a camera program name"),
-        new(typeof(WorldCameraProgramOp.Select), nameof(WorldCameraProgramOp.Select.Default), "a camera program name"),
+        new(typeof(WorldCameraProgramOp.SelectProgram), nameof(WorldCameraProgramOp.SelectProgram.Default), "a camera program name"),
         new(typeof(WorldCameraSelectCase), nameof(WorldCameraSelectCase.Program), "a camera program name"),
         new(typeof(WorldCameraProgramOp.Path), nameof(WorldCameraProgramOp.Path.Curve), "a curve name"),
         new(typeof(WorldReaction.Emit), nameof(WorldReaction.Emit.Tag), "an emission tag"),

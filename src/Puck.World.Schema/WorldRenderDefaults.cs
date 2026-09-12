@@ -24,10 +24,13 @@ public sealed record WorldCameraAnchorCandidate(WorldAnchor Anchor, [property: J
 /// a single unconditional anchor is <paramref name="Anchor"/>.</param>
 public sealed record WorldCamera(
     string Name,
-    WorldAnchor? Anchor,
     WorldCameraProgram Rig,
     uint RenderWidth,
     uint RenderHeight,
+    // OPTIONAL, and carried beside its own XOR partner deliberately: `Anchor` and `Anchors` are alternatives, so a
+    // camera authoring neither is an unanchored camera rather than an incomplete one. Before this pair agreed, the
+    // singular sat among the required parameters and every unanchored camera had to spell `"anchor": null` to load.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAnchor? Anchor = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraAnchorCandidate>? Anchors = null
 ) {
     /// <summary>Gets a value indicating whether any candidate or the anchor is seat-relative, so the view must be

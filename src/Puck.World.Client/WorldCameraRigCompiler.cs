@@ -325,7 +325,7 @@ public static class WorldCameraRigCompiler {
                         ));
 
                         break;
-                    case WorldCameraProgramOp.Fov fov:
+                    case WorldCameraProgramOp.FieldOfView fov:
                         operations.Add(item: new SdfCameraOp.Fov(FieldOfViewRadians: Scalar(
                             fallback: OrbitRig.DefaultFieldOfViewRadians,
                             scalar: fov.FieldOfViewRadians
@@ -351,7 +351,7 @@ public static class WorldCameraRigCompiler {
                         }
 
                         break;
-                    case WorldCameraProgramOp.Select selectOp:
+                    case WorldCameraProgramOp.SelectProgram selectOp:
                         // Same conservative rule as Blend: a document a live mutation left mid-transition can only
                         // transiently miss a resolved name (the validator refuses one dangling at author time), and
                         // dropping the whole op there beats resolving into a pose nothing authored.

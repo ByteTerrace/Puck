@@ -1007,7 +1007,7 @@
       "source": {
         "$type": "machine",
         "engine": "gaming-brick",
-        "contentPath": "../cartridges/pip.cgb.cartridge.json",
+        "contentPath": "../cartridges/hgb-mirror.cgb.cartridge.json",
         "options": "cgb"
       },
       "route": {
@@ -1075,7 +1075,7 @@
       "source": {
         "$type": "machine",
         "engine": "gaming-brick",
-        "contentPath": "../cartridges/pip.cgb.cartridge.json",
+        "contentPath": "../cartridges/hgb-mirror.cgb.cartridge.json",
         "options": "cgb"
       },
       "route": {

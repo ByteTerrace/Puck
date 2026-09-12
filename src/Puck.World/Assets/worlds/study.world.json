@@ -51,7 +51,7 @@
           "yaw": 0
         },
         {
-          "$type": "fov",
+          "$type": "fieldOfView",
           "fieldOfViewRadians": 0.001
         }
       ],

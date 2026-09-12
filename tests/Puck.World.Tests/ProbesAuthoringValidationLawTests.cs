@@ -44,7 +44,7 @@ public sealed class ProbesAuthoringValidationLawTests {
         Rig: new WorldCameraProgram(
             Name: $"{name}-rig",
             Version: WorldCameraProgram.CurrentVersion,
-            Operations: [new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0.9f))]
+            Operations: [new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f))]
         ),
         RenderWidth: 320U,
         RenderHeight: 240U

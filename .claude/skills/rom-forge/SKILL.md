@@ -75,6 +75,14 @@ native execution tests, not by a hidden special case.
 
 ## Backend contracts
 
+- A variable's declared `max` decides its representation: <= 255 is one byte, more is
+  two, little-endian, and the window bounds the total BYTES rather than the slot
+  count. A wide slot is admitted only as a set step's target or value and as a
+  comparison operand — every other field is a byte on both machines and refuses one
+  by name. Only assignment, `Add` and `Subtract` have sixteen-bit forms; SM83 gets
+  add through `add hl, de` and subtract through a borrow chain, and the comparison
+  walks a byte at a time with `>`/`<=` swapping their operands. Seeding writes both
+  bytes.
 - CGB variables: `0xC200..0xC27F`; `0xC280` retains the prior held byte before
   `InputModule.EmitTick`, whose own previous field is advanced inside its call;
   `0xC281` is the operand spill, `0xC282` the out-of-range discard sink, and
@@ -113,12 +121,19 @@ native execution tests, not by a hidden special case.
   of reach of a program-counter-relative load.
 - The estimate does not simply sum rules. Rules each guarded by one equality of
   the same variable against a different constant cannot share a frame, so only
-  the dearest is charged — the phase-machine shape. The saving is given up
-  entirely if anything writes that variable between the first such rule and the
-  last, a counted loop's index included, so a phase must name its successor in a
-  staging variable and a single ungated rule adopts it after every arm. Put that
-  advance step last; moving it before any guarded rule silently triples the
-  estimate.
+  the dearest is charged — the phase-machine shape. For an INFERRED guard the
+  saving is given up entirely if anything writes that variable between the first
+  such rule and the last, a counted loop's index included, so a phase must name
+  its successor in a staging variable and a single ungated rule adopts it after
+  every arm; put that advance step last, or the estimate silently triples.
+- Declaring the variable as the document's `scene` removes that condition: the
+  frame snapshots it before any rule evaluates and every guard on it compares
+  against the snapshot, so a write names the NEXT frame's scene and can never
+  open a second one in this frame. The advance step may then live inside its own
+  arm, and the partition holds wherever it sits. One byte is reserved for the
+  snapshot on each machine — 0xC283 on cgb (arrays move up to 0xC284) and
+  0x020000C1 on agb. `RuleCount` is 1024: rules cost CODE, which capacity
+  refuses, and `scene` is what keeps per-frame work flat as the count grows.
 - Cost is advice, not a gate. Validation refuses what makes an image wrong — a
   shape the hardware has no room for — never what merely makes it slow: a
   cartridge that misses frames still runs, and the emulator already absorbs that
@@ -167,6 +182,13 @@ native execution tests, not by a hidden special case.
 - AGB document output uses direct boot without BIOS calls/IRQs. World play
   supplies `stub` explicitly. The lower-level builder accepts an optional
   caller-supplied logo for retail BIOS boot; document output does not claim it.
+- A rule's comparison and a `set` step's operation are named from `Puck.State`,
+  not from a forge list: `ActionStateComparison` (Equal, NotEqual, Less,
+  LessOrEqual, Greater, GreaterOrEqual) and `ExpressionOp` (Add, Subtract,
+  Multiply, Divide, Modulo, BitAnd, BitOr, BitXor, ShiftLeft, ShiftRight). An
+  ABSENT operation assigns — the one combination no opcode spells, so the field
+  is omitted rather than carrying a name. `CartridgeOperations` holds the
+  emittable subset; KEEP IN SYNC with both backends' operation switches.
 - Rules execute in source order; later steps read earlier writes. Arithmetic
   wraps modulo 256, comparisons are unsigned, and key edges are frame-local.
   A `repeat` count is a literal, never a variable, because the cost walk

@@ -6,6 +6,8 @@ using Puck.Transpiler.Lowering;
 using Puck.Transpiler.Parsing;
 using Xunit;
 
+using Puck.State;
+
 namespace Puck.GamingBricks.Transpiler.Tests;
 
 public class CartridgeRoundTripTests {
@@ -100,8 +102,21 @@ public class CartridgeRoundTripTests {
         var body = Assert.IsType<JsonArray>(Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(Compile(source)["rules"])[0])["body"]);
         var operations = body.OfType<JsonObject>().Select(step => (step["operation"]?.GetValue<string>() ?? string.Empty)).ToArray();
 
+        // A plain `=` carries no operation: assignment is the one combination no opcode spells.
         Assert.Equal(
-            ["set", "add", "subtract", "mul", "div", "mod", "and", "or", "xor", "shl", "shr"],
+            [
+                string.Empty,
+                nameof(ExpressionOp.Add),
+                nameof(ExpressionOp.Subtract),
+                nameof(ExpressionOp.Multiply),
+                nameof(ExpressionOp.Divide),
+                nameof(ExpressionOp.Modulo),
+                nameof(ExpressionOp.BitAnd),
+                nameof(ExpressionOp.BitOr),
+                nameof(ExpressionOp.BitXor),
+                nameof(ExpressionOp.ShiftLeft),
+                nameof(ExpressionOp.ShiftRight),
+            ],
             operations);
     }
 
@@ -123,8 +138,8 @@ public class CartridgeRoundTripTests {
         Assert.Equal("key", Assert.IsType<JsonObject>(conditions[0])["kind"]?.GetValue<string>());
         Assert.Equal("left", Assert.IsType<JsonObject>(conditions[0])["key"]?.GetValue<string>());
         Assert.Equal("held", Assert.IsType<JsonObject>(conditions[0])["mode"]?.GetValue<string>());
-        Assert.Equal("eq", Assert.IsType<JsonObject>(conditions[1])["comparison"]?.GetValue<string>());
-        Assert.Equal("ge", Assert.IsType<JsonObject>(conditions[2])["comparison"]?.GetValue<string>());
+        Assert.Equal(nameof(ActionStateComparison.Equal), Assert.IsType<JsonObject>(conditions[1])["comparison"]?.GetValue<string>());
+        Assert.Equal(nameof(ActionStateComparison.GreaterOrEqual), Assert.IsType<JsonObject>(conditions[2])["comparison"]?.GetValue<string>());
     }
 
     [Fact]
@@ -182,6 +197,97 @@ public class CartridgeRoundTripTests {
         Assert.Equal("map", painted["kind"]?.GetValue<string>());
         Assert.Equal("cr", Assert.IsType<JsonObject>(painted["row"])["variable"]?.GetValue<string>());
         Assert.Equal(0, Assert.IsType<JsonObject>(painted["tile"])["constant"]?.GetValue<int>());
+    }
+
+    [Fact]
+    public void TestAForGeneratesOneSectionRowPerElement() {
+        const string source = """
+            schema: "puck.cartridge.v1"
+            target: "cgb"
+
+            for (level, index) in [4, 9, 16] {
+                variable $"speed{index}" {
+                    initial: level
+                }
+            }
+
+            rule "probe" {
+                when ph == 1
+                ph = 2
+            }
+            """;
+
+        var variables = Assert.IsType<JsonArray>(Compile(source)["variables"]);
+
+        // Three written rows and three generated ones are indistinguishable: the document carries the rows, never
+        // the loop that produced them.
+        Assert.Equal(3, variables.Count);
+        Assert.Equal(
+            ["speed0", "speed1", "speed2"],
+            variables.OfType<JsonObject>().Select(row => (row["name"]?.GetValue<string>() ?? string.Empty)).ToArray());
+        Assert.Equal(
+            [4L, 9L, 16L],
+            variables.OfType<JsonObject>().Select(row => (row["initial"]?.GetValue<long>() ?? 0L)).ToArray());
+    }
+
+    [Fact]
+    public void TestAForGeneratesOneRulePerElementAndBindsItsItemAsAConstant() {
+        const string source = """
+            schema: "puck.cartridge.v1"
+            target: "cgb"
+
+            for phase in [3, 5] {
+                rule "advance" {
+                    when ph == phase
+                    ph = phase
+                }
+            }
+            """;
+
+        var rules = Assert.IsType<JsonArray>(Compile(source)["rules"]);
+
+        Assert.Equal(2, rules.Count);
+
+        for (var index = 0; (index < rules.Count); ++index) {
+            var rule = Assert.IsType<JsonObject>(rules[index]);
+            var expected = ((index == 0) ? 3 : 5);
+            var gate = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(rule["when"])[0]);
+            var step = Assert.IsType<JsonObject>(Assert.IsType<JsonArray>(rule["body"])[0]);
+
+            // The bound name is a compile-time value, so it lands as a constant operand. Lowering it as a machine
+            // variable named `phase` would compile, run, and read whatever byte happened to live there.
+            Assert.Equal(expected, Assert.IsType<JsonObject>(gate["right"])["constant"]?.GetValue<int>());
+            Assert.Equal(expected, Assert.IsType<JsonObject>(step["value"])["constant"]?.GetValue<int>());
+        }
+    }
+
+    [Fact]
+    public void TestAStatementWithNoCartridgeMeaningIsRefused() {
+        const string source = """
+            schema: "puck.cartridge.v1"
+            target: "cgb"
+
+            solid
+
+            rule "probe" {
+                when ph == 1
+                ph = 2
+            }
+            """;
+
+        var diagnostics = new DiagnosticBag();
+        var document = PuckParser.ParseDocumentWithDiagnostics(source: source, diagnostics: diagnostics).Value;
+
+        Assert.NotNull(document);
+
+        CartridgeDocumentEmitter.LowerWithDiagnostics(document: document, diagnostics: diagnostics);
+
+        // Dropping it silently is the failure this refusal exists to prevent: a misspelled row keyword would lose
+        // the row and everything nested in it without a word.
+        var refusal = Assert.Single(diagnostics, d => d.Message.Contains("no place in a cartridge document", StringComparison.Ordinal));
+
+        Assert.Equal(PuckDiagnosticCodes.SemanticValidation, refusal.Code);
+        Assert.Contains("solid", refusal.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -438,7 +438,7 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     break;
-                case WorldCameraProgramOp.Fov fov:
+                case WorldCameraProgramOp.FieldOfView fov:
                     if (seenFov) {
                         errors.Add(item: $"{opPath} is a second 'fov' op — at most one is admitted.");
                     }
@@ -475,7 +475,7 @@ public static partial class WorldDefinitionValidator {
                     );
 
                     break;
-                case WorldCameraProgramOp.Select select:
+                case WorldCameraProgramOp.SelectProgram select:
                     if (seenSelect) {
                         errors.Add(item: $"{opPath} is a second 'select' op — at most one is admitted.");
                     }

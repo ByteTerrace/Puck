@@ -295,8 +295,10 @@ public sealed record WorldHostDefaults(
     int ExitAfterSeconds,
     bool RayQuery,
     bool Timing,
-    string? Genlock,
-    string? Listen,
+    // OPTIONAL: both are documented as null-by-default (loopback-only, no genlock), so absence is the ordinary
+    // case and saying so with a default is what keeps a world document from spelling the absence out.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Genlock = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Listen = null,
     string? Authority = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldBackendPreference? Backend = null,
     // OPTIONAL — the authored-randomness facet over Backend above (see the param docs). XOR-BY-PRESENCE against it:

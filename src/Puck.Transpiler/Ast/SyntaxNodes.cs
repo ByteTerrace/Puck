@@ -147,6 +147,8 @@ public sealed record TemplateParameterNode(
 /// <param name="Length">The character length of the node span.</param>
 /// <param name="Line">The 1-based line number in source text.</param>
 /// <param name="Column">The 1-based column number in source text.</param>
+/// <param name="NameExpression">An interpolated name, when the header wrote one instead of a literal; only a
+/// lowering scope can resolve it, so <see cref="Name"/> stays null until then.</param>
 public sealed record BlockNode(
     string Identifier,
     string? Name,
@@ -155,7 +157,8 @@ public sealed record BlockNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,
-    int Column = 1
+    int Column = 1,
+    ExpressionNode? NameExpression = null
 ) : StatementNode(Offset, Length, Line, Column);
 
 /// <summary>A key-value property assignment: <c>name: expression</c> or <c>name = expression</c>.</summary>
@@ -311,6 +314,45 @@ public sealed record UnaryExpressionNode(
     int Column = 1
 ) : ExpressionNode(Offset, Length, Line, Column);
 
+/// <summary><c>for item in sequence { … }</c>, or <c>for (item, index) in sequence { … }</c> — a COMPILE-TIME
+/// expansion whose body statements are emitted once per element, in place. Distinct from a cartridge rule's
+/// <c>repeat</c>, which is a loop the machine itself runs.</summary>
+/// <param name="Item">The name bound to each element.</param>
+/// <param name="Index">The name bound to each element's ordinal, or <see langword="null"/>.</param>
+/// <param name="Sequence">The expression yielding the array to walk.</param>
+/// <param name="Body">The statements emitted per element.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record ForStatementNode(
+    string Item,
+    string? Index,
+    ExpressionNode Sequence,
+    IReadOnlyList<StatementNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : StatementNode(Offset, Length, Line, Column);
+
+/// <summary>An index read: <c>target[index]</c>. An array takes a whole-number index, an object takes a string
+/// key.</summary>
+/// <param name="Target">The indexed expression.</param>
+/// <param name="Index">The index or key.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record IndexExpressionNode(
+    ExpressionNode Target,
+    ExpressionNode Index,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(Offset, Length, Line, Column);
+
 /// <summary>A lambda: <c>item =&gt; expression</c>, or <c>(running, item) =&gt; expression</c>. It is an argument to
 /// an array builtin and nothing else — the language has no first-class functions, and a lambda is evaluated while
 /// lowering rather than kept in the document.</summary>
@@ -421,3 +463,31 @@ public sealed record ErrorStatementNode(
     int Column = 1
 ) : StatementNode(Offset, Length, Line, Column);
 
+
+/// <summary>One piece of an interpolated string.</summary>
+public abstract record InterpolationSegment {
+    private protected InterpolationSegment() {
+    }
+
+    /// <summary>Text carried through as written.</summary>
+    /// <param name="Text">The literal run, with <c>{{</c>/<c>}}</c> already folded to one brace.</param>
+    public sealed record Literal(string Text) : InterpolationSegment;
+
+    /// <summary>A <c>{…}</c> hole, evaluated and formatted where it stands.</summary>
+    /// <param name="Expression">The hole's expression.</param>
+    public sealed record Hole(ExpressionNode Expression) : InterpolationSegment;
+}
+
+/// <summary>A <c>$"…"</c> or <c>$"""…"""</c> string, whose holes are evaluated while lowering.</summary>
+/// <param name="Segments">The literal runs and holes, in written order.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record InterpolatedStringNode(
+    IReadOnlyList<InterpolationSegment> Segments,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(Offset, Length, Line, Column);

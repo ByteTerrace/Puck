@@ -3,6 +3,8 @@ using Puck.HumbleGamingBrick;
 using Puck.HumbleGamingBrick.Forge;
 using Puck.HumbleGamingBrick.Forge.Framework;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers battery-backed state reaching the cartridge's save window and coming back.</summary>
@@ -23,7 +25,7 @@ public sealed class CartridgeSaveTests {
                 Once(phase: 0, body: [
                     new CartridgeStatement(Kind: "save"),
                     Set(target: "counter", value: 99),
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "table", Index: new CartridgeValue(Constant: 1)), Operation: "set", Value: new CartridgeValue(Constant: 200)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Array: "table", Index: new CartridgeValue(Constant: 1)), Operation: null, Value: new CartridgeValue(Constant: 200)),
                 ]),
                 Once(phase: 1, body: [new CartridgeStatement(Kind: "load")]),
             ],
@@ -57,11 +59,11 @@ public sealed class CartridgeSaveTests {
     // Runs its body on the frame the phase counter names, then advances it.
     private static CartridgeRule Once(int phase, CartridgeStatement[] body) => new(
         Name: $"phase{phase}",
-        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "eq", Right: new CartridgeValue(Constant: phase))],
+        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: phase))],
         Body: [.. body, Set(target: "phase", value: phase + 1)]);
 
     private static CartridgeStatement Set(string target, int value) =>
-        new(Kind: "set", Target: new CartridgeTarget(Variable: target), Operation: "set", Value: new CartridgeValue(Constant: value));
+        new(Kind: "set", Target: new CartridgeTarget(Variable: target), Operation: null, Value: new CartridgeValue(Constant: value));
 
     private sealed class SaveProbe : IDisposable {
         private readonly AgbVerifyMachineDriver? m_agb;

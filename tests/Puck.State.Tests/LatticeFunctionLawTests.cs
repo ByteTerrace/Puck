@@ -59,17 +59,17 @@ public sealed class LatticeFunctionLawTests {
     [InlineData(1, 1, 1, 1)]
     [InlineData(3, 5, 1, 15)]
     public void GcdAndLcmFollowTheMagnitudes(long a, long b, long gcd, long lcm) {
-        Assert.Equal(gcd, Eval($"gcd({a}, {b})"));
-        Assert.Equal(lcm, Eval($"lcm({a}, {b})"));
-        Assert.Equal(a.GreatestCommonDivisor(other: b), Eval($"gcd({a}, {b})"));
+        Assert.Equal(gcd, Eval($"greatestCommonDivisor({a}, {b})"));
+        Assert.Equal(lcm, Eval($"leastCommonMultiple({a}, {b})"));
+        Assert.Equal(a.GreatestCommonDivisor(other: b), Eval($"greatestCommonDivisor({a}, {b})"));
     }
 
     [Fact]
     public void CoprimeStepsHaveNoInteriorLatticePoint() {
-        Assert.Equal(1L, Eval("gcd(3, 5)"));
-        Assert.Equal(3L, Eval("gcd(6, 9)")); // two interior points on the (6, 9) segment
-        Assert.False(TryEval("lcm(4611686018427387904, 4611686018427387903)"));
-        Assert.False(TryEval("gcd(-9223372036854775807 - 1, 2)"));
+        Assert.Equal(1L, Eval("greatestCommonDivisor(3, 5)"));
+        Assert.Equal(3L, Eval("greatestCommonDivisor(6, 9)")); // two interior points on the (6, 9) segment
+        Assert.False(TryEval("leastCommonMultiple(4611686018427387904, 4611686018427387903)"));
+        Assert.False(TryEval("greatestCommonDivisor(-9223372036854775807 - 1, 2)"));
     }
 
     [Theory]
@@ -79,8 +79,8 @@ public sealed class LatticeFunctionLawTests {
     [InlineData(0, 14, 0)]
     [InlineData(7, -14, -7)]
     public void ModIsFloored(long a, long m, long expected) {
-        Assert.Equal(expected, Eval($"mod({a}, {m})"));
-        Assert.Equal(a.FloorModulo(modulus: m), Eval($"mod({a}, {m})"));
+        Assert.Equal(expected, Eval($"remainder({a}, {m})"));
+        Assert.Equal(a.FloorModulo(modulus: m), Eval($"remainder({a}, {m})"));
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public sealed class LatticeFunctionLawTests {
         Assert.Equal(3L, Eval("cycleDistance(1, 12, 14)"));
         Assert.Equal(7L, Eval("cycleDistance(0, 7, 14)"));
         Assert.Equal(0L, Eval("cycleDistance(5, 5, 14)"));
-        Assert.False(TryEval("mod(1, 0)"));
+        Assert.False(TryEval("remainder(1, 0)"));
         Assert.False(TryEval("cycleForward(0, 1, 0)"));
         Assert.False(TryEval("cycleDistance(0, 1, -14)"));
     }
@@ -109,18 +109,18 @@ public sealed class LatticeFunctionLawTests {
 
     [Fact]
     public void SubsetsRankColexicographicallyAsBitmasks() {
-        Assert.Equal(2598960L, Eval("choose(52, 5)"));
-        Assert.Equal(1L, Eval("choose(7, 0)"));
-        Assert.Equal(0L, Eval("choose(3, 5)"));
+        Assert.Equal(2598960L, Eval("binomialCoefficient(52, 5)"));
+        Assert.Equal(1L, Eval("binomialCoefficient(7, 0)"));
+        Assert.Equal(0L, Eval("binomialCoefficient(3, 5)"));
         Assert.Equal(2432902008176640000L, Eval("factorial(20)"));
         Assert.False(TryEval("factorial(21)"));
-        Assert.False(TryEval("choose(-1, 0)"));
-        Assert.False(TryEval("choose(70, 35)"));                       // exceeds 2^63
+        Assert.False(TryEval("binomialCoefficient(-1, 0)"));
+        Assert.False(TryEval("binomialCoefficient(70, 35)"));                       // exceeds 2^63
 
         // Every 3-subset of 0..7 round-trips through its rank; subsetMember reads the subset the mask spells.
         for (var rank = 0L; rank < 56L; rank++) {
             var mask = Eval($"subsetAt(8, 3, {rank})");
-            Assert.Equal(3L, Eval($"popCount({mask})"));
+            Assert.Equal(3L, Eval($"setBitCount({mask})"));
             Assert.Equal(rank, Eval($"subsetRank(8, {mask})"));
             for (var index = 0; index < 3; index++) {
                 var element = Eval($"subsetMember(8, 3, {rank}, {index})");
@@ -133,7 +133,7 @@ public sealed class LatticeFunctionLawTests {
         Assert.False(TryEval("subsetRank(8, 256)"));                      // bit 8 is outside 0..7
         Assert.False(TryEval("subsetAt(8, 3, 56)"));
         Assert.True(TryEval("subsetRank(64, -1)"));                       // the full word is a 64-subset of 0..63
-        // A poker hand's identity: a 5-card mask over 52 ranks below choose(52, 5).
+        // A poker hand's identity: a 5-card mask over 52 ranks below binomialCoefficient(52, 5).
         Assert.True(Eval("subsetRank(52, (1 << 0) | (1 << 13) | (1 << 26) | (1 << 39) | (1 << 51))") < 2598960L);
     }
 
@@ -161,12 +161,12 @@ public sealed class LatticeFunctionLawTests {
         long[] first = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29];
 
         for (var index = 0; index < first.Length; index++) {
-            Assert.Equal(first[index], Eval($"prime({index})"));
+            Assert.Equal(first[index], Eval($"primeAt({index})"));
             Assert.Equal(1L, Eval($"isPrime({first[index]})"));
         }
-        Assert.Equal(1619L, Eval("prime(255)"));
-        Assert.False(TryEval("prime(256)"));
-        Assert.False(TryEval("prime(-1)"));
+        Assert.Equal(1619L, Eval("primeAt(255)"));
+        Assert.False(TryEval("primeAt(256)"));
+        Assert.False(TryEval("primeAt(-1)"));
         Assert.Equal(0L, Eval("isPrime(0)"));
         Assert.Equal(0L, Eval("isPrime(1)"));
         Assert.Equal(0L, Eval("isPrime(-7)"));
@@ -174,9 +174,9 @@ public sealed class LatticeFunctionLawTests {
         Assert.Equal(1L, Eval("isPrime(4294967311)"));          // the first prime above 2^32 takes the 64-bit decider
         Assert.Equal(0L, Eval("isPrime(4294967297)"));          // 641 · 6700417
         Assert.Equal(1L, Eval("isPrime(9223372036854775783)")); // the largest prime below 2^63
-        // A Gödel multiset: wood, stone, iron as exponents of prime(0..2); presence is divisibility.
-        Assert.Equal(1L, Eval("(prime(0) * prime(0) * prime(2)) % prime(2) == 0"));
-        Assert.Equal(0L, Eval("(prime(0) * prime(0) * prime(2)) % prime(1) == 0"));
+        // A Gödel multiset: wood, stone, iron as exponents of primeAt(0..2); presence is divisibility.
+        Assert.Equal(1L, Eval("(primeAt(0) * primeAt(0) * primeAt(2)) % primeAt(2) == 0"));
+        Assert.Equal(0L, Eval("(primeAt(0) * primeAt(0) * primeAt(2)) % primeAt(1) == 0"));
     }
 
     [Fact]

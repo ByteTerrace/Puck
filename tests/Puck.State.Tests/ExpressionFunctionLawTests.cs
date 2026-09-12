@@ -60,8 +60,8 @@ public sealed class ExpressionFunctionLawTests {
         Assert.Equal(x, Eval($"pairX({pair})"));
         Assert.Equal(y, Eval($"pairY({pair})"));
         Assert.Equal(Eval($"pair({y}, {x})"), Eval($"pairSwap({pair})"));
-        Assert.Equal(Math.Max(x, y), Eval($"pairMax({pair})"));
-        Assert.Equal(Math.Min(x, y), Eval($"pairMin({pair})"));
+        Assert.Equal(Math.Max(x, y), Eval($"pairMaximum({pair})"));
+        Assert.Equal(Math.Min(x, y), Eval($"pairMinimum({pair})"));
         Assert.Equal(x + y, Eval($"pairSum({pair})"));
         Assert.Equal(Math.Abs(x - y), Eval($"pairDifference({pair})"));
         if (Math.Max(x, y) < 1_000_000L) {
@@ -86,12 +86,12 @@ public sealed class ExpressionFunctionLawTests {
     [InlineData(1234L, 4321L)]
     [InlineData(2_147_483_647L, 2_147_483_647L)]
     public void MortonCodesRoundTrip(long x, long y) {
-        var code = Eval($"morton({x}, {y})");
+        var code = Eval($"mortonIndex({x}, {y})");
 
         Assert.Equal((long)((uint)x).BitwisePair<uint, ulong>(other: ((uint)y)), code);
         Assert.Equal(x, Eval($"mortonX({code})"));
         Assert.Equal(y, Eval($"mortonY({code})"));
-        Assert.False(TryEval("morton(2147483648, 0)", out _));
+        Assert.False(TryEval("mortonIndex(2147483648, 0)", out _));
     }
 
     [Theory]
@@ -101,7 +101,7 @@ public sealed class ExpressionFunctionLawTests {
     [InlineData(8, 200, 17)]
     [InlineData(31, 2_147_483_647L, 0L)]
     public void HilbertDistancesRoundTrip(int order, long x, long y) {
-        var distance = Eval($"hilbert({order}, {x}, {y})");
+        var distance = Eval($"hilbertIndex({order}, {x}, {y})");
 
         Assert.Equal((long)HilbertCurve.Encode(order: order, x: ((uint)x), y: ((uint)y)), distance);
         Assert.Equal(x, Eval($"hilbertX({order}, {distance})"));
@@ -114,12 +114,12 @@ public sealed class ExpressionFunctionLawTests {
 
         for (var x = 0; x < 8; x++) {
             for (var y = 0; y < 8; y++) {
-                Assert.True(seen.Add(item: Eval($"hilbert(3, {x}, {y})")));
+                Assert.True(seen.Add(item: Eval($"hilbertIndex(3, {x}, {y})")));
             }
         }
         Assert.Equal(64, seen.Count);
-        Assert.False(TryEval("hilbert(0, 0, 0)", out _));
-        Assert.False(TryEval("hilbert(3, 8, 0)", out _));
+        Assert.False(TryEval("hilbertIndex(0, 0, 0)", out _));
+        Assert.False(TryEval("hilbertIndex(3, 8, 0)", out _));
         Assert.False(TryEval("hilbertX(3, 64)", out _));
     }
 
@@ -130,7 +130,7 @@ public sealed class ExpressionFunctionLawTests {
     [InlineData(4, 4)]
     [InlineData(-5, -1)]
     public void HexIndicesRoundTripThroughTheEisensteinBasis(int q, int r) {
-        var index = Eval($"hex({q}, {r})");
+        var index = Eval($"hexIndex({q}, {r})");
         var expected = HexagonalIndex.FromCoordinate(coordinate: new HexagonalCoordinate(Q: q, R: r));
 
         Assert.Equal(expected.Value, index);
@@ -142,10 +142,10 @@ public sealed class ExpressionFunctionLawTests {
         Assert.Equal(index, Eval($"hexRotate({index}, 6)"));
         Assert.Equal(index, Eval($"hexMirror(hexMirror({index}))"));
         Assert.Equal(index, Eval($"hexSwap(hexSwap({index}))"));
-        Assert.Equal(Eval($"hexAdd({index}, hex(2, -1))"), Eval($"hexTranslate({index}, 2, -1)"));
-        Assert.Equal(index, Eval($"hexAdd(hex(2, -1), hexSubtract({index}, hex(2, -1)))"));
+        Assert.Equal(Eval($"hexAdd({index}, hexIndex(2, -1))"), Eval($"hexTranslate({index}, 2, -1)"));
+        Assert.Equal(index, Eval($"hexAdd(hexIndex(2, -1), hexSubtract({index}, hexIndex(2, -1)))"));
         Assert.Equal(index, Eval($"hexMultiply({index}, 1)"));
-        Assert.Equal(Eval($"hex({q * 3}, {r * 3})"), Eval($"hexScale({index}, 3)"));
+        Assert.Equal(Eval($"hexIndex({q * 3}, {r * 3})"), Eval($"hexScale({index}, 3)"));
     }
 
     [Fact]
@@ -176,30 +176,30 @@ public sealed class ExpressionFunctionLawTests {
 
     [Fact]
     public void RootsAndTrigonometryFollowTheirKinds() {
-        Assert.Equal(4L, Eval("sqrt(17)"));
-        Assert.Equal(0L, Eval("sqrt(0)"));
-        Assert.False(TryEval("sqrt(0 - 1)", out _));
-        Assert.Equal(FixedQ4816.FromInteger(value: 2L).Value, Eval("sqrt(4)", kind: CellKind.Fixed));
-        Assert.Equal(0L, Eval("sin(0)", kind: CellKind.Fixed));
-        Assert.Equal(FixedQ4816.One.Value, Eval("cos(0)", kind: CellKind.Fixed));
-        Assert.Equal(FixedQ4816.Sin(angle: FixedQ4816.FromDouble(value: 1.5)).Value, Eval("sin(1.5)", kind: CellKind.Fixed));
-        Assert.Throws<RuleException>(() => Compile(text: "sin(1)", kind: CellKind.Int));
+        Assert.Equal(4L, Eval("squareRoot(17)"));
+        Assert.Equal(0L, Eval("squareRoot(0)"));
+        Assert.False(TryEval("squareRoot(0 - 1)", out _));
+        Assert.Equal(FixedQ4816.FromInteger(value: 2L).Value, Eval("squareRoot(4)", kind: CellKind.Fixed));
+        Assert.Equal(0L, Eval("sine(0)", kind: CellKind.Fixed));
+        Assert.Equal(FixedQ4816.One.Value, Eval("cosine(0)", kind: CellKind.Fixed));
+        Assert.Equal(FixedQ4816.Sin(angle: FixedQ4816.FromDouble(value: 1.5)).Value, Eval("sine(1.5)", kind: CellKind.Fixed));
+        Assert.Throws<RuleException>(() => Compile(text: "sine(1)", kind: CellKind.Int));
         Assert.Throws<RuleException>(() => Compile(text: "pair(1, 2)", kind: CellKind.Fixed));
         Assert.Throws<RuleException>(() => Compile(text: "replicationMask(8)", kind: CellKind.Fixed));
         Assert.Throws<RuleException>(() => Compile(text: "repeatBits(1, 8)", kind: CellKind.Fixed));
         Assert.False(ExpressionSpelling.TryParse(text: "replicationMask(8, 8)", tokens: out _, error: out _));
         Assert.False(ExpressionSpelling.TryParse(text: "repeatBits(1)", tokens: out _, error: out _));
-        Assert.False(ExpressionSpelling.TryParse(text: "hilbert(1, 2)", tokens: out _, error: out _));
+        Assert.False(ExpressionSpelling.TryParse(text: "hilbertIndex(1, 2)", tokens: out _, error: out _));
     }
 
     [Theory]
     [InlineData("pair(a, b)")]
     [InlineData("replicationMask(width)")]
     [InlineData("repeatBits(pattern, width)")]
-    [InlineData("hexNeighbor(hex(q, r), 3)")]
+    [InlineData("hexNeighbor(hexIndex(q, r), 3)")]
     [InlineData("layerOffset(i, 6, 6, 1)")]
-    [InlineData("hilbert(3, x, y) + mortonX(m)")]
-    [InlineData("sqrt(a * a + b * b)")]
+    [InlineData("hilbertIndex(3, x, y) + mortonX(m)")]
+    [InlineData("squareRoot(a * a + b * b)")]
     public void FunctionSpellingsPrintBackToThemselves(string text) {
         Assert.True(ExpressionSpelling.TryParse(text: text, tokens: out var tokens, error: out var error), error);
         Assert.Equal(text, ExpressionSpelling.Print(tokens: tokens));

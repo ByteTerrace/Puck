@@ -49,9 +49,9 @@ public abstract record WorldCameraSubject {
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Path), typeDiscriminator: "path")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Dynamics), typeDiscriminator: "dynamics")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.ClampPitch), typeDiscriminator: "clampPitch")]
-[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Fov), typeDiscriminator: "fov")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.FieldOfView), typeDiscriminator: "fieldOfView")]
 [System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Blend), typeDiscriminator: "blend")]
-[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.Select), typeDiscriminator: "select")]
+[System.Text.Json.Serialization.JsonDerivedType(typeof(WorldCameraProgramOp.SelectProgram), typeDiscriminator: "selectProgram")]
 [System.Text.Json.Serialization.JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldCameraProgramOp {
     private WorldCameraProgramOp() {
@@ -64,12 +64,12 @@ public abstract record WorldCameraProgramOp {
         Blend => "blend",
         ClampPitch => "clampPitch",
         Dynamics => "dynamics",
-        Fov => "fov",
+        FieldOfView => "fieldOfView",
         LookAt => "lookAt",
         Offset => "offset",
         Orbit => "orbit",
         Path => "path",
-        Select => "select",
+        SelectProgram => "selectProgram",
         _ => "unknown",
     });
 
@@ -98,7 +98,7 @@ public abstract record WorldCameraProgramOp {
     /// when <paramref name="Subject"/> is <see langword="null"/>.</param>
     public sealed record LookAt(WorldCameraSubject? Subject, DocumentVector3? TargetOffset = null, bool WorldAxes = false, float FocusDistance = 6f) : WorldCameraProgramOp;
     /// <summary>Orbits the eye about its pivot. <paramref name="Yaw"/> and <paramref name="Pitch"/> are live-bindable
-    /// like <see cref="Fov"/>'s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell
+    /// like <see cref="FieldOfView"/>'s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell
     /// changes — look behind is <c>state.look.behind</c> flipping between 0 and π — while the seat's facing (what
     /// steering and movement resolve against) is untouched, because the facing never includes the rig's offsets.</summary>
     /// <param name="Distance">The finite positive orbit distance.</param>
@@ -114,7 +114,7 @@ public abstract record WorldCameraProgramOp {
     /// <see cref="LookAt"/> with no subject of its own looks ahead along it; a following <see cref="Orbit"/> pivots
     /// at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the
     /// tangent — it never reads the subject's orientation. A dollied eye is <c>path</c> + <see cref="LookAt"/> +
-    /// <see cref="Fov"/>; a dollied pivot is <c>path</c> + <see cref="Orbit"/> with an authored yaw that already
+    /// <see cref="FieldOfView"/>; a dollied pivot is <c>path</c> + <see cref="Orbit"/> with an authored yaw that already
     /// accounts for the curve's own heading. Composes with <see cref="Dynamics"/>'s boom follower untouched.
     /// Carries no rate field: a constant-rate dolly binds <see cref="Fraction"/> to a <c>state</c> row carrying the
     /// <c>advance</c> trait (base + rate·ticks) rather than duplicating a rate spelling here.</summary>
@@ -138,7 +138,7 @@ public abstract record WorldCameraProgramOp {
     /// binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At
     /// most one per program.</summary>
     /// <param name="FieldOfViewRadians">The field of view.</param>
-    public sealed record Fov(BindableScalar FieldOfViewRadians) : WorldCameraProgramOp;
+    public sealed record FieldOfView(BindableScalar FieldOfViewRadians) : WorldCameraProgramOp;
     /// <summary>Evaluates two other authored programs by name and linearly interpolates their resolved eye, target,
     /// and field of view — the whole document's camera-program table (every <c>cameras[].rig</c> plus
     /// <c>views.seatRig</c>/<c>views.cameraRig</c>) is the namespace <paramref name="A"/>/<paramref name="B"/>
@@ -159,9 +159,9 @@ public abstract record WorldCameraProgramOp {
     /// <param name="Cases">The candidate programs, keyed by <see cref="WorldCameraSelectCase.Value"/>. At most one
     /// case per value.</param>
     /// <param name="Default">The program resolved when no case's value matches <paramref name="Key"/>.</param>
-    public sealed record Select(BindableScalar Key, IReadOnlyList<WorldCameraSelectCase> Cases, string Default) : WorldCameraProgramOp;
+    public sealed record SelectProgram(BindableScalar Key, IReadOnlyList<WorldCameraSelectCase> Cases, string Default) : WorldCameraProgramOp;
 }
-/// <summary>One <see cref="WorldCameraProgramOp.Select"/> candidate: the program named by <see cref="Program"/> wins
+/// <summary>One <see cref="WorldCameraProgramOp.SelectProgram"/> candidate: the program named by <see cref="Program"/> wins
 /// when the op's key rounds to <see cref="Value"/>.</summary>
 /// <param name="Value">The matching key value.</param>
 /// <param name="Program">The candidate program's name — the same blend namespace <see cref="WorldCameraProgramOp.Blend"/>
@@ -184,8 +184,8 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
     public WorldCameraProgramOp.Blend? BlendOp => FirstOrDefault<WorldCameraProgramOp.Blend>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.ClampPitch"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.ClampPitch? ClampPitchOp => FirstOrDefault<WorldCameraProgramOp.ClampPitch>();
-    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Fov"/> op, or <see langword="null"/>.</summary>
-    public WorldCameraProgramOp.Fov? FovOp => FirstOrDefault<WorldCameraProgramOp.Fov>();
+    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.FieldOfView"/> op, or <see langword="null"/>.</summary>
+    public WorldCameraProgramOp.FieldOfView? FovOp => FirstOrDefault<WorldCameraProgramOp.FieldOfView>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.LookAt"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.LookAt? LookAtOp => FirstOrDefault<WorldCameraProgramOp.LookAt>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Offset"/> op, or <see langword="null"/>.</summary>
@@ -196,8 +196,8 @@ public sealed record WorldCameraProgram(string Name, string Version, IReadOnlyLi
     public WorldCameraProgramOp.Path? PathOp => FirstOrDefault<WorldCameraProgramOp.Path>();
     /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Dynamics"/> op, or <see langword="null"/>.</summary>
     public WorldCameraProgramOp.Dynamics? DynamicsOp => FirstOrDefault<WorldCameraProgramOp.Dynamics>();
-    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.Select"/> op, or <see langword="null"/>.</summary>
-    public WorldCameraProgramOp.Select? SelectOp => FirstOrDefault<WorldCameraProgramOp.Select>();
+    /// <summary>Gets the program's <see cref="WorldCameraProgramOp.SelectProgram"/> op, or <see langword="null"/>.</summary>
+    public WorldCameraProgramOp.SelectProgram? SelectOp => FirstOrDefault<WorldCameraProgramOp.SelectProgram>();
 
     private TOp? FirstOrDefault<TOp>() where TOp : WorldCameraProgramOp {
         var operations = Operations;

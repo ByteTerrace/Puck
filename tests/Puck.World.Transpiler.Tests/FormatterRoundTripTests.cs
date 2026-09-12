@@ -73,7 +73,7 @@ public class FormatterRoundTripTests {
         var formatted = PuckFormatter.Format(decompiled);
 
         var firstLine = formatted.Split('\n')[0];
-        Assert.Equal("// Decompiled from a canonical Puck world document — a one-time import.", firstLine);
+        Assert.Equal("// Bootstrapped from a Puck world document. The '.puck' source is canonical: edit it and", firstLine);
     }
 
     private static JsonNode CompileToJson(string source, string fullPath, string relativePath) {

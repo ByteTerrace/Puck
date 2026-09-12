@@ -10,15 +10,15 @@ public sealed class WorldExpressionConverterLawTests {
     [Fact]
     public void TheConverterReadsBothSpellingsAndWritesEachBackInItsOwn() {
         var info = WorldJsonContext.Default.ValueExpression;
-        var fromText = JsonSerializer.Deserialize("\"hp - min(damage, hp)\"", info)!;
+        var fromText = JsonSerializer.Deserialize("\"hp - minimum(damage, hp)\"", info)!;
         var fromTokens = JsonSerializer.Deserialize(
             "{\"tokens\":[{\"$type\":\"state\",\"name\":\"hp\"},{\"$type\":\"state\",\"name\":\"damage\"},{\"$type\":\"state\",\"name\":\"hp\"},{\"$type\":\"min\"},{\"$type\":\"subtract\"}]}",
             info
         )!;
         Assert.Equal(fromTokens.Tokens, fromText.Tokens);
-        Assert.Equal("hp - min(damage, hp)", fromText.Text);
+        Assert.Equal("hp - minimum(damage, hp)", fromText.Text);
         Assert.Null(fromTokens.Text);
-        Assert.Equal("\"hp - min(damage, hp)\"", JsonSerializer.Serialize(fromText, info));
+        Assert.Equal("\"hp - minimum(damage, hp)\"", JsonSerializer.Serialize(fromText, info));
         Assert.Contains("\"tokens\": [", JsonSerializer.Serialize(fromTokens, info), StringComparison.Ordinal);
         Assert.Equal(fromTokens.Tokens, JsonSerializer.Deserialize(JsonSerializer.Serialize(fromTokens, info), info)!.Tokens);
 

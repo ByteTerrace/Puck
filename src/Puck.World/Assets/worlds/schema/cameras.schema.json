@@ -14,10 +14,6 @@
         "description": "The camera\u0027s stable name \u2014 the handle a View screen / layout slot samples by.",
         "type": "string"
       },
-      "anchor": {
-        "$ref": "./common.schema.json#/$defs/WorldAnchor",
-        "description": "What the camera rides, or null for the world reference frame (or for Anchors to decide)."
-      },
       "rig": {
         "$ref": "./common.schema.json#/$defs/WorldCameraProgram",
         "description": "The independent local motion, aim, and lens axes."
@@ -29,6 +25,11 @@
       "renderHeight": {
         "description": "The offscreen render height in pixels.",
         "type": "integer"
+      },
+      "anchor": {
+        "$ref": "./common.schema.json#/$defs/WorldAnchor",
+        "description": "What the camera rides, or null for the world reference frame (or for Anchors to decide).",
+        "default": null
       },
       "anchors": {
         "description": "Ranked anchor candidates, first holding wins each frame \u2014 a portrait camera that rides the speaking character while they speak and the seat\u0027s own avatar otherwise. Refused beside Anchor; a single unconditional anchor is Anchor.",
@@ -64,7 +65,6 @@
     },
     "required": [
       "name",
-      "anchor",
       "rig",
       "renderWidth",
       "renderHeight"

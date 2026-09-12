@@ -1,5 +1,7 @@
 using Puck.Maths;
 
+using Puck.State;
+
 namespace Puck.GamingBricks.Forge;
 
 /// <summary>
@@ -73,7 +75,7 @@ public static class CartridgeCost {
             guards[index] = Guard(rule: rules[index]);
         }
 
-        var exclusive = ExclusiveGuards(rules: rules, guards: guards);
+        var exclusive = ExclusiveGuards(rules: rules, guards: guards, scene: document.Scene);
         for (var index = 0; index < rules.Length; ++index) {
             if (guards[index].Name is not { } name || !exclusive.Contains(item: name)) {
                 total = CostBound.Add(left: total, right: bodies[index]);
@@ -111,21 +113,23 @@ public static class CartridgeCost {
     /// <returns>The guard variable's name and the value it must hold, or a null name.</returns>
     /// <remarks>The shape a phase machine's rules take.</remarks>
     public static (string? Name, int Value) Guard(CartridgeRule? rule) =>
-        rule?.When is [{ Kind: "compare", Comparison: "eq", Left.Variable: { } name, Right.Constant: { } value }]
+        rule?.When is [{ Kind: "compare", Comparison: ActionStateComparison.Equal, Left.Variable: { } name, Right.Constant: { } value }]
             ? (name, value)
             : (null, 0);
 
     /// <summary>Returns the guard variables whose values genuinely partition a frame.</summary>
     /// <param name="rules">The document's rules, in evaluation order.</param>
     /// <param name="guards">Each rule's guard, from <see cref="Guard"/>.</param>
+    /// <param name="scene">The document's declared scene variable, or null.</param>
     /// <returns>The names that partition.</returns>
     /// <remarks>
-    /// A guard only partitions if nothing can change it while the rules keyed to it are still being evaluated, so a
-    /// write to it anywhere from the first such rule through the last disqualifies it — including a write by a rule
-    /// that is not itself guarded on it. A write after the last one is what a phase machine's own advance step is,
-    /// and it is harmless.
+    /// An UNDECLARED guard only partitions if nothing can change it while the rules keyed to it are still being
+    /// evaluated, so a write to it anywhere from the first such rule through the last disqualifies it — including a
+    /// write by a rule that is not itself guarded on it. A write after the last one is what a phase machine's own
+    /// advance step is, and it is harmless. The document's declared <c>scene</c> is exempt: the frame compares every
+    /// guard on it against a snapshot taken before any rule runs.
     /// </remarks>
-    public static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards) {
+    public static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards, string? scene = null) {
         var candidates = new HashSet<string>(comparer: StringComparer.Ordinal);
         foreach (var guard in guards) {
             if (guard.Name is { } name) {
@@ -134,6 +138,12 @@ public static class CartridgeCost {
         }
 
         foreach (var name in candidates.ToArray()) {
+            // A DECLARED scene is snapshotted before any rule evaluates and every guard on it compares against that
+            // snapshot, so a mid-frame write cannot let a second scene run: the partition holds wherever the write sits.
+            if (name == scene) {
+                continue;
+            }
+
             var first = Array.FindIndex(array: guards, match: guard => guard.Name == name);
             var last = Array.FindLastIndex(array: guards, match: guard => guard.Name == name);
             for (var index = first; index <= last; ++index) {
@@ -233,11 +243,11 @@ public static class CartridgeCost {
 
     private static CostBound Step(CartridgeStatement statement, CartridgeCostProfile profile) {
         var operation = statement.Operation switch {
-            "set" => CostBound.Known(cycles: profile.StepSet),
-            "add" or "subtract" or "and" or "or" or "xor" => CostBound.Known(cycles: profile.StepArithmetic),
-            "mul" => CostBound.Known(cycles: profile.StepMultiply),
-            "div" or "mod" => CostBound.Known(cycles: profile.StepDivide),
-            "shl" or "shr" => CostBound.Known(cycles: profile.StepShift),
+            null => CostBound.Known(cycles: profile.StepSet),
+            ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.BitAnd or ExpressionOp.BitOr or ExpressionOp.BitXor => CostBound.Known(cycles: profile.StepArithmetic),
+            ExpressionOp.Multiply => CostBound.Known(cycles: profile.StepMultiply),
+            ExpressionOp.Divide or ExpressionOp.Modulo => CostBound.Known(cycles: profile.StepDivide),
+            ExpressionOp.ShiftLeft or ExpressionOp.ShiftRight => CostBound.Known(cycles: profile.StepShift),
             _ => CostBound.Unmodeled(reason: $"Operation '{statement.Operation}' has no measured weight."),
         };
         return CostBound.Add(left: operation, right: CostBound.Add(left: Operand(value: statement.Value, profile: profile), right: Target(target: statement.Target, profile: profile)));

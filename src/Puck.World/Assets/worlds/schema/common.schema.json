@@ -1655,7 +1655,7 @@
       "title": "WorldCameraProgramOpLookAt"
     },
     "WorldCameraProgramOpOrbit": {
-      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
+      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like FieldOfView\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
       "properties": {
         "$type": {
           "const": "orbit"
@@ -1702,7 +1702,7 @@
       "title": "WorldCameraProgramOpOrbit"
     },
     "WorldCameraProgramOpPath": {
-      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B Fov; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
+      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B FieldOfView; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
       "properties": {
         "$type": {
           "const": "path"
@@ -1787,11 +1787,11 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpClampPitch"
     },
-    "WorldCameraProgramOpFov": {
+    "WorldCameraProgramOpFieldOfView": {
       "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
       "properties": {
         "$type": {
-          "const": "fov"
+          "const": "fieldOfView"
         },
         "fieldOfViewRadians": {
           "description": "The field of view.",
@@ -1813,7 +1813,7 @@
         "fieldOfViewRadians"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpFov"
+      "title": "WorldCameraProgramOpFieldOfView"
     },
     "WorldCameraProgramOpBlend": {
       "description": "Evaluates two other authored programs by name and linearly interpolates their resolved eye, target, and field of view \u2014 the whole document\u0027s camera-program table (every cameras[].rig plus views.seatRig/views.cameraRig) is the namespace A/B resolve against. At most one per program; refused when it would create a reference cycle.",
@@ -1854,7 +1854,7 @@
       "title": "WorldCameraProgramOpBlend"
     },
     "WorldCameraSelectCase": {
-      "description": "One Select candidate: the program named by Program wins when the op\u0027s key rounds to Value.",
+      "description": "One SelectProgram candidate: the program named by Program wins when the op\u0027s key rounds to Value.",
       "type": [
         "object",
         "null"
@@ -1882,11 +1882,11 @@
         "$ref": "#/$defs/WorldCameraSelectCase"
       }
     },
-    "WorldCameraProgramOpSelect": {
+    "WorldCameraProgramOpSelectProgram": {
       "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
       "properties": {
         "$type": {
-          "const": "select"
+          "const": "selectProgram"
         },
         "key": {
           "description": "The selecting value \u2014 a literal, or (the intended use) a state.\u003Crow\u003E[.\u003Ckey\u003E] binding \u2014 rounded to the nearest whole number and matched against Cases.",
@@ -1918,7 +1918,7 @@
         "default"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpSelect"
+      "title": "WorldCameraProgramOpSelectProgram"
     },
     "WorldCameraProgramOp": {
       "description": "One instruction in an authored camera program\u0027s ordered op list \u2014 the presentation-side pose algebra bodyMotionPrograms established for sim-side movement, promoted to cameras: an authored rig is an ordered list of these trivial ops rather than a bespoke closed motion/aim union, so a new camera behavior is authored data, never new engine code. This is the AUTHORING vocabulary only: Puck.World.Client.WorldCameraRigCompiler translates it to Puck.SdfVm.Views.SdfCameraOp and resolves each frame\u0027s bindings and subject poses, and Puck.SdfVm.Views.SdfCameraProgramEvaluator \u2014 which parses no document \u2014 walks the result. Floats throughout; presentation carries no fixed-point burden.",
@@ -1952,13 +1952,13 @@
           "$ref": "#/$defs/WorldCameraProgramOpClampPitch"
         },
         {
-          "$ref": "#/$defs/WorldCameraProgramOpFov"
+          "$ref": "#/$defs/WorldCameraProgramOpFieldOfView"
         },
         {
           "$ref": "#/$defs/WorldCameraProgramOpBlend"
         },
         {
-          "$ref": "#/$defs/WorldCameraProgramOpSelect"
+          "$ref": "#/$defs/WorldCameraProgramOpSelectProgram"
         }
       ],
       "title": "WorldCameraProgramOp"
@@ -2063,7 +2063,7 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpClampPitchBare"
     },
-    "WorldCameraProgramOpFovNullable": {
+    "WorldCameraProgramOpFieldOfViewNullable": {
       "description": "Sets the rendered vertical field of view, radians \u2014 a literal, or a state.\u003Crow\u003E[.\u003Ckey\u003E] binding so a world rule can pull focus or frame a moment (decisions in the sim, framing in presentation). At most one per program.",
       "type": [
         "object",
@@ -2090,7 +2090,7 @@
         "fieldOfViewRadians"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpFovBare"
+      "title": "WorldCameraProgramOpFieldOfViewBare"
     },
     "WorldCameraProgramOpLookAtNullable": {
       "description": "Sets the aim target.",
@@ -2168,7 +2168,7 @@
       "title": "WorldCameraProgramOpOffsetBare"
     },
     "WorldCameraProgramOpOrbitNullable": {
-      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like Fov\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
+      "description": "Orbits the eye about its pivot. Yaw and Pitch are live-bindable like FieldOfView\u0027s field of view: a seat rig whose yaw reads a state cell turns the CAMERA when that cell changes \u2014 look behind is state.look.behind flipping between 0 and \u03C0 \u2014 while the seat\u0027s facing (what steering and movement resolve against) is untouched, because the facing never includes the rig\u0027s offsets.",
       "type": [
         "object",
         "null"
@@ -2216,7 +2216,7 @@
       "title": "WorldCameraProgramOpOrbitBare"
     },
     "WorldCameraProgramOpPathNullable": {
-      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B Fov; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
+      "description": "Establishes the CURRENT subject at a point sampled from a named curves row by arc-length fraction, and re-seeds the eye there \u2014 the same subject-seeding role Anchor plays, so at most one of the two may appear in a program, and when present this must be the first operation. The sampled subject\u0027s orientation faces the curve\u0027s own tangent direction at that point. A following Offset with WorldAxes: false (the default) rotates its offset into that tangent frame, and a following LookAt with no subject of its own looks ahead along it; a following Orbit pivots at the traveling point but resolves its own yaw/pitch as literal world-frame angles regardless of the tangent \u2014 it never reads the subject\u0027s orientation. A dollied eye is path \u002B LookAt \u002B FieldOfView; a dollied pivot is path \u002B Orbit with an authored yaw that already accounts for the curve\u0027s own heading. Composes with Dynamics\u0027s boom follower untouched. Carries no rate field: a constant-rate dolly binds Fraction to a state row carrying the advance trait (base \u002B rate\u00B7ticks) rather than duplicating a rate spelling here.",
       "type": [
         "object",
         "null"
@@ -2274,7 +2274,7 @@
       "additionalProperties": false,
       "title": "WorldCameraProgramOpDynamicsBare"
     },
-    "WorldCameraProgramOpSelectNullable": {
+    "WorldCameraProgramOpSelectProgramNullable": {
       "description": "Evaluates exactly one of several other named programs, chosen by a live key \u2014 the state-driven counterpart of Blend\u0027s two-way continuous mix: a rule-advanced integer row selects a whole framing outright rather than easing toward one, so a document can drive which of N stations a single camera program shows without a per-frame console override. The winning program\u0027s eye, target, field of view, and dynamics response pass through unchanged (no lerp). At most one per program; refused when it would create a reference cycle.",
       "type": [
         "object",
@@ -2311,7 +2311,7 @@
         "default"
       ],
       "additionalProperties": false,
-      "title": "WorldCameraProgramOpSelectBare"
+      "title": "WorldCameraProgramOpSelectProgramBare"
     },
     "WorldCameraProgram": {
       "description": "An authored camera program \u2014 the ordered op list a rig resolves through every frame.",
@@ -2342,8 +2342,8 @@
           "description": "Gets the program\u0027s ClampPitch op, or null."
         },
         "fovOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpFovNullable",
-          "description": "Gets the program\u0027s Fov op, or null."
+          "$ref": "#/$defs/WorldCameraProgramOpFieldOfViewNullable",
+          "description": "Gets the program\u0027s FieldOfView op, or null."
         },
         "lookAtOp": {
           "$ref": "#/$defs/WorldCameraProgramOpLookAtNullable",
@@ -2366,8 +2366,8 @@
           "description": "Gets the program\u0027s Dynamics op, or null."
         },
         "selectOp": {
-          "$ref": "#/$defs/WorldCameraProgramOpSelectNullable",
-          "description": "Gets the program\u0027s Select op, or null."
+          "$ref": "#/$defs/WorldCameraProgramOpSelectProgramNullable",
+          "description": "Gets the program\u0027s SelectProgram op, or null."
         }
       },
       "required": [

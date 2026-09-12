@@ -401,7 +401,7 @@ internal static class Fixtures {
                 ),
                 WorldAxes: false
             ),
-            new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0.9599311f)),
+            new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9599311f)),
             new WorldCameraProgramOp.Dynamics(Row: "chase"),
         ]
     );

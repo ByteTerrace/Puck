@@ -725,7 +725,7 @@ public class EmitterSugarTests {
                     transform t = boardCombine(left: "board", operation: Copy, row: "lastLegal")
                     previousInCheck[0] = inCheck[0]
                     previousInCheck[1] = inCheck[1]
-                    enPassantTarget = (abs(move[mover]) == 1) & (abs(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
+                    enPassantTarget = (absolute(move[mover]) == 1) & (absolute(move[to] - move[from]) == 16) ? ((move[from] + move[to]) >> 1) : -1
                     turn = 1 - turn
                     promotionPending[0] = -1
                     promotionPending[1] = -1

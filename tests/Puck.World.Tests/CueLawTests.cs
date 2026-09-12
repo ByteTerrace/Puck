@@ -168,7 +168,7 @@ public sealed class CueLawTests {
                 Effects: [new ActionEffect.SetState(
                     State: MagnitudeRow,
                     Key: "0",
-                    Expression: ValueExpression.Parse(text: $"min({MagnitudeRow}[0] + {step.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, {max.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})")
+                    Expression: ValueExpression.Parse(text: $"minimum({MagnitudeRow}[0] + {step.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)}, {max.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)})")
                 )]
             )],
         };
@@ -182,7 +182,7 @@ public sealed class CueLawTests {
 
         var previous = 0L;
 
-        // At 240 Hz, 60 ticks is 0.25 s — comfortably past ceil(max / step) = 40 charge ticks, so the cell must
+        // At 240 Hz, 60 ticks is 0.25 s — comfortably past ceiling(max / step) = 40 charge ticks, so the cell must
         // have plateaued at max well before this loop ends.
         for (var tick = 0; (tick < 60); tick++) {
             fixture.Step();

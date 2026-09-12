@@ -10,5 +10,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Puck.Abstractions\Puck.Abstractions.csproj" />
     <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+    <!-- The state and rule engine this document row consumes rather than restates: the comparison and opcode
+         vocabularies, and the validated-identifier family. A cartridge's rules ask the same questions of the same
+         shapes a world's rules do, so the spellings are decided in one place and neither can grow an arm the other
+         lacks. The edge points down into Puck.State (whose own closure is Abstractions/Assets/Maths), never back. -->
+    <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,2189 @@
+{
+  "bindingOverlays": [
+    {
+      "document": {
+        "chords": [
+          {
+            "chord": [],
+            "group": "play",
+            "page": {
+              "entries": [
+                {
+                  "channel": "forward",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.w",
+                    "keyboard.arrowUp"
+                  ]
+                },
+                {
+                  "channel": "forward",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.s",
+                    "keyboard.arrowDown"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": -1,
+                  "sources": [
+                    "keyboard.a",
+                    "keyboard.arrowLeft"
+                  ]
+                },
+                {
+                  "channel": "strafe",
+                  "scale": 1,
+                  "sources": [
+                    "keyboard.d",
+                    "keyboard.arrowRight"
+                  ]
+                },
+                {
+                  "command": "player.move.strafe",
+                  "sources": [
+                    "gamepad.leftStick"
+                  ]
+                }
+              ],
+              "id": "base"
+            }
+          }
+        ],
+        "modifiers": [],
+        "version": "puck.bindings.v1"
+      },
+      "id": "hgb-mirror"
+    }
+  ],
+  "bodies": {
+    "capacity": 8,
+    "localSeats": 1,
+    "networkPlayers": 0,
+    "seatSpawns": [
+      "hgb-mirror-arrival"
+    ]
+  },
+  "bodyMotionPrograms": [
+    {
+      "kind": "Motion",
+      "name": "display",
+      "operations": [
+        "CommitPose"
+      ],
+      "version": "puck.body-motion.v1"
+    }
+  ],
+  "cameras": [
+    {
+      "anchor": null,
+      "name": "compare",
+      "renderHeight": 720,
+      "renderWidth": 1280,
+      "rig": {
+        "name": "compare",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.5,
+                -5
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.5,
+                0
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 0.9
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    },
+    {
+      "anchor": null,
+      "name": "diorama",
+      "renderHeight": 576,
+      "renderWidth": 640,
+      "rig": {
+        "name": "diorama",
+        "operations": [
+          {
+            "$type": "anchor",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                28,
+                -366
+              ]
+            }
+          },
+          {
+            "$type": "lookAt",
+            "subject": {
+              "$type": "worldPoint",
+              "point": [
+                0,
+                1.5,
+                -399
+              ]
+            }
+          },
+          {
+            "$type": "fieldOfView",
+            "fieldOfViewRadians": 0.86
+          }
+        ],
+        "version": "puck.camera.v1"
+      }
+    }
+  ],
+  "channels": [
+    {
+      "frame": "Heading",
+      "name": "forward",
+      "role": "MoveAdvance",
+      "shape": "Bipolar"
+    },
+    {
+      "frame": "Heading",
+      "name": "strafe",
+      "role": "MoveStrafe",
+      "shape": "Bipolar"
+    }
+  ],
+  "collision": {
+    "contactSkin": 0.02,
+    "defaultHold": false,
+    "gradientProbe": 0,
+    "gridCellSize": 0,
+    "maxIterations": 4,
+    "maxSlopeDegrees": 60,
+    "requirements": []
+  },
+  "defaultSeatKit": "display",
+  "documentId": "puck-hgb-mirror-v1",
+  "gravity": {
+    "attractors": [],
+    "gravitationalConstant": 0,
+    "isActive": true,
+    "softeningLength": 0.5,
+    "solver": "Pairwise",
+    "uniform": [
+      0,
+      -18,
+      0
+    ]
+  },
+  "host": {
+    "authority": null,
+    "backend": "auto",
+    "exitAfterSeconds": 0,
+    "fullscreen": false,
+    "genlock": null,
+    "height": 720,
+    "journalDepth": 2000,
+    "listen": null,
+    "presentMode": "Immediate",
+    "presentation": "Windowed",
+    "rayQuery": true,
+    "surfaceFormat": "r8g8b8a8",
+    "targetHertz": 60,
+    "timing": false,
+    "width": 1280
+  },
+  "kits": {
+    "rows": [
+      {
+        "bodyContact": "Overlap",
+        "bodyMotionProgram": "display",
+        "collider": null,
+        "mass": 0,
+        "motion": {
+          "facingSnap": false,
+          "holds": [
+            {
+              "bond": "Free",
+              "envelope": {
+                "sinkSpeed": 40
+              },
+              "forward": "Heading",
+              "gravity": {
+                "fall": 46,
+                "rise": 28
+              },
+              "hold": "Lift",
+              "lift": 0,
+              "name": "still",
+              "thrust": 0
+            }
+          ],
+          "speed": {
+            "value": 2.4
+          },
+          "turn": {
+            "rate": 2.5
+          }
+        },
+        "name": "display"
+      }
+    ]
+  },
+  "looks": {
+    "assignment": {
+      "rows": [
+        "hero"
+      ],
+      "sequence": {
+        "name": "r1",
+        "offset": 0,
+        "step": 0
+      }
+    },
+    "rows": [
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "hero",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "hgbMirrorHero"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "falls",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "hgbMirrorFalls"
+        }
+      },
+      {
+        "motion": {
+          "cues": [],
+          "gaitAmplitude": 0,
+          "replayFrames": false,
+          "secondsPerFrame": 0
+        },
+        "name": "ripples",
+        "scale": 1,
+        "source": {
+          "$type": "creation",
+          "prototypeId": "hgbMirrorRipples"
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "description": "One brook rendered twice, side by side: a forged Color cartridge and an SDF diorama, sharing one authoritative position at 0.25 world units per picture pixel.",
+    "title": "hgb-mirror"
+  },
+  "placements": {
+    "rows": [
+      {
+        "id": "hgbMirrorLand",
+        "position": [
+          0,
+          0,
+          -400
+        ],
+        "prototypeId": "hgbMirrorTerrain",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hgbMirrorCascade",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            }
+          },
+          "kit": "display",
+          "look": "falls",
+          "source": "Idle"
+        },
+        "position": [
+          -4,
+          0,
+          -401.02000000000004
+        ],
+        "prototypeId": "hgbMirrorFalls",
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      {
+        "id": "hgbMirrorSurface",
+        "inhabit": {
+          "count": 1,
+          "distribution": {
+            "fill": {
+              "name": "additive",
+              "offset": 0,
+              "step": 1
+            },
+            "region": {
+              "$type": "disc",
+              "radius": 0
+            }
+          },
+          "kit": "display",
+          "look": "ripples",
+          "source": "Idle"
+        },
+        "position": [
+          -2,
+          0.46,
+          -390
+        ],
+        "prototypeId": "hgbMirrorRipples",
+        "scale": 1,
+        "yawDegrees": 0
+      }
+    ]
+  },
+  "prototypes": [
+    {
+      "document": {
+        "name": "hgbMirrorTerrain",
+        "palette": [
+          {
+            "color": "#2E5B22",
+            "roughness": 0.96
+          },
+          {
+            "color": "#467C2E",
+            "roughness": 0.94
+          },
+          {
+            "color": "#6B5945",
+            "roughness": 0.92
+          },
+          {
+            "color": "#4C3E31",
+            "roughness": 0.93
+          },
+          {
+            "color": "#1B5386",
+            "roughness": 0.5,
+            "specular": 0.22
+          },
+          {
+            "color": "#A8905F",
+            "roughness": 0.96
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "lowland",
+            "position": [
+              0,
+              -0.6,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              20,
+              0.6,
+              18
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "exponent": 2.6,
+            "id": 1,
+            "material": 2,
+            "name": "stratum0",
+            "position": [
+              5,
+              0.5700000000000001,
+              9.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              14.44,
+              0.5700000000000001,
+              7.9399999999999995
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          },
+          {
+            "blend": "Union",
+            "exponent": 2.6,
+            "id": 2,
+            "material": 3,
+            "name": "stratum1",
+            "position": [
+              5,
+              1.7100000000000002,
+              9.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              14.355,
+              0.5700000000000001,
+              7.8549999999999995
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          },
+          {
+            "blend": "Union",
+            "exponent": 2.6,
+            "id": 3,
+            "material": 2,
+            "name": "stratum2",
+            "position": [
+              5,
+              2.8500000000000005,
+              9.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              14.27,
+              0.5700000000000001,
+              7.77
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          },
+          {
+            "blend": "Union",
+            "exponent": 2.6,
+            "id": 4,
+            "material": 3,
+            "name": "stratum3",
+            "position": [
+              5,
+              3.99,
+              9.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              14.185,
+              0.5700000000000001,
+              7.685
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          },
+          {
+            "blend": "Union",
+            "exponent": 2.6,
+            "id": 5,
+            "material": 2,
+            "name": "stratum4",
+            "position": [
+              5,
+              5.130000000000001,
+              9.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              14.1,
+              0.5700000000000001,
+              7.6
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          },
+          {
+            "blend": "Union",
+            "exponent": 2.6,
+            "id": 6,
+            "material": 1,
+            "name": "plateauTop",
+            "position": [
+              5,
+              5.84,
+              9.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              14,
+              0.3,
+              7.5
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          },
+          {
+            "blend": "Union",
+            "id": 7,
+            "material": 4,
+            "name": "streamBed",
+            "position": [
+              4,
+              6.14,
+              9.5
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              2,
+              0.1,
+              7.5
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 8,
+            "material": 4,
+            "name": "cascade",
+            "position": [
+              4,
+              3,
+              1.22
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.84,
+              3,
+              0.16
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 9,
+            "material": 4,
+            "name": "runOut",
+            "position": [
+              4,
+              0.28,
+              -1.1786918553337182
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.84,
+              0.1,
+              2.598691855333718
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "exponent": 3,
+            "id": 10,
+            "material": 5,
+            "name": "shore",
+            "position": [
+              2,
+              0.1,
+              -10
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              15,
+              0.16,
+              8.5
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          },
+          {
+            "blend": "Union",
+            "exponent": 3,
+            "id": 11,
+            "material": 4,
+            "name": "pool",
+            "position": [
+              2,
+              0.22,
+              -10
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              13,
+              0.2,
+              6.5
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          }
+        ]
+      },
+      "id": "hgbMirrorTerrain"
+    },
+    {
+      "document": {
+        "drivers": [
+          {
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0,
+            "cadence": 1,
+            "name": "fall",
+            "signal": "state.wp",
+            "when": [
+              "always"
+            ]
+          }
+        ],
+        "name": "hgbMirrorFalls",
+        "palette": [
+          {
+            "color": "#CFE6F7",
+            "roughness": 0.35,
+            "specular": 0.4
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "crest0",
+            "position": [
+              0,
+              -2,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.92,
+              0.16666666666666666,
+              0.06
+            ],
+            "slides": [
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0,
+                  -1,
+                  0
+                ],
+                "driver": "fall",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "crest1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.92,
+              0.16666666666666666,
+              0.06
+            ],
+            "slides": [
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0,
+                  -1,
+                  0
+                ],
+                "driver": "fall",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "crest2",
+            "position": [
+              0,
+              2,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.92,
+              0.16666666666666666,
+              0.06
+            ],
+            "slides": [
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0,
+                  -1,
+                  0
+                ],
+                "driver": "fall",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "crest3",
+            "position": [
+              0,
+              4,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.92,
+              0.16666666666666666,
+              0.06
+            ],
+            "slides": [
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0,
+                  -1,
+                  0
+                ],
+                "driver": "fall",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 0,
+            "name": "crest4",
+            "position": [
+              0,
+              6,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              1.92,
+              0.16666666666666666,
+              0.06
+            ],
+            "slides": [
+              {
+                "amplitude": 0.5,
+                "axis": [
+                  0,
+                  -1,
+                  0
+                ],
+                "driver": "fall",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "hgbMirrorFalls"
+    },
+    {
+      "document": {
+        "drivers": [
+          {
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0,
+            "cadence": 1,
+            "name": "ripple",
+            "signal": "state.lp",
+            "when": [
+              "always"
+            ]
+          }
+        ],
+        "name": "hgbMirrorRipples",
+        "palette": [
+          {
+            "color": "#7FB3D6",
+            "roughness": 0.45,
+            "specular": 0.25
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "id": 0,
+            "material": 0,
+            "name": "wave0",
+            "position": [
+              -12,
+              0,
+              1.669988335044192
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              1.2093018977906218
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 0,
+            "name": "wave1",
+            "position": [
+              -10,
+              0,
+              -2.269067326871891
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              1.6431177194589557
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 0,
+            "name": "wave2",
+            "position": [
+              -8,
+              0,
+              2.660717287515085
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              1.9267263116488549
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 0,
+            "name": "wave3",
+            "position": [
+              -6,
+              0,
+              -2.9293533227994053
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              2.1212558544409488
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 4,
+            "material": 0,
+            "name": "wave4",
+            "position": [
+              -4,
+              0,
+              3.1070483985642077
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              2.2499315989602886
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 5,
+            "material": 0,
+            "name": "wave5",
+            "position": [
+              -2,
+              0,
+              -3.2089457875998937
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              2.3237193634344058
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 6,
+            "material": 0,
+            "name": "wave6",
+            "position": [
+              0,
+              0,
+              3.2421999999999995
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              2.3478
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 7,
+            "material": 0,
+            "name": "wave7",
+            "position": [
+              2,
+              0,
+              -3.2089457875998937
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              2.3237193634344058
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 8,
+            "material": 0,
+            "name": "wave8",
+            "position": [
+              4,
+              0,
+              3.1070483985642077
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              2.2499315989602886
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 9,
+            "material": 0,
+            "name": "wave9",
+            "position": [
+              6,
+              0,
+              -2.9293533227994053
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              2.1212558544409488
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 10,
+            "material": 0,
+            "name": "wave10",
+            "position": [
+              8,
+              0,
+              2.660717287515085
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              1.9267263116488549
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 11,
+            "material": 0,
+            "name": "wave11",
+            "position": [
+              10,
+              0,
+              -2.269067326871891
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              1.6431177194589557
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          },
+          {
+            "blend": "Union",
+            "id": 12,
+            "material": 0,
+            "name": "wave12",
+            "position": [
+              12,
+              0,
+              1.669988335044192
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.09090909090909091,
+              0.025,
+              1.2093018977906218
+            ],
+            "slides": [
+              {
+                "amplitude": 1,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "ripple",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Box"
+          }
+        ]
+      },
+      "id": "hgbMirrorRipples"
+    },
+    {
+      "document": {
+        "drivers": [
+          {
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0,
+            "cadence": 1,
+            "name": "heroX",
+            "signal": "state.ax",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0,
+            "cadence": 1,
+            "name": "heroZ",
+            "signal": "state.ay",
+            "when": [
+              "always"
+            ]
+          },
+          {
+            "blendInSeconds": 0,
+            "blendOutSeconds": 0,
+            "cadence": 2,
+            "name": "heroY",
+            "signal": "state.hy",
+            "when": [
+              "always"
+            ]
+          }
+        ],
+        "name": "hgbMirrorHero",
+        "palette": [
+          {
+            "color": "#B4403A",
+            "roughness": 0.7
+          },
+          {
+            "color": "#E8C9A0",
+            "roughness": 0.65
+          },
+          {
+            "color": "#3B3630",
+            "roughness": 0.8
+          }
+        ],
+        "schema": "puck.creation.v1",
+        "shapes": [
+          {
+            "blend": "Union",
+            "exponent": 3,
+            "id": 0,
+            "material": 0,
+            "name": "trunk",
+            "position": [
+              19,
+              0.85,
+              17
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.8,
+              0.85,
+              0.62
+            ],
+            "slides": [
+              {
+                "amplitude": 0.25,
+                "axis": [
+                  -1,
+                  0,
+                  0
+                ],
+                "driver": "heroX",
+                "phase": 0,
+                "wave": "linear"
+              },
+              {
+                "amplitude": 0.25,
+                "axis": [
+                  0,
+                  0,
+                  -1
+                ],
+                "driver": "heroZ",
+                "phase": 0,
+                "wave": "linear"
+              },
+              {
+                "amplitude": 3,
+                "axis": [
+                  0,
+                  1,
+                  0
+                ],
+                "driver": "heroY",
+                "phase": 0,
+                "wave": "linear"
+              }
+            ],
+            "smooth": 0,
+            "type": "Superellipsoid"
+          },
+          {
+            "blend": "Union",
+            "id": 1,
+            "material": 1,
+            "name": "head",
+            "parent": "trunk",
+            "position": [
+              19,
+              2,
+              17
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.6,
+              0.6,
+              0.6
+            ],
+            "smooth": 0,
+            "type": "Sphere"
+          },
+          {
+            "blend": "Union",
+            "id": 2,
+            "material": 2,
+            "name": "brim",
+            "parent": "trunk",
+            "position": [
+              19,
+              2.32,
+              17
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.95,
+              0.08,
+              0.95
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          },
+          {
+            "blend": "Union",
+            "id": 3,
+            "material": 2,
+            "name": "crown",
+            "parent": "trunk",
+            "position": [
+              19,
+              2.6,
+              17
+            ],
+            "rotation": [
+              0,
+              0,
+              0,
+              1
+            ],
+            "scale": [
+              0.5,
+              0.28,
+              0.5
+            ],
+            "smooth": 0,
+            "type": "Cylinder"
+          }
+        ]
+      },
+      "id": "hgbMirrorHero"
+    }
+  ],
+  "render": {
+    "environment": {
+      "horizon": {
+        "high": "#6B7A88",
+        "low": "#1B1F24"
+      },
+      "softboxes": [
+        {
+          "blur": 0.15,
+          "color": "#FFEFD8",
+          "direction": [
+            0.6,
+            1,
+            0.5
+          ],
+          "size": [
+            0.25,
+            0.5
+          ],
+          "weight": 0.8
+        },
+        {
+          "blur": 0.18,
+          "color": "#D4DEF2",
+          "direction": [
+            -0.6,
+            0.75,
+            -0.6
+          ],
+          "size": [
+            0.24,
+            0.6
+          ],
+          "weight": 0.35
+        }
+      ]
+    },
+    "farDistance": 120,
+    "lighting": {
+      "lights": [
+        {
+          "$type": "directional",
+          "angularRadius": 0.2,
+          "color": "#FFF0D8",
+          "direction": [
+            3,
+            5,
+            4
+          ],
+          "shadows": true,
+          "weight": 0.72
+        },
+        {
+          "$type": "directional",
+          "color": "#C3D2F0",
+          "direction": [
+            -0.7,
+            0.35,
+            -0.6
+          ],
+          "weight": 0.16
+        },
+        {
+          "$type": "hemisphere",
+          "base": 0.16,
+          "color": "#C8D6E2",
+          "gradient": 0.1
+        }
+      ]
+    },
+    "sky": {
+      "layers": [
+        {
+          "$type": "gradient",
+          "stops": [
+            {
+              "color": "#8FA3B2",
+              "elevation": -1
+            },
+            {
+              "color": "#CBD8E0",
+              "elevation": -0.05
+            },
+            {
+              "color": "#77A6C8",
+              "elevation": 0.35
+            },
+            {
+              "color": "#375F88",
+              "elevation": 1
+            }
+          ]
+        },
+        {
+          "$type": "fog",
+          "density": 0.0015
+        },
+        {
+          "$type": "sunDisc",
+          "intensity": 1.4,
+          "light": 0,
+          "radius": 0.02
+        }
+      ]
+    },
+    "tonemap": "Filmic"
+  },
+  "rules": [
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "ax",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "af",
+          "value": 3
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:strafe",
+            "value": 0.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Less",
+            "state": "ax",
+            "value": 152
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "hero-east"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "ax",
+          "value": -1
+        },
+        {
+          "$type": "setState",
+          "state": "af",
+          "value": 2
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$channel:1:strafe",
+            "value": -0.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "ax",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "hero-west"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "ay",
+          "value": -1
+        },
+        {
+          "$type": "setState",
+          "state": "af",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "GreaterOrEqual",
+            "state": "$channel:1:forward",
+            "value": 0.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Greater",
+            "state": "ay",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "hero-north"
+    },
+    {
+      "effects": [
+        {
+          "$type": "addState",
+          "state": "ay",
+          "value": 1
+        },
+        {
+          "$type": "setState",
+          "state": "af",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareState",
+            "comparison": "LessOrEqual",
+            "state": "$channel:1:forward",
+            "value": -0.5
+          },
+          {
+            "$type": "compareState",
+            "comparison": "Less",
+            "state": "ay",
+            "value": 136
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "hero-south"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "hy",
+          "value": 1
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareValue",
+            "comparison": "LessOrEqual",
+            "kind": "Int",
+            "left": "(ax - 56) * (ax - 56) * 900 + (ay - 30) * (ay - 30) * 3136",
+            "right": "2822400"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "hy",
+            "value": 1
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tier-plateau"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "state": "hy",
+          "value": 0
+        }
+      ],
+      "gate": {
+        "$type": "all",
+        "predicates": [
+          {
+            "$type": "compareValue",
+            "comparison": "Greater",
+            "kind": "Int",
+            "left": "(ax - 56) * (ax - 56) * 900 + (ay - 30) * (ay - 30) * 3136",
+            "right": "2822400"
+          },
+          {
+            "$type": "compareState",
+            "comparison": "NotEqual",
+            "state": "hy",
+            "value": 0
+          }
+        ]
+      },
+      "mode": "Level",
+      "name": "tier-lowland"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "wclock % 4",
+          "state": "wp"
+        }
+      ],
+      "gate": {
+        "$type": "compareValue",
+        "comparison": "NotEqual",
+        "kind": "Int",
+        "left": "wp",
+        "right": "wclock % 4"
+      },
+      "mode": "Level",
+      "name": "fall-phase"
+    },
+    {
+      "effects": [
+        {
+          "$type": "setState",
+          "expression": "lclock % 2",
+          "state": "lp"
+        }
+      ],
+      "gate": {
+        "$type": "compareValue",
+        "comparison": "NotEqual",
+        "kind": "Int",
+        "left": "lp",
+        "right": "lclock % 2"
+      },
+      "mode": "Level",
+      "name": "ripple-phase"
+    }
+  ],
+  "schema": "puck.world.def.v1",
+  "screens": [
+    {
+      "halfDepth": 0.01,
+      "halfHeight": 1.44,
+      "halfWidth": 1.6,
+      "index": 0,
+      "memory": [
+        {
+          "address": 49664,
+          "direction": "Write",
+          "row": "ax",
+          "width": 1
+        },
+        {
+          "address": 49665,
+          "direction": "Write",
+          "row": "ay",
+          "width": 1
+        },
+        {
+          "address": 49666,
+          "direction": "Write",
+          "row": "wp",
+          "width": 1
+        },
+        {
+          "address": 49667,
+          "direction": "Write",
+          "row": "lp",
+          "width": 1
+        },
+        {
+          "address": 49668,
+          "direction": "Write",
+          "row": "af",
+          "width": 1
+        },
+        {
+          "address": 49669,
+          "direction": "Read",
+          "row": "wtEcho",
+          "width": 1
+        }
+      ],
+      "origin": [
+        1.8,
+        1.5,
+        0
+      ],
+      "right": [
+        -1,
+        0,
+        0
+      ],
+      "round": 0,
+      "route": {
+        "engageRadius": 0,
+        "engageable": false
+      },
+      "source": {
+        "$type": "machine",
+        "contentPath": "../../cartridges/hgb-mirror.cgb.cartridge.json",
+        "engine": "gaming-brick",
+        "options": "cgb"
+      },
+      "up": [
+        0,
+        1,
+        0
+      ]
+    },
+    {
+      "halfDepth": 0.01,
+      "halfHeight": 1.44,
+      "halfWidth": 1.6,
+      "index": 1,
+      "origin": [
+        -1.8,
+        1.5,
+        0
+      ],
+      "right": [
+        -1,
+        0,
+        0
+      ],
+      "round": 0,
+      "route": {
+        "engageRadius": 0,
+        "engageable": false
+      },
+      "source": {
+        "$type": "view",
+        "cameraName": "diorama"
+      },
+      "up": [
+        0,
+        1,
+        0
+      ]
+    }
+  ],
+  "simulation": {
+    "rateHz": 60
+  },
+  "spawnPoints": [
+    {
+      "id": "hgb-mirror-arrival",
+      "position": [
+        0,
+        0,
+        -400
+      ],
+      "yawDegrees": 0
+    }
+  ],
+  "state": {
+    "world": [
+      {
+        "kind": "Int",
+        "max": 152,
+        "min": 0,
+        "name": "ax",
+        "value": 76
+      },
+      {
+        "kind": "Int",
+        "max": 136,
+        "min": 0,
+        "name": "ay",
+        "value": 20
+      },
+      {
+        "kind": "Int",
+        "max": 3,
+        "min": 0,
+        "name": "af",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "hy",
+        "value": 1
+      },
+      {
+        "kind": "Int",
+        "max": 3,
+        "min": 0,
+        "name": "wp",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 1,
+        "min": 0,
+        "name": "lp",
+        "value": 0
+      },
+      {
+        "kind": "Int",
+        "max": 255,
+        "min": 0,
+        "name": "wtEcho",
+        "value": 0
+      },
+      {
+        "advance": {
+          "rateDenominator": 6,
+          "rateNumerator": 1
+        },
+        "kind": "Int",
+        "name": "wclock",
+        "nonNegative": true,
+        "value": 0
+      },
+      {
+        "advance": {
+          "rateDenominator": 12,
+          "rateNumerator": 1
+        },
+        "kind": "Int",
+        "name": "lclock",
+        "nonNegative": true,
+        "value": 0
+      }
+    ]
+  },
+  "views": {
+    "layouts": [
+      {
+        "name": "compare",
+        "seatCount": 0,
+        "slots": [
+          {
+            "camera": "compare",
+            "height": 1,
+            "width": 1,
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "transitionRenderScale": 1,
+        "transitionSeconds": 0.25
+      }
+    ],
+    "seatControl": {
+      "maxPitch": 0.01,
+      "minPitch": -0.01,
+      "yawReference": "World"
+    },
+    "seatRig": {
+      "name": "seat",
+      "operations": [
+        {
+          "$type": "orbit",
+          "distance": 1,
+          "pitch": 0,
+          "yaw": 0
+        },
+        {
+          "$type": "fieldOfView",
+          "fieldOfViewRadians": 0.9
+        }
+      ],
+      "version": "puck.camera.v1"
+    }
+  }
+}

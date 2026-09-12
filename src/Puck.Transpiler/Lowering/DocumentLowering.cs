@@ -57,6 +57,26 @@ public static class DocumentLowering {
             case LiteralExpressionNode lit:
                 return LowerLiteral(lit: lit, fieldKey: fieldKey, scope: scope);
 
+            case InterpolatedStringNode interpolated: {
+                var built = new System.Text.StringBuilder();
+
+                foreach (var segment in interpolated.Segments) {
+                    switch (segment) {
+                        case InterpolationSegment.Literal text:
+                            built.Append(text.Text);
+
+                            break;
+
+                        case InterpolationSegment.Hole hole:
+                            built.Append(FormatHole(node: LowerValue(expr: hole.Expression, scope: scope)));
+
+                            break;
+                    }
+                }
+
+                return JsonValue.Create(value: built.ToString());
+            }
+
             case ColorExpressionNode color:
                 return JsonValue.Create(value: color.Hex);
 
@@ -124,6 +144,9 @@ public static class DocumentLowering {
 
                 return jsonObj;
             }
+
+            case IndexExpressionNode indexed:
+                return EvaluateIndex(indexed: indexed, scope: scope, fieldKey: fieldKey);
 
             case BinaryExpressionNode bin:
                 return EvaluateBinary(bin: bin, scope: scope, fieldKey: fieldKey);
@@ -197,16 +220,129 @@ public static class DocumentLowering {
         var invocationScope = scope.WithConstants(invocationConstants: localConstants);
 
         foreach (var stmt in template.Body.Statements) {
-            var expandedStmt = stmt;
+            sink(Rename(statement: stmt, scope: invocationScope), target, invocationScope);
+        }
+    }
 
-            // A block whose NAME is a template parameter takes the bound value as its name, so one template can
-            // declare a differently named row per invocation.
-            if ((stmt is BlockNode blockStmt) && (blockStmt.Name is not null) && invocationScope.Constants.TryGetValue(key: blockStmt.Name, value: out var nameExpr)) {
-                expandedStmt = (blockStmt with { Name = (LowerValue(expr: nameExpr, scope: invocationScope)?.ToString() ?? blockStmt.Name) });
+    /// <summary>Flattens a template invocation into the statements it produces, each paired with the scope its
+    /// argument bindings are live in, for a section whose rows a dedicated dispatcher reads.</summary>
+    /// <param name="call">The invocation as written.</param>
+    /// <param name="scope">The invoking scope.</param>
+    /// <returns>Each produced statement and the scope to lower it under; nothing when no template bears the name.</returns>
+    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandTemplateStatements(CallExpressionNode call, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(call);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        var captured = new List<(StatementNode, DocumentScope)>();
+
+        ExpandTemplate(
+            call: call,
+            target: new JsonObject(),
+            scope: scope,
+            sink: (statement, _, invocationScope) => captured.Add(item: (statement, invocationScope)));
+
+        return captured;
+    }
+
+    // A block whose NAME is a template parameter takes the bound value as its name, so one template can declare a
+    // differently named row per invocation.
+    private static StatementNode Rename(StatementNode statement, DocumentScope scope) {
+        if ((statement is not BlockNode block) || (block.Name is null) ||
+            !scope.Constants.TryGetValue(key: block.Name, value: out var nameExpr)) {
+            return statement;
+        }
+
+        return (block with { Name = (LowerValue(expr: nameExpr, scope: scope)?.ToString() ?? block.Name) });
+    }
+
+    /// <summary>Expands a <c>for</c> block, emitting its body once per element of the sequence.</summary>
+    /// <param name="loop">The loop as written.</param>
+    /// <param name="target">The object the body's statements land in.</param>
+    /// <param name="scope">The enclosing scope.</param>
+    /// <param name="sink">The vocabulary's own statement processor.</param>
+    /// <remarks>Compile-time: the document carries the statements produced, never the loop. The bound names are
+    /// locals, so they shadow a constant of the same name for the length of one iteration and are gone after.</remarks>
+    public static void ExpandFor(ForStatementNode loop, JsonObject target, DocumentScope scope, Action<StatementNode, JsonObject, DocumentScope> sink) {
+        ArgumentNullException.ThrowIfNull(loop);
+        ArgumentNullException.ThrowIfNull(scope);
+        ArgumentNullException.ThrowIfNull(sink);
+
+        foreach (var (statement, iteration) in ExpandForStatements(loop: loop, scope: scope)) {
+            sink(statement, target, iteration);
+        }
+    }
+
+    /// <summary>Flattens a <c>for</c> into the statements it produces, each paired with the scope its bindings are
+    /// live in, for a section whose rows a dedicated dispatcher reads.</summary>
+    /// <param name="loop">The loop as written.</param>
+    /// <param name="scope">The enclosing scope.</param>
+    /// <returns>Each produced statement and the scope to lower it under.</returns>
+    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(loop);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if (LowerValue(expr: loop.Sequence, scope: scope) is not JsonArray sequence) {
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.ForSequenceRefused, "a 'for' walks an array known at compile time", loop.Sequence.Span);
+
+            yield break;
+        }
+
+        for (var index = 0; (index < sequence.Count); ++index) {
+            var locals = new Dictionary<string, JsonNode?>(dictionary: scope.Locals, comparer: StringComparer.Ordinal) {
+                [loop.Item] = sequence[index]?.DeepClone(),
+            };
+
+            if (loop.Index is { } ordinal) {
+                locals[ordinal] = JsonValue.Create(value: (long)index);
             }
 
-            sink(expandedStmt, target, invocationScope);
+            var iteration = scope.WithLocals(lambdaLocals: locals);
+
+            foreach (var statement in loop.Body) {
+                yield return (statement, iteration);
+            }
         }
+    }
+
+    /// <summary>Returns a block's name, resolving an interpolated header.</summary>
+    /// <param name="block">The block.</param>
+    /// <param name="scope">The lowering scope.</param>
+    /// <returns>The resolved name, or <see langword="null"/> when the block carries none.</returns>
+    public static string? ResolveBlockName(BlockNode block, DocumentScope scope) {
+        ArgumentNullException.ThrowIfNull(block);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if (block.NameExpression is null) {
+            return block.Name;
+        }
+
+        return (LowerValue(expr: block.NameExpression, scope: scope) is JsonValue value && value.TryGetValue<string>(value: out var text))
+            ? text
+            : block.Name;
+    }
+
+    /// <summary>Writes a lowered value into a section, extending rather than replacing when both the value and
+    /// what is already there are arrays.</summary>
+    /// <param name="target">The object the section belongs to.</param>
+    /// <param name="key">The section name.</param>
+    /// <param name="value">The lowered value.</param>
+    /// <remarks>A section's array is built in statement order: a sugar block appends one row and a property
+    /// carrying an array appends its rows, so the two compose instead of the later one erasing the earlier.
+    /// Assigning over a statement-built array is how rows went missing with no diagnostic.</remarks>
+    public static void AssignOrExtend(JsonObject target, string key, JsonNode? value) {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(key);
+
+        if ((target[key] is JsonArray existing) && (value is JsonArray addition)) {
+            foreach (var item in addition.ToList()) {
+                addition.Remove(item);
+                existing.AppendNode(item: item);
+            }
+
+            return;
+        }
+
+        target[key] = value;
     }
 
     /// <summary>Reads a lowered number whatever JSON numeric kind it landed as.</summary>
@@ -237,9 +373,76 @@ public static class DocumentLowering {
         return false;
     }
 
-    // An integral result narrows back to a long so arithmetic and a written literal reach the document as the same
-    // JSON kind.
-    private static JsonNode NumberNode(double value) {
+    // A hole's value as it reads inside a string. A whole number prints without a decimal point, so
+    // `$"row-{floor(i / 4)}"` reads "row-1" rather than "row-1.0".
+    private static string FormatHole(JsonNode? node) {
+        if (node is not JsonValue value) {
+            return (node?.ToJsonString() ?? string.Empty);
+        }
+
+        if (value.TryGetValue<string>(value: out var text)) {
+            return text;
+        }
+
+        if (value.TryGetValue<bool>(value: out var flag)) {
+            return (flag ? "true" : "false");
+        }
+
+        if (value.TryGetValue<long>(value: out var whole)) {
+            return whole.ToString(provider: CultureInfo.InvariantCulture);
+        }
+
+        if (value.TryGetValue<double>(value: out var real)) {
+            return real.ToString(format: "R", provider: CultureInfo.InvariantCulture);
+        }
+
+        return value.ToJsonString();
+    }
+
+    /// <summary>Reads a lowered value as an object key: a string as itself, a number by its shortest round-trip
+    /// spelling, and anything else as nothing.</summary>
+    /// <param name="node">The lowered node.</param>
+    /// <returns>The key text, or <see langword="null"/> when the value cannot key an object.</returns>
+    public static string? KeyText(JsonNode? node) {
+        if (node is not JsonValue value) {
+            return null;
+        }
+
+        if (value.TryGetValue<string>(value: out var text)) {
+            return text;
+        }
+
+        return TryReadNumber(node: node, number: out var number)
+            ? ((number == Math.Truncate(d: number)) ? ((long)number).ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : number.ToString(provider: System.Globalization.CultureInfo.InvariantCulture))
+            : null;
+    }
+
+    /// <summary>Reads a node as a truth value: the condition `select` branches on and `filter` keeps by. A boolean is
+    /// itself; a number is true when non-zero, which is how a comparison's 1/0 reads; a string is true when non-empty;
+    /// and a present container is true.</summary>
+    /// <param name="node">The lowered node.</param>
+    /// <returns><see langword="true"/> when the node reads as true.</returns>
+    public static bool IsTruthy(JsonNode? node) {
+        if (node is not JsonValue value) {
+            return (node is not null);
+        }
+
+        if (value.TryGetValue<bool>(value: out var flag)) {
+            return flag;
+        }
+
+        if (TryReadNumber(node: node, number: out var number)) {
+            return (number != 0);
+        }
+
+        return value.TryGetValue<string>(value: out var text) && (text.Length > 0);
+    }
+
+    /// <summary>Narrows an integral result back to a long, so arithmetic and a written literal reach the document as
+    /// the same JSON kind.</summary>
+    /// <param name="value">The folded number.</param>
+    /// <returns>A long-valued node when the value is integral, a double-valued one otherwise.</returns>
+    public static JsonNode NumberNode(double value) {
         if (Math.Abs(value: (value % 1)) < double.Epsilon) {
             return JsonValue.Create(value: (long)value);
         }
@@ -309,6 +512,35 @@ public static class DocumentLowering {
         return NumberNode(value: ((un.Operator == "-") ? -number : number));
     }
 
+    private static JsonNode? EvaluateIndex(IndexExpressionNode indexed, DocumentScope scope, string? fieldKey) {
+        var target = LowerValue(expr: indexed.Target, scope: scope, fieldKey: fieldKey);
+        var index = LowerValue(expr: indexed.Index, scope: scope);
+
+        if ((target is JsonObject obj) && (index is JsonValue key) && key.TryGetValue<string>(value: out var name)) {
+            return obj[name]?.DeepClone();
+        }
+
+        if (target is not JsonArray arr) {
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.IndexRefused, "only an array or an object can be indexed", indexed.Span);
+
+            return null;
+        }
+
+        if (!TryReadNumber(node: index, number: out var ordinal) || (ordinal != Math.Truncate(d: ordinal))) {
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.IndexRefused, "an array index is a whole number known at compile time", indexed.Span);
+
+            return null;
+        }
+
+        if ((ordinal < 0) || (ordinal >= arr.Count)) {
+            scope.Diagnostics.ReportError(PuckDiagnosticCodes.IndexRefused, $"index {ordinal} is outside the array's 0..{(arr.Count - 1)}", indexed.Span);
+
+            return null;
+        }
+
+        return arr[(int)ordinal]?.DeepClone();
+    }
+
     private static JsonNode? EvaluateBinary(BinaryExpressionNode bin, DocumentScope scope, string? fieldKey) {
         var leftNode = LowerValue(expr: bin.Left, scope: scope, fieldKey: fieldKey);
         var rightNode = LowerValue(expr: bin.Right, scope: scope, fieldKey: fieldKey);
@@ -317,24 +549,21 @@ public static class DocumentLowering {
             return null;
         }
 
-        switch (bin.Operator) {
-            case "==":
-                return JsonValue.Create(value: (lNum == rNum));
+        // A comparison is worth 1 or 0, never a JSON boolean — the rule language has no boolean either, so this is
+        // what keeps `cleared + (row > 0)` meaning the same thing on both sides of the compiler. `IsTruthy` reads a
+        // non-zero number as true, so a comparison still reads as a condition wherever one is wanted.
+        var comparison = bin.Operator switch {
+            "==" => (lNum == rNum),
+            "!=" => (lNum != rNum),
+            "<" => (lNum < rNum),
+            "<=" => (lNum <= rNum),
+            ">" => (lNum > rNum),
+            ">=" => (lNum >= rNum),
+            _ => (bool?)null,
+        };
 
-            case "!=":
-                return JsonValue.Create(value: (lNum != rNum));
-
-            case "<":
-                return JsonValue.Create(value: (lNum < rNum));
-
-            case "<=":
-                return JsonValue.Create(value: (lNum <= rNum));
-
-            case ">":
-                return JsonValue.Create(value: (lNum > rNum));
-
-            case ">=":
-                return JsonValue.Create(value: (lNum >= rNum));
+        if (comparison is { } verdict) {
+            return JsonValue.Create(value: (verdict ? 1L : 0L));
         }
 
         return NumberNode(value: bin.Operator switch {
@@ -342,6 +571,9 @@ public static class DocumentLowering {
             "-" => (lNum - rNum),
             "*" => (lNum * rNum),
             "/" => ((rNum != 0) ? (lNum / rNum) : 0),
+            // There is deliberately no `//` for integer division: `//` opens a line comment, so `a // b` can only
+            // ever read as `a` followed by a comment. `floor(a / b)` is the spelling, and it is the rule language's
+            // own `floor` — the same name, the same rounding — rather than a second one invented here.
             // A zero divisor yields zero rather than failing, matching division.
             "%" => ((rNum != 0) ? (lNum % rNum) : 0),
             _ => 0,

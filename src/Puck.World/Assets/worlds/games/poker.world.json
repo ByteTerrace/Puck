@@ -225,7 +225,7 @@
             "$type": "compareValue",
             "comparison": "GreaterOrEqual",
             "kind": "Int",
-            "left": "min(stack[1], stack[2])",
+            "left": "minimum(stack[1], stack[2])",
             "right": "house[bigBlind]"
           }
         ]
@@ -346,22 +346,22 @@
           "name": "st"
         },
         {
-          "expression": "popCount($bind:l0) >= 5 ? $bind:l0 : popCount($bind:l1) >= 5 ? $bind:l1 : popCount($bind:l2) >= 5 ? $bind:l2 : popCount($bind:l3) >= 5 ? $bind:l3 : 0",
+          "expression": "setBitCount($bind:l0) >= 5 ? $bind:l0 : setBitCount($bind:l1) >= 5 ? $bind:l1 : setBitCount($bind:l2) >= 5 ? $bind:l2 : setBitCount($bind:l3) >= 5 ? $bind:l3 : 0",
           "kind": "Int",
           "name": "fl"
         },
         {
-          "expression": "popCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
+          "expression": "setBitCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
           "kind": "Int",
           "name": "top2p"
         },
         {
-          "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (popCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : popCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
+          "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (setBitCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : setBitCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
           "kind": "Int",
           "name": "cat"
         },
         {
-          "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << max(popCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
+          "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << maximum(setBitCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
           "kind": "Int",
           "name": "high"
         },
@@ -371,7 +371,7 @@
           "name": "low"
         },
         {
-          "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << max(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
+          "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << maximum(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
           "kind": "Int",
           "name": "secondary"
         }
@@ -447,22 +447,22 @@
           "name": "st"
         },
         {
-          "expression": "popCount($bind:l0) >= 5 ? $bind:l0 : popCount($bind:l1) >= 5 ? $bind:l1 : popCount($bind:l2) >= 5 ? $bind:l2 : popCount($bind:l3) >= 5 ? $bind:l3 : 0",
+          "expression": "setBitCount($bind:l0) >= 5 ? $bind:l0 : setBitCount($bind:l1) >= 5 ? $bind:l1 : setBitCount($bind:l2) >= 5 ? $bind:l2 : setBitCount($bind:l3) >= 5 ? $bind:l3 : 0",
           "kind": "Int",
           "name": "fl"
         },
         {
-          "expression": "popCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
+          "expression": "setBitCount($bind:pairs) > 2 ? clearLowestSetBit($bind:pairs) : $bind:pairs",
           "kind": "Int",
           "name": "top2p"
         },
         {
-          "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (popCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : popCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
+          "expression": "$bind:sf != 0 ? 8 : ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3) != 0 ? 7 : ($bind:trips != 0) & (setBitCount($bind:pairs) >= 2) ? 6 : $bind:fl != 0 ? 5 : $bind:st != 0 ? 4 : $bind:trips != 0 ? 3 : setBitCount($bind:pairs) >= 2 ? 2 : $bind:pairs != 0 ? 1 : 0",
           "kind": "Int",
           "name": "cat"
         },
         {
-          "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << max(popCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
+          "expression": "$bind:cat == 8 ? 63 - leadingZeroCount(($bind:sf | ($bind:sf >> 16) | ($bind:sf >> 32) | ($bind:sf >> 48)) & 16383) : $bind:cat == 7 ? $bind:l0 & $bind:l1 & $bind:l2 & $bind:l3 : $bind:cat == 6 ? 63 - leadingZeroCount($bind:trips) : $bind:fl ^ parallelBitDeposit((1 << maximum(setBitCount($bind:fl) - 5, 0)) - 1, $bind:fl)",
           "kind": "Int",
           "name": "high"
         },
@@ -472,7 +472,7 @@
           "name": "low"
         },
         {
-          "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << max(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
+          "expression": "$bind:cat == 7 ? 63 - leadingZeroCount($bind:ranks ^ ($bind:l0 & $bind:l1 & $bind:l2 & $bind:l3)) : $bind:cat == 6 ? 63 - leadingZeroCount($bind:pairs ^ (1 << maximum(63 - leadingZeroCount($bind:trips), 0))) : $bind:cat == 3 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:trips)) : $bind:cat == 2 ? 63 - leadingZeroCount($bind:ranks ^ $bind:top2p) : $bind:cat == 1 ? clearLowestSetBit(clearLowestSetBit($bind:ranks ^ $bind:pairs)) : 0",
           "kind": "Int",
           "name": "secondary"
         }
@@ -1337,7 +1337,7 @@
         "$type": "compareValue",
         "comparison": "NotEqual",
         "kind": "Int",
-        "left": "max(betAction1[act], betAction2[act])",
+        "left": "maximum(betAction1[act], betAction2[act])",
         "right": "-1"
       },
       "mode": "Level",

@@ -22,7 +22,7 @@ public sealed class CreationCommandTests {
         return directory!.FullName;
     }
     private static string TempWorldCopy() {
-        var source = Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "moth.world.json");
+        var source = Path.Combine(RepoRoot(), "src", "Puck.World", "Assets", "worlds", "avatars", "moth.world.json");
         var target = Path.Combine(Path.GetTempPath(), $"puck-creation-cli-{Guid.NewGuid():N}.world.json");
 
         File.Copy(sourceFileName: source, destFileName: target);

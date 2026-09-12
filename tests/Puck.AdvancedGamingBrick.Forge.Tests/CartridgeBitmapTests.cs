@@ -1,5 +1,7 @@
 using Puck.GamingBricks.Forge;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>Covers the per-pixel drawing surface, where a picture is plotted point by point rather than built of tiles.</summary>
@@ -41,10 +43,10 @@ public sealed class CartridgeBitmapTests {
             Rules = [
                 new CartridgeRule(
                     Name: "once",
-                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: "lt", Right: new CartridgeValue(Constant: 3))],
+                    When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "phase"), Comparison: ActionStateComparison.Less, Right: new CartridgeValue(Constant: 3))],
                     Body: [Plot(x: 70, y: 70, colour: 1)]),
                 new CartridgeRule(Name: "tick", When: [], Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: "add", Value: new CartridgeValue(Constant: 1)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "phase"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
                 ]),
             ],
         };

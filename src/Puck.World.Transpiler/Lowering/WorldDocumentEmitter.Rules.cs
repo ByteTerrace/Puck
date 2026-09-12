@@ -45,7 +45,7 @@ public static partial class WorldDocumentEmitter {
                     obj["decision"] = LowerDecisionBlock(decision, scope);
                     break;
                 case PropertyNode prop:
-                    obj[prop.Name] = LowerExpression(prop.Value, scope, prop.Name);
+                    DocumentLowering.AssignOrExtend(obj, prop.Name, LowerExpression(prop.Value, scope, prop.Name));
                     break;
                 case EffectStatementNode or ExpressionStatementNode:
                     if (LowerEffectStatement(stmt, scope) is { } effect) {
@@ -195,7 +195,7 @@ public static partial class WorldDocumentEmitter {
     // ---- Gate lowering (§1) --------------------------------------------------------------------------------
 
     private static JsonObject LowerPredicate(PredicateNode node, DocumentScope scope) => node switch {
-        ComparisonPredicateNode cmp => LowerComparison(cmp),
+        ComparisonPredicateNode cmp => LowerComparison(cmp, scope),
         AndPredicateNode and => LowerPredicateList("all", "predicates", and.Operands, scope),
         OrPredicateNode or => LowerPredicateList("any", "predicates", or.Operands, scope),
         NotPredicateNode not => new JsonObject { ["$type"] = "not", ["predicate"] = LowerPredicate(not.Operand, scope) },
@@ -224,7 +224,41 @@ public static partial class WorldDocumentEmitter {
         return new JsonObject { ["$type"] = discriminator, [propertyName] = arr };
     }
 
-    private static JsonObject LowerComparison(ComparisonPredicateNode cmp) {
+    // Substitutes any bare identifier naming a `let` binding or a loop local with the literal it stands for. A
+    // token carrying a state-read sigil ($, a backtick name, a `.key` or `[index]` tail) is left alone: those are
+    // reads of live state, never compile-time values.
+    private static string ResolveOperandConstants(string text, DocumentScope scope) {
+        if (string.IsNullOrEmpty(text) || ((scope.Constants.Count == 0) && (scope.Locals.Count == 0))) {
+            return text;
+        }
+
+        return BareIdentifier.Replace(input: text, evaluator: match => {
+            var name = match.Value;
+
+            if (scope.Locals.TryGetValue(key: name, value: out var local)) {
+                return (DocumentLowering.KeyText(node: local) ?? name);
+            }
+
+            if (scope.Constants.TryGetValue(key: name, value: out var constant)) {
+                return (DocumentLowering.KeyText(node: DocumentLowering.LowerValue(expr: constant, scope: scope)) ?? name);
+            }
+
+            return name;
+        });
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex BareIdentifier =
+        new(@"(?<![\w$`.\[])[A-Za-z_][A-Za-z0-9_]*(?![\w(\[:`])", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static JsonObject LowerComparison(ComparisonPredicateNode cmp, DocumentScope scope) {
+        // A gate operand is resolved against the `let` bindings and loop locals in scope BEFORE it is classified.
+        // Without this a bare name can only ever read as a state row, so a bound named `wellFloor` silently became
+        // a read of a row by that name and the author had to write the number out with a comment naming what it
+        // meant. A binding shadows a state row of the same name, which is the same precedence the cartridge
+        // vocabulary's operands already use.
+        var leftText = ResolveOperandConstants(text: cmp.LeftText, scope: scope);
+        var rightText = ResolveOperandConstants(text: cmp.RightText, scope: scope);
+
         if (!PuckDslVocabulary.TryParseComparator(cmp.Comparator, out var parsedComparison)) {
             throw new InvalidOperationException($"'{cmp.Comparator}' is not a DSL comparison operator");
         }
@@ -238,12 +272,12 @@ public static partial class WorldDocumentEmitter {
                 ["$type"] = "compareValue",
                 ["comparison"] = comparison,
                 ["kind"] = cmp.Kind,
-                ["left"] = cmp.LeftText,
-                ["right"] = cmp.RightText,
+                ["left"] = leftText,
+                ["right"] = rightText,
             };
         }
 
-        switch (ClassifyBareComparison(cmp.LeftText, cmp.RightText, out var leftToken, out var rightToken)) {
+        switch (ClassifyBareComparison(leftText, rightText, out var leftToken, out var rightToken)) {
             case BareComparisonShape.StateAgainstConstant:
                 return NewCompareState(((ValueToken.State)leftToken!).Name, ((ValueToken.State)leftToken).Key, comparison, value: ((ValueToken.Constant)rightToken!).Value);
             case BareComparisonShape.StateAgainstState:
@@ -257,8 +291,8 @@ public static partial class WorldDocumentEmitter {
                     ["$type"] = "compareValue",
                     ["comparison"] = comparison,
                     ["kind"] = "Fixed",
-                    ["left"] = cmp.LeftText,
-                    ["right"] = cmp.RightText,
+                    ["left"] = leftText,
+                    ["right"] = rightText,
                 };
         }
     }

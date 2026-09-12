@@ -259,7 +259,7 @@ public sealed class PuckLanguageServer {
 
         // 4. Built-in Functions
         AddCompletion(items, "orbit", "orbit(pitch: ${1:0deg}, yaw: ${2:0deg}, distance: ${3:2.5m})", "Camera orbit operation", 3);
-        AddCompletion(items, "fov", "fov(degrees: ${1:60})", "Camera field-of-view operation", 3);
+        AddCompletion(items, "fieldOfView", "fieldOfView(degrees: ${1:60})", "Camera field-of-view operation", 3);
         AddCompletion(items, "boardShift", "boardShift(${1:mask}, ${2:lattice}, ${3:dir})", "Bitwise lattice shift function", 3);
         AddCompletion(items, "clamp", "clamp(${1:val}, ${2:min}, ${3:max})", "Math clamp function", 3);
 
@@ -390,7 +390,7 @@ public sealed class PuckLanguageServer {
         "views" => "**`views` Section**\n\nConfigures camera layouts, viewports, and seat rigs.",
         "seatRig" => "**`seatRig` Section**\n\nDeclares a camera seat rig containing scheduled camera operations such as `orbit` and `fov`.",
         "orbit" => "**`orbit(pitch:, yaw:, distance:)`**\n\nConfigures spherical orbit camera positioning relative to the focus target.",
-        "fov" => "**`fov(degrees:)`**\n\nSets the camera vertical field-of-view in degrees.",
+        "fieldOfView" => "**`fieldOfView(degrees:)`**\n\nSets the camera vertical field-of-view in degrees.",
         "solids" => "**`solids` Section**\n\nCollection of Signed Distance Field (SDF) Constructive Solid Geometry (CSG) primitives evaluated by the raymarching engine.",
         "materials" => "**`materials` Section**\n\nSurface material properties including albedo color, roughness, metallic, and reflectance.",
         "state" => "**`state` Section**\n\nWorld state definitions including discrete values, lattices, and cell arrays.",

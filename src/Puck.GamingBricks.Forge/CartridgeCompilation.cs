@@ -4,7 +4,8 @@ namespace Puck.GamingBricks.Forge;
 /// <param name="Rom">The standalone ROM image. No host interpreter is required to execute it.</param>
 /// <param name="SourceHash">The canonical source document's SHA-256.</param>
 /// <param name="Target">The target platform.</param>
-/// <param name="Variables">Bus addresses of the named one-byte state slots.</param>
+/// <param name="Variables">Bus addresses of the named state slots. A slot whose declared ceiling exceeds a byte
+/// occupies two bytes from its address, little-endian.</param>
 /// <param name="Arrays">Bus addresses of the first element of each named array.</param>
 public sealed record CartridgeCompilation(byte[] Rom, string SourceHash, string Target, IReadOnlyDictionary<string, uint> Variables, IReadOnlyDictionary<string, uint> Arrays);
 

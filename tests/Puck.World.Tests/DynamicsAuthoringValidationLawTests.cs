@@ -133,13 +133,13 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var document = WithDynamics(rows: [Chase]);
         var dangling = document with {
             CamerasRaw = [ProbeCamera(rig: ProgramWithOps(operations: [
-                new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 1f)),
+                new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 1f)),
                 new WorldCameraProgramOp.Dynamics(Row: "missing"),
             ]))],
         };
         var resolving = document with {
             CamerasRaw = [ProbeCamera(rig: ProgramWithOps(operations: [
-                new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 1f)),
+                new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 1f)),
                 new WorldCameraProgramOp.Dynamics(Row: "chase"),
             ]))],
         };
@@ -153,14 +153,14 @@ public sealed class DynamicsAuthoringValidationLawTests {
         var document = WithDynamics(rows: [Chase]);
         var denied = document with {
             CamerasRaw = [ProbeCamera(rig: ProgramWithOps(operations: [
-                new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 1f)),
+                new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 1f)),
                 new WorldCameraProgramOp.Dynamics(Row: "chase"),
                 new WorldCameraProgramOp.Dynamics(Row: "chase"),
             ]))],
         };
         var admitted = document with {
             CamerasRaw = [ProbeCamera(rig: ProgramWithOps(operations: [
-                new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 1f)),
+                new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 1f)),
                 new WorldCameraProgramOp.Dynamics(Row: "chase"),
             ]))],
         };

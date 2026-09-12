@@ -1,6 +1,6 @@
 {
   "schema": "puck.world.def.v1",
-  "basis": "moth.world.json",
+  "basis": "avatars/moth.world.json",
   "documentId": "moth-courtyard",
   "metadata": {
     "title": "Moth courtyard",
@@ -1221,7 +1221,7 @@
             "focusDistance": 10
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "opcode": "fov",
             "fieldOfViewRadians": 0.76
           }
@@ -1263,7 +1263,7 @@
             "focusDistance": 10
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "opcode": "fov",
             "fieldOfViewRadians": 0.8
           }
@@ -1305,7 +1305,7 @@
             "focusDistance": 10
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "opcode": "fov",
             "fieldOfViewRadians": 0.83
           }
@@ -1347,7 +1347,7 @@
             "focusDistance": 10
           },
           {
-            "$type": "fov",
+            "$type": "fieldOfView",
             "opcode": "fov",
             "fieldOfViewRadians": 0.85
           }

@@ -39,7 +39,7 @@ public sealed class WorldSeatModeLawTests {
                         Subject: null,
                         FocusDistance: 1f
                     ),
-                    new WorldCameraProgramOp.Fov(FieldOfViewRadians: new BindableScalar(literal: 0.9f)),
+                    new WorldCameraProgramOp.FieldOfView(FieldOfViewRadians: new BindableScalar(literal: 0.9f)),
                 ]
             ),
         }),

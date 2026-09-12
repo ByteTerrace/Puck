@@ -88,7 +88,7 @@ public sealed class ExpressionCostLawTests {
     [InlineData("1 + 2")]
     [InlineData("3 * 4 / 2")]
     [InlineData("isPrime(17)")]
-    [InlineData("gcd(12, 18)")]
+    [InlineData("greatestCommonDivisor(12, 18)")]
     [InlineData("replicationMask(8)")]
     [InlineData("repeatBits(127, 8)")]
     public void SuccessfulConstantExpressionsCostOneConstant(string text) {

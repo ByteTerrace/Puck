@@ -39,7 +39,7 @@ public class ComprehensiveSyntheticTests {
                     version: "puck.camera.v1"
                     operations [
                         orbit(distance: dist, pitch: angle, yaw: 0)
-                        fov(fieldOfViewRadians: 0.001)
+                        fieldOfView(fieldOfViewRadians: 0.001)
                     ]
                 }
             }

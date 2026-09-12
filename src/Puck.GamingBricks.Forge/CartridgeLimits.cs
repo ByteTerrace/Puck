@@ -12,7 +12,13 @@ namespace Puck.GamingBricks.Forge;
 /// byte, operand spill and discard sink come off the top of the variable window rather than out of the array space.
 /// </remarks>
 public static class CartridgeLimits {
-    /// <summary>The maximum number of named byte state slots.</summary>
+    /// <summary>The largest value a one-byte state slot holds, and the default ceiling of a slot that declares none.</summary>
+    public const int NarrowMaximum = 255;
+    /// <summary>The largest value any state slot may declare. Two bytes is what both backends widen a slot to; a
+    /// wider one would need a third representation neither emitter has.</summary>
+    public const int WideMaximum = 65535;
+    /// <summary>The maximum number of named state slots. A slot spends one or two bytes of the variable window
+    /// depending on its declared ceiling, so the window, not this number, is what a wide document runs out of.</summary>
     public const int VariableCount = 128;
     /// <summary>The maximum number of named arrays.</summary>
     public const int ArrayCount = 32;
@@ -20,8 +26,11 @@ public static class CartridgeLimits {
     public const int ArrayLength = 256;
     /// <summary>The maximum total bytes across every array.</summary>
     public const int ArrayByteCount = 7168;
-    /// <summary>The maximum number of rules.</summary>
-    public const int RuleCount = 64;
+    /// <summary>The maximum number of rules. A rule costs CODE, and code is what the image's own windows bound, so
+    /// the real gate is <c>CartridgeCapacityException</c>: this number exists only to keep a runaway document from
+    /// spending minutes in the compiler before that refusal arrives. Per-FRAME work is bounded separately, and a
+    /// document declaring <c>scene</c> runs at most one scene's rules in a frame.</summary>
+    public const int RuleCount = 1024;
     /// <summary>The maximum number of conditions in one rule.</summary>
     public const int ConditionCount = 8;
     /// <summary>The maximum number of steps anywhere in one rule's body tree.</summary>

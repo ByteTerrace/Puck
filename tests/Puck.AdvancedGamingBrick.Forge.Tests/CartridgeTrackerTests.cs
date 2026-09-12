@@ -1,5 +1,7 @@
 using Puck.GamingBricks.Forge;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>
@@ -60,18 +62,18 @@ public sealed class CartridgeTrackerTests {
             Sounds = [new CartridgeSound(Name: "instrument", Sample: sample)],
             Rules = [
                 new CartridgeRule(Name: "clock", When: [], Body: [
-                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "tick"), Operation: "add", Value: new CartridgeValue(Constant: 1)),
+                    new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "tick"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
                     new CartridgeStatement(
                         Kind: "if",
-                        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "tick"), Comparison: "ge", Right: new CartridgeValue(Constant: RowFrames))],
+                        When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "tick"), Comparison: ActionStateComparison.GreaterOrEqual, Right: new CartridgeValue(Constant: RowFrames))],
                         Then: [
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "tick"), Operation: "set", Value: new CartridgeValue(Constant: 0)),
+                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "tick"), Operation: null, Value: new CartridgeValue(Constant: 0)),
                             new CartridgeStatement(
                                 Kind: "play",
                                 Sound: "instrument",
                                 Rate: new CartridgeValue(Array: "rates", Index: new CartridgeValue(Variable: "row"))),
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "row"), Operation: "add", Value: new CartridgeValue(Constant: 1)),
-                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "row"), Operation: "mod", Value: new CartridgeValue(Constant: 4)),
+                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "row"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
+                            new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "row"), Operation: ExpressionOp.Modulo, Value: new CartridgeValue(Constant: 4)),
                         ]),
                 ]),
             ],

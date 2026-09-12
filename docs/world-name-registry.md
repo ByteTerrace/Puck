@@ -38,9 +38,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].rig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
 | `cameras[].rig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `cameras[].rig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
-| `cameras[].rig.operations[][fov].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.Fov.FieldOfViewRadians` |
+| `cameras[].rig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `cameras[].rig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
-| `cameras[].rig.operations[][select].key` | State | Binding | Binding | `WorldCameraProgramOp.Select.Key` |
+| `cameras[].rig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
 | `cameras[].anchors[].when[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `cameras[].anchors[].when[any].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `cameras[].anchors[].when[not].predicate…` | | | | re-enters `OverlayPredicate` |
@@ -492,16 +492,16 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
 | `views.seatRig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `views.seatRig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
-| `views.seatRig.operations[][fov].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.Fov.FieldOfViewRadians` |
+| `views.seatRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.seatRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
-| `views.seatRig.operations[][select].key` | State | Binding | Binding | `WorldCameraProgramOp.Select.Key` |
+| `views.seatRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
 | `views.cameraRig.operations[][orbit].yaw` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Yaw` |
 | `views.cameraRig.operations[][orbit].pitch` | State | Binding | Binding | `WorldCameraProgramOp.Orbit.Pitch` |
 | `views.cameraRig.operations[][path].fraction` | State | Binding | Binding | `WorldCameraProgramOp.Path.Fraction` |
 | `views.cameraRig.operations[][dynamics].row` | Dynamics | Names | Binding | `WorldCameraProgramOp.Dynamics.Row` |
-| `views.cameraRig.operations[][fov].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.Fov.FieldOfViewRadians` |
+| `views.cameraRig.operations[][fieldOfView].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.FieldOfView.FieldOfViewRadians` |
 | `views.cameraRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
-| `views.cameraRig.operations[][select].key` | State | Binding | Binding | `WorldCameraProgramOp.Select.Key` |
+| `views.cameraRig.operations[][selectProgram].key` | State | Binding | Binding | `WorldCameraProgramOp.SelectProgram.Key` |
 | `looks.rows[].motion.lanes` | State | Expression | Read | `WorldLookMotion.Lanes` |
 | `looks.rows[].motion.lanes[]{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
 | `looks.rows[].motion.lanes[]{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
@@ -1189,8 +1189,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].rig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
 | `cameras[].rig.operations[][blend].a` | `WorldCameraProgramOp.Blend.A` | a camera program name |
 | `cameras[].rig.operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
-| `cameras[].rig.operations[][select].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
-| `cameras[].rig.operations[][select].default` | `WorldCameraProgramOp.Select.Default` | a camera program name |
+| `cameras[].rig.operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
+| `cameras[].rig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `bodies.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `bodies.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `bodies.peerVariation.phase.name` | `WorldSequence.Name` | a sequence name |
@@ -1312,14 +1312,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.seatRig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
 | `views.seatRig.operations[][blend].a` | `WorldCameraProgramOp.Blend.A` | a camera program name |
 | `views.seatRig.operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
-| `views.seatRig.operations[][select].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
-| `views.seatRig.operations[][select].default` | `WorldCameraProgramOp.Select.Default` | a camera program name |
+| `views.seatRig.operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
+| `views.seatRig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `views.cameraRig.name` | `WorldCameraProgram.Name` | a camera program name |
 | `views.cameraRig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |
 | `views.cameraRig.operations[][blend].a` | `WorldCameraProgramOp.Blend.A` | a camera program name |
 | `views.cameraRig.operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
-| `views.cameraRig.operations[][select].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
-| `views.cameraRig.operations[][select].default` | `WorldCameraProgramOp.Select.Default` | a camera program name |
+| `views.cameraRig.operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
+| `views.cameraRig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
 | `views.layouts[].name` | `WorldViewLayout.Name` | a view layout name |
 | `views.studies[].name` | `WorldViewStudy.Name` | a view study name |
 | `views.studies[].source` | `WorldViewStudy.Source` | a view study's source is a document path |

@@ -1,5 +1,7 @@
 using Puck.GamingBricks.Forge;
 
+using Puck.State;
+
 namespace Puck.AdvancedGamingBrick.Forge.Tests;
 
 /// <summary>
@@ -48,7 +50,7 @@ public sealed class CartridgeExclusiveGuardTests {
             Guarded(name: "a", phase: 0, work: 40),
             Guarded(name: "b", phase: 1, work: 40),
             new CartridgeRule(Name: "advance", When: [], Body: [
-                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ph"), Operation: "set", Value: new CartridgeValue(Variable: "nph")),
+                new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ph"), Operation: null, Value: new CartridgeValue(Variable: "nph")),
             ]),
         ]);
         var inline = Document(rules: [
@@ -88,6 +90,28 @@ public sealed class CartridgeExclusiveGuardTests {
         Assert.True(condition: Cost(many) > Cost(one));
     }
 
+    [Fact]
+    public void ADeclaredSceneKeepsTheSavingWhereverItIsWritten() {
+        // The same shape that gives the saving up when the guard is merely inferred: a rule moves it between the arms.
+        // Declaring it as the scene makes the partition structural, so the estimate charges the dearest arm regardless.
+        var inferred = Document(rules: [
+            Guarded(name: "a", phase: 0, work: 40, advance: 1),
+            Guarded(name: "b", phase: 1, work: 40),
+        ]);
+        var declared = inferred with { Scene = "ph" };
+
+        Assert.True(condition: Cost(declared) < Cost(inferred));
+    }
+
+    [Fact]
+    public void ASceneNamingNoVariableIsRefused() {
+        var document = Document(rules: [Guarded(name: "a", phase: 0, work: 4)]) with { Scene = "nowhere" };
+
+        Assert.Contains(
+            collection: CartridgeDocuments.Validate(document: document),
+            filter: error => error.Path == "scene");
+    }
+
     private static long Cost(CartridgeDocument document) {
         var frame = CartridgeCost.Frame(document: document, profile: CartridgeCostProfile.Humble);
         Assert.True(condition: frame.IsKnown, userMessage: frame.Reason);
@@ -98,16 +122,16 @@ public sealed class CartridgeExclusiveGuardTests {
     private static CartridgeRule Guarded(string name, int phase, int work, int? advance = null, string? loopIndex = null) {
         var body = new List<CartridgeStatement> {
             new(Kind: "repeat", Count: work, Index: loopIndex ?? "i", Body: [
-                new(Kind: "set", Target: new CartridgeTarget(Variable: "sink"), Operation: "add", Value: new CartridgeValue(Constant: 1)),
+                new(Kind: "set", Target: new CartridgeTarget(Variable: "sink"), Operation: ExpressionOp.Add, Value: new CartridgeValue(Constant: 1)),
             ]),
         };
         if (advance is { } next) {
-            body.Add(item: new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ph"), Operation: "set", Value: new CartridgeValue(Constant: next)));
+            body.Add(item: new CartridgeStatement(Kind: "set", Target: new CartridgeTarget(Variable: "ph"), Operation: null, Value: new CartridgeValue(Constant: next)));
         }
 
         return new CartridgeRule(
             Name: name,
-            When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "ph"), Comparison: "eq", Right: new CartridgeValue(Constant: phase))],
+            When: [new CartridgeCondition(Kind: "compare", Left: new CartridgeValue(Variable: "ph"), Comparison: ActionStateComparison.Equal, Right: new CartridgeValue(Constant: phase))],
             Body: [.. body]);
     }
 
