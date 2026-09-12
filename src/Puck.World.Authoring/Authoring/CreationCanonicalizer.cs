@@ -419,34 +419,13 @@ public static partial class CreationCanonicalizer {
             );
         }
     }
-    // A bone's index in `shapes`, or −1. Names are the same handle `parent` resolves against, so the two agree by
-    // construction.
-    private static int ShapeIndex(IReadOnlyList<ShapeDocument> shapes, string? name) {
-        if (name is null) {
-            return -1;
-        }
-        for (var index = 0; (index < shapes.Count); index++) {
-            if (string.Equals(
-                a: shapes[index].Name?.Value,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
     // Whether `descendant` reaches `ancestor` by walking `parent`. A parent is validated to be declared earlier, so
     // the walk strictly decreases and terminates even on a document that bypassed that check.
-    private static bool DescendsFrom(IReadOnlyList<ShapeDocument> shapes, int descendant, int ancestor) {
+    private static bool DescendsFrom(IReadOnlyList<ShapeDocument> shapes, ShapeLookup lookup, int descendant, int ancestor) {
         var cursor = descendant;
 
         while (cursor > ancestor) {
-            var next = ShapeIndex(
-                name: shapes[cursor].Parent,
-                shapes: shapes
-            );
+            var next = lookup.Find(name: shapes[cursor].Parent);
 
             if (next >= cursor) {
                 return false;
@@ -457,7 +436,7 @@ public static partial class CreationCanonicalizer {
 
         return (cursor == ancestor);
     }
-    private static void ValidateEffectors(CreationDocument document, List<DocumentValidationError> errors) {
+    private static void ValidateEffectors(CreationDocument document, ShapeLookup lookup, List<DocumentValidationError> errors) {
         if (document.Effectors is not { Count: > 0 } effectors) {
             return;
         }
@@ -509,6 +488,7 @@ public static partial class CreationCanonicalizer {
             ValidateEffectorChain(
                 effector: effector,
                 errors: errors,
+                lookup: lookup,
                 path: path,
                 shapes: shapes
             );
@@ -525,7 +505,7 @@ public static partial class CreationCanonicalizer {
             );
         }
     }
-    private static void ValidateEffectorChain(IReadOnlyList<ShapeDocument> shapes, CreationEffectorDocument effector, List<DocumentValidationError> errors, string path) {
+    private static void ValidateEffectorChain(IReadOnlyList<ShapeDocument> shapes, ShapeLookup lookup, CreationEffectorDocument effector, List<DocumentValidationError> errors, string path) {
         var chain = (effector.Chain ?? []);
 
         if (chain.Count < CreationEffectorDocument.MinChainBones) {
@@ -550,10 +530,7 @@ public static partial class CreationCanonicalizer {
         var resolved = true;
 
         for (var i = 0; (i < chain.Count); i++) {
-            var index = ShapeIndex(
-                name: chain[i],
-                shapes: shapes
-            );
+            var index = lookup.Find(name: chain[i]);
 
             if (index < 0) {
                 errors.Add(item: new(
@@ -584,6 +561,7 @@ public static partial class CreationCanonicalizer {
                 !DescendsFrom(
                 ancestor: previous,
                 descendant: index,
+                lookup: lookup,
                 shapes: shapes
             )
             ) {
@@ -597,10 +575,7 @@ public static partial class CreationCanonicalizer {
             previous = index;
         }
 
-        var tip = ShapeIndex(
-            name: effector.Tip,
-            shapes: shapes
-        );
+        var tip = lookup.Find(name: effector.Tip);
 
         if (tip < 0) {
             errors.Add(item: new(
@@ -613,6 +588,7 @@ public static partial class CreationCanonicalizer {
             !DescendsFrom(
             ancestor: previous,
             descendant: tip,
+            lookup: lookup,
             shapes: shapes
         )
         ) {
@@ -828,30 +804,13 @@ public static partial class CreationCanonicalizer {
     // (a zero axis is an identity rotation, an unresolvable driver never advances, either facet beside a domain op
     // composes onto a transform nothing reads for that shape's geometry). Each of those is refused rather than folded
     // to a default: a limb that silently never moves reads as a rig defect, not as authored data.
-    private static void ValidateShapeAnimation(CreationDocument document, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+    private static void ValidateShapeAnimation(CreationDocument document, ShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
         var swings = (shape.Swings ?? []);
         var slides = (shape.Slides ?? []);
 
         if (shape.Parent is { } parent) {
-            var shapes = (document.Shapes ?? []);
-            var index = 0;
-            var parentIndex = -1;
-
-            while ((index < shapes.Count) && !ReferenceEquals(objA: shapes[index], objB: shape)) {
-                index++;
-            }
-
-            for (var candidate = 0; (candidate < shapes.Count); candidate++) {
-                if (string.Equals(
-                    a: shapes[candidate].Name?.Value,
-                    b: parent,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    parentIndex = candidate;
-
-                    break;
-                }
-            }
+            var index = lookup.FindReference(shape: shape);
+            var parentIndex = lookup.Find(name: parent);
 
             if (parentIndex < 0) {
                 errors.Add(item: new(
@@ -1029,7 +988,7 @@ public static partial class CreationCanonicalizer {
     // Swings/Slides/Parent/Panel), a grouped shape (the animated pool's group scope leaves none spare), and a
     // creation CreationStampEmitter.RequiresScope already scopes as a whole (the static path then shares one scope
     // across every shape, with none left for a trim). Mirrors ValidatePanel's own refusal set for the same reason.
-    private static void ValidateTrims(CreationDocument document, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+    private static void ValidateTrims(CreationDocument document, ShapeLookup lookup, ShapeDocument shape, List<DocumentValidationError> errors, string path) {
         if (shape.Trims is not { Count: > 0 } trims) {
             return;
         }
@@ -1048,28 +1007,12 @@ public static partial class CreationCanonicalizer {
         }
 
         var shapes = (document.Shapes ?? []);
-        var hostIndex = 0;
-
-        while ((hostIndex < shapes.Count) && !ReferenceEquals(objA: shapes[hostIndex], objB: shape)) {
-            hostIndex++;
-        }
+        var hostIndex = lookup.FindReference(shape: shape);
 
         for (var i = 0; (i < trims.Count); i++) {
             var trim = trims[i];
             var trimPath = $"{path}[{i}]";
-            var referenceIndex = -1;
-
-            for (var candidate = 0; (candidate < shapes.Count); candidate++) {
-                if (string.Equals(
-                    a: shapes[candidate].Name?.Value,
-                    b: trim.Shape,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    referenceIndex = candidate;
-
-                    break;
-                }
-            }
+            var referenceIndex = lookup.Find(name: trim.Shape, includeUnnamed: true);
 
             if (referenceIndex < 0) {
                 errors.Add(item: new(Message: $"names no shape '{trim.Shape}'.", Path: $"{trimPath}.shape"));
@@ -2259,6 +2202,7 @@ public static partial class CreationCanonicalizer {
 
         var errors = new List<DocumentValidationError>();
         var shapeIds = new HashSet<int>();
+        var lookup = new ShapeLookup(shapes: document.Shapes ?? []);
 
         for (var i = 0; (i < (document.Shapes?.Count ?? 0)); i++) {
             var shape = document.Shapes![i];
@@ -2394,6 +2338,7 @@ public static partial class CreationCanonicalizer {
             ValidateShapeAnimation(
                 document: document,
                 errors: errors,
+                lookup: lookup,
                 path: $"shapes[{i}]",
                 shape: shape
             );
@@ -2406,6 +2351,7 @@ public static partial class CreationCanonicalizer {
             ValidateTrims(
                 document: document,
                 errors: errors,
+                lookup: lookup,
                 path: $"shapes[{i}].trims",
                 shape: shape
             );
@@ -2427,7 +2373,8 @@ public static partial class CreationCanonicalizer {
         );
         ValidateEffectors(
             document: document,
-            errors: errors
+            errors: errors,
+            lookup: lookup
         );
 
         ValidatePalette(
@@ -2474,7 +2421,8 @@ public static partial class CreationCanonicalizer {
         );
         ValidateVolumes(
             document: document,
-            errors: errors
+            errors: errors,
+            lookup: lookup
         );
 
         return errors;
