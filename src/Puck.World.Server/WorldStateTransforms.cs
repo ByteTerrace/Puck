@@ -310,12 +310,17 @@ public static partial class WorldStateTransforms {
             return Refuse("setRay requires a nonempty accepted prefix", out reason);
         }
         var cells = (row.Cells ?? []).ToList();
+        var cellIndices = new Dictionary<CellName, int>(capacity: cells.Count);
+        for (var cellIndex = 0; cellIndex < cells.Count; cellIndex++) {
+            // Match the first authored cell if an unvalidated row contains duplicate keys.
+            cellIndices.TryAdd(key: cells[cellIndex].Key, value: cellIndex);
+        }
         for (var affectedIndex = 0; affectedIndex < prefix; affectedIndex++) {
             var key = CellName.Parse(topology.Key(affected[affectedIndex]));
-            var existing = cells.FindIndex(c => c.Key == key);
-            if (existing >= 0) {
+            if (cellIndices.TryGetValue(key: key, value: out var existing)) {
                 cells[existing] = cells[existing] with { Value = ray.Value };
             } else {
+                cellIndices.Add(key: key, value: cells.Count);
                 cells.Add(new(key, ray.Value));
             }
         }

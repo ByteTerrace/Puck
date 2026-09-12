@@ -33,20 +33,34 @@ public static class CartridgeEffects {
     /// <returns>True for a direct assignment, loop-index update, or implicit state writer.</returns>
     /// <remarks>Load writes its saved variables and clock writes its declared destinations. A declared scene uses a
     /// snapshot and does not depend on this inference.</remarks>
-    public static bool Writes(CartridgeStatement[]? statements, string name, CartridgeDocument? document = null) {
+    public static bool Writes(CartridgeStatement[]? statements, string name, CartridgeDocument? document = null) =>
+        VisitWrites(statements: statements, visit: written => written == name, document: document);
+
+    // One conservative traversal serves both a single-name query and the guard analysis's bulk write collection.
+    // True means the visitor stopped the walk, or an implicit writer without a document can affect any variable.
+    internal static bool VisitWrites(CartridgeStatement[]? statements, Func<string, bool> visit, CartridgeDocument? document) {
+        bool Visit(string? name) => name is not null && visit(name);
+
         foreach (var statement in statements ?? []) {
             if (statement is null) {
                 continue;
             }
-            var implicitWrite = statement.Kind switch {
-                "load" => document is null || (document.Save?.Variables?.Contains(name, StringComparer.Ordinal) ?? false),
-                "clock" => document is null || document.Clock is { } clock &&
-                    new[] { clock.Seconds, clock.Minutes, clock.Hours, clock.Day, clock.Month, clock.Year }.Contains(name, StringComparer.Ordinal),
-                _ => false,
-            };
-            if (implicitWrite || statement.Index == name ||
-                statement.Target is { Key: null } target && target.State == name ||
-                Writes(statement.Then, name, document) || Writes(statement.Else, name, document) || Writes(statement.Body, name, document)) {
+            if (statement.Kind is "load" or "clock" && document is null) {
+                return true;
+            }
+            if (statement.Kind == "load" && document?.Save?.Variables is { } saved) {
+                foreach (var name in saved) {
+                    if (Visit(name)) { return true; }
+                }
+            }
+            if (statement.Kind == "clock" && document?.Clock is { } clock &&
+                (Visit(clock.Seconds) || Visit(clock.Minutes) || Visit(clock.Hours) ||
+                    Visit(clock.Day) || Visit(clock.Month) || Visit(clock.Year))) {
+                return true;
+            }
+            if (Visit(statement.Index) ||
+                statement.Target is { Key: null } target && Visit(target.State) ||
+                VisitWrites(statement.Then, visit, document) || VisitWrites(statement.Else, visit, document) || VisitWrites(statement.Body, visit, document)) {
                 return true;
             }
         }

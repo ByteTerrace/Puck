@@ -37,6 +37,7 @@ public static partial class WorldDefinitionValidator {
 
         var catalog = definition.StateCatalog;
         var rows = definition.State;
+        Dictionary<string, List<WorldStateRow>>? dependentsByRow = null;
 
         while (queue.Count > 0) {
             var rowName = queue.Dequeue();
@@ -81,14 +82,28 @@ public static partial class WorldDefinitionValidator {
                 );
             }
 
-            foreach (var dependent in definition.State ?? []) {
-                if (
-                    (dependent is not null) &&
-                    (dependent.EffectiveDomain is StateDomain.KeysOf keysOf) &&
-                    (keysOf.Row.Value == rowName) &&
-                    seen.Add(item: dependent.Name.Value)
-                ) {
-                    queue.Enqueue(item: dependent.Name.Value);
+            if (dependentsByRow is null) {
+                // Missing row names must not trigger unrelated domain inference before a row is validated.
+                // Lists retain authored order; dictionary enumeration never determines validation order.
+                dependentsByRow = new Dictionary<string, List<WorldStateRow>>(comparer: StringComparer.Ordinal);
+                foreach (var dependent in definition.State ?? []) {
+                    if (dependent is null || dependent.EffectiveDomain is not StateDomain.KeysOf keysOf ||
+                        keysOf.Row.Value is not { } source) {
+                        continue;
+                    }
+                    if (!dependentsByRow.TryGetValue(key: source, value: out var dependents)) {
+                        dependents = [];
+                        dependentsByRow[key: source] = dependents;
+                    }
+                    dependents.Add(item: dependent);
+                }
+            }
+
+            if (dependentsByRow.TryGetValue(key: rowName, value: out var matchingDependents)) {
+                foreach (var dependent in matchingDependents) {
+                    if (seen.Add(item: dependent.Name.Value)) {
+                        queue.Enqueue(item: dependent.Name.Value);
+                    }
                 }
             }
         }

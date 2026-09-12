@@ -77,29 +77,29 @@ public static class CartridgeCost {
         }
 
         var exclusive = ExclusiveGuards(rules: rules, guards: guards, scene: document.Scene, document: document);
+        var armsByGuard = new Dictionary<string, Dictionary<int, CostBound>>(comparer: StringComparer.Ordinal);
         for (var index = 0; index < rules.Length; ++index) {
             if (guards[index].Name is not { } name || !exclusive.Contains(item: name)) {
                 total = CostBound.Add(left: total, right: bodies[index]);
+                continue;
             }
+
+            if (!armsByGuard.TryGetValue(key: name, value: out var arms)) {
+                arms = [];
+                armsByGuard[key: name] = arms;
+            }
+
+            var value = guards[index].Value;
+            arms[key: value] = arms.TryGetValue(key: value, value: out var running)
+                ? CostBound.Add(left: running, right: bodies[index])
+                : bodies[index];
         }
 
         // Each settled guard contributes only its dearest arm: one value of the variable holds for the whole frame,
         // so the rules keyed to the other values cannot run.
         foreach (var name in exclusive) {
-            var arms = new Dictionary<int, CostBound>();
-            for (var index = 0; index < rules.Length; ++index) {
-                if (guards[index].Name != name) {
-                    continue;
-                }
-
-                var value = guards[index].Value;
-                arms[key: value] = arms.TryGetValue(key: value, value: out var running)
-                    ? CostBound.Add(left: running, right: bodies[index])
-                    : bodies[index];
-            }
-
             var dearest = CostBound.Zero;
-            foreach (var arm in arms.Values) {
+            foreach (var arm in armsByGuard[name].Values) {
                 dearest = CostBound.Max(left: dearest, right: arm);
             }
 
@@ -144,27 +144,42 @@ public static class CartridgeCost {
     /// </remarks>
     public static HashSet<string> ExclusiveGuards(CartridgeRule[] rules, (string? Name, int Value)[] guards, string? scene = null, CartridgeDocument? document = null) {
         var candidates = new HashSet<string>(comparer: StringComparer.Ordinal);
-        foreach (var guard in guards) {
-            if (guard.Name is { } name) {
+        var intervals = new Dictionary<string, (int First, int Last)>(comparer: StringComparer.Ordinal);
+        for (var index = 0; index < guards.Length; index++) {
+            if (guards[index].Name is { } name) {
                 candidates.Add(item: name);
+                if (name != scene) {
+                    intervals[name] = (intervals.TryGetValue(name, out var interval) ? interval.First : index, index);
+                }
             }
         }
 
-        foreach (var name in candidates.ToArray()) {
-            // A DECLARED scene is snapshotted before any rule evaluates and every guard on it compares against that
-            // snapshot, so a mid-frame write cannot let a second scene run: the partition holds wherever the write sits.
-            if (name == scene) {
-                continue;
-            }
-
-            var first = Array.FindIndex(array: guards, match: guard => guard.Name == name);
-            var last = Array.FindLastIndex(array: guards, match: guard => guard.Name == name);
-            for (var index = first; index <= last; ++index) {
-                if (CartridgeEffects.Writes(statements: rules[index]?.Body, name: name, document: document)) {
-                    candidates.Remove(item: name);
-                    break;
+        if (intervals.Count == 0) { return candidates; }
+        var first = intervals.Values.Min(static interval => interval.First);
+        var last = intervals.Values.Max(static interval => interval.Last);
+        var coverage = new int[guards.Length + 1];
+        foreach (var interval in intervals.Values) {
+            coverage[interval.First]++;
+            coverage[interval.Last + 1]--;
+        }
+        var active = 0;
+        var retainedScene = scene is not null && candidates.Contains(scene) ? 1 : 0;
+        // Walk each relevant body once, testing its writes against the guard's inclusive interval. The declared
+        // scene has no interval because its snapshotted value remains exclusive regardless of mid-frame writes.
+        for (var index = first; index <= last; index++) {
+            active += coverage[index];
+            if (active == 0) { continue; }
+            bool Disqualify(string name) {
+                if (intervals.TryGetValue(name, out var interval) && index >= interval.First && index <= interval.Last) {
+                    candidates.Remove(name);
                 }
+                return false;
             }
+            if (CartridgeEffects.VisitWrites(statements: rules[index]?.Body, visit: Disqualify, document: document)) {
+                // With no document, load and clock conservatively write every variable active at this point.
+                candidates.RemoveWhere(name => intervals.TryGetValue(name, out var interval) && index >= interval.First && index <= interval.Last);
+            }
+            if (candidates.Count == retainedScene) { break; }
         }
 
         return candidates;
