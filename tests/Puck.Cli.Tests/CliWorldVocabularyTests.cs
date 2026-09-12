@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.World;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Validation;
 using Xunit;
 

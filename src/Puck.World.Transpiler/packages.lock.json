@@ -9,8 +9,7 @@
         "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
       },
       "Parlot": {
-        "type": "Direct",
-        "requested": "[1.5.*, )",
+        "type": "Transitive",
         "resolved": "1.5.9",
         "contentHash": "Vro4ZKVZLBoPdCftyMUlzhlRpegI3N6TlT0zpyn79a42mH214VDqzkAdV70vu578W6NKS84hBA9H6j81cz0dLg=="
       },
@@ -102,6 +101,13 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "Parlot": "[1.5.*, )"
         }
       },
       "puck.world.authoring": {

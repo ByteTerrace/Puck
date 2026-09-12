@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
 using Puck.World.Transpiler.Lowering;
+using Puck.Transpiler;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -61,7 +62,7 @@ public static partial class WorldDecompiler {
                     }
                 }
             } else {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}bindings: {FormatValue(bindings, indentLevel + 1)}");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}bindings{FieldSeparator(bindings)}{FormatValue(bindings, indentLevel + 1)}");
             }
         }
         if (rule["mode"] is { } mode) {
@@ -71,7 +72,7 @@ public static partial class WorldDecompiler {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}forEach: {FormatValue(forEach, indentLevel + 1)}");
         }
         if (rule["zones"] is { } zones) {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}zones: {FormatValue(zones, indentLevel + 1)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}zones{FieldSeparator(zones)}{FormatValue(zones, indentLevel + 1)}");
         }
         if (rule["decision"] is JsonObject decision) {
             AppendDecisionBlock(sb, decision, indentLevel + 1);
@@ -86,7 +87,7 @@ public static partial class WorldDecompiler {
             if (s_ruleKnownKeys.Contains(k) || v is null) {
                 continue;
             }
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}`{k}`: {FormatValue(v, indentLevel + 1)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}`{k}`{FieldSeparator(v)}{FormatValue(v, indentLevel + 1)}");
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
@@ -144,7 +145,7 @@ public static partial class WorldDecompiler {
             if (IsPredicateSafeForGateSugar(interrupt)) {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}interrupt {FormatPredicate(interrupt)}");
             } else {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}interrupt: {FormatValue(interrupt, indentLevel + 1)}");
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}interrupt{FieldSeparator(interrupt)}{FormatValue(interrupt, indentLevel + 1)}");
             }
         }
         if (decision["onNoChoice"] is JsonArray onNoChoice) {
@@ -183,7 +184,7 @@ public static partial class WorldDecompiler {
             }
         }
         if (option["neighbors"] is { } neighbors) {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}neighbors: {FormatValue(neighbors, indentLevel + 1)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}neighbors{FieldSeparator(neighbors)}{FormatValue(neighbors, indentLevel + 1)}");
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
@@ -204,7 +205,7 @@ public static partial class WorldDecompiler {
         if (IsPredicateSafeForGateSugar(gate)) {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}when {FormatPredicate(gate)}");
         } else {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}gate: {FormatValue(gate, indentLevel)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}gate{FieldSeparator(gate)}{FormatValue(gate, indentLevel)}");
         }
     }
 

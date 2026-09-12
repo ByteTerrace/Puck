@@ -1,5 +1,5 @@
 using Puck.World.Transpiler.Decompiler;
-using Puck.World.Transpiler.Formatting;
+using Puck.Transpiler.Formatting;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;

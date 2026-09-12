@@ -53,6 +53,8 @@
         <ProjectReference Include="..\Puck.World.Client\Puck.World.Client.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\Puck.World.Azure\Puck.World.Azure.csproj" />
+        <ProjectReference Include="..\Puck.GamingBricks.Transpiler\Puck.GamingBricks.Transpiler.csproj" />
+        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.Mcp\Puck.Mcp.csproj" />
     </ItemGroup>

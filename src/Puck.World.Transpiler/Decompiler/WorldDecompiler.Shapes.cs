@@ -75,7 +75,7 @@ public static partial class WorldDecompiler {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: {FormatValue(numeric, indentLevel + 1)}{unit}");
                 continue;
             }
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: {FormatValue(v, indentLevel + 1)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}{FieldSeparator(v)}{FormatValue(v, indentLevel + 1)}");
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");

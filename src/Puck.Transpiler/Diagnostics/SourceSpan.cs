@@ -1,4 +1,4 @@
-namespace Puck.World.Transpiler.Diagnostics;
+namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Represents a span of source text with 1-indexed line and column coordinates.</summary>
 /// <param name="Offset">0-based character offset from start of file.</param>

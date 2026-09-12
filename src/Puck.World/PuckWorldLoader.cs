@@ -1,8 +1,8 @@
 using System.Text;
 using Puck.World.Transpiler.Composition;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 
 namespace Puck.World;
 

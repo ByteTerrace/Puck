@@ -1,4 +1,4 @@
-namespace Puck.World.Transpiler.Parsing;
+namespace Puck.Transpiler.Parsing;
 
 /// <summary>Exception thrown when parsing a Puck authoring document fails.</summary>
 public sealed class PuckParseException : Exception {

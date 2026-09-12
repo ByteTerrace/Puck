@@ -42,10 +42,10 @@ internal static class WorldBenchmarks {
     private static void MeasureShippedWorld(string root, List<(string Name, string Value)> rows) {
         var path = Path.Combine(path1: root, path2: ShippedWorldRelativePath);
 
-        // The validator asks which screen-machine engines ship and which compile a cartridge; a composition root
-        // installs both, and this lane is its own root.
-        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = id => WorldScreenMachineEngines.IsRegistered(id);
-        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = id => WorldScreenMachineEngines.CompilesCartridges(id);
+        // The validator asks which screen-machine engines ship and which compile a cartridge, and the answers come
+        // from a registry the shipped brick extensions must be fed into first. CliWorldVocabulary is the CLI's one
+        // installer and does both.
+        CliWorldVocabulary.EnsureInstalled();
 
         // The island proves its seams against the shard documents beside it, read the way the host reads them.
         var neighbours = new WorldFileNeighbourResolver(baseDirectory: () => (Path.GetDirectoryName(path: path) ?? string.Empty));

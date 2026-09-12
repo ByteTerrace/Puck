@@ -59,6 +59,8 @@
         <Project Path="src/Puck.World.Schema/Puck.World.Schema.csproj" />
         <Project Path="src/Puck.World.Server/Puck.World.Server.csproj" />
         <Project Path="src/Puck.World.Silo/Puck.World.Silo.csproj" />
+        <Project Path="src/Puck.GamingBricks.Transpiler/Puck.GamingBricks.Transpiler.csproj" />
+        <Project Path="src/Puck.Transpiler/Puck.Transpiler.csproj" />
         <Project Path="src/Puck.World.Transpiler/Puck.World.Transpiler.csproj" />
         <Project Path="src/Puck.World/Puck.World.csproj" />
     </Folder>
@@ -94,6 +96,7 @@
         <Project Path="tests/Puck.World.Agents.Tests/Puck.World.Agents.Tests.csproj" />
         <Project Path="tests/Puck.World.Schema.Tests/Puck.World.Schema.Tests.csproj" />
         <Project Path="tests/Puck.World.Tests/Puck.World.Tests.csproj" />
+        <Project Path="tests/Puck.GamingBricks.Transpiler.Tests/Puck.GamingBricks.Transpiler.Tests.csproj" />
         <Project Path="tests/Puck.World.Transpiler.Tests/Puck.World.Transpiler.Tests.csproj" />
     </Folder>
 </Solution>

@@ -1,4 +1,4 @@
-using Puck.World.Transpiler.Formatting;
+using Puck.Transpiler.Formatting;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -27,8 +27,8 @@ components:
         var formatted = PuckFormatter.Format(unformatted);
 
         // Egyptian braces: opening brace on same line
-        Assert.Contains("host: {", formatted);
-        Assert.Contains("entities: [", formatted);
+        Assert.Contains("host {", formatted);
+        Assert.Contains("entities [", formatted);
         // 4 spaces indentation
         Assert.Contains("    authority: \"test.host\"", formatted);
         Assert.Contains("    presentation: windowed", formatted);
@@ -40,7 +40,7 @@ components:
 puck: 1
 
 /* Host section block comment */
-host: {
+host {
     authority: ""test.host"" // inline comment
 }
 ";
@@ -54,12 +54,12 @@ host: {
     public void TestFormatterIdempotency() {
         var input = @"puck: 1
 
-host: {
+host {
     authority: ""test.host""
     presentation: windowed
 }
 
-entities: [
+entities [
     {
         name: ""Entity1""
     }
@@ -74,7 +74,7 @@ entities: [
     [Fact]
     public void TestFormatterColonAndCommaSpacing() {
         var unformatted = @"puck:1
-host:{
+host {
 authority:""my-auth"",presentation:headless
 }
 ";
@@ -87,7 +87,7 @@ authority:""my-auth"",presentation:headless
     [Fact]
     public void TestFormatterArrayOfObjectsDoesNotCollapseBraces() {
         var unformatted = @"
-cells: [
+cells [
 {
 key: ""feltColor""
 value: feltColor
@@ -100,7 +100,7 @@ value: 1
         var formatted = PuckFormatter.Format(unformatted);
         Assert.DoesNotContain("[ {", formatted);
         Assert.DoesNotContain("} {", formatted);
-        Assert.Contains("cells: [\n    {\n        key: \"feltColor\"", formatted);
+        Assert.Contains("cells [\n    {\n        key: \"feltColor\"", formatted);
     }
 
     // A ternary's colon carries a space on both sides (Puck.State.ExpressionSpelling's own spelling); stripping the

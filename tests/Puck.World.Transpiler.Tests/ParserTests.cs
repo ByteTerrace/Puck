@@ -1,7 +1,7 @@
 using Parlot;
 using Parlot.Fluent;
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -105,21 +105,21 @@ public class ParserTests {
 
             template seat(id, angle = 0rad) {
                 seatRig id {
-                    pose: [0, 0, 0]
+                    pose [0, 0, 0]
                     azimuth: angle
                 }
             }
 
             host {
                 tickInterval: tickInterval
-                physics: {
+                physics {
                     gravity: defaultGravity
                 }
             }
 
             views {
                 layout "tabletop" {
-                    center: [0, 1.2, 0]
+                    center [0, 1.2, 0]
                     orbit: orbit(radius: 2.5m, pitch: 45deg, yaw: 0rad)
                 }
             }

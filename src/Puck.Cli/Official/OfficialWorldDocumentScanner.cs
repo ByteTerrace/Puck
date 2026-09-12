@@ -28,11 +28,11 @@ internal static class OfficialWorldDocumentScanner {
         composed = [];
         composedDefinition = null;
 
-        // The validator asks which screen-machine engines ship and which compile a cartridge; a composition root
-        // installs both (see Puck.Cli.Bench.WorldBenchmarks, the other Puck.Cli lane that composes a real world), and
-        // this scan is its own root.
-        WorldExtensionVocabularyHook.ScreenMachineEngineCheck = id => WorldScreenMachineEngines.IsRegistered(id);
-        WorldExtensionVocabularyHook.ScreenMachineCartridgeCheck = id => WorldScreenMachineEngines.CompilesCartridges(id);
+        // The validator asks which screen-machine engines ship and which compile a cartridge. Setting those two
+        // hooks is not enough on its own: the answers come from a registry the shipped brick extensions have to be
+        // fed into first, so a scan that only pointed the hooks at an EMPTY registry refused the island's own
+        // arcade cabinets by name. CliWorldVocabulary is the CLI's one installer and does both.
+        CliWorldVocabulary.EnsureInstalled();
 
         var full = Path.GetFullPath(path: worldsDirectory);
         var rootPath = Path.Combine(path1: full, path2: RootDocumentName);

@@ -25,7 +25,7 @@ export binding input, pointer, pad
 template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
     seatRig rigName {
         version: "puck.camera.v1"
-        operations: [
+        operations [
             orbit(distance: dist, pitch: angle, yaw: 0)
             fov(fieldOfViewRadians: 0.001)
         ]
@@ -55,7 +55,7 @@ host {
 views {
     layout "arena" {
         seatCount: 2
-        slots: [
+        slots [
             {
                 camera: null
                 height: 1
@@ -92,12 +92,12 @@ addon "rules-engine" {
 
 // State catalog with world cells
 state {
-    world: [
+    world [
         {
             name: "tableState"
             kind: "Int"
             capacity: 1
-            cells: [
+            cells [
                 {
                     key: "feltColor"
                     value: feltColor
@@ -117,24 +117,24 @@ creation {
 
     shape Box "felt" {
         material: 0
-        position: [0, -1, 0]
-        scale: [24, 0.5, 24]
+        position [0, -1, 0]
+        scale [24, 0.5, 24]
     }
 
     shape Cylinder "post" {
         material: 1
-        position: [0, 0, 0]
+        position [0, 0, 0]
         smooth: 0.25
     }
 }
 
 // Placements: `placement "<id>" { }` rows, with `prototype:` and the bare `solid` flag.
 placements {
-    policy: { collision: "Ignore" }
+    policy { collision: "Ignore" }
 
     placement "table" {
         prototype: tableTop
-        position: [0, 0, 0]
+        position [0, 0, 0]
         yawDegrees: 45deg
         solid
     }
@@ -142,7 +142,7 @@ placements {
     placement "stool" {
         prototype: seat
         parent: table
-        position: [2, 0, 0]
+        position [2, 0, 0]
         scale: 2
     }
 }

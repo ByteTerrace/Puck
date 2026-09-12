@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Puck.World.Transpiler.Diagnostics;
+namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Represents a compiler diagnostic message with location and severity.</summary>
 /// <param name="Code">The unique diagnostic identifier (e.g. PUCK001).</param>

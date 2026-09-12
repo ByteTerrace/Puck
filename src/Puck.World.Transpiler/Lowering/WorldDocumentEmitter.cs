@@ -1,11 +1,11 @@
-using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
 using Puck.World.Transpiler.Addons;
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Extensions;
+using Puck.Transpiler;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -39,7 +39,7 @@ public static partial class WorldDocumentEmitter {
             sourceMap.Register("/basis", document.BasisSpan);
         }
 
-        var scope = new EvaluationScope(basePath, sourceMap: sourceMap, diagnostics: diagnostics, schema: document.Schema);
+        var scope = new DocumentScope(WorldDocumentVocabulary.Instance, basePath, sourceMap: sourceMap, diagnostics: diagnostics, schema: document.Schema);
 
         // Pre-scan let constants and templates
         foreach (var statement in document.Statements) {
@@ -59,33 +59,10 @@ public static partial class WorldDocumentEmitter {
         return new CompilationResult<JsonObject>(canonicalRoot, diagnostics);
     }
 
-    /// <summary>Recursively canonicalizes a JSON node by sorting all object properties ordinally.</summary>
+    /// <summary>Recursively canonicalizes a JSON node by sorting every object's properties ordinally.</summary>
     /// <param name="node">The node to canonicalize.</param>
-    /// <returns>A new canonicalized JSON node with sorted keys, or null if input was null.</returns>
-    public static JsonNode? Canonicalize(JsonNode? node) {
-        if (node is null) {
-            return null;
-        }
-
-        if (node is JsonObject obj) {
-            var sorted = new JsonObject();
-            var orderedProps = obj.OrderBy(static kvp => kvp.Key, StringComparer.Ordinal).ToList();
-            foreach (var kvp in orderedProps) {
-                sorted[kvp.Key] = Canonicalize(kvp.Value);
-            }
-            return sorted;
-        }
-
-        if (node is JsonArray arr) {
-            var canonicalArr = new JsonArray();
-            foreach (var item in arr) {
-                canonicalArr.Add(Canonicalize(item));
-            }
-            return canonicalArr;
-        }
-
-        return node.DeepClone();
-    }
+    /// <returns>A new canonicalized node, or <see langword="null"/> when the input was null.</returns>
+    public static JsonNode? Canonicalize(JsonNode? node) => DocumentLowering.Canonicalize(node: node);
 
     /// <summary>Lowers the AST <see cref="DocumentNode"/> into a mutable <see cref="JsonObject"/>.</summary>
     /// <param name="document">The document AST to lower.</param>
@@ -112,7 +89,7 @@ public static partial class WorldDocumentEmitter {
         return Encoding.UTF8.GetString(bytes);
     }
 
-    private static void ProcessStatement(StatementNode statement, JsonObject target, EvaluationScope scope) {
+    private static void ProcessStatement(StatementNode statement, JsonObject target, DocumentScope scope) {
         switch (statement) {
             case LetNode:
             case TemplateNode:
@@ -223,14 +200,8 @@ public static partial class WorldDocumentEmitter {
         }
     }
 
-    private static void LowerBlock(BlockNode block, JsonObject parent, EvaluationScope scope) {
+    private static void LowerBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         var id = block.Identifier;
-
-        // Check if an installed extension handles this block
-        var ext = scope.Schema is not null ? TranspilerExtensionRegistry.Default.FindHandler(scope.Schema) : null;
-        if (ext is not null && ext.TryLowerSection(id, block, parent, scope.Diagnostics)) {
-            return;
-        }
 
         var blockPointer = $"{scope.CurrentPointer}/{id}";
         scope.SourceMap?.Register(blockPointer, block.Span);
@@ -344,7 +315,7 @@ public static partial class WorldDocumentEmitter {
         }
     }
 
-    private static JsonObject LowerBlockToObject(BlockNode block, EvaluationScope scope) {
+    private static JsonObject LowerBlockToObject(BlockNode block, DocumentScope scope) {
         var obj = new JsonObject();
         foreach (var stmt in block.Statements) {
             ProcessStatement(stmt, obj, scope);
@@ -352,231 +323,19 @@ public static partial class WorldDocumentEmitter {
         return obj;
     }
 
-    /// <summary><paramref name="fieldKey"/> is the enclosing JSON key this expression fills — a property name, or a
-    /// call argument's resolved name — threaded down so a unit-suffixed literal reachable from it (directly, or
-    /// through an array/object/range/binary/`let` indirection) can validate against <see cref="WorldDocumentEmitterUnits"/>'s
-    /// field-dimension table (§5 of the sugar wave). <see langword="null"/> means no such key applies (a bare
-    /// top-level expression, an unnamed call argument that fell to the <c>argN</c> fallback).</summary>
-    private static JsonNode? LowerExpression(ExpressionNode expr, EvaluationScope scope, string? fieldKey = null) {
-        switch (expr) {
-            case LiteralExpressionNode lit:
-                return LowerLiteral(lit, fieldKey, scope);
+    private static JsonNode? LowerExpression(ExpressionNode expr, DocumentScope scope, string? fieldKey = null) =>
+        DocumentLowering.LowerValue(expr: expr, scope: scope, fieldKey: fieldKey);
 
-            case ColorExpressionNode color:
-                return JsonValue.Create(color.Hex);
-
-            case IdentifierExpressionNode ident:
-                if (scope.Constants.TryGetValue(ident.Name, out var constExpr)) {
-                    return LowerExpression(constExpr, scope, fieldKey);
-                }
-                if (string.Equals(ident.Name, "null", StringComparison.Ordinal)) {
-                    return null;
-                }
-                if (string.Equals(ident.Name, "true", StringComparison.Ordinal)) {
-                    return JsonValue.Create(true);
-                }
-                if (string.Equals(ident.Name, "false", StringComparison.Ordinal)) {
-                    return JsonValue.Create(false);
-                }
-                if (string.Equals(ident.Name, "auto", StringComparison.Ordinal)) {
-                    return JsonValue.Create("auto");
-                }
-                return JsonValue.Create(ident.Name);
-
-            case ArrayExpressionNode arr: {
-                var jsonArr = new JsonArray();
-                foreach (var elem in arr.Elements) {
-                    jsonArr.AppendNode(LowerExpression(elem, scope, fieldKey));
-                }
-                return jsonArr;
-            }
-
-            case ObjectExpressionNode obj: {
-                var jsonObj = new JsonObject();
-                foreach (var prop in obj.Properties) {
-                    jsonObj[prop.Name] = LowerExpression(prop.Value, scope, prop.Name);
-                }
-                return jsonObj;
-            }
-
-            case CallExpressionNode call: {
-                var jsonObj = new JsonObject {
-                    ["$type"] = call.Name
-                };
-
-                // Map arguments
-                var positionalIndex = 0;
-                foreach (var arg in call.Arguments) {
-                    var key = arg.Name;
-                    if (key is null) {
-                        // Positional heuristics for common ops
-                        if (string.Equals(call.Name, "orbit", StringComparison.OrdinalIgnoreCase)) {
-                            key = positionalIndex switch {
-                                0 => "distance",
-                                1 => "pitch",
-                                2 => "yaw",
-                                _ => $"arg{positionalIndex}"
-                            };
-                        } else if (string.Equals(call.Name, "fov", StringComparison.OrdinalIgnoreCase)) {
-                            key = "fieldOfViewRadians";
-                        } else {
-                            key = $"arg{positionalIndex}";
-                        }
-                    }
-
-                    // Classified by the qualified `call.argument` key, so a unit reads against the argument's own
-                    // dimension rather than whatever a same-named block property elsewhere means.
-                    jsonObj[key] = LowerExpression(arg.Value, scope, $"{call.Name}.{key}");
-                    positionalIndex++;
-                }
-                return jsonObj;
-            }
-
-            case BinaryExpressionNode bin: {
-                return EvaluateBinary(bin, scope, fieldKey);
-            }
-
-            case RangeExpressionNode range: {
-                var rangeArr = new JsonArray();
-                rangeArr.AppendNode(LowerExpression(range.Start, scope, fieldKey));
-                rangeArr.AppendNode(LowerExpression(range.End, scope, fieldKey));
-                return rangeArr;
-            }
-
-            default:
-                return null;
-        }
+    private static void ExpandTemplateInvocation(CallExpressionNode call, JsonObject target, DocumentScope scope, bool isViewsContext = false) {
+        DocumentLowering.ExpandTemplate(
+            call: call,
+            target: target,
+            scope: scope,
+            sink: (isViewsContext ? ProcessViewsStatement : ProcessStatement)
+        );
     }
 
-    private static JsonNode? LowerLiteral(LiteralExpressionNode lit, string? fieldKey, EvaluationScope scope) {
-        if (lit.Value is null) {
-            return null;
-        }
-
-        if (lit.Value is bool b) {
-            return JsonValue.Create(b);
-        }
-
-        if (lit.Value is string s) {
-            return JsonValue.Create(s);
-        }
-
-        // Numeric values with optional unit
-        double numVal;
-        if (lit.Value is long l) {
-            numVal = l;
-        } else if (lit.Value is double d) {
-            numVal = d;
-        } else if (lit.Value is int i) {
-            numVal = i;
-        } else {
-            numVal = Convert.ToDouble(lit.Value, CultureInfo.InvariantCulture);
-        }
-
-        if (lit.Unit is not null) {
-            return LowerUnitLiteral(numVal, lit.Unit, fieldKey, lit.Span, scope);
-        }
-
-        if (lit.Value is long longVal) {
-            return JsonValue.Create(longVal);
-        }
-
-        return JsonValue.Create(numVal);
-    }
-
-    // Every unit is checked against WorldDocumentEmitterUnits' field-dimension table, `%`/`pct` included: a field
-    // absent from the table is PUCK024, a unit the field's own dimension does not accept is PUCK025. No unit
-    // converts outside the table, so a suffix can never silently change a value the table says nothing about.
-    private static JsonNode LowerUnitLiteral(double numVal, string unit, string? fieldKey, SourceSpan span, EvaluationScope scope) {
-        if (fieldKey is not null && WorldDocumentEmitterUnits.TryConvert(fieldKey, numVal, unit, out var converted)) {
-            if (Math.Abs(converted % 1) < double.Epsilon) {
-                return JsonValue.Create((long)converted);
-            }
-            return JsonValue.Create(converted);
-        }
-
-        var kind = (fieldKey is null) ? WorldDocumentEmitterUnits.FieldDimensionKind.Unknown : WorldDocumentEmitterUnits.Classify(fieldKey);
-        if (kind == WorldDocumentEmitterUnits.FieldDimensionKind.Unknown) {
-            scope.Diagnostics.ReportError(PuckDiagnosticCodes.UnitOnUnknownField, $"'{fieldKey ?? "this field"}' admits no unit — remove the '{unit}' suffix", span);
-        } else {
-            var accepted = string.Join("/", WorldDocumentEmitterUnits.AcceptedUnitsFor(kind));
-            scope.Diagnostics.ReportError(PuckDiagnosticCodes.UnitNotAdmitted, $"'{fieldKey}' accepts {accepted}, not '{unit}'", span);
-        }
-        return JsonValue.Create(numVal);
-    }
-
-    private static JsonNode? EvaluateBinary(BinaryExpressionNode bin, EvaluationScope scope, string? fieldKey) {
-        var leftNode = LowerExpression(bin.Left, scope, fieldKey);
-        var rightNode = LowerExpression(bin.Right, scope, fieldKey);
-
-        if (leftNode is JsonValue leftVal && rightNode is JsonValue rightVal) {
-            if (leftVal.TryGetValue<double>(out var lNum) && rightVal.TryGetValue<double>(out var rNum)) {
-                var res = bin.Operator switch {
-                    "+" => lNum + rNum,
-                    "-" => lNum - rNum,
-                    "*" => lNum * rNum,
-                    "/" => rNum != 0 ? lNum / rNum : 0,
-                    _ => 0
-                };
-                if (Math.Abs(res % 1) < double.Epsilon) {
-                    return JsonValue.Create((long)res);
-                }
-                return JsonValue.Create(res);
-            }
-        }
-
-        return null;
-    }
-
-    private static void ExpandTemplateInvocation(CallExpressionNode call, JsonObject target, EvaluationScope scope, bool isViewsContext = false) {
-        if (!scope.Templates.TryGetValue(call.Name, out var template)) {
-            return;
-        }
-
-        // Bind arguments
-        var localConstants = new Dictionary<string, ExpressionNode>(scope.Constants);
-        for (var i = 0; i < template.Parameters.Count; i++) {
-            var param = template.Parameters[i];
-            ExpressionNode? boundValue = null;
-
-            // Search by name
-            foreach (var arg in call.Arguments) {
-                if (string.Equals(arg.Name, param.Name, StringComparison.Ordinal)) {
-                    boundValue = arg.Value;
-                    break;
-                }
-            }
-
-            // Fallback to positional
-            if (boundValue is null && i < call.Arguments.Count && call.Arguments[i].Name is null) {
-                boundValue = call.Arguments[i].Value;
-            }
-
-            // Fallback to default
-            boundValue ??= param.DefaultValue;
-
-            if (boundValue is not null) {
-                localConstants[param.Name] = boundValue;
-            }
-        }
-
-        var invocationScope = new EvaluationScope(scope.BasePath, localConstants, scope.Templates, scope.SourceMap, scope.Diagnostics, scope.Schema, scope.CurrentPointer);
-        foreach (var stmt in template.Body.Statements) {
-            var expandedStmt = stmt;
-            if (stmt is BlockNode blockStmt && blockStmt.Name is not null && invocationScope.Constants.TryGetValue(blockStmt.Name, out var nameExpr)) {
-                var evaluatedName = LowerExpression(nameExpr, invocationScope)?.ToString() ?? blockStmt.Name;
-                expandedStmt = blockStmt with { Name = evaluatedName };
-            }
-
-            if (isViewsContext) {
-                ProcessViewsStatement(expandedStmt, target, invocationScope);
-            } else {
-                ProcessStatement(expandedStmt, target, invocationScope);
-            }
-        }
-    }
-
-    private static void ProcessViewsStatement(StatementNode stmt, JsonObject viewsObj, EvaluationScope scope) {
+    private static void ProcessViewsStatement(StatementNode stmt, JsonObject viewsObj, DocumentScope scope) {
         if (stmt is BlockNode subBlock) {
             var subId = subBlock.Identifier.ToLowerInvariant();
             if (subId is "layout" or "layouts") {
@@ -617,7 +376,7 @@ public static partial class WorldDocumentEmitter {
         }
     }
 
-    private static void ResolveAddonHash(JsonObject addon, EvaluationScope scope, SourceSpan span = default) {
+    private static void ResolveAddonHash(JsonObject addon, DocumentScope scope, SourceSpan span = default) {
         var sourcePath = addon["modulePath"]?.ToString() ?? addon["source"]?.ToString() ?? addon["path"]?.ToString() ?? addon["rom"]?.ToString() ?? addon["name"]?.ToString() ?? "addon";
         var hashToken = addon["hash"]?.ToString();
 
@@ -661,26 +420,5 @@ public static partial class WorldDocumentEmitter {
         }
     }
 
-    private sealed class EvaluationScope(
-        string? basePath,
-        Dictionary<string, ExpressionNode>? constants = null,
-        Dictionary<string, TemplateNode>? templates = null,
-        SourceMap? sourceMap = null,
-        DiagnosticBag? diagnostics = null,
-        string? schema = null,
-        string currentPointer = ""
-    ) {
-        public string? BasePath { get; } = basePath;
-        public Dictionary<string, ExpressionNode> Constants { get; } = constants ?? [];
-        public Dictionary<string, TemplateNode> Templates { get; } = templates ?? [];
-        public SourceMap? SourceMap { get; } = sourceMap;
-        public DiagnosticBag Diagnostics { get; } = diagnostics ?? new DiagnosticBag();
-        public string? Schema { get; } = schema;
-        public string CurrentPointer { get; set; } = currentPointer;
-    }
-
-    private static void AppendNode(this JsonArray array, JsonNode? item) {
-        ((IList<JsonNode?>)array).Add(item);
-    }
 }
 

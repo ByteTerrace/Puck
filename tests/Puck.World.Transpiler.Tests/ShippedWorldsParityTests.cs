@@ -1,9 +1,9 @@
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
 using Puck.World.Transpiler.Decompiler;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;

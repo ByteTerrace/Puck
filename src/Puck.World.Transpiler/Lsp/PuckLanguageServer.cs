@@ -1,10 +1,10 @@
 using System.Text;
 using System.Text.Json.Nodes;
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Formatting;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Formatting;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
 
 namespace Puck.World.Transpiler.Lsp;

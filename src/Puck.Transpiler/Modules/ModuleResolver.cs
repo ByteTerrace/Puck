@@ -1,8 +1,8 @@
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Parsing;
 
-namespace Puck.World.Transpiler.Modules;
+namespace Puck.Transpiler.Modules;
 
 /// <summary>Resolves multi-document import dependency graphs, detects cycles, and supports optional bundling.</summary>
 public static class ModuleResolver {

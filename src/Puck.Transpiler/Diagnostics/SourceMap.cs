@@ -1,4 +1,4 @@
-namespace Puck.World.Transpiler.Diagnostics;
+namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Maintains bidirectional mapping between canonical JSON pointers and source AST spans.</summary>
 public sealed class SourceMap {

@@ -1,9 +1,9 @@
 using Parlot.Fluent;
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Lowering;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Units;
 
-namespace Puck.World.Transpiler.Parsing;
+namespace Puck.Transpiler.Parsing;
 
 // `rule "name" { }` and everything inside it (§2, §3): bind/decision/option/interrupt/onNoChoice, and the effect
 // statements (set/add/push/countdown/remove/schedule/transform/transaction). These bodies are parsed by a dedicated
@@ -11,6 +11,10 @@ namespace Puck.World.Transpiler.Parsing;
 // property there (§2.2) — the two productions never share a parse context, so no backtracking is needed to
 // disambiguate them.
 public static partial class PuckParser {
+    // Longest-first, so a scan never reads ">>=" as ">" or "<<=" as "<". Plain "=" and "+=" are matched ahead of
+    // this table and carry their own statement nodes.
+    private static readonly string[] CompoundAssignmentOperators = [">>=", "<<=", "-=", "*=", "/=", "%=", "&=", "|=", "^="];
+
     // `in` closes a `schedule <row> in <delay>` row reference; nothing else terminates one but the statement itself.
     private static readonly HashSet<string> ScheduleStopKeywords = new(StringComparer.Ordinal) { "in" };
 
@@ -377,10 +381,10 @@ public static partial class PuckParser {
             var delay = LiteralToDecimal(literal.Value);
             if (literal.Unit is null) {
                 diagnostics?.ReportError(PuckDiagnosticCodes.ScheduleDelayUnit, "'schedule ... in' requires a number carrying a time unit", new SourceSpan(literal.Offset, literal.Length, literal.Line, literal.Column));
-            } else if (WorldDocumentEmitterUnits.TryConvert("delaySeconds", (double)delay, literal.Unit, out var seconds)) {
+            } else if (UnitConversion.TryConvert(UnitDimension.Seconds, (double)delay, literal.Unit, out var seconds)) {
                 delay = (decimal)seconds;
             } else {
-                var accepted = string.Join("/", WorldDocumentEmitterUnits.AcceptedUnitsFor(WorldDocumentEmitterUnits.FieldDimensionKind.Seconds));
+                var accepted = string.Join("/", UnitConversion.AcceptedUnits(UnitDimension.Seconds));
                 diagnostics?.ReportError(PuckDiagnosticCodes.ScheduleDelayUnit, $"'schedule ... in' accepts {accepted}, not '{literal.Unit}'", new SourceSpan(literal.Offset, literal.Length, literal.Line, literal.Column));
             }
             var len = cursor.Offset - startOffset;
@@ -415,6 +419,18 @@ public static partial class PuckParser {
             return ParseTransactionStatement(context, startOffset, line, col, diagnostics, insideTransaction);
         }
 
+        if (TryMatchKeyword(context, "if")) {
+            return ParseIfStatement(context, startOffset, line, col, diagnostics, insideTransaction);
+        }
+
+        if (TryMatchKeyword(context, "repeat")) {
+            return ParseRepeatStatement(context, startOffset, line, col, diagnostics, insideTransaction);
+        }
+
+        if (TryMatchKeyword(context, "break")) {
+            return new BreakStatementNode(startOffset, (cursor.Offset - startOffset), line, col);
+        }
+
         var savedPosition = cursor.Position;
 
         if (TryReadRowRefSpanRaw(context, out var rowRefText, out var rowRefSpan)) {
@@ -432,6 +448,13 @@ public static partial class PuckParser {
                 var rhs = ParseRhs(context, diagnostics, allowText: true, allowSeconds: true, ownerForDiagnostic: "setState");
                 var len = cursor.Offset - startOffset;
                 return new SetCellStatementNode(target, rhs, startOffset, len, line, col);
+            }
+            if (LongestMatchingPunctuation(context.Scanner.Buffer, cursor.Offset, CompoundAssignmentOperators) is { } compound) {
+                cursor.Advance(compound.Length);
+                var target = ResolveRowRef(rowRefText, rowRefSpan, diagnostics);
+                var rhs = ParseRhs(context, diagnostics, allowText: false, allowSeconds: false, ownerForDiagnostic: "compound assignment");
+                var len = cursor.Offset - startOffset;
+                return new CompoundAssignStatementNode(target, compound[..^1], rhs, startOffset, len, line, col);
             }
             cursor.ResetPosition(savedPosition);
         }
@@ -464,6 +487,90 @@ public static partial class PuckParser {
             SkipWhiteSpace(context);
         }
         return statements;
+    }
+
+    // `if Gate { ... }`, with an optional `else { ... }` or `else if ...` tail. An `else if` is stored as an Else
+    // holding one nested IfStatementNode, so a chain of any length is the same shape as one branch and no consumer
+    // needs a separate else-if case.
+    private static IfStatementNode ParseIfStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, bool insideTransaction) {
+        var cursor = context.Scanner.Cursor;
+        var condition = ParseGate(context, diagnostics);
+
+        SkipWhiteSpace(context);
+
+        if (!TryConsume(context, '{')) {
+            throw CreateException(context, "Expected '{' starting an 'if' body");
+        }
+
+        var thenStatements = ParseEffectStatementList(context, diagnostics, insideTransaction);
+
+        if (!TryConsume(context, '}')) {
+            throw CreateException(context, "Expected '}' closing an 'if' body");
+        }
+
+        IReadOnlyList<StatementNode>? elseStatements = null;
+        var savedPosition = cursor.Position;
+
+        SkipWhiteSpace(context);
+
+        if (TryMatchKeyword(context, "else")) {
+            SkipWhiteSpace(context);
+
+            var elseStart = cursor.Offset;
+            var (elseLine, elseCol) = GetLineAndColumn(context.Scanner.Buffer, elseStart);
+
+            if (TryMatchKeyword(context, "if")) {
+                elseStatements = [ParseIfStatement(context, elseStart, elseLine, elseCol, diagnostics, insideTransaction)];
+            } else {
+                if (!TryConsume(context, '{')) {
+                    throw CreateException(context, "Expected '{' or 'if' after 'else'");
+                }
+
+                elseStatements = ParseEffectStatementList(context, diagnostics, insideTransaction);
+
+                if (!TryConsume(context, '}')) {
+                    throw CreateException(context, "Expected '}' closing an 'else' body");
+                }
+            }
+        } else {
+            // Nothing was consumed by the failed keyword match, but the whitespace skip before it was: rewinding
+            // keeps this statement's Length honest and leaves the next statement's own leading trivia alone.
+            cursor.ResetPosition(savedPosition);
+        }
+
+        return new IfStatementNode(condition, thenStatements, elseStatements, startOffset, (cursor.Offset - startOffset), line, col);
+    }
+
+    // `repeat Count as name { ... }`.
+    private static RepeatStatementNode ParseRepeatStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, bool insideTransaction) {
+        var cursor = context.Scanner.Cursor;
+        var count = ParseExpression(context);
+
+        SkipWhiteSpace(context);
+
+        if (!TryMatchKeyword(context, "as")) {
+            throw CreateException(context, "Expected 'as <name>' after a 'repeat' count");
+        }
+
+        SkipWhiteSpace(context);
+
+        if (!TryReadIdentifier(context, out var index)) {
+            throw CreateException(context, "Expected an index name after 'repeat <count> as'");
+        }
+
+        SkipWhiteSpace(context);
+
+        if (!TryConsume(context, '{')) {
+            throw CreateException(context, "Expected '{' starting a 'repeat' body");
+        }
+
+        var body = ParseEffectStatementList(context, diagnostics, insideTransaction);
+
+        if (!TryConsume(context, '}')) {
+            throw CreateException(context, "Expected '}' closing a 'repeat' body");
+        }
+
+        return new RepeatStatementNode(count, index, body, startOffset, (cursor.Offset - startOffset), line, col);
     }
 
     private static TransactionStatementNode ParseTransactionStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, bool insideTransaction = false) {

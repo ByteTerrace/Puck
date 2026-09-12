@@ -1,7 +1,7 @@
 using Parlot;
 using Parlot.Fluent;
 
-namespace Puck.World.Transpiler.Parsing;
+namespace Puck.Transpiler.Parsing;
 
 /// <summary>Whitespace parser for Puck that transparently skips horizontal whitespace, newlines, single-line (//) and multi-line (/* */) comments.</summary>
 public sealed class PuckWhiteSpaceParser : Parser<TextSpan> {

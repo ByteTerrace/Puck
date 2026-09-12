@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Lowering;
+using Puck.Transpiler.Units;
 
 namespace Puck.World.Transpiler.Decompiler;
 
@@ -15,8 +16,8 @@ public static partial class WorldDecompiler {
             return null;
         }
         return WorldDocumentEmitterUnits.Classify(fieldKey) switch {
-            WorldDocumentEmitterUnits.FieldDimensionKind.DegreesNative => "deg",
-            WorldDocumentEmitterUnits.FieldDimensionKind.Seconds => "s",
+            UnitDimension.Degrees => "deg",
+            UnitDimension.Seconds => "s",
             _ => null,
         };
     }

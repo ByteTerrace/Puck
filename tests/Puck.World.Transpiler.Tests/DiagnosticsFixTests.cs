@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -151,7 +151,7 @@ public class DiagnosticsFixTests {
         var (converted, convertedDiagnostics) = Compile("""
             views {
                 seatRig "r" {
-                    operations: [
+                    operations [
                         orbit(distance: 2.5m, pitch: 12deg, yaw: 110deg)
                     ]
                 }
@@ -161,7 +161,7 @@ public class DiagnosticsFixTests {
 
         var (_, refusedDiagnostics) = Compile("""
             poses {
-                rows: [ { name: "isolated", yaw: 110deg, pitch: 12deg } ]
+                rows [ { name: "isolated", yaw: 110deg, pitch: 12deg } ]
             }
             """);
 

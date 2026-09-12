@@ -1,4 +1,4 @@
-namespace Puck.World.Transpiler.Ast;
+namespace Puck.Transpiler.Ast;
 
 /// <summary>Base class for all gate-predicate nodes parsed from a <c>when</c> clause (§1 of the sugar wave).
 /// A predicate node never classifies itself as <c>compareState</c>/<c>compareValue</c> — it carries the raw operand
@@ -85,3 +85,20 @@ public sealed record WhenStatementNode(
     int Line = 1,
     int Column = 1
 ) : StatementNode(Offset, Length, Line, Column);
+
+/// <summary>A call-form gate: <c>key(left, held)</c>. The comparison predicate covers every gate expressible as
+/// <c>left cmp right</c>; this covers the ones that are not — a machine's joypad edge, a vocabulary's own named
+/// test. The parser assigns it no meaning beyond the call's own name and arguments, so a vocabulary that knows no
+/// such gate refuses it by name.</summary>
+/// <param name="Call">The call as written.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record CallPredicateNode(
+    CallExpressionNode Call,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : PredicateNode(Offset, Length, Line, Column);

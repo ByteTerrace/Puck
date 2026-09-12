@@ -1,14 +1,15 @@
 using System.Text.Json.Nodes;
 using Puck.SignedDistance;
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Lowering;
 
 // `shape Type "name" { }` (§4.1, a creation-document row — CreationDocument.Shapes, the live successor to the dead
 // `solid`/`"solids"` collector this renames in place) and `placements { policy: { } placement "id" { } }` (§4.2).
 public static partial class WorldDocumentEmitter {
-    private static void LowerShapeBlock(BlockNode block, JsonObject parent, EvaluationScope scope) {
+    private static void LowerShapeBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["shapes"] is not JsonArray shapesArr) {
             shapesArr = [];
             parent["shapes"] = shapesArr;
@@ -48,7 +49,7 @@ public static partial class WorldDocumentEmitter {
         shapesArr.AppendNode(shapeObj);
     }
 
-    private static void LowerPlacementsBlock(BlockNode block, JsonObject parent, EvaluationScope scope) {
+    private static void LowerPlacementsBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["placements"] is not JsonObject placementsObj) {
             placementsObj = [];
             parent["placements"] = placementsObj;
@@ -71,8 +72,14 @@ public static partial class WorldDocumentEmitter {
             } else if (stmt is PropertyNode prop) {
                 scope.CurrentPointer = placementsPointer;
                 placementsObj[prop.Name] = LowerExpression(prop.Value, scope, prop.Name);
+            } else if (stmt is BlockNode { Name: null, Target: null } nested) {
+                // An object-valued field of the section, written in block form: `policy { }` is the section's own
+                // `policy` object, the same field the property spelling fills.
+                scope.CurrentPointer = $"{placementsPointer}/{nested.Identifier}";
+                scope.SourceMap?.Register(scope.CurrentPointer, nested.Span);
+                placementsObj[nested.Identifier] = LowerBlockToObject(nested, scope);
             } else {
-                ReportUnrecognizedSectionStatement("placements", "'placement' rows and plain properties", stmt, scope);
+                ReportUnrecognizedSectionStatement("placements", "'placement' rows, nested field blocks and plain properties", stmt, scope);
             }
         }
 
@@ -81,7 +88,7 @@ public static partial class WorldDocumentEmitter {
 
     // A statement the section's grammar has no slot for would otherwise be dropped without a trace — a one-letter
     // typo in the row keyword silently loses a whole row and everything nested in it.
-    private static void ReportUnrecognizedSectionStatement(string section, string admitted, StatementNode stmt, EvaluationScope scope) {
+    private static void ReportUnrecognizedSectionStatement(string section, string admitted, StatementNode stmt, DocumentScope scope) {
         var spelling = stmt switch {
             BlockNode block => $"'{block.Identifier}' block",
             PropertyNode property => $"'{property.Name}' property",
@@ -94,7 +101,7 @@ public static partial class WorldDocumentEmitter {
         );
     }
 
-    private static JsonObject LowerPlacementRow(BlockNode row, EvaluationScope scope) {
+    private static JsonObject LowerPlacementRow(BlockNode row, DocumentScope scope) {
         var rowObj = LowerBlockToObject(row, scope);
 
         // Deviates from the addon/shape precedent of mapping a block's quoted name to "name": WorldPlacement's
@@ -132,7 +139,7 @@ public static partial class WorldDocumentEmitter {
         return rowObj;
     }
 
-    private static void LowerPrototypesBlock(BlockNode block, JsonObject parent, EvaluationScope scope) {
+    private static void LowerPrototypesBlock(BlockNode block, JsonObject parent, DocumentScope scope) {
         if (parent["prototypes"] is not JsonArray protoArr) {
             protoArr = [];
             parent["prototypes"] = protoArr;
@@ -160,7 +167,7 @@ public static partial class WorldDocumentEmitter {
     // `WorldPrototype.Id` is the block's quoted name, the same way `WorldPlacement.Id` is; `document` is an
     // ordinary nested block reached through `LowerBlockToObject` -> `ProcessStatement` -> `LowerBlock`, so a `shape`
     // statement inside it hits `LowerShapeBlock` the same way one at document root does.
-    private static JsonObject LowerPrototypeRow(BlockNode row, EvaluationScope scope) {
+    private static JsonObject LowerPrototypeRow(BlockNode row, DocumentScope scope) {
         var rowObj = LowerBlockToObject(row, scope);
 
         if (!rowObj.ContainsKey("id") && !string.IsNullOrEmpty(row.Name)) {

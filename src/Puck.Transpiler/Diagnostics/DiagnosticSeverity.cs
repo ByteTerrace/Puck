@@ -1,4 +1,4 @@
-namespace Puck.World.Transpiler.Diagnostics;
+namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Severity classification for compiler diagnostics.</summary>
 public enum DiagnosticSeverity {

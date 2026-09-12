@@ -1,6 +1,6 @@
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 
-namespace Puck.World.Transpiler.Ast;
+namespace Puck.Transpiler.Ast;
 
 /// <summary>Base class for all Abstract Syntax Tree nodes in the Puck authoring language.</summary>
 /// <param name="Offset">The 0-based character offset within the source text.</param>
@@ -286,6 +286,43 @@ public sealed record BinaryExpressionNode(
     ExpressionNode Left,
     string Operator,
     ExpressionNode Right,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(Offset, Length, Line, Column);
+
+/// <summary>A prefix operator expression: <c>-operand</c> or <c>+operand</c>. A signed NUMERIC LITERAL never
+/// reaches this node — the primary reader folds the sign into the literal so a unit suffix still reads against the
+/// value it signs (<c>-1.5m</c>) — so this node's operand is always an identifier, call, member access, or
+/// parenthesized expression.</summary>
+/// <param name="Operator">The operator token ('-' or '+').</param>
+/// <param name="Operand">The expression the operator applies to.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record UnaryExpressionNode(
+    string Operator,
+    ExpressionNode Operand,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(Offset, Length, Line, Column);
+
+/// <summary>A lambda: <c>item =&gt; expression</c>, or <c>(running, item) =&gt; expression</c>. It is an argument to
+/// an array builtin and nothing else — the language has no first-class functions, and a lambda is evaluated while
+/// lowering rather than kept in the document.</summary>
+/// <param name="Parameters">The parameter names, in written order.</param>
+/// <param name="Body">The expression each application evaluates.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record LambdaExpressionNode(
+    IReadOnlyList<string> Parameters,
+    ExpressionNode Body,
     int Offset = 0,
     int Length = 0,
     int Line = 1,

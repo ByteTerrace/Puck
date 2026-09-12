@@ -1,9 +1,9 @@
 using Parlot.Fluent;
 using Puck.State;
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
 
-namespace Puck.World.Transpiler.Parsing;
+namespace Puck.Transpiler.Parsing;
 
 // The opaque-span operand scanner (§1.2 of the sugar wave) and the row-reference reader (§2.2) built on it. Both
 // hand raw text to Puck.State.ExpressionSpelling.TryParse rather than re-implementing any part of its grammar
@@ -16,8 +16,8 @@ public static partial class PuckParser {
 
     /// <summary>Scans one contiguous span of opaque operand text: brackets and parentheses are tracked as one
     /// combined depth counter, a backquoted span is passed through uninterpreted, and scanning always stops
-    /// (without consuming) at a top-level ')', ',', ';', '}', a comment opener ('//' or '/*'), a newline, or end of
-    /// input. When <paramref
+    /// (without consuming) at a top-level ')', ',', ';', '{', '}', a comment opener ('//' or '/*'), a newline, or
+    /// end of input. When <paramref
     /// name="stopKeywords"/> names a bare word found at a word boundary, scanning also stops there. When <paramref
     /// name="stopAtComparator"/>, a top-level comparison operator (from <see cref="ComparisonStopOperators"/>) also
     /// stops the scan without being consumed — <paramref name="sawComparator"/> reports whether that happened, so a
@@ -65,7 +65,9 @@ public static partial class PuckParser {
                 continue;
             }
 
-            if (c is ',' or ';' or '}' or '\n' or '\r') {
+            // '{' stops for the same reason '}' does: no operand grammar contains one, and an `if`/`repeat` gate
+            // is followed immediately by its block body.
+            if (c is ',' or ';' or '{' or '}' or '\n' or '\r') {
                 break;
             }
 

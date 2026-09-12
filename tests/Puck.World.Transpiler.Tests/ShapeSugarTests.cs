@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -43,7 +43,7 @@ public class ShapeSugarTests {
                     document {
                         schema: "puck.creation.v1"
                         shape Box "block" {
-                            position: [1, 2, 3]
+                            position [1, 2, 3]
                         }
                     }
                 }
@@ -79,7 +79,7 @@ public class ShapeSugarTests {
                 prototype "studyProp" {
                     document {
                         shape Box "block" {
-                            position: [0, 0, 0]
+                            position [0, 0, 0]
                             rotation: "state.transforms.identity"
                         }
                     }
@@ -113,7 +113,7 @@ public class ShapeSugarTests {
                         shape Cylinder "waist" {
                             parent: "chest"
                             group: 0
-                            position: [0, 0.9, 0]
+                            position [0, 0.9, 0]
                         }
                     }
                 }
@@ -144,8 +144,8 @@ public class ShapeSugarTests {
                 prototype "trim" {
                     document {
                         shape Sweep "rail" {
-                            profile: { a: [0, 0, 0], b: [1, 1, 1] }
-                            position: [0, 0, 0]
+                            profile { a [0, 0, 0], b [1, 1, 1] }
+                            position [0, 0, 0]
                         }
                     }
                 }
@@ -223,7 +223,7 @@ public class ShapeSugarTests {
         var puck = WorldDecompiler.Decompile(json);
 
         Assert.DoesNotContain("prototype \"", puck, StringComparison.Ordinal);
-        Assert.Contains("prototypes: [", puck, StringComparison.Ordinal);
+        Assert.Contains("prototypes [", puck, StringComparison.Ordinal);
     }
 
     // A `document.shapes` row with no `type` is a basis-merge patch onto a base document's shape (named by `id`
@@ -252,7 +252,7 @@ public class ShapeSugarTests {
 
         Assert.Contains("prototype \"moth\" {", puck, StringComparison.Ordinal);
         Assert.DoesNotContain("shape ", puck, StringComparison.Ordinal);
-        Assert.Contains("slides: [", puck, StringComparison.Ordinal);
+        Assert.Contains("slides [", puck, StringComparison.Ordinal);
 
         // Round-trips: the fallback text still compiles back to the same JSON it was decompiled from.
         var diagnostics = new DiagnosticBag();

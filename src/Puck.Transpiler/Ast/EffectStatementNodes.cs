@@ -1,4 +1,4 @@
-namespace Puck.World.Transpiler.Ast;
+namespace Puck.Transpiler.Ast;
 
 /// <summary>A structural reference to a state row, optionally keyed: <c>name</c> or <c>name[key]</c>. The parser
 /// resolves the whole span through <c>ExpressionSpelling.TryParse</c> and requires exactly one <c>State</c> token
@@ -96,6 +96,27 @@ public sealed record AddCellStatementNode(
     int Column = 1
 ) : EffectStatementNode(Offset, Length, Line, Column);
 
+/// <summary><c>row[key] op= rhs</c> for an arithmetic or bitwise <c>op</c> beyond plain assignment and addition,
+/// which have their own nodes. The operator is carried as written; which of them a document's own effects can
+/// express is the lowering vocabulary's answer.</summary>
+/// <param name="Target">The assigned row reference.</param>
+/// <param name="Operator">The compound operator as written, without the trailing <c>=</c> (<c>-</c>, <c>*</c>,
+/// <c>/</c>, <c>%</c>, <c>&amp;</c>, <c>|</c>, <c>^</c>, <c>&gt;&gt;</c>, <c>&lt;&lt;</c>).</param>
+/// <param name="Rhs">The right-hand side.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record CompoundAssignStatementNode(
+    RowRefNode Target,
+    string Operator,
+    RhsNode Rhs,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(Offset, Length, Line, Column);
+
 /// <summary><c>push row = rhs</c> — a <c>pushState</c> effect. <c>PushState</c> carries no key, unlike set/add.</summary>
 public sealed record PushStatementNode(
     string RowName,
@@ -158,6 +179,63 @@ public sealed record TransformStatementNode(
 public sealed record TransactionStatementNode(
     IReadOnlyList<StatementNode> MainEffects,
     IReadOnlyList<StatementNode>? OnFailureEffects,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(Offset, Length, Line, Column);
+
+/// <summary><c>if Gate { ... } [else { ... }]</c>, and the <c>else if</c> chain an <c>Else</c> holding a single
+/// nested <see cref="IfStatementNode"/> spells. General control flow: the language parses it for every document
+/// vocabulary, and each one decides whether its rule shape can carry a branch at all —
+/// <c>puck.world.def.v1</c> rules are straight-line and refuse it by name, a <c>puck.cartridge.v1</c> rule lowers
+/// it to its own <c>if</c> action.</summary>
+/// <param name="Condition">The branch gate, parsed by the same reader a rule's own <c>when</c> uses.</param>
+/// <param name="Then">The statements run when the gate holds.</param>
+/// <param name="Else">The statements run when it does not, or <see langword="null"/> for a bare <c>if</c>.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record IfStatementNode(
+    PredicateNode Condition,
+    IReadOnlyList<StatementNode> Then,
+    IReadOnlyList<StatementNode>? Else,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(Offset, Length, Line, Column);
+
+/// <summary><c>repeat Count as name { ... }</c> — a bounded loop whose body runs <c>Count</c> times with
+/// <c>name</c> bound to 0, 1, … Count-1. The count is a COUNT, never a range: there is no start operand to get
+/// wrong and no inclusive/exclusive question to answer. A vocabulary that unrolls at compile time needs the count
+/// to be a constant expression; that is the vocabulary's refusal to make, not the parser's.</summary>
+/// <param name="Count">The number of iterations.</param>
+/// <param name="Index">The name bound to the iteration ordinal inside <paramref name="Body"/>.</param>
+/// <param name="Body">The statements run once per iteration.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record RepeatStatementNode(
+    ExpressionNode Count,
+    string Index,
+    IReadOnlyList<StatementNode> Body,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : EffectStatementNode(Offset, Length, Line, Column);
+
+/// <summary><c>break</c> — leaves the innermost enclosing <see cref="RepeatStatementNode"/>. Parsed anywhere a
+/// statement is; whether a <c>break</c> outside a loop is an error is the lowering vocabulary's call, since only it
+/// knows what its own runtime does with one.</summary>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed record BreakStatementNode(
     int Offset = 0,
     int Length = 0,
     int Line = 1,

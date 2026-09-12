@@ -1,6 +1,6 @@
 using Puck.State;
 
-namespace Puck.World.Transpiler;
+namespace Puck.Transpiler;
 
 /// <summary>Ties the DSL's operator and keyword spellings to the <c>Puck.State</c> enums they stand for. The parser,
 /// the emitter, the decompiler and the language server all read this table rather than each carrying a hand-typed

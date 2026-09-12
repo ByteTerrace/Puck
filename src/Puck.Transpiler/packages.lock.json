@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.NET.ILLink.Tasks": {
+        "type": "Direct",
+        "requested": "[10.0.12, )",
+        "resolved": "10.0.12",
+        "contentHash": "xi+BDjFpW+Sb+MHFHaH6Y/gV9I8BluFwRXc1QyCdoZbIK26eNiBeFuMTe/FMwc33G1wdHCyDg7CVTmb8OdQrMQ=="
+      },
+      "Parlot": {
+        "type": "Direct",
+        "requested": "[1.5.*, )",
+        "resolved": "1.5.9",
+        "contentHash": "Vro4ZKVZLBoPdCftyMUlzhlRpegI3N6TlT0zpyn79a42mH214VDqzkAdV70vu578W6NKS84hBA9H6j81cz0dLg=="
+      },
+      "System.IO.Hashing": {
+        "type": "Transitive",
+        "resolved": "10.0.12",
+        "contentHash": "jDix4bBMYnpZdSPcnY+KDV6ik3SRMzpMKby/bZl/XUwIiflwRNAFZ0oOl61R/pSaveIJ8t1gs2BUlrGsPs/bcg=="
+      },
+      "ByteTerrace.Puck.Abstractions": {
+        "type": "Project"
+      },
+      "ByteTerrace.Puck.Assets": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "System.IO.Hashing": "[10.*, )"
+        }
+      },
+      "ByteTerrace.Puck.Maths": {
+        "type": "Project"
+      },
+      "ByteTerrace.Puck.State": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      }
+    }
+  }
+}

@@ -40,10 +40,10 @@ host {
     width: viewWidth
 }
 
-screens: [
+screens [
     {
         index: 0
-        origin: [spread, eyeHeight, 0]
+        origin [spread, eyeHeight, 0]
         right: screenRight
         up: screenUp
         halfWidth: screenHalfWidth
@@ -51,11 +51,11 @@ screens: [
         halfDepth: screenHalfDepth
         round: 0
         source: machine(engine: brick, contentPath: reference, options: colorOptions)
-        route: { engageable: false, engageRadius: 0 }
+        route { engageable: false, engageRadius: 0 }
     }
     {
         index: 1
-        origin: [-spread, eyeHeight, 0]
+        origin [-spread, eyeHeight, 0]
         right: screenRight
         up: screenUp
         halfWidth: screenHalfWidth
@@ -63,19 +63,19 @@ screens: [
         halfDepth: screenHalfDepth
         round: 0
         source: machine(engine: brick, contentPath: authored, options: colorOptions)
-        route: { engageable: false, engageRadius: 0 }
+        route { engageable: false, engageRadius: 0 }
     }
 ]
 
-cameras: [
+cameras [
     {
         anchor: null
         name: "compare"
         renderHeight: viewHeight
         renderWidth: viewWidth
-        rig: {
+        rig {
             name: "compare"
-            operations: [
+            operations [
                 anchor(subject: worldPoint(point: [0, eyeHeight, eyeDistance]))
                 lookAt(subject: worldPoint(point: [0, eyeHeight, 0]))
                 fov(fieldOfViewRadians: fieldOfView)
@@ -88,7 +88,7 @@ cameras: [
 views {
     layout "compare" {
         seatCount: 0
-        slots: [
+        slots [
             {
                 camera: "compare"
                 height: 1
@@ -109,7 +109,7 @@ views {
 
     seatRig "seat" {
         version: "puck.camera.v1"
-        operations: [
+        operations [
             orbit(distance: 1, pitch: 0, yaw: 0)
             fov(fieldOfViewRadians: fieldOfView)
         ]

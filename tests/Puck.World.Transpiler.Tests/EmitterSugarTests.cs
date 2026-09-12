@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -460,7 +460,7 @@ public class EmitterSugarTests {
             placements {
                 placement "p" {
                     prototype: proto
-                    position: [0, 0, 0]
+                    position [0, 0, 0]
                     yawDegrees: 45deg
                 }
             }
@@ -515,7 +515,7 @@ public class EmitterSugarTests {
             placements {
                 placement "p" {
                     prototype: proto
-                    position: [150cm, 0, 5mm]
+                    position [150cm, 0, 5mm]
                 }
             }
             """);
@@ -567,7 +567,7 @@ public class EmitterSugarTests {
     public void ShapeFillsBlendSmoothRotationScaleOnlyWhenAbsent() {
         var (json, diagnostics) = Lower("""
             shape Box "board" {
-                position: [0, -2.5, 0]
+                position [0, -2.5, 0]
             }
             """);
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
@@ -590,7 +590,7 @@ public class EmitterSugarTests {
     public void ShapeNeverFillsGroupWhenAbsent() {
         var (json, diagnostics) = Lower("""
             shape Box "board" {
-                position: [0, -2.5, 0]
+                position [0, -2.5, 0]
             }
             """);
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
@@ -604,7 +604,7 @@ public class EmitterSugarTests {
             shape Cylinder "meadow" {
                 blend: SmoothUnion
                 rotation: "state.transforms.identity"
-                position: [0, -2.5, 0]
+                position [0, -2.5, 0]
             }
             """);
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
@@ -617,7 +617,7 @@ public class EmitterSugarTests {
     public void ShapeWithNoNameLeavesTheBareTypeIdentifierAsType() {
         var (json, diagnostics) = Lower("""
             shape Sphere {
-                position: [0, 0, 0]
+                position [0, 0, 0]
             }
             """);
         Assert.False(diagnostics.HasErrors, diagnostics.FormatReport(""));
@@ -633,9 +633,9 @@ public class EmitterSugarTests {
                 placement "debugRoom" {
                     prototype: debugRoom
                     parent: provingCourt
-                    position: [0, 0, 0]
+                    position [0, 0, 0]
                     solid
-                    grip: { holdable: true }
+                    grip { holdable: true }
                 }
             }
             """);
@@ -661,10 +661,10 @@ public class EmitterSugarTests {
     public void PlacementsPolicySurvivesAlongsidePlacementRows() {
         var (json, diagnostics) = Lower("""
             placements {
-                policy: { maxLivePlacements: 8 }
+                policy { maxLivePlacements: 8 }
                 placement "p1" {
                     prototype: proto
-                    position: [0, 0, 0]
+                    position [0, 0, 0]
                 }
             }
             """);

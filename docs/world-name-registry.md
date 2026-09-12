@@ -502,6 +502,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `views.cameraRig.operations[][fov].fieldOfViewRadians` | State | Binding | Binding | `WorldCameraProgramOp.Fov.FieldOfViewRadians` |
 | `views.cameraRig.operations[][blend].weight` | State | Binding | Binding | `WorldCameraProgramOp.Blend.Weight` |
 | `views.cameraRig.operations[][select].key` | State | Binding | Binding | `WorldCameraProgramOp.Select.Key` |
+| `looks.rows[].motion.lanes` | State | Expression | Read | `WorldLookMotion.Lanes` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][state].name` | State | Names | Read | `ValueToken.State.Name` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][state].key` | State | Key | Read | `ValueToken.State.Key` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][boardShift].topology` | Topology | Names | Read | `ValueToken.BoardShift.Topology` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][boardFill].topology` | Topology | Names | Read | `ValueToken.BoardFill.Topology` |
+| `looks.rows[].motion.lanes[]{tokens}.tokens[][boardImage].topology` | Topology | Names | Read | `ValueToken.BoardImage.Topology` |
 | `dynamics[].name` | Dynamics | Declares |  | `DynamicsRow.Name` |
 | `hud.defaults.cursor.visible[all].predicates[]…` | | | | re-enters `OverlayPredicate` |
 | `hud.defaults.cursor.visible[any].predicates[]…` | | | | re-enters `OverlayPredicate` |

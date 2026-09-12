@@ -1,9 +1,9 @@
 using Parlot;
 using Parlot.Fluent;
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
 
-namespace Puck.World.Transpiler.Parsing;
+namespace Puck.Transpiler.Parsing;
 
 /// <summary>High-performance recursive-descent parser for the Puck authoring language.</summary>
 public static partial class PuckParser {
@@ -362,7 +362,12 @@ public static partial class PuckParser {
 
         // Check if property assignment: key: expr or key = expr
         if (cursor.Current == ':' || cursor.Current == '=') {
+            var separator = cursor.Current;
+
             cursor.Advance();
+            SkipWhiteSpace(context);
+            RefuseColonBeforeContainer(context, firstId, separator, startOffset, line, col, diagnostics);
+
             var valExpr = ParseExpression(context);
             var len = cursor.Offset - startOffset;
             return new PropertyNode(Name: firstId, Value: valExpr, Offset: startOffset, Length: len, Line: line, Column: col);
@@ -378,6 +383,16 @@ public static partial class PuckParser {
         // Check if block without name: firstId { ... }
         if (cursor.Current == '{') {
             return ParseBlock(context, identifier: firstId, name: null, target: null, startOffset: startOffset, line: line, col: col, diagnostics: diagnostics);
+        }
+
+        // Bare keyword statement: `firstId` ended its own line, so nothing can belong to it — e.g. the `solid`
+        // flag inside a `placement { }` row. Tested BEFORE the two-token block form below, because that form spans
+        // whitespace including newlines and would otherwise read a flag and the block statement following it as one
+        // `identifier name { }` header.
+        if (context.Scanner.Buffer[startOffset] != '"' && AtEndOfLogicalStatement(context.Scanner.Buffer, afterFirstIdOffset)) {
+            cursor.ResetPosition(afterFirstIdPosition);
+
+            return new FlagStatementNode(Name: firstId, Offset: startOffset, Length: (afterFirstIdOffset - startOffset), Line: line, Column: col);
         }
 
         // Otherwise, named block or block with target:
@@ -398,16 +413,28 @@ public static partial class PuckParser {
             }
         }
 
-        // Bare keyword statement: nothing else was found on `firstId`'s own line, and no block/property/call shape
-        // matched — e.g. the `solid` flag inside a `placement { }` row (§4.2). A last resort, tried only once every
-        // other statement shape above has failed, so it can never shadow a multi-line block header.
-        if (context.Scanner.Buffer[startOffset] != '"' && AtEndOfLogicalStatement(context.Scanner.Buffer, afterFirstIdOffset)) {
-            cursor.ResetPosition(afterFirstIdPosition);
-            var flagLen = afterFirstIdOffset - startOffset;
-            return new FlagStatementNode(Name: firstId, Offset: startOffset, Length: flagLen, Line: line, Column: col);
+        throw CreateException(context, $"Unexpected token sequence after '{firstId}'");
+    }
+
+    // A container value is written as a block, a scalar takes a colon: `host { }` and `cameras [ ]`, never
+    // `host: { }` or `cameras: [ ]`. The test is syntactic and looks only at the literal that follows, so a name
+    // standing for a container (`origin: bounds`) is untouched — what is refused is the punctuation, not the value.
+    // The statement still parses after the report, so one misspelling yields one diagnostic rather than a cascade.
+    private static void RefuseColonBeforeContainer(ParseContext context, string identifier, char separator, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
+        var cursor = context.Scanner.Cursor;
+
+        if (cursor.Current is not ('{' or '[')) {
+            return;
         }
 
-        throw CreateException(context, $"Unexpected token sequence after '{firstId}'");
+        var opener = cursor.Current;
+        var shape = ((opener == '{') ? "block" : "array");
+
+        diagnostics?.ReportError(
+            PuckDiagnosticCodes.ColonBeforeContainer,
+            $"'{identifier}{separator} {opener}' - a {shape} is written without the '{separator}': use '{identifier} {opener}'",
+            new SourceSpan(startOffset, (cursor.Offset - startOffset), line, col)
+        );
     }
 
     private static BlockNode ParseBlock(ParseContext context, string identifier, string? name, string? target, int startOffset, int line, int col, DiagnosticBag? diagnostics = null) {
@@ -434,9 +461,9 @@ public static partial class PuckParser {
         // the emitter no single answer for the field — diagnosed here, where both spellings are already visible.
         if (string.Equals(identifier, "placement", StringComparison.Ordinal)) {
             var sawBareSolid = statements.Exists(static s => s is FlagStatementNode { Name: "solid" });
-            var sawSolidProperty = statements.Exists(static s => s is PropertyNode { Name: "solid" });
-            if (sawBareSolid && sawSolidProperty) {
-                diagnostics?.ReportError(PuckDiagnosticCodes.SolidSpelledTwice, $"placement '{name}' authors both the bare 'solid' flag and an explicit 'solid: {{ }}' override", new SourceSpan(startOffset, context.Scanner.Cursor.Offset - startOffset, line, col));
+            var sawSolidOverride = statements.Exists(static s => s is PropertyNode { Name: "solid" } or BlockNode { Identifier: "solid" });
+            if (sawBareSolid && sawSolidOverride) {
+                diagnostics?.ReportError(PuckDiagnosticCodes.SolidSpelledTwice, $"placement '{name}' authors both the bare 'solid' flag and an explicit 'solid {{ }}' override", new SourceSpan(startOffset, context.Scanner.Cursor.Offset - startOffset, line, col));
             }
         }
 
@@ -517,8 +544,96 @@ public static partial class PuckParser {
     }
 
     private static ExpressionNode ParseExpression(ParseContext context) {
-        return ParseRangeExpression(context);
+        if (TryParseLambda(context) is { } lambda) {
+            return lambda;
+        }
+
+        return ParseComparisonExpression(context);
     }
+
+    // Comparisons sit above the range so `0..4` still reads as one span, and produce a boolean — the shape
+    // `filter`'s lambda is written to return.
+    private static ExpressionNode ParseComparisonExpression(ParseContext context) {
+        var left = ParseRangeExpression(context);
+
+        SkipWhiteSpace(context);
+
+        var matched = LongestMatchingPunctuation(context.Scanner.Buffer, context.Scanner.Cursor.Offset, ComparisonOperators);
+
+        if (matched is null) {
+            return left;
+        }
+
+        context.Scanner.Cursor.Advance(matched.Length);
+
+        var right = ParseRangeExpression(context);
+
+        return new BinaryExpressionNode(Left: left, Operator: matched, Right: right, Offset: left.Offset, Length: (context.Scanner.Cursor.Offset - left.Offset), Line: left.Line, Column: left.Column);
+    }
+
+    // `item => body` and `(running, item) => body`. Tried before anything else an expression could be, and rewound
+    // when the arrow is absent, because the parameter list is indistinguishable from an ordinary operand until it
+    // arrives: `(a, b)` alone is a parenthesized expression and `item` alone is an identifier.
+    private static ExpressionNode? TryParseLambda(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
+        var savedPosition = cursor.Position;
+
+        SkipWhiteSpace(context);
+
+        var startOffset = cursor.Offset;
+        var (line, col) = GetLineAndColumn(context.Scanner.Buffer, startOffset);
+        var parameters = new List<string>();
+
+        if (cursor.Current == '(') {
+            cursor.Advance();
+            SkipWhiteSpace(context);
+
+            while (!cursor.Eof && (cursor.Current != ')')) {
+                if (!TryReadIdentifier(context, out var parameter)) {
+                    cursor.ResetPosition(savedPosition);
+
+                    return null;
+                }
+
+                parameters.Add(parameter);
+                SkipWhiteSpace(context);
+
+                if (cursor.Current == ',') {
+                    cursor.Advance();
+                    SkipWhiteSpace(context);
+                }
+            }
+
+            if (!TryConsume(context, ')')) {
+                cursor.ResetPosition(savedPosition);
+
+                return null;
+            }
+        } else if (TryReadIdentifier(context, out var single)) {
+            parameters.Add(single);
+        } else {
+            cursor.ResetPosition(savedPosition);
+
+            return null;
+        }
+
+        SkipWhiteSpace(context);
+
+        if ((cursor.Current != '=') || (cursor.PeekNext() != '>')) {
+            cursor.ResetPosition(savedPosition);
+
+            return null;
+        }
+
+        cursor.Advance(2);
+
+        var body = ParseExpression(context);
+
+        return new LambdaExpressionNode(Parameters: parameters, Body: body, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
+    }
+
+    // Longest-first, so a scan never reads "<=" as "<".
+    private static readonly string[] ComparisonOperators = ["==", "!=", "<=", ">=", "<", ">"];
 
     private static ExpressionNode ParseRangeExpression(ParseContext context) {
         var left = ParseAdditiveExpression(context);
@@ -555,23 +670,51 @@ public static partial class PuckParser {
     }
 
     private static ExpressionNode ParseMultiplicativeExpression(ParseContext context) {
-        var left = ParsePostfixExpression(context);
+        var left = ParseUnaryExpression(context);
 
         while (true) {
             SkipWhiteSpace(context);
             var cur = context.Scanner.Cursor.Current;
-            if (cur != '*' && cur != '/') {
+            if (cur != '*' && cur != '/' && cur != '%') {
                 break;
             }
 
             var op = cur.ToString();
             context.Scanner.Cursor.Advance();
-            var right = ParsePostfixExpression(context);
+            var right = ParseUnaryExpression(context);
             var len = context.Scanner.Cursor.Offset - left.Offset;
             left = new BinaryExpressionNode(Left: left, Operator: op, Right: right, Offset: left.Offset, Length: len, Line: left.Line, Column: left.Column);
         }
 
         return left;
+    }
+
+    // A sign in front of anything that is not a number: `-spread`, `-scale(2)`, `-(a + b)`. A number keeps its own
+    // signed-literal reader (ParsePrimaryExpression), because folding the sign into the literal is what lets a unit
+    // suffix read against the value it signs; intercepting `-1.5m` here would sign a unit-converted quantity instead.
+    private static ExpressionNode ParseUnaryExpression(ParseContext context) {
+        SkipWhiteSpace(context);
+        var cursor = context.Scanner.Cursor;
+
+        if (cursor.Current is not ('-' or '+')) {
+            return ParsePostfixExpression(context);
+        }
+
+        var next = cursor.PeekNext();
+
+        if (char.IsDigit(next) || (next == '.')) {
+            return ParsePostfixExpression(context);
+        }
+
+        var startOffset = cursor.Offset;
+        var (line, col) = GetLineAndColumn(context.Scanner.Buffer, startOffset);
+        var op = cursor.Current.ToString();
+
+        cursor.Advance();
+
+        var operand = ParseUnaryExpression(context);
+
+        return new UnaryExpressionNode(Operator: op, Operand: operand, Offset: startOffset, Length: (cursor.Offset - startOffset), Line: line, Column: col);
     }
 
     private static ExpressionNode ParsePostfixExpression(ParseContext context) {
@@ -856,7 +999,23 @@ public static partial class PuckParser {
 
             SkipWhiteSpace(context);
             if (cursor.Current == ':' || cursor.Current == '=') {
+                var separator = cursor.Current;
+
                 cursor.Advance();
+                SkipWhiteSpace(context);
+
+                // The same one-spelling rule a statement follows: a container is written without the separator.
+                // Object literals already admit `key { }` and `key [ ]`, so this closes the second spelling here too.
+                if (cursor.Current is '{' or '[') {
+                    var shape = ((cursor.Current == '{') ? "block" : "array");
+
+                    var (eLine, eCol) = GetLineAndColumn(context.Scanner.Buffer, cursor.Offset);
+
+                    throw new PuckParseException($"'{propKey}{separator} {cursor.Current}' - a {shape} is written without the '{separator}': use '{propKey} {cursor.Current}'", cursor.Offset, eLine, eCol) {
+                        Code = PuckDiagnosticCodes.ColonBeforeContainer,
+                    };
+                }
+
                 var valExpr = ParseExpression(context);
                 properties.Add(new PropertyNode(Name: propKey, Value: valExpr, Offset: propStart, Length: cursor.Offset - propStart, Line: pLine, Column: pCol));
             } else if (cursor.Current == '{') {

@@ -1,5 +1,5 @@
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Validation;
 
@@ -140,6 +140,10 @@ public static partial class PuckLinter {
             case BinaryExpressionNode bin:
                 CollectReferences(bin.Left, references, diagnostics, inLet: false);
                 CollectReferences(bin.Right, references, diagnostics, inLet: false);
+                break;
+
+            case UnaryExpressionNode un:
+                CollectReferences(un.Operand, references, diagnostics, inLet: false);
                 break;
 
             case ArrayExpressionNode arr:

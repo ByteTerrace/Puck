@@ -5,10 +5,10 @@
         <PuckLayer>Engine services</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="Parlot" Version="[1.5.*, )" />
-    </ItemGroup>
-    <ItemGroup>
+        <!-- The world's own vocabulary on top of the language core: lowering to puck.world.def.v1, decompiling
+             from it, its reference lint, and the language server that completes its names. -->
         <ProjectReference Include="..\Puck.Assets\Puck.Assets.csproj" />
+        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>
 </Project>

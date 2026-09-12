@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 
 namespace Puck.World.Transpiler.Addons;
 

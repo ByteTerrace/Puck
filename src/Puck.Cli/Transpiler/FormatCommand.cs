@@ -1,5 +1,5 @@
 using System.CommandLine;
-using Puck.World.Transpiler.Formatting;
+using Puck.Transpiler.Formatting;
 
 namespace Puck.Cli.Transpiler;
 

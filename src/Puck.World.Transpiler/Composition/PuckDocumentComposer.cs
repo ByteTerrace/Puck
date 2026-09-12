@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 
 namespace Puck.World.Transpiler.Composition;
 

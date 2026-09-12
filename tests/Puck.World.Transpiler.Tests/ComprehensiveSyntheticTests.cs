@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -37,7 +37,7 @@ public class ComprehensiveSyntheticTests {
             template seatRigPreset(rigName, angle = 0rad, dist = 2.5m) {
                 seatRig rigName {
                     version: "puck.camera.v1"
-                    operations: [
+                    operations [
                         orbit(distance: dist, pitch: angle, yaw: 0)
                         fov(fieldOfViewRadians: 0.001)
                     ]
@@ -67,7 +67,7 @@ public class ComprehensiveSyntheticTests {
             views {
                 layout "arena" {
                     seatCount: 2
-                    slots: [
+                    slots [
                         {
                             camera: null
                             height: 1
@@ -104,12 +104,12 @@ public class ComprehensiveSyntheticTests {
 
             // State catalog with world cells
             state {
-                world: [
+                world [
                     {
                         name: "tableState"
                         kind: "Int"
                         capacity: 1
-                        cells: [
+                        cells [
                             {
                                 key: "feltColor"
                                 value: feltColor
@@ -242,13 +242,13 @@ public class ComprehensiveSyntheticTests {
             }
 
             shape Box "board" {
-                dimensions: [1.2, 0.05, 1.2]
+                dimensions [1.2, 0.05, 1.2]
                 material: "wood"
             }
 
             shape Superellipsoid "cushion" {
-                radii: [0.1, 0.05, 1.2]
-                exponents: [0.2, 0.2]
+                radii [0.1, 0.05, 1.2]
+                exponents [0.2, 0.2]
             }
             """;
 

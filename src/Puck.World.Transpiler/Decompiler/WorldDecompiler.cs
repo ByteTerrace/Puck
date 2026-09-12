@@ -122,10 +122,8 @@ public static partial class WorldDecompiler {
                 DecompilePlacementsBlock(sb, placementsObj, indentLevel: 0);
             } else if (string.Equals(key, "prototypes", StringComparison.OrdinalIgnoreCase) && value is JsonArray prototypesArr && CanSugarPrototypes(prototypesArr)) {
                 DecompilePrototypesBlock(sb, prototypesArr, indentLevel: 0);
-            } else if (value is JsonObject blockObj) {
-                DecompileNamedBlock(sb, key, null, blockObj, indentLevel: 0);
             } else {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{key}: {FormatValue(value, 0)}");
+                EmitField(sb, key, value, indentLevel: 0);
             }
         }
 
@@ -241,7 +239,7 @@ public static partial class WorldDecompiler {
         }
 
         if (srObj.TryGetPropertyValue("operations", out var opsNode) && opsNode is JsonArray opsArr) {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}operations: [");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}operations [");
             var opIndent = new string(' ', (indentLevel + 2) * 4);
             foreach (var opItem in opsArr) {
                 if (opItem is JsonObject opObj && opObj.ContainsKey("$type")) {
@@ -258,7 +256,7 @@ public static partial class WorldDecompiler {
             if (k is "name" or "version" or "operations") {
                 continue;
             }
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}{k}: {FormatValue(v, indentLevel + 1)}");
+            EmitField(sb, k, v, indentLevel + 1);
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");
@@ -284,6 +282,31 @@ public static partial class WorldDecompiler {
         }
     }
 
+    // Whether a value PRINTS as a container. Not the same question as whether it IS one: an object carrying a
+    // `$type` discriminator prints as a call (`compare(left: …)`), which is leaf-shaped and keeps its colon.
+    private static bool RendersAsContainer(JsonNode? value) => value switch {
+        JsonArray => true,
+        JsonObject obj => obj["$type"] is not JsonValue typeVal || !typeVal.TryGetValue<string>(out _),
+        _ => false,
+    };
+
+    // The separator a field writes before its value: none in front of a container, ": " in front of a leaf. The
+    // colon is what tells a reader "this is a leaf", so it never appears in front of a '{' or a '['.
+    internal static string FieldSeparator(JsonNode? value) => RendersAsContainer(value) ? " " : ": ";
+
+    // One field, in the one spelling its value's shape calls for.
+    internal static void EmitField(StringBuilder sb, string key, JsonNode? value, int indentLevel) {
+        var indent = new string(' ', (indentLevel * 4));
+
+        if (value is JsonObject obj && RendersAsContainer(value)) {
+            DecompileNamedBlock(sb, key, null, obj, indentLevel);
+
+            return;
+        }
+
+        sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}{key}{FieldSeparator(value)}{FormatValue(value, indentLevel)}");
+    }
+
     private static void DecompileNamedBlock(
         StringBuilder sb,
         string identifier,
@@ -306,12 +329,8 @@ public static partial class WorldDecompiler {
             }
             if (string.Equals(k, "shapes", StringComparison.OrdinalIgnoreCase) && v is JsonArray shapesArr && shapesArr.Count > 0 && CanSugarShapes(shapesArr)) {
                 DecompileShapesBlock(sb, shapesArr, indentLevel + 1);
-            } else if (v is null) {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}{k}: null");
-            } else if (v is JsonObject childObj) {
-                DecompileNamedBlock(sb, k, null, childObj, indentLevel + 1);
             } else {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}{k}: {FormatValue(v, indentLevel + 1)}");
+                EmitField(sb, k, v, indentLevel + 1);
             }
         }
 
@@ -379,7 +398,9 @@ public static partial class WorldDecompiler {
             var sb = new StringBuilder();
             sb.AppendLine("{");
             foreach (var (k, v) in obj) {
-                sb.AppendLine(CultureInfo.InvariantCulture, $"{itemIndent}{k}: {FormatValue(v, indentLevel + 1)}");
+                // An object literal follows the same one-spelling rule a block does: no colon in front of a
+                // container. The literal grammar admits `key { }` and `key [ ]` directly.
+                sb.AppendLine(CultureInfo.InvariantCulture, $"{itemIndent}{k}{FieldSeparator(v)}{FormatValue(v, indentLevel + 1)}");
             }
             sb.Append(CultureInfo.InvariantCulture, $"{indent}}}");
             return sb.ToString();

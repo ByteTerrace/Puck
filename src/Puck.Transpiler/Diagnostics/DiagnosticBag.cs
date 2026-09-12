@@ -2,7 +2,7 @@ using System.Collections;
 using System.Globalization;
 using System.Text;
 
-namespace Puck.World.Transpiler.Diagnostics;
+namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Accumulates diagnostics across compilation stages and formats high-fidelity compiler output.</summary>
 public sealed class DiagnosticBag : IReadOnlyList<Diagnostic> {

@@ -1,13 +1,15 @@
 # Puck.World.Transpiler
 
-Compiles the `.puck` authoring language to `puck.world.def.v1` JSON, and decompiles the other way. `.puck` is an
+The `puck.world.def.v1` VOCABULARY for the `.puck` authoring language: it compiles a parsed document to world JSON
+and decompiles the other way. The language itself — parser, syntax tree, diagnostics, formatter, import resolver,
+unit arithmetic — is [`Puck.Transpiler`](../Puck.Transpiler/README.md), which knows no schema at all. `.puck` is an
 authoring layer: JSON stays the wire form and the checked-in source of every shipped world.
 
 ## Pipeline
 
-`Parsing/PuckParser.cs` (source → `Ast/*` syntax tree) → `Lowering/WorldDocumentEmitter.cs` (tree → JSON) /
+`Puck.Transpiler`'s `PuckParser` (source → syntax tree) → `Lowering/WorldDocumentEmitter.cs` (tree → JSON) /
 `Decompiler/WorldDecompiler.cs` (JSON → tree → source) → `Validation/{PuckLinter,WorldSemanticValidator}.cs` →
-`Lsp/PuckLanguageServer.cs` (editor integration). `Modules/ModuleResolver.cs` composes `import`s.
+`Lsp/PuckLanguageServer.cs` (editor integration). The core's `ModuleResolver` composes `import`s.
 
 ## Grammar
 
@@ -24,18 +26,25 @@ export read|action|binding name, name2       // names may wrap onto lines indent
                                              // a facet word alone on its line is an empty exported array
 
 identifier [target] [name] { statements }   // a structural block; up to two leading tokens name it
-identifier: expression                       // a property
-identifier [ elem, elem2 ]                    // an inline array property (outside a rule body — see below)
+identifier [ elem, elem2 ]                    // an array property (outside a rule body — see below)
+identifier: expression                       // a property whose value is a SCALAR
 identifier(k: v, k2: v2)                      // a call expression statement
 identifier                                    // a bare flag statement, only where nothing else could follow on
                                                // the line (e.g. a placement row's bare `solid`, standing in for
                                                // `solid: { margin: 0 }`)
 ```
 
+A container value is written as a block and a scalar takes a colon — `host { }`, `cameras [ ]`, `documentId: "puck"`
+— at every depth and inside an object literal too. There is exactly one spelling per shape: a colon in front of a
+`{` or a `[` is PUCK040. A name that merely stands for a container keeps its colon (`origin: bounds`), because the
+rule is about the punctuation in front of a literal, not about what the value turns out to be; a call's named
+argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a statement.
+
 Expressions: `+ - * /` (C precedence via additive/multiplicative), `.` member access, `(...)` calls,
 `[a, b]` arrays, `{ k: v }` objects, `a..b` ranges, `#rrggbb[aa]` colors, and number literals with an optional unit
 suffix (`s ms hz rad deg m mm cm % pct`), every one of which is checked against the field-dimension table in
-`Lowering/WorldDocumentEmitterUnits` — a unit on a field the table does not cover is PUCK024 and a unit the field's
+`Lowering/WorldDocumentEmitterUnits` (which says which field is a length or a time; what the suffix is worth is
+the core's `UnitConversion`) — a unit on a field the table does not cover is PUCK024 and a unit the field's
 own dimension does not admit is PUCK025, so no suffix ever converts a value silently. A call argument classifies by
 its qualified `call.argument` key, an ordinary property by its bare name: `orbit(yaw: 45deg)` is radians-native and
 converts, a `yaw:` property on any other block is not in the table at all and is refused. A call `name(k: v, ...)` lowers to `{"$type":"name","k":v,...}` — the
@@ -203,7 +212,7 @@ refused), PUCK036 (a statement inside `prototypes`/`placements` that the section
 `PUCK008`/`PUCK013`/`PUCK014` also cover a rule-body-only keyword found where an ordinary statement belongs
 (`option "x" { }` outside a `decision`, `push x = 1` outside a rule), named at the keyword's own span.
 
-Every code is declared once in `Diagnostics/PuckDiagnosticCodes`; report sites name a constant, never a literal.
+Every code is declared once in `Puck.Transpiler`'s `Diagnostics/PuckDiagnosticCodes`; report sites name a constant, never a literal.
 
 Unit-dimension validation (PUCK024/PUCK025), the shape-type check (PUCK027), and the reference-resolution lint
 family (PUCK_LINT_005 onward) live in the lowering/lint stages, not the parser.

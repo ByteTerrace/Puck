@@ -8,6 +8,14 @@ description: Guides Puck's data-first cartridge authoring in Puck.GamingBricks.F
 The user's current instructions outrank this file. Update stale instructions
 in the same change rather than preserving an obsolete workflow.
 
+## Authoring in the DSL
+
+`src/Puck.GamingBricks.Transpiler` compiles a `.puck` source to a cartridge document and decompiles one back.
+Both artifacts are committed side by side (`tetris.cgb.puck` and `tetris.cgb.cartridge.json`); the regeneration
+gate in `tests/Puck.GamingBricks.Transpiler.Tests` compiles the source and compares bytes, so they cannot drift.
+`puck compile <source> --validate` runs the forge's own `CartridgeDocuments.Validate` over the lowered JSON.
+Read that project's README for the grammar. Never hand-edit the generated JSON: regenerate it from the source.
+
 ## Player authoring
 
 `src/Puck.GamingBricks.Forge` owns `puck.cartridge.v1`, validation,

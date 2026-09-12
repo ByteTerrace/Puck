@@ -1705,6 +1705,7 @@
           "ByteTerrace.Puck.AdvancedGamingBrick.Forge": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Attestation": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.GamingBricks.Transpiler": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Hosting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.HumbleGamingBrick": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.HumbleGamingBrick.Forge": "[0.1.0-alpha, )",
@@ -1712,6 +1713,7 @@
           "ByteTerrace.Puck.Scripting": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
           "FSharp.Core": "[10.*, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
           "Microsoft.CodeAnalysis.CSharp.Workspaces": "[5.*, )",
@@ -1751,6 +1753,13 @@
         "dependencies": {
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.GamingBricks.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )"
         }
       },
       "ByteTerrace.Puck.Hosting": {
@@ -1833,6 +1842,13 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "Parlot": "[1.5.*, )"
         }
       },
       "puck.actors": {
@@ -2058,7 +2074,7 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "Parlot": "[1.5.*, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
           "Puck.World.Schema": "[1.0.0, )"
         }
       }

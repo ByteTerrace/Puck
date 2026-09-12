@@ -1,5 +1,5 @@
-using Puck.World.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
 using Xunit;
 
@@ -10,7 +10,7 @@ public class LinterTests {
     public void TestLinterReportsUnusedConstant() {
         var source = @"puck: 1
 let UNUSED_VAL = 42
-host: {
+host {
     authority: ""test""
 }
 ";
@@ -27,9 +27,9 @@ host: {
     public void TestLinterReportsUnusedTemplate() {
         var source = @"puck: 1
 template UnusedTemplate() {
-    components: []
+    components []
 }
-host: {
+host {
     authority: ""test""
 }
 ";
@@ -46,7 +46,7 @@ host: {
     public void TestLinterPassesWhenConstantUsed() {
         var source = @"puck: 1
 let USED_VAL = ""alpha""
-host: {
+host {
     authority: USED_VAL
 }
 ";
@@ -62,7 +62,7 @@ host: {
     [Fact]
     public void TestLinterReportsHardcodedHexColor() {
         var source = @"puck: 1
-entities: [
+entities [
     {
         name: ""Box""
         color: ""#FF0000""

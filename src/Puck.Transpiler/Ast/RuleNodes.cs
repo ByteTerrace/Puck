@@ -1,4 +1,4 @@
-namespace Puck.World.Transpiler.Ast;
+namespace Puck.Transpiler.Ast;
 
 /// <summary><c>rule "name" { ... }</c>. <see cref="Statements"/> is the ordered body — a mix of
 /// <see cref="WhenStatementNode"/> (at most one), <see cref="BindStatementNode"/>, ordinary <see cref="PropertyNode"/>

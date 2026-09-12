@@ -1,6 +1,6 @@
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 
-namespace Puck.World.Transpiler;
+namespace Puck.Transpiler;
 
 /// <summary>Represents the result of a compilation or parsing step, carrying any emitted diagnostics.</summary>
 /// <typeparam name="T">The type of the compiled output.</typeparam>

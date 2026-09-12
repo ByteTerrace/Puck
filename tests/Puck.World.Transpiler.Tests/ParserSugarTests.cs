@@ -1,6 +1,6 @@
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -520,8 +520,8 @@ public class ParserSugarTests {
         var doc = ParseClean("""
             shape Cylinder "meadow" {
                 id: 0
-                position: [0, -2.5, 0]
-                scale: [32, 2.0, 32]
+                position [0, -2.5, 0]
+                scale [32, 2.0, 32]
             }
             """);
         var block = Assert.IsType<BlockNode>(doc.Statements[0]);
@@ -537,9 +537,9 @@ public class ParserSugarTests {
                 placement "debugRoom" {
                     prototype: debugRoom
                     parent: provingCourt
-                    position: [0, 0, 0]
+                    position [0, 0, 0]
                     solid
-                    grip: { holdable: true }
+                    grip { holdable: true }
                 }
             }
             """);
@@ -547,8 +547,8 @@ public class ParserSugarTests {
         var placement = Assert.IsType<BlockNode>(placements.Statements[0]);
         var flag = Assert.IsType<FlagStatementNode>(placement.Statements[3]);
         Assert.Equal("solid", flag.Name);
-        var grip = Assert.IsType<PropertyNode>(placement.Statements[4]);
-        Assert.Equal("grip", grip.Name);
+        var grip = Assert.IsType<BlockNode>(placement.Statements[4]);
+        Assert.Equal("grip", grip.Identifier);
     }
 
     [Fact]
@@ -558,7 +558,7 @@ public class ParserSugarTests {
                 placement "debugRoom" {
                     prototype: debugRoom
                     solid
-                    solid: { margin: 0.2 }
+                    solid { margin: 0.2 }
                 }
             }
             """);

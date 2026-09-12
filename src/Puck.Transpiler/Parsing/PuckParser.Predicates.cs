@@ -1,8 +1,8 @@
 using Parlot.Fluent;
-using Puck.World.Transpiler.Ast;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Diagnostics;
 
-namespace Puck.World.Transpiler.Parsing;
+namespace Puck.Transpiler.Parsing;
 
 // The gate grammar: WhenStatement -> Gate -> OrGate -> AndGate -> NotGate -> Atom -> Comparison. `and`/`or`/`not`/
 // `as`/`when` are reserved only inside this production family; nowhere else does the parser treat them specially.
@@ -86,7 +86,62 @@ public static partial class PuckParser {
             return inner;
         }
 
+        if (TryParseCallPredicate(context, out var call) && (call is not null)) {
+            return call;
+        }
+
         return ParseComparisonPredicate(context, diagnostics);
+    }
+
+    // A bare `name(...)` gate, taken only when nothing comparison-shaped follows it: `min(a, b) == 3` is a
+    // comparison whose left operand happens to be a call, and reading the call as the whole gate would swallow the
+    // comparator. The scan is speculative for that reason and rewinds when it guesses wrong -- including when the
+    // arguments fail to parse as expressions at all, since a comparison operand is opaque text handed to
+    // ExpressionSpelling rather than an expression this parser reads.
+    private static bool TryParseCallPredicate(ParseContext context, out CallPredicateNode? predicate) {
+        predicate = null;
+
+        var cursor = context.Scanner.Cursor;
+        var savedPosition = cursor.Position;
+        var start = cursor.Offset;
+        var (line, col) = GetLineAndColumn(context.Scanner.Buffer, start);
+
+        if (!TryReadIdentifier(context, out var name)) {
+            cursor.ResetPosition(savedPosition);
+
+            return false;
+        }
+
+        SkipWhiteSpace(context);
+
+        if (cursor.Current != '(') {
+            cursor.ResetPosition(savedPosition);
+
+            return false;
+        }
+
+        CallExpressionNode call;
+
+        try {
+            call = ParseCallExpression(context, name, start, line, col);
+        }
+        catch (PuckParseException) {
+            cursor.ResetPosition(savedPosition);
+
+            return false;
+        }
+
+        SkipWhiteSpace(context);
+
+        if (LongestMatchingPunctuation(context.Scanner.Buffer, cursor.Offset, ComparatorPunctuation) is not null) {
+            cursor.ResetPosition(savedPosition);
+
+            return false;
+        }
+
+        predicate = new CallPredicateNode(Call: call, Offset: start, Length: (cursor.Offset - start), Line: line, Column: col);
+
+        return true;
     }
 
     private static PredicateNode ParseComparisonPredicate(ParseContext context, DiagnosticBag? diagnostics) {

@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -64,7 +64,7 @@ public class EmitterTests {
             views {
                 layout "study" {
                     seatCount: 0
-                    slots: [
+                    slots [
                         {
                             camera: null
                             height: 1
@@ -86,7 +86,7 @@ public class EmitterTests {
 
                 seatRig "study" {
                     version: "puck.camera.v1"
-                    operations: [
+                    operations [
                         orbit(distance: 0.01, pitch: 0, yaw: 0)
                         fov(fieldOfViewRadians: 0.001)
                     ]
@@ -141,7 +141,7 @@ public class EmitterTests {
 
             host {
                 tickInterval: interval
-                physics: {
+                physics {
                     gravity: defaultGravity
                 }
             }

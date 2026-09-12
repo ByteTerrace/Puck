@@ -63,7 +63,7 @@ public static partial class WorldDecompiler {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}{k}: null");
                 continue;
             }
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{innerIndent}{k}: {FormatValue(v, inner)}");
+            EmitField(sb, k, v, inner);
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");

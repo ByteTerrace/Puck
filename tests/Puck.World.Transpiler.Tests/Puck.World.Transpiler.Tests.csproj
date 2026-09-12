@@ -12,6 +12,7 @@
         <PackageReference Include="xunit.v3" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
+        <ProjectReference Include="..\..\src\Puck.Transpiler\Puck.Transpiler.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
         <ProjectReference Include="..\..\src\Puck.World.Schema\Puck.World.Schema.csproj" />
     </ItemGroup>

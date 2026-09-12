@@ -61,7 +61,10 @@ internal static class DecompileCommand {
         string puckSource;
 
         try {
-            puckSource = WorldDecompiler.Decompile(jsonText: json);
+            // The document's own schema picks the vocabulary, the same way compiling does.
+            puckSource = ((System.Text.Json.Nodes.JsonNode.Parse(json: json) is System.Text.Json.Nodes.JsonObject document) && DecompileCartridge.Handles(document: document))
+                ? DecompileCartridge.Run(document: document)
+                : WorldDecompiler.Decompile(jsonText: json);
         }
         catch (Exception ex) {
             Console.Error.WriteLine(value: $"error: Failed to decompile world definition '{fullPath}': {ex.Message}");

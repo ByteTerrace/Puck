@@ -1,7 +1,7 @@
 using System.CommandLine;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
 
 namespace Puck.Cli.Transpiler;

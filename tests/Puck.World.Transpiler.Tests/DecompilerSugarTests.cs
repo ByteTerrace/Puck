@@ -122,7 +122,7 @@ public class DecompilerSugarTests {
         // `group` carries no default (an ungrouped shape omits the key entirely instead) — an authored 0 is a
         // different, meaningful state from absence, so it always prints rather than eliding.
         Assert.Contains("group: 0", firstShape, StringComparison.Ordinal);
-        Assert.Contains("position: [0, 0, 0]", firstShape, StringComparison.Ordinal);
+        Assert.Contains("position [0, 0, 0]", firstShape, StringComparison.Ordinal);
 
         Assert.Contains("shape Sphere {", puck, StringComparison.Ordinal);
         var secondStart = puck.IndexOf("shape Sphere {", StringComparison.Ordinal);
@@ -131,7 +131,7 @@ public class DecompilerSugarTests {
         Assert.Contains("blend: \"Subtract\"", secondShape, StringComparison.Ordinal);
         Assert.Contains("smooth: 0.25", secondShape, StringComparison.Ordinal);
         Assert.Contains("rotation: \"state.transforms.identity\"", secondShape, StringComparison.Ordinal);
-        Assert.Contains("scale: [2, 2, 2]", secondShape, StringComparison.Ordinal);
+        Assert.Contains("scale [2, 2, 2]", secondShape, StringComparison.Ordinal);
         Assert.Contains("group: 3", secondShape, StringComparison.Ordinal);
     }
 

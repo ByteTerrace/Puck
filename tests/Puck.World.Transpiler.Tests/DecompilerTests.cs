@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
 using Puck.World.Transpiler.Decompiler;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Parsing;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;

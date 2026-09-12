@@ -1,6 +1,9 @@
 using System.Text.Json.Nodes;
 using Puck.State;
-using Puck.World.Transpiler.Ast;
+using Puck.Transpiler.Ast;
+using Puck.Transpiler.Lowering;
+using Puck.Transpiler.Diagnostics;
+using Puck.Transpiler;
 
 namespace Puck.World.Transpiler.Lowering;
 
@@ -13,7 +16,7 @@ namespace Puck.World.Transpiler.Lowering;
 // it writes that text back VERBATIM (never reprinted through ExpressionSpelling.Print) so a ValueExpression-typed
 // field's wire spelling round-trips exactly through ValueExpressionJsonConverter's own verbatim-Text convention.
 public static partial class WorldDocumentEmitter {
-    private static void LowerRuleBlock(RuleBlockNode rule, JsonObject parent, EvaluationScope scope) {
+    private static void LowerRuleBlock(RuleBlockNode rule, JsonObject parent, DocumentScope scope) {
         if (parent["rules"] is not JsonArray rulesArr) {
             rulesArr = [];
             parent["rules"] = rulesArr;
@@ -32,7 +35,7 @@ public static partial class WorldDocumentEmitter {
         foreach (var stmt in rule.Statements) {
             switch (stmt) {
                 case WhenStatementNode when1:
-                    obj["gate"] = LowerPredicate(when1.Predicate);
+                    obj["gate"] = LowerPredicate(when1.Predicate, scope);
                     break;
                 case BindStatementNode bind:
                     bindings ??= [];
@@ -45,7 +48,9 @@ public static partial class WorldDocumentEmitter {
                     obj[prop.Name] = LowerExpression(prop.Value, scope, prop.Name);
                     break;
                 case EffectStatementNode or ExpressionStatementNode:
-                    effects.AppendNode(LowerEffectStatement(stmt, scope));
+                    if (LowerEffectStatement(stmt, scope) is { } effect) {
+                        effects.AppendNode(effect);
+                    }
                     break;
             }
         }
@@ -69,7 +74,7 @@ public static partial class WorldDocumentEmitter {
         ["expression"] = bind.ExpressionText,
     };
 
-    private static JsonObject LowerDecisionBlock(DecisionBlockNode decision, EvaluationScope scope) {
+    private static JsonObject LowerDecisionBlock(DecisionBlockNode decision, DocumentScope scope) {
         var obj = new JsonObject();
         var options = new JsonArray();
         decimal? periodSeconds = null;
@@ -110,7 +115,7 @@ public static partial class WorldDocumentEmitter {
                     sawSeed = true;
                     break;
                 case InterruptStatementNode interrupt:
-                    obj["interrupt"] = LowerPredicate(interrupt.Predicate);
+                    obj["interrupt"] = LowerPredicate(interrupt.Predicate, scope);
                     break;
                 case PropertyNode { Name: "interrupt" } p:
                     obj["interrupt"] = LowerExpression(p.Value, scope, p.Name);
@@ -118,7 +123,9 @@ public static partial class WorldDocumentEmitter {
                 case OnNoChoiceBlockNode onNoChoice: {
                     var arr = new JsonArray();
                     foreach (var effect in onNoChoice.Effects) {
-                        arr.AppendNode(LowerEffectStatement(effect, scope));
+                        if (LowerEffectStatement(effect, scope) is { } lowered) {
+                            arr.AppendNode(lowered);
+                        }
                     }
                     obj["onNoChoice"] = arr;
                     break;
@@ -151,14 +158,14 @@ public static partial class WorldDocumentEmitter {
         return obj;
     }
 
-    private static JsonObject LowerOptionBlock(OptionBlockNode option, EvaluationScope scope) {
+    private static JsonObject LowerOptionBlock(OptionBlockNode option, DocumentScope scope) {
         var obj = new JsonObject { ["name"] = option.Name };
         var effects = new JsonArray();
 
         foreach (var stmt in option.Statements) {
             switch (stmt) {
                 case WhenStatementNode when1:
-                    obj["gate"] = LowerPredicate(when1.Predicate);
+                    obj["gate"] = LowerPredicate(when1.Predicate, scope);
                     break;
                 case ScoreStatementNode score:
                     obj["score"] = score.Text;
@@ -167,7 +174,9 @@ public static partial class WorldDocumentEmitter {
                     obj[p.Name] = LowerExpression(p.Value, scope, p.Name);
                     break;
                 case EffectStatementNode or ExpressionStatementNode:
-                    effects.AppendNode(LowerEffectStatement(stmt, scope));
+                    if (LowerEffectStatement(stmt, scope) is { } effect) {
+                        effects.AppendNode(effect);
+                    }
                     break;
             }
         }
@@ -185,18 +194,32 @@ public static partial class WorldDocumentEmitter {
 
     // ---- Gate lowering (§1) --------------------------------------------------------------------------------
 
-    private static JsonObject LowerPredicate(PredicateNode node) => node switch {
+    private static JsonObject LowerPredicate(PredicateNode node, DocumentScope scope) => node switch {
         ComparisonPredicateNode cmp => LowerComparison(cmp),
-        AndPredicateNode and => LowerPredicateList("all", "predicates", and.Operands),
-        OrPredicateNode or => LowerPredicateList("any", "predicates", or.Operands),
-        NotPredicateNode not => new JsonObject { ["$type"] = "not", ["predicate"] = LowerPredicate(not.Operand) },
+        AndPredicateNode and => LowerPredicateList("all", "predicates", and.Operands, scope),
+        OrPredicateNode or => LowerPredicateList("any", "predicates", or.Operands, scope),
+        NotPredicateNode not => new JsonObject { ["$type"] = "not", ["predicate"] = LowerPredicate(not.Operand, scope) },
+        CallPredicateNode call => RefuseCallGate(call, scope),
         _ => throw new InvalidOperationException($"unrecognized predicate node '{node.GetType()}'"),
     };
 
-    private static JsonObject LowerPredicateList(string discriminator, string propertyName, IReadOnlyList<PredicateNode> operands) {
+    // A world gate is a comparison, or and/or/not over comparisons - there is no arm for a named test. The vacuous
+    // `all` keeps the shape well-formed for whatever else the emitter is midway through building; the reported error
+    // is what stops the compile.
+    private static JsonObject RefuseCallGate(CallPredicateNode call, DocumentScope scope) {
+        scope.Diagnostics.ReportError(
+            PuckDiagnosticCodes.UnsupportedCallGate,
+            $"'{call.Call.Name}(...)' is not a puck.world.def.v1 gate - a world gate compares two operands",
+            call.Span
+        );
+
+        return new JsonObject { ["$type"] = "all", ["predicates"] = new JsonArray() };
+    }
+
+    private static JsonObject LowerPredicateList(string discriminator, string propertyName, IReadOnlyList<PredicateNode> operands, DocumentScope scope) {
         var arr = new JsonArray();
         foreach (var operand in operands) {
-            arr.AppendNode(LowerPredicate(operand));
+            arr.AppendNode(LowerPredicate(operand, scope));
         }
         return new JsonObject { ["$type"] = discriminator, [propertyName] = arr };
     }
@@ -300,7 +323,9 @@ public static partial class WorldDocumentEmitter {
 
     // ---- Effect statement lowering (§2) ---------------------------------------------------------------------
 
-    private static JsonNode LowerEffectStatement(StatementNode stmt, EvaluationScope scope) => stmt switch {
+    // Null means "refused, and the refusal is already reported": a caller drops it rather than writing a null into
+    // an effects array.
+    private static JsonNode? LowerEffectStatement(StatementNode stmt, DocumentScope scope) => stmt switch {
         SetCellStatementNode s => LowerCellEffect("setState", s.Target, s.Rhs, allowText: true),
         AddCellStatementNode a => LowerCellEffect("addState", a.Target, a.Rhs, allowText: false),
         PushStatementNode push => LowerPush(push),
@@ -310,8 +335,39 @@ public static partial class WorldDocumentEmitter {
         TransformStatementNode transform => new JsonObject { ["$type"] = "transformState", ["transform"] = LowerExpression(transform.Transform, scope) },
         TransactionStatementNode transaction => LowerTransaction(transaction, scope),
         ExpressionStatementNode { Expression: CallExpressionNode call } => LowerExpression(call, scope)!,
+        CompoundAssignStatementNode compound => RefuseCompoundAssignment(compound, scope),
+        IfStatementNode => RefuseControlFlow(stmt, "if", "gate the rule itself with 'when', or split it into two rules", scope),
+        RepeatStatementNode => RefuseControlFlow(stmt, "repeat", "a rule already runs once per matching subject - use 'forEach'", scope),
+        BreakStatementNode => RefuseControlFlow(stmt, "break", "there is no loop in a puck.world.def.v1 rule to leave", scope),
         _ => throw new InvalidOperationException($"unrecognized effect statement '{stmt.GetType()}'"),
     };
+
+    // puck.world.def.v1 carries two assignment effects, setState and addState; every other operator belongs in the
+    // expression on the right, where the state engine evaluates it.
+    private static JsonNode? RefuseCompoundAssignment(CompoundAssignStatementNode compound, DocumentScope scope) {
+        var target = (compound.Target.Key is null) ? compound.Target.Name : $"{compound.Target.Name}[{compound.Target.Key}]";
+
+        scope.Diagnostics.ReportError(
+            PuckDiagnosticCodes.UnsupportedAssignmentOperator,
+            $"puck.world.def.v1 has no '{compound.Operator}=' effect - write it as '{target} = {target} {compound.Operator} ...'",
+            compound.Span
+        );
+
+        return null;
+    }
+
+    // puck.world.def.v1 rule effects are a straight line: the rule's own gate decides whether the whole body runs,
+    // and there is no branch or loop for one to lower onto. The language still parses control flow, because another
+    // document vocabulary (a cartridge's rules) carries it natively.
+    private static JsonNode? RefuseControlFlow(StatementNode stmt, string keyword, string alternative, DocumentScope scope) {
+        scope.Diagnostics.ReportError(
+            PuckDiagnosticCodes.UnsupportedControlFlow,
+            $"a puck.world.def.v1 rule body is straight-line, so '{keyword}' has nothing to lower onto - {alternative}",
+            stmt.Span
+        );
+
+        return null;
+    }
 
     private static JsonObject LowerCellEffect(string discriminator, RowRefNode target, RhsNode rhs, bool allowText) {
         var obj = new JsonObject { ["$type"] = discriminator, ["state"] = target.Name };
@@ -388,17 +444,21 @@ public static partial class WorldDocumentEmitter {
         return obj;
     }
 
-    private static JsonObject LowerTransaction(TransactionStatementNode transaction, EvaluationScope scope) {
+    private static JsonObject LowerTransaction(TransactionStatementNode transaction, DocumentScope scope) {
         var mainEffects = new JsonArray();
         foreach (var stmt in transaction.MainEffects) {
-            mainEffects.AppendNode(LowerEffectStatement(stmt, scope));
+            if (LowerEffectStatement(stmt, scope) is { } lowered) {
+                mainEffects.AppendNode(lowered);
+            }
         }
 
         var obj = new JsonObject { ["$type"] = "transaction", ["effects"] = mainEffects };
         if (transaction.OnFailureEffects is { } onFailure) {
             var onFailureArr = new JsonArray();
             foreach (var stmt in onFailure) {
-                onFailureArr.AppendNode(LowerEffectStatement(stmt, scope));
+                if (LowerEffectStatement(stmt, scope) is { } lowered) {
+                    onFailureArr.AppendNode(lowered);
+                }
             }
             obj["onFailure"] = onFailureArr;
         }

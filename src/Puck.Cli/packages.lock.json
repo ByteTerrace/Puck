@@ -1578,6 +1578,13 @@
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )"
         }
       },
+      "ByteTerrace.Puck.GamingBricks.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.GamingBricks.Forge": "[0.1.0-alpha, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )"
+        }
+      },
       "ByteTerrace.Puck.Hosting": {
         "type": "Project",
         "dependencies": {
@@ -1658,6 +1665,13 @@
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )"
+        }
+      },
+      "ByteTerrace.Puck.Transpiler": {
+        "type": "Project",
+        "dependencies": {
+          "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
+          "Parlot": "[1.5.*, )"
         }
       },
       "puck.actors": {
@@ -1870,7 +1884,6 @@
           "Puck.Launcher": "[1.0.0, )",
           "Puck.Storage": "[1.0.0, )",
           "Puck.World.Addons": "[1.0.0, )",
-          "Puck.World.Azure": "[1.0.0, )",
           "Puck.World.Client": "[1.0.0, )",
           "Puck.World.Console": "[1.0.0, )",
           "Puck.World.Machines": "[1.0.0, )",
@@ -1884,7 +1897,7 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
-          "Parlot": "[1.5.*, )",
+          "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
           "Puck.World.Schema": "[1.0.0, )"
         }
       }

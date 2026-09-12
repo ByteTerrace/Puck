@@ -247,6 +247,7 @@ public static partial class WorldNameRegistry {
         new(typeof(OverlayPredicate.State), nameof(OverlayPredicate.State.Binding), WorldNameKind.State, WorldNameRole.Binding, WorldExportFacet.Binding),
         new(typeof(WorldCameraProgramOp.Dynamics), nameof(WorldCameraProgramOp.Dynamics.Row), WorldNameKind.Dynamics, WorldNameRole.Names, WorldExportFacet.Binding),
         new(typeof(WorldRenderCycle), nameof(WorldRenderCycle.State), WorldNameKind.State, WorldNameRole.Names),
+        new(typeof(WorldLookMotion), nameof(WorldLookMotion.Lanes), WorldNameKind.State, WorldNameRole.Expression),
         new(typeof(WorldFlockProfile), nameof(WorldFlockProfile.CohesionAffinity), WorldNameKind.State, WorldNameRole.Expression),
         new(typeof(WorldFlockProfile), nameof(WorldFlockProfile.AlignmentAffinity), WorldNameKind.State, WorldNameRole.Expression),
         new(typeof(WorldHostDefaults), nameof(WorldHostDefaults.BackendRow), WorldNameKind.State, WorldNameRole.Names),

@@ -49,6 +49,7 @@
         <ProjectReference Include="..\Puck.World.Protocol\Puck.World.Protocol.csproj" />
         <ProjectReference Include="..\Puck.World.Schema\Puck.World.Schema.csproj" />
         <ProjectReference Include="..\Puck.World.Server\Puck.World.Server.csproj" />
+        <ProjectReference Include="..\Puck.Transpiler\Puck.Transpiler.csproj" />
         <ProjectReference Include="..\Puck.World.Transpiler\Puck.World.Transpiler.csproj" />
     </ItemGroup>
      <ItemGroup>

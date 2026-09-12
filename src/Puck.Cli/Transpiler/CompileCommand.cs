@@ -2,10 +2,12 @@ using System.CommandLine;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Abstractions.Documents;
-using Puck.World.Transpiler.Diagnostics;
+using Puck.Transpiler.Diagnostics;
+using Puck.GamingBricks.Forge;
+using Puck.GamingBricks.Transpiler;
 using Puck.World.Transpiler.Lowering;
-using Puck.World.Transpiler.Modules;
-using Puck.World.Transpiler.Parsing;
+using Puck.Transpiler.Modules;
+using Puck.Transpiler.Parsing;
 using Puck.World.Transpiler.Validation;
 
 namespace Puck.Cli.Transpiler;
@@ -131,12 +133,21 @@ internal static class CompileCommand {
         }
 
         var sourceMap = new SourceMap();
-        var loweringResult = WorldDocumentEmitter.LowerWithDiagnostics(
-            basePath: baseDirectory,
-            diagnostics: diagnostics,
-            document: effectiveAst,
-            sourceMap: sourceMap
-        );
+        // The document's own `schema:` line picks the vocabulary that knows what its sections mean. The language is
+        // the same either way; only the lowering differs.
+        var isCartridge = string.Equals(a: effectiveAst.Schema, b: CartridgeVocabulary.Schema, comparisonType: StringComparison.Ordinal);
+        var loweringResult = (isCartridge
+            ? CartridgeDocumentEmitter.LowerWithDiagnostics(
+                diagnostics: diagnostics,
+                document: effectiveAst,
+                sourceMap: sourceMap
+            )
+            : WorldDocumentEmitter.LowerWithDiagnostics(
+                basePath: baseDirectory,
+                diagnostics: diagnostics,
+                document: effectiveAst,
+                sourceMap: sourceMap
+            ));
 
         var jsonObject = loweringResult.Value ?? new JsonObject();
         var jsonBytes = CanonicalJsonDocument.Serialize(node: jsonObject);
@@ -144,7 +155,11 @@ internal static class CompileCommand {
 
         // A module is a fragment whichever root imports it supplies fields for, so validating one as a world
         // reports refusals that belong to that root, not to this file. `lint` applies the same rule.
-        if (validate && !diagnostics.HasErrors && WorldSemanticValidator.IsRootDocument(jsonObject)) {
+        if (validate && !diagnostics.HasErrors && isCartridge) {
+            ValidateCartridge(diagnostics: diagnostics, json: json, sourcePath: sourcePath);
+        }
+
+        if (validate && !diagnostics.HasErrors && !isCartridge && WorldSemanticValidator.IsRootDocument(jsonObject)) {
             CliWorldVocabulary.EnsureInstalled();
             WorldSemanticValidator.ValidateComposedWorld(
                 diagnostics: diagnostics,
@@ -180,6 +195,21 @@ internal static class CompileCommand {
         catch (Exception ex) {
             Console.Error.WriteLine(value: $"error: Failed to write output file '{outputPath}': {ex.Message}");
             return 2;
+        }
+    }
+
+    // `--validate` on a cartridge means the forge's own document validation: names resolve, arrays fit, every
+    // operand is in range. Lowering only proves the SOURCE was well formed.
+    private static void ValidateCartridge(DiagnosticBag diagnostics, string json, string sourcePath) {
+        try {
+            var document = CartridgeDocuments.Parse(utf8: Encoding.UTF8.GetBytes(s: json));
+
+            foreach (var refusal in CartridgeDocuments.Validate(document: document)) {
+                diagnostics.ReportError(PuckDiagnosticCodes.SemanticValidation, $"{refusal.Path}: {refusal.Message}", default);
+            }
+        }
+        catch (Exception ex) {
+            diagnostics.ReportError(PuckDiagnosticCodes.SchemaRejected, $"{Path.GetFileName(path: sourcePath)}: {ex.Message}", default);
         }
     }
 

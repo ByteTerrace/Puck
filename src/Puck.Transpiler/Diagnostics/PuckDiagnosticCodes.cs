@@ -1,4 +1,4 @@
-namespace Puck.World.Transpiler.Diagnostics;
+namespace Puck.Transpiler.Diagnostics;
 
 /// <summary>Every diagnostic identifier the transpiler reports, each declared exactly once. Report sites name a
 /// constant here rather than a literal, so a code cannot be minted twice for two different meanings. A retired code
@@ -108,6 +108,32 @@ public static class PuckDiagnosticCodes {
 
     /// <summary>A statement inside a section block that the section's own grammar cannot carry.</summary>
     public const string UnrecognizedSectionStatement = "PUCK036";
+
+    /// <summary>PUCK037: a control-flow statement (<c>if</c>, <c>repeat</c>, <c>break</c>) in a document whose rule
+    /// shape is straight-line. The language parses control flow for every vocabulary; whether one can CARRY a branch
+    /// is the vocabulary's own answer.</summary>
+    public const string UnsupportedControlFlow = "PUCK037";
+
+    /// <summary>PUCK038: a call-form gate (<c>key(left, held)</c>) in a document whose gates are comparisons
+    /// only.</summary>
+    public const string UnsupportedCallGate = "PUCK038";
+
+    /// <summary>PUCK039: a compound assignment (<c>-=</c>, <c>*=</c>, <c>&gt;&gt;=</c>, …) in a document whose
+    /// effects carry no such operator.</summary>
+    public const string UnsupportedAssignmentOperator = "PUCK039";
+
+    /// <summary>PUCK040: a colon in front of a container value. A block or an array is written as a block
+    /// (<c>host { }</c>, <c>cameras [ ]</c>); the colon is what marks a scalar leaf, so there is exactly one
+    /// spelling for each.</summary>
+    public const string ColonBeforeContainer = "PUCK040";
+
+    /// <summary>PUCK041: an array builtin (<c>map</c>, <c>filter</c>, <c>reduce</c>, <c>range</c>, <c>length</c>,
+    /// <c>concat</c>) called with arguments it cannot evaluate at compile time.</summary>
+    public const string BuiltinRefused = "PUCK041";
+
+    /// <summary>PUCK042: a lambda written where no builtin takes one. A lambda is an argument to an array builtin
+    /// and nothing else.</summary>
+    public const string LambdaOutsideBuiltin = "PUCK042";
 
     /// <summary>An unused <c>let</c> binding.</summary>
     public const string LintUnusedLet = "PUCK_LINT_001";

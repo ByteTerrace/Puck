@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <!-- The gallery card truncates, so the first sentence has to stand alone; the detail follows it. -->
+        <Description>The Puck DSL language core: lexer, parser, syntax tree, diagnostics, formatter, module resolver and unit conversions, with no knowledge of any particular document schema. A document vocabulary supplies its own lowering and validation on top, so the same surface syntax — constants, parametric templates, infix predicates, units, imports — serves worlds, cartridges, or any other versioned JSON document. Source-available and dual-licensed: free for noncommercial use under PolyForm Noncommercial 1.0.0, paid commercial license otherwise.</Description>
+        <IsAotCompatible>true</IsAotCompatible>
+        <IsPackable>true</IsPackable>
+        <PackageId>ByteTerrace.Puck.Transpiler</PackageId>
+        <PackageTags>dsl;parser;transpiler;authoring</PackageTags>
+        <PuckKind>Production</PuckKind>
+        <PuckLayer>Engine services</PuckLayer>
+        <RootNamespace>Puck.Transpiler</RootNamespace>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageReference Include="Parlot" Version="[1.5.*, )" />
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Puck.State is the one engine the LANGUAGE itself reads: an operand span is handed to
+             ExpressionSpelling rather than re-parsed here, and PuckDslVocabulary spells its comparison and
+             cell-kind enums. No document schema is named. -->
+        <ProjectReference Include="..\Puck.State\Puck.State.csproj" />
+    </ItemGroup>
+</Project>

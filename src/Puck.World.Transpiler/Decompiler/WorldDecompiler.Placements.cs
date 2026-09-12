@@ -34,7 +34,7 @@ public static partial class WorldDecompiler {
             if (string.Equals(key, "rows", StringComparison.Ordinal) || value is null) {
                 continue;
             }
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{key}: {FormatValue(value, indentLevel + 1)}");
+            EmitField(sb, key, value, indentLevel + 1);
             wroteAny = true;
         }
 
@@ -65,7 +65,7 @@ public static partial class WorldDecompiler {
         // A row with no prototypeId of its own is a basis-merge directive or a partial row a basis completes; the
         // emitter fills no default there, so eliding one here would silently drop an authored value.
         if (row["prototypeId"] is { } prototypeId) {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}prototype: {FormatValue(prototypeId, indentLevel + 1)}");
+            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}prototype{FieldSeparator(prototypeId)}{FormatValue(prototypeId, indentLevel + 1)}");
             elide.Add("prototypeId");
             foreach (var key in WorldDocumentRowDefaults.PlacementKeys) {
                 if (WorldDocumentRowDefaults.IsDefaultValue(key, row[key], index: 0, shape: false)) {
@@ -92,13 +92,13 @@ public static partial class WorldDecompiler {
                 sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: {FormatValue(numeric, indentLevel + 1)}{unit}");
                 continue;
             }
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}{k}: {FormatValue(v, indentLevel + 1)}");
+            EmitField(sb, k, v, indentLevel + 1);
         }
 
         if (bareSolid) {
             sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}solid");
         } else if (row["solid"] is JsonObject solidFull) {
-            sb.AppendLine(CultureInfo.InvariantCulture, $"{inner}solid: {FormatValue(solidFull, indentLevel + 1)}");
+            EmitField(sb, "solid", solidFull, indentLevel + 1);
         }
 
         sb.AppendLine(CultureInfo.InvariantCulture, $"{indent}}}");

@@ -1,7 +1,7 @@
 using System.Text;
 using Puck.State;
 
-namespace Puck.World.Transpiler.Formatting;
+namespace Puck.Transpiler.Formatting;
 
 /// <summary>Opinionated, idempotent source code formatter for the Puck authoring language (.puck).</summary>
 public static class PuckFormatter {
@@ -176,7 +176,9 @@ public static class PuckFormatter {
                 if (prevIdx >= 0) {
                     var prevTrimmed = result[prevIdx].TrimEnd();
                     if (CanAttachEgyptianBrace(prevTrimmed, trimmed)) {
-                        result[prevIdx] = prevTrimmed + " " + trimmed;
+                        // A container is written without the separator, so joining the opener to its key drops one.
+                        // Formatting must not reintroduce the spelling the parser refuses (PUCK040).
+                        result[prevIdx] = DropTrailingSeparator(prevTrimmed) + " " + trimmed;
                         // Clear any blank lines between them
                         for (var k = result.Count - 1; k > prevIdx; k--) {
                             result.RemoveAt(k);
@@ -190,6 +192,30 @@ public static class PuckFormatter {
         }
 
         return result;
+    }
+
+    // Whether a line is nothing but an identifier, so a container opener on the next line belongs to it.
+    private static bool IsBareKey(string prevTrimmed) {
+        if (prevTrimmed.Length == 0) {
+            return false;
+        }
+
+        foreach (var c in prevTrimmed) {
+            if (!char.IsLetterOrDigit(c) && (c != '_')) {
+                return false;
+            }
+        }
+
+        return !char.IsDigit(prevTrimmed[0]);
+    }
+
+    // Drops the ':' or '=' a key was written with before a container opener joins it.
+    private static string DropTrailingSeparator(string prevTrimmed) {
+        if (prevTrimmed.EndsWith(':') || prevTrimmed.EndsWith('=')) {
+            return prevTrimmed[..^1].TrimEnd();
+        }
+
+        return prevTrimmed;
     }
 
     private static bool CanAttachEgyptianBrace(string prevTrimmed, string brace) {
@@ -209,9 +235,10 @@ public static class PuckFormatter {
             return false;
         }
 
-        // For '[', only attach to property declarations ending with ':'
+        // For '[', attach to a property declaration whether or not it still carries the separator the container
+        // spelling drops: `cells [` and the older `cells: [` both reach the formatter.
         if (brace == "[") {
-            return prevTrimmed.EndsWith(':');
+            return (prevTrimmed.EndsWith(':') || prevTrimmed.EndsWith('=') || IsBareKey(prevTrimmed));
         }
 
         // For '{', attach to property ending with ':' or block header (identifier, string literal, or parameter ')')
